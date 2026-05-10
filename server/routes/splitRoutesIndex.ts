@@ -19,6 +19,7 @@ import { registerMirqabRoutes } from "./mirqab";
 import { registerAbTestRoutes } from "./abTests";
 import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
+import articleEditLocksRouter from "./articleEditLocks";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -46,4 +47,5 @@ export function registerSplitRoutes(app: Express) {
   registerAbTestRoutes(app);
   app.use(focusSessionsRouter);
   app.use(edgeMetaRouter);
+  app.use(articleEditLocksRouter);
 }
