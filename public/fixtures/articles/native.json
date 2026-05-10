@@ -1,0 +1,23 @@
+{
+  "id": "native-001",
+  "title": "كيف تحول شركة XYZ العالمية المملكة إلى مركز للابتكار التقني",
+  "slug": "xyz-innovation-hub",
+  "excerpt": "تعرف على كيفية مساهمة شركة XYZ في بناء منظومة تقنية متقدمة في المملكة من خلال برامج التدريب والشراكات الاستراتيجية مع الجامعات السعودية.",
+  "image": "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200",
+  "publishedAt": "2025-10-24T09:00:00Z",
+  "category": {
+    "id": "cat-sponsored",
+    "name": "محتوى مدعوم",
+    "slug": "sponsored",
+    "color": "#6366f1"
+  },
+  "author": {
+    "id": "sponsor-xyz",
+    "name": "فريق XYZ",
+    "avatar": "https://api.dicebear.com/7.x/initials/svg?seed=XYZ"
+  },
+  "views": 5670,
+  "likes": 234,
+  "commentsCount": 45,
+  "readingTime": 5
+}

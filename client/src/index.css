@@ -1,0 +1,1985 @@
+/* IBM Plex Sans Arabic font is loaded in index.html with deferred loading for better performance */
+
+/* OpenDyslexic font is loaded dynamically in AccessibilityContext when Reading Mode is enabled */
+/* This saves ~1.7 MB from the initial CSS bundle */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Safari iOS zoom prevention + prevent horizontal overflow on Android Chrome */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+/* Prevent Safari from auto-zooming on input focus */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
+/* Disable animations on Safari if they cause issues */
+@supports (-webkit-touch-callout: none) {
+  .animate-\\[shimmer_2s_infinite\\] {
+    animation: none !important;
+  }
+}
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  /* Automatic computation of border around primary / danger buttons */
+  --opaque-button-border-intensity: -8; /* In terms of percentages */
+
+  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  --background: 0 0% 100%;
+
+  --foreground: 210 25% 7.8431%;
+
+  --border: 201.4286 30.4348% 90.9804%;
+
+  --card: 180 6.6667% 97.0588%;
+
+  --card-foreground: 210 25% 7.8431%;
+
+  --card-border: 220 24% 88%;
+
+  --sidebar: 180 6.6667% 97.0588%;
+
+  --sidebar-foreground: 210 25% 7.8431%;
+
+  --sidebar-border: 205.0000 25.0000% 90.5882%;
+
+  --sidebar-primary: 203.8863 88.2845% 53.1373%;
+
+  --sidebar-primary-foreground: 0 0% 100%;
+
+  --sidebar-accent: 211.5789 51.3514% 92.7451%;
+
+  --sidebar-accent-foreground: 203.8863 88.2845% 53.1373%;
+
+  --sidebar-ring: 202.8169 89.1213% 53.1373%;
+
+  --popover: 0 0% 100%;
+
+  --popover-foreground: 210 25% 7.8431%;
+
+  --popover-border: 220 24% 88%;
+
+  --primary: 203.8863 88.2845% 53.1373%;
+
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 210deg 4.94% 68.24%;
+
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 240 1.9608% 90%;
+
+  --muted-foreground: 210 25% 7.8431%;
+
+  --footer: 220 15% 96%;
+
+  --footer-foreground: 220 20% 25%;
+
+  --accent: 211.5789 51.3514% 92.7451%;
+
+  --accent-foreground: 203.8863 88.2845% 53.1373%;
+
+  --accent-blue: 220 84% 88%;
+
+  --accent-purple: 243 75% 88%;
+
+  --accent-green: 142 70% 86%;
+
+  --destructive: 356.3033 90.5579% 54.3137%;
+
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 70% 45%;
+
+  --success-foreground: 0 0% 98%;
+
+  --warning: 35 90% 55%;
+
+  --warning-foreground: 220 20% 15%;
+
+  --info: 195 75% 50%;
+
+  --info-foreground: 0 0% 98%;
+
+  --input: 200 23.0769% 97.4510%;
+  --ring: 202.8169 89.1213% 53.1373%;
+  --chart-1: 203.8863 88.2845% 53.1373%;
+  --chart-2: 159.7826 100% 36.0784%;
+  --chart-3: 42.0290 92.8251% 56.2745%;
+  --chart-4: 147.1429 78.5047% 41.9608%;
+  --chart-5: 341.4894 75.2000% 50.9804%;
+
+  /* AI Accent Colors - Professional Blue Tones */
+  --ai-primary: 220 84% 53%;
+  --ai-primary-foreground: 0 0% 98%;
+  --ai-secondary: 243 75% 59%;
+  --ai-secondary-foreground: 0 0% 98%;
+  --ai-glow: 220 84% 53%;
+  --ai-background: 220 100% 97%;
+  --ai-background-muted: 220 100% 99%;
+
+  /* iFox Semantic Color Tokens - WCAG Compliant (Always Dark Theme) */
+  --ifox-surface-primary: 258 45% 16%;
+  --ifox-surface-muted: 252 32% 20%;
+  --ifox-surface-overlay: 258 60% 22%;
+  --ifox-text-primary: 220 15% 94%;
+  --ifox-text-secondary: 220 12% 78%;
+  --ifox-text-tertiary: 220 10% 65%;
+  
+  /* Accent Colors */
+  --ifox-accent-primary: 266 87% 65%;
+  --ifox-accent-secondary: 252 75% 70%;
+  --ifox-accent-muted: 258 40% 45%;
+  
+  /* Semantic Status Colors */
+  --ifox-success: 142 70% 50%;
+  --ifox-success-muted: 142 50% 40%;
+  --ifox-success-glow: 142 70% 45%;
+  --ifox-warning: 35 90% 55%;
+  --ifox-warning-muted: 35 70% 45%;
+  --ifox-warning-glow: 35 90% 50%;
+  --ifox-info: 195 75% 55%;
+  --ifox-info-muted: 195 60% 45%;
+  --ifox-info-glow: 195 75% 50%;
+  --ifox-error: 0 75% 50%;
+  --ifox-error-muted: 0 60% 40%;
+  --ifox-error-glow: 0 75% 45%;
+  
+  /* Accent Glows for Animations */
+  --ifox-accent-glow: 266 87% 60%;
+  --ifox-accent-glow-secondary: 252 75% 65%;
+  
+  /* Neutral/Fallback Colors */
+  --ifox-neutral: 220 10% 50%;
+  --ifox-neutral-muted: 220 8% 40%;
+
+  --font-sans: Open Sans, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 1.3rem; /* 8px */
+  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
+
+  /* Fallback for older browsers */
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Fallback for older browsers */
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --opaque-button-border-intensity: 9;  /* In terms of percentages */
+
+  /* Backgrounds applied on top of other backgrounds when hovered/active */
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 0 0% 0%;
+
+  --foreground: 200 6.6667% 91.1765%;
+
+  --border: 210 5.2632% 14.9020%;
+
+  --card: 228 9.8039% 10%;
+
+  --card-foreground: 0 0% 85.0980%;
+
+  --card-border: 220 18% 16%;
+
+  --sidebar: 228 9.8039% 10%;
+
+  --sidebar-foreground: 0 0% 85.0980%;
+
+  --sidebar-border: 205.7143 15.7895% 26.0784%;
+
+  --sidebar-primary: 202.8169 89.1213% 53.1373%;
+
+  --sidebar-primary-foreground: 0 0% 100%;
+
+  --sidebar-accent: 205.7143 70% 7.8431%;
+
+  --sidebar-accent-foreground: 203.7736 87.6033% 52.5490%;
+
+  --sidebar-ring: 202.8169 89.1213% 53.1373%;
+
+  --popover: 0 0% 0%;
+
+  --popover-foreground: 200 6.6667% 91.1765%;
+
+  --popover-border: 220 18% 16%;
+
+  --primary: 203.7736 87.6033% 52.5490%;
+
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 195.0000 15.3846% 94.9020%;
+
+  --secondary-foreground: 210 25% 7.8431%;
+
+  --muted: 0 0% 9.4118%;
+
+  --muted-foreground: 210 3.3898% 46.2745%;
+
+  --footer: 220 18% 12%;
+
+  --footer-foreground: 220 10% 85%;
+
+  --accent: 205.7143 70% 7.8431%;
+
+  --accent-foreground: 203.7736 87.6033% 52.5490%;
+
+  --destructive: 356.3033 90.5579% 54.3137%;
+
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 142 70% 50%;
+
+  --success-foreground: 0 0% 98%;
+
+  --warning: 35 90% 60%;
+
+  --warning-foreground: 220 20% 15%;
+
+  --info: 195 75% 55%;
+
+  --info-foreground: 0 0% 98%;
+
+  --input: 207.6923 27.6596% 18.4314%;
+  --ring: 202.8169 89.1213% 53.1373%;
+  --chart-1: 203.8863 88.2845% 53.1373%;
+  --chart-2: 159.7826 100% 36.0784%;
+  --chart-3: 42.0290 92.8251% 56.2745%;
+  --chart-4: 147.1429 78.5047% 41.9608%;
+  --chart-5: 341.4894 75.2000% 50.9804%;
+
+  /* AI Accent Colors - Professional Blue Tones (Dark Mode) */
+  --ai-primary: 220 84% 60%;
+  --ai-primary-foreground: 0 0% 98%;
+  --ai-secondary: 243 75% 65%;
+  --ai-secondary-foreground: 0 0% 98%;
+  --ai-glow: 220 84% 60%;
+  --ai-background: 220 25% 10%;
+  --ai-background-muted: 220 20% 12%;
+
+  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --radius: 1.3rem;
+  --spacing: 0.25rem;
+  --font-mono: Menlo, monospace;
+  --font-sans: Open Sans, sans-serif;
+  --font-serif: Georgia, serif;
+  --tracking-normal: 0em;
+
+}
+
+/**
+ * Visual Variant Tokens
+ * Each variant exposes the same three CSS variables consumed by previews and
+ * by the rest of the UI. Preview swatches inside VariantSwitcher read the
+ * --variant-* variables for pixel-accurate previews, while the
+ * --primary / --font-sans / --radius overrides apply the variant globally.
+ */
+:root,
+[data-variant="ai-first"] {
+  --variant-primary: 203.7736 87.6033% 52.5490%;
+  --variant-font-family: "IBM Plex Sans Arabic", "Open Sans", sans-serif;
+  --variant-radius: 0.75rem;
+}
+
+[data-variant="magazine"] {
+  --variant-primary: 24 95% 53%;
+  --variant-font-family: "Tajawal", "IBM Plex Sans Arabic", sans-serif;
+  --variant-radius: 0rem;
+}
+
+[data-variant="classic"] {
+  --variant-primary: 0 71.7% 40.2%;
+  --variant-font-family: "Noto Naskh Arabic", "Amiri", serif;
+  --variant-radius: 0.25rem;
+}
+
+[data-variant="terminal"] {
+  --variant-primary: 142 70% 45%;
+  --variant-font-family: "JetBrains Mono", "Courier New", monospace;
+  --variant-radius: 0rem;
+}
+
+/**
+ * iFox Theme Scope
+ * Remaps Tailwind utility classes to use iFox OKLCH tokens
+ * Ensures proper contrast and dark theme for iFox admin dashboard
+ */
+.ifox-theme {
+  /* Override global background/foreground with iFox dark theme */
+  --background: var(--ifox-surface-primary);
+  --foreground: var(--ifox-text-primary);
+  
+  /* Primary (accent colors) */
+  --primary: var(--ifox-accent-primary);
+  --primary-foreground: var(--ifox-text-primary);
+  
+  /* Secondary */
+  --secondary: var(--ifox-surface-overlay);
+  --secondary-foreground: var(--ifox-text-primary);
+  
+  /* Accent */
+  --accent: var(--ifox-accent-secondary);
+  --accent-foreground: var(--ifox-text-primary);
+  
+  /* Card backgrounds */
+  --card: var(--ifox-surface-muted);
+  --card-foreground: var(--ifox-text-primary);
+  
+  /* Borders */
+  --border: var(--ifox-surface-overlay);
+  
+  /* Muted elements */
+  --muted: var(--ifox-surface-overlay);
+  --muted-foreground: var(--ifox-text-secondary);
+  
+  /* Popover/dropdown backgrounds */
+  --popover: var(--ifox-surface-muted);
+  --popover-foreground: var(--ifox-text-primary);
+  
+  /* Sidebar */
+  --sidebar: var(--ifox-surface-primary);
+  --sidebar-foreground: var(--ifox-text-primary);
+  --sidebar-primary: var(--ifox-accent-primary);
+  --sidebar-primary-foreground: var(--ifox-text-primary);
+  --sidebar-accent: var(--ifox-surface-overlay);
+  --sidebar-accent-foreground: var(--ifox-text-primary);
+  --sidebar-border: var(--ifox-surface-overlay);
+  --sidebar-ring: var(--ifox-accent-primary);
+  
+  /* Input fields */
+  --input: var(--ifox-surface-overlay);
+  
+  /* Destructive (use global success/warning/error) */
+  --destructive: var(--ifox-error);
+  --destructive-foreground: var(--ifox-text-primary);
+  
+  /* Ensure proper ring/focus colors */
+  --ring: var(--ifox-accent-primary);
+}
+
+/* Dark mode override - ensure iFox theme stays dark even in light mode */
+.ifox-theme.dark,
+.dark .ifox-theme {
+  --background: var(--ifox-surface-primary);
+  --foreground: var(--ifox-text-primary);
+  --card: var(--ifox-surface-muted);
+  --card-foreground: var(--ifox-text-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+}
+
+/* =====================================================
+ * Multi-Variant Design System
+ * Switches the overall visual style without affecting
+ * the light/dark mode. Controlled by data-variant on <html>.
+ * ===================================================== */
+
+/* AI-First (default) variant: bind --variant-* to global tokens for parity. */
+[data-variant="ai-first"],
+[data-variant="ai-first"].dark {
+  --radius: var(--variant-radius);
+  --font-sans: var(--variant-font-family);
+}
+
+/* Magazine variant: large fonts, no rounded corners, orange accent */
+[data-variant="magazine"],
+[data-variant="magazine"].dark {
+  --radius: var(--variant-radius);
+  --font-sans: var(--variant-font-family);
+  --variant-font-scale: 1.08;
+  --primary: var(--variant-primary);
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 24 95% 42%;
+  --ring: var(--variant-primary);
+  --sidebar-primary: var(--variant-primary);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-ring: var(--variant-primary);
+  --accent: 24 95% 94%;
+  --accent-foreground: 24 95% 38%;
+  --sidebar-accent: 24 95% 94%;
+  --sidebar-accent-foreground: 24 95% 38%;
+}
+[data-variant="magazine"].dark {
+  --accent: 24 60% 14%;
+  --accent-foreground: 24 95% 70%;
+  --sidebar-accent: 24 60% 14%;
+  --sidebar-accent-foreground: 24 95% 70%;
+}
+[data-variant="magazine"] body {
+  font-family: var(--variant-font-family) !important;
+  font-size: calc(1rem * var(--variant-font-scale));
+}
+[data-variant="magazine"] h1,
+[data-variant="magazine"] h2,
+[data-variant="magazine"] h3,
+[data-variant="magazine"] h4 {
+  font-family: var(--variant-font-family) !important;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+[data-variant="magazine"] *,
+[data-variant="magazine"] *::before,
+[data-variant="magazine"] *::after {
+  border-radius: 0 !important;
+}
+
+/* Classic variant: traditional newspaper style with red accent and Naskh font */
+[data-variant="classic"],
+[data-variant="classic"].dark {
+  --radius: var(--variant-radius);
+  --font-sans: var(--variant-font-family);
+  --primary: var(--variant-primary);
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 0 71.7% 32%;
+  --ring: var(--variant-primary);
+  --sidebar-primary: var(--variant-primary);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-ring: var(--variant-primary);
+  --accent: 0 60% 94%;
+  --accent-foreground: 0 72% 35%;
+  --sidebar-accent: 0 60% 94%;
+  --sidebar-accent-foreground: 0 72% 35%;
+}
+[data-variant="classic"].dark {
+  --accent: 0 30% 16%;
+  --accent-foreground: 0 75% 70%;
+  --sidebar-accent: 0 30% 16%;
+  --sidebar-accent-foreground: 0 75% 70%;
+}
+[data-variant="classic"] body {
+  font-family: var(--variant-font-family) !important;
+}
+[data-variant="classic"] h1,
+[data-variant="classic"] h2,
+[data-variant="classic"] h3,
+[data-variant="classic"] h4,
+[data-variant="classic"] h5,
+[data-variant="classic"] h6 {
+  font-family: var(--variant-font-family) !important;
+}
+
+/* Terminal variant: monospace for everything, green accent */
+[data-variant="terminal"],
+[data-variant="terminal"].dark {
+  --radius: var(--variant-radius);
+  --font-sans: var(--variant-font-family);
+  --font-serif: var(--variant-font-family);
+  --font-mono: var(--variant-font-family);
+  --primary: var(--variant-primary);
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 142 70% 36%;
+  --ring: var(--variant-primary);
+  --sidebar-primary: var(--variant-primary);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-ring: var(--variant-primary);
+  --accent: 142 60% 92%;
+  --accent-foreground: 142 70% 28%;
+  --sidebar-accent: 142 60% 92%;
+  --sidebar-accent-foreground: 142 70% 28%;
+}
+[data-variant="terminal"].dark {
+  --accent: 142 50% 12%;
+  --accent-foreground: 142 70% 70%;
+  --sidebar-accent: 142 50% 12%;
+  --sidebar-accent-foreground: 142 70% 70%;
+}
+[data-variant="terminal"] body,
+[data-variant="terminal"] h1,
+[data-variant="terminal"] h2,
+[data-variant="terminal"] h3,
+[data-variant="terminal"] h4,
+[data-variant="terminal"] h5,
+[data-variant="terminal"] h6,
+[data-variant="terminal"] p,
+[data-variant="terminal"] span,
+[data-variant="terminal"] a,
+[data-variant="terminal"] button,
+[data-variant="terminal"] input,
+[data-variant="terminal"] textarea,
+[data-variant="terminal"] select,
+[data-variant="terminal"] li,
+[data-variant="terminal"] td,
+[data-variant="terminal"] th,
+[data-variant="terminal"] label,
+[data-variant="terminal"] div {
+  font-family: var(--variant-font-family) !important;
+}
+
+/**
+ * Using the elevate system.
+ * Automatic contrast adjustment.
+ *
+ * <element className="hover-elevate" />
+ * <element className="active-elevate-2" />
+ *
+ * // Using the tailwind utility when a data attribute is "on"
+ * <element className="toggle-elevate data-[state=on]:toggle-elevated" />
+ * // Or manually controlling the toggle state
+ * <element className="toggle-elevate toggle-elevated" />
+ *
+ * Elevation systems have to handle many states.
+ * - not-hovered, vs. hovered vs. active  (three mutually exclusive states)
+ * - toggled or not
+ * - focused or not (this is not handled with these utilities)
+ *
+ * Even without handling focused or not, this is six possible combinations that
+ * need to be distinguished from eachother visually.
+ */
+@layer utilities {
+
+  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  input[type="search"]::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  /* Placeholder styling for contentEditable div */
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
+   * buttons/badges can remove the automatic brightness adjustment on interactions
+   * and program their own. */
+  .no-default-hover-elevate {}
+
+  .no-default-active-elevate {}
+
+
+  /**
+   * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
+   * This way they can stack/compound. Both will overlap the parent's borders!
+   * So borders will be automatically adjusted both on toggle, and hover/active,
+   * and they will be compounded.
+   */
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: -1;
+    /* sits behind content but above backdrop */
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  /* Does not work on elements with overflow:hidden! */
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    /*border-radius: inherit;   match rounded corners */
+    border-radius: inherit;
+    z-index: 999;
+    /* sits in front of content */
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  /* If there's a 1px border, adjust the inset so that it covers that parent's border */
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+
+  /* TipTap Editor Styles */
+  .ProseMirror {
+    outline: none;
+  }
+
+  .ProseMirror p.is-editor-empty:first-child::before {
+    color: hsl(var(--muted-foreground));
+    content: attr(data-placeholder);
+    float: right;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .ProseMirror h1 {
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+  }
+
+  .ProseMirror h2 {
+    font-size: 1.5em;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 0.83em;
+    margin-bottom: 0.5em;
+  }
+
+  .ProseMirror h3 {
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-top: 0.67em;
+    margin-bottom: 0.5em;
+  }
+
+  .ProseMirror p {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .ProseMirror ul,
+  .ProseMirror ol {
+    padding-right: 1.5rem;
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+
+  .ProseMirror ul li,
+  .ProseMirror ol li {
+    margin-top: 0.25em;
+    margin-bottom: 0.25em;
+  }
+
+  .ProseMirror code {
+    background-color: hsl(var(--muted));
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: hsl(var(--foreground));
+  }
+
+  .ProseMirror pre {
+    background-color: hsl(var(--muted));
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1em 0;
+    overflow-x: auto;
+    direction: ltr;
+    text-align: left;
+  }
+
+  .ProseMirror pre code {
+    background: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  .ProseMirror blockquote {
+    position: relative;
+    border-right: 4px solid hsl(var(--primary));
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem 1.25rem 1rem;
+    margin: 1.5em 0;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.03) 100%);
+    font-style: italic;
+    font-size: 1.1em;
+    line-height: 1.8;
+    color: hsl(var(--foreground) / 0.85);
+    box-shadow: 0 2px 8px hsl(var(--primary) / 0.08);
+  }
+
+  .ProseMirror blockquote::before {
+    content: "❝";
+    position: absolute;
+    top: -0.5rem;
+    right: 0.75rem;
+    font-size: 2.5rem;
+    color: hsl(var(--primary) / 0.25);
+    font-style: normal;
+    line-height: 1;
+  }
+
+  .ProseMirror blockquote p {
+    margin: 0;
+  }
+
+  .ProseMirror blockquote p:not(:last-child) {
+    margin-bottom: 0.75em;
+  }
+
+  /* Article content blockquote styling (prose) */
+  .prose blockquote {
+    position: relative;
+    border-right: 4px solid hsl(var(--primary)) !important;
+    border-left: none !important;
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem 1.25rem 1rem !important;
+    margin: 1.5em 0 !important;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.03) 100%);
+    font-style: italic !important;
+    font-size: 1.1em;
+    line-height: 1.8;
+    color: hsl(var(--foreground) / 0.85) !important;
+    box-shadow: 0 2px 8px hsl(var(--primary) / 0.08);
+    quotes: none !important;
+  }
+
+  .prose blockquote::before {
+    content: "❝" !important;
+    position: absolute !important;
+    top: -0.5rem;
+    right: 0.75rem;
+    left: auto !important;
+    font-size: 2.5rem;
+    color: hsl(var(--primary) / 0.25);
+    font-style: normal;
+    line-height: 1;
+  }
+
+  .prose blockquote p {
+    margin: 0 !important;
+  }
+
+  .prose blockquote p:not(:last-child) {
+    margin-bottom: 0.75em !important;
+  }
+
+  .ProseMirror a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .ProseMirror a:hover {
+    color: hsl(var(--primary) / 0.8);
+  }
+
+  .ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+  }
+
+  .ProseMirror hr {
+    border: none;
+    border-top: 2px solid hsl(var(--border));
+    margin: 2rem 0;
+  }
+
+  /* AI Accent Utilities */
+  .bg-ai-gradient {
+    background: linear-gradient(135deg, hsl(var(--ai-primary)) 0%, hsl(var(--ai-secondary)) 100%);
+  }
+
+  .bg-ai-gradient-soft {
+    background: linear-gradient(135deg, hsl(var(--ai-background)) 0%, hsl(var(--ai-background-muted)) 100%);
+  }
+
+  .text-ai-gradient {
+    background: linear-gradient(135deg, hsl(var(--ai-primary)) 0%, hsl(var(--ai-secondary)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .border-ai-gradient {
+    border-image: linear-gradient(135deg, hsl(var(--ai-primary)) 0%, hsl(var(--ai-secondary)) 100%) 1;
+  }
+
+  /* AI Glow Effect */
+  .ai-glow {
+    box-shadow: 0 0 20px hsl(var(--ai-glow) / 0.3);
+  }
+
+  /* AI Pulse Animation */
+  @keyframes ai-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.02);
+    }
+  }
+
+  .ai-pulse {
+    animation: ai-pulse 3s ease-in-out infinite;
+  }
+
+  /* AI Gradient Pulse Animation */
+  @keyframes ai-gradient-pulse {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  .ai-gradient-pulse {
+    background: linear-gradient(135deg, hsl(var(--ai-primary)) 0%, hsl(var(--ai-secondary)) 50%, hsl(var(--ai-primary)) 100%);
+    background-size: 200% 200%;
+    animation: ai-gradient-pulse 4s ease infinite;
+  }
+
+  /* Scroll Fade In Animation */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .scroll-fade-in {
+    animation: fade-in-up 0.6s ease-out forwards;
+  }
+
+  /* Stagger animation delays */
+  .scroll-fade-in:nth-child(1) { animation-delay: 0.1s; }
+  .scroll-fade-in:nth-child(2) { animation-delay: 0.2s; }
+  .scroll-fade-in:nth-child(3) { animation-delay: 0.3s; }
+  .scroll-fade-in:nth-child(4) { animation-delay: 0.4s; }
+  .scroll-fade-in:nth-child(5) { animation-delay: 0.5s; }
+
+  /* Hide scrollbar utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Emoji Picker Optimizations */
+  .emoji-picker-wrapper {
+    width: 100%;
+  }
+  
+  .emoji-picker-wrapper aside.epr-main {
+    max-width: 100% !important;
+  }
+  
+  /* Make emoji much smaller */
+  .emoji-picker-wrapper .epr-emoji-img {
+    font-size: 16px !important;
+    width: 24px !important;
+    height: 24px !important;
+    padding: 1px !important;
+    margin: 0 !important;
+  }
+  
+  .emoji-picker-wrapper button.epr-emoji {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Reduce category button size */
+  .emoji-picker-wrapper .epr-category-nav button {
+    padding: 4px !important;
+    font-size: 14px !important;
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  /* Reduce search input padding */
+  .emoji-picker-wrapper .epr-search-container {
+    padding: 4px !important;
+  }
+  
+  .emoji-picker-wrapper .epr-search-container input {
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+    height: 28px !important;
+  }
+  
+  /* Tighter grid spacing */
+  .emoji-picker-wrapper .epr-emoji-category-content {
+    gap: 1px !important;
+    padding: 4px !important;
+  }
+  
+  /* Reduce header spacing */
+  .emoji-picker-wrapper .epr-header {
+    padding: 4px !important;
+  }
+  
+  /* Ensure scrolling works */
+  .emoji-picker-wrapper .epr-body {
+    overflow-y: auto !important;
+  }
+
+  /* Small Switch Component - Better sizing for table cells */
+  button[role="switch"].h-5.w-9 > span {
+    height: 1rem !important;
+    width: 1rem !important;
+  }
+
+  button[role="switch"].h-5.w-9[data-state="checked"] > span {
+    transform: translateX(1rem) !important;
+  }
+
+  button[role="switch"].h-5.w-9[data-state="unchecked"] > span {
+    transform: translateX(0) !important;
+  }
+}
+
+/* ==========================================
+   PDF PRINTING STYLES (RTL-first)
+   ========================================== */
+
+/* Print page setup for A4 */
+@page {
+  size: A4 portrait;
+  margin: 16mm 20mm;
+}
+
+/* Print media styles */
+@media print {
+  /* Hide non-printable elements */
+  header:not(.pdf-header),
+  footer:not(.pdf-footer),
+  nav,
+  .no-print,
+  button:not(.pdf-content button),
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* Show PDF content */
+  #article-pdf-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* RTL direction for Arabic */
+  .pdf-header,
+  .pdf-cover,
+  .pdf-content,
+  .pdf-stats,
+  .pdf-footer {
+    direction: rtl !important;
+    text-align: right !important;
+  }
+
+  /* Typography for print */
+  body {
+    font-family: 'IBM Plex Sans Arabic', 'Noto Naskh Arabic', Arial, sans-serif !important;
+    font-size: 12pt !important;
+    line-height: 1.6 !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Headers */
+  h1 {
+    font-size: 24pt !important;
+    font-weight: 700 !important;
+    line-height: 1.3 !important;
+    page-break-after: avoid !important;
+    orphans: 3 !important;
+  }
+
+  h2 {
+    font-size: 18pt !important;
+    font-weight: 600 !important;
+    page-break-after: avoid !important;
+    margin-top: 18pt !important;
+    orphans: 3 !important;
+  }
+
+  h3 {
+    font-size: 14pt !important;
+    font-weight: 600 !important;
+    page-break-after: avoid !important;
+    orphans: 3 !important;
+  }
+
+  /* Paragraphs */
+  p {
+    font-size: 12pt !important;
+    line-height: 1.75 !important;
+    margin-bottom: 10pt !important;
+    orphans: 3 !important;
+    widows: 3 !important;
+  }
+
+  /* Images */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid !important;
+    display: block !important;
+  }
+
+  /* Prevent breaks inside important elements */
+  .pdf-header,
+  .pdf-stats > div,
+  blockquote,
+  pre,
+  table {
+    page-break-inside: avoid !important;
+  }
+
+  /* Links - show URL */
+  a {
+    color: #000 !important;
+    text-decoration: underline !important;
+  }
+
+  /* Remove backgrounds for print */
+  * {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Keep specific backgrounds for stats cards */
+  .pdf-stats .bg-blue-50,
+  .pdf-stats .bg-pink-50,
+  .pdf-stats .bg-green-50,
+  .pdf-stats .bg-purple-50 {
+    background-color: #f5f5f5 !important;
+  }
+
+  /* Borders for print */
+  .border,
+  .border-t,
+  .border-b,
+  .border-r,
+  .border-l {
+    border-color: #ccc !important;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #ccc !important;
+    padding: 8pt !important;
+  }
+
+  /* Code blocks */
+  pre, code {
+    background: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+    page-break-inside: avoid !important;
+    font-size: 10pt !important;
+  }
+
+  /* Blockquotes */
+  blockquote {
+    border-right: 4px solid #ccc !important;
+    padding-right: 12pt !important;
+    margin: 12pt 0 !important;
+    font-style: italic !important;
+  }
+
+  /* Lists */
+  ul, ol {
+    margin: 8pt 0 !important;
+    padding-right: 20pt !important;
+  }
+
+  li {
+    margin-bottom: 4pt !important;
+  }
+}
+
+/* AI Card Shimmer Animation */
+@keyframes shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+/* AI Footer Utilities */
+@keyframes ai-gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes ai-pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes ai-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@layer utilities {
+  .ai-gradient-bg {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--ai-primary) / 0.15) 0%,
+      hsl(var(--ai-secondary) / 0.15) 50%,
+      hsl(var(--ai-primary) / 0.15) 100%
+    );
+    background-size: 200% 200%;
+  }
+
+  .ai-gradient-animate {
+    animation: ai-gradient-shift 8s ease infinite;
+  }
+
+  .ai-glow-border {
+    position: relative;
+    border: 1px solid hsl(var(--ai-primary) / 0.3);
+  }
+
+  .ai-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--ai-primary) / 0.4),
+      hsl(var(--ai-secondary) / 0.4),
+      hsl(var(--ai-primary) / 0.4)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .ai-glow-border:hover::before {
+    opacity: 1;
+  }
+
+  .ai-pulse-icon {
+    animation: ai-pulse-glow 2s ease-in-out infinite;
+  }
+
+  .ai-float-icon {
+    animation: ai-float 3s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-gradient-animate,
+    .ai-pulse-icon,
+    .ai-float-icon {
+      animation: none;
+    }
+  }
+
+  /* Highlight message animation for chat */
+  .highlight-message {
+    animation: highlightFade 2s ease-out;
+  }
+
+  @keyframes highlightFade {
+    0% {
+      background-color: hsl(var(--primary) / 0.2);
+    }
+    100% {
+      background-color: transparent;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .highlight-message {
+      animation: none;
+    }
+  }
+
+  /* Marquee animation for breaking news ticker */
+  @keyframes marquee {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-marquee {
+    animation: marquee 20s linear infinite;
+  }
+
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee {
+      animation: none;
+    }
+  }
+
+  /* 404 Page - Animated Gradient Background */
+  @keyframes gradient-shift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .gradient-404-animate {
+    background: linear-gradient(
+      135deg,
+      hsl(220, 30%, 10%),
+      hsl(220, 84%, 20%),
+      hsl(243, 75%, 25%),
+      hsl(220, 30%, 10%)
+    );
+    background-size: 400% 400%;
+    animation: gradient-shift 15s ease infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gradient-404-animate {
+      animation: none;
+      background: hsl(220, 30%, 10%);
+    }
+  }
+
+  /* ============================================
+   * ACCESSIBILITY SETTINGS
+   * ============================================ */
+
+  /* Font Size Settings */
+  html.font-normal {
+    font-size: 16px;
+  }
+
+  html.font-large {
+    font-size: 18px;
+  }
+
+  html.font-x-large {
+    font-size: 20px;
+  }
+
+  /* High Contrast Mode */
+  html.high-contrast {
+    --foreground: 220 20% 5%;
+    --background: 0 0% 100%;
+    --border: 220 13% 70%;
+    --card-border: 220 24% 60%;
+    --muted-foreground: 220 10% 40%;
+  }
+
+  html.high-contrast.dark {
+    --foreground: 0 0% 98%;
+    --background: 220 20% 5%;
+    --border: 220 13% 30%;
+    --card-border: 220 24% 40%;
+    --muted-foreground: 220 10% 60%;
+  }
+
+  /* Reduce Motion - Disable all animations */
+  html.reduce-motion *,
+  html.reduce-motion *::before,
+  html.reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Also respect system prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Reading Mode - Enhanced readability for dyslexia */
+  html.reading-mode {
+    /* Apply OpenDyslexic font */
+    font-family: 'OpenDyslexic', 'IBM Plex Sans Arabic', sans-serif;
+  }
+
+  /* Scope reading mode text spacing to text elements only - preserves UI control spacing and table layouts */
+  html.reading-mode p,
+  html.reading-mode li,
+  html.reading-mode h1,
+  html.reading-mode h2,
+  html.reading-mode h3,
+  html.reading-mode h4,
+  html.reading-mode h5,
+  html.reading-mode h6,
+  html.reading-mode blockquote,
+  html.reading-mode article,
+  html.reading-mode section {
+    /* Enhanced line height for better readability */
+    line-height: 1.8 !important;
+    
+    /* Enhanced letter spacing */
+    letter-spacing: 0.12em !important;
+    
+    /* Enhanced word spacing */
+    word-spacing: 0.16em !important;
+  }
+
+  /* Line highlighting on hover for paragraphs in reading mode */
+  html.reading-mode p:hover,
+  html.reading-mode li:hover {
+    background-color: hsl(var(--accent) / 0.3);
+    outline: 2px solid hsl(var(--accent) / 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease, outline 0.2s ease;
+  }
+
+  /* Respect reduce motion in reading mode */
+  html.reading-mode.reduce-motion p:hover,
+  html.reading-mode.reduce-motion li:hover {
+    transition: none !important;
+  }
+
+  /* Preserve monospace fonts for code in reading mode */
+  html.reading-mode code,
+  html.reading-mode pre,
+  html.reading-mode kbd,
+  html.reading-mode samp {
+    font-family: var(--font-mono) !important;
+    letter-spacing: normal !important;
+  }
+
+  /* Preserve icon fonts in reading mode */
+  html.reading-mode [class*="icon"],
+  html.reading-mode svg {
+    font-family: inherit !important;
+  }
+
+  /* ============================================
+   * TOUCH TARGET IMPROVEMENTS (WCAG 2.5.5)
+   * Minimum 44x44px for mobile touch targets
+   * ============================================ */
+  
+  @media (max-width: 768px) {
+    /* Ensure all interactive elements meet minimum touch target size */
+    button:not(.no-min-touch-size),
+    a:not(.no-min-touch-size),
+    input[type="button"]:not(.no-min-touch-size),
+    input[type="submit"]:not(.no-min-touch-size),
+    input[type="reset"]:not(.no-min-touch-size),
+    [role="button"]:not(.no-min-touch-size),
+    [onclick]:not(.no-min-touch-size) {
+      min-width: 44px;
+      min-height: 44px;
+    }
+    
+    /* Exception for icon buttons - use padding to meet target size */
+    button[data-testid*="icon"]:not(.no-min-touch-size),
+    button.icon-button:not(.no-min-touch-size) {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+
+  /* ============================================
+   * ENHANCED FOCUS INDICATORS
+   * Visible focus rings with high contrast
+   * ============================================ */
+  
+  /* Primary focus style - applies to all focusable elements */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
+  /* Enhanced focus for keyboard navigation */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.1);
+  }
+
+  /* High contrast focus indicators */
+  html.high-contrast *:focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 3px;
+    box-shadow: 0 0 0 6px hsl(var(--ring) / 0.2);
+  }
+
+  /* Focus within containers */
+  .focus-within-ring:focus-within {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Skip links focus (always visible when focused) */
+  .skip-link:focus {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+    padding: 1rem;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  /* ============================================
+   * SCREEN READER UTILITIES
+   * ============================================ */
+  
+  /* Screen reader only - visually hidden but accessible */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  /* Screen reader only - not focusable */
+  .sr-only-not-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+/* ============================================
+ * REACT-DATEPICKER CUSTOM STYLES
+ * RTL + Dark Mode Support
+ * ============================================ */
+
+.react-datepicker {
+  font-family: 'IBM Plex Sans Arabic', sans-serif !important;
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+  direction: rtl;
+}
+
+.react-datepicker__header {
+  background-color: hsl(var(--muted)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  border-top-left-radius: 0.5rem !important;
+  border-top-right-radius: 0.5rem !important;
+  padding-top: 0.5rem !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header,
+.react-datepicker__day-name {
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-datepicker__day {
+  color: hsl(var(--foreground)) !important;
+  border-radius: 0.375rem !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--accent-foreground)) !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.react-datepicker__day--today {
+  font-weight: bold !important;
+  border: 1px solid hsl(var(--primary)) !important;
+}
+
+.react-datepicker__day--disabled {
+  color: hsl(var(--muted-foreground)) !important;
+  opacity: 0.5;
+}
+
+.react-datepicker__navigation {
+  top: 0.75rem !important;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: hsl(var(--foreground)) !important;
+}
+
+.react-datepicker__time-container {
+  border-right: 1px solid hsl(var(--border)) !important;
+  border-left: none !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time {
+  background-color: hsl(var(--popover)) !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time-box {
+  width: 100px !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time-list-item {
+  color: hsl(var(--foreground)) !important;
+  padding: 0.5rem 0.75rem !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time-list-item:hover {
+  background-color: hsl(var(--accent)) !important;
+}
+
+.react-datepicker__time-container .react-datepicker__time-list-item--selected {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.react-datepicker__triangle {
+  display: none !important;
+}
+
+.react-datepicker-popper {
+  z-index: 50 !important;
+}
+
+/* ===== Enhanced Form Field Styling ===== */
+
+/* Form Section Container */
+.form-section {
+  @apply relative rounded-xl border border-border/60 bg-card/30 p-5;
+  padding-left: 1.25rem;
+}
+
+[dir="rtl"] .form-section {
+  padding-left: 1.25rem;
+  padding-right: 1.5rem;
+}
+
+.form-section::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  right: -1px;
+  width: 4px;
+  background: linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.3) 100%);
+  border-radius: 4px;
+}
+
+[dir="rtl"] .form-section::before {
+  right: auto;
+  left: -1px;
+}
+
+.form-section-header {
+  @apply flex items-center gap-3 mb-4 pb-3 border-b border-border/40;
+}
+
+.form-section-icon {
+  @apply flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary;
+}
+
+.form-section-title {
+  @apply text-base font-semibold text-foreground;
+}
+
+.form-section-description {
+  @apply text-xs text-muted-foreground/80 mt-0.5;
+}
+
+/* Form Field Groups */
+.form-field-group {
+  @apply space-y-4;
+}
+
+.form-field-row {
+  @apply grid gap-4;
+}
+
+.form-field-row-2 {
+  @apply grid-cols-1 sm:grid-cols-2;
+}
+
+/* Enhanced Label Styling */
+.form-label-enhanced {
+  @apply text-sm font-medium text-foreground/90 mb-1.5 block;
+}
+
+.form-label-enhanced.required::after {
+  content: ' *';
+  @apply text-destructive;
+}
+
+/* Helper Text Styling */
+.form-helper-text {
+  @apply text-xs text-muted-foreground/70 italic mt-1.5 block;
+}
+
+.form-helper-text-inline {
+  @apply text-xs text-muted-foreground/60 italic;
+}
+
+/* Field State Indicators */
+.field-filled {
+  @apply border-primary/30 bg-background;
+}
+
+.field-error {
+  @apply border-destructive/50 bg-destructive/5;
+}
+
+/* Dark mode adjustments */
+.dark .form-section {
+  @apply bg-card/50 border-border/40;
+}
+
+.dark .form-section::before {
+  background: linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.2) 100%);
+}
+
+/* ===== Glassmorphism Utilities for Moment by Moment Page ===== */
+
+.glass-panel {
+  @apply bg-background/90 backdrop-blur-md border border-border/40;
+}
+
+.glass-panel-dark {
+  @apply bg-card/70 backdrop-blur-md border border-white/10;
+}
+
+.glass-hero {
+  background: linear-gradient(135deg, 
+    hsl(var(--destructive) / 0.1) 0%, 
+    hsl(var(--primary) / 0.08) 50%,
+    hsl(var(--accent) / 0.1) 100%);
+  @apply backdrop-blur-sm;
+}
+
+.live-pulse-ring {
+  animation: live-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes live-pulse-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px hsl(var(--destructive) / 0);
+  }
+}
+
+.stat-card-gradient-1 {
+  background: linear-gradient(135deg, 
+    hsl(var(--card)) 0%, 
+    hsl(var(--primary) / 0.15) 100%);
+}
+
+.stat-card-gradient-2 {
+  background: linear-gradient(135deg, 
+    hsl(var(--card)) 0%, 
+    hsl(var(--destructive) / 0.15) 100%);
+}
+
+.stat-card-gradient-3 {
+  background: linear-gradient(135deg, 
+    hsl(var(--card)) 0%, 
+    hsl(243 75% 59% / 0.15) 100%);
+}
+
+.stat-card-gradient-4 {
+  background: linear-gradient(135deg, 
+    hsl(var(--card)) 0%, 
+    hsl(var(--info) / 0.15) 100%);
+}
+
+.news-card-modern {
+  @apply relative transition-all duration-300;
+}
+
+.news-card-modern::before {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-l from-primary/5 to-transparent opacity-0 transition-opacity duration-300 rounded-lg pointer-events-none;
+}
+
+.news-card-modern:hover::before {
+  @apply opacity-100;
+}
+
+/* Staggered animation for cards */
+.animate-fade-in-up {
+  animation: moment-fade-in-up 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes moment-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animation delay utilities for staggered effect */
+.animation-delay-100 { animation-delay: 100ms; }
+.animation-delay-200 { animation-delay: 200ms; }
+.animation-delay-300 { animation-delay: 300ms; }
+.animation-delay-400 { animation-delay: 400ms; }
+.animation-delay-500 { animation-delay: 500ms; }
+
+/* Breaking news ticker animation */
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker-scroll 30s linear infinite;
+}
+
+/* LTR ticker animation for English */
+@keyframes ticker-scroll-ltr {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-ticker-ltr {
+  animation: ticker-scroll-ltr 30s linear infinite;
+}
+
+/* Filter pill active state */
+.filter-pill-active {
+  @apply bg-primary text-primary-foreground shadow-md;
+  box-shadow: 0 4px 14px hsl(var(--primary) / 0.25);
+}
+
+.filter-pill-breaking-active {
+  @apply bg-destructive text-destructive-foreground;
+  box-shadow: 0 4px 14px hsl(var(--destructive) / 0.25);
+}
+
+/* Fix RTL sidebar spacing for dashboard */
+[dir="rtl"] [data-slot="sidebar-gap"] {
+  display: none;
+}
+
+/* Only apply margin on desktop (md and above) where sidebar is fixed position */
+@media (min-width: 768px) {
+  [dir="rtl"] [data-slot="sidebar-inset"] {
+    margin-right: var(--sidebar-width);
+    transition: margin-right 0.2s ease-linear;
+  }
+
+  /* When sidebar is collapsed in RTL, remove the margin */
+  [dir="rtl"] .peer[data-state="collapsed"] ~ [data-slot="sidebar-inset"] {
+    margin-right: 0;
+  }
+}
+
+/* On mobile, sidebar is overlay (Sheet), so no margin needed */
+@media (max-width: 767px) {
+  [dir="rtl"] [data-slot="sidebar-inset"] {
+    margin-right: 0;
+  }
+}
+
+.dark #Leaderboard[data-ad-state="filled"],
+.dark #MPU[data-ad-state="filled"],
+.dark [data-testid^="dms-ad-slot-lite"][data-ad-state="filled"] {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.prose img {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  width: 100%;
+}
+
+.prose img[width][height],
+.prose img[data-legacy-aspect="cached"],
+.prose img[data-legacy-aspect="measured"] {
+  aspect-ratio: auto;
+}
+
+.embed-responsive {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.embed-responsive iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.prose .social-embed-wrap {
+  width: 100%;
+}
+
+.prose figure {
+  contain: layout;
+}

@@ -1,0 +1,18 @@
+{
+  "id": "breaking-001",
+  "title": "عاجل: هزة أرضية بقوة 4.2 ريختر تضرب جنوب المملكة",
+  "slug": "earthquake-southern-region",
+  "excerpt": "رصدت هيئة المساحة الجيولوجية السعودية هزة أرضية بلغت قوتها 4.2 درجة على مقياس ريختر في منطقة جنوب المملكة، دون الإبلاغ عن أضرار بشرية أو مادية.",
+  "image": "https://images.unsplash.com/photo-1464207687429-7505649dae38?w=1200",
+  "publishedAt": "2025-10-24T15:45:00Z",
+  "category": {
+    "id": "cat-breaking",
+    "name": "عاجل",
+    "slug": "breaking",
+    "color": "#dc2626"
+  },
+  "views": 28340,
+  "likes": 421,
+  "commentsCount": 89,
+  "newsType": "breaking"
+}

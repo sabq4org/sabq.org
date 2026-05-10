@@ -1,0 +1,36 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build:client",
+  "outputDirectory": "dist/public",
+  "installCommand": "npm ci",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.sabq.news/api/:path*" },
+    { "source": "/health", "destination": "https://api.sabq.news/health" },
+    { "source": "/ready", "destination": "https://api.sabq.news/ready" },
+    { "source": "/sitemap.xml", "destination": "https://api.sabq.news/sitemap.xml" },
+    { "source": "/sitemap-:path*.xml", "destination": "https://api.sabq.news/sitemap-:path*.xml" },
+    { "source": "/robots.txt", "destination": "https://api.sabq.news/robots.txt" },
+    { "source": "/ads.txt", "destination": "https://api.sabq.news/ads.txt" },
+    { "source": "/app-ads.txt", "destination": "https://api.sabq.news/app-ads.txt" },
+    { "source": "/uploads/:path*", "destination": "https://api.sabq.news/uploads/:path*" },
+    { "source": "/branding/:path*", "destination": "https://api.sabq.news/branding/:path*" }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)\\.(js|css|woff|woff2|ttf|eot|png|jpg|jpeg|gif|svg|webp|avif|ico)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+  "github": {
+    "silent": true
+  }
+}

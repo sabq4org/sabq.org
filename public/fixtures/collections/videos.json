@@ -1,0 +1,32 @@
+[
+  {
+    "id": "video-001",
+    "title": "جولة حصرية داخل مشروع نيوم",
+    "slug": "neom-exclusive-tour",
+    "image": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800",
+    "videoUrl": "https://www.youtube.com/watch?v=example1",
+    "publishedAt": "2025-10-24T14:00:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "views": 45670
+  },
+  {
+    "id": "video-002",
+    "title": "أهداف المباراة كاملة",
+    "slug": "match-highlights",
+    "image": "https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=800",
+    "videoUrl": "https://www.youtube.com/watch?v=example2",
+    "publishedAt": "2025-10-24T13:00:00Z",
+    "category": { "id": "cat-sports", "name": "رياضة", "slug": "sports", "color": "#f59e0b" },
+    "views": 62340
+  },
+  {
+    "id": "video-003",
+    "title": "كيف يعمل الذكاء الاصطناعي التوليدي؟",
+    "slug": "ai-explained",
+    "image": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800",
+    "videoUrl": "https://www.youtube.com/watch?v=example3",
+    "publishedAt": "2025-10-24T11:00:00Z",
+    "category": { "id": "cat-tech", "name": "تقنية", "slug": "technology", "color": "#7c3aed" },
+    "views": 18920
+  }
+]

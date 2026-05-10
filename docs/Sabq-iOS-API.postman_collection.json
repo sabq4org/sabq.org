@@ -1,0 +1,954 @@
+{
+  "info": {
+    "name": "Sabq iOS API",
+    "_postman_id": "sabq-ios-api-v1",
+    "description": "توثيق API تطبيق سبق للـ iOS\nBase URL: https://sabq.org\nAPI Version: v1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://sabq.org",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Bearer token — يُحدَّث تلقائياً عند تسجيل الدخول"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "deviceToken",
+      "value": "apns-device-token-here",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"123456\",\n  \"firstName\": \"أحمد\",\n  \"lastName\": \"الغامدي\",\n  \"phone\": \"+966501234567\",\n  \"gender\": \"male\",\n  \"city\": \"الرياض\",\n  \"country\": \"SA\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.userId) {",
+                  "  pm.collectionVariables.set('userId', res.userId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "activate"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"code\": \"123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Resend Activation Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-activation",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "resend-activation"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"123456\",\n  \"deviceInfo\": {\n    \"platform\": \"ios\",\n    \"model\": \"iPhone 16\",\n    \"osVersion\": \"18.0\",\n    \"appVersion\": \"1.0.0\"\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.collectionVariables.set('token', res.token);",
+                  "  pm.collectionVariables.set('userId', res.user.id);",
+                  "  console.log('Token saved:', res.token.substring(0, 20) + '...');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"code\": \"123456\",\n  \"newPassword\": \"newPassword123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        },
+        {
+          "name": "Logout All Devices",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout-all",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout-all"]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📰 Articles & News",
+      "item": [
+        {
+          "name": "Get Articles List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles?limit=20&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles"],
+              "query": [
+                { "key": "limit", "value": "20", "description": "عدد النتائج (الحد الأقصى 200)" },
+                { "key": "offset", "value": "0", "description": "تخطي عدد من النتائج" },
+                { "key": "category", "value": "", "disabled": true, "description": "UUID القسم" },
+                { "key": "newsType", "value": "", "disabled": true, "description": "breaking | featured | regular" },
+                { "key": "featured", "value": "true", "disabled": true, "description": "المقالات المميزة" },
+                { "key": "since", "value": "", "disabled": true, "description": "ISO 8601 date" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Single Article",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles/:articleId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles", ":articleId"],
+              "variable": [
+                { "key": "articleId", "value": "article-uuid-here" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Articles by Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles?category=category-uuid&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles"],
+              "query": [
+                { "key": "category", "value": "category-uuid" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Breaking News",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/breaking?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "breaking"],
+              "query": [
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Featured Articles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles?featured=true&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles"],
+              "query": [
+                { "key": "featured", "value": "true" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Homepage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/homepage",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "homepage"]
+            }
+          }
+        },
+        {
+          "name": "Get Related Articles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:slug/related",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":slug", "related"],
+              "variable": [
+                { "key": "slug", "value": "article-slug-here" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Weekly Photos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/weekly-photos?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "weekly-photos"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Breaking Ticker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/breaking-ticker/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "breaking-ticker", "active"]
+            }
+          }
+        },
+        {
+          "name": "Track Article View",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles/:articleId/view",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles", ":articleId", "view"],
+              "variable": [
+                { "key": "articleId", "value": "article-uuid-here" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"unique-device-id\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0.0\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Batch Track Views (Offline Sync)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/articles/batch-view",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "articles", "batch-view"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"views\": [\n    { \"articleId\": \"article-uuid-1\" },\n    { \"articleId\": \"article-uuid-2\" }\n  ],\n  \"deviceId\": \"unique-device-id\",\n  \"platform\": \"ios\",\n  \"appVersion\": \"1.0.0\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📂 Categories",
+      "item": [
+        {
+          "name": "Get Categories (v1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get Menu Groups (For App Navigation)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/menu-groups",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "menu-groups"]
+            }
+          }
+        },
+        {
+          "name": "Get Categories (Web)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "categories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 Profile",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "profile"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"أحمد\",\n  \"lastName\": \"الغامدي\",\n  \"gender\": \"male\",\n  \"city\": \"جدة\",\n  \"country\": \"SA\",\n  \"locale\": \"ar\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Upload Profile Image (base64)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/profile/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "profile", "image"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Profile Image",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/profile/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "profile", "image"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/change-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "change-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"oldPassword123\",\n  \"newPassword\": \"newPassword456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/account",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "account"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "❤️ Interests",
+      "item": [
+        {
+          "name": "Get Available Interests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/interests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "interests"]
+            }
+          }
+        },
+        {
+          "name": "Get My Interests",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/interests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "interests"]
+            }
+          }
+        },
+        {
+          "name": "Update Interests (Replace All)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/interests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "interests"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryIds\": [\"cat-uuid-1\", \"cat-uuid-2\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Add Interest",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/interests/add",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "interests", "add"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"cat-uuid\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Remove Interest",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/interests/:categoryId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "interests", ":categoryId"],
+              "variable": [
+                { "key": "categoryId", "value": "cat-uuid" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔔 Push Notifications",
+      "item": [
+        {
+          "name": "Register Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceToken\": \"{{deviceToken}}\",\n  \"platform\": \"ios\",\n  \"tokenProvider\": \"apns\",\n  \"deviceName\": \"iPhone 16 Pro\",\n  \"osVersion\": \"18.0\",\n  \"appVersion\": \"1.0.0\",\n  \"language\": \"ar\",\n  \"timezone\": \"Asia/Riyadh\",\n  \"userId\": \"{{userId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Unregister Device",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/unregister",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "unregister"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceToken\": \"{{deviceToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Check Device Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/devices/status?deviceToken={{deviceToken}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "devices", "status"],
+              "query": [
+                { "key": "deviceToken", "value": "{{deviceToken}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Topics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/topics",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "topics"]
+            }
+          }
+        },
+        {
+          "name": "Track Notification Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/event",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "event"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaignId\": \"campaign-uuid\",\n  \"eventType\": \"opened\",\n  \"deviceToken\": \"{{deviceToken}}\",\n  \"metadata\": {\n    \"articleId\": \"article-uuid\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Register FCM Token (Authenticated)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/members/fcm-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "members", "fcm-token"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fcmToken\": \"fcm-token-here\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💬 Comments",
+      "item": [
+        {
+          "name": "Get Article Comments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:slug/comments?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":slug", "comments"],
+              "variable": [
+                { "key": "slug", "value": "article-slug-here" }
+              ],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Post Comment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:slug/comments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":slug", "comments"],
+              "variable": [
+                { "key": "slug", "value": "article-slug-here" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"تعليقي على هذا الخبر\",\n  \"parentId\": null\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👍 Reactions & Bookmarks",
+      "item": [
+        {
+          "name": "React to Article",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:id/react",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":id", "react"],
+              "variable": [
+                { "key": "id", "value": "article-uuid" }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"like\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Bookmark Article (Toggle)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:id/bookmark",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":id", "bookmark"],
+              "variable": [
+                { "key": "id", "value": "article-uuid" }
+              ]
+            },
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔍 Search",
+      "item": [
+        {
+          "name": "Search Articles (v1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search?q=الاقتصاد&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "search"],
+              "query": [
+                { "key": "q", "value": "الاقتصاد" },
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" },
+                { "key": "categoryId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Articles (Web)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search?q=الاقتصاد&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "search"],
+              "query": [
+                { "key": "q", "value": "الاقتصاد" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🎵 Audio Newsletters",
+      "item": [
+        {
+          "name": "Get Public Newsletters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/audio-newsletters/public",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audio-newsletters", "public"]
+            }
+          }
+        },
+        {
+          "name": "Get Single Newsletter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/audio-newsletters/public/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audio-newsletters", "public", ":id"],
+              "variable": [
+                { "key": "id", "value": "newsletter-uuid" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Article Audio Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/articles/:slug/summary-audio",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "articles", ":slug", "summary-audio"],
+              "variable": [
+                { "key": "slug", "value": "article-slug" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

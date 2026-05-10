@@ -1,0 +1,1291 @@
+{
+  "version": "1.0.0",
+  "templates": [
+    {
+      "id": "hero.split",
+      "name": "Hero تقسيم يمين/يسار",
+      "kind": "hero",
+      "description": "قصة رئيسية بصورة كبيرة ونص مختصر في تخطيط مقسوم",
+      "bestFor": ["خبر رئيسي", "عاجل", "قصة مميزة", "صور قوية"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "image", "publishedAt"],
+        "optionalFields": ["excerpt", "category", "author", "reporter"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["article", "banner"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["hero_top"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "position", "article_id"]
+      },
+      "component": {
+        "name": "HeroSplit",
+        "path": "components/publishing/templates/HeroSplit.tsx",
+        "props": ["item", "accent"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/lead.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 90
+      },
+      "scoreHints": {
+        "urgency": 0.5,
+        "hasImages": 0.4,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "hero.overlay",
+      "name": "Hero مع تراكب نصي",
+      "kind": "hero",
+      "description": "صورة كاملة العرض مع نص متراكب للتأثير الدرامي",
+      "bestFor": ["خبر عاجل", "قصة مصورة", "تغطية خاصة"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "image", "publishedAt"],
+        "optionalFields": ["excerpt", "category", "newsType"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "lg",
+        "elevation": "none",
+        "accent": "brand.primary",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["article", "banner"],
+        "contrastMin": 7,
+        "keyboardNav": true
+      },
+      "placements": ["hero_top"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "position", "article_id"]
+      },
+      "component": {
+        "name": "HeroOverlay",
+        "path": "components/publishing/templates/HeroOverlay.tsx",
+        "props": ["item", "accent"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/breaking.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 80
+      },
+      "scoreHints": {
+        "urgency": 0.6,
+        "hasImages": 0.5,
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "news_list.basic",
+      "name": "قائمة أخبار - أساسي",
+      "kind": "list",
+      "description": "قائمة عمودية بسيطة للعناوين مع صور مصغرة",
+      "bestFor": ["عناوين قصيرة", "تحديثات كثيرة", "قراءة سريعة"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "publishedAt"],
+        "optionalFields": ["image", "category", "excerpt", "views"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "md",
+        "elevation": "none",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius", "density"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "above_all_news", "in_stream", "sidebar_primary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 12
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "position", "item_index"]
+      },
+      "component": {
+        "name": "NewsListBasic",
+        "path": "components/publishing/templates/NewsListBasic.tsx",
+        "props": ["items", "title", "accent", "limit", "showMeta"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/topNews.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 80
+      },
+      "scoreHints": {
+        "urgency": 0.4,
+        "hasImages": 0.2,
+        "readingDepth": 0.1,
+        "viewport": "mobile"
+      }
+    },
+    {
+      "id": "news_list.summary",
+      "name": "قائمة أخبار - مع ملخص",
+      "kind": "list",
+      "description": "قائمة أخبار مع ملخصات قصيرة لكل مقال",
+      "bestFor": ["تحليلات", "قصص معمقة", "قراءة متأنية"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "excerpt", "publishedAt"],
+        "optionalFields": ["image", "category", "author", "readingTime"]
+      },
+      "behaviors": {
+        "pagination": "loadMore",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "density"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "above_all_news", "in_stream"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 8
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "has_image"]
+      },
+      "component": {
+        "name": "NewsListSummary",
+        "path": "components/publishing/templates/NewsListSummary.tsx",
+        "props": ["items", "title", "accent", "limit", "showAuthor"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/topNews.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 90,
+        "maxDescLen": 160
+      },
+      "scoreHints": {
+        "urgency": 0.2,
+        "hasImages": 0.3,
+        "readingDepth": 0.4,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "news_grid.two_col",
+      "name": "Grid عمودان",
+      "kind": "grid",
+      "description": "شبكة من بطاقات الأخبار مع صور مصغّرة في عمودين",
+      "bestFor": ["تجميع فئات", "تدفّق يومي", "محتوى مرئي"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "image", "publishedAt"],
+        "optionalFields": ["category", "excerpt", "views"]
+      },
+      "behaviors": {
+        "pagination": "loadMore",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "#2563eb",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "above_all_news", "in_stream"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 12
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "column"]
+      },
+      "component": {
+        "name": "NewsGridTwoCol",
+        "path": "components/publishing/templates/NewsGridTwoCol.tsx",
+        "props": ["items", "accent", "limit", "title"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/topNews.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 4,
+        "maxTitleLen": 80
+      },
+      "scoreHints": {
+        "urgency": 0.2,
+        "hasImages": 0.6,
+        "viewport": "mobile"
+      }
+    },
+    {
+      "id": "news_grid.masonry",
+      "name": "Grid Masonry متدرج",
+      "kind": "grid",
+      "description": "تخطيط Masonry ديناميكي للمحتوى متنوع الأحجام",
+      "bestFor": ["محتوى مختلط", "صور متنوعة", "تصميم جذاب"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "image", "publishedAt"],
+        "optionalFields": ["excerpt", "category", "newsType"]
+      },
+      "behaviors": {
+        "pagination": "infinite",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "in_stream"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 15
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "size_variant"]
+      },
+      "component": {
+        "name": "NewsGridMasonry",
+        "path": "components/publishing/templates/NewsGridMasonry.tsx",
+        "props": ["items", "accent", "limit"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/mixed.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 6,
+        "maxTitleLen": 90
+      },
+      "scoreHints": {
+        "urgency": 0.1,
+        "hasImages": 0.7,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "ticker.inline",
+      "name": "Ticker مضمّن",
+      "kind": "ticker",
+      "description": "شريط عناوين سريع للأخبار العاجلة داخل المحتوى",
+      "bestFor": ["أخبار عاجلة", "تحديثات سريعة", "أحداث لحظية"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "publishedAt"],
+        "optionalFields": ["newsType"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": false,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "md",
+        "elevation": "sm",
+        "accent": "#dc2626",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["marquee", "list"],
+        "contrastMin": 7,
+        "keyboardNav": true
+      },
+      "placements": ["between_all_and_murqap", "in_stream"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "no-image",
+        "maxItems": 20
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "ticker_type"]
+      },
+      "component": {
+        "name": "TickerInline",
+        "path": "components/publishing/templates/TickerInline.tsx",
+        "props": ["items", "accent", "speed", "pauseOnHover"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/breaking.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 60
+      },
+      "scoreHints": {
+        "urgency": 0.8,
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "ticker.marquee",
+      "name": "Ticker Marquee متحرك",
+      "kind": "ticker",
+      "description": "شريط أخبار متحرك مستمر بدون توقف",
+      "bestFor": ["بث مباشر", "تغطية حية", "أحداث رياضية"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug"],
+        "optionalFields": ["publishedAt", "category"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "none",
+        "skeleton": false,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "md",
+        "elevation": "none",
+        "accent": "#ea580c",
+        "allowOverride": ["accent", "speed"]
+      },
+      "a11y": {
+        "roles": ["marquee", "complementary"],
+        "contrastMin": 7,
+        "keyboardNav": false
+      },
+      "placements": ["hero_top", "above_footer"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "no-image",
+        "maxItems": 30
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "speed_setting"]
+      },
+      "component": {
+        "name": "TickerMarquee",
+        "path": "components/publishing/templates/TickerMarquee.tsx",
+        "props": ["items", "accent", "speed"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/live.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 5,
+        "maxTitleLen": 70
+      },
+      "scoreHints": {
+        "urgency": 0.9,
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "timeline.vertical",
+      "name": "Timeline عمودي",
+      "kind": "timeline",
+      "description": "خط زمني عمودي لتتبع تطور القصة",
+      "bestFor": ["سرد تاريخي", "تطور حدث", "قصة مستمرة"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "publishedAt"],
+        "optionalFields": ["excerpt", "image", "category"]
+      },
+      "behaviors": {
+        "pagination": "loadMore",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "density"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["between_all_and_murqap", "in_stream", "sidebar_primary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image contain",
+        "maxItems": 10
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "date"]
+      },
+      "component": {
+        "name": "TimelineVertical",
+        "path": "components/publishing/templates/TimelineVertical.tsx",
+        "props": ["items", "accent", "showDates", "title"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/story.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 100
+      },
+      "scoreHints": {
+        "readingDepth": 0.5,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "timeline.horizontal",
+      "name": "Timeline أفقي",
+      "kind": "timeline",
+      "description": "خط زمني أفقي قابل للتمرير",
+      "bestFor": ["أحداث متتالية", "مراحل تطور", "تصفح سريع"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "publishedAt"],
+        "optionalFields": ["image", "excerpt"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "brand.primary",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["list", "region"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "between_all_and_murqap"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 12
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "scroll_position"]
+      },
+      "component": {
+        "name": "TimelineHorizontal",
+        "path": "components/publishing/templates/TimelineHorizontal.tsx",
+        "props": ["items", "accent", "showDates"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/story.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 4,
+        "maxTitleLen": 70
+      },
+      "scoreHints": {
+        "viewport": "mobile"
+      }
+    },
+    {
+      "id": "spotlight.card",
+      "name": "Spotlight بطاقة مميزة",
+      "kind": "spotlight",
+      "description": "بطاقة كبيرة لتسليط الضوء على مقال واحد",
+      "bestFor": ["قصة مميزة", "تحقيق خاص", "تقرير مهم"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "excerpt", "image"],
+        "optionalFields": ["author", "category", "readingTime", "publishedAt"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["article", "complementary"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "sidebar_primary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "article_id", "position"]
+      },
+      "component": {
+        "name": "SpotlightCard",
+        "path": "components/publishing/templates/SpotlightCard.tsx",
+        "props": ["item", "accent"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/featured.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 100,
+        "maxDescLen": 200
+      },
+      "scoreHints": {
+        "urgency": 0.3,
+        "hasImages": 0.6,
+        "readingDepth": 0.5
+      }
+    },
+    {
+      "id": "spotlight.media",
+      "name": "Spotlight وسائط",
+      "kind": "spotlight",
+      "description": "تسليط ضوء على محتوى مرئي مع مشغل فيديو",
+      "bestFor": ["فيديو مميز", "تقرير مصور", "محتوى تفاعلي"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "videoUrl"],
+        "optionalFields": ["excerpt", "image", "category", "views"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "#7c3aed",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["article", "region"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "below_featured"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "video_play", "completion_rate"]
+      },
+      "component": {
+        "name": "SpotlightMedia",
+        "path": "components/publishing/templates/SpotlightMedia.tsx",
+        "props": ["item", "accent", "autoplay"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/video.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 90
+      },
+      "scoreHints": {
+        "hasVideo": 0.9,
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "mosaic.magazine",
+      "name": "Mosaic مجلة",
+      "kind": "mosaic",
+      "description": "تخطيط فسيفسائي بأحجام متنوعة كالمجلات",
+      "bestFor": ["محتوى مختلط", "تصميم فني", "صفحة رئيسية"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "image"],
+        "optionalFields": ["excerpt", "category", "newsType", "publishedAt"]
+      },
+      "behaviors": {
+        "pagination": "loadMore",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "in_stream"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 9
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "item_index", "grid_position"]
+      },
+      "component": {
+        "name": "MosaicMagazine",
+        "path": "components/publishing/templates/MosaicMagazine.tsx",
+        "props": ["items", "accent", "layout"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/mixed.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 6,
+        "maxTitleLen": 85
+      },
+      "scoreHints": {
+        "hasImages": 0.8,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "opinion.column",
+      "name": "عمود رأي",
+      "kind": "opinion",
+      "description": "تخطيط مخصص لمقالات الرأي والأعمدة الصحفية",
+      "bestFor": ["مقال رأي", "عمود صحفي", "تحليل شخصي"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "excerpt", "author"],
+        "optionalFields": ["image", "category", "publishedAt"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "#0891b2",
+        "allowOverride": ["accent", "density"]
+      },
+      "a11y": {
+        "roles": ["article", "region"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "sidebar_primary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "author_id", "category"]
+      },
+      "component": {
+        "name": "OpinionColumn",
+        "path": "components/publishing/templates/OpinionColumn.tsx",
+        "props": ["item", "accent", "showAuthor"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/opinion.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 110,
+        "maxDescLen": 250
+      },
+      "scoreHints": {
+        "readingDepth": 0.7,
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "live.stream",
+      "name": "بث مباشر",
+      "kind": "live",
+      "description": "تغطية حية مع تحديثات فورية متجددة",
+      "bestFor": ["حدث مباشر", "تغطية لحظية", "أخبار عاجلة مستمرة"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "publishedAt"],
+        "optionalFields": ["excerpt", "image", "newsType"]
+      },
+      "behaviors": {
+        "pagination": "infinite",
+        "animation": "none",
+        "skeleton": false,
+        "virtualize": true
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "md",
+        "elevation": "sm",
+        "accent": "#dc2626",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["feed", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["hero_top", "in_stream"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image contain",
+        "maxItems": 50
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "update_count", "session_duration"]
+      },
+      "component": {
+        "name": "LiveStream",
+        "path": "components/publishing/templates/LiveStream.tsx",
+        "props": ["items", "accent", "autoRefresh", "title"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/live.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 5,
+        "maxTitleLen": 90
+      },
+      "scoreHints": {
+        "urgency": 0.95,
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "media.video_reel",
+      "name": "Video Reel شريط فيديو",
+      "kind": "media",
+      "description": "صف أفقي قابل للتمرير من الفيديوهات القصيرة",
+      "bestFor": ["فيديوهات قصيرة", "تقارير مصورة", "محتوى مرئي"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "videoUrl", "image"],
+        "optionalFields": ["excerpt", "category", "views"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "#7c3aed",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "below_featured"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 8
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "video_id", "scroll_position"]
+      },
+      "component": {
+        "name": "VideoReel",
+        "path": "components/publishing/templates/VideoReel.tsx",
+        "props": ["items", "accent", "title", "autoplay"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/videos.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 60
+      },
+      "scoreHints": {
+        "hasVideo": 0.85,
+        "viewport": "mobile"
+      }
+    },
+    {
+      "id": "media.podcast_row",
+      "name": "Podcast صف حلقات",
+      "kind": "media",
+      "description": "صف من بطاقات الحلقات الصوتية والبودكاست",
+      "bestFor": ["بودكاست", "محتوى صوتي", "حلقات متسلسلة"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug", "image"],
+        "optionalFields": ["excerpt", "author", "publishedAt", "readingTime"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "#059669",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["list", "article"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "below_featured", "sidebar_secondary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 6
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "podcast_id", "episode_number"]
+      },
+      "component": {
+        "name": "PodcastRow",
+        "path": "components/publishing/templates/PodcastRow.tsx",
+        "props": ["items", "accent", "title", "showAuthor"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/podcasts.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 75
+      },
+      "scoreHints": {
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "infographic.statbar",
+      "name": "Infographic شريط إحصائيات",
+      "kind": "infographic",
+      "description": "شريط مرئي للإحصائيات والأرقام المهمة",
+      "bestFor": ["أرقام", "إحصائيات", "بيانات سريعة"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug"],
+        "optionalFields": ["views", "likes", "commentsCount", "category"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "#f59e0b",
+        "allowOverride": ["accent", "density"]
+      },
+      "a11y": {
+        "roles": ["complementary", "region"],
+        "contrastMin": 4.5,
+        "keyboardNav": false
+      },
+      "placements": ["between_all_and_murqap", "in_stream", "above_footer"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "no-image",
+        "maxItems": 5
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "stat_type"]
+      },
+      "component": {
+        "name": "InfographicStatBar",
+        "path": "components/publishing/templates/InfographicStatBar.tsx",
+        "props": ["items", "accent", "title", "showIcons"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/stats.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 3,
+        "maxTitleLen": 50
+      },
+      "scoreHints": {
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "tag_strip.chips",
+      "name": "Tag Strip شرائح الوسوم",
+      "kind": "tags",
+      "description": "شريط أفقي من chips الوسوم القابلة للنقر",
+      "bestFor": ["تصنيفات", "مواضيع", "تصفح سريع"],
+      "dataBinding": {
+        "input": "Collection<Article>",
+        "requiredFields": ["title", "slug"],
+        "optionalFields": ["category", "seo"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "none",
+        "skeleton": false,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "compact",
+        "radius": "2xl",
+        "elevation": "none",
+        "accent": "brand.primary",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["navigation", "list"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["below_featured", "between_all_and_murqap", "sidebar_primary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "no-image",
+        "maxItems": 15
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "template_click",
+        "props": ["template_id", "tag_name"]
+      },
+      "component": {
+        "name": "TagStripChips",
+        "path": "components/publishing/templates/TagStripChips.tsx",
+        "props": ["items", "accent", "title", "layout"]
+      },
+      "preview": {
+        "demoData": "fixtures/collections/tags.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 5,
+        "maxTitleLen": 30
+      },
+      "scoreHints": {
+        "viewport": "all"
+      }
+    },
+    {
+      "id": "newsletter.block",
+      "name": "Newsletter كتلة اشتراك",
+      "kind": "newsletter",
+      "description": "كتلة دعوة للاشتراك في النشرة البريدية",
+      "bestFor": ["جمع اشتراكات", "بناء جمهور", "تسويق محتوى"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "excerpt"],
+        "optionalFields": ["image", "category"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": false,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "comfortable",
+        "radius": "2xl",
+        "elevation": "md",
+        "accent": "#10b981",
+        "allowOverride": ["accent", "radius"]
+      },
+      "a11y": {
+        "roles": ["form", "region"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "sidebar_secondary", "above_footer"],
+      "performance": {
+        "hydrationHint": "client",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "newsletter_subscribe",
+        "props": ["template_id", "subscription_source"]
+      },
+      "component": {
+        "name": "NewsletterBlock",
+        "path": "components/publishing/templates/NewsletterBlock.tsx",
+        "props": ["item", "accent", "showImage"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/newsletter.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 60,
+        "maxDescLen": 150
+      },
+      "scoreHints": {
+        "viewport": "desktop"
+      }
+    },
+    {
+      "id": "native.story",
+      "name": "Native Story قصة إعلانية",
+      "kind": "native",
+      "description": "محتوى إعلاني مدمج مع إفصاح واضح",
+      "bestFor": ["محتوى مدعوم", "إعلان مدمج", "شراكات"],
+      "dataBinding": {
+        "input": "Article",
+        "requiredFields": ["title", "slug", "image", "excerpt"],
+        "optionalFields": ["category", "author"]
+      },
+      "behaviors": {
+        "pagination": "none",
+        "animation": "subtle",
+        "skeleton": true,
+        "virtualize": false
+      },
+      "styles": {
+        "density": "cozy",
+        "radius": "lg",
+        "elevation": "sm",
+        "accent": "#6366f1",
+        "allowOverride": ["accent"]
+      },
+      "a11y": {
+        "roles": ["article", "complementary"],
+        "contrastMin": 4.5,
+        "keyboardNav": true
+      },
+      "placements": ["in_stream", "sidebar_secondary"],
+      "performance": {
+        "hydrationHint": "server",
+        "imagePolicy": "next/image cover",
+        "maxItems": 1
+      },
+      "analytics": {
+        "viewEvent": "template_view",
+        "clickEvent": "native_ad_click",
+        "props": ["template_id", "ad_id", "sponsor"]
+      },
+      "component": {
+        "name": "NativeStory",
+        "path": "components/publishing/templates/NativeStory.tsx",
+        "props": ["item", "accent", "sponsor"]
+      },
+      "preview": {
+        "demoData": "fixtures/articles/native.json",
+        "thumbnail": "generated:auto"
+      },
+      "constraints": {
+        "minItems": 1,
+        "maxTitleLen": 80,
+        "maxDescLen": 180
+      },
+      "scoreHints": {
+        "viewport": "all"
+      }
+    }
+  ],
+  "selectionPolicy": {
+    "inputs": [
+      "collectionStats",
+      "contentType",
+      "urgency",
+      "hasVideo",
+      "hasInfographics",
+      "viewport",
+      "placement"
+    ],
+    "scoring": "weighted",
+    "rules": [
+      {
+        "if": { "placement": "hero_top", "urgency": "high" },
+        "prefer": ["hero.split", "hero.overlay", "live.stream"],
+        "boost": 0.35
+      },
+      {
+        "if": { "hasVideo": true },
+        "prefer": ["media.video_reel", "spotlight.media"],
+        "boost": 0.3
+      },
+      {
+        "if": { "placement": "between_all_and_murqap" },
+        "prefer": ["ticker.inline", "timeline.vertical", "infographic.statbar"],
+        "boost": 0.2
+      },
+      {
+        "if": { "contentType": "opinion" },
+        "prefer": ["opinion.column", "news_list.summary"],
+        "boost": 0.25
+      },
+      {
+        "if": { "viewport": "mobile", "hasImages": true },
+        "prefer": ["news_grid.two_col", "timeline.horizontal"],
+        "boost": 0.15
+      },
+      {
+        "if": { "viewport": "desktop", "hasImages": true },
+        "prefer": ["news_grid.masonry", "mosaic.magazine"],
+        "boost": 0.2
+      },
+      {
+        "if": { "urgency": "high", "placement": "in_stream" },
+        "prefer": ["ticker.inline", "live.stream"],
+        "boost": 0.3
+      },
+      {
+        "if": { "placement": "sidebar_primary" },
+        "prefer": ["spotlight.card", "timeline.vertical", "tag_strip.chips"],
+        "boost": 0.18
+      },
+      {
+        "if": { "placement": "sidebar_secondary" },
+        "prefer": ["newsletter.block", "media.podcast_row", "native.story"],
+        "boost": 0.15
+      }
+    ],
+    "fallback": "news_list.basic"
+  }
+}

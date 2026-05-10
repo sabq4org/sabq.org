@@ -1,0 +1,12 @@
+{
+  "id": "newsletter-001",
+  "title": "اشترك في ملخصنا اليومي",
+  "excerpt": "احصل على أهم الأخبار والتحليلات مباشرة في بريدك الإلكتروني كل صباح. نشرة سبق اليومية - لا تفوت أي خبر مهم!",
+  "image": "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=1200",
+  "category": {
+    "id": "cat-newsletter",
+    "name": "النشرة البريدية",
+    "slug": "newsletter",
+    "color": "#10b981"
+  }
+}

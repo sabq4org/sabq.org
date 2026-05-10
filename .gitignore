@@ -1,0 +1,49 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+.env.railway
+.env.vercel
+
+# Replit-specific config
+.replit
+replit.nix
+
+# Build artifacts
+.cache
+*.log
+.turbo
+
+# Android/iOS build outputs
+android/app/build
+android/.gradle
+ios/App/App/public
+ios/build
+
+# Temporary files
+*.tmp
+*.temp
+backup_unused_assets
+
+# Database backups and SQL scripts (NEVER commit to repo)
+*.sql
+!migrations/*.sql
+*.sql.gz
+*.dump
+*.backup
+
+# Debug screenshots
+*.png
+!client/public/**/*.png
+!client/src/**/*.png
+!public/**/*.png
+!android/**/*.png
+!ios/**/*.png
+!attached_assets/**/*.png

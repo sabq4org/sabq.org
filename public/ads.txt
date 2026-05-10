@@ -1,0 +1,147 @@
+#START DMS - Choueiri Group (Oct. 18th, 2024)
+
+#For Direct/Sellers.json - DMS
+dms-cg.com, 15, DIRECT
+
+#GAM Open Bidding - DMS
+google.com, pub-2577219840435371, RESELLER, f08c47fec0942fa0
+rubiconproject.com, 18024, RESELLER, 0bfd66d529a55807
+indexexchange.com, 197723, RESELLER, 50b1c356f2c5c8fc
+pubmatic.com, 161547, RESELLER, 5d62403b186f2ace
+smartadserver.com, 4520-OB, RESELLER, 060d053dcf45cbf3
+
+#Rubicon Reseller - DMS
+rubiconproject.com, 14138, RESELLER, 0bfd66d529a55807
+pubmatic.com, 165186, RESELLER, 5d62403b186f2ace
+
+#Criteo - DMS
+criteo.com, B-060575, RESELLER, 9fac4a4a87c2a44f
+themediagrid.com, 5XJDCN, RESELLER, 35d5010d7789b49d
+
+#TripleLift - DMS
+triplelift.com, 9976, RESELLER, 6c33edb13117fd86 
+triplelift.com, 9976-EB, RESELLER, 6c33edb13117fd86
+
+#Yahoo & its Resellers - DMS
+yahoo.com, 60091, RESELLER, e1a5b5b6e3255540
+appnexus.com, 11664, RESELLER #banner
+indexexchange.com, 184349, RESELLER, 50b1c356f2c5c8fc
+openx.com, 544096208, RESELLER, 6a698e2ec38604c6
+pubmatic.com, 155967, RESELLER, 5d62403b186f2ace
+rubiconproject.com, 17250, RESELLER, 0bfd66d529a55807
+triplelift.com, 2792, RESELLER, 6c33edb13117fd86
+
+#LoopMe - DMS
+loopme.com,11612,RESELLER,6c8d5f95897a5a3b
+conversantmedia.com, 100246, RESELLER, 03113cd04947736d
+contextweb.com, 562499, RESELLER, 89ff185a4c4e857c
+Eskimi.com, eas-2020000005, RESELLER
+media.net, 8CUN37DCC, RESELLER
+pokkt.com, 7606, RESELLER, c45702d9311e25fd
+appads.in, 107606, RESELLER
+
+#Amazon Publisher Services - DMS
+aps.amazon.com,5156,DIRECT
+adcolony.com,44ef7fd4adebf701,RESELLER,1ad675c9de6b5176
+indexexchange.com,192410,RESELLER,50b1c356f2c5c8fc
+smaato.com,110004100,RESELLER,07bcf65f187117b4
+admanmedia.com,726,RESELLER
+rubiconproject.com,,DIRECT,0bfd66d529a55807
+
+#FreeWheel - DMS
+freewheel.tv, 1598846, DIRECT
+freewheel.tv, 1598847, RESELLER
+freewheel.tv, 1598854, RESELLER
+freewheel.tv, 1598855, RESELLER
+
+#Seedtag - DMS
+seedtag.com, 64871eeee5a5b30007a2f288, RESELLER
+xandr.com, 4009, RESELLER
+smartadserver.com, 3050, RESELLER
+rubiconproject.com, 17280, RESELLER, 0bfd66d529a55807
+sovrn.com, 397546, RESELLER, fafdf38b16bf6b2b
+lijit.com, 397546, RESELLER, fafdf38b16bf6b2b
+openx.com, 538959099, RESELLER, 6a698e2ec38604c6
+openx.com, 539924617, RESELLER, 6a698e2ec38604c6
+pubmatic.com, 137711, RESELLER, 5d62403b186f2ace
+pubmatic.com, 156212, RESELLER, 5d62403b186f2ace
+rubiconproject.com, 17960, RESELLER, 0bfd66d529a55807
+onetag.com, 75601b04186d260, RESELLER
+rubiconproject.com, 11006, RESELLER, 0bfd66d529a55807
+appnexus.com, 13099, RESELLER
+smartadserver.com, 4111, RESELLER
+richaudience.com, ns9qrKJLKD, RESELLER
+verve.com, 15503, RESELLER, 0c8f5958fc2d6270
+pubmatic.com, 157743, RESELLER, 5d62403b186f2ace
+adform.com, 1889, RESELLER
+indexexchange.com, 191730, RESELLER, 50b1c356f2c5c8fc
+improvedigital.com, 1680, RESELLER
+openx.com, 558758631, RESELLER, 6a698e2ec38604c6
+adyoulike.com, 83d15ef72d387a1e60e5a1399a2b0c03, RESELLER
+rubiconproject.com, 20736, RESELLER, 0bfd66d529a55807
+pubmatic.com, 160925, RESELLER, 5d62403b186f2ace
+pubmatic.com, 156439, RESELLER, 5d62403b186f2ace
+rubiconproject.com, 16114, RESELLER, 0bfd66d529a55807
+openx.com, 537149888, RESELLER, 6a698e2ec38604c6
+appnexus.com, 3703, RESELLER, f5ab79cb980f11d1
+loopme.com, 5679, RESELLER, 6c8d5f95897a5a3b
+rhythmone.com, 2564526802, RESELLER, a670c89d4a324e47
+smaato.com, 1100044045, RESELLER, 07bcf65f187117b4
+adyoulike.com, b4bf4fdd9b0b915f746f6747ff432bde, RESELLER
+axonix.com, 57264, RESELLER
+pubmatic.com, 161593, RESELLER, 5d62403b186f2ace
+admanmedia.com, 43, RESELLER
+loopme.com, 11712, RESELLER, 6c8d5f95897a5a3b
+sonobi.com, b43e9530e7, RESELLER, d1a215d9eb5aee9e
+video.unrulymedia.com, 724823153, RESELLER
+
+#Mobkoi - DMS
+mobkoi.com, B37D5394, DIRECT
+freewheel.tv, 1578381, RESELLER
+
+#Gecko
+gecko.me, 237880, DIRECT
+criteo.com, B-069536, DIRECT, 9fac4a4a87c2a44f
+themediagrid.com, GNOD1C, DIRECT, 35d5010d7789b49d
+google.com, pub-9786056956276771, DIRECT, f08c47fec0942fa0
+
+#EXTE - DMS
+richaudience.com, KkeinXZeyl, DIRECT
+appnexus.com, 8233, RESELLER
+pubmatic.com, 81564, RESELLER, 5d62403b186f2ace
+pubmatic.com, 156538, RESELLER, 5d62403b186f2ace
+rubiconproject.com, 13510, DIRECT
+smartadserver.com, 2640, RESELLER
+smartadserver.com, 2441, RESELLER
+
+#Teads - DMS
+teads.tv, 29831, DIRECT, 15a9c44f6d26cbe1
+
+#Inmobi - DMS
+
+inmobi.com, 95139c38c1624e2499ba329b2b64c9cc, DIRECT, 83e75a7ae333ca9d
+rubiconproject.com, 11726, RESELLER, 0bfd66d529a55807
+rubiconproject.com, 12266, RESELLER, 0bfd66d529a55807
+conversantmedia.com, 40881, RESELLER, 03113cd04947736d
+loopme.com, 9724, RESELLER, 6c8d5f95897a5a3b
+lijit.com, 502742, RESELLER, fafdf38b16bf6b2b
+pubmatic.com, 156931, RESELLER, 5d62403b186f2ace
+pubmatic.com, 157097, RESELLER, 5d62403b186f2ace
+Blis.com, 33, RESELLER, 61453ae19a4b73f4
+verve.com, 5897, RESELLER, 0c8f5958fc2d6270
+blis.com, 33, RESELLER, 61453ae19a4b73f4
+pubmatic.com, 159035, RESELLER, 5d62403b186f2ace
+axonix.com, 57716, RESELLER
+thebrave.io, 1234568, RESELLER, c25b2154543746ac
+Se7en.es, 212430, RESELLER, 064bc410192443d8
+gamaigroup.com, 320201, RESELLER
+iqzone.com, IQ87, RESELLER
+yeahmobi.com, 5135082, RESELLER
+pubnative.net, 1006951, RESELLER, d641df8625486a7b
+appnexus.com, 14077, RESELLER
+admanmedia.com, 2063, RESELLER
+themediagrid.com, B8N9YH, RESELLER, 35d5010d7789b49d
+video.unrulymedia.com, 188404962, RESELLER
+contextweb.com, 558638, RESELLER, 89ff185a4c4e857c
+
+#END DMS - Choueiri Group (Oct. 18th, 2024)

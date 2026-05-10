@@ -1,0 +1,83 @@
+[
+  {
+    "id": "news-001",
+    "title": "وزير الصحة يعلن عن خطة شاملة لتطوير القطاع الصحي",
+    "slug": "health-sector-development-plan",
+    "image": "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800",
+    "publishedAt": "2025-10-24T12:00:00Z",
+    "category": { "id": "cat-health", "name": "صحة", "slug": "health", "color": "#ef4444" },
+    "views": 8420,
+    "newsType": "regular"
+  },
+  {
+    "id": "news-002",
+    "title": "ارتفاع أسعار النفط عالمياً يدعم الميزانية السعودية",
+    "slug": "oil-prices-rise",
+    "image": "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=800",
+    "publishedAt": "2025-10-24T11:30:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "views": 12340,
+    "newsType": "featured"
+  },
+  {
+    "id": "news-003",
+    "title": "المنتخب السعودي يتأهل لربع نهائي كأس آسيا",
+    "slug": "saudi-team-qualifies",
+    "image": "https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=800",
+    "publishedAt": "2025-10-24T10:45:00Z",
+    "category": { "id": "cat-sports", "name": "رياضة", "slug": "sports", "color": "#f59e0b" },
+    "views": 18920,
+    "newsType": "breaking"
+  },
+  {
+    "id": "news-004",
+    "title": "إطلاق برنامج وطني لتعزيز الذكاء الاصطناعي في التعليم",
+    "slug": "ai-education-program",
+    "image": "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=800",
+    "publishedAt": "2025-10-24T09:15:00Z",
+    "category": { "id": "cat-tech", "name": "تقنية", "slug": "technology", "color": "#7c3aed" },
+    "views": 9650,
+    "newsType": "regular"
+  },
+  {
+    "id": "news-005",
+    "title": "وزارة السياحة تعلن عن مبادرة لتطوير المواقع التراثية",
+    "slug": "heritage-sites-development",
+    "image": "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=800",
+    "publishedAt": "2025-10-24T08:30:00Z",
+    "category": { "id": "cat-culture", "name": "ثقافة", "slug": "culture", "color": "#ec4899" },
+    "views": 6780,
+    "newsType": "regular"
+  },
+  {
+    "id": "news-006",
+    "title": "انخفاض معدل البطالة إلى مستويات تاريخية",
+    "slug": "unemployment-rate-drop",
+    "image": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800",
+    "publishedAt": "2025-10-24T07:45:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "excerpt": "أظهرت البيانات الرسمية انخفاض معدل البطالة بين السعوديين إلى 7.2%",
+    "views": 11250,
+    "newsType": "featured"
+  },
+  {
+    "id": "news-007",
+    "title": "افتتاح أكبر مجمع طبي متخصص في الشرق الأوسط",
+    "slug": "medical-complex-opening",
+    "image": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800",
+    "publishedAt": "2025-10-23T16:00:00Z",
+    "category": { "id": "cat-health", "name": "صحة", "slug": "health", "color": "#ef4444" },
+    "views": 7890,
+    "newsType": "regular"
+  },
+  {
+    "id": "news-008",
+    "title": "المملكة تستضيف قمة عالمية للطاقة المتجددة",
+    "slug": "renewable-energy-summit",
+    "image": "https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=800",
+    "publishedAt": "2025-10-23T14:30:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "views": 10560,
+    "newsType": "featured"
+  }
+]

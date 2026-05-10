@@ -1,0 +1,37 @@
+[
+  {
+    "id": "breaking-001",
+    "title": "عاجل: هزة أرضية بقوة 4.2 ريختر تضرب جنوب المملكة",
+    "slug": "earthquake-southern-region",
+    "publishedAt": "2025-10-24T15:45:00Z",
+    "newsType": "breaking"
+  },
+  {
+    "id": "breaking-002",
+    "title": "عاجل: تعليق الرحلات الجوية مؤقتاً بسبب الأحوال الجوية",
+    "slug": "flights-suspended-weather",
+    "publishedAt": "2025-10-24T15:30:00Z",
+    "newsType": "breaking"
+  },
+  {
+    "id": "breaking-003",
+    "title": "عاجل: المنتخب يفوز بثلاثة أهداف مقابل هدف",
+    "slug": "team-wins-3-1",
+    "publishedAt": "2025-10-24T15:15:00Z",
+    "newsType": "breaking"
+  },
+  {
+    "id": "breaking-004",
+    "title": "عاجل: إعلان نتائج اختبارات القبول الجامعي",
+    "slug": "university-admission-results",
+    "publishedAt": "2025-10-24T15:00:00Z",
+    "newsType": "breaking"
+  },
+  {
+    "id": "breaking-005",
+    "title": "عاجل: ارتفاع مؤشر السوق السعودي بنسبة 2.5%",
+    "slug": "stock-market-rise",
+    "publishedAt": "2025-10-24T14:45:00Z",
+    "newsType": "breaking"
+  }
+]

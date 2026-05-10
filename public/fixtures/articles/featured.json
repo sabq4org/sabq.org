@@ -1,0 +1,29 @@
+{
+  "id": "featured-001",
+  "title": "تقرير خاص: كيف غيّر الذكاء الاصطناعي مستقبل التعليم في المملكة",
+  "slug": "ai-education-transformation",
+  "excerpt": "تحقيق موسع يكشف عن التحول الجذري الذي أحدثته تقنيات الذكاء الاصطناعي في المنظومة التعليمية السعودية، وكيف ساهمت في تحسين جودة التعليم وزيادة الكفاءة.",
+  "image": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200",
+  "publishedAt": "2025-10-24T08:00:00Z",
+  "category": {
+    "id": "cat-tech",
+    "name": "تقنية",
+    "slug": "technology",
+    "color": "#7c3aed"
+  },
+  "author": {
+    "id": "author-002",
+    "name": "سارة المطيري",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah"
+  },
+  "reporter": {
+    "id": "reporter-001",
+    "name": "محمد الغامدي",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=mohammed"
+  },
+  "views": 12890,
+  "likes": 1204,
+  "commentsCount": 234,
+  "readingTime": 12,
+  "newsType": "featured"
+}

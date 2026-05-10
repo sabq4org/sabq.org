@@ -1,0 +1,685 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sabq Smart News API",
+    "version": "1.0.0",
+    "description": "AI-ready REST API for accessing Sabq Smart Arabic news content. Optimized for LLMs, search engines, and AI applications.",
+    "contact": {
+      "name": "Sabq API Support",
+      "email": "api-support@sabq.org"
+    },
+    "license": {
+      "name": "Sabq-AI-Use-1.0",
+      "url": "https://sabq.org/ai-policy"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://sabq.org",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:5000",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Articles",
+      "description": "News articles and content"
+    },
+    {
+      "name": "Search",
+      "description": "Search and discovery"
+    },
+    {
+      "name": "Categories",
+      "description": "Content categories"
+    },
+    {
+      "name": "AI Policy",
+      "description": "AI usage policy and metadata"
+    }
+  ],
+  "paths": {
+    "/api/v1/articles": {
+      "get": {
+        "tags": ["Articles"],
+        "summary": "List articles",
+        "description": "Get a paginated list of published articles with optional filtering by category, date, and news type",
+        "operationId": "listArticles",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of articles to return (default: 50, max: 200)",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of articles to skip for pagination (default: 0)",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Get articles updated since this date (ISO 8601 format)",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2025-10-27T00:00:00Z"
+            }
+          },
+          {
+            "name": "newsType",
+            "in": "query",
+            "description": "Filter by news type",
+            "schema": {
+              "type": "string",
+              "enum": ["breaking", "featured", "regular"]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Filter by publication status (default: published)",
+            "schema": {
+              "type": "string",
+              "enum": ["published", "draft", "archived"],
+              "default": "published"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArticleList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/articles/{id}": {
+      "get": {
+        "tags": ["Articles"],
+        "summary": "Get article by ID",
+        "description": "Get detailed information about a specific article including full content and metadata",
+        "operationId": "getArticle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Article ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Article"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Article not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "Search articles",
+        "description": "Search articles by keyword with optional category and date filtering",
+        "operationId": "searchArticles",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query (Arabic or English)",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "الرياض"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of results to return (default: 20, max: 100)",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category ID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Search articles since this date (ISO 8601 format)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid search query",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/breaking": {
+      "get": {
+        "tags": ["Articles"],
+        "summary": "Get breaking news",
+        "description": "Get the latest breaking news articles",
+        "operationId": "getBreakingNews",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of articles to return (default: 10, max: 50)",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Breaking news articles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakingNews"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "List categories",
+        "description": "Get all available content categories",
+        "operationId": "listCategories",
+        "responses": {
+          "200": {
+            "description": "List of categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/ai-usage.json": {
+      "get": {
+        "tags": ["AI Policy"],
+        "summary": "Get AI usage policy",
+        "description": "Machine-readable AI usage policy and licensing information",
+        "operationId": "getAIUsagePolicy",
+        "responses": {
+          "200": {
+            "description": "AI usage policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIUsagePolicy"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Article": {
+        "type": "object",
+        "required": ["id", "url", "canonical_url", "title", "lang", "published_at", "rights"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique article identifier"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Article URL"
+          },
+          "canonical_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Canonical article URL"
+          },
+          "title": {
+            "type": "string",
+            "description": "Article title in Arabic"
+          },
+          "subtitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Article subtitle"
+          },
+          "section": {
+            "type": "string",
+            "description": "Content section in Arabic"
+          },
+          "section_en": {
+            "type": "string",
+            "description": "Content section in English"
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "profile_url": {
+                "type": "string",
+                "format": "uri",
+                "nullable": true
+              }
+            }
+          },
+          "lang": {
+            "type": "string",
+            "enum": ["ar"],
+            "description": "Content language (Arabic)"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Publication timestamp (ISO 8601)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp (ISO 8601)"
+          },
+          "summary": {
+            "type": "string",
+            "description": "AI-generated article summary"
+          },
+          "full_text": {
+            "type": "string",
+            "description": "Full article content in plain text"
+          },
+          "html_content": {
+            "type": "string",
+            "description": "Full article content in HTML"
+          },
+          "image": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "Article featured image URL"
+          },
+          "news_type": {
+            "type": "string",
+            "enum": ["breaking", "featured", "regular"],
+            "description": "Type of news article"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Article tags"
+          },
+          "rights": {
+            "type": "object",
+            "required": ["attribution_required", "training_allowed", "usage", "license"],
+            "properties": {
+              "attribution_required": {
+                "type": "boolean",
+                "description": "Whether attribution is required"
+              },
+              "training_allowed": {
+                "type": "boolean",
+                "description": "Whether training on this content is allowed"
+              },
+              "usage": {
+                "type": "string",
+                "enum": ["inference-only", "research", "commercial"],
+                "description": "Allowed usage type"
+              },
+              "license": {
+                "type": "string",
+                "description": "License identifier"
+              },
+              "attribution_format": {
+                "type": "string",
+                "description": "Required attribution format"
+              }
+            }
+          }
+        }
+      },
+      "ArticleList": {
+        "type": "object",
+        "required": ["total", "limit", "offset", "articles"],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total number of articles matching criteria"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of articles returned"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset"
+          },
+          "articles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Article"
+            }
+          }
+        }
+      },
+      "SearchResults": {
+        "type": "object",
+        "required": ["query", "total", "results"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Original search query"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of results"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Article"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "relevance_score": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Search relevance score (0-1)"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "BreakingNews": {
+        "type": "object",
+        "required": ["total", "breaking_news"],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Number of breaking news articles"
+          },
+          "breaking_news": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Article"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "priority": {
+                      "type": "string",
+                      "enum": ["urgent", "high", "normal"],
+                      "description": "Breaking news priority level"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "CategoryList": {
+        "type": "object",
+        "required": ["categories"],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name_ar": {
+                  "type": "string",
+                  "description": "Category name in Arabic"
+                },
+                "name_en": {
+                  "type": "string",
+                  "description": "Category name in English"
+                },
+                "slug": {
+                  "type": "string",
+                  "description": "URL-friendly category slug"
+                },
+                "icon": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "Category icon (emoji or icon name)"
+                },
+                "description": {
+                  "type": "string",
+                  "nullable": true,
+                  "description": "Category description"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AIUsagePolicy": {
+        "type": "object",
+        "required": ["version", "usage_rights", "quotas", "contact"],
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Policy version"
+          },
+          "usage_rights": {
+            "type": "object",
+            "properties": {
+              "inference_allowed": {
+                "type": "boolean"
+              },
+              "training_allowed": {
+                "type": "boolean"
+              },
+              "commercial_use_allowed": {
+                "type": "boolean"
+              },
+              "attribution_required": {
+                "type": "boolean"
+              },
+              "attribution_format": {
+                "type": "string"
+              }
+            }
+          },
+          "quotas": {
+            "type": "object",
+            "properties": {
+              "free_tier": {
+                "type": "object",
+                "properties": {
+                  "requests_per_day": {
+                    "type": "integer"
+                  },
+                  "requests_per_minute": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "contact": {
+            "type": "object",
+            "properties": {
+              "partnerships": {
+                "type": "string",
+                "format": "email"
+              },
+              "technical_support": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "details": {
+            "type": "object",
+            "description": "Additional error details"
+          }
+        }
+      }
+    }
+  },
+  "x-rate-limits": {
+    "free_tier": {
+      "requests_per_day": 200,
+      "requests_per_minute": 120
+    },
+    "professional_tier": {
+      "requests_per_day": 10000,
+      "requests_per_minute": 500
+    }
+  }
+}

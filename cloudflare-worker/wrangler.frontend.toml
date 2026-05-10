@@ -1,0 +1,37 @@
+# Wrangler config for the frontend edge worker (sits in front of Vercel).
+# Deploy with: wrangler deploy --config wrangler.frontend.toml
+#
+# This is separate from wrangler.toml (which deploys the legacy seo-404
+# worker that fronts the Replit production deployment). Keep both during
+# the experimental split — the legacy one stays untouched.
+
+name = "sabq-frontend-edge"
+main = "frontend-edge-worker.js"
+compatibility_date = "2024-09-01"
+account_id = ""
+
+# These get overridden per-environment.
+[vars]
+API_ORIGIN = "https://api.sabq.news"
+FRONTEND_ORIGIN = "https://sabq.news"
+
+# Production: bind to the Vercel apex domain.
+[env.production]
+routes = [
+  { pattern = "sabq.news/*", zone_id = "" },
+  { pattern = "www.sabq.news/*", zone_id = "" }
+]
+
+[env.production.vars]
+API_ORIGIN = "https://api.sabq.news"
+FRONTEND_ORIGIN = "https://sabq.news"
+
+# Staging / experiment: point at a preview Vercel deployment.
+[env.staging]
+routes = [
+  { pattern = "staging.sabq.news/*", zone_id = "" }
+]
+
+[env.staging.vars]
+API_ORIGIN = "https://api-staging.sabq.news"
+FRONTEND_ORIGIN = "https://staging.sabq.news"

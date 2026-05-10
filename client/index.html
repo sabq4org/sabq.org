@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <!-- Suppress third-party script errors in development -->
+    <script data-cfasync="false">
+      (function() {
+        var origin = location.origin;
+        window.addEventListener('error', function(e) {
+          var src = e.filename || '';
+          var msg = e.message || '';
+          var isExternal = !src || src.indexOf(origin) === -1 ||
+              src.indexOf('googletagmanager') !== -1 ||
+              src.indexOf('googlesyndication') !== -1 ||
+              src.indexOf('doubleclick') !== -1;
+          if (isExternal) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return false;
+          }
+          if (msg.indexOf('scroll-fade-in') !== -1) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return false;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e.reason && typeof e.reason === 'object' && !e.reason.stack) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return false;
+          }
+        }, true);
+      })();
+    </script>
+    
+    <!-- Google Analytics GA4 - Deferred for performance -->
+    <script data-cfasync="false">
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-EEB5593GY7', {
+        send_page_view: true,
+        cookie_flags: 'SameSite=None;Secure'
+      });
+      setTimeout(function() {
+        var s = document.createElement('script');
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-EEB5593GY7';
+        s.async = true;
+        document.head.appendChild(s);
+      }, 5000);
+    </script>
+    
+    <!-- Initialize DMS Signal Object (required by DMS) - sync, fast -->
+    <script data-cfasync="false">
+      var signal = {
+        "User": { "UserId": null, "Country": null, "EmailHash": null },
+        "Content": { "Topic": null, "sTopic": null, "Keywords": null, "ArticleId": null, "ArticleTitle": null, "ArticleAuthorName": null, "ArticlePublishDate": null, "SearchTerm": null, "Platform": "web", "Lang": "ar" },
+        "Page": { "ChannelLevel1": "Homepage", "ChannelLevel2": null }
+      };
+      window.signal = signal;
+    </script>
+    
+    <!-- DEFERRED: Load GPT and GTM scripts on user interaction or after 5s -->
+    <script data-cfasync="false">
+      (function() {
+        var loaded = false;
+        function loadAdScripts() {
+          if (loaded) return;
+          loaded = true;
+          var evts = ['scroll','click','touchstart','mousemove','keydown'];
+          evts.forEach(function(e){ document.removeEventListener(e, loadAdScripts, {capture:true}); });
+          var gpt = document.createElement('script');
+          gpt.async = true;
+          gpt.src = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
+          document.head.appendChild(gpt);
+          (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+          new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+          j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+          'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+          })(window,document,'script','dataLayer','GTM-T5PW84LM');
+        }
+        var evts = ['scroll','click','touchstart','mousemove','keydown'];
+        evts.forEach(function(e){ document.addEventListener(e, loadAdScripts, {capture:true,once:true,passive:true}); });
+        setTimeout(loadAdScripts, 5000);
+      })();
+    </script>
+    <!-- Disable Cloudflare Rocket Loader for this page (rocket-loader=off) -->
+    <meta http-equiv="x-dns-prefetch-control" content="on">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+    <meta name="description" content="سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية مع تلخيص تلقائي، نظام توصيات شخصي، وتغطية حصرية على مدار الساعة. تابع آخر الأخبار السعودية والخليجية لحظة بلحظة." />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    
+    <!-- Organization Schema (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "NewsMediaOrganization",
+      "name": "صحيفة سبق الإلكترونية",
+      "alternateName": "Sabq",
+      "url": "https://sabq.org",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://sabq.org/branding/sabq-og-image.png",
+        "width": 1200,
+        "height": 630
+      },
+      "sameAs": [
+        "https://x.com/sabqorg",
+        "https://www.facebook.com/sabq.org",
+        "https://www.instagram.com/sabqorg",
+        "https://youtube.com/@sabqorg",
+        "https://www.tiktok.com/@sabqorg",
+        "https://www.linkedin.com/in/sabqorg",
+        "https://whatsapp.com/channel/0029VaCUMDGEAKWA2soRAl02"
+      ],
+      "description": "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي",
+      "foundingDate": "2007",
+      "areaServed": {
+        "@type": "Country",
+        "name": "المملكة العربية السعودية"
+      },
+      "publishingPrinciples": "https://sabq.org/about"
+    }
+    </script>
+    
+    <!-- WebSite Schema with SearchAction -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "سبق الذكية",
+      "url": "https://sabq.org",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://sabq.org/search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sabq.org" />
+    <meta property="og:title" content="سبق الذكية - منصة الأخبار الذكية" />
+    <meta property="og:description" content="سبق الذكية - أخبار عاجلة ومحلية ورياضية وعالمية مع تلخيص تلقائي بالذكاء الاصطناعي، نظام توصيات شخصي، وتغطية حصرية على مدار الساعة" />
+    <meta property="og:image" content="https://sabq.org/branding/sabq-og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="صحيفة سبق الإلكترونية" />
+    <meta property="og:locale" content="ar_SA" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://sabq.org" />
+    <meta name="twitter:title" content="سبق الذكية - منصة الأخبار الذكية" />
+    <meta name="twitter:description" content="سبق الذكية - أخبار عاجلة ومحلية ورياضية وعالمية مع تلخيص تلقائي بالذكاء الاصطناعي، نظام توصيات شخصي، وتغطية حصرية على مدار الساعة" />
+    <meta property="twitter:image" content="https://sabq.org/branding/sabq-og-image.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="سبق" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>سبق الذكية - منصة الأخبار الذكية</title>
+    <!-- Preconnect for critical resources (fonts and storage) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://imagedelivery.net" crossorigin>
+
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="https://fonts.gstatic.com/s/ibmplexsansarabic/v15/Qw3NZRtWPQCuHme67tEYUIx3Kh0PHR9N6YPi-OCRXMRrKATtYV0.woff2"
+      crossorigin
+    >
+
+    <!-- Load fonts with display=swap for faster text rendering (deferred to avoid render-blocking) -->
+    <link id="google-fonts" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Inter:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" media="print">
+    <script data-cfasync="false">
+      // Switch font stylesheet to 'all' after load (CSP-compliant replacement for inline onload)
+      (function() {
+        var link = document.getElementById('google-fonts');
+        if (link) {
+          if (link.sheet) { link.media = 'all'; }
+          else { link.addEventListener('load', function() { link.media = 'all'; }); }
+        }
+      })();
+    </script>
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Inter:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    </noscript>
+  </head>
+  <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T5PW84LM"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    <div id="root">
+      <style>
+        .instant-loader {
+          min-height: 100vh;
+          background: #ffffff;
+          display: flex;
+          flex-direction: column;
+          direction: rtl;
+        }
+        @media (prefers-color-scheme: dark) {
+          .instant-loader { background: #0a0a0a; }
+          .instant-loader .skeleton { background: #1a1a1a; }
+        }
+        .instant-loader .header {
+          height: 64px;
+          border-bottom: 1px solid #e5e5e5;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 24px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .instant-loader .header { border-color: #262626; }
+        }
+        .instant-loader .nav {
+          height: 48px;
+          border-bottom: 1px solid #e5e5e5;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 0 24px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .instant-loader .nav { border-color: #262626; }
+        }
+        .instant-loader .skeleton {
+          background: #f3f4f6;
+          border-radius: 8px;
+          animation: pulse 1.5s ease-in-out infinite;
+        }
+        .instant-loader .hero {
+          max-width: 1280px;
+          margin: 32px auto;
+          padding: 0 24px;
+          width: 100%;
+        }
+        .instant-loader .hero-skeleton {
+          height: 400px;
+          width: 100%;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      </style>
+      <div class="instant-loader">
+        <div class="header">
+          <div class="skeleton" style="width: 120px; height: 40px;"></div>
+          <div class="skeleton" style="width: 200px; height: 36px;"></div>
+          <div class="skeleton" style="width: 80px; height: 36px;"></div>
+        </div>
+        <div class="nav">
+          <div class="skeleton" style="width: 60px; height: 24px;"></div>
+          <div class="skeleton" style="width: 80px; height: 24px;"></div>
+          <div class="skeleton" style="width: 70px; height: 24px;"></div>
+          <div class="skeleton" style="width: 90px; height: 24px;"></div>
+        </div>
+        <div class="hero">
+          <div class="skeleton hero-skeleton"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Main app script - MUST NOT be modified by Cloudflare Rocket Loader -->
+    <script data-cfasync="false" type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

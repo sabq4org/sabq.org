@@ -1,0 +1,86 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "usJLwx72Hj6lkfEfI7YAq"
+uri = "file://.local/tasks/sabq-ios-native-prompt.md"
+type = "text"
+title = "برومبت شامل: تحويل سبق الذكية إلى تطبيق iOS أصلي"
+
+[[outputs]]
+id = "wWvwasqsdHQDjllnoaSqR"
+uri = "file://docs/gulf-live-guide.md"
+type = "text"
+title = "دليل تغطية البث الحي — للزملاء"
+
+[[outputs]]
+id = "lkft6cKc9LTIt-HomJwFT"
+uri = "file://تقرير_الأداء_المعماري_سبق.md"
+type = "text"
+title = "تقرير الأداء المعماري — صحيفة سبق"
+
+[[outputs]]
+id = "Kqral1fAcHwAoaMT5zXzm"
+uri = "file://sabq-dashboard-documentation.md"
+type = "text"
+title = "توثيق لوحة تحكم سبق الذكية - Sabq Dashboard Documentation"
+
+[[outputs]]
+id = "K8R6-YE6qlN-sCTLov7pV"
+uri = "file://sabq-ios-api-reference.md"
+type = "text"
+title = "دليل تطبيق سبق iOS الشامل — API + التصميم"
+
+[[outputs]]
+id = "Ue1Lqhanx6FqvJowdSwTy"
+uri = "file://DATABASE_COST_FORENSIC_REPORT.md"
+type = "text"
+title = "تقرير تحقيق التكلفة - Neon Database Forensic Report"
+
+[[outputs]]
+id = "LYXEm5-I0JUBUDud_J4-2"
+uri = "file://sabq-services-guide.md"
+type = "text"
+title = "دليل خدمات منصة سبق الذكية الشامل"
+
+[[outputs]]
+id = "XmGasVAHlu9PsIWhDPkiN"
+uri = "file://honor_articles_report.docx"
+type = "word_document"
+title = "تقرير أخبار HONOR في سبق - 114 خبر"
+
+[[outputs]]
+id = "mmQwuvf5L9ydxAshuIxcq"
+uri = "file://attached_assets/code-review-analysis.md"
+type = "text"
+title = "تحليل مهني وحيادي للتقرير الأمني"
+
+[[outputs]]
+id = "GXUknr164pLNHFWzgWj3U"
+uri = "file://docs/SABQ_PROJECT_OVERVIEW_AR.md"
+type = "text"
+title = "وثيقة سبق الذكية — الإصدار الموسّع (1392 سطر)"
+
+[[outputs]]
+id = "g-uVbbxbwADTuSj-kIIuo"
+uri = "file://rbac-export.json"
+type = "unspecified"
+title = "RBAC Export — الأدوار والصلاحيات (JSON)"
+
+[[outputs]]
+id = "rTkmV59l6pp_O2QhojutJ"
+uri = "file://docs/ai-prompts-article-editor.md"
+type = "text"
+title = "برومبتات التحرير الذكي — إضافة مقال"
+
+[[outputs]]
+id = "tYY7fPYrYEOtMq9FB63zZ"
+uri = "file://docs/ai-image-generation.md"
+type = "text"
+title = "توليد صورة الخبر بالذكاء الاصطناعي"
+
+[[outputs]]
+id = "tkOyBiL4Oa2msuFanJEyw"
+uri = "file://docs/sabq-strategic-ideas-2026.docx"
+type = "word_document"
+title = "سبق — وثيقة الأفكار الاستراتيجية 2026"

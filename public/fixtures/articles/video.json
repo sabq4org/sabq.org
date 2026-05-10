@@ -1,0 +1,20 @@
+{
+  "id": "video-001",
+  "title": "فيديو: جولة حصرية داخل مشروع نيوم المستقبلي",
+  "slug": "neom-exclusive-tour",
+  "excerpt": "تابعوا هذه الجولة الحصرية داخل مشروع نيوم العملاق، حيث نستعرض آخر التطورات في البنية التحتية والتقنيات المستخدمة في بناء مدينة المستقبل.",
+  "image": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200",
+  "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "publishedAt": "2025-10-24T14:00:00Z",
+  "category": {
+    "id": "cat-economy",
+    "name": "اقتصاد",
+    "slug": "economy",
+    "color": "#10b981"
+  },
+  "views": 45670,
+  "likes": 3210,
+  "commentsCount": 456,
+  "readingTime": 4,
+  "newsType": "featured"
+}

@@ -1,0 +1,59 @@
+[
+  {
+    "id": "mixed-001",
+    "title": "المملكة تطلق مشروعاً عملاقاً للطاقة المتجددة",
+    "slug": "renewable-energy-mega-project",
+    "image": "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=800",
+    "publishedAt": "2025-10-24T10:30:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "newsType": "featured",
+    "excerpt": "مشروع بقيمة 500 مليار ريال يوفر 200 ألف فرصة عمل"
+  },
+  {
+    "id": "mixed-002",
+    "title": "تقرير: كيف غيّر الذكاء الاصطناعي مستقبل التعليم",
+    "slug": "ai-education-transformation",
+    "image": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=800",
+    "publishedAt": "2025-10-24T08:00:00Z",
+    "category": { "id": "cat-tech", "name": "تقنية", "slug": "technology", "color": "#7c3aed" },
+    "newsType": "featured",
+    "excerpt": "تحقيق موسع يكشف التحول الجذري في المنظومة التعليمية"
+  },
+  {
+    "id": "mixed-003",
+    "title": "المنتخب يتأهل لربع النهائي بأداء مميز",
+    "slug": "saudi-team-qualifies",
+    "image": "https://images.unsplash.com/photo-1522778119026-d647f0596c20?w=800",
+    "publishedAt": "2025-10-24T10:45:00Z",
+    "category": { "id": "cat-sports", "name": "رياضة", "slug": "sports", "color": "#f59e0b" },
+    "newsType": "breaking"
+  },
+  {
+    "id": "mixed-004",
+    "title": "افتتاح أكبر مجمع طبي متخصص",
+    "slug": "medical-complex-opening",
+    "image": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800",
+    "publishedAt": "2025-10-23T16:00:00Z",
+    "category": { "id": "cat-health", "name": "صحة", "slug": "health", "color": "#ef4444" },
+    "newsType": "regular"
+  },
+  {
+    "id": "mixed-005",
+    "title": "السياحة تعلن عن مبادرة لتطوير المواقع التراثية",
+    "slug": "heritage-sites-development",
+    "image": "https://images.unsplash.com/photo-1564507592333-c60657eea523?w=800",
+    "publishedAt": "2025-10-24T08:30:00Z",
+    "category": { "id": "cat-culture", "name": "ثقافة", "slug": "culture", "color": "#ec4899" },
+    "newsType": "regular"
+  },
+  {
+    "id": "mixed-006",
+    "title": "فيديو: جولة داخل مشروع نيوم المستقبلي",
+    "slug": "neom-video-tour",
+    "image": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800",
+    "videoUrl": "https://www.youtube.com/watch?v=example",
+    "publishedAt": "2025-10-24T14:00:00Z",
+    "category": { "id": "cat-economy", "name": "اقتصاد", "slug": "economy", "color": "#10b981" },
+    "newsType": "featured"
+  }
+]

@@ -1,0 +1,15 @@
+# Nixpacks build hints for Railway. Pins Node 20 to match local engines.
+# Build command intentionally skips the client bundle — Vercel builds the
+# frontend; Railway only ships the Express server.
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-9_x"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build:server"]
+
+[start]
+cmd = "node dist/index.js"

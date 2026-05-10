@@ -1,0 +1,24 @@
+{
+  "id": "lead-001",
+  "title": "المملكة تطلق مشروعاً عملاقاً للطاقة المتجددة بقيمة 500 مليار ريال",
+  "slug": "renewable-energy-mega-project",
+  "excerpt": "في خطوة استراتيجية نحو تحقيق رؤية 2030، أعلنت المملكة العربية السعودية عن إطلاق أضخم مشروع للطاقة المتجددة في الشرق الأوسط، والذي من المتوقع أن يوفر أكثر من 200 ألف فرصة عمل مباشرة.",
+  "image": "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=1200",
+  "publishedAt": "2025-10-24T10:30:00Z",
+  "category": {
+    "id": "cat-economy",
+    "name": "اقتصاد",
+    "slug": "economy",
+    "color": "#10b981"
+  },
+  "author": {
+    "id": "author-001",
+    "name": "أحمد السعيد",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=ahmed"
+  },
+  "views": 15240,
+  "likes": 892,
+  "commentsCount": 156,
+  "readingTime": 8,
+  "newsType": "featured"
+}

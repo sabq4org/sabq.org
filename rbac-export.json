@@ -1,0 +1,1687 @@
+{
+  "permissions": [
+    {
+      "code": "ads.account",
+      "label": "View Ad Account",
+      "labelAr": "عرض الحساب الإعلاني",
+      "module": "ads",
+      "description": "View ad account"
+    },
+    {
+      "code": "ads.manage",
+      "label": "Manage Ads",
+      "labelAr": "إدارة الإعلانات",
+      "module": "ads",
+      "description": "Manage advertising campaigns"
+    },
+    {
+      "code": "ads.view",
+      "label": "View Ads",
+      "labelAr": "عرض الإعلانات",
+      "module": "ads",
+      "description": "View advertising campaigns"
+    },
+    {
+      "code": "ai.manage",
+      "label": "Manage AI Features",
+      "labelAr": "إدارة ميزات الذكاء الاصطناعي",
+      "module": "ai",
+      "description": "Manage AI features"
+    },
+    {
+      "code": "ai.view",
+      "label": "View AI Features",
+      "labelAr": "عرض ميزات الذكاء الاصطناعي",
+      "module": "ai",
+      "description": "View AI features"
+    },
+    {
+      "code": "analysis.create",
+      "label": "Create Analysis",
+      "labelAr": "إنشاء تحليل",
+      "module": "analysis",
+      "description": "Create deep analysis"
+    },
+    {
+      "code": "analysis.manage",
+      "label": "Manage Analysis",
+      "labelAr": "إدارة التحليلات",
+      "module": "analysis",
+      "description": "Manage deep analysis"
+    },
+    {
+      "code": "analysis.view",
+      "label": "View Analysis",
+      "labelAr": "عرض التحليلات",
+      "module": "analysis",
+      "description": "View deep analysis"
+    },
+    {
+      "code": "analytics.behavior",
+      "label": "View User Behavior",
+      "labelAr": "عرض سلوك المستخدمين",
+      "module": "analytics",
+      "description": "View user behavior analytics"
+    },
+    {
+      "code": "analytics.experiments",
+      "label": "Manage Experiments",
+      "labelAr": "إدارة التجارب",
+      "module": "analytics",
+      "description": "Manage A/B tests"
+    },
+    {
+      "code": "analytics.export",
+      "label": "Export Reports",
+      "labelAr": "تصدير التقارير",
+      "module": "analytics",
+      "description": "تصدير تقارير التحليلات"
+    },
+    {
+      "code": "analytics.sentiment",
+      "label": "View Sentiment Analysis",
+      "labelAr": "عرض تحليل المشاعر",
+      "module": "analytics",
+      "description": "View sentiment analytics"
+    },
+    {
+      "code": "analytics.view",
+      "label": "View Analytics",
+      "labelAr": "عرض التحليلات",
+      "module": "analytics",
+      "description": "View analytics dashboards"
+    },
+    {
+      "code": "analytics.view_advanced",
+      "label": "View Advanced Analytics",
+      "labelAr": "عرض التحليلات المتقدمة",
+      "module": "analytics",
+      "description": "عرض التحليلات التفصيلية"
+    },
+    {
+      "code": "analytics.view_basic",
+      "label": "View Basic Analytics",
+      "labelAr": "عرض الإحصائيات الأساسية",
+      "module": "analytics",
+      "description": "عرض الإحصائيات الأساسية"
+    },
+    {
+      "code": "analytics.view_own",
+      "label": "Analytics - View Own",
+      "labelAr": "عرض التحليلات الخاصة",
+      "module": "analytics",
+      "description": null
+    },
+    {
+      "code": "analytics.view_revenue",
+      "label": "View Revenue Analytics",
+      "labelAr": "عرض تحليلات الإيرادات",
+      "module": "analytics",
+      "description": "عرض تحليلات الإيرادات والمبيعات"
+    },
+    {
+      "code": "announcements.manage",
+      "label": "Manage Announcements",
+      "labelAr": "إدارة الإعلانات",
+      "module": "announcements",
+      "description": "Manage internal announcements"
+    },
+    {
+      "code": "appearance.manage",
+      "label": "Manage Appearance",
+      "labelAr": "إدارة المظهر",
+      "module": "appearance",
+      "description": "Manage appearance settings"
+    },
+    {
+      "code": "appearance.view",
+      "label": "View Appearance",
+      "labelAr": "عرض المظهر",
+      "module": "appearance",
+      "description": "View appearance settings"
+    },
+    {
+      "code": "articles.ai_generate",
+      "label": "AI Generate",
+      "labelAr": "التوليد الذكي الشامل",
+      "module": "articles",
+      "description": "AI content generation"
+    },
+    {
+      "code": "articles.archive",
+      "label": "Archive Articles",
+      "labelAr": "أرشفة المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.comprehensive_edit",
+      "label": "Comprehensive Edit",
+      "labelAr": "تحرير وتوليد شامل",
+      "module": "articles",
+      "description": "Comprehensive editing and generation"
+    },
+    {
+      "code": "articles.content_type_selector",
+      "label": "Content Type Selector",
+      "labelAr": "اختيار نوع المحتوى",
+      "module": "articles",
+      "description": "Allows selecting article type (news, opinion, analysis, column, weekly_photos)"
+    },
+    {
+      "code": "articles.create",
+      "label": "Create Articles",
+      "labelAr": "إنشاء المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.delete",
+      "label": "Delete Articles",
+      "labelAr": "حذف المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.edit_any",
+      "label": "Edit Any Article",
+      "labelAr": "تعديل أي مقال",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.edit_own",
+      "label": "Edit Own Articles",
+      "labelAr": "تعديل المقالات الخاصة",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.feature",
+      "label": "Feature Articles",
+      "labelAr": "تمييز المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.generate_images",
+      "label": "Generate Images",
+      "labelAr": "توليد الصور بالذكاء الاصطناعي",
+      "module": "articles",
+      "description": "AI image generation"
+    },
+    {
+      "code": "articles.hide_homepage",
+      "label": "Hide from Homepage",
+      "labelAr": "إخفاء من الواجهة الرئيسية",
+      "module": "articles",
+      "description": "Allow user to hide articles from the homepage while keeping them accessible via direct links"
+    },
+    {
+      "code": "articles.infographics",
+      "label": "Infographics",
+      "labelAr": "الانفوجرافيك",
+      "module": "articles",
+      "description": "Create infographics"
+    },
+    {
+      "code": "articles.muqtarab_angles",
+      "label": "Muqtarab Angles",
+      "labelAr": "زوايا مُقترب",
+      "module": "articles",
+      "description": "Muqtarab angles feature"
+    },
+    {
+      "code": "articles.news_type",
+      "label": "News Type Selector",
+      "labelAr": "اختيار نوع الخبر",
+      "module": "articles",
+      "description": "Allows selecting news type (breaking or regular)"
+    },
+    {
+      "code": "articles.polls",
+      "label": "Polls",
+      "labelAr": "استطلاع الرأي",
+      "module": "articles",
+      "description": "Create polls in articles"
+    },
+    {
+      "code": "articles.publish",
+      "label": "Publish Articles",
+      "labelAr": "نشر المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.review",
+      "label": "Review Articles",
+      "labelAr": "مراجعة المقالات",
+      "module": "articles",
+      "description": "Review publisher articles"
+    },
+    {
+      "code": "articles.schedule",
+      "label": "Schedule Publishing",
+      "labelAr": "جدولة النشر",
+      "module": "articles",
+      "description": "Schedule article publishing"
+    },
+    {
+      "code": "articles.smart_links",
+      "label": "Smart Links",
+      "labelAr": "الروابط الذكية",
+      "module": "articles",
+      "description": "Use smart links"
+    },
+    {
+      "code": "articles.unpublish",
+      "label": "Unpublish Articles",
+      "labelAr": "إلغاء نشر المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "articles.view",
+      "label": "View Articles",
+      "labelAr": "عرض المقالات",
+      "module": "articles",
+      "description": null
+    },
+    {
+      "code": "audio.manage",
+      "label": "Manage Audio Content",
+      "labelAr": "إدارة المحتوى الصوتي",
+      "module": "audio",
+      "description": "Manage audio content"
+    },
+    {
+      "code": "audio.view",
+      "label": "View Audio Content",
+      "labelAr": "عرض المحتوى الصوتي",
+      "module": "audio",
+      "description": "View audio content"
+    },
+    {
+      "code": "audio_briefs.create",
+      "label": "Audio briefs - Create",
+      "labelAr": "إنشاء خبر صوتي",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.delete",
+      "label": "Audio briefs - Delete",
+      "labelAr": "حذف خبر صوتي",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.edit",
+      "label": "Audio briefs - Edit",
+      "labelAr": "تعديل خبر صوتي",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.generate",
+      "label": "Audio briefs - Generate",
+      "labelAr": "توليد صوت للخبر",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.manage_all",
+      "label": "Audio briefs - Manage All",
+      "labelAr": "إدارة كاملة للأخبار الصوتية",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.publish",
+      "label": "Audio briefs - Publish",
+      "labelAr": "نشر خبر صوتي",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_briefs.view",
+      "label": "Audio briefs - View",
+      "labelAr": "عرض الأخبار الصوتية",
+      "module": "audio_briefs",
+      "description": null
+    },
+    {
+      "code": "audio_newsletters.create",
+      "label": "Create Audio Newsletter",
+      "labelAr": "إنشاء نشرة صوتية",
+      "module": "audio_newsletters",
+      "description": "إنشاء نشرات صوتية جديدة"
+    },
+    {
+      "code": "audio_newsletters.delete",
+      "label": "Audio newsletters - Delete",
+      "labelAr": "حذف نشرة صوتية",
+      "module": "audio_newsletters",
+      "description": null
+    },
+    {
+      "code": "audio_newsletters.edit",
+      "label": "Audio newsletters - Edit",
+      "labelAr": "تعديل نشرة صوتية",
+      "module": "audio_newsletters",
+      "description": null
+    },
+    {
+      "code": "audio_newsletters.manage_all",
+      "label": "Audio newsletters - Manage All",
+      "labelAr": "إدارة كاملة للنشرات الصوتية",
+      "module": "audio_newsletters",
+      "description": null
+    },
+    {
+      "code": "audio_newsletters.manage_templates",
+      "label": "Manage Audio Templates",
+      "labelAr": "إدارة قوالب الصوت",
+      "module": "audio_newsletters",
+      "description": "إدارة قوالب النشرات"
+    },
+    {
+      "code": "audio_newsletters.manage_voices",
+      "label": "Manage AI Voices",
+      "labelAr": "إدارة أصوات الذكاء الاصطناعي",
+      "module": "audio_newsletters",
+      "description": "تعديل إعدادات الأصوات"
+    },
+    {
+      "code": "audio_newsletters.publish",
+      "label": "Publish Audio Newsletter",
+      "labelAr": "نشر النشرة الصوتية",
+      "module": "audio_newsletters",
+      "description": "نشر النشرات الصوتية"
+    },
+    {
+      "code": "audio_newsletters.view",
+      "label": "View Audio Newsletters",
+      "labelAr": "عرض النشرات الصوتية",
+      "module": "audio_newsletters",
+      "description": "عرض النشرات الصوتية"
+    },
+    {
+      "code": "audit.view",
+      "label": "View Audit Logs",
+      "labelAr": "عرض سجلات التدقيق",
+      "module": "audit",
+      "description": "View audit logs"
+    },
+    {
+      "code": "blocks.manage",
+      "label": "Manage Blocks",
+      "labelAr": "إدارة البلوكات",
+      "module": "blocks",
+      "description": "Manage smart blocks"
+    },
+    {
+      "code": "blocks.view",
+      "label": "View Blocks",
+      "labelAr": "عرض البلوكات",
+      "module": "blocks",
+      "description": "View smart blocks"
+    },
+    {
+      "code": "calendar:assign_tasks",
+      "label": "Assign Tasks",
+      "labelAr": "تعيين مهام",
+      "module": "calendar",
+      "description": "السماح بتعيين مهام للصحفيين"
+    },
+    {
+      "code": "calendar:create",
+      "label": "Create Events",
+      "labelAr": "إنشاء مناسبات",
+      "module": "calendar",
+      "description": "السماح بإنشاء مناسبات جديدة في التقويم"
+    },
+    {
+      "code": "calendar:delete",
+      "label": "Delete Events",
+      "labelAr": "حذف المناسبات",
+      "module": "calendar",
+      "description": "السماح بحذف المناسبات"
+    },
+    {
+      "code": "calendar:edit",
+      "label": "Edit Events",
+      "labelAr": "تعديل المناسبات",
+      "module": "calendar",
+      "description": "السماح بتعديل المناسبات الموجودة"
+    },
+    {
+      "code": "calendar:generate_ai",
+      "label": "Generate AI Ideas",
+      "labelAr": "توليد أفكار بالذكاء الاصطناعي",
+      "module": "calendar",
+      "description": "استخدام الذكاء الاصطناعي لتوليد أفكار المحتوى"
+    },
+    {
+      "code": "calendar:view",
+      "label": "View Calendar",
+      "labelAr": "عرض التقويم",
+      "module": "calendar",
+      "description": "السماح بعرض التقويم والمناسبات"
+    },
+    {
+      "code": "calendar.manage",
+      "label": "Manage Calendar",
+      "labelAr": "إدارة التقويم",
+      "module": "calendar",
+      "description": "Manage calendar events"
+    },
+    {
+      "code": "calendar.view",
+      "label": "View Calendar",
+      "labelAr": "عرض التقويم",
+      "module": "calendar",
+      "description": "View calendar"
+    },
+    {
+      "code": "categories.create",
+      "label": "Create Categories",
+      "labelAr": "إنشاء التصنيفات",
+      "module": "categories",
+      "description": null
+    },
+    {
+      "code": "categories.delete",
+      "label": "Delete Categories",
+      "labelAr": "حذف التصنيفات",
+      "module": "categories",
+      "description": null
+    },
+    {
+      "code": "categories.manage",
+      "label": "Manage Categories",
+      "labelAr": "إدارة التصنيفات",
+      "module": "categories",
+      "description": "Manage categories"
+    },
+    {
+      "code": "categories.update",
+      "label": "Update Categories",
+      "labelAr": "تعديل التصنيفات",
+      "module": "categories",
+      "description": null
+    },
+    {
+      "code": "categories.view",
+      "label": "View Categories",
+      "labelAr": "عرض التصنيفات",
+      "module": "categories",
+      "description": null
+    },
+    {
+      "code": "comments.approve",
+      "label": "Approve Comments",
+      "labelAr": "الموافقة على التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.ban_user",
+      "label": "Comments - Ban User",
+      "labelAr": "حظر المستخدمين من التعليق",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.create",
+      "label": "Comments - Create",
+      "labelAr": "إنشاء التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.delete",
+      "label": "Delete Comments",
+      "labelAr": "حذف التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.edit",
+      "label": "Comments - Edit",
+      "labelAr": "تعديل التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.moderate",
+      "label": "Moderate Comments",
+      "labelAr": "الإشراف على التعليقات",
+      "module": "comments",
+      "description": "Moderate user comments"
+    },
+    {
+      "code": "comments.reject",
+      "label": "Reject Comments",
+      "labelAr": "رفض التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.restore",
+      "label": "Restore Comments",
+      "labelAr": "استعادة التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.view",
+      "label": "View Comments",
+      "labelAr": "عرض التعليقات",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "comments.view_own",
+      "label": "Comments - View Own",
+      "labelAr": "عرض التعليقات على مقالاتي",
+      "module": "comments",
+      "description": null
+    },
+    {
+      "code": "communications.manage",
+      "label": "Manage Communications",
+      "labelAr": "إدارة قنوات الاتصال",
+      "module": "communications",
+      "description": "Manage communication channels"
+    },
+    {
+      "code": "communications.staff",
+      "label": "Staff Communications",
+      "labelAr": "مراسلة الزملاء",
+      "module": "Communications",
+      "description": "Send communications to staff members"
+    },
+    {
+      "code": "breaking_ticker.manage",
+      "label": "Manage Breaking Ticker",
+      "labelAr": "إدارة شريط الأخبار العاجلة",
+      "module": "content",
+      "description": "Allows managing breaking news ticker topics and headlines"
+    },
+    {
+      "code": "dashboard.view",
+      "label": "View Dashboard",
+      "labelAr": "عرض لوحة التحكم",
+      "module": "dashboard",
+      "description": "Access to main dashboard"
+    },
+    {
+      "code": "dashboard.view_messages",
+      "label": "Dashboard - View Messages",
+      "labelAr": "عرض رسائل التواصل",
+      "module": "dashboard",
+      "description": null
+    },
+    {
+      "code": "dashboard.view_moderators",
+      "label": "Dashboard - View Moderators",
+      "labelAr": "عرض المشرفين المتواجدين",
+      "module": "dashboard",
+      "description": null
+    },
+    {
+      "code": "dashboard.view_quick_actions",
+      "label": "Dashboard - View Quick Actions",
+      "labelAr": "عرض الإجراءات السريعة",
+      "module": "dashboard",
+      "description": null
+    },
+    {
+      "code": "dashboard.view_stats",
+      "label": "Dashboard - View Stats",
+      "labelAr": "عرض الإحصائيات",
+      "module": "dashboard",
+      "description": null
+    },
+    {
+      "code": "dashboard.view_visitors",
+      "label": "Dashboard - View Visitors",
+      "labelAr": "عرض الزوار الحاليين",
+      "module": "dashboard",
+      "description": null
+    },
+    {
+      "code": "email_agent.manage_settings",
+      "label": "Manage Email Settings",
+      "labelAr": "إدارة إعدادات البريد",
+      "module": "email_agent",
+      "description": "تعديل إعدادات الوكيل"
+    },
+    {
+      "code": "email_agent.publish",
+      "label": "Publish via Email",
+      "labelAr": "النشر عبر البريد",
+      "module": "email_agent",
+      "description": "نشر المقالات من البريد"
+    },
+    {
+      "code": "email_agent.view",
+      "label": "View Email Messages",
+      "labelAr": "عرض رسائل البريد",
+      "module": "email_agent",
+      "description": "عرض الرسائل الواردة"
+    },
+    {
+      "code": "ifox.auto_publish",
+      "label": "iFox Auto Publish",
+      "labelAr": "النشر التلقائي",
+      "module": "ifox",
+      "description": "تفعيل النشر التلقائي للمحتوى"
+    },
+    {
+      "code": "ifox.generate_content",
+      "label": "Generate iFox Content",
+      "labelAr": "توليد محتوى iFox",
+      "module": "ifox",
+      "description": "توليد مقالات وصور تلقائياً"
+    },
+    {
+      "code": "ifox.manage_categories",
+      "label": "Manage iFox Categories",
+      "labelAr": "إدارة تصنيفات iFox",
+      "module": "ifox",
+      "description": "إدارة التصنيفات المستهدفة"
+    },
+    {
+      "code": "ifox.manage_settings",
+      "label": "Manage iFox Settings",
+      "labelAr": "إدارة إعدادات iFox",
+      "module": "ifox",
+      "description": "تعديل إعدادات النظام"
+    },
+    {
+      "code": "ifox.view_dashboard",
+      "label": "View iFox Dashboard",
+      "labelAr": "عرض لوحة iFox",
+      "module": "ifox",
+      "description": "الوصول إلى لوحة تحكم iFox"
+    },
+    {
+      "code": "infographics.create",
+      "label": "Create Infographics",
+      "labelAr": "إنشاء إنفوجرافيك",
+      "module": "infographics",
+      "description": "إنشاء إنفوجرافيك جديد"
+    },
+    {
+      "code": "infographics.delete",
+      "label": "Delete Infographics",
+      "labelAr": "حذف الإنفوجرافيك",
+      "module": "infographics",
+      "description": "حذف الإنفوجرافيك"
+    },
+    {
+      "code": "infographics.publish",
+      "label": "Publish Infographics",
+      "labelAr": "نشر الإنفوجرافيك",
+      "module": "infographics",
+      "description": "نشر الإنفوجرافيك"
+    },
+    {
+      "code": "infographics.view",
+      "label": "View Infographics",
+      "labelAr": "عرض الإنفوجرافيك",
+      "module": "infographics",
+      "description": "عرض الإنفوجرافيك"
+    },
+    {
+      "code": "integrations.manage",
+      "label": "Manage Integrations",
+      "labelAr": "إدارة التكاملات",
+      "module": "integrations",
+      "description": "Manage system integrations"
+    },
+    {
+      "code": "media.delete",
+      "label": "Media - Delete",
+      "labelAr": "حذف الوسائط",
+      "module": "media",
+      "description": null
+    },
+    {
+      "code": "media.edit",
+      "label": "Media - Edit",
+      "labelAr": "تعديل الوسائط",
+      "module": "media",
+      "description": null
+    },
+    {
+      "code": "media.manage",
+      "label": "Manage Media",
+      "labelAr": "إدارة الوسائط",
+      "module": "media",
+      "description": "Manage media files"
+    },
+    {
+      "code": "media.upload",
+      "label": "Upload Media",
+      "labelAr": "رفع الوسائط",
+      "module": "media",
+      "description": "Upload media files"
+    },
+    {
+      "code": "media.view",
+      "label": "View Media",
+      "labelAr": "عرض الوسائط",
+      "module": "media",
+      "description": "View media library"
+    },
+    {
+      "code": "media_library.delete",
+      "label": "Delete Media",
+      "labelAr": "حذف ملفات",
+      "module": "media_library",
+      "description": "حذف الملفات"
+    },
+    {
+      "code": "media_library.manage_folders",
+      "label": "Manage Folders",
+      "labelAr": "إدارة المجلدات",
+      "module": "media_library",
+      "description": "إنشاء وتعديل المجلدات"
+    },
+    {
+      "code": "media_library.upload",
+      "label": "Upload Media",
+      "labelAr": "رفع ملفات",
+      "module": "media_library",
+      "description": "رفع ملفات جديدة"
+    },
+    {
+      "code": "media_library.view",
+      "label": "View Media Library",
+      "labelAr": "عرض مكتبة الوسائط",
+      "module": "media_library",
+      "description": "عرض الملفات والصور"
+    },
+    {
+      "code": "mirqab.create",
+      "label": "Create Mirqab Content",
+      "labelAr": "إنشاء محتوى المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "mirqab.delete",
+      "label": "Delete Mirqab Content",
+      "labelAr": "حذف محتوى المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "mirqab.edit",
+      "label": "Edit Mirqab Content",
+      "labelAr": "تعديل محتوى المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "mirqab.manage",
+      "label": "Manage Mirqab",
+      "labelAr": "إدارة المرقاب",
+      "module": "mirqab",
+      "description": "Manage Mirqab content"
+    },
+    {
+      "code": "mirqab.manage_settings",
+      "label": "Manage Mirqab Settings",
+      "labelAr": "إدارة إعدادات المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "mirqab.publish",
+      "label": "Publish Mirqab Content",
+      "labelAr": "نشر محتوى المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "mirqab.view",
+      "label": "View Mirqab",
+      "labelAr": "عرض المرقاب",
+      "module": "mirqab",
+      "description": null
+    },
+    {
+      "code": "moderation.manage",
+      "label": "Manage Moderation",
+      "labelAr": "إدارة الرقابة",
+      "module": "moderation",
+      "description": "Manage AI moderation settings"
+    },
+    {
+      "code": "moderation.view",
+      "label": "View Moderation",
+      "labelAr": "عرض الرقابة",
+      "module": "moderation",
+      "description": "View AI moderation dashboard"
+    },
+    {
+      "code": "muqtarab.create",
+      "label": "Create Muqtarab Content",
+      "labelAr": "إنشاء محتوى مُقترب",
+      "module": "muqtarab",
+      "description": "إنشاء زوايا ومواضيع"
+    },
+    {
+      "code": "muqtarab.manage",
+      "label": "Manage Muqtarab",
+      "labelAr": "إدارة مُقترب",
+      "module": "muqtarab",
+      "description": "إدارة كاملة للمحتوى"
+    },
+    {
+      "code": "muqtarab.publish",
+      "label": "Publish Muqtarab Content",
+      "labelAr": "نشر محتوى مُقترب",
+      "module": "muqtarab",
+      "description": "نشر المحتوى"
+    },
+    {
+      "code": "muqtarab.view",
+      "label": "View Muqtarab Content",
+      "labelAr": "عرض محتوى مُقترب",
+      "module": "muqtarab",
+      "description": "عرض محتوى مُقترب"
+    },
+    {
+      "code": "newsletters.view",
+      "label": "View Newsletters",
+      "labelAr": "عرض النشرات",
+      "module": "newsletters",
+      "description": "View newsletters"
+    },
+    {
+      "code": "notifications.view",
+      "label": "View Notifications",
+      "labelAr": "عرض الإشعارات",
+      "module": "notifications",
+      "description": "View notifications"
+    },
+    {
+      "code": "omq.create",
+      "label": "Create Deep Analysis",
+      "labelAr": "إنشاء تحليل عميق",
+      "module": "omq",
+      "description": "إنشاء تحليلات جديدة"
+    },
+    {
+      "code": "omq.manage",
+      "label": "Manage Deep Analysis",
+      "labelAr": "إدارة التحليل العميق",
+      "module": "omq",
+      "description": "إدارة وتعديل التحليلات"
+    },
+    {
+      "code": "omq.publish",
+      "label": "Publish Deep Analysis",
+      "labelAr": "نشر التحليل العميق",
+      "module": "omq",
+      "description": "نشر التحليلات"
+    },
+    {
+      "code": "omq.view",
+      "label": "View Deep Analysis",
+      "labelAr": "عرض التحليل العميق",
+      "module": "omq",
+      "description": "عرض التحليلات العميقة"
+    },
+    {
+      "code": "opinion.create",
+      "label": "Opinion - Create",
+      "labelAr": "إنشاء مقال رأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.delete_any",
+      "label": "Opinion - Delete Any",
+      "labelAr": "حذف أي مقال رأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.delete_own",
+      "label": "Opinion - Delete Own",
+      "labelAr": "حذف مقالات الرأي الخاصة",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.edit_any",
+      "label": "Opinion - Edit Any",
+      "labelAr": "تعديل أي مقال رأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.edit_own",
+      "label": "Opinion - Edit Own",
+      "labelAr": "تعديل مقالات الرأي الخاصة",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.publish",
+      "label": "Opinion - Publish",
+      "labelAr": "نشر مقالات الرأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.reject",
+      "label": "Opinion - Reject",
+      "labelAr": "رفض مقالات الرأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.review",
+      "label": "Opinion - Review",
+      "labelAr": "مراجعة مقالات الرأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.submit_review",
+      "label": "Opinion - Submit Review",
+      "labelAr": "إرسال مقال رأي للمراجعة",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "opinion.view",
+      "label": "Opinion - View",
+      "labelAr": "عرض مقالات الرأي",
+      "module": "opinion",
+      "description": null
+    },
+    {
+      "code": "permissions.manage",
+      "label": "Manage Permissions",
+      "labelAr": "إدارة الصلاحيات",
+      "module": "permissions",
+      "description": "Manage system permissions"
+    },
+    {
+      "code": "permissions.view",
+      "label": "View Permissions",
+      "labelAr": "عرض الصلاحيات",
+      "module": "permissions",
+      "description": "View system permissions"
+    },
+    {
+      "code": "profile.view",
+      "label": "View Profile",
+      "labelAr": "عرض الملف الشخصي",
+      "module": "profile",
+      "description": "View user profile"
+    },
+    {
+      "code": "publisher_sales.create_content",
+      "label": "Create Publisher Content",
+      "labelAr": "إنشاء محتوى للنشر",
+      "module": "publisher_sales",
+      "description": "إنشاء محتوى للمراجعة"
+    },
+    {
+      "code": "publisher_sales.manage_packages",
+      "label": "Manage Packages",
+      "labelAr": "إدارة الباقات",
+      "module": "publisher_sales",
+      "description": "إدارة باقات الاشتراك"
+    },
+    {
+      "code": "publisher_sales.view",
+      "label": "View Publisher Dashboard",
+      "labelAr": "عرض لوحة الناشر",
+      "module": "publisher_sales",
+      "description": "عرض لوحة تحكم الناشر"
+    },
+    {
+      "code": "publisher_sales.view_analytics",
+      "label": "View Publisher Analytics",
+      "labelAr": "عرض تحليلات الناشر",
+      "module": "publisher_sales",
+      "description": "عرض إحصائيات الأداء"
+    },
+    {
+      "code": "publishers.manage",
+      "label": "Manage Publishers",
+      "labelAr": "إدارة الناشرين",
+      "module": "publishers",
+      "description": "Manage publishers"
+    },
+    {
+      "code": "publishers.view",
+      "label": "View Publishers",
+      "labelAr": "عرض الناشرين",
+      "module": "publishers",
+      "description": "View publishers"
+    },
+    {
+      "code": "roles.manage",
+      "label": "Manage Roles",
+      "labelAr": "إدارة الأدوار",
+      "module": "roles",
+      "description": "Create and manage roles"
+    },
+    {
+      "code": "roles.view",
+      "label": "View Roles",
+      "labelAr": "عرض الأدوار",
+      "module": "roles",
+      "description": "View system roles"
+    },
+    {
+      "code": "rss.manage",
+      "label": "Manage RSS Feeds",
+      "labelAr": "إدارة مصادر RSS",
+      "module": "rss",
+      "description": "Manage RSS feed sources"
+    },
+    {
+      "code": "settings.manage",
+      "label": "Manage Settings",
+      "labelAr": "إدارة الإعدادات",
+      "module": "settings",
+      "description": "Manage system settings"
+    },
+    {
+      "code": "settings.update",
+      "label": "Settings - Update",
+      "labelAr": "تحديث الإعدادات",
+      "module": "settings",
+      "description": null
+    },
+    {
+      "code": "settings.view",
+      "label": "View Settings",
+      "labelAr": "عرض الإعدادات",
+      "module": "settings",
+      "description": "View system settings"
+    },
+    {
+      "code": "smart_links.manage",
+      "label": "Manage Smart Links",
+      "labelAr": "إدارة الروابط الذكية",
+      "module": "smart_links",
+      "description": "Create and manage smart links"
+    },
+    {
+      "code": "smart_links.view",
+      "label": "View Smart Links",
+      "labelAr": "عرض الروابط الذكية",
+      "module": "smart_links",
+      "description": "View smart links"
+    },
+    {
+      "code": "staff.create",
+      "label": "Create Staff",
+      "labelAr": "إضافة أعضاء الكادر",
+      "module": "staff",
+      "description": null
+    },
+    {
+      "code": "staff.delete",
+      "label": "Delete Staff",
+      "labelAr": "حذف أعضاء الكادر",
+      "module": "staff",
+      "description": null
+    },
+    {
+      "code": "staff.update",
+      "label": "Update Staff",
+      "labelAr": "تعديل الكادر",
+      "module": "staff",
+      "description": null
+    },
+    {
+      "code": "staff.view",
+      "label": "View Staff",
+      "labelAr": "عرض الكادر",
+      "module": "staff",
+      "description": null
+    },
+    {
+      "code": "staff.view_productivity",
+      "label": "View Staff Productivity",
+      "labelAr": "عرض إنتاجية الموظفين",
+      "module": "staff",
+      "description": "View staff productivity metrics and analytics"
+    },
+    {
+      "code": "storage.manage",
+      "label": "Manage Storage",
+      "labelAr": "إدارة التخزين",
+      "module": "storage",
+      "description": "Manage file storage"
+    },
+    {
+      "code": "story_cards.create",
+      "label": "Create Story Cards",
+      "labelAr": "إنشاء بطاقات قصص",
+      "module": "story_cards",
+      "description": "إنشاء بطاقات جديدة"
+    },
+    {
+      "code": "story_cards.share",
+      "label": "Share Story Cards",
+      "labelAr": "مشاركة بطاقات القصص",
+      "module": "story_cards",
+      "description": "مشاركة على وسائل التواصل"
+    },
+    {
+      "code": "story_cards.view",
+      "label": "View Story Cards",
+      "labelAr": "عرض بطاقات القصص",
+      "module": "story_cards",
+      "description": "عرض بطاقات القصص"
+    },
+    {
+      "code": "system.manage_roles",
+      "label": "Manage Roles",
+      "labelAr": "إدارة الأدوار",
+      "module": "system",
+      "description": null
+    },
+    {
+      "code": "system.manage_settings",
+      "label": "Manage Settings",
+      "labelAr": "إدارة الإعدادات",
+      "module": "system",
+      "description": null
+    },
+    {
+      "code": "system.manage_themes",
+      "label": "Manage Themes",
+      "labelAr": "إدارة الثيمات",
+      "module": "system",
+      "description": null
+    },
+    {
+      "code": "system.view_audit",
+      "label": "View Audit Logs",
+      "labelAr": "عرض سجلات النشاط",
+      "module": "system",
+      "description": "Access and view system audit logs and activity history"
+    },
+    {
+      "code": "system.view_logs",
+      "label": "View Activity Logs",
+      "labelAr": "عرض سجلات النشاط",
+      "module": "system",
+      "description": null
+    },
+    {
+      "code": "tags.create",
+      "label": "Tags - Create",
+      "labelAr": "إنشاء الوسوم",
+      "module": "tags",
+      "description": null
+    },
+    {
+      "code": "tags.delete",
+      "label": "Tags - Delete",
+      "labelAr": "حذف الوسوم",
+      "module": "tags",
+      "description": null
+    },
+    {
+      "code": "tags.manage",
+      "label": "Manage Tags",
+      "labelAr": "إدارة الوسوم",
+      "module": "tags",
+      "description": "Create and manage tags"
+    },
+    {
+      "code": "tags.update",
+      "label": "Tags - Update",
+      "labelAr": "تعديل الوسوم",
+      "module": "tags",
+      "description": null
+    },
+    {
+      "code": "tags.view",
+      "label": "View Tags",
+      "labelAr": "عرض الوسوم",
+      "module": "tags",
+      "description": "View article tags"
+    },
+    {
+      "code": "tasks.manage",
+      "label": "Manage Tasks",
+      "labelAr": "إدارة المهام",
+      "module": "tasks",
+      "description": "Create and manage tasks"
+    },
+    {
+      "code": "tasks.view",
+      "label": "View Tasks",
+      "labelAr": "عرض المهام",
+      "module": "tasks",
+      "description": "View task center"
+    },
+    {
+      "code": "templates.manage",
+      "label": "Manage Templates",
+      "labelAr": "إدارة القوالب",
+      "module": "templates",
+      "description": "Manage page templates"
+    },
+    {
+      "code": "tools.view",
+      "label": "View Tools",
+      "labelAr": "عرض الأدوات",
+      "module": "tools",
+      "description": "View smart tools"
+    },
+    {
+      "code": "users.ban",
+      "label": "Ban Users",
+      "labelAr": "حظر المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.change_role",
+      "label": "Change User Roles",
+      "labelAr": "تغيير أدوار المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.create",
+      "label": "Create Users",
+      "labelAr": "إنشاء المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.delete",
+      "label": "Delete Users",
+      "labelAr": "حذف المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.manage",
+      "label": "Manage Users",
+      "labelAr": "إدارة المستخدمين",
+      "module": "users",
+      "description": "Manage system users"
+    },
+    {
+      "code": "users.suspend",
+      "label": "Suspend Users",
+      "labelAr": "تعليق المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.update",
+      "label": "Update Users",
+      "labelAr": "تعديل المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "users.view",
+      "label": "View Users",
+      "labelAr": "عرض المستخدمين",
+      "module": "users",
+      "description": null
+    },
+    {
+      "code": "visual_ai.generate_image",
+      "label": "Generate AI Images",
+      "labelAr": "توليد صور بالذكاء الاصطناعي",
+      "module": "visual_ai",
+      "description": "إنشاء صور باستخدام DALL-E أو Visual AI"
+    },
+    {
+      "code": "visual_ai.generate_infographic",
+      "label": "Generate Infographics",
+      "labelAr": "توليد إنفوجرافيك",
+      "module": "visual_ai",
+      "description": "إنشاء إنفوجرافيك بالذكاء الاصطناعي"
+    },
+    {
+      "code": "visual_ai.manage_settings",
+      "label": "Manage AI Image Settings",
+      "labelAr": "إدارة إعدادات توليد الصور",
+      "module": "visual_ai",
+      "description": "تعديل إعدادات ونماذج الذكاء الاصطناعي"
+    },
+    {
+      "code": "visual_ai.view_gallery",
+      "label": "View AI Image Gallery",
+      "labelAr": "عرض معرض الصور",
+      "module": "visual_ai",
+      "description": "عرض الصور المولدة"
+    },
+    {
+      "code": "whatsapp_agent.manage_settings",
+      "label": "Manage WhatsApp Settings",
+      "labelAr": "إدارة إعدادات الواتساب",
+      "module": "whatsapp_agent",
+      "description": "تعديل إعدادات الوكيل"
+    },
+    {
+      "code": "whatsapp_agent.manage_users",
+      "label": "Manage WhatsApp Users",
+      "labelAr": "إدارة مستخدمي الواتساب",
+      "module": "whatsapp_agent",
+      "description": "إدارة المستخدمين المصرح لهم"
+    },
+    {
+      "code": "whatsapp_agent.publish",
+      "label": "Publish via WhatsApp",
+      "labelAr": "النشر عبر الواتساب",
+      "module": "whatsapp_agent",
+      "description": "نشر المقالات من الواتساب"
+    },
+    {
+      "code": "whatsapp_agent.view",
+      "label": "View WhatsApp Messages",
+      "labelAr": "عرض رسائل الواتساب",
+      "module": "whatsapp_agent",
+      "description": "عرض الرسائل الواردة"
+    }
+  ],
+  "roles": [
+    {
+      "name": "admin",
+      "nameAr": "مسؤول",
+      "description": "إدارة المستخدمين والموافقات التحريرية والإعدادات العامة",
+      "isSystem": false
+    },
+    {
+      "name": "comments_moderator",
+      "nameAr": "مشرف تعليقات",
+      "description": "إدارة التعليقات: الموافقة والرفض والتعديل والحذف والحظر",
+      "isSystem": false
+    },
+    {
+      "name": "content_manager",
+      "nameAr": "مدير محتوى",
+      "description": "يدير المحتوى والمقالات",
+      "isSystem": false
+    },
+    {
+      "name": "editor",
+      "nameAr": "محرر",
+      "description": "إنشاء وتحرير ونشر المحتوى وإدارة الوسائط والتصنيفات",
+      "isSystem": false
+    },
+    {
+      "name": "media_manager",
+      "nameAr": "مدير وسائط",
+      "description": "إدارة المكتبة الإعلامية والألبومات",
+      "isSystem": true
+    },
+    {
+      "name": "opinion_author",
+      "nameAr": "كاتب مقال رأي",
+      "description": "كتابة وتحرير مقالات الرأي الخاصة فقط وإرسالها للمراجعة، دون صلاحيات النشر المباشر",
+      "isSystem": false
+    },
+    {
+      "name": "publisher",
+      "nameAr": "ناشر",
+      "description": "ناشر محتوى داخلي - يمكنه إنشاء ونشر وأرشفة وتعديل وجدولة مقالاته الخاصة فقط",
+      "isSystem": true
+    },
+    {
+      "name": "reader",
+      "nameAr": "قارئ",
+      "description": "مستخدم عادي بدون صلاحيات تحريرية",
+      "isSystem": false
+    },
+    {
+      "name": "reporter",
+      "nameAr": "مراسل",
+      "description": "إنشاء وتحرير المقالات الخاصة فقط دون صلاحيات النشر، مع إمكانية رفع الوسائط ومتابعة التعليقات والإحصائيات على مقالاته",
+      "isSystem": false
+    },
+    {
+      "name": "system_admin",
+      "nameAr": "مدير النظام",
+      "description": "صلاحيات كاملة على النظام",
+      "isSystem": true
+    }
+  ],
+  "rolePermissions": {
+    "admin": [
+      "analytics.export",
+      "analytics.view_advanced",
+      "analytics.view_basic",
+      "analytics.view_revenue",
+      "articles.archive",
+      "articles.create",
+      "articles.delete",
+      "articles.edit_any",
+      "articles.feature",
+      "articles.publish",
+      "articles.unpublish",
+      "articles.view",
+      "audio_newsletters.create",
+      "audio_newsletters.manage_templates",
+      "audio_newsletters.publish",
+      "audio_newsletters.view",
+      "breaking_ticker.manage",
+      "calendar:assign_tasks",
+      "calendar:create",
+      "calendar:delete",
+      "calendar:edit",
+      "calendar:generate_ai",
+      "calendar:view",
+      "categories.create",
+      "categories.delete",
+      "categories.update",
+      "categories.view",
+      "comments.approve",
+      "comments.delete",
+      "comments.reject",
+      "comments.view",
+      "communications.staff",
+      "email_agent.publish",
+      "email_agent.view",
+      "ifox.auto_publish",
+      "ifox.generate_content",
+      "ifox.manage_categories",
+      "ifox.view_dashboard",
+      "infographics.create",
+      "infographics.delete",
+      "infographics.publish",
+      "infographics.view",
+      "media_library.delete",
+      "media_library.manage_folders",
+      "media_library.upload",
+      "media_library.view",
+      "mirqab.create",
+      "mirqab.delete",
+      "mirqab.edit",
+      "mirqab.manage_settings",
+      "mirqab.publish",
+      "mirqab.view",
+      "muqtarab.create",
+      "muqtarab.manage",
+      "muqtarab.publish",
+      "muqtarab.view",
+      "omq.create",
+      "omq.manage",
+      "omq.publish",
+      "omq.view",
+      "publisher_sales.create_content",
+      "publisher_sales.manage_packages",
+      "publisher_sales.view",
+      "publisher_sales.view_analytics",
+      "staff.create",
+      "staff.delete",
+      "staff.update",
+      "staff.view",
+      "story_cards.create",
+      "story_cards.share",
+      "story_cards.view",
+      "system.manage_themes",
+      "system.view_audit",
+      "system.view_logs",
+      "users.change_role",
+      "users.suspend",
+      "users.update",
+      "users.view",
+      "visual_ai.generate_image",
+      "visual_ai.generate_infographic",
+      "visual_ai.view_gallery",
+      "whatsapp_agent.publish",
+      "whatsapp_agent.view"
+    ],
+    "comments_moderator": [
+      "articles.view",
+      "comments.approve",
+      "comments.delete",
+      "comments.reject",
+      "comments.restore",
+      "comments.view"
+    ],
+    "content_manager": [
+      "articles.ai_generate",
+      "articles.archive",
+      "articles.comprehensive_edit",
+      "articles.content_type_selector",
+      "articles.create",
+      "articles.delete",
+      "articles.edit_any",
+      "articles.edit_own",
+      "articles.feature",
+      "articles.generate_images",
+      "articles.hide_homepage",
+      "articles.news_type",
+      "articles.polls",
+      "articles.publish",
+      "articles.review",
+      "articles.schedule",
+      "articles.smart_links",
+      "articles.unpublish",
+      "articles.view",
+      "breaking_ticker.manage",
+      "categories.view",
+      "dashboard.view",
+      "infographics.create",
+      "infographics.delete",
+      "infographics.publish",
+      "infographics.view",
+      "media_library.view",
+      "profile.view",
+      "staff.view_productivity",
+      "users.view"
+    ],
+    "editor": [
+      "analytics.view_advanced",
+      "analytics.view_basic",
+      "articles.archive",
+      "articles.create",
+      "articles.edit_any",
+      "articles.feature",
+      "articles.publish",
+      "articles.unpublish",
+      "articles.view",
+      "audio_newsletters.create",
+      "audio_newsletters.publish",
+      "audio_newsletters.view",
+      "breaking_ticker.manage",
+      "categories.create",
+      "categories.delete",
+      "categories.update",
+      "categories.view",
+      "comments.approve",
+      "comments.reject",
+      "comments.view",
+      "ifox.view_dashboard",
+      "infographics.create",
+      "infographics.delete",
+      "infographics.publish",
+      "infographics.view",
+      "media_library.delete",
+      "media_library.manage_folders",
+      "media_library.upload",
+      "media_library.view",
+      "mirqab.create",
+      "mirqab.edit",
+      "mirqab.publish",
+      "mirqab.view",
+      "muqtarab.create",
+      "muqtarab.manage",
+      "muqtarab.publish",
+      "muqtarab.view",
+      "omq.create",
+      "omq.publish",
+      "omq.view",
+      "staff.view",
+      "story_cards.create",
+      "story_cards.share",
+      "story_cards.view",
+      "users.view",
+      "visual_ai.generate_image",
+      "visual_ai.generate_infographic",
+      "visual_ai.view_gallery"
+    ],
+    "media_manager": [
+      "media.delete",
+      "media.edit",
+      "media.upload",
+      "media.view"
+    ],
+    "opinion_author": [
+      "articles.create",
+      "articles.edit_own",
+      "articles.review",
+      "categories.view",
+      "users.view"
+    ],
+    "publisher": [
+      "analytics.view_basic",
+      "articles.archive",
+      "articles.create",
+      "articles.edit_own",
+      "articles.publish",
+      "articles.schedule",
+      "articles.view",
+      "media_library.upload",
+      "media_library.view",
+      "publisher_sales.create_content",
+      "publisher_sales.manage_packages",
+      "publisher_sales.view",
+      "publisher_sales.view_analytics"
+    ],
+    "reader": [
+      "articles.view",
+      "categories.view",
+      "infographics.view",
+      "muqtarab.view",
+      "omq.view"
+    ],
+    "reporter": [
+      "articles.create",
+      "articles.view",
+      "dashboard.view",
+      "profile.view"
+    ],
+    "system_admin": [
+      "*"
+    ]
+  }
+}

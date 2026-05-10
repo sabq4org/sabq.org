@@ -1,0 +1,23 @@
+{
+  "id": "opinion-001",
+  "title": "رأي: المسؤولية الاجتماعية للشركات... بين الواجب والاستثمار",
+  "slug": "corporate-social-responsibility",
+  "excerpt": "في عالم الأعمال المعاصر، لم تعد المسؤولية الاجتماعية للشركات مجرد واجب أخلاقي، بل أصبحت استثماراً استراتيجياً يعزز من قيمة العلامة التجارية ويبني جسوراً متينة مع المجتمع.",
+  "image": "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=1200",
+  "publishedAt": "2025-10-23T12:00:00Z",
+  "category": {
+    "id": "cat-opinion",
+    "name": "آراء",
+    "slug": "opinion",
+    "color": "#0891b2"
+  },
+  "author": {
+    "id": "author-003",
+    "name": "د. خالد العتيبي",
+    "avatar": "https://api.dicebear.com/7.x/avataaars/svg?seed=khaled"
+  },
+  "views": 8420,
+  "likes": 567,
+  "commentsCount": 123,
+  "readingTime": 6
+}

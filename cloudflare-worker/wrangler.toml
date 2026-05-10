@@ -1,0 +1,9 @@
+name = "sabq-seo-404"
+main = "seo-404-worker.js"
+compatibility_date = "2024-01-01"
+account_id = ""
+
+[env.production]
+routes = [
+  { pattern = "sabq.org/*", zone_id = "" }
+]
