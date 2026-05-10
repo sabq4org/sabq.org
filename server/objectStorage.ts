@@ -3,6 +3,7 @@ import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -472,6 +473,35 @@ export class ObjectStorageService {
   }
 
   async getObjectEntityUploadURL(): Promise<string> {
+    // S3-compatible backend (Tigris on Railway, etc.) — sign a PUT URL
+    // directly against the configured S3 endpoint. The browser will PUT
+    // the file at this URL, then the client calls /api/article-images
+    // (or similar) to finalize. Files are placed under uploads/<uuid>
+    // with NO public/private prefix here; finalize handlers decide
+    // whether to copy/move them.
+    if (STORAGE_PROVIDER === 's3') {
+      const client = getS3Client();
+      const bucket = getS3Bucket();
+      const objectId = randomUUID();
+      // Place under public/ so the resulting URL is immediately
+      // publicly readable (matches uploadFileS3's public path layout).
+      // Finalize handlers (trySetObjectEntityAclPolicy below) treat S3
+      // URLs as already-public and just normalize them.
+      const key = `public/uploads/${objectId}`;
+      const cmd = new PutObjectCommand({ Bucket: bucket, Key: key });
+      return getSignedUrl(client, cmd, { expiresIn: 900 });
+    }
+
+    if (STORAGE_PROVIDER === 'r2') {
+      const client = getR2Client();
+      const bucket = getR2Bucket();
+      const objectId = randomUUID();
+      const key = `public/uploads/${objectId}`;
+      const cmd = new PutObjectCommand({ Bucket: bucket, Key: key });
+      return getSignedUrl(client, cmd, { expiresIn: 900 });
+    }
+
+    // Default GCS-via-Replit-sidecar path (legacy)
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error(
@@ -676,6 +706,22 @@ export class ObjectStorageService {
     rawPath: string,
     aclPolicy: ObjectAclPolicy
   ): Promise<string> {
+    // S3-compatible (Tigris/R2/etc.): files were uploaded directly under
+    // public/ via the presigned URL, so they're already public-readable.
+    // Strip any AWS query params left behind by the presigned PUT and
+    // return the canonical URL — this is what gets saved as the article's
+    // imageUrl.
+    if (STORAGE_PROVIDER === 's3' || STORAGE_PROVIDER === 'r2') {
+      try {
+        const u = new URL(rawPath);
+        // Drop signing query params (X-Amz-*, etc.)
+        u.search = "";
+        return u.toString();
+      } catch {
+        return rawPath;
+      }
+    }
+
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     if (!normalizedPath.startsWith("/")) {
       return normalizedPath;
