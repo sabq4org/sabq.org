@@ -42,6 +42,13 @@ RUN addgroup -g 1001 -S nodejs && \
 # Pre-create the uploads directory so the non-root user can write to it at runtime
 RUN mkdir -p /app/uploads && chown sabq:nodejs /app/uploads
 
+# Defensive: also pre-create dist/public. Headless mode (SERVE_SPA=false)
+# never touches this dir, but if SERVE_SPA detection fails or someone
+# overrides it, the SPA-serve code path tries to mkdir dist/public at
+# startup. Without sabq ownership of /app/dist, that mkdir hits EACCES
+# and aborts route registration mid-init.
+RUN mkdir -p /app/dist/public && chown -R sabq:nodejs /app/dist
+
 USER sabq
 
 ENV NODE_ENV=production

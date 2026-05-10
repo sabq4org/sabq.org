@@ -992,7 +992,11 @@ if (!(globalThis as any).__sabqServer) {
     // Set SERVE_SPA=false on Railway (or any headless deployment where the
     // frontend lives elsewhere, e.g. Vercel) to disable SPA wiring entirely.
     // Production on Replit (no env override) → unchanged.
-    const serveSpa = process.env.SERVE_SPA !== "false";
+    // Lenient parser: accepts "false"/"0"/"no"/"off" in any case with
+    // surrounding whitespace, since Railway/CI env editors sometimes inject
+    // them on copy-paste.
+    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
+    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
 
     if (!serveSpa) {
       console.log("[Server] 🛰  Headless mode — SPA serving disabled (SERVE_SPA=false). Frontend is served externally.");
