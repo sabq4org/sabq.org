@@ -16,6 +16,9 @@ vite.config.ts.*
 .replit
 replit.nix
 
+# Seed data with personal info — kept local only
+scripts/seed-data/
+
 # Build artifacts
 .cache
 *.log
