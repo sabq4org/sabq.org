@@ -1,6 +1,7 @@
-# Nixpacks build hints for Railway. Pins Node 20 to match local engines.
-# Build command intentionally skips the client bundle — Vercel builds the
-# frontend; Railway only ships the Express server.
+# Nixpacks build hints — kept as a fallback for environments without
+# Docker (e.g. if a Railway service is later configured to skip the
+# Dockerfile). Today's deployment uses Dockerfile (see railway.json),
+# which produces the same headless server-only bundle.
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "npm-9_x"]
