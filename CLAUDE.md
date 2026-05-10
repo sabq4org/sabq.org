@@ -51,6 +51,11 @@ R2 URL migration: `scripts/migrate-urls-to-r2.ts` rewrites `/public-objects/*`, 
 - `@shared/*` → `shared/*`
 - `@assets/*` → `attached_assets/*` (Vite only)
 
+### Database driver is selectable
+[server/db.ts](server/db.ts) supports two drivers via the `DB_DRIVER` env var:
+- `neon` (default, Replit-safe): `@neondatabase/serverless` over WebSocket. Required by Replit's bundled DB and external Neon.
+- `pg`: standard `node-postgres` TCP. Required for Railway PG (Railway's PG endpoint doesn't speak Neon's wsproxy protocol — `verifyConnection()` will hang forever otherwise, leaving the server listening but with no routes registered because the async init never completes). Set this on Railway.
+
 ### Drizzle schema is the source of truth
 `shared/schema.ts` (~12k lines, **251 tables**) defines the full DB. `npm run db:push` syncs it directly — there is no migration generation step in the regular workflow (the four files in `migrations/` are historical). When adding tables/columns, edit `schema.ts` and `db:push`. Trilingual content uses three parallel table families: `articles`/`en_articles`/`ur_articles`, `categories`/`en_categories`/`ur_categories`, etc. — keep them in sync when adding fields.
 

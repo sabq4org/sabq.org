@@ -1,6 +1,19 @@
 // Reference: javascript_database blueprint
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle, type NeonDatabase } from 'drizzle-orm/neon-serverless';
+//
+// Database driver is selected at boot via the DB_DRIVER env var:
+//   - "neon" (default, Replit-safe): @neondatabase/serverless over Neon's
+//     wsproxy WebSocket. Required by Replit's bundled DB and any Neon-hosted
+//     PG. Will hang against non-Neon PostgreSQL because the WebSocket
+//     endpoint doesn't exist — use "pg" for those cases.
+//   - "pg": standard node-postgres TCP. Works against any PostgreSQL
+//     including Railway PG, AWS RDS, self-hosted, etc.
+//
+// Both drivers expose the same surface (pool.query, drizzle queries) so the
+// rest of the codebase doesn't need to know which one is active.
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { drizzle as drizzleNeon, type NeonDatabase } from 'drizzle-orm/neon-serverless';
+import { Pool as PgPool } from 'pg';
+import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import ws from "ws";
 import * as schema from "@shared/schema";
 
@@ -9,9 +22,14 @@ neonConfig.pipelineConnect = "password";
 neonConfig.coalesceWrites = true;
 neonConfig.useSecureWebSocket = true;
 
-// Graceful database connection with error handling
-let pool: Pool;
-let db: NeonDatabase<typeof schema>;
+const DB_DRIVER = (process.env.DB_DRIVER || 'neon').toLowerCase();
+
+// Graceful database connection with error handling. Pool/db typed as any so
+// the same module can hold either NeonPool/NeonDatabase or PgPool/NodePgDatabase
+// without leaking driver-specific types to consumers (Drizzle's query API is
+// identical for both).
+let pool: any;
+let db: NeonDatabase<typeof schema> | NodePgDatabase<typeof schema>;
 let _dbConnected = false;
 let _dbLastError: string | null = null;
 let _reconnectTimer: ReturnType<typeof setInterval> | null = null;
@@ -21,10 +39,7 @@ function getDatabaseUrl(): string | undefined {
 }
 
 function initPool(databaseUrl: string): void {
-  const isExternalNeon = !!process.env.NEON_DATABASE_URL;
-  console.log(`[DB] Initializing connection (${isExternalNeon ? 'External Neon' : 'Replit DB'})...`);
-  
-  pool = new Pool({ 
+  const poolConfig = {
     connectionString: databaseUrl,
     max: 15,
     min: 0,
@@ -32,16 +47,30 @@ function initPool(databaseUrl: string): void {
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
     maxUses: 5000,
-  });
-  
-  pool.on('error', (err) => {
-    console.error('[Pool] Unexpected client error:', err.message);
-    _dbConnected = false;
-    _dbLastError = err.message;
-    startReconnectLoop();
-  });
+  };
 
-  db = drizzle({ client: pool, schema });
+  if (DB_DRIVER === 'pg') {
+    console.log('[DB] Initializing connection (Standard PG via node-postgres) — Railway / generic PostgreSQL...');
+    pool = new PgPool(poolConfig);
+    pool.on('error', (err: any) => {
+      console.error('[Pool] Unexpected client error:', err.message);
+      _dbConnected = false;
+      _dbLastError = err.message;
+      startReconnectLoop();
+    });
+    db = drizzlePg(pool, { schema });
+  } else {
+    const isExternalNeon = !!process.env.NEON_DATABASE_URL;
+    console.log(`[DB] Initializing connection (${isExternalNeon ? 'External Neon' : 'Replit DB'} via @neondatabase/serverless)...`);
+    pool = new NeonPool(poolConfig);
+    pool.on('error', (err: any) => {
+      console.error('[Pool] Unexpected client error:', err.message);
+      _dbConnected = false;
+      _dbLastError = err.message;
+      startReconnectLoop();
+    });
+    db = drizzleNeon({ client: pool, schema });
+  }
 }
 
 async function verifyConnection(): Promise<boolean> {
@@ -179,7 +208,7 @@ try {
   initPool(databaseUrl);
   
   console.log("[DB] Pool initialized");
-  console.log(`[DB] Pool config: max=15, min=0, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (Safe: 15x3pods=45<80 Neon limit)`);
+  console.log(`[DB] Pool config: max=15, min=0, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (driver=${DB_DRIVER})`);
   
   const monitorInterval = process.env.NODE_ENV === 'production' ? 300000 : 60000;
   const monitorTimer = setInterval(() => {
