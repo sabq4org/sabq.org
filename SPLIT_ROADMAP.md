@@ -67,23 +67,52 @@ category pages, article pages. Confirm images load.
       `server/routes/edgeMeta.ts` if you want full parity with the
       original `seoInjector.ts`.
 
-## Phase 2.5 — Wire S3 (Tigris on Railway) for uploads (~10 min)
+## Phase 2.5 — Wire S3 storage for uploads (BLOCKED on bucket public access)
 
-The S3 backend is implemented in [server/objectStorage.ts](server/objectStorage.ts)
-behind `STORAGE_PROVIDER=s3`. Activate it on Railway:
+**Status as of 2026-05-11**: Server code (objectStorage.ts) is fully
+ready — it sets `ACL=public-read` on every public upload, supports
+presigned PUTs for `/api/objects/upload`, and trySetObjectEntityAclPolicy
+strips signing query params for the canonical URL. Verified locally:
+PutObject + HeadObject succeed against Tebi (`t3.storageapi.dev`,
+bucket `lightweight-holder-alzu3y`).
 
-- [ ] Add Railway env vars (already configured per the hand-off):
-      `STORAGE_PROVIDER=s3`, `S3_ENDPOINT=https://t3.storageapi.dev`,
-      `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
-      and optionally `S3_PUBLIC_URL` (CDN fronting the bucket).
-- [ ] Smoke test from local with the same vars:
-      `tsx scripts/test-s3-upload.ts`
-      Expects 3/3 ✅. If step 3 returns 403, the bucket needs a
-      public-read policy on `public/*` OR `S3_PUBLIC_URL` must point
-      at a CDN that fronts the bucket.
-- [ ] After Railway redeploy, upload an article image from the
-      dashboard. The returned URL should be
-      `${S3_PUBLIC_URL or S3_ENDPOINT}/${bucket}/public/...`.
+**The blocker**: Tebi accepts the `public-read` ACL header silently but
+does NOT use it for anonymous HTTP access. Anonymous GET on a freshly
+uploaded `public/...` object returns 403. Tebi also rejects
+`PutBucketPolicy` (501 NotImplemented). It uses an internal "bucket
+public" toggle that's only set via the Tebi web console.
+
+### Pick one to unblock (in priority order):
+
+- **(B) Switch Railway plugin from "S3 Storage" (Tebi) to "Tigris"
+  (recommended).** Tigris's endpoint is `*.fly.storage.tigris.dev` and
+  it honors per-object ACLs natively — meaning the existing code works
+  with zero changes. Just swap the env vars on Railway:
+  `S3_ENDPOINT=https://fly.storage.tigris.dev` (or whatever Railway
+  provides) plus the new `S3_BUCKET` / `S3_ACCESS_KEY_ID` /
+  `S3_SECRET_ACCESS_KEY`. Re-run `tsx scripts/test-s3-upload.ts` —
+  step 3 should return 200.
+
+- **(A) Stay on Tebi but flip the bucket public via console.tebi.io.**
+  Login at https://console.tebi.io with the same credentials Railway
+  exposed, find bucket `lightweight-holder-alzu3y`, toggle "Public" in
+  its settings. No code changes.
+
+- **(C) Front the bucket with Cloudflare.** Add a custom hostname
+  (e.g. `cdn.sabq.news`) on Cloudflare with Tebi as origin. Set
+  `S3_PUBLIC_URL=https://cdn.sabq.news` on Railway. The bucket itself
+  stays private but Cloudflare serves it publicly. Adds operational
+  complexity but works regardless of provider.
+
+After unblocking, upload an article image from the dashboard. The DB
+should record `imageUrl` starting with `${S3_PUBLIC_URL or S3_ENDPOINT}/${bucket}/public/uploads/<uuid>`.
+
+### Useful scripts (on `experimental/split-deploy`)
+
+- `scripts/test-s3-upload.ts` — PutObject + HeadObject + anonymous GET.
+- `scripts/try-tebi-public.ts` — last-ditch Tebi-specific API attempts
+  (PutBucketAcl, PutPublicAccessBlock). Both returned no joy on Tebi
+  but worth re-running if a different provider is configured.
 
 ## Phase 3 — Migrate uploaded images to absolute R2 URLs (~30 min)
 
