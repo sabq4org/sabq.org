@@ -51,10 +51,46 @@ export async function userHasPermission(
   }
 }
 
-// Get all permissions for a user using efficient JOIN
-// Includes user-level overrides for complete permission set
+// Roles whose users always pass any permission check, regardless of what's
+// in role_permissions. Mirrored from `userHasPermission` above so that the
+// 15+ direct callsites of `getUserPermissions(...).includes(code)` in
+// server/routes.ts work without per-call refactoring.
+const SUPERUSER_ROLE_NAMES = ['admin', 'superadmin', 'system_admin', 'system.admin'];
+
+// Get all permissions for a user using efficient JOIN.
+// Includes user-level overrides for complete permission set.
+//
+// Superuser shortcut: if the user's text-column role (users.role) is one of
+// SUPERUSER_ROLE_NAMES, OR they have any matching role in user_roles, this
+// returns the full set of permission codes from the permissions table —
+// every consumer that does `.includes("articles.publish")` etc. gets a true
+// match without needing wildcard awareness. This matches the behavior of
+// userHasPermission() which already short-circuits superusers.
 export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
+    // Superuser check — matches userHasPermission's logic.
+    const [user] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    let isSuperuser = user ? SUPERUSER_ROLE_NAMES.includes(user.role) : false;
+
+    if (!isSuperuser) {
+      const rbacRoles = await db
+        .select({ roleName: roles.name })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(eq(userRoles.userId, userId));
+      isSuperuser = rbacRoles.some(r => SUPERUSER_ROLE_NAMES.includes(r.roleName));
+    }
+
+    if (isSuperuser) {
+      const allPerms = await db.select({ code: permissions.code }).from(permissions);
+      return allPerms.map(p => p.code);
+    }
+
     // Get role-based permissions
     const result = await db
       .select({ permissionCode: permissions.code })
@@ -67,9 +103,9 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
 
     // Get user-level overrides
     const overrides = await db
-      .select({ 
+      .select({
         permissionCode: userPermissionOverrides.permissionCode,
-        effect: userPermissionOverrides.effect 
+        effect: userPermissionOverrides.effect
       })
       .from(userPermissionOverrides)
       .where(eq(userPermissionOverrides.userId, userId));
