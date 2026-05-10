@@ -39,6 +39,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S sabq -u 1001
 
+# Pre-create the uploads directory so the non-root user can write to it at runtime
+RUN mkdir -p /app/uploads && chown sabq:nodejs /app/uploads
+
 USER sabq
 
 ENV NODE_ENV=production
