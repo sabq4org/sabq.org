@@ -1005,7 +1005,15 @@ if (!(globalThis as any).__sabqServer) {
       });
     } else if (!isProductionMode && app.get("env") === "development") {
       console.log("[Server] Starting in DEVELOPMENT mode with Vite");
-      const { setupVite } = await import("./vite");
+      // Computed-string import keeps esbuild from following ./vite during
+      // bundling. Without this, server/vite.ts (which `import`s the `vite`
+      // npm package — a devDependency) gets inlined into dist/index.js,
+      // and the production stage's `npm ci --omit=dev` removes vite,
+      // crashing the container at startup with ERR_MODULE_NOT_FOUND.
+      // This file path is only resolved at runtime in dev mode (where vite
+      // IS installed); production code paths never reach this branch.
+      const viteModulePath = "./vite";
+      const { setupVite } = await import(/* @vite-ignore */ viteModulePath);
       await setupVite(app, server);
       console.log("[Server] ✅ Vite setup completed");
     } else {
