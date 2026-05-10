@@ -15,21 +15,33 @@ export type User = {
   profileImageUrl?: string;
 };
 
+// "*" is a wildcard issued to superuser-equivalent roles (admin,
+// system_admin) by getPermissionsForRoles in rbac-constants. When present
+// it grants access regardless of the specific permission asked for —
+// useful because nav.config.ts and feature gates reference codes that
+// aren't all enumerated in PERMISSION_CODES.
+function hasWildcard(user: User | null | undefined): boolean {
+  return user?.permissions?.includes("*") ?? false;
+}
+
 // Check if user has a specific permission
 export function hasPermission(user: User | null | undefined, permission: string): boolean {
   if (!user) return false;
+  if (hasWildcard(user)) return true;
   return user.permissions?.includes(permission) ?? false;
 }
 
 // Check if user has any of the specified permissions
 export function hasAnyPermission(user: User | null | undefined, ...permissionsToCheck: string[]): boolean {
   if (!user) return false;
+  if (hasWildcard(user)) return true;
   return permissionsToCheck.some(p => user.permissions?.includes(p) ?? false);
 }
 
-// Check if user has all of the specified permissions  
+// Check if user has all of the specified permissions
 export function hasAllPermissions(user: User | null | undefined, ...permissionsToCheck: string[]): boolean {
   if (!user) return false;
+  if (hasWildcard(user)) return true;
   return permissionsToCheck.every(p => user.permissions?.includes(p) ?? false);
 }
 

@@ -409,21 +409,28 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY]: "عرض إنتاجية الموظفين",
 };
 
-// Helper function to get all permissions for given roles
+// Helper function to get all permissions for given roles.
+//
+// Wildcard handling: returns the literal ["*"] (instead of expanding to
+// Object.values(PERMISSION_CODES)) when any role has "*". This matters
+// because nav.config.ts and feature components reference dozens of
+// permission codes (roles.view, permissions.manage, ads.manage, ai.view,
+// blocks.manage, ...) that are NOT defined in PERMISSION_CODES, and
+// expanding "*" would silently drop them. Keeping the literal "*" lets
+// hasPermission/hasAnyPermission treat it as "matches anything".
 export function getPermissionsForRoles(roleNames: string[]): string[] {
   const allPermissions = new Set<string>();
-  
+
   for (const roleName of roleNames) {
     const permissions = ROLE_PERMISSIONS_MAP[roleName] || [];
-    
-    // If role has wildcard (*), return all permissions
+
     if (permissions.includes("*")) {
-      return Object.values(PERMISSION_CODES);
+      return ["*"];
     }
-    
+
     permissions.forEach(p => allPermissions.add(p));
   }
-  
+
   return Array.from(allPermissions);
 }
 
