@@ -14,7 +14,8 @@
     { "source": "/ads.txt", "destination": "https://api.sabq.news/ads.txt" },
     { "source": "/app-ads.txt", "destination": "https://api.sabq.news/app-ads.txt" },
     { "source": "/uploads/:path*", "destination": "https://api.sabq.news/uploads/:path*" },
-    { "source": "/branding/:path*", "destination": "https://api.sabq.news/branding/:path*" }
+    { "source": "/branding/:path*", "destination": "https://api.sabq.news/branding/:path*" },
+    { "source": "/((?!assets/|.*\\.(?:js|css|map|json|xml|txt|ico|png|jpg|jpeg|gif|svg|webp|avif|woff|woff2|ttf|eot|pdf)).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
