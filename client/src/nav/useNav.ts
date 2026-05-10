@@ -32,8 +32,11 @@ function itemPassesAccessCheck(
     return false;
   }
 
-  // If item has permissions defined, check permissions (permission-first)
+  // If item has permissions defined, check permissions (permission-first).
+  // "*" in userPermissions is a wildcard issued to admin/system_admin —
+  // grants access regardless of the specific permission asked for.
   if (item.permissions && item.permissions.length > 0) {
+    if (userPermissions?.includes("*")) return true;
     return userPermissions?.some(p => item.permissions!.includes(p)) ?? false;
   }
 

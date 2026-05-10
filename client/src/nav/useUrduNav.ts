@@ -27,8 +27,10 @@ function itemPassesAccessCheck(
     return false;
   }
 
-  // If item has permissions defined, check permissions (permission-first)
+  // If item has permissions defined, check permissions (permission-first).
+  // "*" wildcard grants access regardless of specific code requested.
   if (item.permissions && item.permissions.length > 0) {
+    if (userPermissions?.includes("*")) return true;
     return userPermissions?.some(p => item.permissions!.includes(p)) ?? false;
   }
 
