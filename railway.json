@@ -1,6 +1,5 @@
 {
-  "$schema": "https://railway.app/railway.schema.json",
-  "//": "Railway picks Dockerfile over nixpacks/buildCommand when present. The Dockerfile in this repo runs `npm run build:server` (headless, server-only).",
+  "$schema": "https://schema.up.railway.app/v1.json",
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile"
