@@ -16,17 +16,18 @@ const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 'local';
 
 let r2Client: S3Client | null = null;
+let s3Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
   if (!r2Client) {
     const accountId = process.env.R2_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    
+
     if (!accountId || !accessKeyId || !secretAccessKey) {
       throw new Error('[R2] Missing R2 credentials. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY');
     }
-    
+
     r2Client = new S3Client({
       region: 'auto',
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -41,6 +42,53 @@ function getR2Client(): S3Client {
 
 function getR2Bucket(): string {
   return process.env.R2_BUCKET_NAME || 'sabq-media';
+}
+
+// Generic S3-compatible client (Tigris on Railway, MinIO, Backblaze B2,
+// AWS S3, etc.). Activated by STORAGE_PROVIDER=s3. Uses:
+//   S3_ENDPOINT          full URL incl. https://, e.g. https://t3.storageapi.dev
+//   S3_BUCKET            bucket name
+//   S3_ACCESS_KEY_ID
+//   S3_SECRET_ACCESS_KEY
+//   S3_REGION            optional, defaults to "auto" (works for Tigris/R2)
+//   S3_PUBLIC_URL        optional, full base URL for public reads. If unset,
+//                        falls back to path-style ${S3_ENDPOINT}/${bucket}.
+//   S3_FORCE_PATH_STYLE  optional, "true"/"false". Defaults to true since most
+//                        S3-compat providers don't support virtual-hosted style
+//                        without DNS setup.
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    const endpoint = process.env.S3_ENDPOINT;
+    const accessKeyId = process.env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+
+    if (!endpoint || !accessKeyId || !secretAccessKey) {
+      throw new Error(
+        "[S3] Missing S3 credentials. Set S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY",
+      );
+    }
+
+    s3Client = new S3Client({
+      region: process.env.S3_REGION || "auto",
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+    });
+  }
+  return s3Client;
+}
+
+function getS3Bucket(): string {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) throw new Error("[S3] S3_BUCKET env var is required");
+  return bucket;
+}
+
+function getS3PublicUrl(bucket: string): string {
+  const explicit = process.env.S3_PUBLIC_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const endpoint = (process.env.S3_ENDPOINT || "").replace(/\/+$/, "");
+  return `${endpoint}/${bucket}`;
 }
 
 /**
@@ -455,17 +503,45 @@ export class ObjectStorageService {
     const bucket = getR2Bucket();
     const prefix = visibility === "public" ? "public" : ".private";
     const key = `${prefix}/${path}`;
-    
+
     await client.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: buffer,
       ContentType: contentType,
     }));
-    
+
     const r2PublicUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.r2.dev`;
     const url = visibility === "public" ? `${r2PublicUrl}/${key}` : key;
-    
+
+    return { url, path: key };
+  }
+
+  // Generic S3-compatible upload (Tigris on Railway, MinIO, AWS S3, etc.).
+  // Public files go under `public/` and are served via S3_PUBLIC_URL;
+  // private files go under `.private/` and are returned by key only — fetch
+  // them via signed URLs when needed.
+  async uploadFileS3(
+    path: string,
+    buffer: Buffer,
+    contentType: string,
+    visibility: "public" | "private" = "private",
+  ): Promise<{ url: string; path: string }> {
+    const client = getS3Client();
+    const bucket = getS3Bucket();
+    const prefix = visibility === "public" ? "public" : ".private";
+    const key = `${prefix}/${path}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+
+    const url = visibility === "public" ? `${getS3PublicUrl(bucket)}/${key}` : key;
     return { url, path: key };
   }
 
@@ -475,6 +551,9 @@ export class ObjectStorageService {
     contentType: string,
     visibility: "public" | "private" = "private"
   ): Promise<{ url: string; path: string }> {
+    if (STORAGE_PROVIDER === 's3') {
+      return this.uploadFileS3(path, buffer, contentType, visibility);
+    }
     if (STORAGE_PROVIDER === 'r2') {
       return this.uploadFileR2(path, buffer, contentType, visibility);
     }

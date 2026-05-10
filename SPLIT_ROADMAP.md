@@ -67,6 +67,24 @@ category pages, article pages. Confirm images load.
       `server/routes/edgeMeta.ts` if you want full parity with the
       original `seoInjector.ts`.
 
+## Phase 2.5 — Wire S3 (Tigris on Railway) for uploads (~10 min)
+
+The S3 backend is implemented in [server/objectStorage.ts](server/objectStorage.ts)
+behind `STORAGE_PROVIDER=s3`. Activate it on Railway:
+
+- [ ] Add Railway env vars (already configured per the hand-off):
+      `STORAGE_PROVIDER=s3`, `S3_ENDPOINT=https://t3.storageapi.dev`,
+      `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`,
+      and optionally `S3_PUBLIC_URL` (CDN fronting the bucket).
+- [ ] Smoke test from local with the same vars:
+      `tsx scripts/test-s3-upload.ts`
+      Expects 3/3 ✅. If step 3 returns 403, the bucket needs a
+      public-read policy on `public/*` OR `S3_PUBLIC_URL` must point
+      at a CDN that fronts the bucket.
+- [ ] After Railway redeploy, upload an article image from the
+      dashboard. The returned URL should be
+      `${S3_PUBLIC_URL or S3_ENDPOINT}/${bucket}/public/...`.
+
 ## Phase 3 — Migrate uploaded images to absolute R2 URLs (~30 min)
 
 The article HTML and image columns currently reference paths like
@@ -164,6 +182,12 @@ COOKIE_DOMAIN=.sabq.news
 COOKIE_SAMESITE=none
 PUBLIC_SITE_URL=https://sabq.news
 PRIVATE_OBJECT_DIR=/tmp/private-objects
+STORAGE_PROVIDER=s3
+S3_ENDPOINT=https://t3.storageapi.dev
+S3_BUCKET=<railway tigris bucket>
+S3_ACCESS_KEY_ID=<...>
+S3_SECRET_ACCESS_KEY=<...>
+S3_PUBLIC_URL=                          # optional, falls back to ${S3_ENDPOINT}/${S3_BUCKET}
 ```
 
 ### Vercel (frontend)
