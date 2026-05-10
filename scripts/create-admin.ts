@@ -1,28 +1,38 @@
-import { Pool } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+// Dual-driver: matches server/db.ts so this script works against both
+// Neon (Replit production) and standard PG (Railway). Set DB_DRIVER=pg
+// when targeting a non-Neon backend.
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { drizzle as drizzleNeon } from 'drizzle-orm/neon-serverless';
+import { Pool as PgPool } from 'pg';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
 import bcrypt from "bcrypt";
 import ws from "ws";
-import { neonConfig } from '@neondatabase/serverless';
 import * as schema from "../shared/schema.js";
 
 neonConfig.webSocketConstructor = ws;
 
+const DB_DRIVER = (process.env.DB_DRIVER || 'neon').toLowerCase();
+
 async function createAdminUser() {
   // Use DATABASE_URL from environment (works for both dev and prod)
   const databaseUrl = process.env.DATABASE_URL;
-  
+
   if (!databaseUrl) {
     console.error("❌ DATABASE_URL not found in environment variables");
     process.exit(1);
   }
 
-  console.log("🔗 Connecting to database...");
-  const pool = new Pool({ 
-    connectionString: databaseUrl,
-    max: 1
-  });
-  const db = drizzle({ client: pool, schema });
+  console.log(`🔗 Connecting to database (driver=${DB_DRIVER})...`);
+  let pool: any;
+  let db: any;
+  if (DB_DRIVER === 'pg') {
+    pool = new PgPool({ connectionString: databaseUrl, max: 1 });
+    db = drizzlePg(pool, { schema });
+  } else {
+    pool = new NeonPool({ connectionString: databaseUrl, max: 1 });
+    db = drizzleNeon({ client: pool, schema });
+  }
 
   try {
     const adminEmail = process.env.ADMIN_EMAIL || "admin@sabq.sa";
