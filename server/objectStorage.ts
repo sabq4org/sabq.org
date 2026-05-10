@@ -485,10 +485,18 @@ export class ObjectStorageService {
       const objectId = randomUUID();
       // Place under public/ so the resulting URL is immediately
       // publicly readable (matches uploadFileS3's public path layout).
-      // Finalize handlers (trySetObjectEntityAclPolicy below) treat S3
-      // URLs as already-public and just normalize them.
+      // ACL is signed into the URL — providers that support per-object
+      // ACLs (Tebi, R2, S3, etc.) will mark the upload public-read
+      // automatically. The browser PUT doesn't need to send an extra
+      // header. If your provider rejects ACL (rare), set
+      // S3_DISABLE_ACL=true and configure the bucket public elsewhere.
       const key = `public/uploads/${objectId}`;
-      const cmd = new PutObjectCommand({ Bucket: bucket, Key: key });
+      const useAcl = process.env.S3_DISABLE_ACL !== "true";
+      const cmd = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ...(useAcl ? { ACL: "public-read" as const } : {}),
+      });
       return getSignedUrl(client, cmd, { expiresIn: 900 });
     }
 
@@ -547,10 +555,16 @@ export class ObjectStorageService {
     return { url, path: key };
   }
 
-  // Generic S3-compatible upload (Tigris on Railway, MinIO, AWS S3, etc.).
+  // Generic S3-compatible upload (Tebi/Tigris on Railway, MinIO, AWS S3, etc.).
   // Public files go under `public/` and are served via S3_PUBLIC_URL;
   // private files go under `.private/` and are returned by key only — fetch
   // them via signed URLs when needed.
+  //
+  // ACL: public files get x-amz-acl=public-read. Tebi doesn't support
+  // bucket policies (PutBucketPolicy → 501) but accepts per-object ACLs.
+  // AWS S3, R2, Backblaze, MinIO all accept this too. If your provider
+  // rejects ACLs (rare), set S3_DISABLE_ACL=true and either configure the
+  // bucket as public via the provider's console or front it with a CDN.
   async uploadFileS3(
     path: string,
     buffer: Buffer,
@@ -561,6 +575,8 @@ export class ObjectStorageService {
     const bucket = getS3Bucket();
     const prefix = visibility === "public" ? "public" : ".private";
     const key = `${prefix}/${path}`;
+    const wantPublic = visibility === "public";
+    const useAcl = process.env.S3_DISABLE_ACL !== "true";
 
     await client.send(
       new PutObjectCommand({
@@ -568,10 +584,11 @@ export class ObjectStorageService {
         Key: key,
         Body: buffer,
         ContentType: contentType,
+        ...(useAcl && wantPublic ? { ACL: "public-read" as const } : {}),
       }),
     );
 
-    const url = visibility === "public" ? `${getS3PublicUrl(bucket)}/${key}` : key;
+    const url = wantPublic ? `${getS3PublicUrl(bucket)}/${key}` : key;
     return { url, path: key };
   }
 

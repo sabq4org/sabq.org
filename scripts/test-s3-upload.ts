@@ -58,13 +58,18 @@ async function main() {
   console.log(`  key:        ${key}`);
   console.log("");
 
-  console.log("[1/3] PutObject...");
+  console.log("[1/3] PutObject (with ACL=public-read)...");
+  // Tebi (t3.storageapi.dev) doesn't support PutBucketPolicy but DOES
+  // honor per-object ACLs. R2/S3/Backblaze/MinIO accept this too. Set
+  // S3_DISABLE_ACL=true to fall back to bucket-level public config.
+  const useAcl = process.env.S3_DISABLE_ACL !== "true";
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: body,
       ContentType: "text/plain; charset=utf-8",
+      ...(useAcl ? { ACL: "public-read" as const } : {}),
     }),
   );
   console.log("      ✅ uploaded");
