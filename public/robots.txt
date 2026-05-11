@@ -1,0 +1,10 @@
+# sabq.news is an experimental/staging deployment. The production site
+# is sabq.org. This file blocks crawlers entirely to prevent duplicate
+# content penalties on sabq.org while sabq.news is being validated.
+#
+# This file is served by Vercel as a static asset. The production
+# Express robots.txt route still serves the real (permissive) robots
+# on sabq.org via Replit, untouched.
+
+User-agent: *
+Disallow: /
