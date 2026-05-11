@@ -160,9 +160,16 @@ hurt SEO on the day of launch.
       `cloudflare-worker/frontend-edge-worker.js` injects per-page SEO
       meta into the static SPA shell. Without it crawlers and link
       previews (WhatsApp/Facebook/Twitter) see the generic homepage
-      tags. Wrangler config: `cloudflare-worker/wrangler.frontend.toml`
-      — fill in `account_id` and the route `zone_id` first, then
-      `npx wrangler deploy --config cloudflare-worker/wrangler.frontend.toml --env production`.
+      tags. Deploy script is ready and self-contained (curl + jq, no
+      wrangler dep). Set the right zone for sabq.news (or sabq.org at
+      cutover) then run:
+      ```
+      CLOUDFLARE_WORKERS_API_TOKEN=<token> \
+      CLOUDFLARE_ZONE_ID=<sabq.news zone> \
+        ./cloudflare-worker/deploy-frontend-edge.sh
+      ```
+      Override `ROUTE_PATTERNS` env var to extend coverage (e.g.
+      `sabq.org/*,www.sabq.org/*`).
 - [ ] **Extend Worker routes to sabq.org.** Add `sabq.org/*` and
       `www.sabq.org/*` patterns to `wrangler.frontend.toml`'s
       `[env.production]` routes block, redeploy.
