@@ -50,3 +50,5 @@ backup_unused_assets
 !android/**/*.png
 !ios/**/*.png
 !attached_assets/**/*.png
+# Internal security audit — kept local; contains attack-surface details
+AUDIT_REPORT.md
