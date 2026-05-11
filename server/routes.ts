@@ -1429,6 +1429,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "لم يتم اختيار ملف" });
       }
 
+      // multer parses the Content-Disposition filename as Latin-1 per the
+      // HTTP spec default. Browsers send UTF-8 bytes, so non-ASCII names
+      // (Arabic etc.) arrive as mojibake like "ÙØ±Ø©" instead of "صورة".
+      // Round-trip via Latin-1 to recover the UTF-8 string.
+      if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
+        req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      }
+
       console.log("[Media Upload] File received:", {
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
