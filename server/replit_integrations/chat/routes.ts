@@ -7,13 +7,22 @@ Supported models: gemini-2.5-flash (fast), gemini-2.5-pro (advanced reasoning)
 Usage: Include httpOptions with baseUrl and empty apiVersion when using AI Integrations (required)
 */
 
-// This is using Replit's AI Integrations service, which provides Gemini-compatible API access without requiring your own Gemini API key.
+// On Replit: AI_INTEGRATIONS_GEMINI_API_KEY + AI_INTEGRATIONS_GEMINI_BASE_URL
+// hit Replit's AI Integrations proxy. Off Replit: GEMINI_API_KEY hits
+// Gemini directly with the SDK's default baseUrl + apiVersion.
+const replitProxyUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
 const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
+  apiKey:
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY,
+  ...(replitProxyUrl
+    ? {
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: replitProxyUrl,
+        },
+      }
+    : {}),
 });
 
 export function registerChatRoutes(app: Express): void {

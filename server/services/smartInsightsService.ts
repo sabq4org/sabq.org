@@ -1,12 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import pRetry from "p-retry";
 
+// On Replit: Replit's AI Integrations proxy. Off Replit: Gemini directly.
+const replitProxyUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
 const ai = new GoogleGenAI({
-  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY,
-  httpOptions: {
-    apiVersion: "",
-    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL,
-  },
+  apiKey:
+    process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+    process.env.GEMINI_API_KEY,
+  ...(replitProxyUrl
+    ? {
+        httpOptions: {
+          apiVersion: "",
+          baseUrl: replitProxyUrl,
+        },
+      }
+    : {}),
 });
 
 interface SmartInsightsResult {
