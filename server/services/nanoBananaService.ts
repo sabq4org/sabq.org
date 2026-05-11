@@ -383,12 +383,51 @@ export async function uploadImageToStorage(
     const blurDataUrl = `data:image/webp;base64,${blurBuffer.toString('base64')}`;
     
     console.log(`[Nano Banana Pro] Compression: ${originalBuffer.length} -> ${webpBuffer.length} bytes (${Math.round((1 - webpBuffer.length/originalBuffer.length) * 100)}% reduction)`);
-    
+
     // Create distinct filenames for each asset
     const mainFileName = `${uniqueBase}.webp`;
     const thumbFileName = `${uniqueBase}_thumb.webp`;
-    
-    // Upload main WebP image
+
+    // Try Cloudflare Images first — on Railway/headless setups the
+    // Replit ObjectStorage path needs PUBLIC_OBJECT_SEARCH_PATHS that
+    // doesn't exist there. CF Images is the canonical home for image
+    // assets anyway. We upload the main WebP and reuse the same image
+    // for the thumbnail URL (CF native variants/transforms handle
+    // sizing on the delivery side).
+    const { cloudflareImagesService } = await import("./cloudflareImagesService");
+    if (cloudflareImagesService.isCloudflareConfigured()) {
+      console.log(`[Nano Banana Pro] Cloudflare Images configured, uploading...`);
+      const cfMain = await cloudflareImagesService.uploadToCloudflare(
+        webpBuffer,
+        mainFileName,
+        { source: "nano-banana", type: "ai-generated" },
+        "image/webp"
+      );
+      if (cfMain.success && cfMain.deliveryUrl) {
+        // Upload thumbnail separately so the thumbnailUrl is a distinct
+        // CF asset (callers may want a smaller image without relying on
+        // CF variant config).
+        const cfThumb = await cloudflareImagesService.uploadToCloudflare(
+          thumbnailBuffer,
+          thumbFileName,
+          { source: "nano-banana", type: "ai-generated-thumb" },
+          "image/webp"
+        );
+        const thumbnailUrl =
+          cfThumb.success && cfThumb.deliveryUrl
+            ? cfThumb.deliveryUrl
+            : cfMain.deliveryUrl;
+        console.log(`[Nano Banana Pro] Cloudflare upload successful: ${cfMain.deliveryUrl}`);
+        return {
+          url: cfMain.deliveryUrl,
+          thumbnailUrl,
+          blurDataUrl,
+        };
+      }
+      console.warn(`[Nano Banana Pro] Cloudflare upload failed, falling back to GCS:`, cfMain.error);
+    }
+
+    // Upload main WebP image to GCS (Replit object storage path)
     const mainPath = `ai-generated/${mainFileName}`;
     const mainResult = await objectStorageService.uploadFile(
       mainPath,
@@ -396,7 +435,7 @@ export async function uploadImageToStorage(
       "image/webp",
       "public"
     );
-    
+
     // Upload thumbnail
     const thumbPath = `ai-generated/${thumbFileName}`;
     const thumbResult = await objectStorageService.uploadFile(
