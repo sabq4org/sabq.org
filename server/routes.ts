@@ -10957,7 +10957,12 @@ Respond in valid JSON format only:
     }
   });
 
-  app.get("/api/articles/:slug", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM, sMaxAge: 600, staleWhileRevalidate: 300 }), async (req: any, res) => {
+  // Published articles barely change between edits. Edits trigger
+  // purgeArticle() via contentInvalidation, so we can cache aggressively
+  // at the edge. (perf audit Tier 2, 2026-05-11): bumped sMaxAge
+  // 600 → 3600 + swr 300 → 3600. Browser cache stays short (60s)
+  // so views/likes counters refresh on reload.
+  app.get("/api/articles/:slug", cacheControl({ maxAge: 60, sMaxAge: 3600, staleWhileRevalidate: 3600 }), async (req: any, res) => {
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
