@@ -207,14 +207,14 @@ export function ContinueReadingWidget() {
         </motion.div>
 
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {Array.from({ length: 5 }).map((_, i) => (
               <ContinueReadingCardSkeleton key={i} />
             ))}
           </div>
         ) : hasArticles ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {articles.slice(0, 4).map((article, index) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {articles.slice(0, 5).map((article, index) => (
               <ContinueReadingCard
                 key={article.id}
                 article={article}
