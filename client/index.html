@@ -168,10 +168,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>سبق الذكية - منصة الأخبار الذكية</title>
-    <!-- Preconnect for critical resources (fonts and storage) -->
+    <!-- Preconnect for critical resources (fonts, storage, API). -->
+    <!-- The API preconnect saves ~100-200ms on first authenticated -->
+    <!-- request when the frontend is on Vercel and the API on Railway. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://imagedelivery.net" crossorigin>
+    <link rel="preconnect" href="https://api.sabq.news" crossorigin>
+    <link rel="dns-prefetch" href="https://api.sabq.org">
 
     <link
       rel="preload"
