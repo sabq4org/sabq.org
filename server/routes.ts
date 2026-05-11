@@ -1435,30 +1435,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         size: req.file.size,
       });
 
-      // Extract bucket ID from PRIVATE_OBJECT_DIR
-      const privateObjectDir = process.env.PRIVATE_OBJECT_DIR || '';
-      console.log("[Media Upload] PRIVATE_OBJECT_DIR:", privateObjectDir);
-      
-      // PRIVATE_OBJECT_DIR can be in format: "bucket-name/.private" or "/objects/bucket-name/.private"
-      const parts = privateObjectDir.split('/').filter(Boolean);
-      let bucketId: string;
-      
-      if (parts.length >= 2 && parts[0] === 'objects') {
-        // Format: /objects/bucket-name/.private
-        bucketId = parts[1];
-      } else if (parts.length >= 1) {
-        // Format: bucket-name/.private
-        bucketId = parts[0];
-      } else {
-        throw new Error('Invalid PRIVATE_OBJECT_DIR format');
-      }
-      
-      console.log("[Media Upload] Extracted bucket ID:", bucketId);
-
-      if (!bucketId) {
-        throw new Error('Bucket ID not found in PRIVATE_OBJECT_DIR');
-      }
-
       // Generate unique filename with year/month structure
       const now = new Date();
       const year = now.getFullYear();
@@ -1468,9 +1444,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const objectPath = `uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
 
-      console.log("[Media Upload] Uploading to bucket:", bucketId, "path:", objectPath);
-
-      // Check if we should use Cloudflare for images
+      // Try Cloudflare Images first for image uploads. When CF succeeds we
+      // skip GCS entirely — GCS is only reached for non-images, or as a
+      // fallback when CF is not configured / failed.
       let cloudflareUrl: string | null = null;
       if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
         console.log("[Media Upload] Cloudflare Images configured, attempting upload...");
@@ -1478,47 +1454,67 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           req.file.buffer,
           req.file.originalname,
           { uploadedBy: userId.toString(), type: 'media' },
-          req.file.mimetype // Pass actual mimetype from upload
+          req.file.mimetype
         );
         if (cfResult.success && cfResult.deliveryUrl) {
           cloudflareUrl = cfResult.deliveryUrl;
           console.log("[Media Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
         } else {
-          console.log("[Media Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
+          console.log("[Media Upload] Cloudflare upload failed, will try GCS fallback:", cfResult.error);
         }
       }
 
-      // Upload file to GCS and make it public for direct access
-      const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
-      const bucket = objectStorageClient.bucket(bucketId);
-      const file = bucket.file(objectPath);
+      // GCS path — used only when CF didn't claim the upload. Wrapped in
+      // try/catch so a missing/misconfigured GCS doesn't kill the request
+      // when CF already has the file.
+      let storagePath: string;
+      if (cloudflareUrl) {
+        storagePath = cloudflareUrl;
+        console.log("[Media Upload] Stored via Cloudflare, skipping GCS:", cloudflareUrl);
+      } else {
+        const privateObjectDir = process.env.PRIVATE_OBJECT_DIR || '';
+        const parts = privateObjectDir.split('/').filter(Boolean);
+        let bucketId: string | undefined;
+        if (parts.length >= 2 && parts[0] === 'objects') {
+          bucketId = parts[1];
+        } else if (parts.length >= 1) {
+          bucketId = parts[0];
+        }
 
-      await file.save(req.file.buffer, {
-        contentType: req.file.mimetype,
-        metadata: {
-          cacheControl: 'public, max-age=31536000', // Cache for 1 year
-        },
-      });
+        if (!bucketId) {
+          return res.status(500).json({
+            message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
+          });
+        }
 
-      // Make the file publicly accessible for direct access from GCS
-      let isPublic = false;
-    try {
-        await file.makePublic();
-        console.log("[Media Upload] File made public successfully");
-        isPublic = true;
-      } catch (error) {
-        console.warn("[Media Upload] Could not make file public (bucket may have public access prevention):", error);
+        try {
+          const { objectStorageClient } = await import('./objectStorage');
+          const bucket = objectStorageClient.bucket(bucketId);
+          const file = bucket.file(objectPath);
+
+          await file.save(req.file.buffer, {
+            contentType: req.file.mimetype,
+            metadata: { cacheControl: 'public, max-age=31536000' },
+          });
+
+          let isPublic = false;
+          try {
+            await file.makePublic();
+            isPublic = true;
+          } catch (error) {
+            console.warn("[Media Upload] Could not make file public:", error);
+          }
+
+          const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
+          const gsPath = `gs://${bucketId}/${objectPath}`;
+          storagePath = isPublic ? publicGcsUrl : gsPath;
+        } catch (gcsError) {
+          console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
+          return res.status(502).json({
+            message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
+          });
+        }
       }
-
-      console.log("[Media Upload] File uploaded successfully");
-
-      // Determine which URL to store in database based on public access success
-      const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
-      const gsPath = `gs://${bucketId}/${objectPath}`;
-      
-      // If public access succeeded, store public URL; otherwise store gs:// path for proxy
-      // If Cloudflare upload succeeded, use that URL; otherwise use GCS URL
-      const storagePath = cloudflareUrl || (isPublic ? publicGcsUrl : gsPath);
 
       // Extract metadata (width, height for images)
       let width: number | undefined;

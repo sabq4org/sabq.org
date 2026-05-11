@@ -1253,49 +1253,22 @@ export default function ArticleEditor() {
     setIsUploadingImage(true);
 
     try {
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "article");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload image");
-      }
-
-      // Extract the actual file path without query parameters
-      const fileUrl = uploadData.uploadURL.split('?')[0];
-      console.log("[Image Upload] File URL:", fileUrl);
-
-      const aclData = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL: fileUrl }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }) as { objectPath: string };
-
-      console.log("[Image Upload] ACL Response:", aclData);
-      console.log("[Image Upload] Object Path:", aclData.objectPath);
-
-      setImageUrl(aclData.objectPath);
-      setIsAiGeneratedImage(false); // Manual upload is not AI generated
-
-      // Auto-save to media library in background and save media ID
-      const mediaId = await saveToMediaLibrary(aclData.objectPath);
-      if (mediaId) {
-        setHeroImageMediaId(mediaId);
-      }
+      setImageUrl(uploaded.url);
+      setIsAiGeneratedImage(false);
+      setHeroImageMediaId(uploaded.id);
 
       toast({
         title: "تم الرفع بنجاح",
-        description: `الرابط: ${aclData.objectPath.substring(0, 50)}...`,
+        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
       });
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -1335,33 +1308,16 @@ export default function ArticleEditor() {
     setIsUploadingInfographicBanner(true);
 
     try {
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "article-infographic-banner");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload file");
-      }
-
-      const fileUrl = uploadData.uploadURL.split('?')[0];
-
-      const aclData = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL: fileUrl }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }) as { objectPath: string };
-
-      setInfographicBannerUrl(aclData.objectPath);
+      setInfographicBannerUrl(uploaded.url);
       setIsAiGeneratedInfographicBanner(false);
 
       toast({

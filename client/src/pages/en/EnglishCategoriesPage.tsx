@@ -371,33 +371,16 @@ export default function EnglishCategoriesPage() {
     try {
       setIsUploadingImage(true);
 
-      // Step 1: Get upload URL
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "en-category-hero");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      // Step 2: Upload the image to GCS
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload image");
-      }
-
-      // Step 3: Set ACL policy to make image public
-      const imageURL = uploadResponse.url.split("?")[0];
-      const aclResponse = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL }),
-      }) as { objectPath: string };
-
-      // Step 4: Set the public URL
-      form.setValue("heroImageUrl", aclResponse.objectPath);
+      form.setValue("heroImageUrl", uploaded.url);
 
       toast({
         title: "Image Uploaded",
