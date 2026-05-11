@@ -4,7 +4,6 @@ import { Link, useParams } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -473,29 +472,41 @@ export function ArticlePassportPage({ language }: ArticlePassportPageProps) {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto max-w-4xl py-8 px-4 space-y-6" dir={dir}>
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-48 w-full" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-32 w-full" />
+      <div className="min-h-screen bg-muted/30 dark:bg-background" dir={dir}>
+        <div className="container mx-auto max-w-6xl py-8 px-4 space-y-6">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-72 w-full rounded-2xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (isError || !passport) {
     return (
-      <div className="container mx-auto max-w-2xl py-12 px-4 text-center space-y-4" dir={dir}>
-        <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground" />
-        <h1 className="text-2xl font-bold" data-testid="text-passport-not-found">{t.notFoundTitle}</h1>
-        <p className="text-muted-foreground">{t.notFoundDesc}</p>
-        {slug && (
-          <Link href={getArticleUrl(slug, language)}>
-            <Button variant="outline" data-testid="button-back-to-article">
-              <ArrowLeft className="h-4 w-4" />
-              <span>{t.backHome}</span>
-            </Button>
-          </Link>
-        )}
+      <div className="min-h-screen bg-muted/30 dark:bg-background flex items-center justify-center" dir={dir}>
+        <div className="container mx-auto max-w-2xl py-12 px-4 text-center space-y-4">
+          <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground" />
+          <h1 className="text-2xl font-bold" data-testid="text-passport-not-found">{t.notFoundTitle}</h1>
+          <p className="text-muted-foreground">{t.notFoundDesc}</p>
+          {slug && (
+            <Link href={getArticleUrl(slug, language)}>
+              <Button variant="outline" data-testid="button-back-to-article">
+                <ArrowLeft className="h-4 w-4" />
+                <span>{t.backHome}</span>
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
     );
   }
@@ -524,469 +535,510 @@ export function ArticlePassportPage({ language }: ArticlePassportPageProps) {
     src.channel !== "manual";
 
   return (
-    <div className="container mx-auto max-w-4xl py-8 px-4 space-y-6" dir={dir}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="space-y-2">
+    <div className="min-h-screen bg-muted/30 dark:bg-background" dir={dir}>
+      {/* Sticky top bar */}
+      <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
           <Link href={getArticleUrl(a.slug, language)}>
             <Button variant="ghost" size="sm" data-testid="button-back-article">
               <ArrowLeft className="h-4 w-4" />
               <span>{t.backHome}</span>
             </Button>
           </Link>
-          <h1 className="text-3xl font-bold flex items-center gap-2" data-testid="text-passport-page-title">
-            <ShieldCheck className="h-7 w-7 text-primary" />
-            {t.title}
-          </h1>
-          <p className="text-muted-foreground">{t.subtitle}</p>
+          <div className="flex items-center gap-2 text-sm font-medium" data-testid="text-passport-page-title">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <span>{t.title}</span>
+          </div>
         </div>
       </div>
 
-      {/* Article summary */}
-      <Card>
-        <CardContent className="p-5 space-y-4">
-          {a.imageUrl && (
-            <div
-              className="overflow-hidden rounded-md border bg-muted"
-              data-testid="block-passport-cover"
-            >
+      <div className="container mx-auto max-w-6xl px-4 py-6 space-y-6">
+
+        {/* HERO — cover image with overlay (title, category, trust badge) */}
+        <section className="relative overflow-hidden rounded-2xl border bg-card shadow-sm" data-testid="block-passport-hero">
+          {a.imageUrl ? (
+            <div className="relative aspect-[16/8] sm:aspect-[16/7] overflow-hidden bg-muted">
               <img
                 src={a.imageUrl}
                 alt={a.title}
-                className="w-full h-auto max-h-80 object-cover"
+                className="w-full h-full object-cover"
                 data-testid="img-passport-cover"
               />
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {a.category && (
-              <Badge variant="secondary" data-testid="badge-category">{a.category.name}</Badge>
-            )}
-            <Badge variant="outline" data-testid="badge-article-type">{a.articleType}</Badge>
-            <Badge variant="outline" data-testid="badge-status">{a.status}</Badge>
-            <Badge
-              variant="outline"
-              className="uppercase"
-              data-testid={`badge-language-${passport.language}`}
-            >
-              {t.language}: {t.languageNames[passport.language]}
-            </Badge>
-          </div>
-          <h2 className="text-2xl font-semibold leading-snug" data-testid="text-article-title">{a.title}</h2>
-          {a.subtitle && <p className="text-base text-muted-foreground">{a.subtitle}</p>}
-          {a.excerpt && <p className="text-sm text-muted-foreground leading-relaxed">{a.excerpt}</p>}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground">{t.publishedAt}</div>
-              <div data-testid="text-published-at">{formatDate(a.publishedAt, language)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">{t.createdAt}</div>
-              <div data-testid="text-created-at">{formatDate(a.createdAt, language)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">{t.updatedAt}</div>
-              <div data-testid="text-updated-at">{formatDate(a.updatedAt, language)}</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Trust badge */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <TrustBadgeIcon tier={passport.trustBadge.tier} />
-            {t.sectionTrust}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="default"
-              className="text-sm"
-              data-testid={`badge-trust-${passport.trustBadge.tier}`}
-            >
-              {passport.trustBadge.label[language]}
-            </Badge>
-            {passport.trustBadge.credibilityScore !== null && (
-              <Badge
-                variant="outline"
-                className="text-sm"
-                data-testid="badge-credibility"
-              >
-                <Star className="h-3 w-3" />
-                {t.credibility}: {passport.trustBadge.credibilityScore}
-              </Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">{t.badgeNote}</p>
-        </CardContent>
-      </Card>
-
-      {/* AI Footprint */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Sparkles className="h-5 w-5" />
-            {t.sectionAi}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Total */}
-          <div className="space-y-2 rounded-md border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium">{t.aiTotal}</div>
-              <div className="text-sm font-semibold tabular-nums" data-testid="text-ai-total-pct">
-                {ai.percentages.total}%
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
+              {/* Trust badge floating top-right */}
+              <div className="absolute top-4 end-4 inline-flex items-center gap-2 rounded-full bg-background/95 backdrop-blur border border-border/50 px-3 py-1.5 shadow-md"
+                   data-testid={`badge-trust-${passport.trustBadge.tier}`}>
+                <TrustBadgeIcon tier={passport.trustBadge.tier} />
+                <span className="text-xs font-semibold">{passport.trustBadge.label[language]}</span>
               </div>
-            </div>
-            <Progress value={ai.percentages.total} className="h-2" data-testid="progress-ai-total" />
-            <div className="text-xs text-muted-foreground leading-relaxed" data-testid="text-ai-explanation">
-              {ai.explanation[language]}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Body */}
-            <div className="rounded-md border p-3 space-y-2">
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                {t.body}
-              </div>
-              <div className="text-sm font-medium" data-testid="text-ai-body-tier">
-                {t.aiBody[ai.body.tier]}
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Progress value={ai.percentages.body} className="h-1.5 flex-1" />
-                <span className="text-xs tabular-nums" data-testid="text-ai-body-pct">
-                  {ai.percentages.body}%
-                </span>
-              </div>
-              {ai.body.aiEditCount > 0 && (
-                <div
-                  className="text-[11px] text-muted-foreground inline-flex items-center gap-1"
-                  data-testid="text-ai-edit-count"
-                >
-                  <PencilLine className="h-3 w-3" />
-                  {t.aiEditsCount(ai.body.aiEditCount)}
-                </div>
-              )}
-            </div>
-            {/* Cover */}
-            <div className="rounded-md border p-3 space-y-2">
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" />
-                {t.cover}
-              </div>
-              <div className="text-sm font-medium" data-testid="text-ai-cover">
-                {ai.cover.isAiGenerated ? t.aiCoverYes : t.aiCoverNo}
-              </div>
-              {ai.cover.isAiGenerated && ai.cover.model && (
-                <div className="text-xs text-muted-foreground">{ai.cover.model}</div>
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <Progress value={ai.percentages.cover} className="h-1.5 flex-1" />
-                <span className="text-xs tabular-nums" data-testid="text-ai-cover-pct">
-                  {ai.percentages.cover}%
-                </span>
-              </div>
-              {ai.cover.isAiGenerated && (
-                <div className="text-[11px] text-muted-foreground italic">
-                  {ai.cover.prompt ? (
-                    <span data-testid="text-ai-cover-prompt">{ai.cover.prompt}</span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1" data-testid="text-ai-cover-prompt-locked">
-                      <Lock className="h-3 w-3" />
-                      {t.promptStaffOnly}
-                    </span>
+              {/* Title + category overlay */}
+              <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {a.category && (
+                    <Badge className="bg-primary text-primary-foreground border-0 shadow-sm" data-testid="badge-category">
+                      {a.category.name}
+                    </Badge>
                   )}
+                  <Badge variant="outline" className="bg-white/15 text-white border-white/30 backdrop-blur" data-testid="badge-article-type">
+                    {a.articleType}
+                  </Badge>
+                  <Badge variant="outline" className="bg-white/15 text-white border-white/30 backdrop-blur uppercase" data-testid={`badge-language-${passport.language}`}>
+                    {t.languageNames[passport.language]}
+                  </Badge>
                 </div>
-              )}
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white leading-snug" data-testid="text-article-title">
+                  {a.title}
+                </h2>
+                {a.subtitle && <p className="text-sm sm:text-base text-white/85 leading-relaxed line-clamp-2">{a.subtitle}</p>}
+              </div>
             </div>
-            {/* SEO */}
-            <div className="rounded-md border p-3 space-y-2">
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <SearchIcon className="h-3 w-3" />
-                {t.seo}
+          ) : (
+            <div className="p-6 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {a.category && <Badge variant="secondary">{a.category.name}</Badge>}
+                <Badge variant="outline">{a.articleType}</Badge>
+                <Badge
+                  variant="default"
+                  data-testid={`badge-trust-${passport.trustBadge.tier}`}
+                >
+                  {passport.trustBadge.label[language]}
+                </Badge>
               </div>
-              <div className="text-sm font-medium" data-testid="text-ai-seo">
-                {ai.seo.status || "—"}
+              <h2 className="text-2xl md:text-3xl font-bold leading-snug" data-testid="text-article-title">{a.title}</h2>
+              {a.subtitle && <p className="text-base text-muted-foreground">{a.subtitle}</p>}
+            </div>
+          )}
+
+          {/* Strip beneath hero: excerpt + dates */}
+          <div className="p-5 space-y-4 border-t bg-card">
+            {a.excerpt && (
+              <p className="text-sm leading-relaxed text-muted-foreground">{a.excerpt}</p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm pt-1">
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.publishedAt}</div>
+                <div className="font-medium" data-testid="text-published-at">{formatDate(a.publishedAt, language)}</div>
               </div>
-              {ai.seo.provider && (
-                <div className="text-xs text-muted-foreground">
-                  {ai.seo.provider}
-                  {ai.seo.model ? ` · ${ai.seo.model}` : ""}
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <Progress value={ai.percentages.seo} className="h-1.5 flex-1" />
-                <span className="text-xs tabular-nums" data-testid="text-ai-seo-pct">
-                  {ai.percentages.seo}%
-                </span>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.createdAt}</div>
+                <div className="font-medium" data-testid="text-created-at">{formatDate(a.createdAt, language)}</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.updatedAt}</div>
+                <div className="font-medium" data-testid="text-updated-at">{formatDate(a.updatedAt, language)}</div>
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </section>
 
-      {/* People */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <UserIcon className="h-5 w-5" />
-            {t.sectionPeople}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filledPeople.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-no-people">{t.noPeople}</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filledPeople.map(([key, person, label]) => (
-                <PersonRow key={key as string} person={person} role={label} language={language} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {/* TWO-COLUMN GRID — AI footprint + content (left), trust details + SEO (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-      {/* Sources */}
-      {showSources && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Globe className="h-5 w-5" />
-              {t.sectionSources}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs text-muted-foreground">{t.inboundChannel}:</span>
-              <Badge
-                variant="secondary"
-                className="text-xs"
-                data-testid={`badge-channel-${src.channel}`}
-              >
-                <ChannelIcon channel={src.channel} />
-                {t.channels[src.channel]}
-              </Badge>
-              {src.rawSource && src.rawSource !== src.channel && (
-                <Badge variant="outline" className="text-xs" data-testid="badge-raw-source">
-                  {src.rawSource}
-                </Badge>
-              )}
-            </div>
-            {src.inbound?.from && (
-              <div className="text-sm" data-testid="text-inbound-from">
-                <span className="text-muted-foreground">{t.inboundFrom}:</span>{" "}
-                <span className="font-medium">{src.inbound.from}</span>
-              </div>
-            )}
-            {src.inbound?.hasOriginalMessage && (
-              <Badge variant="outline" className="text-xs" data-testid="badge-original-message">
-                {t.hasOriginalMessage}
-              </Badge>
-            )}
-            {src.sourceUrl && (
-              <a
-                href={src.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary inline-flex items-center gap-1 hover:underline"
-                data-testid="link-source-url"
-              >
-                <ExternalLink className="h-3 w-3" />
-                {t.sourceLink}
-              </a>
-            )}
-            {src.additionalLinks.length > 0 && (
-              <div className="space-y-1" data-testid="block-additional-links">
-                <div className="text-xs text-muted-foreground">{t.additionalLinks}:</div>
-                <ul className="space-y-1 ps-4 list-disc">
-                  {src.additionalLinks.map((url) => (
-                    <li key={url} className="text-sm break-all">
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary inline-flex items-center gap-1 hover:underline"
-                        data-testid={`link-additional-${url}`}
-                      >
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        <span className="break-all" dir="ltr">{url}</span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {passport.publisher && (
-              <div className="flex items-center gap-3 rounded-md border p-3" data-testid="block-publisher">
-                <Avatar className="h-10 w-10">
-                  {passport.publisher.logoUrl && <AvatarImage src={passport.publisher.logoUrl} />}
-                  <AvatarFallback>
-                    <Building2 className="h-4 w-4" />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium" data-testid="text-publisher-name">
-                    {language === "en" && passport.publisher.agencyNameEn
-                      ? passport.publisher.agencyNameEn
-                      : passport.publisher.agencyName}
+          {/* ───────── LEFT COLUMN ───────── */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* AI Footprint */}
+            <Card data-testid="block-ai-footprint">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="h-5 w-5" />
+                  {t.sectionAi}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Total with big number + segmented bar */}
+                <div className="rounded-lg bg-muted/40 border p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-medium">{t.aiTotal}</div>
+                    <div className="text-2xl font-bold tabular-nums text-primary" data-testid="text-ai-total-pct">
+                      {ai.percentages.total}%
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">{t.sectionPublisher}</div>
+                  <Progress value={ai.percentages.total} className="h-2.5" data-testid="progress-ai-total" />
+                  <div className="text-xs text-muted-foreground leading-relaxed" data-testid="text-ai-explanation">
+                    {ai.explanation[language]}
+                  </div>
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      {/* SEO history */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <SearchIcon className="h-5 w-5" />
-            {t.sectionSeo}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!passport.seoHistoryLatest ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-no-seo-history">
-              {t.noSeoHistory}
-            </p>
-          ) : (
-            <div className="space-y-2 text-sm" data-testid="block-seo-history">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">
-                  {t.aiSeoVersion} {passport.seoHistoryLatest.version}
-                </Badge>
-                <Badge variant="secondary">{passport.seoHistoryLatest.provider}</Badge>
-                <Badge variant="outline">{passport.seoHistoryLatest.model}</Badge>
-                {passport.seoHistoryLatest.manualOverride && (
-                  <Badge variant="default">{t.aiSeoManual}</Badge>
+                {/* 3 detail rows (icon + label + % side-by-side, no nested cards) */}
+                <div className="space-y-2.5">
+                  {/* Body */}
+                  <div className="flex items-start gap-3 rounded-md border p-3" data-testid="row-ai-body">
+                    <div className="w-10 h-10 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="text-sm font-medium">{t.body}</div>
+                        <span className="text-sm font-semibold tabular-nums" data-testid="text-ai-body-pct">
+                          {ai.percentages.body}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" data-testid="text-ai-body-tier">
+                        {t.aiBody[ai.body.tier]}
+                      </div>
+                      {ai.body.aiEditCount > 0 && (
+                        <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1 mt-1" data-testid="text-ai-edit-count">
+                          <PencilLine className="h-3 w-3" />
+                          {t.aiEditsCount(ai.body.aiEditCount)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Cover */}
+                  <div className="flex items-start gap-3 rounded-md border p-3" data-testid="row-ai-cover">
+                    <div className="w-10 h-10 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center flex-shrink-0">
+                      <ImageIcon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="text-sm font-medium">{t.cover}</div>
+                        <span className="text-sm font-semibold tabular-nums" data-testid="text-ai-cover-pct">
+                          {ai.percentages.cover}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" data-testid="text-ai-cover">
+                        {ai.cover.isAiGenerated ? t.aiCoverYes : t.aiCoverNo}
+                        {ai.cover.isAiGenerated && ai.cover.model && <span> · {ai.cover.model}</span>}
+                      </div>
+                      {ai.cover.isAiGenerated && (
+                        <div className="text-[11px] text-muted-foreground italic mt-1">
+                          {ai.cover.prompt ? (
+                            <span data-testid="text-ai-cover-prompt">{ai.cover.prompt}</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1" data-testid="text-ai-cover-prompt-locked">
+                              <Lock className="h-3 w-3" />
+                              {t.promptStaffOnly}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* SEO */}
+                  <div className="flex items-start gap-3 rounded-md border p-3" data-testid="row-ai-seo">
+                    <div className="w-10 h-10 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
+                      <SearchIcon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="text-sm font-medium">{t.seo}</div>
+                        <span className="text-sm font-semibold tabular-nums" data-testid="text-ai-seo-pct">
+                          {ai.percentages.seo}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground" data-testid="text-ai-seo">
+                        {ai.seo.status || "—"}
+                        {ai.seo.provider && <span> · {ai.seo.provider}{ai.seo.model ? ` · ${ai.seo.model}` : ""}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* People */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <UserIcon className="h-5 w-5" />
+                  {t.sectionPeople}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {filledPeople.length === 0 ? (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-people">{t.noPeople}</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {filledPeople.map(([key, person, label]) => (
+                      <PersonRow key={key as string} person={person} role={label} language={language} />
+                    ))}
+                  </div>
                 )}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {t.aiSeoGenerated}: {passport.seoHistoryLatest.generatedByName || passport.seoHistoryLatest.generatedBy || "—"}
-                {" · "}
-                {formatDate(passport.seoHistoryLatest.createdAt, language)}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
 
-      {/* AI image generations */}
-      {passport.aiImageGenerations.length > 0 && (
+            {/* AI image generations */}
+            {passport.aiImageGenerations.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <ImageIcon className="h-5 w-5" />
+                    {t.sectionImages}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {passport.aiImageGenerations.map((img) => (
+                      <div
+                        key={img.id}
+                        className="space-y-2"
+                        data-testid={`block-ai-image-${img.id}`}
+                      >
+                        {img.imageUrl ? (
+                          <img
+                            src={img.thumbnailUrl || img.imageUrl}
+                            alt={img.prompt || img.model}
+                            className="w-full aspect-square object-cover rounded-md border"
+                          />
+                        ) : (
+                          <div className="w-full aspect-square rounded-md border bg-muted flex items-center justify-center">
+                            <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground line-clamp-2">
+                          {img.prompt ? (
+                            img.prompt
+                          ) : (
+                            <span className="inline-flex items-center gap-1 italic">
+                              <Lock className="h-3 w-3" />
+                              {t.promptStaffOnly}
+                            </span>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-[10px]">{img.model}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* ───────── RIGHT COLUMN (sticky on desktop) ───────── */}
+          <div className="space-y-6 lg:sticky lg:top-20 lg:self-start lg:h-fit">
+
+            {/* Trust badge prominent */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <TrustBadgeIcon tier={passport.trustBadge.tier} />
+                  {t.sectionTrust}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-base font-semibold">
+                  {passport.trustBadge.label[language]}
+                </div>
+                {passport.trustBadge.credibilityScore !== null && (
+                  <div className="rounded-md bg-muted/40 border p-3 space-y-1" data-testid="block-credibility">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                      <Star className="h-3 w-3" />
+                      {t.credibility}
+                    </div>
+                    <div className="text-2xl font-bold tabular-nums" data-testid="badge-credibility">
+                      {passport.trustBadge.credibilityScore}
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground leading-relaxed">{t.badgeNote}</p>
+              </CardContent>
+            </Card>
+
+            {/* Sources */}
+            {showSources && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Globe className="h-5 w-5" />
+                    {t.sectionSources}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="text-xs text-muted-foreground">{t.inboundChannel}:</span>
+                    <Badge
+                      variant="secondary"
+                      className="text-xs"
+                      data-testid={`badge-channel-${src.channel}`}
+                    >
+                      <ChannelIcon channel={src.channel} />
+                      {t.channels[src.channel]}
+                    </Badge>
+                    {src.rawSource && src.rawSource !== src.channel && (
+                      <Badge variant="outline" className="text-xs" data-testid="badge-raw-source">
+                        {src.rawSource}
+                      </Badge>
+                    )}
+                  </div>
+                  {src.inbound?.from && (
+                    <div className="text-sm" data-testid="text-inbound-from">
+                      <span className="text-muted-foreground">{t.inboundFrom}:</span>{" "}
+                      <span className="font-medium">{src.inbound.from}</span>
+                    </div>
+                  )}
+                  {src.inbound?.hasOriginalMessage && (
+                    <Badge variant="outline" className="text-xs" data-testid="badge-original-message">
+                      {t.hasOriginalMessage}
+                    </Badge>
+                  )}
+                  {src.sourceUrl && (
+                    <a
+                      href={src.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary inline-flex items-center gap-1 hover:underline"
+                      data-testid="link-source-url"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t.sourceLink}
+                    </a>
+                  )}
+                  {src.additionalLinks.length > 0 && (
+                    <div className="space-y-1" data-testid="block-additional-links">
+                      <div className="text-xs text-muted-foreground">{t.additionalLinks}:</div>
+                      <ul className="space-y-1 ps-4 list-disc">
+                        {src.additionalLinks.map((url) => (
+                          <li key={url} className="text-sm break-all">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary inline-flex items-center gap-1 hover:underline"
+                              data-testid={`link-additional-${url}`}
+                            >
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              <span className="break-all" dir="ltr">{url}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {passport.publisher && (
+                    <div className="flex items-center gap-3 rounded-md border p-3" data-testid="block-publisher">
+                      <Avatar className="h-10 w-10">
+                        {passport.publisher.logoUrl && <AvatarImage src={passport.publisher.logoUrl} />}
+                        <AvatarFallback>
+                          <Building2 className="h-4 w-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium" data-testid="text-publisher-name">
+                          {language === "en" && passport.publisher.agencyNameEn
+                            ? passport.publisher.agencyNameEn
+                            : passport.publisher.agencyName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{t.sectionPublisher}</div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* SEO history */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <SearchIcon className="h-5 w-5" />
+                  {t.sectionSeo}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!passport.seoHistoryLatest ? (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-seo-history">
+                    {t.noSeoHistory}
+                  </p>
+                ) : (
+                  <div className="space-y-2 text-sm" data-testid="block-seo-history">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">
+                        {t.aiSeoVersion} {passport.seoHistoryLatest.version}
+                      </Badge>
+                      <Badge variant="secondary">{passport.seoHistoryLatest.provider}</Badge>
+                      <Badge variant="outline">{passport.seoHistoryLatest.model}</Badge>
+                      {passport.seoHistoryLatest.manualOverride && (
+                        <Badge variant="default">{t.aiSeoManual}</Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {t.aiSeoGenerated}: {passport.seoHistoryLatest.generatedByName || passport.seoHistoryLatest.generatedBy || "—"}
+                      {" · "}
+                      {formatDate(passport.seoHistoryLatest.createdAt, language)}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* FULL-WIDTH TIMELINE */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <ImageIcon className="h-5 w-5" />
-              {t.sectionImages}
+              <Clock className="h-5 w-5" />
+              {t.sectionTimeline}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {passport.aiImageGenerations.map((img) => (
-                <div
-                  key={img.id}
-                  className="space-y-2"
-                  data-testid={`block-ai-image-${img.id}`}
-                >
-                  {img.imageUrl ? (
-                    <img
-                      src={img.thumbnailUrl || img.imageUrl}
-                      alt={img.prompt || img.model}
-                      className="w-full aspect-square object-cover rounded-md border"
-                    />
-                  ) : (
-                    <div className="w-full aspect-square rounded-md border bg-muted flex items-center justify-center">
-                      <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground line-clamp-2">
-                    {img.prompt ? (
-                      img.prompt
-                    ) : (
-                      <span className="inline-flex items-center gap-1 italic">
-                        <Lock className="h-3 w-3" />
-                        {t.promptStaffOnly}
-                      </span>
-                    )}
-                  </div>
-                  <Badge variant="outline" className="text-[10px]">{img.model}</Badge>
-                </div>
-              ))}
-            </div>
+            {passport.timeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground" data-testid="text-no-timeline">{t.noTimeline}</p>
+            ) : (
+              <ol className="relative ps-7" data-testid="list-timeline">
+                {/* Vertical line spanning all events */}
+                <div className="absolute top-1 bottom-1 start-[11px] w-px bg-border" aria-hidden />
+                {passport.timeline.map((event, idx) => {
+                  const eventLabel = t.eventType[event.eventType] || event.eventType;
+                  const isLast = idx === passport.timeline.length - 1;
+                  return (
+                    <li
+                      key={event.id}
+                      className={`relative ${isLast ? "" : "pb-5"}`}
+                      data-testid={`item-timeline-${event.id}`}
+                    >
+                      {/* Dot */}
+                      <div className="absolute start-[-21px] top-1 h-[14px] w-[14px] rounded-full bg-primary border-[3px] border-background shadow" aria-hidden />
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">{eventLabel}</Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {t.eventSource[event.source]}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(event.createdAt, language)}
+                          </span>
+                        </div>
+                        {event.summary && (
+                          <p className="text-sm text-muted-foreground">{event.summary}</p>
+                        )}
+                        {event.actor && (
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <Avatar className="h-6 w-6">
+                              {event.actor.profileImageUrl && <AvatarImage src={event.actor.profileImageUrl} />}
+                              <AvatarFallback className="text-[10px]">
+                                {getPersonName(event.actor, language).slice(0, 1)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs text-muted-foreground" data-testid={`text-event-actor-${event.id}`}>
+                              {getPersonName(event.actor, language)}
+                            </span>
+                          </div>
+                        )}
+                        {event.details && passport.viewer.isStaff && (
+                          <details className="pt-1" data-testid={`details-event-${event.id}`}>
+                            <summary className="text-xs text-muted-foreground cursor-pointer hover:underline inline-flex items-center gap-1">
+                              <Lock className="h-3 w-3" />
+                              {t.changeDetails} ({t.staffOnly})
+                            </summary>
+                            <pre className="mt-1 text-[11px] bg-muted/50 rounded p-2 overflow-x-auto leading-relaxed">
+                              {JSON.stringify(event.details, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
           </CardContent>
         </Card>
-      )}
 
-      {/* Timeline / Edit history */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Clock className="h-5 w-5" />
-            {t.sectionTimeline}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {passport.timeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground" data-testid="text-no-timeline">{t.noTimeline}</p>
-          ) : (
-            <ol className="space-y-3" data-testid="list-timeline">
-              {passport.timeline.map((event) => {
-                const eventLabel =
-                  t.eventType[event.eventType] || event.eventType;
-                return (
-                  <li
-                    key={event.id}
-                    className="flex items-start gap-3 rounded-md border p-3"
-                    data-testid={`item-timeline-${event.id}`}
-                  >
-                    <div className="mt-0.5">
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">{eventLabel}</Badge>
-                        <Badge variant="outline" className="text-[10px]">
-                          {t.eventSource[event.source]}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(event.createdAt, language)}
-                        </span>
-                      </div>
-                      {event.summary && (
-                        <p className="text-sm text-muted-foreground">{event.summary}</p>
-                      )}
-                      {event.details && passport.viewer.isStaff && (
-                        <details className="pt-1" data-testid={`details-event-${event.id}`}>
-                          <summary className="text-xs text-muted-foreground cursor-pointer hover:underline inline-flex items-center gap-1">
-                            <Lock className="h-3 w-3" />
-                            {t.changeDetails} ({t.staffOnly})
-                          </summary>
-                          <pre className="mt-1 text-[11px] bg-muted/50 rounded p-2 overflow-x-auto leading-relaxed">
-                            {JSON.stringify(event.details, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
-
-      <Separator />
-      <div className="text-xs text-muted-foreground text-center pb-6">
-        Sabq · {t.title}
+        <div className="text-xs text-muted-foreground text-center pt-2 pb-6">
+          Sabq · {t.title}
+        </div>
       </div>
     </div>
   );
