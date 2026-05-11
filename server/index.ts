@@ -135,10 +135,31 @@ app.use(cors({
     if (!origin) {
       return callback(null, true);
     }
+    // Reject anything that doesn't parse cleanly as a URL and isn't
+    // https in production (security audit M7, 2026-05-11). The
+    // allowedOriginsSet check below is an exact-string match on the
+    // origin (good), but the regex preview pattern is only as tight
+    // as the operator wrote it. We add a parse-and-protocol gate so
+    // a malformed origin can't smuggle past even a loose regex.
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      console.warn(`[CORS] Rejected non-URL origin: ${origin}`);
+      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+    }
+    if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+      console.warn(`[CORS] Rejected non-HTTPS origin in production: ${origin}`);
+      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+    }
     const normalizedOrigin = origin.replace(/:5000$/, '').replace(/:5001$/, '');
     if (allowedOriginsSet.has(origin) || normalizedOriginsSet.has(normalizedOrigin)) {
       return callback(null, true);
     }
+    // NOTE: previewPattern is matched against the *whole* origin string,
+    // anchored. Make sure FRONTEND_PREVIEW_PATTERN env var is tight —
+    // e.g. `^https://sabq-[a-z0-9-]+-<team-id>\.vercel\.app$` — because
+    // any Vercel user can deploy a project named "sabq-*" otherwise.
     if (previewPattern && previewPattern.test(origin)) {
       return callback(null, true);
     }

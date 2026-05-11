@@ -80,6 +80,18 @@ function getWebhookSecret(): string {
   return secret;
 }
 
+// Strip anything that looks like a credential before it lands in a log
+// or error message (security audit M10, 2026-05-11). Tap's own error
+// bodies don't echo bearer tokens, but a future API change or an
+// intermediary that does is a risk we close pre-emptively. Also caps
+// length so a giant response body doesn't flood logs.
+function sanitizeForLog(text: string): string {
+  return String(text || "")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer ***")
+    .replace(/sk_(test|live)_[A-Za-z0-9_-]+/g, "sk_***")
+    .slice(0, 500);
+}
+
 export async function createCharge(params: CreateChargeParams): Promise<TapChargeResponse> {
   const { amountHalalas, currency = "SAR", customer, redirectUrl, postUrl, description, metadata } = params;
   
@@ -124,7 +136,7 @@ export async function createCharge(params: CreateChargeParams): Promise<TapCharg
   });
   
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = sanitizeForLog(await response.text());
     console.error(`[Tap Payment] Error creating charge:`, errorText);
     throw new Error(`Failed to create Tap charge: ${response.status} ${errorText}`);
   }
@@ -147,7 +159,7 @@ export async function retrieveCharge(chargeId: string): Promise<TapChargeRespons
   });
   
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = sanitizeForLog(await response.text());
     console.error(`[Tap Payment] Error retrieving charge:`, errorText);
     throw new Error(`Failed to retrieve Tap charge: ${response.status}`);
   }

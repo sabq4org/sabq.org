@@ -4,6 +4,8 @@ import { createServer, type Server } from "http";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
+import { validatePassword } from "./utils/passwordPolicy";
+import { verifyImageMagicBytes } from "./utils/imageVerify";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
@@ -90,8 +92,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB
   },
   fileFilter: (req, file, cb) => {
+    // GIF removed (security audit M8, 2026-05-11). Animated GIFs let
+    // an attacker hold long-lived browser connections and stall page
+    // rendering; we don't have an animation-aware probe in this path.
+    // If GIF is needed back, add a sharp.metadata().pages <= 1 gate.
     const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
       'application/pdf',
       'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -106,7 +112,7 @@ const upload = multer({
     }
   },
 });
-import { randomUUID } from "crypto";
+import crypto, { randomUUID } from "crypto";
 import { checkUserStatus } from "./userStatusMiddleware";
 import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
@@ -152,13 +158,22 @@ const contactUploadLimiter = rateLimit({
   validate: cfValidate,
 });
 
+// Tightened from 100/15min → 30/15min and keyed per-user when
+// authenticated (security audit M2, 2026-05-11). Previous setting let
+// a single authenticated client push 100 × 10MB = 1GB every 15 minutes
+// before tripping. 30/15min is still well above any normal editor's
+// upload pace for a news platform.
 const mediaUploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 30,
   message: { message: "تم تجاوز حد رفع الملفات. يرجى المحاولة بعد قليل" },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: cfKeyGenerator,
+  keyGenerator: (req: any) => {
+    const userId = req.user?.id;
+    if (userId) return `u:${userId}`;
+    return cfKeyGenerator(req);
+  },
   validate: cfValidate,
 });
 
@@ -669,8 +684,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.ok) {
+        return res.status(400).json({ message: pwCheck.message });
       }
 
       // Check if user exists
@@ -764,7 +780,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Verify Email
-  app.post("/api/auth/verify-email", async (req, res) => {
+  // Rate-limited (security audit M4, 2026-05-11). The token has finite
+  // entropy; without throttling an attacker could iterate values. The
+  // shared authLimiter (5/15min, skips successful) is appropriate here
+  // because successful verify means the right user got their email.
+  app.post("/api/auth/verify-email", authLimiter, async (req, res) => {
     try {
       const { token } = req.body;
 
@@ -836,22 +856,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // Generate reset token (plaintext - will be sent via email)
-      const resetToken = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${Math.random().toString(36).substr(2, 9)}`;
+      // Generate reset token (plaintext — will be sent via email).
+      // Use crypto-grade randomness instead of Math.random (which is not
+      // unpredictable enough for security tokens), and wrap in a
+      // composite `<tokenId>.<plaintext>` format so the reset endpoint
+      // can look up by O(1) primary key instead of bcrypt-comparing
+      // every unused token (security audit M5, 2026-05-11).
+      const plaintextToken = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       // Hash token before storing (security: never store plaintext tokens)
-      const tokenHash = await bcrypt.hash(resetToken, 12);
+      const tokenHash = await bcrypt.hash(plaintextToken, 12);
 
       // Save hashed token to database
-      await db.insert(passwordResetTokens).values({
+      const [inserted] = await db.insert(passwordResetTokens).values({
         userId: user.id,
         token: tokenHash,
         expiresAt,
-      });
+      }).returning({ id: passwordResetTokens.id });
+
+      const compositeToken = `${inserted.id}.${plaintextToken}`;
 
       // Send password reset email via MailerSend
-      const emailResult = await sendPasswordResetEmail(email, resetToken);
+      const emailResult = await sendPasswordResetEmail(email, compositeToken);
       if (!emailResult.success) {
         console.warn("⚠️  Failed to send password reset email:", emailResult.error);
         // Still return success to prevent email enumeration
@@ -879,34 +906,43 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "الرمز وكلمة المرور مطلوبان" });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.ok) {
+        return res.status(400).json({ message: pwCheck.message });
       }
 
-      // Find all unused tokens for potential matching
-      const candidateTokens = await db
+      // Composite token format: "<tokenId>.<plaintext>" — see forgot-
+      // password above. Lookup is O(1) on tokenId instead of bcrypt-
+      // comparing every unused token row.
+      const firstDot = typeof token === "string" ? token.indexOf(".") : -1;
+      if (firstDot < 1) {
+        return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
+      }
+      const tokenId = token.slice(0, firstDot);
+      const plaintext = token.slice(firstDot + 1);
+
+      const [stored] = await db
         .select()
         .from(passwordResetTokens)
-        .where(eq(passwordResetTokens.used, false));
+        .where(and(eq(passwordResetTokens.id, tokenId), eq(passwordResetTokens.used, false)))
+        .limit(1);
 
-      // Find matching token by comparing hashes
-      let matchedToken = null;
-      for (const candidate of candidateTokens) {
-        const isMatch = await bcrypt.compare(token, candidate.token);
-        if (isMatch) {
-          matchedToken = candidate;
-          break;
-        }
-      }
-
-      if (!matchedToken) {
+      if (!stored) {
         return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
       }
 
-      // Check if token expired
-      if (new Date() > new Date(matchedToken.expiresAt)) {
+      // Check expiry BEFORE bcrypt compare so expired tokens don't even
+      // spend a hash cycle.
+      if (new Date() > new Date(stored.expiresAt)) {
         return res.status(400).json({ message: "رمز إعادة التعيين منتهي الصلاحية" });
       }
+
+      const isMatch = await bcrypt.compare(plaintext, stored.token);
+      if (!isMatch) {
+        return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
+      }
+
+      const matchedToken = stored;
 
       // Hash new password
       const passwordHash = await bcrypt.hash(password, 12);
@@ -942,8 +978,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "كلمة المرور الحالية والجديدة مطلوبتان" });
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const newPwCheck = validatePassword(newPassword);
+      if (!newPwCheck.ok) {
+        return res.status(400).json({ message: newPwCheck.message });
       }
 
       // Get user from database
@@ -1414,12 +1451,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       fileSize: 10 * 1024 * 1024, // 10MB max
     },
     fileFilter: (req, file, cb) => {
+      // GIF removed (security audit M8, 2026-05-11).
       const allowedTypes = [
         'image/jpeg',
         'image/jpg',
         'image/png',
         'image/webp',
-        'image/gif',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
@@ -1445,6 +1482,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Round-trip via Latin-1 to recover the UTF-8 string.
       if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
         req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      }
+
+      // Verify the file's actual magic bytes match the claimed MIME
+      // (security audit M1, 2026-05-11). multer's fileFilter only
+      // trusts the client-declared header; sharp reads the real format.
+      if (req.file.mimetype.startsWith('image/')) {
+        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        if (!verify.ok) {
+          console.warn("[Media Upload] Magic byte verification failed:", verify.reason);
+          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+        }
       }
 
       console.log("[Media Upload] File received:", {
@@ -3904,11 +3952,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       fileSize: 10 * 1024 * 1024, // 10MB max
     },
     fileFilter: (req, file, cb) => {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      // GIF removed (security audit M8, 2026-05-11).
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPG, PNG, WEBP, GIF'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPG, PNG, WEBP'));
       }
     },
   });
@@ -3943,6 +3992,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Recover UTF-8 filename if multer parsed it as Latin-1.
       if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
         req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      }
+
+      // Magic-byte verification (security audit M1).
+      if (req.file.mimetype.startsWith('image/')) {
+        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        if (!verify.ok) {
+          console.warn("[Profile Image Upload] Magic byte verification failed:", verify.reason);
+          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+        }
       }
 
       // Try Cloudflare Images first. When CF succeeds, return the
@@ -5073,8 +5131,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "New password is required" });
       }
 
-      if (newPassword.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      const adminPwCheck = validatePassword(newPassword);
+      if (!adminPwCheck.ok) {
+        return res.status(400).json({ message: adminPwCheck.message });
       }
 
       const [user] = await db

@@ -234,6 +234,21 @@ export function registerTwoFactorRoutes(app: Express) {
         isValid = verifyToken(user.twoFactorSecret || '', token);
       }
 
+      // Audit-log every verify attempt (security audit M9, 2026-05-11).
+      // Records IP, UA, method, and outcome so an admin can see brute-
+      // force patterns. Best-effort — logging failure doesn't block the
+      // login flow.
+      const verifyMethod = backupCode ? "backup_code" : "totp";
+      const ip = getRealIp(req);
+      const ua = (req.headers["user-agent"] as string) || "unknown";
+      logActivity({
+        userId,
+        action: isValid ? "2fa_verify_success" : "2fa_verify_fail",
+        entityType: "user",
+        entityId: userId,
+        metadata: { ip, userAgent: ua, reason: verifyMethod },
+      }).catch(() => { /* never block on log */ });
+
       if (!isValid) {
         return res.status(400).json({ message: "الرمز غير صحيح" });
       }
@@ -248,7 +263,7 @@ export function registerTwoFactorRoutes(app: Express) {
         // Clear the pending 2FA userId from session
         delete (req.session as any).pending2FAUserId;
 
-      res.json({ 
+      res.json({
           message: "تم التحقق بنجاح",
           user: {
             id: user.id,
@@ -267,10 +282,21 @@ export function registerTwoFactorRoutes(app: Express) {
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Send SMS OTP for 2FA setup or verification
+  // Send SMS OTP for 2FA setup or verification.
+  // Reject dual-context callers (security audit M12, 2026-05-11): if
+  // both pending2FAUserId (mid-login flow) AND req.user (already
+  // authenticated) are set, an attacker who has stolen a partial 2FA
+  // session can call this endpoint with the victim's userId to
+  // enumerate phone numbers. Allow only one context at a time.
   app.post("/api/2fa/send-sms", strictLimiter, async (req: any, res) => {
     try {
-      const userId = (req.session as any).pending2FAUserId || req.user?.id;
+      const pendingId = (req.session as any).pending2FAUserId;
+      const authedId = req.user?.id;
+      if (pendingId && authedId && pendingId !== authedId) {
+        console.warn("[2FA] Dual-context send-sms rejected", { pendingId, authedId });
+        return res.status(403).json({ message: "غير مصرح" });
+      }
+      const userId = pendingId || authedId;
 
       if (!userId) {
         return res.status(401).json({ message: "غير مصرح" });

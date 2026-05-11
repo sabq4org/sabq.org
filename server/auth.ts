@@ -52,7 +52,12 @@ export function getSession() {
   // SameSite=None requires Secure=true; we enforce that combo explicitly.
   const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
   const cookieSameSite = (process.env.COOKIE_SAMESITE as "lax" | "strict" | "none" | undefined) || "lax";
-  const cookieSecure = cookieSameSite === "none" ? true : process.env.NODE_ENV === "production";
+  // Secure=true unconditional in production (security audit M11,
+  // 2026-05-11). Old logic only enforced Secure when SameSite=none, so
+  // a misconfigured prod with COOKIE_SAMESITE=lax + COOKIE_DOMAIN would
+  // leak the session cookie over plain HTTP if the domain ever served
+  // over HTTP. Production always = HTTPS, period.
+  const cookieSecure = process.env.NODE_ENV === "production" || cookieSameSite === "none";
 
   return session({
     secret: sessionSecret,
