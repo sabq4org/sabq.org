@@ -1457,7 +1457,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
+      // Reject anything other than a plain alphanumeric extension
+      // (security audit H2, 2026-05-11). originalname.split('.').pop()
+      // could otherwise return "../foo" or a multi-segment path and
+      // break out of uploads/media/.
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
       const objectId = randomUUID();
 
       const objectPath = `uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
@@ -2571,10 +2576,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         throw new Error('Bucket ID not found in PRIVATE_OBJECT_DIR');
       }
 
-      // Generate unique filename
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
+      // Generate unique filename (security audit H2: validate extension)
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
       const objectId = randomUUID();
-      
+
       // Build object path (simple, no complex directory structure)
       const objectPath = `uploads/avatars/${objectId}.${fileExtension}`;
 
@@ -2683,13 +2689,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const ext = objectPath.split('.').pop()?.toLowerCase() || 'jpg';
+      // SVG removed (security audit H3, 2026-05-11). SVGs can embed
+      // <script> and execute in any context the proxy serves them in;
+      // refusing here is defense-in-depth — uploads already block them
+      // at the multer fileFilter layer, but legacy objects might exist.
+      if (ext === 'svg' || ext === 'svgz') {
+        return res.status(415).json({ message: "نوع الملف غير مدعوم" });
+      }
       const mimeTypes: Record<string, string> = {
         'png': 'image/png',
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
         'gif': 'image/gif',
         'webp': 'image/webp',
-        'svg': 'image/svg+xml',
       };
       const contentType = mimeTypes[ext] || 'image/jpeg';
 
@@ -3961,7 +3973,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
       const objectId = randomUUID();
       const relativePath = `uploads/profile-images/${objectId}.${fileExtension}`;
       const fullPath = `${publicPath}/${relativePath}`;
@@ -18111,7 +18124,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         // Create new user account
         isNewUser = true;
         const bcrypt = await import('bcryptjs');
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        // Bumped from 10 → 12 to match every other bcrypt.hash() call in
+        // the codebase (security audit H4, 2026-05-11). Existing weaker
+        // hashes from this codepath stay valid (bcrypt-verify works
+        // across rounds), but new accounts get the canonical strength.
+        const hashedPassword = await bcrypt.hash(tempPassword, 12);
         
         user = await storage.createUser({
           email: submission.email,

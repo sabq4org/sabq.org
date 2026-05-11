@@ -12,6 +12,19 @@ export const ROLE_NAMES = {
   READER: "reader",
 } as const;
 
+// Role names that grant superuser access — every permission check
+// short-circuits to true when the user's role (text column) OR any of
+// their user_roles entries matches one of these. The text "system.admin"
+// is kept for legacy data; new accounts should use "system_admin".
+// SECURITY: this list MUST stay in sync with seed data and any
+// permission-check shortcut. Single source of truth (audit H5).
+export const SUPERUSER_ROLE_NAMES = [
+  "admin",
+  "superadmin",
+  "system_admin",
+  "system.admin",
+] as const;
+
 export const ROLE_LABELS_AR = {
   [ROLE_NAMES.SYSTEM_ADMIN]: "مدير النظام",
   [ROLE_NAMES.ADMIN]: "مسؤول",

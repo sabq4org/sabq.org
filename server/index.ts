@@ -320,20 +320,21 @@ function hasSessionCookie(req: Request): boolean {
 
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10000, // 10000 requests per IP per window (high-traffic site behind CDN)
+  max: 10000, // 10000 requests per IP/user per window (high-traffic site behind CDN)
   handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  // Per-user keying when authenticated, IP otherwise (security audit H7).
   keyGenerator: (req) => {
+    const userId = (req as any).user?.id;
+    if (userId) return `u:${userId}`;
     const cfIp = req.headers['cf-connecting-ip'] as string;
     const xForwardedFor = req.headers['x-forwarded-for'] as string;
-    const realIp = cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
-    return realIp;
+    return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
   },
   skip: (req) => {
     if (req.path.startsWith("/health") || req.path.startsWith("/ready")) return true;
-    if (hasSessionCookie(req)) return true;
     if (req.method === "GET") return true;
     return false;
   },
@@ -363,14 +364,19 @@ const writeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  // Key by authenticated user when available, IP otherwise (security
+  // audit H7, 2026-05-11). The previous skip-on-session-cookie meant a
+  // stolen session token bypassed every write limit; per-user keying
+  // closes that path while keeping anonymous writes IP-limited.
   keyGenerator: (req) => {
+    const userId = (req as any).user?.id;
+    if (userId) return `u:${userId}`;
     const cfIp = req.headers['cf-connecting-ip'] as string;
     const xForwardedFor = req.headers['x-forwarded-for'] as string;
     return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
   },
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
-    if (hasSessionCookie(req)) return true;
     return false;
   },
 });

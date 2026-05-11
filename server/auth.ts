@@ -459,16 +459,20 @@ export async function setupAuth(app: Express) {
         return done(null, false);
       }
       
-      const serializedUser = { 
-        id: user.id, 
+      const serializedUser = {
+        id: user.id,
         email: user.email,
         role: user.role,
         allowedLanguages: user.allowedLanguages || [],
         hasPressCard: user.hasPressCard || false,
       };
-      
-      // Cache for 5 minutes
-      memoryCache.set(cacheKey, serializedUser, CACHE_TTL.MEDIUM);
+
+      // Cache for 60s (security audit H6, 2026-05-11). Was 5 min, which
+      // meant a revoked role still granted access for up to that long
+      // even after the admin updated user_roles. invalidateUserSessionCache()
+      // is called from the role-mutation routes for instant takedown,
+      // but the shorter TTL is a safety net if a callsite is missed.
+      memoryCache.set(cacheKey, serializedUser, CACHE_TTL.SHORT);
       
       done(null, serializedUser);
     } catch (error) {

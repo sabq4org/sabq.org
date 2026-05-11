@@ -4,6 +4,7 @@ import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
+import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
@@ -19,23 +20,22 @@ export async function userHasPermission(
     let permData = memoryCache.get<{ isSuperuser: boolean; permissions: string[] }>(cacheKey);
 
     if (!permData) {
-      // Check superuser status
-      const superuserRoles = ['admin', 'superadmin', 'system_admin', 'system.admin'];
+      // Check superuser status — single source of truth in shared constants.
       const [user] = await db
         .select({ role: users.role })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1);
-      
-      let isSuperuser = user ? superuserRoles.includes(user.role) : false;
-      
+
+      let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+
       if (!isSuperuser) {
         const rbacRoles = await db
           .select({ roleName: roles.name })
           .from(userRoles)
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, userId));
-        isSuperuser = rbacRoles.some(r => superuserRoles.includes(r.roleName));
+        isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
       }
 
       const permissions = isSuperuser ? [] : await getUserPermissions(userId);
@@ -50,12 +50,6 @@ export async function userHasPermission(
     return false;
   }
 }
-
-// Roles whose users always pass any permission check, regardless of what's
-// in role_permissions. Mirrored from `userHasPermission` above so that the
-// 15+ direct callsites of `getUserPermissions(...).includes(code)` in
-// server/routes.ts work without per-call refactoring.
-const SUPERUSER_ROLE_NAMES = ['admin', 'superadmin', 'system_admin', 'system.admin'];
 
 // Get all permissions for a user using efficient JOIN.
 // Includes user-level overrides for complete permission set.
@@ -75,7 +69,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
       .where(eq(users.id, userId))
       .limit(1);
 
-    let isSuperuser = user ? SUPERUSER_ROLE_NAMES.includes(user.role) : false;
+    let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
 
     if (!isSuperuser) {
       const rbacRoles = await db
@@ -83,7 +77,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
         .from(userRoles)
         .innerJoin(roles, eq(userRoles.roleId, roles.id))
         .where(eq(userRoles.userId, userId));
-      isSuperuser = rbacRoles.some(r => SUPERUSER_ROLE_NAMES.includes(r.roleName));
+      isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
     }
 
     if (isSuperuser) {

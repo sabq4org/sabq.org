@@ -38,8 +38,15 @@ export const getCsrfToken: RequestHandler = (req, res) => {
         : "lax";
   const csrfSecure = csrfSameSite === "none" ? true : process.env.NODE_ENV === "production";
 
+  // httpOnly: true (security audit H1, 2026-05-11). The frontend
+  // primarily reads the token from this endpoint's JSON body and stores
+  // it in memory; the cookie itself is only used by the server as a
+  // double-submit check. Locking it from JS prevents an XSS leak —
+  // previously, since SameSite=none weakens CSRF defaults to zero, a
+  // single XSS could pair the stolen token with a forged request and
+  // bypass CSRF entirely.
   res.cookie(CSRF_COOKIE, token, {
-    httpOnly: false,
+    httpOnly: true,
     secure: csrfSecure,
     sameSite: csrfSameSite,
     maxAge: 7 * 24 * 60 * 60 * 1000,

@@ -139,7 +139,11 @@ async function uploadAttachmentToGCS(
     const bucket = objectStorageClient.bucket(bucketName);
     
     const fileId = nanoid();
-    const extension = filename.split('.').pop() || '';
+    // Reject anything other than a plain alphanumeric extension
+    // (security audit H2, 2026-05-11). filename.split('.').pop() could
+    // otherwise contain "../" and break out of email-attachments/.
+    const rawExt = (filename.split('.').pop() || '').toLowerCase();
+    const extension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
     const storedFilename = `email-attachments/${fileId}.${extension}`;
     const fullPath = `${objectPath}/${storedFilename}`.replace(/\/+/g, '/');
     
