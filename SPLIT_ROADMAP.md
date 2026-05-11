@@ -11,20 +11,19 @@ all functional.
 
 ---
 
-## Phase 0 — Security (do first, ~10 min)
+## Phase 0 — Security (DONE 2026-05-11)
 
-- [ ] **Rotate Railway PG password** (exposed in chat history multiple times).
-      Railway → Postgres service → Connect tab → Reset Password. Railway
-      auto-updates the `DATABASE_URL` env var on the backend service.
-- [ ] **Change admin password** for `admin@sabq.sa` via the dashboard
-      Profile/Settings (current temp password also in chat history).
-- [ ] **Change reporter password** for `reporter@sabq.sa` (lower priority —
-      test account).
-- [ ] **Verify production sabq.org untouched**:
-      `curl https://sabq.org/health` should return Replit's normal response.
-- [ ] **Disable Railway auto-fix bot** (optional but recommended). It has
-      write access to GitHub and merges PRs to `main` when builds fail.
-      Railway → Project Settings → look for "Auto-Fix" / "Smart Build".
+All credentials exposed in chat history have been rotated:
+
+- [x] Railway PG password rotated.
+- [x] Admin password for `admin@sabq.sa` changed.
+- [x] Reporter password for `reporter@sabq.sa` changed.
+- [x] sabq.org production verified untouched (`/health` returns
+      Replit's normal response).
+- [x] Railway auto-fix bot disabled (or confirmed disabled).
+
+Also rotated mid-session: the Gemini API key (`AIzaSy...`) that
+appeared in chat during the Nano Banana Pro debugging.
 
 ## Phase 1 — Functional smoke test (~30-60 min)
 
