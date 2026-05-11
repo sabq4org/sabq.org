@@ -147,6 +147,52 @@ After monitoring, pick one:
   SSR. Estimated 2–4 weeks of focused work to migrate 133 Wouter pages.
   Only revisit if (a)/(b) won't meet SEO goals.
 
+### Migration-day checklist (when sabq.org points at Railway/Vercel)
+
+Things deferred during the experimental phase that MUST be revisited
+before/at the cutover. Do not skip; each one would silently break or
+hurt SEO on the day of launch.
+
+- [ ] **Lift the sabq.news crawler block.** Remove `public/robots.txt`
+      (the disallow-all file) and the `X-Robots-Tag: noindex, nofollow`
+      header from `vercel.json`. Both were added in commit
+      `7ef0093` to protect sabq.org SEO while sabq.news ran experimental.
+- [ ] **Deploy the frontend Cloudflare Worker.** The Worker at
+      `cloudflare-worker/frontend-edge-worker.js` injects per-page SEO
+      meta into the static SPA shell. Without it crawlers and link
+      previews (WhatsApp/Facebook/Twitter) see the generic homepage
+      tags. Wrangler config: `cloudflare-worker/wrangler.frontend.toml`
+      — fill in `account_id` and the route `zone_id` first, then
+      `npx wrangler deploy --config cloudflare-worker/wrangler.frontend.toml --env production`.
+- [ ] **Extend Worker routes to sabq.org.** Add `sabq.org/*` and
+      `www.sabq.org/*` patterns to `wrangler.frontend.toml`'s
+      `[env.production]` routes block, redeploy.
+- [ ] **Decide what happens to the existing sabq.org SEO 404 worker**
+      (`cloudflare-worker/seo-404-worker.js` + `wrangler.toml`). If the
+      new frontend worker takes over, retire it; otherwise chain them.
+- [ ] **Update OG/canonical defaults in the SPA shell.** `client/index.html`
+      hardcodes `og:url=https://sabq.org`, `og:image=https://sabq.org/branding/...`,
+      `twitter:url=https://sabq.org`. The worker strips/replaces these
+      on indexable routes, but the shell still needs sensible defaults
+      for non-worker requests (e.g. direct hits during a Worker outage).
+- [ ] **Re-point cookie + CORS env vars to .sabq.org.**
+      - `COOKIE_DOMAIN=.sabq.org` (Railway)
+      - `FRONTEND_URL=https://sabq.org`, `ALLOWED_ORIGINS=https://sabq.org,https://www.sabq.org` (Railway)
+      - `PUBLIC_SITE_URL=https://sabq.org` (Railway)
+      - `VITE_API_URL=https://api.sabq.org` (Vercel) — if keeping
+        DIRECT mode; alternatively keep `api.sabq.news` and update DNS
+- [ ] **DNS cutover plan for sabq.org.**
+      - Old: Replit IPs / proxied through Cloudflare
+      - New: `sabq.org` and `www.sabq.org` → Vercel; `api.sabq.org` → Railway
+      - Keep TTL low (60s) for ~24h before cutover so rollback is fast.
+- [ ] **301 redirects from sabq.news → sabq.org** (if sabq.news stays
+      reachable post-migration) so any links shared during the
+      experimental phase resolve to the canonical home.
+- [ ] **Re-issue mobile apps with new API base.** iOS + Android via
+      `capacitor.config.ts` and native configs.
+- [ ] **Tested rollback runbook ready.** Vercel domain detach,
+      Railway service pause, Cloudflare DNS revert to Replit IPs.
+
 ## Phase 6 — Cleanup + documentation (~1 hour)
 
 Once the topology decision is made:
