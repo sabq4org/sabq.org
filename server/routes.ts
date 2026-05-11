@@ -3928,11 +3928,37 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         size: req.file.size
       });
 
+      // Recover UTF-8 filename if multer parsed it as Latin-1.
+      if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
+        req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      }
+
+      // Try Cloudflare Images first. When CF succeeds, return the
+      // imagedelivery.net URL and skip the GCS path entirely — Replit-
+      // sidecar-backed GCS isn't available on Railway, and
+      // PUBLIC_OBJECT_SEARCH_PATHS is typically unset there too.
+      if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
+        console.log("[Profile Image Upload] Cloudflare Images configured, attempting upload...");
+        const cfResult = await cloudflareImagesService.uploadToCloudflare(
+          req.file.buffer,
+          req.file.originalname,
+          { uploadedBy: (req.user as any)?.id?.toString() || 'anonymous', type: 'profile-image' },
+          req.file.mimetype
+        );
+        if (cfResult.success && cfResult.deliveryUrl) {
+          console.log("[Profile Image Upload] Cloudflare upload successful:", { url: cfResult.deliveryUrl, imageId: cfResult.imageId });
+          return res.json({ success: true, url: cfResult.deliveryUrl });
+        }
+        console.log("[Profile Image Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
+      }
+
+      // GCS fallback (Replit-only path).
       const publicObjectPaths = process.env.PUBLIC_OBJECT_SEARCH_PATHS || '';
       const publicPath = publicObjectPaths.split(',')[0];
-      
       if (!publicPath) {
-        throw new Error('PUBLIC_OBJECT_SEARCH_PATHS not configured');
+        return res.status(502).json({
+          message: "تعذّر رفع الصورة. خدمة التخزين السحابي غير متاحة حالياً.",
+        });
       }
 
       const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
@@ -3940,27 +3966,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const relativePath = `uploads/profile-images/${objectId}.${fileExtension}`;
       const fullPath = `${publicPath}/${relativePath}`;
 
-      console.log("[Profile Image Upload] Uploading to path:", fullPath);
+      console.log("[Profile Image Upload] Uploading to GCS path:", fullPath);
 
-      // Check if we should use Cloudflare for profile images
-      let cloudflareUrl: string | null = null;
-      if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
-        console.log("[Profile Image Upload] Cloudflare Images configured, attempting upload...");
-        const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname,
-          { uploadedBy: (req.user as any)?.id?.toString() || 'anonymous', type: 'profile-image' },
-          req.file.mimetype // Pass actual mimetype from upload
-        );
-        if (cfResult.success && cfResult.deliveryUrl) {
-          cloudflareUrl = cfResult.deliveryUrl;
-          console.log("[Profile Image Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
-        } else {
-          console.log("[Profile Image Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
-        }
-      }
-
-      const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
+      const { objectStorageClient } = await import('./objectStorage');
 
       const { bucketName, objectName } = parseObjectPath(fullPath);
       const bucket = objectStorageClient.bucket(bucketName);
@@ -3972,12 +3980,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const proxyUrl = `/public-objects/${relativePath}`;
 
-      console.log("[Profile Image Upload] Success. URL:", cloudflareUrl || proxyUrl);
+      console.log("[Profile Image Upload] Success via GCS. URL:", proxyUrl);
 
-      res.json({ 
-        success: true,
-        url: cloudflareUrl || proxyUrl
-      });
+      res.json({ success: true, url: proxyUrl });
     } catch (error: any) {
       console.error("Error uploading profile image:", error);
       
