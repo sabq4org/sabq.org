@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import multer from "multer";
 import { simpleParser } from "mailparser";
 import mammoth from "mammoth";
@@ -469,10 +470,49 @@ function cleanupProcessedEmails() {
 
 setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 
+// Shared-secret check for the SendGrid Inbound Parse webhook.
+// SendGrid Inbound Parse does NOT sign its requests — it relies on URL
+// obscurity. We add a shared-secret token check (URL query OR header)
+// so anyone who guesses the URL still can't fabricate inbound mail.
+//
+// Set SENDGRID_INBOUND_SECRET on the backend, then configure SendGrid
+// Inbound Parse with either:
+//   - URL: https://api.sabq.org/api/email-agent/webhook?token=<secret>
+//   - or a custom header X-Webhook-Token: <secret>
+//
+// Backward compatibility: if SENDGRID_INBOUND_SECRET is unset, the
+// webhook still accepts (logs a critical warning) so existing
+// deployments keep working until the env var is added. Tighten to
+// "always reject" once the secret is deployed everywhere.
+//
+// (Security audit C6, 2026-05-11.)
+function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
+  const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
+  if (!inboundSecret) {
+    console.warn("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — webhook is unauthenticated. Set this env var to enable shared-secret validation.");
+    return { ok: true };
+  }
+  const provided = String(req.query.token || req.get("x-webhook-token") || "");
+  if (!provided) {
+    return { ok: false, reason: "missing token" };
+  }
+  const a = Buffer.from(inboundSecret);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length) return { ok: false, reason: "token length mismatch" };
+  if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: "invalid token" };
+  return { ok: true };
+}
+
 router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
   let webhookLog: any = null; // Define outside try block so it's accessible in catch
   let dedupKey = ''; // Will be set after parsing
-  
+
+  const secretCheck = verifyInboundWebhookSecret(req);
+  if (!secretCheck.ok) {
+    console.warn(`[Email Agent] Rejected inbound webhook: ${secretCheck.reason}`);
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
     console.log("[Email Agent] Received webhook from SendGrid");

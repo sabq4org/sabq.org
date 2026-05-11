@@ -190,8 +190,12 @@ export function registerTwoFactorRoutes(app: Express) {
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Verify 2FA token during login
-  app.post("/api/2fa/verify", async (req: any, res) => {
+  // Verify 2FA token during login.
+  // Rate-limited (security audit C7, 2026-05-11): a 6-digit TOTP code has
+  // ~1M possible values; without per-IP throttling an attacker could brute
+  // force a pending2FA session in minutes. strictLimiter (15/min) makes
+  // that infeasible. Per-user lockout is still a TODO follow-up.
+  app.post("/api/2fa/verify", strictLimiter, async (req: any, res) => {
     try {
       const { token, backupCode } = req.body;
 

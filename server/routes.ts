@@ -18559,85 +18559,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
   
 
-  // Test email sending for staff communications
-  app.post("/api/test/send-staff-email", async (req, res) => {
-    try {
-      const { to, subject, message } = req.body;
-      
-      if (!to || !subject || !message) {
-        return res.status(400).json({ message: "يرجى تقديم البريد والموضوع والرسالة" });
-      }
-      
-      const { sendEmailNotification } = await import("./services/email");
-      
-      const { staffCommunicationsService } = await import("./services/staffCommunications");
-      const emailHtml = staffCommunicationsService.wrapInTemplate(`<p style="margin-bottom: 20px; white-space: pre-wrap;">${message}</p>`, subject);
-      
-      const result = await sendEmailNotification({
-        to,
-        subject: `[راسل الزملاء] ${subject}`,
-        html: emailHtml,
-        text: `${subject}\n\n${message}\n\n---\nصحيفة سبق الإلكترونية`,
-      });
-      
-      if (result.success) {
-        console.log(`✅ Test email sent to ${to}`);
-        res.json({ success: true, message: `تم إرسال البريد بنجاح إلى ${to}` });
-      } else {
-        res.status(500).json({ success: false, message: "فشل في إرسال البريد", error: result.error });
-      }
-    } catch (error) {
-      console.error("Error sending test email:", error);
-      res.status(500).json({ message: "خطأ في إرسال البريد" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // Test notification sending for a specific article (by ID)
-  app.post("/api/test/send-notifications/:articleId", async (req, res) => {
-    try {
-      const { articleId } = req.params;
-      
-      // Get article details
-      const [article] = await db
-        .select()
-        .from(articles)
-        .where(eq(articles.id, articleId))
-        .limit(1);
-      
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-      
-      console.log(`🧪 TEST: Sending notifications for article: ${article.title}`);
-      
-      // Determine notification type
-      let notificationType: 'published' | 'breaking' | 'featured' = 'published';
-      if (article.newsType === 'breaking') {
-        notificationType = 'breaking';
-      } else if (article.newsType === 'featured') {
-        notificationType = 'featured';
-      }
-      
-      // Send notifications
-      await sendArticleNotification(article, notificationType);
-      
-      res.json({
-        success: true,
-        message: `Notifications sent for article: ${article.title}`,
-        articleId: article.id,
-        notificationType
-      });
-    } catch (error) {
-      console.error("Error in test notification endpoint:", error);
-      res.status(500).json({ 
-        success: false,
-        message: "Failed to send notifications",
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  });
+  // Removed (security audit C2/C3, 2026-05-11): the two
+  //   POST /api/test/send-staff-email
+  //   POST /api/test/send-notifications/:articleId
+  // routes shipped with no auth and let any anonymous client send arbitrary
+  // emails or trigger a push-notification broadcast for any article. The
+  // authenticated admin equivalent for notifications lives below at
+  // /api/admin/articles/:id/resend-notification.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -36726,46 +36654,52 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Staff Productivity Dashboard API
   app.get("/api/staff/productivity", requireAuth, requirePermission("staff.view_productivity"), async (req: any, res) => {
     try {
-      const { range = 'all', userId } = req.query;
-      
-      // Calculate date filter based on range
-      let dateFilter = '';
-      const now = new Date();
-      
-      if (range === 'day') {
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${yesterday.toISOString()}'`;
-      } else if (range === 'week') {
-        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${lastWeek.toISOString()}'`;
-      } else if (range === 'month') {
-        const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${lastMonth.toISOString()}'`;
+      const rangeRaw = String(req.query.range || 'all');
+      const userIdRaw = req.query.userId;
+
+      // Whitelist range; any other value falls through to "all".
+      const allowedRanges = ['day', 'week', 'month', 'all'] as const;
+      const range = (allowedRanges as readonly string[]).includes(rangeRaw)
+        ? (rangeRaw as typeof allowedRanges[number])
+        : 'all';
+
+      // Validate userId shape (UUID) before letting it anywhere near SQL.
+      // Security audit C1 (2026-05-11): this used to be interpolated raw
+      // into the CTE filter, which let an authenticated staff member
+      // pivot to arbitrary read via `userId="' OR 1=1 --"`.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const userId = typeof userIdRaw === 'string' && UUID_RE.test(userIdRaw) ? userIdRaw : null;
+      if (userIdRaw && !userId) {
+        return res.status(400).json({ message: "userId غير صالح" });
       }
-      
-      // Define staff roles - these are role names in the roles table
+
+      // Date cutoff as a real value, not a string-interpolated literal.
+      const now = new Date();
+      let dateCutoff: Date | null = null;
+      if (range === 'day') dateCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      else if (range === 'week') dateCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (range === 'month') dateCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Server-controlled staff role list — safe to inline, but kept here
+      // so all dynamic bits are visible in one place.
       const staffRoles = ['reporter', 'content_manager', 'editor', 'senior_editor', 'editor_in_chief', 'moderator', 'opinion_author'];
-      const rolesStr = staffRoles.map(r => `'${r}'`).join(', ');
-      
-      // Build user filter if specific userId provided
-      const userFilter = userId ? `AND u.id = '${userId}'` : '';
-      
-      // Execute raw SQL for efficient aggregation
-      // FIXED: Use user_roles + roles tables for accurate role filtering (RBAC)
-      const sqlQuery = `
+
+      // Compose with parameterized fragments. Drizzle's sql tag inlines
+      // the value safely (placeholder + bind), so neither dateCutoff nor
+      // userId nor staffRoles can break out of their slot.
+      const result = await db.execute(sql`
         WITH staff_members AS (
-          -- Get staff members based on their CURRENT role from user_roles table (RBAC)
           SELECT DISTINCT u.id as user_id, u.first_name, u.last_name, u.email, r.name as role_name
           FROM users u
           INNER JOIN user_roles ur ON ur.user_id = u.id
           INNER JOIN roles r ON r.id = ur.role_id
-          WHERE r.name IN (${rolesStr})
+          WHERE r.name = ANY(${staffRoles})
             AND u.deleted_at IS NULL
             AND u.status = 'active'
-            ${userFilter}
+            AND (${userId}::text IS NULL OR u.id = ${userId})
         ),
         staff_articles AS (
-          SELECT 
+          SELECT
             sm.user_id,
             a.id as article_id,
             COALESCE(a.views, 0) as views
@@ -36776,10 +36710,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
             OR a.reporter_id = sm.user_id
             OR a.publisher_id = sm.user_id
             OR (a.source_metadata->>'from' = sm.email AND a.source_metadata->>'type' IN ('email', 'whatsapp'))
-          ) AND a.status = 'published' ${dateFilter}
+          ) AND a.status = 'published'
+            AND (${dateCutoff}::timestamptz IS NULL OR a.published_at >= ${dateCutoff})
         ),
         staff_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(DISTINCT sa.article_id) as articles_count,
             COALESCE(SUM(sa.views), 0) as total_views
@@ -36787,7 +36722,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           GROUP BY sa.user_id
         ),
         reaction_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(r.id) as reactions_count
           FROM staff_articles sa
@@ -36795,14 +36730,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
           GROUP BY sa.user_id
         ),
         comment_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(c.id) as comments_count
           FROM staff_articles sa
           LEFT JOIN comments c ON c.article_id = sa.article_id AND c.status = 'approved'
           GROUP BY sa.user_id
         )
-        SELECT 
+        SELECT
           sm.user_id as "userId",
           COALESCE(sm.first_name, '') || ' ' || COALESCE(sm.last_name, '') as name,
           sm.email,
@@ -36812,9 +36747,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
           COALESCE(rs.reactions_count, 0)::int as "reactionsCount",
           COALESCE(cs.comments_count, 0)::int as "commentsCount",
           (
-            COALESCE(ss.articles_count, 0) * 10 + 
-            COALESCE(ss.total_views, 0) * 0.01 + 
-            COALESCE(rs.reactions_count, 0) * 2 + 
+            COALESCE(ss.articles_count, 0) * 10 +
+            COALESCE(ss.total_views, 0) * 0.01 +
+            COALESCE(rs.reactions_count, 0) * 2 +
             COALESCE(cs.comments_count, 0) * 3
           )::numeric(10,2) as "productivityScore"
         FROM staff_members sm
@@ -36822,14 +36757,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
         LEFT JOIN reaction_stats rs ON rs.user_id = sm.user_id
         LEFT JOIN comment_stats cs ON cs.user_id = sm.user_id
         ORDER BY (
-          COALESCE(ss.articles_count, 0) * 10 + 
-          COALESCE(ss.total_views, 0) * 0.01 + 
-          COALESCE(rs.reactions_count, 0) * 2 + 
+          COALESCE(ss.articles_count, 0) * 10 +
+          COALESCE(ss.total_views, 0) * 0.01 +
+          COALESCE(rs.reactions_count, 0) * 2 +
           COALESCE(cs.comments_count, 0) * 3
         ) DESC
-      `;
-      
-      const result = await db.execute(sql.raw(sqlQuery));
+      `);
       
       const staffData = result.rows.map((row: any) => ({
         userId: row.userId,
