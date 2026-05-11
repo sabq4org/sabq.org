@@ -58,7 +58,6 @@ import {
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
-import { ObjectUploader } from "@/components/ObjectUploader";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
@@ -139,20 +138,40 @@ export default function Profile() {
     },
   });
 
-  const handleAvatarUploadComplete = async (result: any) => {
-    try {
-      const uploadedUrl = result.successful?.[0]?.uploadURL;
-      if (!uploadedUrl) {
-        throw new Error('لم يتم الحصول على رابط الصورة');
-      }
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-      const response = await apiRequest("/api/profile/image", {
+  const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "خطأ", description: "الرجاء اختيار ملف صورة فقط", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "خطأ", description: "حجم الصورة يجب أن يكون أقل من 5 ميجابايت", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "profile-avatar");
+      const uploaded = (await apiRequest("/api/media/upload", {
+        method: "POST",
+        body: formData,
+        isFormData: true,
+      })) as { url: string };
+
+      await apiRequest("/api/profile/image", {
         method: "PUT",
-        body: JSON.stringify({ profileImageUrl: uploadedUrl }),
+        body: JSON.stringify({ profileImageUrl: uploaded.url }),
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      
+
       toast({
         title: "تم التحديث بنجاح",
         description: "تم تحديث صورتك الشخصية",
@@ -163,17 +182,9 @@ export default function Profile() {
         description: error.message || "فشل في حفظ الصورة. حاول مرة أخرى.",
         variant: "destructive",
       });
+    } finally {
+      setIsUploadingAvatar(false);
     }
-  };
-
-  const getUploadUrl = async () => {
-    const response = await apiRequest("/api/profile/image/upload", {
-      method: "POST",
-    });
-    return {
-      method: "PUT" as const,
-      url: response.uploadURL,
-    };
   };
 
   const onSubmit = (data: UpdateUserFormData) => {
@@ -565,18 +576,26 @@ export default function Profile() {
                 </Avatar>
                 
                 <div className="absolute -bottom-2 -right-2">
-                  <ObjectUploader
-                    maxNumberOfFiles={1}
-                    maxFileSize={5 * 1024 * 1024}
-                    allowedFileTypes={['.jpg', '.jpeg', '.png', '.webp']}
-                    onGetUploadParameters={getUploadUrl}
-                    onComplete={handleAvatarUploadComplete}
+                  <input
+                    id="avatar-file-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={handleAvatarFileChange}
+                    disabled={isUploadingAvatar}
+                    data-testid="input-avatar-file"
+                  />
+                  <Button
+                    type="button"
                     variant="default"
                     size="icon"
-                    buttonClassName="h-10 w-10 rounded-full shadow-lg"
+                    className="h-10 w-10 rounded-full shadow-lg"
+                    disabled={isUploadingAvatar}
+                    onClick={() => document.getElementById("avatar-file-input")?.click()}
+                    data-testid="button-upload-avatar"
                   >
                     <Upload className="h-4 w-4" />
-                  </ObjectUploader>
+                  </Button>
                 </div>
               </div>
 

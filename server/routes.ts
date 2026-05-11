@@ -1196,27 +1196,37 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.put("/api/profile/image", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
+
       if (!req.body.profileImageUrl) {
         return res.status(400).json({ message: "رابط الصورة مطلوب" });
       }
 
       console.log("[Profile Image] Upload URL received:", req.body.profileImageUrl);
 
-      const objectStorageService = new ObjectStorageService();
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        req.body.profileImageUrl,
-        {
-          owner: userId,
-          visibility: "public",
-        }
-      );
-
-      console.log("[Profile Image] Object path after ACL:", objectPath);
+      // If the URL is already a fully-qualified external URL (Cloudflare
+      // Images via imagedelivery.net, or any other CDN), we skip the
+      // Replit-sidecar-backed ACL step — there's nothing to ACL on an
+      // external host, and trySetObjectEntityAclPolicy would call the
+      // 127.0.0.1:1106 sidecar that doesn't exist on Railway.
+      let objectPath: string;
+      if (/^https?:\/\//.test(req.body.profileImageUrl)) {
+        objectPath = req.body.profileImageUrl;
+        console.log("[Profile Image] External URL — skipping ACL step");
+      } else {
+        const objectStorageService = new ObjectStorageService();
+        objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+          req.body.profileImageUrl,
+          {
+            owner: userId,
+            visibility: "public",
+          }
+        );
+        console.log("[Profile Image] Object path after ACL:", objectPath);
+      }
 
       // Update user profile with the new image path
-      const user = await storage.updateUser(userId, { 
-        profileImageUrl: objectPath 
+      const user = await storage.updateUser(userId, {
+        profileImageUrl: objectPath
       });
 
       console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
