@@ -46,7 +46,6 @@ import {
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
-import { ObjectUploader } from "@/components/ObjectUploader";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
@@ -104,25 +103,40 @@ export default function EnglishProfile() {
     },
   });
 
-  const handleAvatarUploadComplete = async (result: any) => {
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleAvatarFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Error", description: "Please select an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Error", description: "Image must be under 5 MB", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
     try {
-      const uploadedUrl = result.successful?.[0]?.uploadURL;
-      if (!uploadedUrl) {
-        throw new Error('Failed to get image URL');
-      }
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "profile-avatar");
+      const uploaded = (await apiRequest("/api/media/upload", {
+        method: "POST",
+        body: formData,
+        isFormData: true,
+      })) as { url: string };
 
-      console.log("[Profile] Image uploaded to:", uploadedUrl);
-
-      // Set ACL and save to user profile
-      const response = await apiRequest("/api/profile/image", {
+      await apiRequest("/api/profile/image", {
         method: "PUT",
-        body: JSON.stringify({ profileImageUrl: uploadedUrl }),
+        body: JSON.stringify({ profileImageUrl: uploaded.url }),
       });
 
-      console.log("[Profile] Image saved to profile:", response);
-
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      
+
       toast({
         title: "Successfully updated",
         description: "Your profile picture has been updated",
@@ -134,17 +148,9 @@ export default function EnglishProfile() {
         description: error.message || "Failed to save image. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsUploadingAvatar(false);
     }
-  };
-
-  const getUploadUrl = async () => {
-    const response = await apiRequest("/api/profile/image/upload", {
-      method: "POST",
-    });
-    return {
-      method: "PUT" as const,
-      url: response.uploadURL,
-    };
   };
 
   const onSubmit = (data: UpdateUserFormData) => {
@@ -318,18 +324,26 @@ export default function EnglishProfile() {
                 </Avatar>
                 
                 <div className="absolute bottom-0 right-0">
-                  <ObjectUploader
-                    maxNumberOfFiles={1}
-                    maxFileSize={5 * 1024 * 1024}
-                    allowedFileTypes={['.jpg', '.jpeg', '.png', '.webp']}
-                    onGetUploadParameters={getUploadUrl}
-                    onComplete={handleAvatarUploadComplete}
+                  <input
+                    id="en-avatar-file-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={handleAvatarFileChange}
+                    disabled={isUploadingAvatar}
+                    data-testid="input-en-avatar-file"
+                  />
+                  <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    buttonClassName="h-10 w-10 rounded-full shadow-lg"
+                    className="h-10 w-10 rounded-full shadow-lg"
+                    disabled={isUploadingAvatar}
+                    onClick={() => document.getElementById("en-avatar-file-input")?.click()}
+                    data-testid="button-upload-en-avatar"
                   >
                     <Upload className="h-4 w-4" />
-                  </ObjectUploader>
+                  </Button>
                   <p className="absolute -bottom-8 right-0 text-xs text-muted-foreground whitespace-nowrap">
                     JPG, PNG, WEBP (up to 10MB)
                   </p>
