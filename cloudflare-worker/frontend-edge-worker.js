@@ -144,6 +144,12 @@ function buildMetaBlock(meta) {
   ].filter(Boolean).join("\n");
 }
 
+class TagRemover {
+  element(element) {
+    element.remove();
+  }
+}
+
 class HeadInjector {
   constructor(metaBlock) {
     this.metaBlock = metaBlock;
@@ -178,7 +184,21 @@ async function handleHtml(request, env) {
   }
 
   const metaBlock = buildMetaBlock(meta);
-  const rewriter = new HTMLRewriter().on("head", new HeadInjector(metaBlock));
+  // Strip the static SPA shell's stale meta tags first, otherwise crawlers
+  // that pick the *first* duplicate (Twitter, some Slack/Telegram variants)
+  // would see the generic homepage tags instead of the injected article
+  // ones. Facebook/WhatsApp/LinkedIn use the *last* occurrence so this also
+  // de-duplicates the response for them.
+  const remover = new TagRemover();
+  const rewriter = new HTMLRewriter()
+    .on("head > title", remover)
+    .on('head > meta[name="description"]', remover)
+    .on('head > meta[name="robots"]', remover)
+    .on('head > link[rel="canonical"]', remover)
+    .on('head > meta[property^="og:"]', remover)
+    .on('head > meta[name^="twitter:"]', remover)
+    .on('head > meta[property^="twitter:"]', remover)
+    .on("head", new HeadInjector(metaBlock));
   return rewriter.transform(originRes);
 }
 
