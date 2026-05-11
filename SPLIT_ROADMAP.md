@@ -146,6 +146,46 @@ After monitoring, pick one:
   SSR. Estimated 2–4 weeks of focused work to migrate 133 Wouter pages.
   Only revisit if (a)/(b) won't meet SEO goals.
 
+### Database — Neon migration test (DONE 2026-05-11)
+
+Verified end-to-end that Railway sabq.news works connected to Neon
+(separate test project, not production yet). What was tested:
+
+- Login as admin → sessions + RBAC ✓
+- View existing articles → reads ✓
+- Publish new article → INSERT through the full publish chain ✓
+- Edit article → UPDATE + edit-lock heartbeat ✓
+- Delete article → DELETE + cascade ✓
+- Image upload → CF Images path still works under Neon ✓
+
+**Required Railway env changes for Neon:**
+```
+DATABASE_URL=<neon-pooler-url>?sslmode=require
+DB_DRIVER=neon
+```
+The `DB_DRIVER` swap is mandatory — leaving it on `pg` makes the
+server hang forever on Neon (Neon's wsproxy doesn't speak plain TCP).
+
+**Migration gotcha discovered:** The `sessions` table from
+shared/schema.ts didn't exist on Railway PG (probably because
+connect-pg-simple is configured with `createTableIfMissing: false`
+and the test environment never lazy-created it). After pg_dump from
+Railway → restore to Neon, the table was missing and every request
+500'd with `relation "sessions" does not exist`. Fix is one SQL block
+in Neon's web SQL Editor (idempotent, safe to re-run):
+```sql
+CREATE TABLE IF NOT EXISTS "sessions" (
+  "sid" varchar PRIMARY KEY,
+  "sess" jsonb NOT NULL,
+  "expire" timestamp NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "sessions" ("expire");
+```
+Run this on the *production* Neon before the launch-day DATABASE_URL
+swap too, even though prod has been on Neon for years — the table
+already exists there (every Replit prod login created/used it), but
+zero harm to verify.
+
 ### Migration-day checklist (when sabq.org points at Railway/Vercel)
 
 Things deferred during the experimental phase that MUST be revisited
