@@ -52,3 +52,6 @@ backup_unused_assets
 !attached_assets/**/*.png
 # Internal security audit — kept local; contains attack-surface details
 AUDIT_REPORT.md
+
+# Internal migration runbook — kept local; contains operational detail
+MIGRATION_RUNBOOK.md
