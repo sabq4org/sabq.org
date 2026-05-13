@@ -124,20 +124,43 @@ async function uploadAttachmentToGCS(
   contentType: string,
   isPublic: boolean = false
 ): Promise<string> {
+  // 🎯 PUBLIC IMAGES: Cloudflare Images is the canonical store. Try it FIRST
+  // and return immediately on success, so the upload works on Railway where
+  // PUBLIC_OBJECT_SEARCH_PATHS / Replit Object Storage are not configured.
+  if (isPublic && contentType.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
+    try {
+      console.log(`[Email Agent] ☁️ Uploading image to Cloudflare Images (primary)...`);
+      const cfResult = await cloudflareImagesService.uploadToCloudflare(
+        file,
+        filename,
+        { source: 'email-agent', type: 'article-image' },
+        contentType
+      );
+
+      if (cfResult.success && cfResult.deliveryUrl) {
+        console.log(`[Email Agent] ☁️ Cloudflare upload successful: ${cfResult.deliveryUrl}`);
+        return cfResult.deliveryUrl;
+      }
+      console.log(`[Email Agent] ☁️ Cloudflare upload failed, falling back to GCS: ${cfResult.error}`);
+    } catch (cfError) {
+      console.error("[Email Agent] ☁️ Cloudflare upload error, falling back to GCS:", cfError);
+    }
+  }
+
   try {
     // For images, use PUBLIC directory so they can be displayed in browser
     // For other files (Word docs, PDFs), use PRIVATE directory
-    const objectDir = isPublic 
+    const objectDir = isPublic
       ? (process.env.PUBLIC_OBJECT_SEARCH_PATHS || "").split(',')[0]?.trim() || ""
       : process.env.PRIVATE_OBJECT_DIR || "";
-    
+
     if (!objectDir) {
       throw new Error(`${isPublic ? 'PUBLIC_OBJECT_SEARCH_PATHS' : 'PRIVATE_OBJECT_DIR'} not set`);
     }
 
     const { bucketName, objectPath } = parseObjectPath(objectDir);
     const bucket = objectStorageClient.bucket(bucketName);
-    
+
     const fileId = nanoid();
     // Reject anything other than a plain alphanumeric extension
     // (security audit H2, 2026-05-11). filename.split('.').pop() could
@@ -146,9 +169,9 @@ async function uploadAttachmentToGCS(
     const extension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
     const storedFilename = `email-attachments/${fileId}.${extension}`;
     const fullPath = `${objectPath}/${storedFilename}`.replace(/\/+/g, '/');
-    
+
     const gcsFile = bucket.file(fullPath);
-    
+
     await gcsFile.save(file, {
       contentType,
       metadata: {
@@ -158,29 +181,7 @@ async function uploadAttachmentToGCS(
     });
 
     console.log(`[Email Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} attachment to GCS: ${fullPath}`);
-    
-    // 🎯 For public images, try to upload to Cloudflare Images for faster CDN delivery
-    if (isPublic && contentType.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
-      try {
-        console.log(`[Email Agent] ☁️ Uploading image to Cloudflare Images...`);
-        const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          file,
-          filename,
-          { source: 'email-agent', type: 'article-image' },
-          contentType
-        );
-        
-        if (cfResult.success && cfResult.deliveryUrl) {
-          console.log(`[Email Agent] ☁️ Cloudflare upload successful: ${cfResult.deliveryUrl}`);
-          return cfResult.deliveryUrl;
-        } else {
-          console.log(`[Email Agent] ☁️ Cloudflare upload failed, using GCS: ${cfResult.error}`);
-        }
-      } catch (cfError) {
-        console.error("[Email Agent] ☁️ Cloudflare upload error, using GCS fallback:", cfError);
-      }
-    }
-    
+
     // 🎯 Return Backend Proxy URL (Replit Object Storage doesn't allow makePublic or signed URLs)
     // The backend will stream the file from Object Storage
     if (isPublic) {
@@ -189,7 +190,7 @@ async function uploadAttachmentToGCS(
       console.log(`[Email Agent] 🌐 Generated proxy URL: ${proxyUrl}`);
       return proxyUrl;
     }
-    
+
     // For private files, return the relative path (requires proxy/download endpoint)
     return `${objectDir}/${storedFilename}`;
   } catch (error) {
