@@ -154,3 +154,37 @@ export function invalidatePublishedContent(
     console.log(`[ContentInvalidation] triggered (${reason})${articleSlug ? ` slug=${articleSlug}` : ""}${isBreaking ? " breaking" : ""}`);
   }
 }
+
+type ArticleLike = { slug?: string | null; newsType?: string | null } | null | undefined;
+
+/**
+ * Convenience wrapper for the common "an article was just written" path.
+ * Reads slug + newsType off the article row so callers don't have to spell
+ * them out, and also purges the old slug if the rename changed it.
+ *
+ * Use this instead of calling invalidatePublishedContent() with just a
+ * reason string — without articleSlug, the article URL never gets purged
+ * from Cloudflare and stays stale at the edge for sMaxAge=3600s.
+ */
+export function invalidateArticleWrite(
+  article: ArticleLike,
+  opts: { reason?: string; oldSlug?: string | null } = {},
+): void {
+  const reason = opts.reason ?? "article-write";
+  const isBreaking = article?.newsType === "breaking";
+  const newSlug = article?.slug ?? null;
+  const oldSlug = opts.oldSlug ?? null;
+
+  const slugs = new Set<string>();
+  if (newSlug) slugs.add(newSlug);
+  if (oldSlug && oldSlug !== newSlug) slugs.add(oldSlug);
+
+  if (slugs.size === 0) {
+    invalidatePublishedContent({ isBreaking, reason });
+    return;
+  }
+
+  Array.from(slugs).forEach((slug) => {
+    invalidatePublishedContent({ articleSlug: slug, isBreaking, reason });
+  });
+}

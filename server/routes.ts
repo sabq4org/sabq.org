@@ -73,7 +73,7 @@ import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
-import { invalidatePublishedContent } from "./services/contentInvalidation";
+import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import pLimit from 'p-limit';
 import { db } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
@@ -7099,8 +7099,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(articles.id, articleId))
         .returning();
 
-      // Invalidate caches immediately (in-memory, fast)
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
+      // Passing the article so its slug is purged at the edge — otherwise
+      // /article/<slug> stays stale for sMaxAge=3600s. oldSlug covers renames.
+      invalidateArticleWrite(updatedArticle, {
+        reason: 'admin-patch',
+        oldSlug: existingArticle.slug,
+      });
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
       memoryCache.invalidatePattern('^articles:');
@@ -7603,8 +7608,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update (runs immediately)
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update (runs immediately).
+      // Passing the article so its slug is purged at the Cloudflare edge — without
+      // it, /article/<slug> stays cached for up to sMaxAge=3600s.
+      invalidateArticleWrite(articleForNotification, { reason: "article-publish" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7692,8 +7699,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-feature" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7782,8 +7790,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.error("[ARCHIVE] Error sending rejection email:", emailError);
       }
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-archive" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7842,8 +7851,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-restore" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -8091,8 +8101,9 @@ Respond in valid JSON format only:
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-toggle-breaking" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -13800,11 +13811,7 @@ Respond in valid JSON format only:
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
       // for instant visibility of the new article across all pods + edge.
-      invalidatePublishedContent({
-        articleSlug: article.slug ?? null,
-        isBreaking: article.newsType === 'breaking',
-        reason: 'dashboard-create',
-      });
+      invalidateArticleWrite(article, { reason: 'dashboard-create' });
       memoryCache.delete('lite-feed');
 
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
@@ -14040,25 +14047,12 @@ Respond in valid JSON format only:
       const updated = await storage.updateArticle(req.params.id, articleData);
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
-      // for instant visibility of the edit across all pods + edge. Purging both
-      // the old slug (in case it changed) and the new one covers slug rewrites.
-      const slugsToPurge: string[] = [];
-      if (updated.slug) slugsToPurge.push(updated.slug);
-      if (article.slug && article.slug !== updated.slug) slugsToPurge.push(article.slug);
-      if (slugsToPurge.length === 0) {
-        invalidatePublishedContent({
-          isBreaking: updated.newsType === 'breaking',
-          reason: 'dashboard-update',
-        });
-      } else {
-        slugsToPurge.forEach((slug) => {
-          invalidatePublishedContent({
-            articleSlug: slug,
-            isBreaking: updated.newsType === 'breaking',
-            reason: 'dashboard-update',
-          });
-        });
-      }
+      // for instant visibility of the edit across all pods + edge. oldSlug
+      // covers slug rewrites — both old and new URLs get purged.
+      invalidateArticleWrite(updated, {
+        reason: 'dashboard-update',
+        oldSlug: article.slug,
+      });
       memoryCache.delete('lite-feed');
 
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
