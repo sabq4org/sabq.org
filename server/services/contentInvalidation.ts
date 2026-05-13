@@ -138,9 +138,13 @@ export function invalidatePublishedContent(
 
   if (!skipCloudflare) {
     try {
-      void purgeHomepage();
-      if (isBreaking) void purgeBreakingNews();
-      if (articleSlug) void purgeArticle(articleSlug);
+      // immediate:true bypasses the 30s batch flush so the editor's change is
+      // visible at the Cloudflare edge within ~1s of save. Without it, CDN
+      // would keep serving the stale article HTML/JSON (sMaxAge=3600) until
+      // the next scheduled flush.
+      void purgeHomepage({ immediate: true });
+      if (isBreaking) void purgeBreakingNews({ immediate: true });
+      if (articleSlug) void purgeArticle(articleSlug, { immediate: true });
     } catch (e: any) {
       console.error("[ContentInvalidation] cloudflare purge failed:", e?.message);
     }

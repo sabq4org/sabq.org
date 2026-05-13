@@ -33,8 +33,12 @@ const STATIC_EXTENSIONS = [
   ".json", ".xml", ".txt", ".pdf"
 ];
 
-const SEO_META_TTL = 60;
-const SLUG_REDIRECT_TTL = 60;
+// Short TTL so a freshly published/edited article's <title> + OG meta + slug
+// canonicalization show up at the edge within ~10s. Longer TTLs (was 60s) made
+// editors see stale crawler/share tags after saving even though the article
+// body itself was already updated via the backend Cloudflare purge.
+const SEO_META_TTL = 10;
+const SLUG_REDIRECT_TTL = 10;
 
 function isStaticAsset(pathname) {
   for (const ext of STATIC_EXTENSIONS) {

@@ -114,44 +114,50 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startFlushTimer();
 
-export async function purgeUrls(urls: string[]): Promise<PurgeResult> {
+export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }): Promise<PurgeResult> {
   if (!CLOUDFLARE_ZONE_ID || !CLOUDFLARE_API_TOKEN) {
     console.log('[Cloudflare] Purge skipped - API credentials not configured');
     return { success: true };
   }
   enqueue(urls);
+  // Editor/publish flows pass immediate:true so the change is visible at the
+  // edge within ~1s instead of waiting up to FLUSH_INTERVAL_MS for the next
+  // batched flush. Bulk/background callers omit it and stay batched.
+  if (opts?.immediate) {
+    void flushQueue();
+  }
   return { success: true };
 }
 
-export async function purgeHomepage(): Promise<PurgeResult> {
+export async function purgeHomepage(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,
     `${SITE_URL}/api/homepage-lite`,
     `${SITE_URL}/api/lite-feed`,
     `${SITE_URL}/api/ai-insights`,
-  ]);
+  ], opts);
 }
 
-export async function purgeBreakingNews(): Promise<PurgeResult> {
+export async function purgeBreakingNews(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,
     `${SITE_URL}/api/homepage-lite`,
     `${SITE_URL}/api/breaking-ticker/active`,
-  ]);
+  ], opts);
 }
 
-export async function purgeArticle(slug: string): Promise<PurgeResult> {
+export async function purgeArticle(slug: string, opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/article/${slug}`,
     `${SITE_URL}/api/articles/${slug}`,
-  ]);
+  ], opts);
 }
 
-export async function purgeCategory(slug: string): Promise<PurgeResult> {
+export async function purgeCategory(slug: string, opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/category/${slug}`,
     `${SITE_URL}/api/categories/${slug}/articles`,
-  ]);
+  ], opts);
 }
 
 export async function purgeAll(): Promise<PurgeResult> {

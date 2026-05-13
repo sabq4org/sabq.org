@@ -13798,17 +13798,15 @@ Respond in valid JSON format only:
 
       const article = await storage.createArticle(parsed.data);
 
-      // Invalidate caches when articles are created
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
+      // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
+      // for instant visibility of the new article across all pods + edge.
+      invalidatePublishedContent({
+        articleSlug: article.slug ?? null,
+        isBreaking: article.newsType === 'breaking',
+        reason: 'dashboard-create',
+      });
+      memoryCache.delete('lite-feed');
+
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
       console.log(`🔍 [DASHBOARD CREATE] Article ID: ${article.id}, Title: ${article.title}`);
       
@@ -14041,17 +14039,28 @@ Respond in valid JSON format only:
 
       const updated = await storage.updateArticle(req.params.id, articleData);
 
-      // Invalidate caches when articles are updated
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
+      // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
+      // for instant visibility of the edit across all pods + edge. Purging both
+      // the old slug (in case it changed) and the new one covers slug rewrites.
+      const slugsToPurge: string[] = [];
+      if (updated.slug) slugsToPurge.push(updated.slug);
+      if (article.slug && article.slug !== updated.slug) slugsToPurge.push(article.slug);
+      if (slugsToPurge.length === 0) {
+        invalidatePublishedContent({
+          isBreaking: updated.newsType === 'breaking',
+          reason: 'dashboard-update',
+        });
+      } else {
+        slugsToPurge.forEach((slug) => {
+          invalidatePublishedContent({
+            articleSlug: slug,
+            isBreaking: updated.newsType === 'breaking',
+            reason: 'dashboard-update',
+          });
+        });
+      }
+      memoryCache.delete('lite-feed');
+
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
       console.log(`🔍 [DASHBOARD UPDATE] Article ID: ${updated.id}, Title: ${updated.title}`);
       
