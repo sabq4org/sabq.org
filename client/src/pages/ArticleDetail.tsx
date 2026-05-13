@@ -118,7 +118,11 @@ export default function ArticleDetail() {
 
   const { data: article, isLoading } = useQuery<ArticleWithDetails>({
     queryKey: ["/api/articles", slug],
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    // Editorial credibility: corrections must surface instantly. Override the
+    // global 5min staleTime and refetch on tab focus so editors verifying
+    // their own save (and readers returning to the tab) see the latest copy.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   // Parse stored aiSummary text into up to 3 bullets (no extra request needed)
@@ -235,7 +239,10 @@ export default function ArticleDetail() {
   }>({
     queryKey: ["/api/articles", slug, "sidebar"],
     enabled: !!slug,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    // Mirrors the article query: editors adding photographer photos need
+    // them visible immediately on the public page.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const relatedArticles = sidebarData?.related || [];
