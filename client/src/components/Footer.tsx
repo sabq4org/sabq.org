@@ -184,27 +184,11 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Copyright & Replit */}
+        {/* Copyright */}
         <div className="flex flex-col items-center gap-1 text-center border-t border-border/50 pt-3">
           <p className="text-[11px] text-muted-foreground">
             © {currentYear} سبق الذكية | صُنعت بكل <span className="text-green-600">♥</span> في السعودية
           </p>
-          <a 
-            href="https://replit.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            dir="ltr"
-            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Built by Replit"
-          >
-            <span>Built by</span>
-            <svg width="14" height="14" viewBox="0 0 32 32" aria-hidden="true">
-              <path fill="#F26207" d="M7 5.5C7 4.67157 7.67157 4 8.5 4H15.5C16.3284 4 17 4.67157 17 5.5V12H8.5C7.67157 12 7 11.3284 7 10.5V5.5Z"/>
-              <path fill="#F26207" d="M17 12H25.5C26.3284 12 27 12.6716 27 13.5V18.5C27 19.3284 26.3284 20 25.5 20H17V12Z"/>
-              <path fill="#F26207" d="M7 21.5C7 20.6716 7.67157 20 8.5 20H17V28H8.5C7.67157 28 7 27.3284 7 26.5V21.5Z"/>
-            </svg>
-            <span>Replit</span>
-          </a>
         </div>
       </div>
 
@@ -314,27 +298,6 @@ export function Footer() {
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               صُنعت بكل <span className="text-green-600">♥</span> في السعودية
             </p>
-            <a 
-              href="https://replit.com" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              dir="ltr"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Built by Replit"
-            >
-              <span>Built by</span>
-              <svg 
-                width="16" 
-                height="16" 
-                viewBox="0 0 32 32" 
-                aria-hidden="true"
-              >
-                <path fill="#F26207" d="M7 5.5C7 4.67157 7.67157 4 8.5 4H15.5C16.3284 4 17 4.67157 17 5.5V12H8.5C7.67157 12 7 11.3284 7 10.5V5.5Z"/>
-                <path fill="#F26207" d="M17 12H25.5C26.3284 12 27 12.6716 27 13.5V18.5C27 19.3284 26.3284 20 25.5 20H17V12Z"/>
-                <path fill="#F26207" d="M7 21.5C7 20.6716 7.67157 20 8.5 20H17V28H8.5C7.67157 28 7 27.3284 7 26.5V21.5Z"/>
-              </svg>
-              <span>Replit</span>
-            </a>
           </div>
 
           {/* Social */}
