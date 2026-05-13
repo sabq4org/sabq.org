@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Hash, Search, ArrowUpRight, Flame } from "lucide-react";
@@ -13,19 +12,11 @@ interface TrendingKeyword {
   category?: string;
 }
 
-type TimeWindow = "24h" | "7d" | "30d";
-
 const CATEGORY_TEXT: Record<string, string> = {
   "سياسة":  "text-red-700 dark:text-red-300",
   "اقتصاد": "text-emerald-700 dark:text-emerald-300",
   "رياضة":  "text-blue-700 dark:text-blue-300",
   "تقنية":  "text-violet-700 dark:text-violet-300",
-};
-
-const TIME_LABELS: Record<TimeWindow, string> = {
-  "24h": "24 ساعة",
-  "7d": "أسبوع",
-  "30d": "شهر",
 };
 
 /** Top-3 rank medal styling. Top-1 also gets a subtle live pulsing dot. */
@@ -38,34 +29,28 @@ function rankMeta(rank: number): { ring: string; text: string; bg: string; medal
 
 export function TrendingKeywords() {
   const [, setLocation] = useLocation();
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("24h");
 
   const { data: keywords, isLoading, error } = useQuery<TrendingKeyword[]>({
-    // Period param is forward-compatible — backend can pick it up later.
-    queryKey: ["/api/trending-keywords", timeWindow],
+    queryKey: ["/api/trending-keywords"],
   });
 
   return (
     <section className="space-y-5" dir="rtl">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
-              <Hash className="h-5 w-5" />
-            </div>
-            <h2
-              className="text-2xl md:text-3xl font-bold"
-              data-testid="heading-trending-keywords"
-            >
-              الكلمات الأكثر تداولاً
-            </h2>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
+            <Hash className="h-5 w-5" />
           </div>
-          <p className="text-sm text-muted-foreground">
-            أعلى 8 كلمات تفاعلاً ضمن المدة المختارة
-          </p>
+          <h2
+            className="text-2xl md:text-3xl font-bold"
+            data-testid="heading-trending-keywords"
+          >
+            الكلمات الأكثر تداولاً
+          </h2>
         </div>
-
-        <TimeWindowSelector value={timeWindow} onChange={setTimeWindow} />
+        <p className="text-sm text-muted-foreground">
+          خلال الـ 24 ساعة الماضية
+        </p>
       </div>
 
       <div className="rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm p-2 md:p-3">
@@ -220,41 +205,3 @@ function RankBadge({ rank, meta, live }: RankBadgeProps) {
   );
 }
 
-// MARK: - Time window selector (shared visual with TrendingTopics)
-
-interface TimeWindowSelectorProps {
-  value: TimeWindow;
-  onChange: (value: TimeWindow) => void;
-}
-
-function TimeWindowSelector({ value, onChange }: TimeWindowSelectorProps) {
-  return (
-    <div
-      className="inline-flex items-center p-1 rounded-full bg-muted/60 border border-border/60"
-      role="tablist"
-      data-testid="time-window-selector-keywords"
-    >
-      {(Object.keys(TIME_LABELS) as TimeWindow[]).map((key) => {
-        const isActive = key === value;
-        return (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(key)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
-              isActive
-                ? "bg-card shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            data-testid={`time-window-keywords-${key}`}
-          >
-            {TIME_LABELS[key]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}

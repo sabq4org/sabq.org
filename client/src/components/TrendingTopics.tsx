@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "wouter";
 import {
   TrendingUp,
@@ -32,8 +32,6 @@ interface TrendingTopicsProps {
     comments: number;
   }>;
 }
-
-type TimeWindow = "24h" | "7d" | "30d";
 
 /**
  * Map of the most-common section names to a Lucide icon + a Tailwind tint key.
@@ -95,7 +93,11 @@ const TINT_CLASSES: Record<TintKey, {
   slate:   { bg: "bg-slate-50/60 dark:bg-slate-900/40",     ring: "ring-slate-400/20",      text: "text-slate-700 dark:text-slate-300",     iconBg: "bg-slate-100 dark:bg-slate-800/60",     border: "border-slate-200/60 dark:border-slate-800/40" },
 };
 
-/** Natural Arabic count: 538041 → "538 ألف", 1_250_000 → "1.3 مليون". */
+/**
+ * Natural Arabic count using Western digits (per user preference): 538041 →
+ * "538 ألف", 1_250_000 → "1.3 مليون", 432 → "432". Uses en-US locale so the
+ * numerals come back in their Western form, not Arabic-Indic (٤٣٢).
+ */
 function formatArabicNumber(n: number): string {
   if (n >= 1_000_000) {
     return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")} مليون`;
@@ -104,12 +106,10 @@ function formatArabicNumber(n: number): string {
     const v = (n / 1_000).toFixed(1).replace(/\.0$/, "");
     return `${v} ألف`;
   }
-  return n.toLocaleString("ar-SA");
+  return n.toLocaleString("en-US");
 }
 
 export function TrendingTopics({ topics }: TrendingTopicsProps) {
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("24h");
-
   if (!topics || topics.length === 0) return null;
 
   // Sort defensively in case the API doesn't ship in count-order.
@@ -120,22 +120,18 @@ export function TrendingTopics({ topics }: TrendingTopicsProps) {
 
   return (
     <section className="space-y-5" dir="rtl">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
-              <TrendingUp className="h-5 w-5" />
-            </div>
-            <h2 className="text-2xl md:text-3xl font-bold" data-testid="heading-trending-topics">
-              موضوعات صاعدة
-            </h2>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary">
+            <TrendingUp className="h-5 w-5" />
           </div>
-          <p className="text-sm text-muted-foreground">
-            الأقسام الأكثر تفاعلاً بناءً على المشاهدات والتعليقات
-          </p>
+          <h2 className="text-2xl md:text-3xl font-bold" data-testid="heading-trending-topics">
+            موضوعات صاعدة
+          </h2>
         </div>
-
-        <TimeWindowSelector value={timeWindow} onChange={setTimeWindow} />
+        <p className="text-sm text-muted-foreground">
+          الأقسام الأكثر تفاعلاً بناءً على المشاهدات والتعليقات
+        </p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
@@ -231,47 +227,3 @@ export function TrendingTopics({ topics }: TrendingTopicsProps) {
   );
 }
 
-// MARK: - Time window selector
-
-interface TimeWindowSelectorProps {
-  value: TimeWindow;
-  onChange: (value: TimeWindow) => void;
-}
-
-const TIME_LABELS: Record<TimeWindow, string> = {
-  "24h": "24 ساعة",
-  "7d": "أسبوع",
-  "30d": "شهر",
-};
-
-function TimeWindowSelector({ value, onChange }: TimeWindowSelectorProps) {
-  return (
-    <div
-      className="inline-flex items-center p-1 rounded-full bg-muted/60 border border-border/60"
-      role="tablist"
-      data-testid="time-window-selector"
-    >
-      {(Object.keys(TIME_LABELS) as TimeWindow[]).map((key) => {
-        const isActive = key === value;
-        return (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(key)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
-              isActive
-                ? "bg-card shadow-sm text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            data-testid={`time-window-${key}`}
-          >
-            {TIME_LABELS[key]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
