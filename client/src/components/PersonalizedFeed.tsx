@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,6 @@ import { Newspaper, Clock, MessageSquare, Sparkles, Zap, Star, Flame, Loader2, C
 import { useAuth } from "@/hooks/useAuth";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatArticleTimestamp } from "@/lib/formatTime";
-import { DmsMpuAd } from "@/components/DmsAdSlot";
 import { getObjectPosition } from "@/lib/imageUtils";
 import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
@@ -344,9 +343,8 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
               const match = matches.get(article.id);
 
               return (
-                <Fragment key={article.id}>
-                  <Link href={`/article/${article.englishSlug || article.slug}`}>
-                    <div 
+                <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
+                    <div
                       className="block group cursor-pointer"
                       data-testid={`link-article-mobile-${article.id}`}
                     >
@@ -461,11 +459,6 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                       </div>
                     </div>
                   </Link>
-                  {/* Mobile ad slot after every 5th article */}
-                  {(index + 1) % 5 === 0 && index < articles.length - 1 && (
-                    <DmsMpuAd id={`MPU-news-${Math.floor(index / 5)}`} lazyLoad={true} />
-                  )}
-                </Fragment>
               );
             })}
           </div>

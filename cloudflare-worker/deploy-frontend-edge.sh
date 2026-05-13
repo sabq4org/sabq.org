@@ -103,7 +103,7 @@ for PATTERN in "${PATTERNS[@]}"; do
       "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/workers/routes" \
       -H "Authorization: Bearer $API_TOKEN")
 
-    EXISTING_ID=$(echo "$EXISTING_ROUTES" | jq -r --arg p "$PATTERN" '.result[] | select(.pattern == $p) | .id')
+    EXISTING_ID=$(echo "$EXISTING_ROUTES" | jq -r --arg p "$PATTERN" '(.result // [])[] | select(.pattern == $p) | .id')
 
     if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
         ROUTE_RESPONSE=$(curl -s -X PUT \
