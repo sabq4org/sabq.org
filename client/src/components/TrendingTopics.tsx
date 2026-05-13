@@ -110,13 +110,16 @@ function formatArabicNumber(n: number): string {
 }
 
 export function TrendingTopics({ topics }: TrendingTopicsProps) {
-  if (!topics || topics.length === 0) return null;
-
-  // Sort defensively in case the API doesn't ship in count-order.
+  // Sort defensively in case the API doesn't ship in count-order. MUST run
+  // before the early return below — otherwise switching `topics` between
+  // empty and non-empty re-orders hooks and crashes the whole SPA (white
+  // page with "Rendered more hooks than during the previous render").
   const sorted = useMemo(
-    () => [...topics].sort((a, b) => b.count - a.count),
+    () => [...(topics ?? [])].sort((a, b) => b.count - a.count),
     [topics],
   );
+
+  if (!topics || topics.length === 0) return null;
 
   return (
     <section className="space-y-5" dir="rtl">
