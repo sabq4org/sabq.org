@@ -1519,6 +1519,7 @@ export default function ArticleDetail() {
                 <SocialShareBar
                   title={article.title}
                   url={shortLink?.shortCode ? `https://sabq.org/s/${shortLink.shortCode}` : `https://sabq.org/article/${slug}`}
+                  copyUrl={`https://sabq.org/article/${slug}`}
                   description={article.excerpt || ""}
                   articleId={article.id}
                 />
