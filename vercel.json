@@ -21,7 +21,9 @@
     {
       "source": "/((?!assets/|api/|_vercel/|.*\\.(?:js|css|map|json|xml|txt|ico|png|jpg|jpeg|gif|svg|webp|avif|woff|woff2|ttf|eot|pdf)).*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, must-revalidate" }
+        { "key": "Cache-Control", "value": "no-store, must-revalidate" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
       ]
     },
     {
