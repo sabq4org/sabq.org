@@ -11,6 +11,7 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { LiveRegionProvider } from "@/contexts/LiveRegionContext";
 import { VoiceAssistantProvider } from "@/contexts/VoiceAssistantContext";
 import { SkipLinks } from "@/components/SkipLinks";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
@@ -1099,6 +1100,7 @@ function App() {
                       <Router />
                     </div>
                   </ErrorBoundary>
+                  <UpdateBanner />
                 </TooltipProvider>
               </VoiceAssistantProvider>
             </LiveRegionProvider>

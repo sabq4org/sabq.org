@@ -2,6 +2,7 @@ import { Component, ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
+import { cacheBustReload, canCacheBust, markCacheBust } from "@/lib/cacheBust";
 
 interface Props {
   children: ReactNode;
@@ -55,11 +56,21 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: any) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
-    
+
     if (isChunkLoadError(error) && shouldAutoReload()) {
-      console.log('[ErrorBoundary] Chunk load error detected, reloading page...');
+      // Use cacheBustReload (not plain window.location.reload) so any
+      // edge/browser cache that's still serving the stale HTML pointing
+      // at the renamed chunks is bypassed. Plain reload reuses the same
+      // URL and can land back on the same poisoned response.
       markReloadAttempt();
-      window.location.reload();
+      if (canCacheBust()) {
+        console.log("[ErrorBoundary] Chunk load error — cache-bust reloading");
+        markCacheBust();
+        cacheBustReload();
+      } else {
+        console.warn("[ErrorBoundary] Cache-bust budget exhausted — falling back to plain reload");
+        window.location.reload();
+      }
     }
   }
 

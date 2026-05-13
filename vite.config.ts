@@ -3,10 +3,30 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+// Unique per-build identifier. Embedded into the bundle as a compile-time
+// constant AND emitted as /build-info.json so the running client can poll
+// for a deploy and prompt a refresh — eliminates "blank page after deploy"
+// for users who keep the tab open across releases.
+const SABQ_BUILD_ID = String(Date.now());
+
 export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
+    {
+      name: "sabq-build-info",
+      apply: "build",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "build-info.json",
+          source: JSON.stringify({
+            buildId: SABQ_BUILD_ID,
+            builtAt: new Date().toISOString(),
+          }),
+        });
+      },
+    },
     // Replit-specific plugins — only on Replit AND in dev. Vercel builds
     // and local non-Replit envs skip them. Set DISABLE_REPLIT_PLUGINS=true
     // to force-disable even on Replit.
@@ -23,6 +43,9 @@ export default defineConfig({
         ]
       : []),
   ],
+  define: {
+    __SABQ_BUILD_ID__: JSON.stringify(SABQ_BUILD_ID),
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
