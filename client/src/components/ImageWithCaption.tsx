@@ -44,8 +44,6 @@ export function ImageWithCaption({
 
   if (!imageUrl) return null;
 
-  const reservedAspectRatio = aspectRatio || "16 / 9";
-
   return (
     <figure className={`my-6 ${className}`} data-testid="figure-image-with-caption">
       <div
@@ -55,8 +53,7 @@ export function ImageWithCaption({
       >
         {error ? (
           <div
-            className="w-full flex items-center justify-center text-muted-foreground text-sm"
-            style={{ aspectRatio: reservedAspectRatio }}
+            className="w-full flex items-center justify-center text-muted-foreground text-sm py-12"
           >
             تعذر تحميل الصورة
           </div>
@@ -67,10 +64,10 @@ export function ImageWithCaption({
             priority={priority}
             fetchPriority={priority ? "high" : "auto"}
             wrapperClassName="w-full"
-            className="w-full h-full object-cover"
+            className="w-full h-auto"
             objectPosition={objectPosition || "center 20%"}
             sizes={HERO_SIZES_ATTR}
-            aspectRatio={reservedAspectRatio}
+            aspectRatio={aspectRatio}
             onError={() => setError(true)}
           />
         )}

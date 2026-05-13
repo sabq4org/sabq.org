@@ -1,8 +1,7 @@
 import { buildCloudflareUrl, normalizeImageSrc } from "./cdnImage";
 import { formatAspectRatio, getCachedAspectRatio } from "./legacyImageRatioCache";
 
-const DEFAULT_ASPECT = "16 / 9";
-const DEFAULT_IMG_STYLE = `aspect-ratio: ${DEFAULT_ASPECT}; width: 100%; height: auto;`;
+const DEFAULT_IMG_STYLE = `width: 100%; height: auto;`;
 
 const SOCIAL_EMBED_HEIGHTS: Array<{ match: RegExp; minHeight: number; wrapClass: string }> = [
   { match: /\btwitter-tweet\b/, minHeight: 520, wrapClass: "social-embed-wrap social-embed-twitter" },
@@ -82,11 +81,14 @@ function transformImg(img: HTMLImageElement): void {
         );
         img.setAttribute("data-legacy-aspect", "cached");
       } else {
+        // No intrinsic dims + no cached ratio → let the image render at its
+        // natural aspect ratio (width:100%; height:auto). Slight layout shift
+        // on load is acceptable; forcing 16/9 was cropping/distorting images.
         img.setAttribute(
           "style",
           `${existingStyle ? existingStyle + ";" : ""}${DEFAULT_IMG_STYLE}`,
         );
-        img.setAttribute("data-legacy-aspect", "default");
+        img.setAttribute("data-legacy-aspect", "natural");
       }
     }
   }
