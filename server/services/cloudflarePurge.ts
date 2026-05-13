@@ -1,6 +1,17 @@
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const SITE_URL = process.env.FRONTEND_URL || 'https://sabq.org';
+// API_URL is the backend's own CF-proxied origin. CF caches at api.sabq.org
+// independently from sabq.org (different zone-cache entries even if same
+// zone), AND Vercel's rewrite layer proxies sabq.org/api/* to here, so any
+// purge that targets only ${SITE_URL}/api/* leaves the api.sabq.org cache
+// stale. We purge both URL variants so neither side keeps serving old data.
+const API_URL = process.env.PUBLIC_API_URL || 'https://api.sabq.org';
+
+function bothHosts(path: string): string[] {
+  // path starts with "/"
+  return [`${SITE_URL}${path}`, `${API_URL}${path}`];
+}
 
 const FLUSH_INTERVAL_MS = 30_000;
 const MAX_URLS_PER_REQUEST = 30;
@@ -132,35 +143,35 @@ export async function purgeUrls(urls: string[], opts?: { immediate?: boolean }):
 export async function purgeHomepage(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,
-    `${SITE_URL}/api/homepage-lite`,
-    `${SITE_URL}/api/lite-feed`,
-    `${SITE_URL}/api/ai-insights`,
+    ...bothHosts('/api/homepage-lite'),
+    ...bothHosts('/api/lite-feed'),
+    ...bothHosts('/api/ai-insights'),
   ], opts);
 }
 
 export async function purgeBreakingNews(opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/`,
-    `${SITE_URL}/api/homepage-lite`,
-    `${SITE_URL}/api/breaking-ticker/active`,
+    ...bothHosts('/api/homepage-lite'),
+    ...bothHosts('/api/breaking-ticker/active'),
   ], opts);
 }
 
 export async function purgeArticle(slug: string, opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/article/${slug}`,
-    `${SITE_URL}/api/articles/${slug}`,
-    // Sidebar bundles related + tags + mediaAssets (the photographer photos
-    // the Arabic article page actually renders). Has sMaxAge=600+swr=300 so
-    // without this purge editors saw new images ~15min late at the edge.
-    `${SITE_URL}/api/articles/${slug}/sidebar`,
+    // Article JSON + sidebar (bundles related + tags + mediaAssets) live at
+    // /api/* — purge BOTH sabq.org and api.sabq.org so neither CF zone keeps
+    // serving stale.
+    ...bothHosts(`/api/articles/${slug}`),
+    ...bothHosts(`/api/articles/${slug}/sidebar`),
   ], opts);
 }
 
 export async function purgeCategory(slug: string, opts?: { immediate?: boolean }): Promise<PurgeResult> {
   return purgeUrls([
     `${SITE_URL}/category/${slug}`,
-    `${SITE_URL}/api/categories/${slug}/articles`,
+    ...bothHosts(`/api/categories/${slug}/articles`),
   ], opts);
 }
 

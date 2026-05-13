@@ -87,6 +87,14 @@ export function cacheControl(options: CacheOptions = {}) {
       res.removeHeader('cache-control');
       res.setHeader('Cache-Control', cacheControlValue);
       res.setHeader('Vary', 'Accept-Encoding');
+      // Vercel's rewrite-cache layer has its own opaque cache that DOES NOT
+      // honor Cache-Control purges via Cloudflare's API. Without this header,
+      // edits to article media/content stayed stale on Vercel for the full
+      // s-maxage window even though CF zones were purged immediately. Setting
+      // Vercel-CDN-Cache-Control: no-store makes Vercel proxy fresh every
+      // time while CF zones (sabq.org + api.sabq.org) still cache via the
+      // public s-maxage above — and those CF zones are what we purge.
+      res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
       
       // Call original with cleaned arguments
       if (reasonOrHeaders !== undefined) {
