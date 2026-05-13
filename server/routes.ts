@@ -10968,12 +10968,15 @@ Respond in valid JSON format only:
     }
   });
 
-  // Published articles barely change between edits. Edits trigger
-  // purgeArticle() via contentInvalidation, so we can cache aggressively
-  // at the edge. (perf audit Tier 2, 2026-05-11): bumped sMaxAge
-  // 600 → 3600 + swr 300 → 3600. Browser cache stays short (60s)
-  // so views/likes counters refresh on reload.
-  app.get("/api/articles/:slug", cacheControl({ maxAge: 60, sMaxAge: 3600, staleWhileRevalidate: 3600 }), async (req: any, res) => {
+  // Editorial credibility requires that corrections appear instantly across
+  // every POP. We previously relied on s-maxage=3600 + immediate Cloudflare
+  // purge on writes, but that left a 1–2s global propagation window and any
+  // missed write path created up-to-2h staleness. With s-maxage=0 the CDN
+  // edge never stores this response, the Railway memoryCache (5min TTL,
+  // pattern-invalidated on every write) absorbs the read load, and every
+  // user — including the editor verifying their own save — sees the latest
+  // content immediately. Per-pod memoryCache hit rate keeps DB load bounded.
+  app.get("/api/articles/:slug", cacheControl({ maxAge: 0, sMaxAge: 0 }), async (req: any, res) => {
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
@@ -11115,7 +11118,10 @@ Respond in valid JSON format only:
 
 
   // Combined sidebar data endpoint for faster loading (fetches related, tags, and media in parallel)
-  app.get("/api/articles/:slug/sidebar", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM, sMaxAge: 600, staleWhileRevalidate: 300 }), async (req: any, res) => {
+  // Sidebar bundles related + tags + mediaAssets (photographer photos). Same
+  // editorial-credibility rationale as /api/articles/:slug above — s-maxage=0
+  // keeps CDN out of the freshness picture, Railway memoryCache handles load.
+  app.get("/api/articles/:slug/sidebar", cacheControl({ maxAge: 0, sMaxAge: 0 }), async (req: any, res) => {
     try {
       const slug = req.params.slug;
       
