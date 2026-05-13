@@ -7100,15 +7100,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .returning();
 
       // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
-      // Passing the article so its slug is purged at the edge — otherwise
-      // /article/<slug> stays stale for sMaxAge=3600s. oldSlug covers renames.
+      // Passing the article so its slug + englishSlug are BOTH purged at
+      // the edge — otherwise /api/articles/<englishSlug> stays stale for
+      // sMaxAge=3600s (browser fetches by englishSlug after slugRedirect,
+      // not the DB slug). oldSlug/oldEnglishSlug cover renames.
       invalidateArticleWrite(updatedArticle, {
         reason: 'admin-patch',
         oldSlug: existingArticle.slug,
+        oldEnglishSlug: existingArticle.englishSlug,
       });
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
       memoryCache.invalidatePattern('^sidebar:');
       memoryCache.delete('lite-feed');
 
@@ -14047,11 +14047,15 @@ Respond in valid JSON format only:
       const updated = await storage.updateArticle(req.params.id, articleData);
 
       // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
-      // for instant visibility of the edit across all pods + edge. oldSlug
-      // covers slug rewrites — both old and new URLs get purged.
+      // for instant visibility of the edit across all pods + edge. We pass
+      // BOTH oldSlug AND oldEnglishSlug so every URL the browser/CDN could
+      // have cached — /api/articles/<slug> and /api/articles/<englishSlug>
+      // — gets purged (browsers fetch by englishSlug after slugRedirect, so
+      // missing it leaves the edge serving stale JSON for sMaxAge=3600s).
       invalidateArticleWrite(updated, {
         reason: 'dashboard-update',
         oldSlug: article.slug,
+        oldEnglishSlug: article.englishSlug,
       });
       memoryCache.delete('lite-feed');
 

@@ -17,6 +17,7 @@ const PUBLISHED_CONTENT_PATTERNS = [
   "^insights:",         // insights:ai
   "^opinion:",          // opinion:list:...
   "^articles:",         // articles:list:..., articles:featured, articles:recent:..., articles:latest-footer
+  "^article:",          // article:detail:<slug>, article:id:<id>, article:passport:<lang>:<slug>:*, article:media-assets:<id>:<locale>, article:related:..., article:sidebar:...
   "^lite-feed",         // lite-feed
   "^news-",             // news-paginated-total, news-analytics-ar/en/ur
   "^mobile:",           // mobile:sections, mobile:trending, mobile:homepage
@@ -155,12 +156,24 @@ export function invalidatePublishedContent(
   }
 }
 
-type ArticleLike = { slug?: string | null; newsType?: string | null } | null | undefined;
+type ArticleLike = {
+  slug?: string | null;
+  englishSlug?: string | null;
+  newsType?: string | null;
+} | null | undefined;
 
 /**
  * Convenience wrapper for the common "an article was just written" path.
- * Reads slug + newsType off the article row so callers don't have to spell
- * them out, and also purges the old slug if the rename changed it.
+ * Reads slug + englishSlug + newsType off the article row so callers don't
+ * have to spell them out, and also purges the old slug(s) if the rename
+ * changed them.
+ *
+ * Why we purge BOTH `slug` AND `englishSlug`: after `slugRedirect` middleware
+ * 301s Arabic slugs to `/article/<englishSlug>`, browsers/CDN cache the JSON
+ * at `/api/articles/<englishSlug>` — NOT `/api/articles/<slug>`. If we only
+ * purge by `slug`, the edge keeps serving stale JSON (incl. old imageUrl)
+ * for sMaxAge=3600s. Reported symptom: image visibly stale ~35min after
+ * editing even though listings updated immediately.
  *
  * Use this instead of calling invalidatePublishedContent() with just a
  * reason string — without articleSlug, the article URL never gets purged
@@ -168,16 +181,20 @@ type ArticleLike = { slug?: string | null; newsType?: string | null } | null | u
  */
 export function invalidateArticleWrite(
   article: ArticleLike,
-  opts: { reason?: string; oldSlug?: string | null } = {},
+  opts: {
+    reason?: string;
+    oldSlug?: string | null;
+    oldEnglishSlug?: string | null;
+  } = {},
 ): void {
   const reason = opts.reason ?? "article-write";
   const isBreaking = article?.newsType === "breaking";
-  const newSlug = article?.slug ?? null;
-  const oldSlug = opts.oldSlug ?? null;
 
   const slugs = new Set<string>();
-  if (newSlug) slugs.add(newSlug);
-  if (oldSlug && oldSlug !== newSlug) slugs.add(oldSlug);
+  if (article?.slug) slugs.add(article.slug);
+  if (article?.englishSlug) slugs.add(article.englishSlug);
+  if (opts.oldSlug) slugs.add(opts.oldSlug);
+  if (opts.oldEnglishSlug) slugs.add(opts.oldEnglishSlug);
 
   if (slugs.size === 0) {
     invalidatePublishedContent({ isBreaking, reason });

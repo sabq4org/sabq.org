@@ -1,5 +1,5 @@
 import { useParams } from "wouter";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
@@ -155,7 +155,15 @@ export default function ArticleDetail() {
   useAdTracking(article?.category?.nameAr || '', article?.id);
 
   const isVideoTemplate = !!(article?.isVideoTemplate && article?.videoUrl);
-  useHeroPreload(!isVideoTemplate && article?.imageUrl ? article.imageUrl : null);
+  // Cache-bust the hero so a re-uploaded image refreshes immediately for
+  // anyone with the article page already loaded (mirrors ArticleCard).
+  // Without this, the browser cache + Cloudflare edge can keep showing the
+  // previous image even after the JSON is repurged.
+  const heroImageUrl = useMemo(
+    () => (article?.imageUrl ? getCacheBustedImageUrl(article.imageUrl, article.updatedAt) : null),
+    [article?.imageUrl, article?.updatedAt],
+  );
+  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null);
 
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";
@@ -1176,7 +1184,10 @@ export default function ArticleDetail() {
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
               <VideoPlayer
                 videoUrl={(article as any).videoUrl}
-                thumbnailUrl={(article as any).videoThumbnailUrl || article.imageUrl}
+                thumbnailUrl={getCacheBustedImageUrl(
+                  (article as any).videoThumbnailUrl || article.imageUrl,
+                  article.updatedAt,
+                )}
                 title={article.title}
                 className="rounded-lg"
               />
@@ -1192,7 +1203,7 @@ export default function ArticleDetail() {
 
               return (
                 <ImageWithCaption
-                  imageUrl={article.imageUrl}
+                  imageUrl={heroImageUrl ?? article.imageUrl}
                   altText={heroImageAsset?.altText || article.title}
                   captionHtml={heroImageAsset?.captionHtml}
                   captionPlain={heroImageAsset?.captionPlain || heroImageAsset?.altText || article.title}
