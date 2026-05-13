@@ -11,7 +11,10 @@ import { CURRENT_BUILD_ID, fetchRemoteBuildId } from "@/lib/buildVersion";
  * for the next interval tick.
  */
 const POLL_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
-const INITIAL_DELAY_MS = 60 * 1000;     // 60 seconds — don't hammer on first load
+// Short initial delay so users who arrived seconds before a deploy still
+// get the update banner before they try to navigate into a dead chunk.
+// 5s is enough to let the page render without competing for bandwidth.
+const INITIAL_DELAY_MS = 5 * 1000;
 
 export function useBuildVersionCheck(): boolean {
   const [hasUpdate, setHasUpdate] = useState(false);
