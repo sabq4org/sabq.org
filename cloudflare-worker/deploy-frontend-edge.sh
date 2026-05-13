@@ -8,9 +8,9 @@
 #
 # Optional env vars:
 #   WORKER_NAME       Default: sabq-frontend-edge
-#   ROUTE_PATTERNS    Comma-separated, default: sabq.news/*,www.sabq.news/*
-#   API_ORIGIN        Default: https://api.sabq.news
-#   FRONTEND_ORIGIN   Default: https://sabq.news
+#   ROUTE_PATTERNS    Comma-separated, default: sabq.org/*,www.sabq.org/*
+#   API_ORIGIN        Default: https://api.sabq.org
+#   FRONTEND_ORIGIN   Default: https://sabq.org
 
 set -e
 
@@ -35,9 +35,9 @@ if [ -z "$CLOUDFLARE_ZONE_ID" ]; then
 fi
 
 WORKER_NAME="${WORKER_NAME:-sabq-frontend-edge}"
-ROUTE_PATTERNS="${ROUTE_PATTERNS:-sabq.news/*,www.sabq.news/*}"
-API_ORIGIN="${API_ORIGIN:-https://api.sabq.news}"
-FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-https://sabq.news}"
+ROUTE_PATTERNS="${ROUTE_PATTERNS:-sabq.org/*,www.sabq.org/*}"
+API_ORIGIN="${API_ORIGIN:-https://api.sabq.org}"
+FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-https://sabq.org}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKER_SCRIPT="$SCRIPT_DIR/frontend-edge-worker.js"
