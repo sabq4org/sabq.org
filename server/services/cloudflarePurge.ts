@@ -150,6 +150,10 @@ export async function purgeArticle(slug: string, opts?: { immediate?: boolean })
   return purgeUrls([
     `${SITE_URL}/article/${slug}`,
     `${SITE_URL}/api/articles/${slug}`,
+    // Sidebar bundles related + tags + mediaAssets (the photographer photos
+    // the Arabic article page actually renders). Has sMaxAge=600+swr=300 so
+    // without this purge editors saw new images ~15min late at the edge.
+    `${SITE_URL}/api/articles/${slug}/sidebar`,
   ], opts);
 }
 

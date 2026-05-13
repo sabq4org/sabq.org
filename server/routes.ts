@@ -12298,6 +12298,12 @@ Respond in valid JSON format only:
         };
         const asset = await storage.createArticleMediaAsset(dataToInsert);
         memoryCache.invalidatePattern('^article:media-assets:');
+        // Purge article HTML/JSON/sidebar at the edge so newly-added photos
+        // appear immediately (otherwise sidebar stayed stale up to 15min).
+        const articleForPurge = await storage.getArticleById(articleId);
+        if (articleForPurge) {
+          invalidateArticleWrite(articleForPurge, { reason: 'media-asset-create' });
+        }
         res.status(201).json(asset);
       } catch (error: any) {
         console.error("Error creating media asset:", error);
@@ -12367,12 +12373,16 @@ Respond in valid JSON format only:
           altText: parsed.data.altText || "صورة الخبر",
         };
         const asset = await storage.updateArticleMediaAsset(id, dataToUpdate);
-        
+
         if (!asset) {
           return res.status(404).json({ message: "Media asset not found" });
         }
-        
+
         memoryCache.invalidatePattern('^article:media-assets:');
+        const articleForPurge = await storage.getArticleById(asset.articleId);
+        if (articleForPurge) {
+          invalidateArticleWrite(articleForPurge, { reason: 'media-asset-update' });
+        }
         res.json(asset);
       } catch (error: any) {
         console.error("Error updating media asset:", error);
@@ -12388,10 +12398,18 @@ Respond in valid JSON format only:
     async (req: any, res) => {
     try {
         const { id } = req.params;
-        
+
+        // Look up asset BEFORE deleting so we can purge the right article URLs.
+        const existing = await storage.getArticleMediaAssetById(id);
         await storage.deleteArticleMediaAsset(id);
-        
+
         memoryCache.invalidatePattern('^article:media-assets:');
+        if (existing?.articleId) {
+          const articleForPurge = await storage.getArticleById(existing.articleId);
+          if (articleForPurge) {
+            invalidateArticleWrite(articleForPurge, { reason: 'media-asset-delete' });
+          }
+        }
         res.status(204).send();
       } catch (error: any) {
         console.error("Error deleting media asset:", error);

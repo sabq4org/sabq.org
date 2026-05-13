@@ -18,6 +18,7 @@ const PUBLISHED_CONTENT_PATTERNS = [
   "^opinion:",          // opinion:list:...
   "^articles:",         // articles:list:..., articles:featured, articles:recent:..., articles:latest-footer
   "^article:",          // article:detail:<slug>, article:id:<id>, article:passport:<lang>:<slug>:*, article:media-assets:<id>:<locale>, article:related:..., article:sidebar:...
+  "^sidebar:",          // sidebar:<articleId> — server cache for /api/articles/:slug/sidebar (related + tags + mediaAssets)
   "^lite-feed",         // lite-feed
   "^news-",             // news-paginated-total, news-analytics-ar/en/ur
   "^mobile:",           // mobile:sections, mobile:trending, mobile:homepage
