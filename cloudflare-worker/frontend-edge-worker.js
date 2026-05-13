@@ -173,8 +173,16 @@ async function handleHtml(request, env) {
   }
 
   // 2) Fetch HTML from Vercel + meta from backend in parallel.
+  // Bypass Cloudflare's edge cache for the upstream HTML so we never inject
+  // meta into a stale SPA shell whose <script src="/assets/index-<hash>.js">
+  // points to a chunk that was rotated out by a newer Vercel deploy. Without
+  // this, every deploy forced a manual "Purge Everything" in Cloudflare to
+  // stop users hitting a white page until the worker's cached upstream
+  // response naturally aged out. The origin (Vercel) already sends
+  // Cache-Control: no-store for HTML — we just need to honor it on the
+  // worker→origin hop.
   const [originRes, meta] = await Promise.all([
-    fetch(request),
+    fetch(request, { cf: { cacheTtl: 0, cacheEverything: false } }),
     fetchSeoMeta(env.API_ORIGIN, pathname),
   ]);
 
