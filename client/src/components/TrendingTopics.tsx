@@ -159,10 +159,8 @@ export function TrendingTopics({ topics }: TrendingTopicsProps) {
               >
                 <div
                   className={cn(
-                    "relative h-full rounded-2xl border p-4 transition-all duration-300",
-                    "backdrop-blur-sm hover:shadow-lg hover:-translate-y-0.5",
-                    tint.bg,
-                    tint.border,
+                    "relative h-full rounded-2xl border border-border/60 p-4 transition-all duration-300",
+                    "bg-card/60 backdrop-blur-sm hover:shadow-lg hover:-translate-y-0.5",
                   )}
                 >
                   {isTop3 && (
@@ -189,9 +187,8 @@ export function TrendingTopics({ topics }: TrendingTopicsProps) {
                   <div className="space-y-1.5">
                     <h3
                       className={cn(
-                        "font-bold leading-tight",
+                        "font-bold leading-tight text-foreground",
                         isTop3 ? "text-lg" : "text-base",
-                        tint.text,
                       )}
                     >
                       {topic.topic}
