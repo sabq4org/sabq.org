@@ -55,6 +55,7 @@ import {
   Zap,
   Lock,
   User,
+  BadgeCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -1068,13 +1069,22 @@ export default function ArticleDetail() {
             <div className="bg-card border rounded-lg p-6 space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 {article.category && (
-                  <Badge 
-                    variant="secondary" 
+                  <Badge
+                    variant="secondary"
                     className="gap-1 text-black"
                     style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
                     data-testid="badge-article-category"
                   >
                     {article.category.icon} {article.category.nameAr}
+                  </Badge>
+                )}
+                {article.verifiedBy && article.verifiedAt && (
+                  <Badge
+                    className="gap-1 bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700"
+                    data-testid="badge-article-verified"
+                  >
+                    <BadgeCheck className="h-3 w-3" />
+                    موثّق
                   </Badge>
                 )}
                 {article.newsType === 'breaking' && (
