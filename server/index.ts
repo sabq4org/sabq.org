@@ -236,22 +236,15 @@ app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 // Direct proxy for /public-objects/ — uses searchPublicObject for dual-bucket fallback.
 // In production, /public-objects/ returns HTML (SPA fallback) instead of actual images.
 // This handler intercepts before the SPA fallback and streams from Object Storage.
-// On headless deployments (Railway) PUBLIC_OBJECT_SEARCH_PATHS is unset and the
-// Replit GCS sidecar (127.0.0.1:1106) is absent — return 404 instead of letting
-// searchPublicObject throw ECONNREFUSED into the log.
 app.get('/public-objects/*', async (req: any, res) => {
   try {
     const subPath = req.params[0] as string;
     if (!subPath) return res.status(400).end();
 
-    if (!process.env.PUBLIC_OBJECT_SEARCH_PATHS) {
-      return res.status(404).json({ message: "الملف غير موجود" });
-    }
-
     const { ObjectStorageService } = await import('./objectStorage');
     const service = new ObjectStorageService();
     const file = await service.searchPublicObject(subPath);
-
+    
     if (!file) {
       return res.status(404).json({ message: "الملف غير موجود" });
     }
@@ -269,14 +262,10 @@ app.get('/objects/*', async (req: any, res) => {
     const subPath = req.params[0] as string;
     if (!subPath) return res.status(400).end();
 
-    if (!process.env.PUBLIC_OBJECT_SEARCH_PATHS) {
-      return res.status(404).json({ message: "الملف غير موجود" });
-    }
-
     const { ObjectStorageService } = await import('./objectStorage');
     const service = new ObjectStorageService();
     const file = await service.searchPublicObject(subPath);
-
+    
     if (!file) {
       return res.status(404).json({ message: "الملف غير موجود" });
     }
@@ -890,31 +879,26 @@ if (!(globalThis as any).__sabqServer) {
     app.use(socialCrawlerMiddleware);
     console.log("[Server] ✅ Social crawler middleware registered");
 
-    // SPA-fallback middlewares (legacy redirects, content-existence 404s, SEO meta
-    // injection) all depend on the prebuilt dist/public/index.html template. On
-    // headless deployments (Railway, SERVE_SPA=false) that file isn't built into
-    // the image, and the Cloudflare Worker (sabq-frontend-edge) handles slug 301s
-    // + <head> injection at the edge via /api/edge/{slug-redirect,seo-meta}. So
-    // skip these registrations entirely when SPA serving is off — otherwise every
-    // non-API GET that leaks to api.sabq.org throws ENOENT in seoInjector.
-    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
-    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
+    // Legacy URL redirects middleware - MUST run BEFORE seoInjector so that
+    // legacy paths like /news/{slug} are 301-redirected before seoInjector
+    // sees them as spa-fallback and serves a 200 SPA shell.
+    const { legacyRedirectMiddleware } = await import("./legacyRedirectMiddleware");
+    app.use(legacyRedirectMiddleware);
+    console.log("[Server] ✅ Legacy redirect middleware registered");
 
-    if (serveSpa) {
-      const { legacyRedirectMiddleware } = await import("./legacyRedirectMiddleware");
-      app.use(legacyRedirectMiddleware);
-      console.log("[Server] ✅ Legacy redirect middleware registered");
+    // Content existence middleware - MUST run BEFORE seoInjector. In production
+    // it serves a 404 SPA shell directly for missing entity slugs (article,
+    // muqtarab, world-day, keyword, reporter, writer, category), preventing
+    // seoInjector from overwriting the status with 200.
+    const { contentExistenceMiddleware } = await import("./contentExistenceMiddleware");
+    app.use(contentExistenceMiddleware);
+    console.log("[Server] ✅ Content existence middleware registered (SEO 404)");
 
-      const { contentExistenceMiddleware } = await import("./contentExistenceMiddleware");
-      app.use(contentExistenceMiddleware);
-      console.log("[Server] ✅ Content existence middleware registered (SEO 404)");
-
-      const { seoInjectorMiddleware } = await import("./seoInjector");
-      app.use(seoInjectorMiddleware);
-      console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
-    } else {
-      console.log("[Server] 🛰  Headless — skipping SPA-fallback middlewares (legacy redirect, content existence, SEO injector). Handled by Cloudflare Worker.");
-    }
+    // SEO meta tag injection middleware - Injects dynamic title, OG, Twitter, canonical, JSON-LD
+    // into the SPA HTML for all browsers (not just crawlers) to fix SEO indexing.
+    const { seoInjectorMiddleware } = await import("./seoInjector");
+    app.use(seoInjectorMiddleware);
+    console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
 
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -1035,8 +1019,12 @@ if (!(globalThis as any).__sabqServer) {
     // Set SERVE_SPA=false on Railway (or any headless deployment where the
     // frontend lives elsewhere, e.g. Vercel) to disable SPA wiring entirely.
     // Production on Replit (no env override) → unchanged.
-    // `serveSpa` is computed earlier (around the SPA-fallback middlewares block)
-    // since the same flag gates those registrations too.
+    // Lenient parser: accepts "false"/"0"/"no"/"off" in any case with
+    // surrounding whitespace, since Railway/CI env editors sometimes inject
+    // them on copy-paste.
+    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
+    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
+
     if (!serveSpa) {
       console.log("[Server] 🛰  Headless mode — SPA serving disabled (SERVE_SPA=false). Frontend is served externally.");
       // Catch-all for non-API GETs so we return JSON 404 instead of HTML.

@@ -361,22 +361,13 @@ export async function generateLiteOptimizedImage(
 ): Promise<string | null> {
   try {
     if (!imageUrl) return null;
-
-    // Headless deployments (Railway) have no Replit Object Storage to write to —
-    // PUBLIC_OBJECT_SEARCH_PATHS is unset and the GCS sidecar at 127.0.0.1:1106
-    // doesn't exist. The source image is already on Cloudflare Images, which
-    // provides responsive variants natively, so callers fall back to imageUrl
-    // when liteOptimizedImageUrl is null. Skip silently instead of erroring.
-    if (!process.env.PUBLIC_OBJECT_SEARCH_PATHS) {
-      return null;
-    }
-
+    
     // Normalize path - handle both /public-objects/ URLs and direct paths
     let imagePath = imageUrl;
     if (imageUrl.includes('/public-objects/')) {
       imagePath = imageUrl.replace(/^\/public-objects\//, '');
     }
-
+    
     // Get original image
     const file = await objectStorageService.searchPublicObject(imagePath);
     if (!file) {
