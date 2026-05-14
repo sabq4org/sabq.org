@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
-import { cacheBustReload, canCacheBust, markCacheBust } from "@/lib/cacheBust";
+import { cacheBustReload, canCacheBust, markCacheBust, resetCacheBustState } from "@/lib/cacheBust";
 
 const CHUNK_RELOAD_KEY = 'sabq_chunk_error_reload';
 const CHUNK_RELOAD_TIMEOUT = 60000;
@@ -92,6 +92,21 @@ if ('serviceWorker' in navigator) {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Stable-boot budget reset.
+// 30s after mount, if React has actually painted real children into #root
+// (not the static instant-loader skeleton), wipe every chunk-recovery
+// counter — inline safety net + cacheBust budget + main.tsx own counter.
+// Without this, a user who hit one bad deploy cycle and burned through the
+// 3-5 reload budget gets "تعذر تحميل الصفحة" on the NEXT minor blip for
+// the rest of their session, even though the current HTML+chunks are fine.
+setTimeout(() => {
+  const root = document.getElementById("root");
+  if (!root || root.childElementCount === 0) return;
+  const first = root.firstElementChild;
+  if (first && first.classList && first.classList.contains("instant-loader")) return;
+  resetCacheBustState();
+}, 30_000);
 
 import { Capacitor } from '@capacitor/core';
 if (import.meta.env.PROD && Capacitor.isNativePlatform()) {

@@ -65,6 +65,28 @@ export function canHardReset(): boolean {
   }
 }
 
+// Clear all chunk-recovery state. Called from main.tsx after the React app
+// has been alive for a stable boot window — a successful render proves the
+// current HTML/chunk pair works, so any reload counters accumulated from
+// earlier failed cycles are no longer relevant and would otherwise cause
+// "تعذر تحميل الصفحة" to fire on the next minor hiccup. Mirrors the keys
+// owned by both the inline safety net (index.html) and the in-bundle layers.
+export function resetCacheBustState(): void {
+  var keys = [
+    CB_COUNT_KEY,
+    CB_LAST_KEY,
+    HR_DONE_KEY,
+    "sabq_chunk_reload",
+    "sabq_chunk_error_reload",
+    "__sabq_safety_reload_ts",
+    "__sabq_safety_reload_count",
+    "__sabq_safety_reload_window",
+  ];
+  keys.forEach((k) => {
+    try { sessionStorage.removeItem(k); } catch {}
+  });
+}
+
 export function hardReset(): void {
   try {
     sessionStorage.setItem(HR_DONE_KEY, String(Date.now()));
