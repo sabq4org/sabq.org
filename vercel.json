@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build:client && bash scripts/purge-cf-cache.sh",
+  "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
   "installCommand": "npm ci",
   "framework": null,
