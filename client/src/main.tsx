@@ -4,6 +4,9 @@ import "./index.css";
 import "./mobile.css";
 import { cacheBustReload, canCacheBust, markCacheBust, resetCacheBustState } from "@/lib/cacheBust";
 
+declare const __SABQ_BUILD_ID__: string;
+console.log('[sabq build]', __SABQ_BUILD_ID__);
+
 const CHUNK_RELOAD_KEY = 'sabq_chunk_error_reload';
 const CHUNK_RELOAD_TIMEOUT = 60000;
 
