@@ -375,6 +375,21 @@ export async function generateArticleThumbnail(
   options: ThumbnailOptions = {}
 ): Promise<string> {
   try {
+    // Headless deployments (Railway) have no Replit GCS sidecar (127.0.0.1:1106)
+    // and PUBLIC_OBJECT_SEARCH_PATHS is unset, so uploadThumbnailToStorage can't
+    // run. The original image already lives on Cloudflare Images and is served
+    // CDN-fast, so use it as the thumbnail and persist that on the row to keep
+    // the column stable. Skip the sharp/extract pipeline entirely.
+    if (!process.env.PUBLIC_OBJECT_SEARCH_PATHS) {
+      try {
+        await db
+          .update(articles)
+          .set({ thumbnailUrl: imageUrl })
+          .where(eq(articles.id, articleId));
+      } catch {}
+      return imageUrl;
+    }
+
     // Look up article's focal point from database if not already provided
     if (!options.focalPoint) {
       try {

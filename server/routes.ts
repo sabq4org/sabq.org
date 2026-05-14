@@ -2863,10 +2863,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       // Extract the full path after /api/public-media/
       const fullPath = req.params[0] as string;
-      
+
       if (!fullPath) {
         console.error(`[Public Media Proxy] Empty file path requested`);
         return res.status(400).json({ message: "مسار الملف مطلوب" });
+      }
+
+      // Headless deployments (Railway) have no Replit Object Storage backing —
+      // the GCS sidecar at 127.0.0.1:1106 is absent and PUBLIC_OBJECT_SEARCH_PATHS
+      // is unset, so file.exists() throws ECONNREFUSED. Return 404 cleanly. Old
+      // article content referencing /api/public-media/* should be migrated to
+      // Cloudflare Images via scripts/migrate-urls-to-r2.ts (or its CF variant).
+      if (!process.env.PUBLIC_OBJECT_SEARCH_PATHS) {
+        return res.status(404).json({ message: "الملف غير موجود" });
       }
 
       // Get file from Object Storage
