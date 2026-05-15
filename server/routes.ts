@@ -35605,6 +35605,38 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
+  // Bulk mark contact messages as read (must be registered before /:id routes)
+  app.post("/api/admin/contact-messages/bulk-mark-read", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
+    try {
+      const { ids, all } = req.body ?? {};
+      const readOnlyPending = eq(contactMessages.status, "pending");
+
+      if (all === true) {
+        const updated = await db
+          .update(contactMessages)
+          .set({ status: "read" })
+          .where(readOnlyPending)
+          .returning({ id: contactMessages.id });
+        return res.json({ success: true, updatedCount: updated.length });
+      }
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "حدد رسائل أو استخدم all: true" });
+      }
+
+      const updated = await db
+        .update(contactMessages)
+        .set({ status: "read" })
+        .where(and(inArray(contactMessages.id, ids), readOnlyPending))
+        .returning({ id: contactMessages.id });
+
+      res.json({ success: true, updatedCount: updated.length });
+    } catch (error: any) {
+      console.error("Error bulk marking contact messages as read:", error);
+      res.status(500).json({ message: "فشل في تحديث الرسائل" });
+    }
+  });
+
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get single contact message
