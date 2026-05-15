@@ -1081,7 +1081,7 @@ export default function ArticleDetail() {
                 <DigitalPassportButton
                   slug={slug!}
                   language="ar"
-                  className="min-h-6 h-6 px-2.5 py-0 text-xs font-semibold gap-1 rounded-full [&_svg]:size-3 ms-auto"
+                  className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none ms-auto"
                 />
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
