@@ -14,11 +14,12 @@ struct DailyBriefRoute: Hashable {}
 struct DailyBriefView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthStore.self) private var authStore
+    @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(ArticlesStore.self) private var articlesStore
     @State private var showLogin = false
-    @State private var loginInitialMode = false
+    @State private var showSignUp = false
     @State private var showInterestsPicker = false
     @State private var allCategories: [APICategory] = []
-    @State private var bookmarksCount: Int = 0
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -47,7 +48,11 @@ struct DailyBriefView: View {
             }
         }
         .sheet(isPresented: $showLogin, onDismiss: { }) {
-            LoginSheet(initialMode: loginInitialMode)
+            LoginSheet(initialMode: false)
+        }
+        .sheet(isPresented: $showSignUp) {
+            SignUpFlowView()
+                .environment(authStore)
         }
         .sheet(isPresented: $showInterestsPicker) {
             InterestsPickerSheet(allCategories: allCategories, selectedIds: Set(authStore.currentUser?.interests.map(\.id) ?? []))
@@ -65,8 +70,184 @@ struct DailyBriefView: View {
     @ViewBuilder
     private func memberDashboard(user: APIUser) -> some View {
         memberHero(user: user)
+        statsRow(user: user)
         interestsCard(user: user)
-        valueGrid
+        if !suggestedArticles(for: user).isEmpty {
+            suggestionsSection(user: user)
+        }
+        moodCard(user: user)
+    }
+
+    /// Three small stat tiles: bookmarks count, interests count, days as
+    /// member. All numbers come from already-cached client state — no API
+    /// dependency, so the dashboard is never empty for a logged-in user.
+    private func statsRow(user: APIUser) -> some View {
+        let bookmarks = bookmarksStore.bookmarkedIDs.count
+        let interests = user.interests.count
+        let days = Self.daysSinceJoined(user.createdAt)
+        return HStack(spacing: 10) {
+            statTile(value: "\(bookmarks)", label: "محفوظ", icon: "bookmark.fill", tint: SabqTheme.primaryEnd)
+            statTile(value: "\(interests)", label: "اهتماماتك", icon: "slider.horizontal.3", tint: SabqTheme.teal)
+            statTile(value: days != nil ? "\(days!)" : "—", label: "يوم معك", icon: "calendar", tint: SabqTheme.gold)
+        }
+    }
+
+    private func statTile(value: String, label: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(tint)
+                Spacer(minLength: 0)
+            }
+            Text(value)
+                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+                .monospacedDigit()
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+        )
+    }
+
+    /// Filter the homepage feed to the user's interest categories. Returns
+    /// up to 8 articles. Uses client-side filtering on `allArticles` since
+    /// the per-category endpoint is still in deploy queue.
+    private func suggestedArticles(for user: APIUser) -> [Article] {
+        let interestSlugs = Set(user.interests.compactMap { $0.slug?.lowercased() })
+        guard !interestSlugs.isEmpty else { return [] }
+        return articlesStore.allArticles
+            .filter { interestSlugs.contains($0.category.slug.lowercased()) }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private func suggestionsSection(user: APIUser) -> some View {
+        let suggestions = suggestedArticles(for: user)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.coral)
+                Text("اقتراحات لك من اهتماماتك")
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                Spacer(minLength: 0)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(suggestions) { article in
+                        NavigationLink(value: article) {
+                            suggestionCard(article: article)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private func suggestionCard(article: Article) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let urlString = article.imageURL, let url = URL(string: urlString) {
+                CachedAsyncImage(url: url, contentMode: .fill) {
+                    Rectangle().fill(article.category.tint.opacity(0.15))
+                }
+                .frame(width: 220, height: 124)
+                .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .fill(article.category.tint.opacity(0.15))
+                    .frame(width: 220, height: 124)
+            }
+            Text(article.category.title)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(article.category.tint)
+            Text(article.title)
+                .font(.system(size: 13.5, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+                .multilineTextAlignment(.leading)
+                .lineLimit(3)
+                .frame(width: 220, alignment: .leading)
+        }
+        .frame(width: 220, alignment: .leading)
+    }
+
+    /// Mood/sentiment card. Until the backend exposes a real "your mood
+    /// based on reading" endpoint, we infer a soft mood from the user's
+    /// active interest mix — health/local-news tilts toward "متابع للأخبار",
+    /// economy/tech toward "مهتم بالتحليل", culture/sports toward "متنوع
+    /// الاهتمامات". Pure client-side; never empty for a logged-in user.
+    private func moodCard(user: APIUser) -> some View {
+        let interestSlugs = Set(user.interests.compactMap { $0.slug?.lowercased() })
+        let (icon, label, subtitle, tint) = Self.inferMood(from: interestSlugs)
+        return HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle().fill(tint.opacity(0.14)).frame(width: 46, height: 46)
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("مزاجك القرائي اليوم")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                Text(label)
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(tint.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+        )
+    }
+
+    private static func inferMood(from slugs: Set<String>) -> (icon: String, label: String, subtitle: String, tint: Color) {
+        if slugs.isEmpty {
+            return ("sparkles", "نبدأ معاً", "اختر اهتماماتك لنخصّص لك مزاج قراءة يومي", SabqTheme.primaryEnd)
+        }
+        if slugs.contains("technology") || slugs.contains("business") {
+            return ("brain.head.profile", "مهتم بالتحليل", "تميل لقراءة الاقتصاد والتقنية والتحليلات العميقة", SabqTheme.teal)
+        }
+        if slugs.contains("sports") {
+            return ("flame.fill", "متابع نشط", "تتابع الرياضة وأخبارها الحارة لحظة بلحظة", SabqTheme.coral)
+        }
+        if slugs.contains("culture") || slugs.contains("life") {
+            return ("book.fill", "قارئ منوّع", "تستمتع بالثقافة والحياة وقصص الناس", SabqTheme.gold)
+        }
+        return ("newspaper.fill", "متابع للأخبار", "حاضر مع كل جديد من الأخبار المحلية والعالمية", SabqTheme.primaryEnd)
+    }
+
+    private static func daysSinceJoined(_ raw: String?) -> Int? {
+        guard let raw, let date = ISO8601DateFormatter().date(from: raw) else { return nil }
+        let diff = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
+        return max(0, diff)
     }
 
     private func memberHero(user: APIUser) -> some View {
@@ -384,20 +565,22 @@ struct DailyBriefView: View {
     private var guestActions: some View {
         VStack(spacing: 10) {
             Button {
-                loginInitialMode = true
-                showLogin = true
+                showSignUp = true
             } label: {
-                Text("أنشئ حسابك")
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .heavy))
+                    Text("ابدأ التسجيل مع SABQ AI")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
             }
             .buttonStyle(.plain)
 
             Button {
-                loginInitialMode = false
                 showLogin = true
             } label: {
                 Text("لديك حساب؟ تسجيل الدخول")
