@@ -40,6 +40,43 @@ const STATIC_EXTENSIONS = [
 const SEO_META_TTL = 10;
 const SLUG_REDIRECT_TTL = 10;
 
+// Never let Cloudflare edge-cache HTML from the worker or from the origin
+// subrequest. Stale HTML is the root cause of post-deploy white pages: the
+// shell still references /assets/index-<oldhash>.js which 404s after Vite
+// rotates chunk names on the next Vercel deploy.
+const ORIGIN_FETCH = { cf: { cacheTtl: 0, cacheEverything: false } };
+
+const HTML_NO_STORE_HEADERS = {
+  "Cache-Control":
+    "private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0, proxy-revalidate",
+  "CDN-Cache-Control": "no-store, max-age=0, must-revalidate",
+  "Pragma": "no-cache",
+  "Expires": "0",
+};
+
+function isHtmlResponse(response) {
+  return (response.headers.get("content-type") || "")
+    .toLowerCase()
+    .includes("text/html");
+}
+
+function withHtmlNoStore(response) {
+  if (!isHtmlResponse(response)) return response;
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(HTML_NO_STORE_HEADERS)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function fetchOrigin(request) {
+  return fetch(request, ORIGIN_FETCH);
+}
+
 function isStaticAsset(pathname) {
   for (const ext of STATIC_EXTENSIONS) {
     if (pathname.endsWith(ext)) return true;
@@ -186,13 +223,13 @@ async function handleHtml(request, env) {
   // Cache-Control: no-store for HTML — we just need to honor it on the
   // worker→origin hop.
   const [originRes, meta] = await Promise.all([
-    fetch(request, { cf: { cacheTtl: 0, cacheEverything: false } }),
+    fetchOrigin(request),
     fetchSeoMeta(env.API_ORIGIN, pathname),
   ]);
 
   const ct = (originRes.headers.get("content-type") || "").toLowerCase();
   if (!ct.includes("text/html") || !meta) {
-    return originRes;
+    return withHtmlNoStore(originRes);
   }
 
   const metaBlock = buildMetaBlock(meta);
@@ -211,7 +248,7 @@ async function handleHtml(request, env) {
     .on('head > meta[name^="twitter:"]', remover)
     .on('head > meta[property^="twitter:"]', remover)
     .on("head", new HeadInjector(metaBlock));
-  return rewriter.transform(originRes);
+  return withHtmlNoStore(rewriter.transform(originRes));
 }
 
 export default {
@@ -223,14 +260,14 @@ export default {
     }
 
     if (!isInjectablePath(url.pathname)) {
-      return fetch(request);
+      return withHtmlNoStore(await fetchOrigin(request));
     }
 
     try {
       return await handleHtml(request, env);
     } catch (err) {
       console.error("[edge-worker] error:", err);
-      return fetch(request);
+      return withHtmlNoStore(await fetchOrigin(request));
     }
   },
 };
