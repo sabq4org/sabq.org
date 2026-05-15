@@ -104,11 +104,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     audioSummaries: false,
   }), []);
   
-  const { treeFiltered, activeItem } = useNav({ 
-    role, 
+  const { treeFiltered, activeItem } = useNav({
+    role,
     flags,
     pathname: location,
     permissions: user?.permissions || [], // Always pass array (empty if undefined)
+    // Pass the full role set so excludeRoles can hide entries when ANY of
+    // the user's roles matches (e.g. an account with both admin and
+    // opinion_author should drop opinion-author-excluded entries).
+    allRoles: user?.roles && user.roles.length > 0 ? user.roles : (user?.role ? [user.role] : []),
   });
 
   const toggleGroup = (groupId: string) => {

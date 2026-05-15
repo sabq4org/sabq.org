@@ -20,16 +20,26 @@ function itemPassesAccessCheck(
   item: NavItem,
   role: UserRole,
   flags: Record<string, boolean>,
-  userPermissions?: string[]
+  userPermissions?: string[],
+  allRoles?: string[]
 ): boolean {
   // Check feature flags first (must always pass)
   if (!checkFeatureFlags(item, flags)) {
     return false;
   }
 
-  // Check excludeRoles - if role is in excludeRoles, deny access immediately
-  if (item.excludeRoles && item.excludeRoles.includes(role)) {
-    return false;
+  // Check excludeRoles - if ANY of the user's roles is in excludeRoles,
+  // deny access. We check the full roles set (not just the highest role)
+  // because a user with both `admin` and `opinion_author` should still
+  // be excluded from a writer-noise entry that lists `opinion_author`.
+  // excludeRoles is intentionally a soft-deny for UX layering — it does
+  // NOT prevent the user from accessing the URL directly if they have
+  // permission, it only hides the sidebar entry from the curated view.
+  if (item.excludeRoles && item.excludeRoles.length > 0) {
+    const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
+    if (item.excludeRoles.some((r) => roles.includes(r))) {
+      return false;
+    }
   }
 
   // If item has permissions defined, check permissions (permission-first).
@@ -60,7 +70,8 @@ function filterNavTree(
   items: NavItem[],
   role: UserRole,
   flags: Record<string, boolean>,
-  userPermissions?: string[]
+  userPermissions?: string[],
+  allRoles?: string[]
 ): NavItem[] {
   const result: NavItem[] = [];
   
@@ -70,11 +81,22 @@ function filterNavTree(
     if (!checkFeatureFlags(item, flags)) {
       continue; // Skip this item entirely if feature flags fail
     }
-    
+
+    // Container-level excludeRoles: hide the entire subtree when any of
+    // the user's roles is in the parent's excludeRoles. Without this,
+    // children would still show because admin/wildcard permissions pass
+    // them individually.
+    if (item.excludeRoles && item.excludeRoles.length > 0) {
+      const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
+      if (item.excludeRoles.some((r) => roles.includes(r))) {
+        continue;
+      }
+    }
+
     // First, recursively process children
     if (item.children && item.children.length > 0) {
-      const filteredChildren = filterNavTree(item.children, role, flags, userPermissions);
-      
+      const filteredChildren = filterNavTree(item.children, role, flags, userPermissions, allRoles);
+
       // If children passed, handle parent visibility
       if (filteredChildren.length > 0) {
         // Pure container (no path) - safe to show if children are accessible
@@ -86,9 +108,9 @@ function filterNavTree(
           });
           continue;
         }
-        
+
         // Parent WITH path - must pass its own access check for security
-        if (itemPassesAccessCheck(item, role, flags, userPermissions)) {
+        if (itemPassesAccessCheck(item, role, flags, userPermissions, allRoles)) {
           result.push({
             ...item,
             children: filteredChildren,
@@ -100,17 +122,17 @@ function filterNavTree(
         }
         continue;
       }
-      
+
       // No children passed - check if parent itself passes and has a direct path
-      if (item.path && itemPassesAccessCheck(item, role, flags, userPermissions)) {
+      if (item.path && itemPassesAccessCheck(item, role, flags, userPermissions, allRoles)) {
         result.push({ ...item, children: [] });
       }
       // Otherwise, parent with no accessible children - skip
       continue;
     }
-    
+
     // Leaf item - apply direct access check
-    if (itemPassesAccessCheck(item, role, flags, userPermissions)) {
+    if (itemPassesAccessCheck(item, role, flags, userPermissions, allRoles)) {
       result.push(item);
     }
   }
@@ -203,9 +225,10 @@ export function useNav(context: NavContext): NavState {
     const flags = context.flags;
     const currentPath = context.pathname;
     const userPermissions = context.permissions;
+    const allRoles = context.allRoles;
 
     // Filter tree - now includes permission-based filtering
-    const treeFiltered = filterNavTree(navConfig, role, flags, userPermissions);
+    const treeFiltered = filterNavTree(navConfig, role, flags, userPermissions, allRoles);
 
     // Find active item
     const activeItem = findActiveItem(treeFiltered, currentPath);
@@ -222,7 +245,7 @@ export function useNav(context: NavContext): NavState {
       parents,
       flat,
     };
-  }, [context.role, context.flags, context.pathname, context.permissions]);
+  }, [context.role, context.flags, context.pathname, context.permissions, context.allRoles]);
 
   return navState;
 }

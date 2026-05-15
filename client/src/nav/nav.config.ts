@@ -208,6 +208,7 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/categories",
         icon: FolderOpen,
         roles: ["admin", "editor"],
+        excludeRoles: ["opinion_author", "reporter"],
         permissions: ["categories.view", "categories.create", "categories.update"],
       },
       {
@@ -580,6 +581,7 @@ export const navConfig: NavItem[] = [
     labelAr: "المستخدمون والأدوار",
     icon: Users,
     roles: ["admin"],
+    excludeRoles: ["opinion_author", "reporter"],
     children: [
       {
         id: "staff",
@@ -672,6 +674,7 @@ export const navConfig: NavItem[] = [
     labelAr: "الناشرون والوكالات",
     icon: Building2,
     roles: ["admin"],
+    excludeRoles: ["opinion_author", "reporter"],
     children: [
       {
         id: "publishers_list",
