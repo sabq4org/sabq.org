@@ -117,6 +117,12 @@ private struct CachedArticle: Codable {
             id: id,
             title: title,
             excerpt: excerpt,
+            // Bookmarks predate the dedicated aiSummary field; we'd have to
+            // migrate the persisted store to keep it. The article detail
+            // refetches the full article anyway, so leaving it empty just
+            // means the smart-summary card falls back to `excerpt` for the
+            // brief moment between opening a bookmark and the fetch landing.
+            aiSummary: "",
             body: body,
             // Bookmarks store only the stripped body; the rich HTML is
             // re-fetched from the API when the article is opened.

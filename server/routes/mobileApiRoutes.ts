@@ -2221,6 +2221,11 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     slug: article.slug,
     body: stripHtml(article.content || ""),
     excerpt: article.excerpt || makeExcerpt(article.content || ""),
+    // Dashboard-generated AI summary. iOS uses this for the "الموجز الذكي"
+    // card; web reads `aiSummary` directly. Falls through to null when the
+    // article hasn't been processed yet so the iOS card can fall back to
+    // `excerpt` the same way the web does.
+    ai_summary: article.aiSummary || null,
     section: row.category?.nameAr || "عام",
     section_id: row.category?.id || null,
     author: byline || "سبق",

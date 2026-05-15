@@ -277,6 +277,10 @@ struct Article: Identifiable, Equatable, Hashable {
     let id: String
     let title: String
     let excerpt: String
+    /// Dashboard-generated AI summary surfaced as "الموجز الذكي" in the
+    /// article detail card. Empty when the article hasn't been AI-processed
+    /// yet — the card then falls back to `excerpt` (matching the web).
+    let aiSummary: String
     /// Plain-text fallback used for share sheets, list rows, accessibility.
     let body: String
     /// Raw HTML body when the API returns one (article detail). Empty for
@@ -323,6 +327,7 @@ struct Article: Identifiable, Equatable, Hashable {
         // with TipTap markup (paragraphs, bold, blockquotes, galleries, …).
         let bodyHTML = api.fullText
         let excerpt = Self.resolveExcerpt(excerpt: api.excerpt, summary: api.summary, subtitle: api.subtitle, body: body)
+        let aiSummary = (api.aiSummary ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let slug = api.slug.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
         let sharePath = api.englishSlug?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -333,6 +338,7 @@ struct Article: Identifiable, Equatable, Hashable {
             id: api.id,
             title: api.title,
             excerpt: excerpt,
+            aiSummary: aiSummary,
             body: body.isEmpty ? excerpt : body,
             bodyHTML: bodyHTML,
             category: ArticleCategory(fromSection: api.categoryName),

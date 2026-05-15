@@ -24,6 +24,10 @@ struct ArticleDetailView: View {
     @State private var commentsStore: CommentsStore?
     @State private var showLoginForCommentSheet = false
     @State private var commentFeedback: CommentFeedback?
+    /// Collapsed (3-line) vs. expanded display state for the smart summary
+    /// card. Local — resets to collapsed whenever the user opens a new
+    /// article (`@State` is owned by the view instance).
+    @State private var isSummaryExpanded = false
     @State private var fullArticle: Article?
     @State private var resolvedTags: [String] = []
     @State private var isExcerptExpanded = false
@@ -459,41 +463,30 @@ struct ArticleDetailView: View {
             : SabqTheme.surface
     }
 
-    // AI bullets derived from the article excerpt by splitting on Arabic
-    // sentence delimiters. Returns 2–3 short bullets when the excerpt is
-    // multi-sentence; an empty array otherwise (the section is then hidden).
-    private var aiBullets: [String] {
-        let raw = displayArticle.excerpt
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return [] }
-        let separators = CharacterSet(charactersIn: ".؟!\n")
-        let sentences = raw
-            .components(separatedBy: separators)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.count >= 12 }
-        // Need at least two meaningful sentences to bother with a bullets card.
-        guard sentences.count >= 2 else { return [] }
-        return Array(sentences.prefix(3))
+    /// Source of truth for the "الموجز الذكي" card body. Mirrors the web
+    /// (`ArticleDetail.tsx`: `article.aiSummary || article.excerpt`) — prefer
+    /// the dashboard-generated AI summary, fall back to the editor's excerpt
+    /// when the AI hasn't processed the article yet.
+    private var smartSummaryText: String {
+        let ai = displayArticle.aiSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !ai.isEmpty { return ai }
+        return displayArticle.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Single unified smart-summary card — the AI-bullet design adopted as
-    /// the canonical summary surface (per user 2026-05-14). Uses split
-    /// excerpt as bullets when 2+ sentences are detected, otherwise renders
-    /// the full excerpt as one body block in the same card.
-    ///
-    /// The audio-summary play button is integrated inline at the top right
-    /// when an audio file exists — keeps the listen action visually
-    /// connected to the textual summary instead of a separate row.
+    /// Single unified smart-summary card. Shows the AI summary text capped at
+    /// 3 lines by default with an expand/collapse toggle when the content
+    /// overflows. The audio-summary play button sits inline at the top right
+    /// when an audio file exists, keeping the listen action visually
+    /// connected to the textual summary.
     @ViewBuilder
     private var smartSummaryCard: some View {
-        let bullets = aiBullets
-        let fallback = displayArticle.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = smartSummaryText
         let hasAudio = audioSummary?.url != nil
 
-        if bullets.isEmpty && fallback.isEmpty && !hasAudio {
+        if body.isEmpty && !hasAudio {
             EmptyView()
         } else {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 12, weight: .semibold))
@@ -507,30 +500,32 @@ struct ArticleDetailView: View {
                     }
                 }
 
-                if !bullets.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(bullets.enumerated()), id: \.offset) { _, bullet in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Circle()
-                                    .fill(SabqTheme.primaryEnd)
-                                    .frame(width: 5, height: 5)
-                                    .offset(y: 6)
-                                Text(bullet)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .multilineTextAlignment(.leading)
-                                    .lineSpacing(3)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                } else if !fallback.isEmpty {
-                    Text(fallback)
-                        .font(.system(size: 13, weight: .medium))
+                if !body.isEmpty {
+                    Text(body)
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(4)
+                        .lineLimit(isSummaryExpanded ? nil : 3)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if Self.summaryNeedsToggle(body) {
+                        Button {
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                                isSummaryExpanded.toggle()
+                            }
+                            SabqHaptics.light()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                            }
+                            .foregroundStyle(SabqTheme.primaryEnd)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .padding(16)
@@ -548,6 +543,15 @@ struct ArticleDetailView: View {
                     .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
             )
         }
+    }
+
+    /// Heuristic: at 14pt on standard mobile widths, ~50 chars/line fits, so
+    /// 3 lines ≈ 150 chars. Showing the toggle for slightly-shorter content
+    /// is fine — tapping it just does nothing visible. The worst case is
+    /// hiding the toggle for content that would have wrapped to a 4th line
+    /// due to long Arabic words, so we err on the generous side at 120 chars.
+    private static func summaryNeedsToggle(_ text: String) -> Bool {
+        text.count > 120
     }
 
     /// Compact play/pause pill for the audio summary. Sits in the smart-
@@ -731,7 +735,9 @@ struct ArticleDetailView: View {
             .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
             .foregroundStyle(SabqTheme.ink)
             .multilineTextAlignment(.leading)
-            .lineSpacing(8)
+            // Tightened from 8 → 3 per user direction: the headline reads as a
+            // single editorial block instead of feeling double-spaced.
+            .lineSpacing(3)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

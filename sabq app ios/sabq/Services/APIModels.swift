@@ -18,6 +18,11 @@ nonisolated struct APIArticle: Decodable {
     let fullText: String
     let excerpt: String?
     let summary: String?
+    /// Dashboard-generated AI summary. Distinct from `excerpt` (the editorial
+    /// teaser): this is what the web `ArticleDetail` shows in the AI summary
+    /// card. iOS prefers it for the "الموجز الذكي" card; fall back to
+    /// `excerpt` when it isn't set.
+    let aiSummary: String?
     let subtitle: String?
     let slug: String?
     let englishSlug: String?
@@ -56,6 +61,8 @@ nonisolated struct APIArticle: Decodable {
         excerpt = try? c.decode(String.self, forKey: FlexKey("excerpt"))
         summary = (try? c.decode(String.self, forKey: FlexKey("summary")))
             ?? (try? c.decode(String.self, forKey: FlexKey("aiSummary")))
+        aiSummary = (try? c.decode(String.self, forKey: FlexKey("aiSummary")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("ai_summary")))
         subtitle = try? c.decode(String.self, forKey: FlexKey("subtitle"))
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))

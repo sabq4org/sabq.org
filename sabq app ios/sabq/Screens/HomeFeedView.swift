@@ -59,8 +59,10 @@ struct HomeFeedView: View {
                     trendingPreviewSection
                         .animatedAppear(index: 8)
 
-                    categoryChipsSection
-                        .animatedAppear(index: 9)
+                    // Category chips removed from the homepage per user
+                    // direction — categories are now reached via Explore tab.
+                    // The `categoryChipsSection` view + filtering state remain
+                    // intact in case we re-introduce them in a sheet later.
 
                     latestArticlesSection
                         .animatedAppear(index: 10)
@@ -577,9 +579,12 @@ struct HomeFeedView: View {
             icon = "sun.haze.fill"
             tint = Color(red: 0.93, green: 0.58, blue: 0.22)
         case 17..<21:
+            // Evening = the sun setting. `sunset.fill` reads as dusk far more
+            // clearly than the previous `sun.dust.fill` (which most users see
+            // as a daytime haze icon). Warmer orange tint matches the sunset.
             greeting = "مساء الخير"
-            icon = "sun.dust.fill"
-            tint = Color(red: 0.85, green: 0.45, blue: 0.55)
+            icon = "sunset.fill"
+            tint = Color(red: 0.95, green: 0.45, blue: 0.20)
         default:
             greeting = "ليلة هادئة"
             icon = "moon.stars.fill"
