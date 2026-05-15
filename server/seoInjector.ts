@@ -268,7 +268,11 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   const a = article[0];
   const seoData = (a.seo as any) || {};
   const title = a.title || seoData.metaTitle || '';
-  const description = truncate(seoData.metaDescription || a.excerpt || a.aiSummary || '', 220);
+  // Priority for the shareable description that crawlers (Twitter, WhatsApp,
+  // Facebook) read: explicit editorial `metaDescription` wins, then the
+  // AI-generated `aiSummary` (so the smart summary appears in shares — user
+  // request 2026-05-15), then the editor's `excerpt` as a last resort.
+  const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const canonicalSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/${urlPrefix}/${canonicalSlug}`;
@@ -373,7 +377,11 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const a = article[0];
   const seoData = (a.seo as any) || {};
   const title = a.title || seoData.metaTitle || '';
-  const description = truncate(seoData.metaDescription || a.excerpt || a.aiSummary || '', 220);
+  // Priority for the shareable description that crawlers (Twitter, WhatsApp,
+  // Facebook) read: explicit editorial `metaDescription` wins, then the
+  // AI-generated `aiSummary` (so the smart summary appears in shares — user
+  // request 2026-05-15), then the editor's `excerpt` as a last resort.
+  const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/en/article/${articleSlug}`;
@@ -470,7 +478,11 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const a = article[0];
   const seoData = (a.seo as any) || {};
   const title = a.title || seoData.metaTitle || '';
-  const description = truncate(seoData.metaDescription || a.excerpt || a.aiSummary || '', 220);
+  // Priority for the shareable description that crawlers (Twitter, WhatsApp,
+  // Facebook) read: explicit editorial `metaDescription` wins, then the
+  // AI-generated `aiSummary` (so the smart summary appears in shares — user
+  // request 2026-05-15), then the editor's `excerpt` as a last resort.
+  const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/ur/article/${articleSlug}`;

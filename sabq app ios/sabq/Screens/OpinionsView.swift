@@ -57,13 +57,13 @@ struct OpinionsView: View {
         }
     }
 
-    // MARK: - Most viewed (top)
+    // MARK: - Trending (top)
 
     private var mostViewedSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
-                title: "الأكثر قراءة",
-                subtitle: "المقالات التي يقرؤها الناس الآن",
+                title: "ترند المقالات",
+                subtitle: "الأكثر قراءةً خلال آخر 24 ساعة",
                 icon: "flame.fill",
                 tint: SabqTheme.coral
             )
@@ -304,9 +304,12 @@ struct OpinionsView: View {
         let priorLatest = latest
         let priorMostViewed = mostViewed
 
-        // Two parallel fetches: most-viewed (sort=views) and latest (default).
-        // Either one can return empty without breaking the other section.
-        async let viewsTask = NewsService.fetchOpinions(sort: "views")
+        // Two parallel fetches: trending (24h window, by views) and latest
+        // (default ordering). Either one can return empty without breaking
+        // the other section. Switched from `sort=views` (all-time) to
+        // `sort=trending` (last 24h) so the top section actually shows
+        // different articles from the latest list below.
+        async let viewsTask = NewsService.fetchOpinions(sort: "trending")
         async let latestTask = NewsService.fetchOpinions(sort: nil)
 
         let viewsResult = await viewsTask

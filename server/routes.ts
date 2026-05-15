@@ -24391,14 +24391,18 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/opinion", async (req, res) => {
     try {
       const { page = 1, limit = 12, authorId, search, sort } = req.query;
-      // `sort=views` orders opinions by view count desc (most-read first) —
-      // used by the iOS "all articles" screen to render the highlighted
-      // top-of-page section. Any other value (including unset) falls back
-      // to publishedAt desc, which is the long-standing default.
-      const sortByViews = String(sort || "") === "views";
+      // `sort=views`     — order by all-time view count desc.
+      // `sort=trending`  — restrict to articles published in the last 24h
+      //                    and order by views desc. Powers the iOS "ترند
+      //                    المقالات" highlight section.
+      // Anything else (or unset) — newest first, the long-standing default.
+      const sortValue = String(sort || "");
+      const sortByViews = sortValue === "views";
+      const sortByTrending = sortValue === "trending";
 
       // Check cache first - TTL 20 seconds
-      const cacheKey = `opinion:list:${page}:${limit}:${authorId || ''}:${search || ''}:${sortByViews ? 'views' : 'latest'}`;
+      const sortKey = sortByTrending ? 'trending' : sortByViews ? 'views' : 'latest';
+      const cacheKey = `opinion:list:${page}:${limit}:${authorId || ''}:${search || ''}:${sortKey}`;
       const cached = memoryCache.get(cacheKey);
       if (cached !== null) {
         return res.json(cached);
@@ -24407,6 +24411,18 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const offset = (Number(page) - 1) * Number(limit);
 
       const reporterAlias = aliasedTable(users, 'reporter');
+
+      // 24h cutoff for the trending window. Computed once per request so it
+      // matches the count query too.
+      const trendingCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const baseConditions = [
+        eq(articles.articleType, "opinion"),
+        eq(articles.status, "published"),
+      ];
+      if (sortByTrending) {
+        baseConditions.push(gte(articles.publishedAt, trendingCutoff));
+      }
 
       let query = db
         .select({
@@ -24424,12 +24440,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(
-          and(
-            eq(articles.articleType, "opinion"),
-            eq(articles.status, "published")
-          )
-        )
+        .where(and(...baseConditions))
         .$dynamic();
 
       if (authorId) {
@@ -24446,7 +24457,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       const results = await query
-        .orderBy(sortByViews ? desc(articles.views) : desc(articles.publishedAt))
+        .orderBy((sortByViews || sortByTrending) ? desc(articles.views) : desc(articles.publishedAt))
         .limit(Number(limit))
         .offset(offset);
 
@@ -24456,16 +24467,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         author: row.author,
       }));
 
-      // Get total count for pagination
+      // Get total count for pagination — uses the same conditions as the
+      // main query so `trending` returns the count of last-24h opinions.
       const [{ count }] = await db
         .select({ count: sql<number>`count(*)` })
         .from(articles)
-        .where(
-          and(
-            eq(articles.articleType, "opinion"),
-            eq(articles.status, "published")
-          )
-        );
+        .where(and(...baseConditions));
 
       const result = {
         articles: formattedArticles,

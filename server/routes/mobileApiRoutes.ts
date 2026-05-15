@@ -2336,7 +2336,25 @@ router.get("/articles", async (req: Request, res: Response) => {
       eq(articles.hideFromHomepage, false),
     ];
 
-    if (section) conditions.push(eq(articles.categoryId, section));
+    if (section) {
+      // iOS passes the category SLUG (e.g. "saudi", "sports"); some older
+      // callers pass the UUID directly. Accept both: if the value looks
+      // like a UUID, match `articles.categoryId` directly; otherwise
+      // resolve the slug → category.id first. Falls back to an empty
+      // result when the slug doesn't exist (rather than silently returning
+      // unfiltered articles).
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+      if (uuidRegex.test(section)) {
+        conditions.push(eq(articles.categoryId, section));
+      } else {
+        const [cat] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(eq(categories.slug, section))
+          .limit(1);
+        conditions.push(eq(articles.categoryId, cat?.id ?? "__no_match__"));
+      }
+    }
     if (breaking === "true") conditions.push(eq(articles.newsType, "breaking"));
     if (featured === "true") conditions.push(eq(articles.isFeatured, true));
     if (q) conditions.push(ilike(articles.title, `%${q}%`));

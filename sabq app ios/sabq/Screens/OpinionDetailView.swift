@@ -378,31 +378,9 @@ struct OpinionDetailView: View {
 
     @MainActor
     private func prepareShareURL() async -> URL {
-        if let shortlinkURL {
-            return shortlinkURL
-        }
-
-        if let shortlinkTask {
-            if let resolvedURL = await shortlinkTask.value {
-                self.shortlinkURL = resolvedURL
-                self.shortlinkTask = nil
-                return resolvedURL
-            }
-            self.shortlinkTask = nil
-            return fallbackShareURL
-        }
-
-        let opinionID = displayOpinion.id
-        let task = Task { await resolveShortlinkURL(opinionId: opinionID) }
-        shortlinkTask = task
-
-        if let resolvedURL = await task.value {
-            shortlinkURL = resolvedURL
-            shortlinkTask = nil
-            return resolvedURL
-        }
-
-        shortlinkTask = nil
+        // Same reasoning as ArticleDetailView: skip the shortlink path and
+        // share the canonical `/opinion/<slug>` URL so crawlers unfurl with
+        // the proper og:image / og:title / og:description from seoInjector.
         return fallbackShareURL
     }
 

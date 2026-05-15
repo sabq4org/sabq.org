@@ -105,7 +105,7 @@ enum NewsService {
         await categoryCacheActor.removeAll()
     }
 
-    static func fetchCategoryArticles(slug: String, page: Int = 1, perPage: Int = 20) async -> (articles: [Article], hasMore: Bool) {
+    static func fetchCategoryArticles(slug: String, page: Int = 1, perPage: Int = 50) async -> (articles: [Article], hasMore: Bool) {
         if let cached = await categoryCacheActor.get(slug: slug, page: page) {
             return cached
         }

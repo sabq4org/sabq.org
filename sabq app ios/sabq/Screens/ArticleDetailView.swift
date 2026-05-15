@@ -907,31 +907,12 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func prepareShareURL() async -> URL {
-        if let shortlinkURL {
-            return shortlinkURL
-        }
-
-        if let shortlinkTask {
-            if let resolvedURL = await shortlinkTask.value {
-                self.shortlinkURL = resolvedURL
-                self.shortlinkTask = nil
-                return resolvedURL
-            }
-            self.shortlinkTask = nil
-            return fallbackShareURL
-        }
-
-        let articleID = displayArticle.id
-        let task = Task { await resolveShortlinkURL(articleId: articleID) }
-        shortlinkTask = task
-
-        if let resolvedURL = await task.value {
-            shortlinkURL = resolvedURL
-            shortlinkTask = nil
-            return resolvedURL
-        }
-
-        shortlinkTask = nil
+        // Share the canonical `/article/<englishSlug>` URL directly. The
+        // shortlink path (sabq.link/…) was producing URLs that crawlers
+        // (Twitter/WhatsApp) couldn't unfurl into the article's OG image +
+        // title + summary, AND the shortlink format differed from the web
+        // app's own URL. The canonical URL goes through `seoInjector.ts`
+        // and exposes the full og:image / og:title / og:description.
         return fallbackShareURL
     }
 

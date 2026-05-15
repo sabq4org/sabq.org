@@ -6,6 +6,7 @@ import SwiftUI
 /// which renders the separate live-events table.
 struct MomentByMomentView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(BookmarksStore.self) private var bookmarksStore
     @State private var items: [APILiveUpdate] = []
     @State private var nextCursor: String? = nil
     @State private var isLoading = true
@@ -49,24 +50,43 @@ struct MomentByMomentView: View {
                 } else if items.isEmpty {
                     emptyState
                 } else {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    // Match the homepage "آخر الأخبار" pattern: SurfaceCard +
+                    // CompactArticleRow with dividers, and an explicit
+                    // "Load More" button at the bottom instead of the
+                    // previous timeline rail + infinite-scroll behaviour.
+                    SurfaceCard {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            timelineRow(item: item, isLast: index == items.count - 1)
-                                .onAppear {
-                                    if index >= items.count - 3 {
-                                        Task { await loadMore() }
-                                    }
-                                }
+                            if index > 0 {
+                                Divider().foregroundStyle(SabqTheme.outline)
+                            }
+                            let article = articleFromUpdate(item)
+                            NavigationLink(value: article) {
+                                CompactArticleRow(
+                                    article: article,
+                                    onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                    isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
 
-                        if isLoadingMore {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .tint(SabqTheme.primaryEnd)
-                                Spacer()
+                        if nextCursor != nil {
+                            Button {
+                                Task { await loadMore() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isLoadingMore {
+                                        ProgressView().tint(SabqTheme.primaryEnd)
+                                    }
+                                    Text("تحميل المزيد")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(SabqTheme.primaryEnd)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
-                            .padding(.vertical, 16)
+                            .buttonStyle(.plain)
+                            .disabled(isLoadingMore)
                         }
                     }
                 }
@@ -174,115 +194,31 @@ struct MomentByMomentView: View {
         }
     }
 
-    // MARK: - Timeline Row
-
-    private func timelineRow(item: APILiveUpdate, isLast: Bool) -> some View {
-        NavigationLink(value: articleFromUpdate(item)) {
-            HStack(alignment: .top, spacing: 12) {
-                // Timeline rail — dot per row, connecting line between them.
-                VStack(spacing: 0) {
-                    ZStack {
-                        Circle()
-                            .fill(item.isBreaking ? SabqTheme.coral : SabqTheme.primaryEnd)
-                            .frame(width: 12, height: 12)
-                        if item.isBreaking {
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 6, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    if !isLast {
-                        Rectangle()
-                            .fill(SabqTheme.outline.opacity(0.5))
-                            .frame(width: 1.5)
-                            .frame(minHeight: 60)
-                    }
-                }
-                .frame(width: 16)
-
-                rowContent(item: item)
-                    .padding(.bottom, isLast ? 0 : 16)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func rowContent(item: APILiveUpdate) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                if item.isBreaking {
-                    Text("عاجل")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(SabqTheme.coral))
-                }
-                Text(item.categoryNameAr)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                Text("·")
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                Text(Self.relativeTime(item.publishedAt))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-                Spacer(minLength: 0)
-            }
-
-            Text(item.title)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-                .multilineTextAlignment(.leading)
-                .lineLimit(3)
-
-            if let urlString = item.imageUrl, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
-                    Rectangle()
-                        .fill(SabqTheme.paleFill)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
-            }
-
-            HStack(spacing: 12) {
-                statChip(icon: "eye.fill", value: item.viewsCount)
-                statChip(icon: "bubble.left.fill", value: item.commentsCount)
-                Spacer(minLength: 0)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func statChip(icon: String, value: Int) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 10, weight: .semibold))
-            Text("\(value)")
-                .font(.system(size: 11, weight: .semibold))
-                .monospacedDigit()
-        }
-        .foregroundStyle(SabqTheme.tertiaryInk)
-    }
-
     // MARK: - Empty / Loading / Error
 
     private var loadingSkeleton: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ForEach(0..<4, id: \.self) { _ in
-                HStack(alignment: .top, spacing: 12) {
-                    Circle()
-                        .fill(SabqTheme.paleFill)
-                        .frame(width: 12, height: 12)
+        // Match the new CompactArticleRow layout (thumbnail + text column)
+        // so the skeleton doesn't visually jump when real content lands.
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(0..<5, id: \.self) { _ in
+                HStack(alignment: .top, spacing: 14) {
+                    RoundedRectangle(cornerRadius: 16).fill(SabqTheme.paleFill).frame(width: 84, height: 84)
                     VStack(alignment: .leading, spacing: 8) {
-                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.paleFill).frame(width: 120, height: 10)
+                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.paleFill).frame(width: 80, height: 14)
                         RoundedRectangle(cornerRadius: 4).fill(SabqTheme.paleFill).frame(maxWidth: .infinity).frame(height: 16)
-                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.paleFill).frame(width: 240, height: 16)
+                        RoundedRectangle(cornerRadius: 4).fill(SabqTheme.paleFill).frame(width: 200, height: 14)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Divider().foregroundStyle(SabqTheme.outline.opacity(0.3))
             }
         }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
+        )
         .redacted(reason: .placeholder)
     }
 

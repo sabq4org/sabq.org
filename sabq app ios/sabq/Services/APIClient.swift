@@ -339,7 +339,13 @@ actor APIClient {
         try await get(WrappedArray<APICategory>.self, path: "/sections").items
     }
 
-    func fetchCategoryArticles(slug: String, page: Int = 1, perPage: Int = 20) async throws -> APIPaginatedList<APIArticle> {
+    /// Per-category article list. `slug` is matched on the backend against
+    /// `categories.slug` first, falling back to UUID; v1 was the broken path
+    /// before (slug passed against `categoryId` UUID column — never matched).
+    /// Default `perPage` bumped from 20 → 50 per user direction so the
+    /// CategoryArticlesSheet shows a meaningful first page even for very
+    /// active sections.
+    func fetchCategoryArticles(slug: String, page: Int = 1, perPage: Int = 50) async throws -> APIPaginatedList<APIArticle> {
         try await get(APIPaginatedList<APIArticle>.self, path: "/articles", query: [
             "section": slug,
             "limit": "\(perPage)",
