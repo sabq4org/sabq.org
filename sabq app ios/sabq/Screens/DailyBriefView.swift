@@ -247,13 +247,19 @@ struct DailyBriefView: View {
         }
     }
 
+    /// Action row at the bottom of the landing. For genuine guests we show
+    /// register + login CTAs. For already-authenticated users (who land here
+    /// only because the Arabic /api/ai/daily-summary endpoint doesn't exist
+    /// yet) we show a single "back to the homepage" CTA instead so they
+    /// aren't asked to re-register.
+    @ViewBuilder
     private var guestActions: some View {
-        VStack(spacing: 10) {
+        if authStore.isLoggedIn {
             Button {
-                loginInitialMode = true
-                showLogin = true
+                SabqHaptics.light()
+                dismiss()
             } label: {
-                Text("أنشئ حسابك")
+                Text("العودة للصفحة الرئيسية")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -261,18 +267,33 @@ struct DailyBriefView: View {
                     .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
             }
             .buttonStyle(.plain)
+        } else {
+            VStack(spacing: 10) {
+                Button {
+                    loginInitialMode = true
+                    showLogin = true
+                } label: {
+                    Text("أنشئ حسابك")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                }
+                .buttonStyle(.plain)
 
-            Button {
-                loginInitialMode = false
-                showLogin = true
-            } label: {
-                Text("لديك حساب؟ تسجيل الدخول")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                Button {
+                    loginInitialMode = false
+                    showLogin = true
+                } label: {
+                    Text("لديك حساب؟ تسجيل الدخول")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -467,12 +488,15 @@ struct DailyBriefView: View {
         do {
             summary = try await APIClient.shared.fetchDailySummary()
             needsAuth = false
-        } catch APIError.unauthorized {
-            needsAuth = true
-        } catch APIError.forbidden {
-            needsAuth = true
         } catch {
-            errorMessage = "تحقّق من الاتصال ثم أعد المحاولة."
+            // The Arabic `/api/ai/daily-summary` endpoint isn't implemented
+            // yet — only `/api/en/ai/daily-summary` exists, so iOS always
+            // 404s here. Show the membership value-prop landing instead of
+            // a bare error: it's a useful screen on its own ("here's what
+            // your account unlocks") and avoids a dead-end UX for logged-in
+            // users. The previous `errorMessage = "تحقّق من الاتصال…"`
+            // branch is gone because hitting Retry just 404s again.
+            needsAuth = true
         }
         isLoading = false
     }
