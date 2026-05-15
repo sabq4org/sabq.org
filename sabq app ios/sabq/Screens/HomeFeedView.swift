@@ -623,17 +623,32 @@ struct HomeFeedView: View {
             tint = Color(red: 0.46, green: 0.52, blue: 0.95)
         }
 
-        let todayCount = articlesStore.allArticles.filter {
-            Calendar.current.isDateInToday($0.publishDate)
-        }.count
+        // Stable seed keyed off the calendar day so the rotated headline +
+        // tip don't flicker between renders. Day of year drives the tip
+        // (different tip each day); (day + hour-of-day quarter) drives the
+        // headline (different headline each quarter of the day).
+        let dayOfYear = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 1
+        let quarterIndex: Int
+        switch hour {
+        case 5..<12:  quarterIndex = 0
+        case 12..<17: quarterIndex = 1
+        case 17..<21: quarterIndex = 2
+        default:      quarterIndex = 3
+        }
 
-        // SmartSummary keys from the backend — fall back gracefully when
-        // a key is missing. `phrase` is the AI-generated headline-style line,
-        // `summary` is a one-paragraph context, both optional.
-        let aiPhrase = todayInsights["phrase"]
+        // Prefer the backend-generated AI line when it actually comes back
+        // with something — falls through to a SABQ-AI-branded static line
+        // otherwise so the block never looks empty or generic.
+        let backendAIPhrase = (todayInsights["phrase"]
             ?? todayInsights["headline"]
-            ?? todayInsights["summary"]
-        let topCategory = todayInsights["topCategory"]
+            ?? todayInsights["summary"]) ?? ""
+        let headline: String = {
+            let trimmed = backendAIPhrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+            return Self.sabqHeadlines[(dayOfYear + quarterIndex) % Self.sabqHeadlines.count]
+        }()
+
+        let tip = Self.sabqTips[dayOfYear % Self.sabqTips.count]
 
         return HStack(alignment: .top, spacing: 14) {
             ZStack {
@@ -647,39 +662,45 @@ struct HomeFeedView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(greeting)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                if let aiPhrase, !aiPhrase.isEmpty {
-                    Text(aiPhrase)
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(SabqTheme.ink)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text("هذا ما اخترناه لك اليوم")
-                        .font(.system(size: 18, weight: .heavy, design: .rounded))
-                        .foregroundStyle(SabqTheme.ink)
-                }
                 HStack(spacing: 6) {
-                    if todayCount > 0 {
-                        Text("\(todayCount) خبر اليوم")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                            .monospacedDigit()
+                    Text(greeting)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                    // Tiny "SABQ AI" pill so the headline below clearly
+                    // reads as machine-curated rather than editorial copy.
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 8, weight: .bold))
+                        Text("SABQ AI")
+                            .font(.system(size: 9, weight: .heavy))
                     }
-                    if let topCategory, !topCategory.isEmpty {
-                        if todayCount > 0 {
-                            Text("·")
-                                .font(.system(size: 10))
-                                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
-                        }
-                        Text("الأبرز: \(topCategory)")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(tint)
-                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [SabqTheme.primaryEnd, tint],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    )
                 }
+
+                Text(headline)
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(tip)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -699,6 +720,37 @@ struct HomeFeedView: View {
         )
         .shadow(color: tint.opacity(0.08), radius: 14, x: 0, y: 6)
     }
+
+    /// SABQ-AI-branded headlines for the greeting block. Picked by a stable
+    /// (day-of-year + quarter-of-day) index so the line cycles four times a
+    /// day without flickering between renders. Wording is deliberately
+    /// product-flavoured — the user asked for "phrases related to the
+    /// newspaper" rather than the previous editorial-tone copy.
+    nonisolated static let sabqHeadlines: [String] = [
+        "سبق AI ينتقي لك أبرز الأخبار",
+        "ذكاء سبق يلخّص اليوم بسرعة",
+        "أعدنا ترتيب الخبر ليصلك أسرع",
+        "تجربة قراءة ذكية… من سبق",
+        "أبرز ما حدث اليوم، بأقل وقت",
+        "سبق AI يحلل ويلخّص قبلك",
+        "ملخصات ذكية لكل خبر مع سبق",
+        "اقرأ ما يهمك… مرتباً بذكاء",
+    ]
+
+    /// Rotating in-app announcements / feature tips shown as the small line
+    /// under the headline. Indexed by day-of-year so users see a different
+    /// tip each day. Keep these short, action-oriented, and feature-true.
+    nonisolated static let sabqTips: [String] = [
+        "جديد: التعليقات على الأخبار متاحة الآن",
+        "احفظ المقال بأيقونة الإشارة المرجعية لقراءته لاحقاً",
+        "بدّل بين الوضع الليلي والنهاري من زر القمر في الأعلى",
+        "وضع التركيز يخفي كل ما حول نص الخبر",
+        "اكتشف الأكثر قراءة في صفحة المقالات",
+        "استمع للموجز الصوتي للأخبار بنقرة واحدة",
+        "تابع لحظة بلحظة من زر البث في الأعلى",
+        "اسحب الخبر بإصبعك يميناً للعودة للصفحة السابقة",
+        "بطاقة جواز المحتوى تكشف مصدر الخبر والذكاء وراءه",
+    ]
 
     // MARK: - OMQ Preview (Phase 2)
 
