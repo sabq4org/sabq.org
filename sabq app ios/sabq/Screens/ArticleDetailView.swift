@@ -1080,14 +1080,16 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func commentsList(store: CommentsStore) -> some View {
-        switch store.loadState {
-        case .idle, .loading where store.comments.isEmpty:
-            commentSkeletonList
-        case .failed(let message) where store.comments.isEmpty:
-            commentErrorState(message: message, store: store)
-        case .loaded where store.comments.isEmpty:
-            commentEmptyState
-        default:
+        if store.comments.isEmpty {
+            switch store.loadState {
+            case .idle, .loading:
+                commentSkeletonList
+            case .failed(let message):
+                commentErrorState(message: message, store: store)
+            case .loaded:
+                commentEmptyState
+            }
+        } else {
             LazyVStack(alignment: .leading, spacing: 6) {
                 ForEach(store.comments) { comment in
                     CommentRow(comment: comment) { tapped in
