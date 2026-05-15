@@ -3189,33 +3189,97 @@ const generateSlug = (text: string) => {
         dir="rtl"
       >
         <style>{`
-          .article-editor-stage > div > .grid > div > .shadcn-card,
-          .article-editor-stage > div > .grid > div > div > .shadcn-card {
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
-            border-color: hsl(var(--border) / 0.7);
+          /* Selector targets direct-child Cards of either grid column. */
+          .article-editor-stage .shadcn-card {
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.05);
+            border-color: hsl(var(--border) / 0.6);
             position: relative;
             overflow: hidden;
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card::before,
-          .article-editor-stage > div > .grid > div > div > .shadcn-card::before {
+          .article-editor-stage .shadcn-card::before {
             content: "";
             position: absolute;
             inset-inline-end: 0;
             top: 0;
             bottom: 0;
             width: 3px;
-            background: linear-gradient(180deg, hsl(var(--primary) / 0.55), hsl(var(--primary) / 0.15));
+            background: currentColor;
+            opacity: 0.55;
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:hover,
-          .article-editor-stage > div > .grid > div > div > .shadcn-card:hover {
-            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06), 0 12px 24px rgba(15, 23, 42, 0.08);
+          .article-editor-stage .shadcn-card:hover {
+            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06), 0 14px 28px rgba(15, 23, 42, 0.08);
           }
-          /* Even rows get a faint tint so adjacent cards do not blur together */
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(even) {
-            background-color: hsl(var(--muted) / 0.35);
+
+          /* Sabq palette — rotate light tints across direct-child cards
+             of each grid column. Using --accent-* tokens defined in
+             index.css plus matching pastels. The accent stripe inherits
+             via currentColor so each card carries its own colour. */
+          .article-editor-stage > div > .grid > div > .shadcn-card,
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+1) {
+            background-color: hsl(var(--accent-blue) / 0.32);
+            color: hsl(203 88% 42%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(even) {
-            background-color: hsl(var(--muted) / 0.15);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+2) {
+            background-color: hsl(var(--accent-purple) / 0.30);
+            color: hsl(243 60% 50%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+3) {
+            background-color: hsl(var(--accent-green) / 0.32);
+            color: hsl(142 55% 35%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+4) {
+            background-color: hsl(35 95% 92%);
+            color: hsl(35 85% 40%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+5) {
+            background-color: hsl(195 75% 92%);
+            color: hsl(195 75% 38%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+6) {
+            background-color: hsl(340 70% 94%);
+            color: hsl(340 60% 45%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+7) {
+            background-color: hsl(160 60% 92%);
+            color: hsl(160 50% 35%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+8) {
+            background-color: hsl(265 60% 93%);
+            color: hsl(265 50% 45%);
+          }
+
+          /* Card text content stays neutral — only the ::before stripe
+             uses the inherited colour. Restore the default foreground
+             on inner content so labels/inputs are unaffected. */
+          .article-editor-stage .shadcn-card > * {
+            color: hsl(var(--card-foreground));
+          }
+
+          /* Dark mode: lower the tint opacity so cards stay readable. */
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card,
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+1) {
+            background-color: hsl(220 60% 14%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+2) {
+            background-color: hsl(250 50% 16%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+3) {
+            background-color: hsl(150 40% 13%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+4) {
+            background-color: hsl(35 40% 16%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+5) {
+            background-color: hsl(195 40% 14%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+6) {
+            background-color: hsl(340 30% 16%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+7) {
+            background-color: hsl(160 30% 14%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+8) {
+            background-color: hsl(265 30% 17%);
           }
         `}</style>
        <div className="container mx-auto">
