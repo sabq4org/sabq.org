@@ -50,6 +50,7 @@ import {
   Send,
   ArrowRight,
   Sparkles,
+  FileText,
   ImagePlus,
   Loader2,
   Upload,
@@ -3177,7 +3178,12 @@ const generateSlug = (text: string) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="container mx-auto px-4 py-6">
+      {/* Tinted page surface so the white Cards read as elevated panels
+          instead of merging with the page bg. Negative margins fight the
+          DashboardLayout padding so the tint reaches edge-to-edge inside
+          the main content area. */}
+      <div className="bg-muted/40 dark:bg-muted/10 -m-4 md:-m-6 p-4 md:p-6 min-h-[calc(100vh-4rem)]" dir="rtl">
+       <div className="container mx-auto">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
           <div
@@ -3243,7 +3249,7 @@ const generateSlug = (text: string) => {
         )}
 
         {/* Page Header with Actions - Mobile Optimized */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 p-4 shadow-sm">
           {/* Title Row */}
           <div className="flex items-center gap-3 min-w-0">
             <Button
@@ -3260,9 +3266,17 @@ const generateSlug = (text: string) => {
                 </a>
               </Link>
             </Button>
-            <h1 className="text-xl sm:text-2xl font-bold truncate">
-              {isNewArticle ? "خبر جديد" : "تحرير الخبر"}
-            </h1>
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold truncate">
+                {isNewArticle ? "خبر جديد" : "تحرير الخبر"}
+              </h1>
+              <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">
+                {isNewArticle ? "اكتب خبراً جديداً وحدد إعدادات النشر" : "حدّث محتوى الخبر وأعدّ نشره"}
+              </p>
+            </div>
             {/* Auto-save indicator - visible on desktop */}
             {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground shrink-0" data-testid="autosave-indicator">
@@ -5396,6 +5410,7 @@ const generateSlug = (text: string) => {
             </Card>
           </div>
         </div>
+       </div>
       </div>
 
       {/* Media Library Picker - Hidden for opinion authors */}
