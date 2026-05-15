@@ -374,6 +374,16 @@ export const navConfig: NavItem[] = [
     roles: ["admin", "editor"],
   },
 
+  // ===== استفسارات كتّاب الرأي / Opinion Tickets =====
+  {
+    id: "opinion_tickets",
+    labelKey: "nav.opinion_tickets",
+    labelAr: "استفسارات الكتّاب",
+    path: "/dashboard/opinion-tickets",
+    icon: MessageSquare,
+    roles: ["admin", "editor", "system_admin"],
+  },
+
   // ===== الإعلانات / Advertising =====
   {
     id: "advertising",

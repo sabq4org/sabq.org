@@ -20,6 +20,7 @@ import { registerAbTestRoutes } from "./abTests";
 import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
 import articleEditLocksRouter from "./articleEditLocks";
+import opinionTicketsRouter from "./opinionTickets";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -48,4 +49,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(focusSessionsRouter);
   app.use(edgeMetaRouter);
   app.use(articleEditLocksRouter);
+  app.use(opinionTicketsRouter);
 }

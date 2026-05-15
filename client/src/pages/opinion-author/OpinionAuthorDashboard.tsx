@@ -18,6 +18,8 @@ import {
   MessageCircle,
   PlusCircle,
   FileEdit,
+  MessageSquare,
+  ChevronLeft,
 } from "lucide-react";
 
 interface OpinionAuthorAnalytics {
@@ -54,6 +56,12 @@ export default function OpinionAuthorDashboard() {
     queryKey: ["/api/opinion-author/analytics"],
   });
 
+  const { data: ticketsUnread } = useQuery<{ unreadCount: number }>({
+    queryKey: ["/api/opinion-tickets/unread-count"],
+    refetchInterval: 60_000,
+  });
+  const unreadTickets = ticketsUnread?.unreadCount ?? 0;
+
   const handleEditArticle = (articleId: string) => {
     navigate(`/dashboard/articles/${articleId}/edit`);
   };
@@ -74,14 +82,30 @@ export default function OpinionAuthorDashboard() {
               مرحباً بك في لوحة التحكم الخاصة بك
             </p>
           </div>
-          <Button
-            onClick={handleNewArticle}
-            data-testid="button-new-article"
-            className="gap-2"
-          >
-            <PlusCircle className="h-4 w-4" />
-            مقال جديد
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/dashboard/opinion-author/tickets")}
+              data-testid="button-my-tickets"
+              className="gap-2 relative"
+            >
+              <MessageSquare className="h-4 w-4" />
+              استفساراتي
+              {unreadTickets > 0 && (
+                <Badge className="ml-1 bg-primary text-primary-foreground text-[10px] px-1.5">
+                  {unreadTickets}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              onClick={handleNewArticle}
+              data-testid="button-new-article"
+              className="gap-2"
+            >
+              <PlusCircle className="h-4 w-4" />
+              مقال جديد
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (

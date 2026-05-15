@@ -389,6 +389,10 @@ const AdminPublisherAnalytics = lazy(() => retryImport(() => import("@/pages/adm
 const CorrespondentRegister = lazy(() => retryImport(() => import("@/pages/correspondent/CorrespondentRegister")));
 const OpinionAuthorRegister = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorRegister")));
 const OpinionAuthorDashboard = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorDashboard")));
+const OpinionTicketsList = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketsList")));
+const OpinionTicketDetail = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketDetail")));
+const OpinionTicketsAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionTicketsAdmin")));
+const OpinionTicketAdminDetail = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionTicketAdminDetail")));
 
 // === LAZY IMPORTS (AI/iFox) ===
 const AIHomePage = lazy(() => retryImport(() => import("@/pages/ai/AIHomePage")));
@@ -903,6 +907,10 @@ function Router() {
         <Route path="/opinion-author/register">{() => <LazyRoute component={OpinionAuthorRegister} />}</Route>
         <Route path="/dashboard/opinion-author-applications">{() => <LazyRoute component={OpinionAuthorApplications} />}</Route>
         <Route path="/dashboard/opinion-author">{() => <LazyRoute component={OpinionAuthorDashboard} />}</Route>
+        <Route path="/dashboard/opinion-author/tickets/:id">{() => <LazyRoute component={OpinionTicketDetail} />}</Route>
+        <Route path="/dashboard/opinion-author/tickets">{() => <LazyRoute component={OpinionTicketsList} />}</Route>
+        <Route path="/dashboard/opinion-tickets/:id">{() => <LazyRoute component={OpinionTicketAdminDetail} />}</Route>
+        <Route path="/dashboard/opinion-tickets">{() => <LazyRoute component={OpinionTicketsAdmin} />}</Route>
         
         {/* iFox Admin Dashboard Routes */}
         <Route path="/dashboard/admin/ifox">{() => <LazyRoute component={IFoxDashboard} />}</Route>
