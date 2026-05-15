@@ -25,6 +25,8 @@ import {
   opinionTickets,
   opinionTicketMessages,
   users,
+  roles,
+  userRoles,
   insertOpinionTicketSchema,
   insertOpinionTicketMessageSchema,
   updateOpinionTicketStatusSchema,
@@ -34,7 +36,7 @@ import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 
 const router = Router();
 
-const ADMIN_ROLES = new Set<string>([
+const ADMIN_ROLE_NAMES = new Set<string>([
   ...SUPERUSER_ROLE_NAMES,
   "editor",
 ]);
@@ -46,12 +48,31 @@ function requireAuth(req: any, res: Response, next: NextFunction) {
   next();
 }
 
-function isAdmin(req: any): boolean {
-  return ADMIN_ROLES.has(req.user?.role ?? "");
-}
+/**
+ * Returns the union of the user's roles: the legacy `users.role` text column
+ * AND any rows in `user_roles` joined through `roles`. This matches the
+ * pattern in server/rbac.ts requireRole — a user can be admin via the text
+ * column with no user_roles entry, or have opinion_author granted only via
+ * user_roles while users.role is still "admin"/"reader".
+ */
+async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isWriter: boolean }> {
+  const userId = req.user?.id;
+  if (!userId) return { isAdmin: false, isWriter: false };
 
-function isOpinionWriter(req: any): boolean {
-  return req.user?.role === "opinion_author";
+  const all = new Set<string>();
+  if (req.user?.role) all.add(req.user.role);
+
+  const rbacRows = await db
+    .select({ roleName: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(userRoles.userId, userId));
+  for (const r of rbacRows) all.add(r.roleName);
+
+  let isAdmin = false;
+  for (const r of all) if (ADMIN_ROLE_NAMES.has(r)) { isAdmin = true; break; }
+  const isWriter = all.has("opinion_author");
+  return { isAdmin, isWriter };
 }
 
 function fullName(first?: string | null, last?: string | null): string | null {
@@ -66,8 +87,7 @@ function fullName(first?: string | null, last?: string | null): string | null {
  */
 router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    const admin = isAdmin(req);
-    const writer = isOpinionWriter(req);
+    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
     if (!admin && !writer) {
       return res.status(403).json({ message: "Forbidden" });
     }
@@ -136,8 +156,7 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
  */
 router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, res: Response) => {
   try {
-    const admin = isAdmin(req);
-    const writer = isOpinionWriter(req);
+    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
     if (!admin && !writer) {
       return res.json({ unreadCount: 0 });
     }
@@ -173,7 +192,8 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
  */
 router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    if (!isOpinionWriter(req)) {
+    const { isWriter } = await getViewerRoles(req);
+    if (!isWriter) {
       return res.status(403).json({ message: "هذه الميزة متاحة لكتّاب الرأي فقط" });
     }
     const parsed = insertOpinionTicketSchema.safeParse(req.body);
@@ -215,8 +235,7 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
  */
 router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Response) => {
   try {
-    const admin = isAdmin(req);
-    const writer = isOpinionWriter(req);
+    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
     if (!admin && !writer) {
       return res.status(403).json({ message: "Forbidden" });
     }
@@ -316,8 +335,7 @@ router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Respon
  */
 router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, res: Response) => {
   try {
-    const admin = isAdmin(req);
-    const writer = isOpinionWriter(req);
+    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
     if (!admin && !writer) {
       return res.status(403).json({ message: "Forbidden" });
     }
@@ -353,7 +371,9 @@ router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, r
     }
 
     const now = new Date();
-    const senderRole = admin ? "admin" : "writer";
+    // If the viewer is the ticket's writer, they reply as the writer even
+    // when they also have admin role. Admins reply as "admin" on others' tickets.
+    const senderRole = ticket.writerId === req.user.id ? "writer" : admin ? "admin" : "writer";
 
     const [msg] = await db
       .insert(opinionTicketMessages)
@@ -393,7 +413,8 @@ router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, r
  */
 router.patch("/api/opinion-tickets/:id/status", requireAuth, async (req: any, res: Response) => {
   try {
-    if (!isAdmin(req)) {
+    const { isAdmin: admin } = await getViewerRoles(req);
+    if (!admin) {
       return res.status(403).json({ message: "Forbidden" });
     }
     const parsed = updateOpinionTicketStatusSchema.safeParse(req.body);
@@ -421,7 +442,8 @@ router.patch("/api/opinion-tickets/:id/status", requireAuth, async (req: any, re
  */
 router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, res: Response) => {
   try {
-    if (!isAdmin(req)) {
+    const { isAdmin: admin } = await getViewerRoles(req);
+    if (!admin) {
       return res.status(403).json({ message: "Forbidden" });
     }
     // Only writers who have at least one ticket
