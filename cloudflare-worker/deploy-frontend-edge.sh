@@ -11,6 +11,9 @@
 #   ROUTE_PATTERNS    Comma-separated, default: sabq.org/*,www.sabq.org/*
 #   API_ORIGIN        Default: https://api.sabq.org
 #   FRONTEND_ORIGIN   Default: https://sabq.org
+#   SKIP_ROUTES       If "true"/"1", upload the worker only and skip route setup.
+#                     Use this when your token lacks Zone:Workers Routes:Edit and
+#                     the route is already attached via the dashboard.
 
 set -e
 
@@ -93,6 +96,23 @@ if [ "$SUCCESS" != "true" ]; then
 fi
 echo -e "${GREEN}Worker uploaded.${NC}"
 
+# Allow skipping route configuration entirely. Useful when the API token only
+# has Account:Workers Scripts:Edit (no Zone:Workers Routes:Edit) and the route
+# was already attached to this worker via the Cloudflare dashboard.
+if [ "$SKIP_ROUTES" = "true" ] || [ "$SKIP_ROUTES" = "1" ]; then
+    echo -e "${YELLOW}SKIP_ROUTES set — skipping route configuration.${NC}"
+    echo ""
+    echo -e "${GREEN}=========================================${NC}"
+    echo -e "${GREEN}  Deployment Complete (worker only)      ${NC}"
+    echo -e "${GREEN}=========================================${NC}"
+    echo ""
+    echo -e "Worker:   ${YELLOW}$WORKER_NAME${NC}"
+    echo -e "Bindings: API_ORIGIN=$API_ORIGIN, FRONTEND_ORIGIN=$FRONTEND_ORIGIN"
+    echo -e "${YELLOW}Verify route attachment in the dashboard:${NC}"
+    echo "  https://dash.cloudflare.com/?to=/:account/workers/services/view/$WORKER_NAME"
+    exit 0
+fi
+
 # Configure routes (one or more, comma-separated)
 IFS=',' read -ra PATTERNS <<< "$ROUTE_PATTERNS"
 for PATTERN in "${PATTERNS[@]}"; do
@@ -136,5 +156,5 @@ echo -e "Worker:  ${YELLOW}$WORKER_NAME${NC}"
 echo -e "Routes:  ${YELLOW}$ROUTE_PATTERNS${NC}"
 echo -e "Bindings: API_ORIGIN=$API_ORIGIN, FRONTEND_ORIGIN=$FRONTEND_ORIGIN"
 echo ""
-echo -e "${YELLOW}Test:${NC}"
-echo "  curl -s -A 'WhatsApp/2.21' https://www.sabq.news/article/zmElGwC | grep -E 'og:title|og:image'"
+echo -e "${YELLOW}Test (use a real article slug from your DB):${NC}"
+echo "  curl -sL -A 'WhatsApp/2.21' https://sabq.org/article/JrCEr5K | grep -E 'og:title|og:image'"
