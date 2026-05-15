@@ -61,7 +61,7 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
   const params: string[] = [];
   if (options?.width) params.push(`width=${options.width}`);
   if (options?.height) params.push(`height=${options.height}`);
-  params.push(`quality=${options?.quality || 80}`);
+  params.push(`quality=${options?.quality || 85}`);
   params.push('format=auto');
 
   if (options?.width && options?.height) {
@@ -73,9 +73,9 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
   return `/cdn-cgi/image/${params.join(',')}${imagePath}`;
 }
 
-export const RESPONSIVE_WIDTHS = [320, 640, 960, 1280] as const;
+export const RESPONSIVE_WIDTHS = [320, 640, 960, 1280, 1920] as const;
 
-export function generateResponsiveSrcSet(src: string, quality: number = 80): string {
+export function generateResponsiveSrcSet(src: string, quality: number = 85): string {
   if (!src) return '';
 
   if (src.includes('imagedelivery.net')) return '';
