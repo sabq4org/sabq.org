@@ -70,7 +70,7 @@ export function Footer() {
     { icon: SiWhatsapp, href: "https://whatsapp.com/channel/0029VaCUMDGEAKWA2soRAl02", label: "واتساب" },
   ];
 
-  const mainCategories = categories.slice(0, 6);
+  const mainCategories = categories;
 
   return (
     <footer 
