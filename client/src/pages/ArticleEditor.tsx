@@ -3178,16 +3178,10 @@ const generateSlug = (text: string) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Tinted page surface + scoped CSS that lifts the inner Cards.
-          The Card component renders as bg-card (white), which on the
-          default page bg disappears. The wrapper paints a soft slate
-          backdrop so the white cards read as elevated; the scoped
-          shadow + right-edge accent stripe (RTL) adds the "life" the
-          flat layout was missing. */}
-      <div
-        className="article-editor-stage bg-slate-100/80 dark:bg-slate-900/40 -m-4 md:-m-6 p-4 md:p-6 min-h-[calc(100vh-4rem)]"
-        dir="rtl"
-      >
+      {/* Scope wrapper for the per-card CSS below. Page background is
+          deliberately left at the DashboardLayout default so this
+          editor matches the rest of the dashboard. */}
+      <div className="article-editor-stage" dir="rtl">
         <style>{`
           /* Flat, no-shadow cards with sharp 1px borders and a very
              faint cool tint. Inputs / selects / textareas / the
