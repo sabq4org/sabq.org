@@ -87,14 +87,20 @@ export default function OpinionAuthorDashboard() {
               variant="outline"
               onClick={() => navigate("/dashboard/opinion-author/tickets")}
               data-testid="button-my-tickets"
-              className="gap-2 relative"
+              className="gap-2 relative bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900 dark:bg-amber-500/10 dark:hover:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-100"
             >
-              <MessageSquare className="h-4 w-4" />
+              <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               استفساراتي
               {unreadTickets > 0 && (
-                <Badge className="ml-1 bg-primary text-primary-foreground text-[10px] px-1.5">
-                  {unreadTickets}
-                </Badge>
+                <>
+                  <Badge className="ms-1 bg-amber-500 hover:bg-amber-500 text-white text-[10px] px-1.5 h-5 min-w-[20px] justify-center">
+                    {unreadTickets}
+                  </Badge>
+                  <span
+                    aria-hidden
+                    className="absolute -top-0.5 -end-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse"
+                  />
+                </>
               )}
             </Button>
             <Button

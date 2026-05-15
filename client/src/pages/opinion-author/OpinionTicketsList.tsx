@@ -1,9 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { Inbox, Loader2, MessageSquare, PlusCircle } from "lucide-react";
+import {
+  CheckCircle,
+  Clock,
+  Inbox,
+  Loader2,
+  Lock,
+  MessageSquare,
+  PlusCircle,
+} from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +54,32 @@ function formatDate(date: string) {
   }
 }
 
+interface StatCardProps {
+  label: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor: string;
+  iconBg: string;
+}
+
+function StatCard({ label, value, icon: Icon, iconColor, iconBg }: StatCardProps) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className={cn("p-2 rounded-lg", iconBg)}>
+            <Icon className={cn("h-5 w-5", iconColor)} />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold">{value.toLocaleString("en-US")}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OpinionTicketsList() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -85,17 +119,30 @@ export default function OpinionTicketsList() {
 
   const tickets = Array.isArray(data?.tickets) ? data!.tickets : [];
 
+  const stats = useMemo(() => {
+    const open = tickets.filter((t) => t.status === "open").length;
+    const answered = tickets.filter((t) => t.status === "answered").length;
+    const closed = tickets.filter((t) => t.status === "closed").length;
+    return { total: tickets.length, open, answered, closed };
+  }, [tickets]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6" dir="rtl">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">
-              استفساراتي
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              تواصل مع إدارة التحرير من خلال نظام الاستفسارات
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/10">
+              <MessageSquare className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold" data-testid="text-page-title">
+                استفساراتي
+              </h1>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                تواصل مع إدارة التحرير من خلال نظام الاستفسارات
+              </p>
+            </div>
           </div>
 
           <Dialog open={openDialog} onOpenChange={setOpenDialog}>
@@ -152,67 +199,114 @@ export default function OpinionTicketsList() {
           </Dialog>
         </div>
 
+        {/* Stats */}
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-lg" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-20 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
             ))}
           </div>
-        ) : tickets.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Inbox className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              label="إجمالي الاستفسارات"
+              value={stats.total}
+              icon={Inbox}
+              iconColor="text-primary"
+              iconBg="bg-primary/10"
+            />
+            <StatCard
+              label="مفتوحة"
+              value={stats.open}
+              icon={Clock}
+              iconColor="text-yellow-600 dark:text-yellow-400"
+              iconBg="bg-yellow-500/10"
+            />
+            <StatCard
+              label="تمت الإجابة"
+              value={stats.answered}
+              icon={CheckCircle}
+              iconColor="text-green-600 dark:text-green-400"
+              iconBg="bg-green-500/10"
+            />
+            <StatCard
+              label="مغلقة"
+              value={stats.closed}
+              icon={Lock}
+              iconColor="text-muted-foreground"
+              iconBg="bg-muted"
+            />
+          </div>
+        )}
+
+        {/* List */}
+        <div>
+          <h2 className="text-lg font-semibold mb-4">قائمة الاستفسارات</h2>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : tickets.length === 0 ? (
+            <div className="text-center py-12 border rounded-lg bg-muted/20">
+              <Inbox className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground mb-4">لا توجد استفسارات بعد</p>
-              <Button onClick={() => setOpenDialog(true)} className="gap-2">
+              <Button onClick={() => setOpenDialog(true)} className="gap-2" data-testid="button-new-ticket-empty">
                 <PlusCircle className="h-4 w-4" />
                 أرسل أول استفسار
               </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {tickets.map((t) => {
-              const meta = STATUS_META[t.status];
-              return (
-                <Card
-                  key={t.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/dashboard/opinion-author/tickets/${t.id}`)}
-                  onKeyDown={(e) =>
-                    (e.key === "Enter" || e.key === " ") &&
-                    navigate(`/dashboard/opinion-author/tickets/${t.id}`)
-                  }
-                  className={cn(
-                    "hover:bg-muted/40 transition-colors cursor-pointer",
-                    t.hasUnread && "border-primary/40 bg-primary/5"
-                  )}
-                  data-testid={`row-ticket-${t.id}`}
-                >
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-5 w-5 text-primary" />
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border bg-card">
+              {tickets.map((t, idx) => {
+                const meta = STATUS_META[t.status];
+                return (
+                  <div
+                    key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/dashboard/opinion-author/tickets/${t.id}`)}
+                    onKeyDown={(e) =>
+                      (e.key === "Enter" || e.key === " ") &&
+                      navigate(`/dashboard/opinion-author/tickets/${t.id}`)
+                    }
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40",
+                      idx !== tickets.length - 1 && "border-b",
+                      t.hasUnread && "bg-amber-50/40 dark:bg-amber-500/5"
+                    )}
+                    data-testid={`row-ticket-${t.id}`}
+                  >
+                    <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium line-clamp-1">{t.title}</h3>
+                        <h3 className="font-medium text-sm line-clamp-1">{t.title}</h3>
                         {t.hasUnread && (
-                          <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5">
-                            جديد
-                          </Badge>
+                          <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-label="غير مقروء" />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         آخر نشاط: {formatDate(t.lastMessageAt)}
                       </p>
                     </div>
-                    <Badge className={cn("shrink-0", meta.className)}>{meta.label}</Badge>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                    <Badge variant="outline" className={cn("shrink-0", meta.className)}>
+                      {meta.label}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

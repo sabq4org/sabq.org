@@ -5,7 +5,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -40,8 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { 
-  MessageSquare, 
+import {
+  MessageSquare,
   Search,
   Eye,
   Check,
@@ -57,12 +57,12 @@ import {
   FileText,
   Clock,
   Send,
+  Inbox,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { motion } from "framer-motion";
 import type { ContactMessage } from "@shared/schema";
 
 type ContactMessageStatus = "pending" | "read" | "replied";
@@ -263,88 +263,141 @@ export default function ContactMessagesManagement() {
   const totalPages = data?.totalPages || 1;
   const total = data?.total || 0;
 
+  const counts = {
+    total,
+    pending: messages.filter((m) => m.status === "pending").length,
+    read: messages.filter((m) => m.status === "read").length,
+    replied: messages.filter((m) => m.status === "replied").length,
+  };
+
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl" data-testid="contact-messages-page">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="flex items-center justify-end gap-3 mb-2">
-            <div className="text-right">
-              <h1 className="text-3xl font-bold">رسائل التواصل</h1>
-              <p className="text-muted-foreground">إدارة رسائل الزوار والتواصل</p>
-            </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
-              <MessageSquare className="h-6 w-6 text-white" />
-            </div>
+      <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-500/10">
+            <MessageSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
-        </motion.div>
+          <div>
+            <h1 className="text-2xl font-bold">رسائل التواصل</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              إدارة رسائل الزوار والرد عليها
+            </p>
+          </div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <Card data-testid="filters-card">
-            <CardHeader className="text-right">
-              <CardTitle className="flex items-center justify-end gap-2">
-                <span>البحث والتصفية</span>
-                <Search className="h-5 w-5" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="relative">
-                  <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="بحث بالاسم أو البريد..."
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setPage(1);
-                    }}
-                    className="pr-10"
-                    data-testid="input-search"
-                  />
+        {/* Stats overview */}
+        {isLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-20 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card data-testid="card-total-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Inbox className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">الإجمالي</p>
+                    <p className="text-2xl font-bold">{counts.total.toLocaleString("en-US")}</p>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-pending-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-yellow-500/10">
+                    <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">قيد الانتظار</p>
+                    <p className="text-2xl font-bold">{counts.pending.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-read-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">تمت القراءة</p>
+                    <p className="text-2xl font-bold">{counts.read.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-replied-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <CheckCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">تم الرد</p>
+                    <p className="text-2xl font-bold">{counts.replied.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-                <Select
-                  value={statusFilter}
-                  onValueChange={(value) => {
-                    setStatusFilter(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger data-testid="select-status-filter">
-                    <SelectValue placeholder="تصفية حسب الحالة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">جميع الحالات</SelectItem>
-                    <SelectItem value="pending">قيد الانتظار</SelectItem>
-                    <SelectItem value="read">تم القراءة</SelectItem>
-                    <SelectItem value="replied">تم الرد</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* Filters */}
+        <div className="grid gap-3 md:grid-cols-[1fr_220px]" data-testid="filters-card">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="بحث بالاسم أو البريد..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="pr-10"
+              data-testid="input-search"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger data-testid="select-status-filter">
+              <SelectValue placeholder="جميع الحالات" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">جميع الحالات</SelectItem>
+              <SelectItem value="pending">قيد الانتظار</SelectItem>
+              <SelectItem value="read">تم القراءة</SelectItem>
+              <SelectItem value="replied">تم الرد</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-        >
-          <Card data-testid="messages-table-card">
-            <CardHeader className="text-right">
-              <CardTitle>الرسائل</CardTitle>
-              <CardDescription>
-                {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total} رسالة`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        {/* Table */}
+        <div data-testid="messages-table-card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold">قائمة الرسائل</h2>
+            <p className="text-xs text-muted-foreground">
+              {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total}`}
+            </p>
+          </div>
+          <div>
               {isLoading ? (
                 <TableSkeleton />
               ) : messages.length === 0 ? (
@@ -468,9 +521,8 @@ export default function ContactMessagesManagement() {
                   )}
                 </>
               )}
-            </CardContent>
-          </Card>
-        </motion.div>
+          </div>
+        </div>
 
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
           <DialogContent className="max-w-2xl" dir="rtl" data-testid="message-details-dialog">
