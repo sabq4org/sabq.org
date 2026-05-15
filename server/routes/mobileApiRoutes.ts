@@ -2271,6 +2271,17 @@ function estimateReadingMinutes(text: string): number {
 
 const BASE_URL = "https://sabq.org";
 
+// Deploy marker (used to verify the latest mobileApiRoutes bundle is live
+// on Railway — strings here surface via the `X-Mobile-Routes-Build` header
+// added below). Bump the timestamp string whenever a deploy-correctness
+// check is needed.
+const MOBILE_ROUTES_BUILD = "2026-05-15T21:00Z+categoryslug";
+
+router.use((_req, res, next) => {
+  res.setHeader("X-Mobile-Routes-Build", MOBILE_ROUTES_BUILD);
+  next();
+});
+
 function formatArticleForMobile(row: any, baseUrl: string) {
   const article = row.article;
   // The byline shown to readers is the **reporter** chosen from the editor's
