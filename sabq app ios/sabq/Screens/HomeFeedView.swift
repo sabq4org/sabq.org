@@ -283,9 +283,16 @@ struct HomeFeedView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .always))
         .onAppear {
-            let appearance = UIPageControl.appearance(whenContainedInInstancesOf: [UIHostingController<HomeFeedView>.self])
+            // The previous `whenContainedInInstancesOf: [UIHostingController<HomeFeedView>.self]`
+            // scope no longer matches what SwiftUI's TabView produces on
+            // iOS 16+, so the indicator fell back to the default white tint
+            // and disappeared against the page background. Apply the
+            // appearance globally and bump the unselected colour from
+            // primary@30% to ink@45% so the dots read clearly in both
+            // light and dark mode.
+            let appearance = UIPageControl.appearance()
             appearance.currentPageIndicatorTintColor = UIColor(SabqTheme.primaryEnd)
-            appearance.pageIndicatorTintColor = UIColor(SabqTheme.primaryEnd.opacity(0.3))
+            appearance.pageIndicatorTintColor = UIColor(SabqTheme.ink.opacity(0.45))
         }
         .frame(height: 420)
     }
