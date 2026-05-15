@@ -3189,97 +3189,91 @@ const generateSlug = (text: string) => {
         dir="rtl"
       >
         <style>{`
-          /* Selector targets direct-child Cards of either grid column. */
+          /* Flat, no-shadow cards with sharp 1px borders and a very
+             faint cool tint. Inputs / selects / textareas / the
+             editor surface stay white so they pop out of the card
+             instead of blending into it. */
           .article-editor-stage .shadcn-card {
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.05);
-            border-color: hsl(var(--border) / 0.6);
-            position: relative;
-            overflow: hidden;
-          }
-          .article-editor-stage .shadcn-card::before {
-            content: "";
-            position: absolute;
-            inset-inline-end: 0;
-            top: 0;
-            bottom: 0;
-            width: 3px;
-            background: currentColor;
-            opacity: 0.55;
-          }
-          .article-editor-stage .shadcn-card:hover {
-            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06), 0 14px 28px rgba(15, 23, 42, 0.08);
+            box-shadow: none !important;
+            border-width: 1px;
+            border-color: hsl(var(--border));
           }
 
-          /* Sabq palette — rotate light tints across direct-child cards
-             of each grid column. Using --accent-* tokens defined in
-             index.css plus matching pastels. The accent stripe inherits
-             via currentColor so each card carries its own colour. */
-          .article-editor-stage > div > .grid > div > .shadcn-card,
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+1) {
-            background-color: hsl(var(--accent-blue) / 0.32);
-            color: hsl(203 88% 42%);
+          /* Cool palette — sky / slate / mint / cyan / lavender / teal.
+             Direct-child Cards of each grid column rotate through these.
+             Opacity is tiny so the colour reads as "paper of a different
+             stock" rather than a coloured panel. */
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
+            background-color: hsl(210 40% 97.5%);  /* slate paper */
+            border-color: hsl(210 25% 88%);
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+2) {
-            background-color: hsl(var(--accent-purple) / 0.30);
-            color: hsl(243 60% 50%);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
+            background-color: hsl(205 70% 97%);    /* sky paper */
+            border-color: hsl(205 50% 88%);
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+3) {
-            background-color: hsl(var(--accent-green) / 0.32);
-            color: hsl(142 55% 35%);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
+            background-color: hsl(160 45% 97%);    /* mint paper */
+            border-color: hsl(160 30% 86%);
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+4) {
-            background-color: hsl(35 95% 92%);
-            color: hsl(35 85% 40%);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
+            background-color: hsl(190 55% 97%);    /* cyan paper */
+            border-color: hsl(190 40% 86%);
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+5) {
-            background-color: hsl(195 75% 92%);
-            color: hsl(195 75% 38%);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
+            background-color: hsl(240 35% 97.5%);  /* lavender paper */
+            border-color: hsl(240 25% 88%);
           }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+6) {
-            background-color: hsl(340 70% 94%);
-            color: hsl(340 60% 45%);
-          }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+7) {
-            background-color: hsl(160 60% 92%);
-            color: hsl(160 50% 35%);
-          }
-          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+8) {
-            background-color: hsl(265 60% 93%);
-            color: hsl(265 50% 45%);
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
+            background-color: hsl(180 35% 97%);    /* teal paper */
+            border-color: hsl(180 25% 86%);
           }
 
-          /* Card text content stays neutral — only the ::before stripe
-             uses the inherited colour. Restore the default foreground
-             on inner content so labels/inputs are unaffected. */
-          .article-editor-stage .shadcn-card > * {
-            color: hsl(var(--card-foreground));
+          /* Force every interactive surface inside a tinted card back to
+             white so they read as distinct fields, not as part of the
+             card itself. */
+          .article-editor-stage .shadcn-card input:not([type="checkbox"]):not([type="radio"]),
+          .article-editor-stage .shadcn-card textarea,
+          .article-editor-stage .shadcn-card select,
+          .article-editor-stage .shadcn-card [role="combobox"],
+          .article-editor-stage .shadcn-card [role="textbox"],
+          .article-editor-stage .shadcn-card .ProseMirror,
+          .article-editor-stage .shadcn-card [contenteditable="true"] {
+            background-color: hsl(var(--background)) !important;
+          }
+          /* The rich-text editor wrapper (toolbar + surface) — keep its
+             outer wrapper neutral so the giant editor block doesn't
+             flood the page with one tint. */
+          .article-editor-stage .shadcn-card .tiptap,
+          .article-editor-stage .shadcn-card .editor-shell,
+          .article-editor-stage .shadcn-card [data-editor-shell] {
+            background-color: hsl(var(--background)) !important;
+            border-radius: 0.5rem;
           }
 
-          /* Dark mode: lower the tint opacity so cards stay readable. */
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card,
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+1) {
-            background-color: hsl(220 60% 14%);
+          /* Dark mode — cool tones at low lightness, sharp borders. */
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
+            background-color: hsl(210 25% 12%);
+            border-color: hsl(210 15% 22%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+2) {
-            background-color: hsl(250 50% 16%);
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
+            background-color: hsl(205 30% 13%);
+            border-color: hsl(205 20% 23%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+3) {
-            background-color: hsl(150 40% 13%);
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
+            background-color: hsl(160 20% 12%);
+            border-color: hsl(160 15% 22%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+4) {
-            background-color: hsl(35 40% 16%);
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
+            background-color: hsl(190 25% 12%);
+            border-color: hsl(190 18% 22%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+5) {
-            background-color: hsl(195 40% 14%);
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
+            background-color: hsl(240 20% 13%);
+            border-color: hsl(240 15% 23%);
           }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+6) {
-            background-color: hsl(340 30% 16%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+7) {
-            background-color: hsl(160 30% 14%);
-          }
-          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(8n+8) {
-            background-color: hsl(265 30% 17%);
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
+            background-color: hsl(180 20% 12%);
+            border-color: hsl(180 15% 22%);
           }
         `}</style>
        <div className="container mx-auto">
