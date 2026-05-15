@@ -131,11 +131,12 @@ struct HomeFeedView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Live coverage entry point — replaces the previous bell
-                // (notifications) button. The route is already wired in
-                // ContentView via `LiveCoverageRoute` → `LiveCoverageView`.
-                // A subtle pulsing red dot signals "live" without yelling.
-                NavigationLink(value: LiveCoverageRoute()) {
+                // "لحظة بلحظة" entry point — replaces the previous bell
+                // (notifications) button. Routes to the published-articles
+                // live feed (`MomentByMomentView`), NOT the live-events
+                // coverage screen. A subtle pulsing red dot signals
+                // freshness without yelling.
+                NavigationLink(value: MomentByMomentRoute()) {
                     ZStack {
                         Circle()
                             .fill(

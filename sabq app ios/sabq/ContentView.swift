@@ -65,6 +65,9 @@ struct ContentView: View {
                 .navigationDestination(for: LiveCoverageRoute.self) { _ in
                     LiveCoverageView()
                 }
+                .navigationDestination(for: MomentByMomentRoute.self) { _ in
+                    MomentByMomentView()
+                }
                 .navigationDestination(for: OpinionsRoute.self) { _ in
                     OpinionsView()
                 }

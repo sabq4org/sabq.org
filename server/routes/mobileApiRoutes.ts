@@ -1495,6 +1495,14 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
       .where(eq(userRoles.userId, session.userId));
 
+    // Diagnostic: log the role payload we're about to return so we can
+    // verify whether a particular user (e.g. aalhazmi@sabq.org) actually
+    // has the expected RBAC mapping. Safe to keep — emails are already
+    // logged by the existing auth flow, and the payload is small.
+    console.log(
+      `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} rbacRoles=${JSON.stringify(rbacRoles)}`
+    );
+
     // Get user interests
     const interests = await db
       .select({

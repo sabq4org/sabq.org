@@ -109,6 +109,10 @@ struct AuthorRoute: Hashable {
 }
 
 struct LiveCoverageRoute: Hashable {}
+/// "لحظة بلحظة" — published-articles live feed (mirrors web's
+/// `/moment-by-moment`). Distinct from `LiveCoverageRoute` which targets the
+/// live-events table.
+struct MomentByMomentRoute: Hashable {}
 
 // MARK: - Article Category
 

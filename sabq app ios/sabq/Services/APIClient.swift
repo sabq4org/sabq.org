@@ -401,6 +401,22 @@ actor APIClient {
         try await get(APILiveEventDetail.self, path: "/live/\(id)")
     }
 
+    /// Moment-by-moment news feed — published articles in reverse-chronological
+    /// order. Backed by `/api/live/updates` (public API root, not v1). Mirrors
+    /// the web's `MomentByMoment.tsx` page; distinct from `fetchLive` which
+    /// queries the separate live-events table.
+    func fetchMomentByMomentUpdates(cursor: String? = nil, filter: String? = nil, limit: Int = 20) async throws -> APILiveUpdatesResponse {
+        var query: [String: String] = ["limit": "\(limit)"]
+        if let cursor { query["cursor"] = cursor }
+        if let filter { query["filter"] = filter }
+        return try await get(
+            APILiveUpdatesResponse.self,
+            path: "/live/updates",
+            query: query,
+            apiRoot: publicAPIBaseURL
+        )
+    }
+
     // MARK: - Paginated News
 
     func fetchPaginatedNews(page: Int = 1, ignoreCache: Bool = false) async throws -> APIPaginatedList<APIArticle> {

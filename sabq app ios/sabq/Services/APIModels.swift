@@ -1431,3 +1431,51 @@ nonisolated struct APILiveEventDetail: Decodable {
             ?? 0
     }
 }
+
+// MARK: - Moment-by-Moment (Live News Updates)
+
+/// One row in the moment-by-moment feed (`GET /api/live/updates`). This is a
+/// stream of recently-published articles, NOT the live-events table that
+/// powers `APILiveEvent`. See `client/src/pages/MomentByMoment.tsx` for the
+/// reference web implementation.
+nonisolated struct APILiveUpdate: Decodable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let slug: String
+    let imageUrl: String?
+    let publishedAt: String
+    let updatedAt: String
+    let isBreaking: Bool
+    let categoryNameAr: String
+    let categoryColor: String?
+    let viewsCount: Int
+    let commentsCount: Int
+    let summary: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? UUID().uuidString
+        title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
+        slug = (try? c.decode(String.self, forKey: FlexKey("slug"))) ?? ""
+        imageUrl = try? c.decode(String.self, forKey: FlexKey("imageUrl"))
+        publishedAt = (try? c.decode(String.self, forKey: FlexKey("publishedAt"))) ?? ""
+        updatedAt = (try? c.decode(String.self, forKey: FlexKey("updatedAt"))) ?? publishedAt
+        isBreaking = (try? c.decode(Bool.self, forKey: FlexKey("isBreaking"))) ?? false
+        categoryNameAr = (try? c.decode(String.self, forKey: FlexKey("categoryNameAr"))) ?? "غير مصنف"
+        categoryColor = try? c.decode(String.self, forKey: FlexKey("categoryColor"))
+        viewsCount = (try? c.decode(Int.self, forKey: FlexKey("viewsCount"))) ?? 0
+        commentsCount = (try? c.decode(Int.self, forKey: FlexKey("commentsCount"))) ?? 0
+        summary = (try? c.decode(String.self, forKey: FlexKey("summary"))) ?? ""
+    }
+}
+
+nonisolated struct APILiveUpdatesResponse: Decodable {
+    let items: [APILiveUpdate]
+    let nextCursor: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        items = (try? c.decode([APILiveUpdate].self, forKey: FlexKey("items"))) ?? []
+        nextCursor = try? c.decode(String.self, forKey: FlexKey("nextCursor"))
+    }
+}
