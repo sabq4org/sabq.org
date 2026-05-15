@@ -201,26 +201,41 @@ struct CommentRow: View {
 /// Draws a single connected thread guide that emerges from under the parent
 /// row's avatar and curves into each reply's avatar.
 ///
-/// Geometry constants depend on the parent row's internal layout:
+/// Geometry constants — distances measured from the row's **leading** edge so
+/// the same numbers work in LTR and RTL. SwiftUI's `Canvas` always uses
+/// LTR pixel coordinates, so we read `layoutDirection` and mirror the X
+/// coordinates against `size.width` when the surrounding layout is RTL
+/// (which is the default for this app via `.sabqRTL()`).
+///
 ///   - the row has `.padding(.vertical, 10)` so the header starts at y=10
 ///   - the avatar is 32×32, so its center is at y=26 and bottom at y=42
-///   - the avatar's horizontal center is x=16 (HStack starts at x=0)
+///   - the avatar's leading-edge offset is 16 (HStack starts at the
+///     leading edge, avatar width 32, center at 16)
 ///   - replies VStack adds `.padding(.leading, 38)` so reply avatars start
-///     at x=38 inside the shared `commentRowSpace` coordinate
+///     38pt in from the leading edge
 private struct ThreadLineOverlay: View {
+    @Environment(\.layoutDirection) private var layoutDirection
     let replyFrames: [CGRect]
 
-    private let trunkX: CGFloat = 16
+    private let trunkFromLeading: CGFloat = 16
     private let trunkStartY: CGFloat = 42
-    private let avatarEdgeX: CGFloat = 38
+    private let avatarEdgeFromLeading: CGFloat = 38
     private let avatarCenterYOffset: CGFloat = 26
     private let cornerRadius: CGFloat = 8
 
     var body: some View {
-        Canvas { context, _ in
+        Canvas { context, size in
             guard !replyFrames.isEmpty else { return }
             let centerYs = replyFrames.map { $0.minY + avatarCenterYOffset }
             guard let lastY = centerYs.last else { return }
+
+            // In RTL, "leading" is the right edge — mirror all X coordinates
+            // against the canvas width. The `dir` sign also flips the elbow
+            // arc so it curves the same direction relative to the trunk.
+            let isRTL = layoutDirection == .rightToLeft
+            let trunkX = isRTL ? size.width - trunkFromLeading : trunkFromLeading
+            let avatarEdgeX = isRTL ? size.width - avatarEdgeFromLeading : avatarEdgeFromLeading
+            let dir: CGFloat = isRTL ? -1 : 1
 
             let stroke = GraphicsContext.Shading.color(SabqTheme.outline.opacity(0.55))
 
@@ -237,10 +252,12 @@ private struct ThreadLineOverlay: View {
                 var branch = Path()
                 branch.move(to: CGPoint(x: trunkX, y: y - cornerRadius))
                 branch.addQuadCurve(
-                    to: CGPoint(x: trunkX + cornerRadius, y: y),
+                    to: CGPoint(x: trunkX + cornerRadius * dir, y: y),
                     control: CGPoint(x: trunkX, y: y)
                 )
-                branch.addLine(to: CGPoint(x: avatarEdgeX - 2, y: y))
+                // Stop the stub 2pt shy of the avatar's outer edge so the
+                // line doesn't visually touch the circle.
+                branch.addLine(to: CGPoint(x: avatarEdgeX - 2 * dir, y: y))
                 context.stroke(branch, with: stroke, lineWidth: 1.5)
             }
         }
