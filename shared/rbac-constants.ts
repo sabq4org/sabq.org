@@ -12,6 +12,19 @@ export const ROLE_NAMES = {
   READER: "reader",
 } as const;
 
+// Role names that grant superuser access — every permission check
+// short-circuits to true when the user's role (text column) OR any of
+// their user_roles entries matches one of these. The text "system.admin"
+// is kept for legacy data; new accounts should use "system_admin".
+// SECURITY: this list MUST stay in sync with seed data and any
+// permission-check shortcut. Single source of truth (audit H5).
+export const SUPERUSER_ROLE_NAMES = [
+  "admin",
+  "superadmin",
+  "system_admin",
+  "system.admin",
+] as const;
+
 export const ROLE_LABELS_AR = {
   [ROLE_NAMES.SYSTEM_ADMIN]: "مدير النظام",
   [ROLE_NAMES.ADMIN]: "مسؤول",
@@ -179,78 +192,18 @@ export const PERMISSION_CODES = {
 export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
   [ROLE_NAMES.SYSTEM_ADMIN]: ["*"], // All permissions
   
-  [ROLE_NAMES.ADMIN]: [
-    PERMISSION_CODES.USERS_VIEW,
-    PERMISSION_CODES.USERS_CREATE,
-    PERMISSION_CODES.USERS_UPDATE, // Note: Admins can update users but email changes require system_admin (enforced in backend)
-    PERMISSION_CODES.USERS_DELETE,
-    PERMISSION_CODES.USERS_SUSPEND,
-    PERMISSION_CODES.USERS_BAN,
-    PERMISSION_CODES.USERS_CHANGE_ROLE,
-    PERMISSION_CODES.ARTICLES_VIEW,
-    PERMISSION_CODES.ARTICLES_PUBLISH,
-    PERMISSION_CODES.ARTICLES_EDIT_ANY,
-    PERMISSION_CODES.ARTICLES_DELETE,
-    // Article Editor Features
-    PERMISSION_CODES.ARTICLES_AI_GENERATE,
-    PERMISSION_CODES.ARTICLES_SCHEDULE,
-    PERMISSION_CODES.ARTICLES_POLLS,
-    PERMISSION_CODES.ARTICLES_SMART_LINKS,
-    PERMISSION_CODES.ARTICLES_GENERATE_IMAGES,
-    PERMISSION_CODES.ARTICLES_INFOGRAPHICS,
-    PERMISSION_CODES.ARTICLES_NEWS_TYPE,
-    PERMISSION_CODES.ARTICLES_MUQTARAB_ANGLES,
-    PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT,
-    PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR,
-    PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE,
-    PERMISSION_CODES.COMMENTS_VIEW,
-    PERMISSION_CODES.COMMENTS_APPROVE,
-    PERMISSION_CODES.MEDIA_VIEW,
-    PERMISSION_CODES.MEDIA_UPLOAD,
-    PERMISSION_CODES.SETTINGS_VIEW,
-    PERMISSION_CODES.SETTINGS_UPDATE,
-    PERMISSION_CODES.ANALYTICS_VIEW,
-    PERMISSION_CODES.SYSTEM_VIEW_AUDIT,
-    PERMISSION_CODES.SYSTEM_MANAGE_SETTINGS,
-    PERMISSION_CODES.MIRQAB_VIEW,
-    PERMISSION_CODES.MIRQAB_CREATE,
-    PERMISSION_CODES.MIRQAB_EDIT,
-    PERMISSION_CODES.MIRQAB_DELETE,
-    PERMISSION_CODES.MIRQAB_PUBLISH,
-    PERMISSION_CODES.MIRQAB_MANAGE_SETTINGS,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_VIEW,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_CREATE,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_EDIT,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_DELETE,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_PUBLISH,
-    PERMISSION_CODES.AUDIO_NEWSLETTERS_MANAGE_ALL,
-    PERMISSION_CODES.AUDIO_BRIEFS_VIEW,
-    PERMISSION_CODES.AUDIO_BRIEFS_CREATE,
-    PERMISSION_CODES.AUDIO_BRIEFS_EDIT,
-    PERMISSION_CODES.AUDIO_BRIEFS_DELETE,
-    PERMISSION_CODES.AUDIO_BRIEFS_PUBLISH,
-    PERMISSION_CODES.AUDIO_BRIEFS_GENERATE,
-    PERMISSION_CODES.AUDIO_BRIEFS_MANAGE_ALL,
-    PERMISSION_CODES.OPINION_VIEW,
-    PERMISSION_CODES.OPINION_EDIT_ANY,
-    PERMISSION_CODES.OPINION_REVIEW,
-    PERMISSION_CODES.OPINION_PUBLISH,
-    PERMISSION_CODES.OPINION_REJECT,
-    PERMISSION_CODES.OPINION_DELETE_ANY,
-    // Dashboard - صلاحيات كاملة للمسؤول
-    PERMISSION_CODES.DASHBOARD_VIEW,
-    PERMISSION_CODES.DASHBOARD_VIEW_STATS,
-    PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES,
-    PERMISSION_CODES.DASHBOARD_VIEW_MODERATORS,
-    PERMISSION_CODES.DASHBOARD_VIEW_QUICK_ACTIONS,
-    PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
-    // Communications
-    PERMISSION_CODES.COMMUNICATIONS_STAFF,
-    // Breaking News Ticker
-    PERMISSION_CODES.BREAKING_TICKER_MANAGE,
-    // Staff Productivity
-    PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
-  ],
+  // ADMIN gets all permissions in the UI to match the backend's behavior
+  // (server/rbac.ts treats 'admin' as a superuser via the superuserRoles
+  // list). The previous explicit list silently omitted dozens of codes
+  // (categories.*, tags.*, roles.*, permissions.*, articles.create,
+  // articles.edit_own, articles.unpublish, articles.archive, articles.feature,
+  // smart_links.*, foreign_news.*, ads.*, ai.*, blocks.*, integrations.*, ...)
+  // which hid sidebar items and dashboard buttons even though the backend
+  // would have allowed the actions. Role-assignment restrictions (e.g.
+  // admin can't create system_admin) are enforced separately by
+  // canAssignRole below, so granting "*" here doesn't widen what an admin
+  // can do — it just unhides what they could already do.
+  [ROLE_NAMES.ADMIN]: ["*"],
   
   [ROLE_NAMES.EDITOR]: [
     PERMISSION_CODES.ARTICLES_VIEW,
@@ -469,21 +422,28 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY]: "عرض إنتاجية الموظفين",
 };
 
-// Helper function to get all permissions for given roles
+// Helper function to get all permissions for given roles.
+//
+// Wildcard handling: returns the literal ["*"] (instead of expanding to
+// Object.values(PERMISSION_CODES)) when any role has "*". This matters
+// because nav.config.ts and feature components reference dozens of
+// permission codes (roles.view, permissions.manage, ads.manage, ai.view,
+// blocks.manage, ...) that are NOT defined in PERMISSION_CODES, and
+// expanding "*" would silently drop them. Keeping the literal "*" lets
+// hasPermission/hasAnyPermission treat it as "matches anything".
 export function getPermissionsForRoles(roleNames: string[]): string[] {
   const allPermissions = new Set<string>();
-  
+
   for (const roleName of roleNames) {
     const permissions = ROLE_PERMISSIONS_MAP[roleName] || [];
-    
-    // If role has wildcard (*), return all permissions
+
     if (permissions.includes("*")) {
-      return Object.values(PERMISSION_CODES);
+      return ["*"];
     }
-    
+
     permissions.forEach(p => allPermissions.add(p));
   }
-  
+
   return Array.from(allPermissions);
 }
 

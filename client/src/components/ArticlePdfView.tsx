@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { Eye, Heart, Share2, MessageSquare, Clock } from "lucide-react";
 import { formatSaudiDateTime } from "@/lib/pdf/exportClient";
 import type { ArticleWithDetails } from "@shared/schema";
@@ -118,7 +119,7 @@ export function ArticlePdfView({ article, articleUrl }: ArticlePdfViewProps) {
             lineHeight: '1.75',
             color: '#1a1a1a',
           }}
-          dangerouslySetInnerHTML={{ __html: article.content }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
         />
       </article>
 

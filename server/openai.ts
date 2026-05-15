@@ -1087,11 +1087,14 @@ export async function rewriteAndEnhanceContent(
    - استبدل الكلمات الركيكة بكلمات أقوى
    - أزل التكرار غير الضروري
 
+🚨 قاعدة صارمة لا تُكسر: كل كلمة في ردك يجب أن تكون مستوحاة من النص الأصلي فقط. لا تخترع أي كلمة أو وصف أو معلومة أو اسم مكان لم يرد حرفياً في النص.
+
 ⚠️ ممنوعات:
-- لا تضف معلومات جديدة غير موجودة في النص الأصلي
-- لا تغير الحقائق أو الأرقام
+- لا تضف معلومات أو كلمات أو أوصافاً غير موجودة في النص الأصلي
+- لا تغير الحقائق أو الأرقام أو الأسماء
 - لا تحذف معلومات مهمة
 - لا تضف رأيك الشخصي
+- لا تضف كلمات وصفية من عندك (مثل: قارة، كبرى، مشهورة، عريقة...)
 
 أعد النتيجة بصيغة JSON فقط:
 {
@@ -1176,6 +1179,7 @@ Rewrite and improve this content in JSON format.`
           content: userPrompt,
         },
       ],
+      temperature: 0.2,
       response_format: { type: "json_object" },
       max_completion_tokens: 4096, // Higher limit for content rewriting
     });
@@ -1639,7 +1643,8 @@ export async function autoFormatContent(
 • لا تُعد صياغة الخبر بشكل كامل، ركّز على التنسيق فقط.
 • لا تستخدم أي لغة غير العربية في المحتوى نفسه.
 • لا تضف مقدمة ولا خاتمة؛ فقط النتيجة حسب نموذج الـ JSON أعلاه.
-• الحد الأقصى للكلمات الغامقة: ${rules.max_bold_per_paragraph || 5} لكل فقرة.`;
+• الحد الأقصى للكلمات الغامقة: ${rules.max_bold_per_paragraph || 5} لكل فقرة.
+• 🚨 ممنوع منعاً باتاً إضافة أي كلمة أو وصف لم يرد في النص الأصلي — التنسيق فقط، لا إثراء ولا إضافة.`;
 
     const userPrompt = JSON.stringify({
       mode: "auto_format",
@@ -1667,6 +1672,7 @@ export async function autoFormatContent(
           content: userPrompt,
         },
       ],
+      temperature: 0.2,
       response_format: { type: "json_object" },
       max_completion_tokens: 4096,
     });

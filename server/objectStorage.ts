@@ -3,6 +3,7 @@ import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -16,17 +17,18 @@ const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 'local';
 
 let r2Client: S3Client | null = null;
+let s3Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
   if (!r2Client) {
     const accountId = process.env.R2_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    
+
     if (!accountId || !accessKeyId || !secretAccessKey) {
       throw new Error('[R2] Missing R2 credentials. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY');
     }
-    
+
     r2Client = new S3Client({
       region: 'auto',
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -41,6 +43,53 @@ function getR2Client(): S3Client {
 
 function getR2Bucket(): string {
   return process.env.R2_BUCKET_NAME || 'sabq-media';
+}
+
+// Generic S3-compatible client (Tigris on Railway, MinIO, Backblaze B2,
+// AWS S3, etc.). Activated by STORAGE_PROVIDER=s3. Uses:
+//   S3_ENDPOINT          full URL incl. https://, e.g. https://t3.storageapi.dev
+//   S3_BUCKET            bucket name
+//   S3_ACCESS_KEY_ID
+//   S3_SECRET_ACCESS_KEY
+//   S3_REGION            optional, defaults to "auto" (works for Tigris/R2)
+//   S3_PUBLIC_URL        optional, full base URL for public reads. If unset,
+//                        falls back to path-style ${S3_ENDPOINT}/${bucket}.
+//   S3_FORCE_PATH_STYLE  optional, "true"/"false". Defaults to true since most
+//                        S3-compat providers don't support virtual-hosted style
+//                        without DNS setup.
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    const endpoint = process.env.S3_ENDPOINT;
+    const accessKeyId = process.env.S3_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+
+    if (!endpoint || !accessKeyId || !secretAccessKey) {
+      throw new Error(
+        "[S3] Missing S3 credentials. Set S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY",
+      );
+    }
+
+    s3Client = new S3Client({
+      region: process.env.S3_REGION || "auto",
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
+    });
+  }
+  return s3Client;
+}
+
+function getS3Bucket(): string {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) throw new Error("[S3] S3_BUCKET env var is required");
+  return bucket;
+}
+
+function getS3PublicUrl(bucket: string): string {
+  const explicit = process.env.S3_PUBLIC_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const endpoint = (process.env.S3_ENDPOINT || "").replace(/\/+$/, "");
+  return `${endpoint}/${bucket}`;
 }
 
 /**
@@ -424,6 +473,43 @@ export class ObjectStorageService {
   }
 
   async getObjectEntityUploadURL(): Promise<string> {
+    // S3-compatible backend (Tigris on Railway, etc.) — sign a PUT URL
+    // directly against the configured S3 endpoint. The browser will PUT
+    // the file at this URL, then the client calls /api/article-images
+    // (or similar) to finalize. Files are placed under uploads/<uuid>
+    // with NO public/private prefix here; finalize handlers decide
+    // whether to copy/move them.
+    if (STORAGE_PROVIDER === 's3') {
+      const client = getS3Client();
+      const bucket = getS3Bucket();
+      const objectId = randomUUID();
+      // Place under public/ so the resulting URL is immediately
+      // publicly readable (matches uploadFileS3's public path layout).
+      // ACL is signed into the URL — providers that support per-object
+      // ACLs (Tebi, R2, S3, etc.) will mark the upload public-read
+      // automatically. The browser PUT doesn't need to send an extra
+      // header. If your provider rejects ACL (rare), set
+      // S3_DISABLE_ACL=true and configure the bucket public elsewhere.
+      const key = `public/uploads/${objectId}`;
+      const useAcl = process.env.S3_DISABLE_ACL !== "true";
+      const cmd = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        ...(useAcl ? { ACL: "public-read" as const } : {}),
+      });
+      return getSignedUrl(client, cmd, { expiresIn: 900 });
+    }
+
+    if (STORAGE_PROVIDER === 'r2') {
+      const client = getR2Client();
+      const bucket = getR2Bucket();
+      const objectId = randomUUID();
+      const key = `public/uploads/${objectId}`;
+      const cmd = new PutObjectCommand({ Bucket: bucket, Key: key });
+      return getSignedUrl(client, cmd, { expiresIn: 900 });
+    }
+
+    // Default GCS-via-Replit-sidecar path (legacy)
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error(
@@ -455,17 +541,54 @@ export class ObjectStorageService {
     const bucket = getR2Bucket();
     const prefix = visibility === "public" ? "public" : ".private";
     const key = `${prefix}/${path}`;
-    
+
     await client.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: buffer,
       ContentType: contentType,
     }));
-    
+
     const r2PublicUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.r2.dev`;
     const url = visibility === "public" ? `${r2PublicUrl}/${key}` : key;
-    
+
+    return { url, path: key };
+  }
+
+  // Generic S3-compatible upload (Tebi/Tigris on Railway, MinIO, AWS S3, etc.).
+  // Public files go under `public/` and are served via S3_PUBLIC_URL;
+  // private files go under `.private/` and are returned by key only — fetch
+  // them via signed URLs when needed.
+  //
+  // ACL: public files get x-amz-acl=public-read. Tebi doesn't support
+  // bucket policies (PutBucketPolicy → 501) but accepts per-object ACLs.
+  // AWS S3, R2, Backblaze, MinIO all accept this too. If your provider
+  // rejects ACLs (rare), set S3_DISABLE_ACL=true and either configure the
+  // bucket as public via the provider's console or front it with a CDN.
+  async uploadFileS3(
+    path: string,
+    buffer: Buffer,
+    contentType: string,
+    visibility: "public" | "private" = "private",
+  ): Promise<{ url: string; path: string }> {
+    const client = getS3Client();
+    const bucket = getS3Bucket();
+    const prefix = visibility === "public" ? "public" : ".private";
+    const key = `${prefix}/${path}`;
+    const wantPublic = visibility === "public";
+    const useAcl = process.env.S3_DISABLE_ACL !== "true";
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ...(useAcl && wantPublic ? { ACL: "public-read" as const } : {}),
+      }),
+    );
+
+    const url = wantPublic ? `${getS3PublicUrl(bucket)}/${key}` : key;
     return { url, path: key };
   }
 
@@ -475,6 +598,9 @@ export class ObjectStorageService {
     contentType: string,
     visibility: "public" | "private" = "private"
   ): Promise<{ url: string; path: string }> {
+    if (STORAGE_PROVIDER === 's3') {
+      return this.uploadFileS3(path, buffer, contentType, visibility);
+    }
     if (STORAGE_PROVIDER === 'r2') {
       return this.uploadFileR2(path, buffer, contentType, visibility);
     }
@@ -597,6 +723,22 @@ export class ObjectStorageService {
     rawPath: string,
     aclPolicy: ObjectAclPolicy
   ): Promise<string> {
+    // S3-compatible (Tigris/R2/etc.): files were uploaded directly under
+    // public/ via the presigned URL, so they're already public-readable.
+    // Strip any AWS query params left behind by the presigned PUT and
+    // return the canonical URL — this is what gets saved as the article's
+    // imageUrl.
+    if (STORAGE_PROVIDER === 's3' || STORAGE_PROVIDER === 'r2') {
+      try {
+        const u = new URL(rawPath);
+        // Drop signing query params (X-Amz-*, etc.)
+        u.search = "";
+        return u.toString();
+      } catch {
+        return rawPath;
+      }
+    }
+
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     if (!normalizedPath.startsWith("/")) {
       return normalizedPath;

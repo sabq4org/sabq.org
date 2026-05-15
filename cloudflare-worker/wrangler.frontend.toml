@@ -12,19 +12,19 @@ account_id = ""
 
 # These get overridden per-environment.
 [vars]
-API_ORIGIN = "https://api.sabq.news"
-FRONTEND_ORIGIN = "https://sabq.news"
+API_ORIGIN = "https://api.sabq.org"
+FRONTEND_ORIGIN = "https://sabq.org"
 
 # Production: bind to the Vercel apex domain.
 [env.production]
 routes = [
-  { pattern = "sabq.news/*", zone_id = "" },
-  { pattern = "www.sabq.news/*", zone_id = "" }
+  { pattern = "sabq.org/*", zone_id = "" },
+  { pattern = "www.sabq.org/*", zone_id = "" }
 ]
 
 [env.production.vars]
-API_ORIGIN = "https://api.sabq.news"
-FRONTEND_ORIGIN = "https://sabq.news"
+API_ORIGIN = "https://api.sabq.org"
+FRONTEND_ORIGIN = "https://sabq.org"
 
 # Staging / experiment: point at a preview Vercel deployment.
 [env.staging]

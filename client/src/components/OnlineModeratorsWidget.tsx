@@ -158,7 +158,7 @@ export function OnlineModeratorsWidget() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="text-xs" dir="rtl">
                         <p className="font-semibold">{getDisplayName(mod)}</p>
-                        <p className="text-muted-foreground">{mod.jobTitle || getRoleLabel(mod)}</p>
+                        <p className="text-muted-foreground">{getRoleLabel(mod)}</p>
                       </TooltipContent>
                     </Tooltip>
                   ))}

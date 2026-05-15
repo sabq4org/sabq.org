@@ -76,20 +76,34 @@ import {
   Shield,
   FileDown
 } from "lucide-react";
-import pdfMake from "pdfmake/build/pdfmake";
-import pdfFonts from "pdfmake/build/vfs_fonts";
+// pdfmake is dynamic-imported inside generateAdPDF below (perf audit
+// 2026-05-11). Static import was pulling pdfmake/build/vfs_fonts —
+// embedded font binaries — into this page's chunk, adding ~2 MB to the
+// admin bundle on every page visit. Now downloaded only when the user
+// actually clicks "Export PDF".
 import type { TDocumentDefinitions, Content, TableCell as PdfTableCell } from "pdfmake/interfaces";
 
-// Initialize pdfMake with fonts (Roboto is bundled in vfs_fonts)
-pdfMake.vfs = pdfFonts.pdfMake?.vfs || pdfFonts.vfs || pdfFonts;
-pdfMake.fonts = {
-  Roboto: {
-    normal: 'Roboto-Regular.ttf',
-    bold: 'Roboto-Medium.ttf',
-    italics: 'Roboto-Italic.ttf',
-    bolditalics: 'Roboto-MediumItalic.ttf'
-  }
-};
+// vfs/font init only runs once across the whole page lifetime.
+let pdfMakeInitialized: any = null;
+async function getPdfMake(): Promise<any> {
+  if (pdfMakeInitialized) return pdfMakeInitialized;
+  const [{ default: pdfMake }, pdfFontsModule] = await Promise.all([
+    import("pdfmake/build/pdfmake"),
+    import("pdfmake/build/vfs_fonts"),
+  ]);
+  const pdfFonts: any = pdfFontsModule.default ?? pdfFontsModule;
+  pdfMake.vfs = pdfFonts.pdfMake?.vfs || pdfFonts.vfs || pdfFonts;
+  pdfMake.fonts = {
+    Roboto: {
+      normal: "Roboto-Regular.ttf",
+      bold: "Roboto-Medium.ttf",
+      italics: "Roboto-Italic.ttf",
+      bolditalics: "Roboto-MediumItalic.ttf",
+    },
+  };
+  pdfMakeInitialized = pdfMake;
+  return pdfMake;
+}
 import {
   Tooltip,
   TooltipContent,
@@ -226,8 +240,9 @@ const statusLabelsEn: Record<NativeAdStatus, string> = {
   rejected: "Rejected",
 };
 
-function generateAdPDF(ad: NativeAd, onSuccess?: () => void, onError?: (error: Error) => void) {
+async function generateAdPDF(ad: NativeAd, onSuccess?: () => void, onError?: (error: Error) => void) {
   try {
+    const pdfMake = await getPdfMake();
     const currentDate = format(new Date(), "MMMM d, yyyy - HH:mm");
     const totalCost = (ad.clicks * (ad.costPerClick || 100)) / 100;
     const ctr = ad.impressions > 0 ? ((ad.clicks / ad.impressions) * 100).toFixed(2) : "0.00";

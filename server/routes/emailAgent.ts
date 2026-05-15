@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import multer from "multer";
 import { simpleParser } from "mailparser";
 import mammoth from "mammoth";
@@ -123,27 +124,54 @@ async function uploadAttachmentToGCS(
   contentType: string,
   isPublic: boolean = false
 ): Promise<string> {
+  // 🎯 PUBLIC IMAGES: Cloudflare Images is the canonical store. Try it FIRST
+  // and return immediately on success, so the upload works on Railway where
+  // PUBLIC_OBJECT_SEARCH_PATHS / Replit Object Storage are not configured.
+  if (isPublic && contentType.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
+    try {
+      console.log(`[Email Agent] ☁️ Uploading image to Cloudflare Images (primary)...`);
+      const cfResult = await cloudflareImagesService.uploadToCloudflare(
+        file,
+        filename,
+        { source: 'email-agent', type: 'article-image' },
+        contentType
+      );
+
+      if (cfResult.success && cfResult.deliveryUrl) {
+        console.log(`[Email Agent] ☁️ Cloudflare upload successful: ${cfResult.deliveryUrl}`);
+        return cfResult.deliveryUrl;
+      }
+      console.log(`[Email Agent] ☁️ Cloudflare upload failed, falling back to GCS: ${cfResult.error}`);
+    } catch (cfError) {
+      console.error("[Email Agent] ☁️ Cloudflare upload error, falling back to GCS:", cfError);
+    }
+  }
+
   try {
     // For images, use PUBLIC directory so they can be displayed in browser
     // For other files (Word docs, PDFs), use PRIVATE directory
-    const objectDir = isPublic 
+    const objectDir = isPublic
       ? (process.env.PUBLIC_OBJECT_SEARCH_PATHS || "").split(',')[0]?.trim() || ""
       : process.env.PRIVATE_OBJECT_DIR || "";
-    
+
     if (!objectDir) {
       throw new Error(`${isPublic ? 'PUBLIC_OBJECT_SEARCH_PATHS' : 'PRIVATE_OBJECT_DIR'} not set`);
     }
 
     const { bucketName, objectPath } = parseObjectPath(objectDir);
     const bucket = objectStorageClient.bucket(bucketName);
-    
+
     const fileId = nanoid();
-    const extension = filename.split('.').pop() || '';
+    // Reject anything other than a plain alphanumeric extension
+    // (security audit H2, 2026-05-11). filename.split('.').pop() could
+    // otherwise contain "../" and break out of email-attachments/.
+    const rawExt = (filename.split('.').pop() || '').toLowerCase();
+    const extension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
     const storedFilename = `email-attachments/${fileId}.${extension}`;
     const fullPath = `${objectPath}/${storedFilename}`.replace(/\/+/g, '/');
-    
+
     const gcsFile = bucket.file(fullPath);
-    
+
     await gcsFile.save(file, {
       contentType,
       metadata: {
@@ -153,29 +181,7 @@ async function uploadAttachmentToGCS(
     });
 
     console.log(`[Email Agent] ✅ Uploaded ${isPublic ? 'PUBLIC' : 'PRIVATE'} attachment to GCS: ${fullPath}`);
-    
-    // 🎯 For public images, try to upload to Cloudflare Images for faster CDN delivery
-    if (isPublic && contentType.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
-      try {
-        console.log(`[Email Agent] ☁️ Uploading image to Cloudflare Images...`);
-        const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          file,
-          filename,
-          { source: 'email-agent', type: 'article-image' },
-          contentType
-        );
-        
-        if (cfResult.success && cfResult.deliveryUrl) {
-          console.log(`[Email Agent] ☁️ Cloudflare upload successful: ${cfResult.deliveryUrl}`);
-          return cfResult.deliveryUrl;
-        } else {
-          console.log(`[Email Agent] ☁️ Cloudflare upload failed, using GCS: ${cfResult.error}`);
-        }
-      } catch (cfError) {
-        console.error("[Email Agent] ☁️ Cloudflare upload error, using GCS fallback:", cfError);
-      }
-    }
-    
+
     // 🎯 Return Backend Proxy URL (Replit Object Storage doesn't allow makePublic or signed URLs)
     // The backend will stream the file from Object Storage
     if (isPublic) {
@@ -184,7 +190,7 @@ async function uploadAttachmentToGCS(
       console.log(`[Email Agent] 🌐 Generated proxy URL: ${proxyUrl}`);
       return proxyUrl;
     }
-    
+
     // For private files, return the relative path (requires proxy/download endpoint)
     return `${objectDir}/${storedFilename}`;
   } catch (error) {
@@ -469,10 +475,49 @@ function cleanupProcessedEmails() {
 
 setInterval(cleanupProcessedEmails, 5 * 60 * 1000);
 
+// Shared-secret check for the SendGrid Inbound Parse webhook.
+// SendGrid Inbound Parse does NOT sign its requests — it relies on URL
+// obscurity. We add a shared-secret token check (URL query OR header)
+// so anyone who guesses the URL still can't fabricate inbound mail.
+//
+// Set SENDGRID_INBOUND_SECRET on the backend, then configure SendGrid
+// Inbound Parse with either:
+//   - URL: https://api.sabq.org/api/email-agent/webhook?token=<secret>
+//   - or a custom header X-Webhook-Token: <secret>
+//
+// Backward compatibility: if SENDGRID_INBOUND_SECRET is unset, the
+// webhook still accepts (logs a critical warning) so existing
+// deployments keep working until the env var is added. Tighten to
+// "always reject" once the secret is deployed everywhere.
+//
+// (Security audit C6, 2026-05-11.)
+function verifyInboundWebhookSecret(req: Request): { ok: boolean; reason?: string } {
+  const inboundSecret = process.env.SENDGRID_INBOUND_SECRET;
+  if (!inboundSecret) {
+    console.warn("[Email Agent] CRITICAL: SENDGRID_INBOUND_SECRET not set — webhook is unauthenticated. Set this env var to enable shared-secret validation.");
+    return { ok: true };
+  }
+  const provided = String(req.query.token || req.get("x-webhook-token") || "");
+  if (!provided) {
+    return { ok: false, reason: "missing token" };
+  }
+  const a = Buffer.from(inboundSecret);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length) return { ok: false, reason: "token length mismatch" };
+  if (!crypto.timingSafeEqual(a, b)) return { ok: false, reason: "invalid token" };
+  return { ok: true };
+}
+
 router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
   let webhookLog: any = null; // Define outside try block so it's accessible in catch
   let dedupKey = ''; // Will be set after parsing
-  
+
+  const secretCheck = verifyInboundWebhookSecret(req);
+  if (!secretCheck.ok) {
+    console.warn(`[Email Agent] Rejected inbound webhook: ${secretCheck.reason}`);
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
     console.log("[Email Agent] ============ WEBHOOK START ============");
     console.log("[Email Agent] Received webhook from SendGrid");

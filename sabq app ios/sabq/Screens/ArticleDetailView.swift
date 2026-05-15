@@ -1,0 +1,1277 @@
+import SwiftUI
+import AVFoundation
+
+struct ArticleDetailView: View {
+    let article: Article
+    @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("articleFontSize") private var fontSize: Double = 17
+    @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
+    @AppStorage("articleUseReaderFont") private var useReaderFont: Bool = false
+
+    @State private var showReaderControls = false
+    @State private var isFocusMode = false
+    @State private var aiInsights: [String: String] = [:]
+
+    @State private var relatedArticles: [Article] = []
+    @State private var comments: [APIComment] = []
+    @State private var audioSummary: APIAudioSummary?
+    @State private var isPlayingAudio = false
+    @State private var audioPlayer: AVPlayer?
+    @State private var commentText = ""
+    @State private var isPostingComment = false
+    @State private var fullArticle: Article?
+    @State private var resolvedTags: [String] = []
+    @State private var isExcerptExpanded = false
+    @State private var shortlinkURL: URL?
+    @State private var shortlinkTask: Task<URL?, Never>?
+    @State private var isCopyFeedbackVisible = false
+    @State private var copyFeedbackTask: Task<Void, Never>?
+    @State private var scrollProgress: CGFloat = 0
+    @State private var scrollOffsetY: CGFloat = 0
+    @State private var heroAppeared: Bool = false
+    @State private var isPassportPresented = false
+
+    /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
+    /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
+    /// so violent flicks don't overscale.
+    private var heroScale: CGFloat {
+        let appearOffset = heroAppeared ? 0 : 0.06
+        let pullZoom = min(0.18, max(0, -scrollOffsetY * 0.0015))
+        return 1 + appearOffset + pullZoom
+    }
+
+    /// Hero moves slower than the surrounding content (40%) for parallax;
+    /// only applied when user is scrolling AWAY from the top to avoid
+    /// fighting the pull-zoom above.
+    private var heroParallaxY: CGFloat {
+        max(0, scrollOffsetY * 0.4)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    heroImage
+                        .frame(width: proxy.size.width)
+                        // Phase-1 motion: zoom-on-appear (1.06→1.0 spring),
+                        // pull-down rubber-band zoom, gentle parallax when
+                        // scrolling away from the top. heroAppeared flips
+                        // via the .onAppear at the bottom of the body.
+                        .scaleEffect(heroScale, anchor: .top)
+                        .offset(y: heroParallaxY)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.85), value: heroAppeared)
+                        // Clip AFTER the transforms so the zoomed-up hero
+                        // doesn't visually bleed into the labelsRow below.
+                        .frame(height: 300)
+                        .clipped()
+
+                    VStack(alignment: .leading, spacing: 18) {
+                        // Editorial column order (per user 2026-05-14):
+                        //   labels → title → metadata → smart summary →
+                        //   audio (if any) → divider → body.
+                        // Focus mode collapses secondary surfaces to keep
+                        // only the reading column.
+
+                        if !isFocusMode {
+                            labelsRow
+                                .animatedAppear(index: 0)
+                        }
+
+                        articleTitle
+                            .animatedAppear(index: 1)
+
+                        articleMeta
+                            .animatedAppear(index: 2)
+
+                        if !isFocusMode {
+                            smartSummaryCard
+                                .animatedAppear(index: 3)
+                        }
+
+                        Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
+                        articleBody
+
+                        actionBar
+
+                        if !isFocusMode, !displayTags.isEmpty {
+                            tagsSection
+                        }
+
+                        if !isFocusMode, !relatedArticles.isEmpty {
+                            relatedSection
+                        }
+
+                        if !isFocusMode && (!comments.isEmpty || article.slug != nil) {
+                            commentsSection
+                        }
+                    }
+                    .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 60)
+                }
+                .frame(width: proxy.size.width, alignment: .leading)
+            }
+            .onScrollGeometryChange(for: CGSize.self) { geo in
+                let contentHeight = max(1, geo.contentSize.height - geo.containerSize.height)
+                let progress = min(1, max(0, geo.contentOffset.y / contentHeight))
+                // Packed as CGSize so a single observer feeds both the
+                // reading progress bar AND the hero parallax math.
+                return CGSize(width: progress, height: geo.contentOffset.y)
+            } action: { _, newValue in
+                scrollProgress = newValue.width
+                scrollOffsetY = newValue.height
+            }
+            .overlay(alignment: .top) {
+                readingProgressBar
+            }
+        }
+        .background(focusBackground)
+        .sabqRTL()
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .onAppear {
+            // Trigger one-shot zoom-on-appear unless we've already settled.
+            if !heroAppeared {
+                heroAppeared = true
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button {
+                    SabqHaptics.light()
+                    dismiss()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(SabqTheme.ink)
+                    .padding(8)
+                    .background(
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                    )
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 8) {
+                    Button {
+                        SabqHaptics.medium()
+                        bookmarksStore.toggle(article.id, article: article)
+                    } label: {
+                        Image(systemName: bookmarksStore.isBookmarked(article.id) ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                bookmarksStore.isBookmarked(article.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                            )
+                            .padding(8)
+                            .background(
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                            )
+                    }
+
+                    Button {
+                        SabqHaptics.light()
+                        shareArticle()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .padding(8)
+                            .background(
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .task {
+            updateResolvedTags(from: article)
+            await loadExtras()
+        }
+        .onDisappear {
+            audioPlayer?.pause()
+            audioPlayer = nil
+            isPlayingAudio = false
+            shortlinkTask?.cancel()
+            copyFeedbackTask?.cancel()
+        }
+        .navigationDestination(for: Article.self) { related in
+            ArticleDetailView(article: related)
+        }
+    }
+
+    // MARK: - Reading Progress Bar
+
+    private var readingProgressBar: some View {
+        ProgressView(value: scrollProgress)
+            .progressViewStyle(ReadingProgressStyle())
+            .frame(height: 4)
+            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: scrollProgress)
+            .opacity(scrollProgress > 0.001 ? 1 : 0)
+            .animation(.easeOut(duration: 0.25), value: scrollProgress > 0.001)
+    }
+
+    private var fallbackShareURL: URL {
+        if let urlStr = displayArticle.articleURL, let url = URL(string: urlStr) {
+            return url
+        }
+        return URL(string: "https://sabq.org")!
+    }
+
+    @MainActor
+    private func loadExtras() async {
+        Task { try? await APIClient.shared.trackView(articleId: article.id) }
+
+        if let slug = article.slug {
+            async let detail = NewsService.fetchArticleDetail(slug: slug)
+            async let c = NewsService.fetchComments(slug: slug)
+            async let a = NewsService.fetchAudioSummary(slug: slug)
+            // Best-effort: returns sentiment + credibility hints when ai
+            // processing has run for this article. Failures are silent.
+            async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
+
+            let (bundle, com, aud, ins) = await (detail, c, a, insights)
+            comments = com
+            audioSummary = aud
+            if let ins { aiInsights = ins }
+
+            if let bundle {
+                fullArticle = bundle.article
+                relatedArticles = bundle.related
+                updateResolvedTags(from: bundle.article)
+            }
+
+            if relatedArticles.isEmpty {
+                relatedArticles = await NewsService.fetchRelated(slug: slug)
+            }
+        }
+
+        _ = await prepareShareURL()
+    }
+
+    // MARK: - Hero Image
+
+    // Hero is intentionally clean — no text/badges overlaid on the image.
+    // Category chip, breaking pill, and publication metadata now live below
+    // the hero between the title and excerpt (calm row, low-emphasis).
+    private var heroImage: some View {
+        Group {
+            if let urlString = article.imageURL, let url = URL(string: urlString) {
+                CachedAsyncImage(url: url, contentMode: .fill) {
+                    heroPlaceholder
+                }
+                .frame(maxWidth: .infinity, maxHeight: 300)
+                .clipped()
+            } else {
+                heroPlaceholder
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
+        .clipped()
+    }
+
+    private var heroPlaceholder: some View {
+        LinearGradient(
+            colors: [article.category.tint.opacity(0.20), article.category.tint.opacity(0.05)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
+        .overlay {
+            Image(systemName: article.category.icon)
+                .font(.system(size: 100, weight: .ultraLight))
+                .foregroundStyle(article.category.tint.opacity(0.15))
+        }
+    }
+
+    // MARK: - Audio Summary
+
+    private var audioSummarySection: some View {
+        Button {
+            toggleAudio()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isPlayingAudio ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("ملخص صوتي")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+
+                    Text(isPlayingAudio ? "جاري التشغيل..." : "استمع لملخص المقال")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+
+                Spacer(minLength: 0)
+
+                if let duration = audioSummary?.duration {
+                    Text("\(duration / 60):\(String(format: "%02d", duration % 60))")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                    .fill(SabqTheme.primaryEnd.opacity(0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                    .stroke(SabqTheme.primaryEnd.opacity(0.12), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleAudio() {
+        if isPlayingAudio {
+            audioPlayer?.pause()
+            isPlayingAudio = false
+        } else if let urlStr = audioSummary?.url, let url = URL(string: urlStr) {
+            audioPlayer = AVPlayer(url: url)
+            audioPlayer?.play()
+            isPlayingAudio = true
+        }
+    }
+
+    // MARK: - Meta
+
+    /// Unified labels row under the hero: category + breaking (when applicable)
+    /// + sentiment (when AI insights returned one) + موثوق passport pill.
+    /// FlowLayout wraps onto a second line on narrow screens.
+    private var labelsRow: some View {
+        FlowLayout(spacing: 8) {
+            // Category pill
+            Text(article.category.title)
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(article.category.tint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous).fill(article.category.tint.opacity(0.10))
+                )
+                .overlay(
+                    Capsule(style: .continuous).stroke(article.category.tint.opacity(0.25), lineWidth: 0.5)
+                )
+
+            // Breaking pill (only when applicable)
+            if article.isBreaking {
+                HStack(spacing: 5) {
+                    PulsingDot(color: SabqTheme.coral)
+                        .scaleEffect(0.6)
+                        .frame(width: 12, height: 12)
+                    Text("عاجل")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(SabqTheme.coral)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule(style: .continuous).fill(SabqTheme.coral.opacity(0.10)))
+            }
+
+            sentimentPill
+
+            // Passport "موثوق" pill — opens the same sheet as the action bar.
+            if let slug = article.slug {
+                PassportInlineBadge(slug: slug)
+            }
+        }
+    }
+
+    /// Renders a small sentiment pill when aiInsights returns one. Accepts
+    /// either localized Arabic labels or the canonical English keys.
+    @ViewBuilder
+    private var sentimentPill: some View {
+        if let raw = aiInsights["sentiment"]?.lowercased(),
+           let mapped = sentimentMapping(for: raw) {
+            HStack(spacing: 5) {
+                Image(systemName: mapped.icon)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(mapped.label)
+                    .font(.system(size: 11, weight: .heavy))
+            }
+            .foregroundStyle(mapped.tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(mapped.tint.opacity(0.10))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(mapped.tint.opacity(0.25), lineWidth: 0.5)
+            )
+        }
+    }
+
+    private func sentimentMapping(for raw: String) -> (label: String, icon: String, tint: Color)? {
+        switch raw {
+        case "positive", "ايجابي", "إيجابي":
+            return ("إيجابي", "face.smiling", Color(red: 0.16, green: 0.68, blue: 0.40))
+        case "neutral", "محايد":
+            return ("محايد", "minus.circle", SabqTheme.secondaryInk)
+        case "negative", "سلبي":
+            return ("سلبي", "exclamationmark.triangle.fill", SabqTheme.coral)
+        case "mixed", "مختلط":
+            return ("مختلط", "circle.lefthalf.fill", Color(red: 0.62, green: 0.36, blue: 0.92))
+        default:
+            return nil
+        }
+    }
+
+    // Cream surface when in focus mode for a warmer reading experience;
+    // standard surface otherwise.
+    private var focusBackground: Color {
+        isFocusMode
+            ? Color(UIColor { t in
+                t.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.10, green: 0.09, blue: 0.08, alpha: 1)
+                    : UIColor(red: 0.98, green: 0.95, blue: 0.91, alpha: 1)
+            })
+            : SabqTheme.surface
+    }
+
+    // AI bullets derived from the article excerpt by splitting on Arabic
+    // sentence delimiters. Returns 2–3 short bullets when the excerpt is
+    // multi-sentence; an empty array otherwise (the section is then hidden).
+    private var aiBullets: [String] {
+        let raw = displayArticle.excerpt
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return [] }
+        let separators = CharacterSet(charactersIn: ".؟!\n")
+        let sentences = raw
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= 12 }
+        // Need at least two meaningful sentences to bother with a bullets card.
+        guard sentences.count >= 2 else { return [] }
+        return Array(sentences.prefix(3))
+    }
+
+    /// Single unified smart-summary card — the AI-bullet design adopted as
+    /// the canonical summary surface (per user 2026-05-14). Uses split
+    /// excerpt as bullets when 2+ sentences are detected, otherwise renders
+    /// the full excerpt as one body block in the same card.
+    ///
+    /// The audio-summary play button is integrated inline at the top right
+    /// when an audio file exists — keeps the listen action visually
+    /// connected to the textual summary instead of a separate row.
+    @ViewBuilder
+    private var smartSummaryCard: some View {
+        let bullets = aiBullets
+        let fallback = displayArticle.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasAudio = audioSummary?.url != nil
+
+        if bullets.isEmpty && fallback.isEmpty && !hasAudio {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    Text("الموجز الذكي")
+                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Spacer(minLength: 0)
+                    if hasAudio {
+                        listenButton
+                    }
+                }
+
+                if !bullets.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(bullets.enumerated()), id: \.offset) { _, bullet in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Circle()
+                                    .fill(SabqTheme.primaryEnd)
+                                    .frame(width: 5, height: 5)
+                                    .offset(y: 6)
+                                Text(bullet)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                    .multilineTextAlignment(.leading)
+                                    .lineSpacing(3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                } else if !fallback.isEmpty {
+                    Text(fallback)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                            .fill(SabqTheme.primaryEnd.opacity(0.04))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+            )
+        }
+    }
+
+    /// Compact play/pause pill for the audio summary. Sits in the smart-
+    /// summary card header. Hooks into the existing `toggleAudio` logic
+    /// so audio state stays synchronised with the rest of the screen.
+    private var listenButton: some View {
+        Button {
+            SabqHaptics.light()
+            toggleAudio()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
+                    .font(.system(size: 11, weight: .heavy))
+                Text(isPlayingAudio ? "إيقاف" : "استماع")
+                    .font(.system(size: 11, weight: .heavy))
+                if let duration = audioSummary?.duration, !isPlayingAudio {
+                    Text("· \(duration / 60):\(String(format: "%02d", duration % 60))")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous).fill(SabqTheme.primaryEnd)
+            )
+            .shadow(color: SabqTheme.primaryEnd.opacity(0.30), radius: 6, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // Publication metadata between title and excerpt. Single calm row,
+    // tertiary ink, bullet separators — should not visually disrupt the
+    // text flow above or below it.
+    private var articleMeta: some View {
+        HStack(spacing: 8) {
+            NavigationLink(value: AuthorRoute(name: article.author)) {
+                Text(article.author)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .buttonStyle(.plain)
+            .layoutPriority(2)
+
+            Text("·")
+                .font(.system(size: 11))
+                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
+
+            Text(article.readingTime)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .monospacedDigit()
+                .lineLimit(1)
+                .layoutPriority(1)
+
+            Text("·")
+                .font(.system(size: 11))
+                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
+
+            Text(article.dateFormatted)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .layoutPriority(3)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Action Bar
+
+    // Bar trimmed to 4 calmer buttons: مشاركة / حفظ / Aa / قراءة.
+    // Passport is reachable from the inline pill above; copy-link lives
+    // inside the iOS share sheet.
+    private var actionBar: some View {
+        HStack(spacing: 0) {
+            Button {
+                SabqHaptics.light()
+                shareArticle()
+            } label: {
+                actionButton(icon: "square.and.arrow.up", label: "مشاركة")
+            }
+            .buttonStyle(.plain)
+
+            Divider().frame(height: 28)
+
+            Button {
+                SabqHaptics.medium()
+                bookmarksStore.toggle(article.id, article: article)
+            } label: {
+                actionButton(
+                    icon: bookmarksStore.isBookmarked(article.id) ? "bookmark.fill" : "bookmark",
+                    label: bookmarksStore.isBookmarked(article.id) ? "تم الحفظ" : "حفظ",
+                    isActive: bookmarksStore.isBookmarked(article.id)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Divider().frame(height: 28)
+
+            Button {
+                SabqHaptics.light()
+                showReaderControls = true
+            } label: {
+                actionButton(icon: "textformat.size", label: "تنسيق")
+            }
+            .buttonStyle(.plain)
+
+            Divider().frame(height: 28)
+
+            Button {
+                SabqHaptics.medium()
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    isFocusMode.toggle()
+                }
+            } label: {
+                actionButton(
+                    icon: isFocusMode ? "book.closed.fill" : "book",
+                    label: isFocusMode ? "خروج" : "قراءة",
+                    isActive: isFocusMode
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                        .fill(SabqTheme.paleFill.opacity(0.4))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+        )
+        .sheet(isPresented: $isPassportPresented) {
+            if let slug = article.slug {
+                PassportSheetView(slug: slug)
+            }
+        }
+        .sheet(isPresented: $showReaderControls) {
+            ReaderControlsSheet(
+                fontSize: $fontSize,
+                lineSpacing: $lineSpacing,
+                useReaderFont: $useReaderFont
+            )
+        }
+    }
+
+    private func actionButton(icon: String, label: String, isActive: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+            Text(label)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+        }
+        .foregroundStyle(isActive ? SabqTheme.primaryEnd : SabqTheme.secondaryInk)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+    }
+
+    // MARK: - Title
+
+    private var articleTitle: some View {
+        Text(displayArticle.title)
+            // Editorial headline font — IBM Plex Sans Arabic Bold matches
+            // the web brand and reads more "newspaper" than SF Arabic.
+            .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
+            .foregroundStyle(SabqTheme.ink)
+            .multilineTextAlignment(.leading)
+            .lineSpacing(8)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 4)
+    }
+
+    // MARK: - Excerpt
+
+    private var articleExcerpt: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(SabqTheme.primaryEnd)
+                .frame(width: 3)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.primaryEnd.opacity(0.7))
+                    Text("الموجز الذكي")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+
+                Text(displayArticle.excerpt)
+                    .font(.system(size: CGFloat(fontSize - 1), weight: .regular))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(6)
+                    .lineLimit(isExcerptExpanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(.easeInOut(duration: 0.25), value: isExcerptExpanded)
+
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        isExcerptExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isExcerptExpanded ? "عرض أقل" : "عرض المزيد")
+                            .font(.system(size: 13, weight: .medium))
+                        Image(systemName: isExcerptExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    // MARK: - Body
+
+    private var displayArticle: Article { fullArticle ?? article }
+    private var displayTags: [String] { resolvedTags }
+
+    @MainActor
+    private func updateResolvedTags(from source: Article) {
+        var seen = Set<String>()
+        let newTags = source.tags
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0).inserted }
+        if !newTags.isEmpty {
+            resolvedTags = newTags
+        }
+    }
+
+    private var articleBody: some View {
+        Group {
+            let html = displayArticle.bodyHTML
+            let plain = displayArticle.body
+            if html.isEmpty && plain.isEmpty {
+                VStack(spacing: 16) {
+                    ForEach(0..<5, id: \.self) { i in
+                        SkeletonBox(width: i == 4 ? 200 : nil, height: 14)
+                    }
+                }
+                .padding(.vertical, 20)
+            } else if !html.isEmpty && isHTMLContent(html) {
+                // Rich HTML pipeline: parse into structured blocks and render
+                // each natively (paragraph/heading/list/quote/image/gallery/
+                // tweet/video). Honours the Aa controls live.
+                let blocks = ArticleHtmlParser.parse(html)
+                ArticleContentView(
+                    blocks: blocks,
+                    fontSize: fontSize,
+                    lineSpacing: lineSpacing,
+                    useReaderFont: useReaderFont
+                )
+                .padding(.horizontal, 6)
+            } else {
+                // Legacy plain-text fallback for articles still stored as
+                // newline-separated paragraphs (or list-payload previews).
+                let paragraphs = Article.displayParagraphs(for: plain)
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+                        Text(paragraph)
+                            .font(.system(
+                                size: CGFloat(index == 0 ? fontSize + 1 : fontSize),
+                                weight: index == 0 ? .medium : .regular,
+                                design: useReaderFont ? .serif : .default
+                            ))
+                            .foregroundStyle(SabqTheme.ink.opacity(0.92))
+                            .multilineTextAlignment(.leading)
+                            .lineSpacing(CGFloat(lineSpacing) + (index == 0 ? 4 : 3))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.horizontal, 6)
+            }
+        }
+    }
+
+    /// Detects HTML-flavoured content. Looks for any common block-level
+    /// opening tag — cheap and reliable for our TipTap output.
+    private func isHTMLContent(_ html: String) -> Bool {
+        let lower = html.lowercased()
+        let markers = ["<p", "<h1", "<h2", "<h3", "<h4", "<ul", "<ol", "<blockquote", "<img", "<div", "<a "]
+        return markers.contains { lower.contains($0) }
+    }
+
+    private func shareArticle() {
+        Task {
+            let url = await prepareShareURL()
+            presentShareSheet(with: url)
+        }
+    }
+
+    private func copyShareLink() {
+        Task {
+            let url = await prepareShareURL()
+            await MainActor.run {
+                UIPasteboard.general.string = url.absoluteString
+                showCopyFeedback()
+            }
+        }
+    }
+
+    @MainActor
+    private func showCopyFeedback() {
+        copyFeedbackTask?.cancel()
+
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(.success)
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+            isCopyFeedbackVisible = true
+        }
+
+        copyFeedbackTask = Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isCopyFeedbackVisible = false
+                }
+                copyFeedbackTask = nil
+            }
+        }
+    }
+
+    @MainActor
+    private func prepareShareURL() async -> URL {
+        if let shortlinkURL {
+            return shortlinkURL
+        }
+
+        if let shortlinkTask {
+            if let resolvedURL = await shortlinkTask.value {
+                self.shortlinkURL = resolvedURL
+                self.shortlinkTask = nil
+                return resolvedURL
+            }
+            self.shortlinkTask = nil
+            return fallbackShareURL
+        }
+
+        let articleID = displayArticle.id
+        let task = Task { await resolveShortlinkURL(articleId: articleID) }
+        shortlinkTask = task
+
+        if let resolvedURL = await task.value {
+            shortlinkURL = resolvedURL
+            shortlinkTask = nil
+            return resolvedURL
+        }
+
+        shortlinkTask = nil
+        return fallbackShareURL
+    }
+
+    private func resolveShortlinkURL(articleId: String) async -> URL? {
+        await SabqShareHelper.resolveShortlink(articleId: articleId)
+    }
+
+    @MainActor
+    private func presentShareSheet(with url: URL) {
+        SabqShareHelper.presentShareSheet(with: url)
+    }
+
+    // MARK: - Tags
+
+    private var tagsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("الوسوم")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(SabqTheme.secondaryInk)
+
+            FlowLayout(spacing: 8) {
+                ForEach(displayTags, id: \.self) { tag in
+                    NavigationLink(value: KeywordRoute(keyword: tag)) {
+                        Text(tag)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(SabqTheme.primaryStart)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(SabqTheme.primaryEnd.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - Related Articles
+
+    private var relatedSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider().foregroundStyle(SabqTheme.outline)
+
+            SectionHeader(
+                title: "أخبار ذات صلة",
+                subtitle: "مقالات مشابهة قد تهمك",
+                icon: "link",
+                tint: SabqTheme.primaryEnd
+            )
+
+            ForEach(relatedArticles.prefix(5)) { related in
+                NavigationLink(value: related) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(related.title)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(SabqTheme.ink)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+
+                            Text(related.relativeDate)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(SabqTheme.tertiaryInk)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if let urlStr = related.imageURL, let url = URL(string: urlStr) {
+                            CachedAsyncImage(url: url, contentMode: .fill) {
+                                relatedPlaceholder(related)
+                            }
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        } else {
+                            relatedPlaceholder(related)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+
+                if related.id != relatedArticles.prefix(5).last?.id {
+                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
+                }
+            }
+        }
+    }
+
+    private func relatedPlaceholder(_ article: Article) -> some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(article.category.tint.opacity(0.1))
+            .frame(width: 56, height: 56)
+            .overlay {
+                Image(systemName: article.category.icon)
+                    .font(.system(size: 18, weight: .light))
+                    .foregroundStyle(article.category.tint.opacity(0.4))
+            }
+    }
+
+    // MARK: - Comments
+
+    private var commentsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Divider().foregroundStyle(SabqTheme.outline)
+
+            SectionHeader(
+                title: "التعليقات",
+                subtitle: comments.isEmpty ? "كن أول من يعلّق" : "\(comments.count) تعليق",
+                icon: "bubble.left.and.bubble.right.fill",
+                tint: SabqTheme.teal
+            )
+
+            if article.slug != nil {
+                HStack(spacing: 10) {
+                    TextField("أضف تعليقاً...", text: $commentText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(SabqTheme.ink)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                                .fill(SabqTheme.paleFill)
+                        )
+
+                    Button {
+                        Task { await postComment() }
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundStyle(
+                                commentText.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? SabqTheme.tertiaryInk
+                                    : SabqTheme.primaryEnd
+                            )
+                            .rotationEffect(.degrees(180))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(commentText.trimmingCharacters(in: .whitespaces).isEmpty || isPostingComment)
+                }
+            }
+
+            ForEach(comments) { comment in
+                commentRow(comment)
+            }
+        }
+    }
+
+    private func commentRow(_ comment: APIComment) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(SabqTheme.primaryEnd.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                    .overlay {
+                        Text(String((comment.userName ?? "م").prefix(1)))
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(SabqTheme.primaryEnd)
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(comment.userName ?? "مستخدم")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.ink)
+
+                    Text(comment.createdAt)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Text(comment.body)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineSpacing(4)
+                .lineLimit(nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 40)
+        }
+        .padding(.vertical, 8)
+    }
+
+    private static func sanitizeComment(_ text: String) -> String {
+        text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func postComment() async {
+        guard let slug = article.slug else { return }
+        let sanitized = Self.sanitizeComment(commentText)
+        guard !sanitized.isEmpty else { return }
+        isPostingComment = true
+        SabqHaptics.light()
+        if let newComment = try? await APIClient.shared.postComment(slug: slug, body: sanitized) {
+            comments.insert(newComment, at: 0)
+            commentText = ""
+            SabqHaptics.success()
+        } else {
+            SabqHaptics.error()
+        }
+        isPostingComment = false
+    }
+}
+
+// MARK: - Reading Progress Style
+
+private struct ReadingProgressStyle: ProgressViewStyle {
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    func makeBody(configuration: Configuration) -> some View {
+        let fraction = configuration.fractionCompleted ?? 0
+        let anchor: UnitPoint = layoutDirection == .rightToLeft ? .trailing : .leading
+        GeometryReader { geo in
+            ZStack(alignment: layoutDirection == .rightToLeft ? .trailing : .leading) {
+                // Track stays barely visible so the bar reads as a single
+                // accent stroke at the top edge — calmer than a 3pt solid.
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.outline.opacity(0.18))
+
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.brandGradient)
+                    .frame(width: max(0, geo.size.width * fraction))
+                    .shadow(color: SabqTheme.primaryEnd.opacity(0.35),
+                            radius: 6, x: 0, y: 0)
+            }
+        }
+        // Hidden anchor reference (avoids removing the param)
+        .scaleEffect(x: 1, y: 1, anchor: anchor)
+    }
+}
+
+// MARK: - Reader Controls Sheet
+
+/// Aa popover — surfaces the already-persisted reader settings
+/// (articleFontSize, articleLineSpacing, articleUseReaderFont). Each control
+/// previews the change instantly via @AppStorage so the user sees the body
+/// re-flow behind the sheet.
+private struct ReaderControlsSheet: View {
+    @Binding var fontSize: Double
+    @Binding var lineSpacing: Double
+    @Binding var useReaderFont: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 22) {
+                preview
+
+                VStack(alignment: .leading, spacing: 18) {
+                    sliderSection(
+                        title: "حجم الخط",
+                        valueText: "\(Int(fontSize)) pt",
+                        value: $fontSize,
+                        range: 13...22,
+                        step: 1,
+                        leftLabel: "أ",
+                        leftSize: 12,
+                        rightLabel: "أ",
+                        rightSize: 20
+                    )
+
+                    sliderSection(
+                        title: "تباعد الأسطر",
+                        valueText: String(format: "%.0f", lineSpacing),
+                        value: $lineSpacing,
+                        range: 2...12,
+                        step: 1,
+                        leftLabel: "≡",
+                        leftSize: 14,
+                        rightLabel: "≣",
+                        rightSize: 14
+                    )
+
+                    Toggle(isOn: $useReaderFont) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("خط القراءة")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(SabqTheme.ink)
+                            Text("خط متّسع لقراءة مريحة")
+                                .font(.system(size: 11))
+                                .foregroundStyle(SabqTheme.tertiaryInk)
+                        }
+                    }
+                    .tint(SabqTheme.primaryEnd)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 30)
+            .background(SabqTheme.background)
+            .navigationTitle("تنسيق القراءة")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("تم") { dismiss() }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                }
+            }
+        }
+        .sabqRTL()
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var preview: some View {
+        Text("تظهر القراءة بهذا الحجم والتباعد. عدّل الإعدادات أدناه لتجد المريح لعينيك.")
+            .font(.system(
+                size: fontSize,
+                weight: .regular,
+                design: useReaderFont ? .serif : .default
+            ))
+            .lineSpacing(lineSpacing)
+            .foregroundStyle(SabqTheme.ink)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .fill(SabqTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+            )
+    }
+
+    private func sliderSection(
+        title: String,
+        valueText: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        leftLabel: String,
+        leftSize: CGFloat,
+        rightLabel: String,
+        rightSize: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SabqTheme.ink)
+                Spacer()
+                Text(valueText)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+            }
+            HStack(spacing: 10) {
+                Text(leftLabel)
+                    .font(.system(size: leftSize, weight: .semibold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .frame(width: 18)
+                Slider(value: value, in: range, step: step)
+                    .tint(SabqTheme.primaryEnd)
+                Text(rightLabel)
+                    .font(.system(size: rightSize, weight: .semibold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .frame(width: 18)
+            }
+        }
+    }
+}

@@ -52,17 +52,25 @@ export default function EnglishArticleDetail() {
   const { data: article, isLoading } = useQuery<EnArticleWithDetails>({
     queryKey: ["/api/en/articles", params.slug],
     enabled: !!params.slug,
+    // Editorial credibility: override global 5min staleTime so corrections
+    // surface instantly when the editor verifies or readers return to tab.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const { data: relatedArticlesRaw } = useQuery<any[]>({
     queryKey: [`/api/en/articles/${params.slug}/related`],
     enabled: !!params.slug,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
   const relatedArticles = Array.isArray(relatedArticlesRaw) ? relatedArticlesRaw : [];
 
   const { data: mediaAssets } = useQuery<any[]>({
     queryKey: ["/api/en/articles", article?.id, "media-assets"],
     enabled: !!article?.id,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const { data: articleTagsRaw } = useQuery<Array<{ id: string; nameAr: string; nameEn: string; slug: string }>>({

@@ -33,8 +33,49 @@ const STATIC_EXTENSIONS = [
   ".json", ".xml", ".txt", ".pdf"
 ];
 
-const SEO_META_TTL = 60;
-const SLUG_REDIRECT_TTL = 60;
+// Short TTL so a freshly published/edited article's <title> + OG meta + slug
+// canonicalization show up at the edge within ~10s. Longer TTLs (was 60s) made
+// editors see stale crawler/share tags after saving even though the article
+// body itself was already updated via the backend Cloudflare purge.
+const SEO_META_TTL = 10;
+const SLUG_REDIRECT_TTL = 10;
+
+// Never let Cloudflare edge-cache HTML from the worker or from the origin
+// subrequest. Stale HTML is the root cause of post-deploy white pages: the
+// shell still references /assets/index-<oldhash>.js which 404s after Vite
+// rotates chunk names on the next Vercel deploy.
+const ORIGIN_FETCH = { cf: { cacheTtl: 0, cacheEverything: false } };
+
+const HTML_NO_STORE_HEADERS = {
+  "Cache-Control":
+    "private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0, proxy-revalidate",
+  "CDN-Cache-Control": "no-store, max-age=0, must-revalidate",
+  "Pragma": "no-cache",
+  "Expires": "0",
+};
+
+function isHtmlResponse(response) {
+  return (response.headers.get("content-type") || "")
+    .toLowerCase()
+    .includes("text/html");
+}
+
+function withHtmlNoStore(response) {
+  if (!isHtmlResponse(response)) return response;
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(HTML_NO_STORE_HEADERS)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function fetchOrigin(request) {
+  return fetch(request, ORIGIN_FETCH);
+}
 
 function isStaticAsset(pathname) {
   for (const ext of STATIC_EXTENSIONS) {
@@ -144,6 +185,12 @@ function buildMetaBlock(meta) {
   ].filter(Boolean).join("\n");
 }
 
+class TagRemover {
+  element(element) {
+    element.remove();
+  }
+}
+
 class HeadInjector {
   constructor(metaBlock) {
     this.metaBlock = metaBlock;
@@ -167,19 +214,41 @@ async function handleHtml(request, env) {
   }
 
   // 2) Fetch HTML from Vercel + meta from backend in parallel.
+  // Bypass Cloudflare's edge cache for the upstream HTML so we never inject
+  // meta into a stale SPA shell whose <script src="/assets/index-<hash>.js">
+  // points to a chunk that was rotated out by a newer Vercel deploy. Without
+  // this, every deploy forced a manual "Purge Everything" in Cloudflare to
+  // stop users hitting a white page until the worker's cached upstream
+  // response naturally aged out. The origin (Vercel) already sends
+  // Cache-Control: no-store for HTML — we just need to honor it on the
+  // worker→origin hop.
   const [originRes, meta] = await Promise.all([
-    fetch(request),
+    fetchOrigin(request),
     fetchSeoMeta(env.API_ORIGIN, pathname),
   ]);
 
   const ct = (originRes.headers.get("content-type") || "").toLowerCase();
   if (!ct.includes("text/html") || !meta) {
-    return originRes;
+    return withHtmlNoStore(originRes);
   }
 
   const metaBlock = buildMetaBlock(meta);
-  const rewriter = new HTMLRewriter().on("head", new HeadInjector(metaBlock));
-  return rewriter.transform(originRes);
+  // Strip the static SPA shell's stale meta tags first, otherwise crawlers
+  // that pick the *first* duplicate (Twitter, some Slack/Telegram variants)
+  // would see the generic homepage tags instead of the injected article
+  // ones. Facebook/WhatsApp/LinkedIn use the *last* occurrence so this also
+  // de-duplicates the response for them.
+  const remover = new TagRemover();
+  const rewriter = new HTMLRewriter()
+    .on("head > title", remover)
+    .on('head > meta[name="description"]', remover)
+    .on('head > meta[name="robots"]', remover)
+    .on('head > link[rel="canonical"]', remover)
+    .on('head > meta[property^="og:"]', remover)
+    .on('head > meta[name^="twitter:"]', remover)
+    .on('head > meta[property^="twitter:"]', remover)
+    .on("head", new HeadInjector(metaBlock));
+  return withHtmlNoStore(rewriter.transform(originRes));
 }
 
 export default {
@@ -191,14 +260,14 @@ export default {
     }
 
     if (!isInjectablePath(url.pathname)) {
-      return fetch(request);
+      return withHtmlNoStore(await fetchOrigin(request));
     }
 
     try {
       return await handleHtml(request, env);
     } catch (err) {
       console.error("[edge-worker] error:", err);
-      return fetch(request);
+      return withHtmlNoStore(await fetchOrigin(request));
     }
   },
 };

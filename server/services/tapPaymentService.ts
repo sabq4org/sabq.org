@@ -70,7 +70,26 @@ function getSecretKey(): string {
 }
 
 function getWebhookSecret(): string {
-  return process.env.TAP_WEBHOOK_SECRET || "";
+  const secret = process.env.TAP_WEBHOOK_SECRET;
+  if (!secret) {
+    // Fail hard rather than silently returning "" (security audit C8,
+    // 2026-05-11). An empty secret would compute a deterministic hash
+    // an attacker could replicate, accepting forged webhooks as valid.
+    throw new Error("TAP_WEBHOOK_SECRET environment variable is not set");
+  }
+  return secret;
+}
+
+// Strip anything that looks like a credential before it lands in a log
+// or error message (security audit M10, 2026-05-11). Tap's own error
+// bodies don't echo bearer tokens, but a future API change or an
+// intermediary that does is a risk we close pre-emptively. Also caps
+// length so a giant response body doesn't flood logs.
+function sanitizeForLog(text: string): string {
+  return String(text || "")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer ***")
+    .replace(/sk_(test|live)_[A-Za-z0-9_-]+/g, "sk_***")
+    .slice(0, 500);
 }
 
 export async function createCharge(params: CreateChargeParams): Promise<TapChargeResponse> {
@@ -117,7 +136,7 @@ export async function createCharge(params: CreateChargeParams): Promise<TapCharg
   });
   
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = sanitizeForLog(await response.text());
     console.error(`[Tap Payment] Error creating charge:`, errorText);
     throw new Error(`Failed to create Tap charge: ${response.status} ${errorText}`);
   }
@@ -140,7 +159,7 @@ export async function retrieveCharge(chargeId: string): Promise<TapChargeRespons
   });
   
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = sanitizeForLog(await response.text());
     console.error(`[Tap Payment] Error retrieving charge:`, errorText);
     throw new Error(`Failed to retrieve Tap charge: ${response.status}`);
   }
@@ -155,30 +174,42 @@ export function verifyWebhookSignature(
   body: string,
   receivedHashstring: string
 ): boolean {
-  const webhookSecret = getWebhookSecret();
-  if (!webhookSecret) {
-    console.error("[Tap Payment] CRITICAL: TAP_WEBHOOK_SECRET is not configured - rejecting webhook");
-    return false;
-  }
-  
   if (!receivedHashstring) {
     console.error("[Tap Payment] No hashstring received in webhook request");
     return false;
   }
-  
+
+  let webhookSecret: string;
+  try {
+    webhookSecret = getWebhookSecret();
+  } catch (e) {
+    // getWebhookSecret throws when the env var is missing — that's a
+    // configuration error, not a forged-webhook signal, so log it but
+    // still reject the webhook.
+    console.error("[Tap Payment]", (e as Error).message, "— rejecting webhook");
+    return false;
+  }
+
   const computedHash = crypto
     .createHmac("sha256", webhookSecret)
     .update(body)
     .digest("hex");
-  
-  const isValid = computedHash === receivedHashstring;
-  
+
+  // Constant-time compare (security audit C8, 2026-05-11). The earlier
+  // `===` leaked timing information that could be brute-forced byte by
+  // byte over many forged requests.
+  const a = Buffer.from(computedHash, "hex");
+  const b = Buffer.from(receivedHashstring, "hex");
+  if (a.length !== b.length) return false;
+  const isValid = crypto.timingSafeEqual(a, b);
+
   if (!isValid) {
+    // Don't log either side of the comparison — both values are
+    // derived from the webhook secret and leaking them helps an
+    // attacker calibrate forgeries.
     console.error("[Tap Payment] Webhook signature mismatch");
-    console.error(`[Tap Payment] Received: ${receivedHashstring}`);
-    console.error(`[Tap Payment] Computed: ${computedHash}`);
   }
-  
+
   return isValid;
 }
 

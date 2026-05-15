@@ -16,6 +16,9 @@ vite.config.ts.*
 .replit
 replit.nix
 
+# Seed data with personal info — kept local only
+scripts/seed-data/
+
 # Build artifacts
 .cache
 *.log
@@ -47,3 +50,11 @@ backup_unused_assets
 !android/**/*.png
 !ios/**/*.png
 !attached_assets/**/*.png
+# Internal security audit — kept local; contains attack-surface details
+AUDIT_REPORT.md
+
+# Internal migration runbook — kept local; contains operational detail
+MIGRATION_RUNBOOK.md
+
+# Auto-generated middleware embed (regenerated each build)
+spa-index-html.generated.ts

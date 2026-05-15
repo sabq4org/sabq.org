@@ -36,6 +36,14 @@ export interface NavItem {
 
 export interface NavContext {
   role: UserRole;
+  /**
+   * All of the user's roles (from the RBAC user_roles table + the legacy
+   * users.role text column). Used by excludeRoles so that a user with
+   * multiple roles (e.g. admin + opinion_author) is excluded if ANY of
+   * their roles is in an item's excludeRoles list. When omitted, the
+   * filter falls back to checking only `role`.
+   */
+  allRoles?: string[];
   permissions?: string[]; // User's permissions for permission-based filtering
   flags: Record<string, boolean>;
   pathname: string;

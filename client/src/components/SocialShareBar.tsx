@@ -16,6 +16,13 @@ import { SiX } from "react-icons/si";
 interface SocialShareBarProps {
   title: string;
   url: string;
+  /**
+   * Optional clean canonical URL used by the "Copy link" button only.
+   * Platform-specific share buttons (WhatsApp/Twitter/etc) still use `url`
+   * so they keep the short-link analytics + UTM tracking. When omitted,
+   * the Copy button falls back to `url`.
+   */
+  copyUrl?: string;
   description?: string;
   articleId?: string;
   className?: string;
@@ -26,6 +33,7 @@ interface SocialShareBarProps {
 export function SocialShareBar({
   title,
   url,
+  copyUrl,
   description = "",
   articleId,
   className = "",
@@ -37,6 +45,9 @@ export function SocialShareBar({
   const { logBehavior } = useBehaviorTracking();
 
   const shareUrl = url.startsWith("http") ? url : `https://sabq.org${url}`;
+  const clipboardUrl = copyUrl
+    ? (copyUrl.startsWith("http") ? copyUrl : `https://sabq.org${copyUrl}`)
+    : shareUrl;
   const shareText = `${title}${description ? `\n\n${description}` : ""}`;
 
   const trackShare = (platform: string) => {
@@ -51,7 +62,7 @@ export function SocialShareBar({
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(clipboardUrl);
       setCopied(true);
       trackShare("copy_link");
       toast({

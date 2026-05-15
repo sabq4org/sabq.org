@@ -4,6 +4,8 @@ import { createServer, type Server } from "http";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
+import { validatePassword } from "./utils/passwordPolicy";
+import { verifyImageMagicBytes } from "./utils/imageVerify";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
@@ -71,7 +73,7 @@ import { generateSeoMetadata } from './seo-generator';
 import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } from "./cacheMiddleware";
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
-import { invalidatePublishedContent } from "./services/contentInvalidation";
+import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
 import pLimit from 'p-limit';
 import { db } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
@@ -90,8 +92,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024, // 10MB
   },
   fileFilter: (req, file, cb) => {
+    // GIF removed (security audit M8, 2026-05-11). Animated GIFs let
+    // an attacker hold long-lived browser connections and stall page
+    // rendering; we don't have an animation-aware probe in this path.
+    // If GIF is needed back, add a sharp.metadata().pages <= 1 gate.
     const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
       'application/pdf',
       'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -106,7 +112,7 @@ const upload = multer({
     }
   },
 });
-import { randomUUID } from "crypto";
+import crypto, { randomUUID } from "crypto";
 import { checkUserStatus } from "./userStatusMiddleware";
 import { slugRedirectMiddleware } from "./middleware/slugRedirect";
 import rateLimit from "express-rate-limit";
@@ -152,13 +158,22 @@ const contactUploadLimiter = rateLimit({
   validate: cfValidate,
 });
 
+// Tightened from 100/15min → 30/15min and keyed per-user when
+// authenticated (security audit M2, 2026-05-11). Previous setting let
+// a single authenticated client push 100 × 10MB = 1GB every 15 minutes
+// before tripping. 30/15min is still well above any normal editor's
+// upload pace for a news platform.
 const mediaUploadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 30,
   message: { message: "تم تجاوز حد رفع الملفات. يرجى المحاولة بعد قليل" },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: cfKeyGenerator,
+  keyGenerator: (req: any) => {
+    const userId = req.user?.id;
+    if (userId) return `u:${userId}`;
+    return cfKeyGenerator(req);
+  },
   validate: cfValidate,
 });
 
@@ -669,8 +684,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.ok) {
+        return res.status(400).json({ message: pwCheck.message });
       }
 
       // Check if user exists
@@ -764,7 +780,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Verify Email
-  app.post("/api/auth/verify-email", async (req, res) => {
+  // Rate-limited (security audit M4, 2026-05-11). The token has finite
+  // entropy; without throttling an attacker could iterate values. The
+  // shared authLimiter (5/15min, skips successful) is appropriate here
+  // because successful verify means the right user got their email.
+  app.post("/api/auth/verify-email", authLimiter, async (req, res) => {
     try {
       const { token } = req.body;
 
@@ -836,22 +856,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
-      // Generate reset token (plaintext - will be sent via email)
-      const resetToken = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${Math.random().toString(36).substr(2, 9)}`;
+      // Generate reset token (plaintext — will be sent via email).
+      // Use crypto-grade randomness instead of Math.random (which is not
+      // unpredictable enough for security tokens), and wrap in a
+      // composite `<tokenId>.<plaintext>` format so the reset endpoint
+      // can look up by O(1) primary key instead of bcrypt-comparing
+      // every unused token (security audit M5, 2026-05-11).
+      const plaintextToken = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       // Hash token before storing (security: never store plaintext tokens)
-      const tokenHash = await bcrypt.hash(resetToken, 12);
+      const tokenHash = await bcrypt.hash(plaintextToken, 12);
 
       // Save hashed token to database
-      await db.insert(passwordResetTokens).values({
+      const [inserted] = await db.insert(passwordResetTokens).values({
         userId: user.id,
         token: tokenHash,
         expiresAt,
-      });
+      }).returning({ id: passwordResetTokens.id });
+
+      const compositeToken = `${inserted.id}.${plaintextToken}`;
 
       // Send password reset email via MailerSend
-      const emailResult = await sendPasswordResetEmail(email, resetToken);
+      const emailResult = await sendPasswordResetEmail(email, compositeToken);
       if (!emailResult.success) {
         console.warn("⚠️  Failed to send password reset email:", emailResult.error);
         // Still return success to prevent email enumeration
@@ -879,34 +906,43 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "الرمز وكلمة المرور مطلوبان" });
       }
 
-      if (password.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.ok) {
+        return res.status(400).json({ message: pwCheck.message });
       }
 
-      // Find all unused tokens for potential matching
-      const candidateTokens = await db
+      // Composite token format: "<tokenId>.<plaintext>" — see forgot-
+      // password above. Lookup is O(1) on tokenId instead of bcrypt-
+      // comparing every unused token row.
+      const firstDot = typeof token === "string" ? token.indexOf(".") : -1;
+      if (firstDot < 1) {
+        return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
+      }
+      const tokenId = token.slice(0, firstDot);
+      const plaintext = token.slice(firstDot + 1);
+
+      const [stored] = await db
         .select()
         .from(passwordResetTokens)
-        .where(eq(passwordResetTokens.used, false));
+        .where(and(eq(passwordResetTokens.id, tokenId), eq(passwordResetTokens.used, false)))
+        .limit(1);
 
-      // Find matching token by comparing hashes
-      let matchedToken = null;
-      for (const candidate of candidateTokens) {
-        const isMatch = await bcrypt.compare(token, candidate.token);
-        if (isMatch) {
-          matchedToken = candidate;
-          break;
-        }
-      }
-
-      if (!matchedToken) {
+      if (!stored) {
         return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
       }
 
-      // Check if token expired
-      if (new Date() > new Date(matchedToken.expiresAt)) {
+      // Check expiry BEFORE bcrypt compare so expired tokens don't even
+      // spend a hash cycle.
+      if (new Date() > new Date(stored.expiresAt)) {
         return res.status(400).json({ message: "رمز إعادة التعيين منتهي الصلاحية" });
       }
+
+      const isMatch = await bcrypt.compare(plaintext, stored.token);
+      if (!isMatch) {
+        return res.status(400).json({ message: "رمز إعادة التعيين غير صحيح أو منتهي الصلاحية" });
+      }
+
+      const matchedToken = stored;
 
       // Hash new password
       const passwordHash = await bcrypt.hash(password, 12);
@@ -942,8 +978,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "كلمة المرور الحالية والجديدة مطلوبتان" });
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json({ message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
+      const newPwCheck = validatePassword(newPassword);
+      if (!newPwCheck.ok) {
+        return res.status(400).json({ message: newPwCheck.message });
       }
 
       // Get user from database
@@ -1196,27 +1233,37 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.put("/api/profile/image", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
+
       if (!req.body.profileImageUrl) {
         return res.status(400).json({ message: "رابط الصورة مطلوب" });
       }
 
       console.log("[Profile Image] Upload URL received:", req.body.profileImageUrl);
 
-      const objectStorageService = new ObjectStorageService();
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        req.body.profileImageUrl,
-        {
-          owner: userId,
-          visibility: "public",
-        }
-      );
-
-      console.log("[Profile Image] Object path after ACL:", objectPath);
+      // If the URL is already a fully-qualified external URL (Cloudflare
+      // Images via imagedelivery.net, or any other CDN), we skip the
+      // Replit-sidecar-backed ACL step — there's nothing to ACL on an
+      // external host, and trySetObjectEntityAclPolicy would call the
+      // 127.0.0.1:1106 sidecar that doesn't exist on Railway.
+      let objectPath: string;
+      if (/^https?:\/\//.test(req.body.profileImageUrl)) {
+        objectPath = req.body.profileImageUrl;
+        console.log("[Profile Image] External URL — skipping ACL step");
+      } else {
+        const objectStorageService = new ObjectStorageService();
+        objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+          req.body.profileImageUrl,
+          {
+            owner: userId,
+            visibility: "public",
+          }
+        );
+        console.log("[Profile Image] Object path after ACL:", objectPath);
+      }
 
       // Update user profile with the new image path
-      const user = await storage.updateUser(userId, { 
-        profileImageUrl: objectPath 
+      const user = await storage.updateUser(userId, {
+        profileImageUrl: objectPath
       });
 
       console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
@@ -1404,12 +1451,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       fileSize: 10 * 1024 * 1024, // 10MB max
     },
     fileFilter: (req, file, cb) => {
+      // GIF removed (security audit M8, 2026-05-11).
       const allowedTypes = [
         'image/jpeg',
         'image/jpg',
         'image/png',
         'image/webp',
-        'image/gif',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
@@ -1429,48 +1476,48 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "لم يتم اختيار ملف" });
       }
 
+      // multer parses the Content-Disposition filename as Latin-1 per the
+      // HTTP spec default. Browsers send UTF-8 bytes, so non-ASCII names
+      // (Arabic etc.) arrive as mojibake like "ÙØ±Ø©" instead of "صورة".
+      // Round-trip via Latin-1 to recover the UTF-8 string.
+      if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
+        req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+      }
+
+      // Verify the file's actual magic bytes match the claimed MIME
+      // (security audit M1, 2026-05-11). multer's fileFilter only
+      // trusts the client-declared header; sharp reads the real format.
+      if (req.file.mimetype.startsWith('image/')) {
+        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        if (!verify.ok) {
+          console.warn("[Media Upload] Magic byte verification failed:", verify.reason);
+          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+        }
+      }
+
       console.log("[Media Upload] File received:", {
         originalName: req.file.originalname,
         mimetype: req.file.mimetype,
         size: req.file.size,
       });
 
-      // Extract bucket ID from PRIVATE_OBJECT_DIR
-      const privateObjectDir = process.env.PRIVATE_OBJECT_DIR || '';
-      console.log("[Media Upload] PRIVATE_OBJECT_DIR:", privateObjectDir);
-      
-      // PRIVATE_OBJECT_DIR can be in format: "bucket-name/.private" or "/objects/bucket-name/.private"
-      const parts = privateObjectDir.split('/').filter(Boolean);
-      let bucketId: string;
-      
-      if (parts.length >= 2 && parts[0] === 'objects') {
-        // Format: /objects/bucket-name/.private
-        bucketId = parts[1];
-      } else if (parts.length >= 1) {
-        // Format: bucket-name/.private
-        bucketId = parts[0];
-      } else {
-        throw new Error('Invalid PRIVATE_OBJECT_DIR format');
-      }
-      
-      console.log("[Media Upload] Extracted bucket ID:", bucketId);
-
-      if (!bucketId) {
-        throw new Error('Bucket ID not found in PRIVATE_OBJECT_DIR');
-      }
-
       // Generate unique filename with year/month structure
       const now = new Date();
       const year = now.getFullYear();
       const month = String(now.getMonth() + 1).padStart(2, '0');
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
+      // Reject anything other than a plain alphanumeric extension
+      // (security audit H2, 2026-05-11). originalname.split('.').pop()
+      // could otherwise return "../foo" or a multi-segment path and
+      // break out of uploads/media/.
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
       const objectId = randomUUID();
 
       const objectPath = `uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
 
-      console.log("[Media Upload] Uploading to bucket:", bucketId, "path:", objectPath);
-
-      // Check if we should use Cloudflare for images
+      // Try Cloudflare Images first for image uploads. When CF succeeds we
+      // skip GCS entirely — GCS is only reached for non-images, or as a
+      // fallback when CF is not configured / failed.
       let cloudflareUrl: string | null = null;
       if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
         console.log("[Media Upload] Cloudflare Images configured, attempting upload...");
@@ -1478,47 +1525,67 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           req.file.buffer,
           req.file.originalname,
           { uploadedBy: userId.toString(), type: 'media' },
-          req.file.mimetype // Pass actual mimetype from upload
+          req.file.mimetype
         );
         if (cfResult.success && cfResult.deliveryUrl) {
           cloudflareUrl = cfResult.deliveryUrl;
           console.log("[Media Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
         } else {
-          console.log("[Media Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
+          console.log("[Media Upload] Cloudflare upload failed, will try GCS fallback:", cfResult.error);
         }
       }
 
-      // Upload file to GCS and make it public for direct access
-      const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
-      const bucket = objectStorageClient.bucket(bucketId);
-      const file = bucket.file(objectPath);
+      // GCS path — used only when CF didn't claim the upload. Wrapped in
+      // try/catch so a missing/misconfigured GCS doesn't kill the request
+      // when CF already has the file.
+      let storagePath: string;
+      if (cloudflareUrl) {
+        storagePath = cloudflareUrl;
+        console.log("[Media Upload] Stored via Cloudflare, skipping GCS:", cloudflareUrl);
+      } else {
+        const privateObjectDir = process.env.PRIVATE_OBJECT_DIR || '';
+        const parts = privateObjectDir.split('/').filter(Boolean);
+        let bucketId: string | undefined;
+        if (parts.length >= 2 && parts[0] === 'objects') {
+          bucketId = parts[1];
+        } else if (parts.length >= 1) {
+          bucketId = parts[0];
+        }
 
-      await file.save(req.file.buffer, {
-        contentType: req.file.mimetype,
-        metadata: {
-          cacheControl: 'public, max-age=31536000', // Cache for 1 year
-        },
-      });
+        if (!bucketId) {
+          return res.status(500).json({
+            message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
+          });
+        }
 
-      // Make the file publicly accessible for direct access from GCS
-      let isPublic = false;
-    try {
-        await file.makePublic();
-        console.log("[Media Upload] File made public successfully");
-        isPublic = true;
-      } catch (error) {
-        console.warn("[Media Upload] Could not make file public (bucket may have public access prevention):", error);
+        try {
+          const { objectStorageClient } = await import('./objectStorage');
+          const bucket = objectStorageClient.bucket(bucketId);
+          const file = bucket.file(objectPath);
+
+          await file.save(req.file.buffer, {
+            contentType: req.file.mimetype,
+            metadata: { cacheControl: 'public, max-age=31536000' },
+          });
+
+          let isPublic = false;
+          try {
+            await file.makePublic();
+            isPublic = true;
+          } catch (error) {
+            console.warn("[Media Upload] Could not make file public:", error);
+          }
+
+          const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
+          const gsPath = `gs://${bucketId}/${objectPath}`;
+          storagePath = isPublic ? publicGcsUrl : gsPath;
+        } catch (gcsError) {
+          console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
+          return res.status(502).json({
+            message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
+          });
+        }
       }
-
-      console.log("[Media Upload] File uploaded successfully");
-
-      // Determine which URL to store in database based on public access success
-      const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
-      const gsPath = `gs://${bucketId}/${objectPath}`;
-      
-      // If public access succeeded, store public URL; otherwise store gs:// path for proxy
-      // If Cloudflare upload succeeded, use that URL; otherwise use GCS URL
-      const storagePath = cloudflareUrl || (isPublic ? publicGcsUrl : gsPath);
 
       // Extract metadata (width, height for images)
       let width: number | undefined;
@@ -2557,10 +2624,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         throw new Error('Bucket ID not found in PRIVATE_OBJECT_DIR');
       }
 
-      // Generate unique filename
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
+      // Generate unique filename (security audit H2: validate extension)
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
       const objectId = randomUUID();
-      
+
       // Build object path (simple, no complex directory structure)
       const objectPath = `uploads/avatars/${objectId}.${fileExtension}`;
 
@@ -2669,13 +2737,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const ext = objectPath.split('.').pop()?.toLowerCase() || 'jpg';
+      // SVG removed (security audit H3, 2026-05-11). SVGs can embed
+      // <script> and execute in any context the proxy serves them in;
+      // refusing here is defense-in-depth — uploads already block them
+      // at the multer fileFilter layer, but legacy objects might exist.
+      if (ext === 'svg' || ext === 'svgz') {
+        return res.status(415).json({ message: "نوع الملف غير مدعوم" });
+      }
       const mimeTypes: Record<string, string> = {
         'png': 'image/png',
         'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg',
         'gif': 'image/gif',
         'webp': 'image/webp',
-        'svg': 'image/svg+xml',
       };
       const contentType = mimeTypes[ext] || 'image/jpeg';
 
@@ -3878,11 +3952,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       fileSize: 10 * 1024 * 1024, // 10MB max
     },
     fileFilter: (req, file, cb) => {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      // GIF removed (security audit M8, 2026-05-11).
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPG, PNG, WEBP, GIF'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPG, PNG, WEBP'));
       }
     },
   });
@@ -3914,39 +3989,57 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         size: req.file.size
       });
 
-      const publicObjectPaths = process.env.PUBLIC_OBJECT_SEARCH_PATHS || '';
-      const publicPath = publicObjectPaths.split(',')[0];
-      
-      if (!publicPath) {
-        throw new Error('PUBLIC_OBJECT_SEARCH_PATHS not configured');
+      // Recover UTF-8 filename if multer parsed it as Latin-1.
+      if (req.file.originalname && /[À-ÿ]/.test(req.file.originalname)) {
+        req.file.originalname = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
       }
 
-      const fileExtension = req.file.originalname.split('.').pop() || 'jpg';
-      const objectId = randomUUID();
-      const relativePath = `uploads/profile-images/${objectId}.${fileExtension}`;
-      const fullPath = `${publicPath}/${relativePath}`;
+      // Magic-byte verification (security audit M1).
+      if (req.file.mimetype.startsWith('image/')) {
+        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        if (!verify.ok) {
+          console.warn("[Profile Image Upload] Magic byte verification failed:", verify.reason);
+          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+        }
+      }
 
-      console.log("[Profile Image Upload] Uploading to path:", fullPath);
-
-      // Check if we should use Cloudflare for profile images
-      let cloudflareUrl: string | null = null;
+      // Try Cloudflare Images first. When CF succeeds, return the
+      // imagedelivery.net URL and skip the GCS path entirely — Replit-
+      // sidecar-backed GCS isn't available on Railway, and
+      // PUBLIC_OBJECT_SEARCH_PATHS is typically unset there too.
       if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
         console.log("[Profile Image Upload] Cloudflare Images configured, attempting upload...");
         const cfResult = await cloudflareImagesService.uploadToCloudflare(
           req.file.buffer,
           req.file.originalname,
           { uploadedBy: (req.user as any)?.id?.toString() || 'anonymous', type: 'profile-image' },
-          req.file.mimetype // Pass actual mimetype from upload
+          req.file.mimetype
         );
         if (cfResult.success && cfResult.deliveryUrl) {
-          cloudflareUrl = cfResult.deliveryUrl;
-          console.log("[Profile Image Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
-        } else {
-          console.log("[Profile Image Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
+          console.log("[Profile Image Upload] Cloudflare upload successful:", { url: cfResult.deliveryUrl, imageId: cfResult.imageId });
+          return res.json({ success: true, url: cfResult.deliveryUrl });
         }
+        console.log("[Profile Image Upload] Cloudflare upload failed, falling back to GCS:", cfResult.error);
       }
 
-      const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
+      // GCS fallback (Replit-only path).
+      const publicObjectPaths = process.env.PUBLIC_OBJECT_SEARCH_PATHS || '';
+      const publicPath = publicObjectPaths.split(',')[0];
+      if (!publicPath) {
+        return res.status(502).json({
+          message: "تعذّر رفع الصورة. خدمة التخزين السحابي غير متاحة حالياً.",
+        });
+      }
+
+      const rawExt = req.file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExtension = /^[a-z0-9]{1,5}$/.test(rawExt) ? rawExt : 'bin';
+      const objectId = randomUUID();
+      const relativePath = `uploads/profile-images/${objectId}.${fileExtension}`;
+      const fullPath = `${publicPath}/${relativePath}`;
+
+      console.log("[Profile Image Upload] Uploading to GCS path:", fullPath);
+
+      const { objectStorageClient } = await import('./objectStorage');
 
       const { bucketName, objectName } = parseObjectPath(fullPath);
       const bucket = objectStorageClient.bucket(bucketName);
@@ -3958,12 +4051,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const proxyUrl = `/public-objects/${relativePath}`;
 
-      console.log("[Profile Image Upload] Success. URL:", cloudflareUrl || proxyUrl);
+      console.log("[Profile Image Upload] Success via GCS. URL:", proxyUrl);
 
-      res.json({ 
-        success: true,
-        url: cloudflareUrl || proxyUrl
-      });
+      res.json({ success: true, url: proxyUrl });
     } catch (error: any) {
       console.error("Error uploading profile image:", error);
       
@@ -5041,8 +5131,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(400).json({ message: "New password is required" });
       }
 
-      if (newPassword.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      const adminPwCheck = validatePassword(newPassword);
+      if (!adminPwCheck.ok) {
+        return res.status(400).json({ message: adminPwCheck.message });
       }
 
       const [user] = await db
@@ -7008,11 +7099,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(articles.id, articleId))
         .returning();
 
-      // Invalidate caches immediately (in-memory, fast)
-      invalidatePublishedContent({ reason: "article-write" });
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
+      // Invalidate caches immediately (in-memory + Redis + Cloudflare CDN).
+      // Passing the article so its slug + englishSlug are BOTH purged at
+      // the edge — otherwise /api/articles/<englishSlug> stays stale for
+      // sMaxAge=3600s (browser fetches by englishSlug after slugRedirect,
+      // not the DB slug). oldSlug/oldEnglishSlug cover renames.
+      invalidateArticleWrite(updatedArticle, {
+        reason: 'admin-patch',
+        oldSlug: existingArticle.slug,
+        oldEnglishSlug: existingArticle.englishSlug,
+      });
       memoryCache.invalidatePattern('^sidebar:');
       memoryCache.delete('lite-feed');
 
@@ -7512,8 +7608,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update (runs immediately)
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update (runs immediately).
+      // Passing the article so its slug is purged at the Cloudflare edge — without
+      // it, /article/<slug> stays cached for up to sMaxAge=3600s.
+      invalidateArticleWrite(articleForNotification, { reason: "article-publish" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7601,8 +7699,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-feature" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7691,8 +7790,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.error("[ARCHIVE] Error sending rejection email:", emailError);
       }
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-archive" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -7751,8 +7851,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-restore" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -8000,8 +8101,9 @@ Respond in valid JSON format only:
         },
       });
 
-      // Invalidate cache and broadcast to all connected clients for instant update
-      invalidatePublishedContent({ reason: "article-write" });
+      // Invalidate cache and broadcast to all connected clients for instant update.
+      // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
+      invalidateArticleWrite(updatedArticle, { reason: "article-toggle-breaking" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
       memoryCache.invalidatePattern('^article:detail:');
       memoryCache.invalidatePattern('^article:id:');
@@ -10866,7 +10968,15 @@ Respond in valid JSON format only:
     }
   });
 
-  app.get("/api/articles/:slug", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM, sMaxAge: 600, staleWhileRevalidate: 300 }), async (req: any, res) => {
+  // Editorial credibility requires that corrections appear instantly across
+  // every POP. We previously relied on s-maxage=3600 + immediate Cloudflare
+  // purge on writes, but that left a 1–2s global propagation window and any
+  // missed write path created up-to-2h staleness. With s-maxage=0 the CDN
+  // edge never stores this response, the Railway memoryCache (5min TTL,
+  // pattern-invalidated on every write) absorbs the read load, and every
+  // user — including the editor verifying their own save — sees the latest
+  // content immediately. Per-pod memoryCache hit rate keeps DB load bounded.
+  app.get("/api/articles/:slug", cacheControl({ maxAge: 0, sMaxAge: 0 }), async (req: any, res) => {
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
@@ -11008,7 +11118,10 @@ Respond in valid JSON format only:
 
 
   // Combined sidebar data endpoint for faster loading (fetches related, tags, and media in parallel)
-  app.get("/api/articles/:slug/sidebar", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM, sMaxAge: 600, staleWhileRevalidate: 300 }), async (req: any, res) => {
+  // Sidebar bundles related + tags + mediaAssets (photographer photos). Same
+  // editorial-credibility rationale as /api/articles/:slug above — s-maxage=0
+  // keeps CDN out of the freshness picture, Railway memoryCache handles load.
+  app.get("/api/articles/:slug/sidebar", cacheControl({ maxAge: 0, sMaxAge: 0 }), async (req: any, res) => {
     try {
       const slug = req.params.slug;
       
@@ -12191,6 +12304,12 @@ Respond in valid JSON format only:
         };
         const asset = await storage.createArticleMediaAsset(dataToInsert);
         memoryCache.invalidatePattern('^article:media-assets:');
+        // Purge article HTML/JSON/sidebar at the edge so newly-added photos
+        // appear immediately (otherwise sidebar stayed stale up to 15min).
+        const articleForPurge = await storage.getArticleById(articleId);
+        if (articleForPurge) {
+          invalidateArticleWrite(articleForPurge, { reason: 'media-asset-create' });
+        }
         res.status(201).json(asset);
       } catch (error: any) {
         console.error("Error creating media asset:", error);
@@ -12260,12 +12379,16 @@ Respond in valid JSON format only:
           altText: parsed.data.altText || "صورة الخبر",
         };
         const asset = await storage.updateArticleMediaAsset(id, dataToUpdate);
-        
+
         if (!asset) {
           return res.status(404).json({ message: "Media asset not found" });
         }
-        
+
         memoryCache.invalidatePattern('^article:media-assets:');
+        const articleForPurge = await storage.getArticleById(asset.articleId);
+        if (articleForPurge) {
+          invalidateArticleWrite(articleForPurge, { reason: 'media-asset-update' });
+        }
         res.json(asset);
       } catch (error: any) {
         console.error("Error updating media asset:", error);
@@ -12281,10 +12404,18 @@ Respond in valid JSON format only:
     async (req: any, res) => {
     try {
         const { id } = req.params;
-        
+
+        // Look up asset BEFORE deleting so we can purge the right article URLs.
+        const existing = await storage.getArticleMediaAssetById(id);
         await storage.deleteArticleMediaAsset(id);
-        
+
         memoryCache.invalidatePattern('^article:media-assets:');
+        if (existing?.articleId) {
+          const articleForPurge = await storage.getArticleById(existing.articleId);
+          if (articleForPurge) {
+            invalidateArticleWrite(articleForPurge, { reason: 'media-asset-delete' });
+          }
+        }
         res.status(204).send();
       } catch (error: any) {
         console.error("Error deleting media asset:", error);
@@ -13702,17 +13833,11 @@ Respond in valid JSON format only:
 
       const article = await storage.createArticle(parsed.data);
 
-      // Invalidate caches when articles are created
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
+      // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
+      // for instant visibility of the new article across all pods + edge.
+      invalidateArticleWrite(article, { reason: 'dashboard-create' });
+      memoryCache.delete('lite-feed');
+
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
       console.log(`🔍 [DASHBOARD CREATE] Article ID: ${article.id}, Title: ${article.title}`);
       
@@ -13945,17 +14070,19 @@ Respond in valid JSON format only:
 
       const updated = await storage.updateArticle(req.params.id, articleData);
 
-      // Invalidate caches when articles are updated
-      memoryCache.invalidatePattern('^homepage');
-      memoryCache.invalidatePattern('^blocks:');
-      memoryCache.invalidatePattern('^insights:');
-      memoryCache.invalidatePattern('^opinion:');
-      memoryCache.invalidatePattern('^trending');
-      memoryCache.invalidatePattern('^article:detail:');
-      memoryCache.invalidatePattern('^article:id:');
-      memoryCache.invalidatePattern('^articles:');
-      memoryCache.invalidatePattern('^sidebar:');
-      
+      // Invalidate caches (in-memory + Redis pub/sub + Cloudflare CDN purge)
+      // for instant visibility of the edit across all pods + edge. We pass
+      // BOTH oldSlug AND oldEnglishSlug so every URL the browser/CDN could
+      // have cached — /api/articles/<slug> and /api/articles/<englishSlug>
+      // — gets purged (browsers fetch by englishSlug after slugRedirect, so
+      // missing it leaves the edge serving stale JSON for sMaxAge=3600s).
+      invalidateArticleWrite(updated, {
+        reason: 'dashboard-update',
+        oldSlug: article.slug,
+        oldEnglishSlug: article.englishSlug,
+      });
+      memoryCache.delete('lite-feed');
+
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
       console.log(`🔍 [DASHBOARD UPDATE] Article ID: ${updated.id}, Title: ${updated.title}`);
       
@@ -18092,7 +18219,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         // Create new user account
         isNewUser = true;
         const bcrypt = await import('bcryptjs');
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        // Bumped from 10 → 12 to match every other bcrypt.hash() call in
+        // the codebase (security audit H4, 2026-05-11). Existing weaker
+        // hashes from this codepath stay valid (bcrypt-verify works
+        // across rounds), but new accounts get the canonical strength.
+        const hashedPassword = await bcrypt.hash(tempPassword, 12);
         
         user = await storage.createUser({
           email: submission.email,
@@ -18540,85 +18671,13 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
   
 
-  // Test email sending for staff communications
-  app.post("/api/test/send-staff-email", async (req, res) => {
-    try {
-      const { to, subject, message } = req.body;
-      
-      if (!to || !subject || !message) {
-        return res.status(400).json({ message: "يرجى تقديم البريد والموضوع والرسالة" });
-      }
-      
-      const { sendEmailNotification } = await import("./services/email");
-      
-      const { staffCommunicationsService } = await import("./services/staffCommunications");
-      const emailHtml = staffCommunicationsService.wrapInTemplate(`<p style="margin-bottom: 20px; white-space: pre-wrap;">${message}</p>`, subject);
-      
-      const result = await sendEmailNotification({
-        to,
-        subject: `[راسل الزملاء] ${subject}`,
-        html: emailHtml,
-        text: `${subject}\n\n${message}\n\n---\nصحيفة سبق الإلكترونية`,
-      });
-      
-      if (result.success) {
-        console.log(`✅ Test email sent to ${to}`);
-        res.json({ success: true, message: `تم إرسال البريد بنجاح إلى ${to}` });
-      } else {
-        res.status(500).json({ success: false, message: "فشل في إرسال البريد", error: result.error });
-      }
-    } catch (error) {
-      console.error("Error sending test email:", error);
-      res.status(500).json({ message: "خطأ في إرسال البريد" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // Test notification sending for a specific article (by ID)
-  app.post("/api/test/send-notifications/:articleId", async (req, res) => {
-    try {
-      const { articleId } = req.params;
-      
-      // Get article details
-      const [article] = await db
-        .select()
-        .from(articles)
-        .where(eq(articles.id, articleId))
-        .limit(1);
-      
-      if (!article) {
-        return res.status(404).json({ message: "Article not found" });
-      }
-      
-      console.log(`🧪 TEST: Sending notifications for article: ${article.title}`);
-      
-      // Determine notification type
-      let notificationType: 'published' | 'breaking' | 'featured' = 'published';
-      if (article.newsType === 'breaking') {
-        notificationType = 'breaking';
-      } else if (article.newsType === 'featured') {
-        notificationType = 'featured';
-      }
-      
-      // Send notifications
-      await sendArticleNotification(article, notificationType);
-      
-      res.json({
-        success: true,
-        message: `Notifications sent for article: ${article.title}`,
-        articleId: article.id,
-        notificationType
-      });
-    } catch (error) {
-      console.error("Error in test notification endpoint:", error);
-      res.status(500).json({ 
-        success: false,
-        message: "Failed to send notifications",
-        error: error instanceof Error ? error.message : String(error)
-      });
-    }
-  });
+  // Removed (security audit C2/C3, 2026-05-11): the two
+  //   POST /api/test/send-staff-email
+  //   POST /api/test/send-notifications/:articleId
+  // routes shipped with no auth and let any anonymous client send arbitrary
+  // emails or trigger a push-notification broadcast for any article. The
+  // authenticated admin equivalent for notifications lives below at
+  // /api/admin/articles/:id/resend-notification.
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -35546,6 +35605,38 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
+  // Bulk mark contact messages as read (must be registered before /:id routes)
+  app.post("/api/admin/contact-messages/bulk-mark-read", requireAuth, requireRole("admin", "editor"), async (req: any, res) => {
+    try {
+      const { ids, all } = req.body ?? {};
+      const readOnlyPending = eq(contactMessages.status, "pending");
+
+      if (all === true) {
+        const updated = await db
+          .update(contactMessages)
+          .set({ status: "read" })
+          .where(readOnlyPending)
+          .returning({ id: contactMessages.id });
+        return res.json({ success: true, updatedCount: updated.length });
+      }
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "حدد رسائل أو استخدم all: true" });
+      }
+
+      const updated = await db
+        .update(contactMessages)
+        .set({ status: "read" })
+        .where(and(inArray(contactMessages.id, ids), readOnlyPending))
+        .returning({ id: contactMessages.id });
+
+      res.json({ success: true, updatedCount: updated.length });
+    } catch (error: any) {
+      console.error("Error bulk marking contact messages as read:", error);
+      res.status(500).json({ message: "فشل في تحديث الرسائل" });
+    }
+  });
+
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get single contact message
@@ -36707,46 +36798,52 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Staff Productivity Dashboard API
   app.get("/api/staff/productivity", requireAuth, requirePermission("staff.view_productivity"), async (req: any, res) => {
     try {
-      const { range = 'all', userId } = req.query;
-      
-      // Calculate date filter based on range
-      let dateFilter = '';
-      const now = new Date();
-      
-      if (range === 'day') {
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${yesterday.toISOString()}'`;
-      } else if (range === 'week') {
-        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${lastWeek.toISOString()}'`;
-      } else if (range === 'month') {
-        const lastMonth = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        dateFilter = `AND a.published_at >= '${lastMonth.toISOString()}'`;
+      const rangeRaw = String(req.query.range || 'all');
+      const userIdRaw = req.query.userId;
+
+      // Whitelist range; any other value falls through to "all".
+      const allowedRanges = ['day', 'week', 'month', 'all'] as const;
+      const range = (allowedRanges as readonly string[]).includes(rangeRaw)
+        ? (rangeRaw as typeof allowedRanges[number])
+        : 'all';
+
+      // Validate userId shape (UUID) before letting it anywhere near SQL.
+      // Security audit C1 (2026-05-11): this used to be interpolated raw
+      // into the CTE filter, which let an authenticated staff member
+      // pivot to arbitrary read via `userId="' OR 1=1 --"`.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const userId = typeof userIdRaw === 'string' && UUID_RE.test(userIdRaw) ? userIdRaw : null;
+      if (userIdRaw && !userId) {
+        return res.status(400).json({ message: "userId غير صالح" });
       }
-      
-      // Define staff roles - these are role names in the roles table
+
+      // Date cutoff as a real value, not a string-interpolated literal.
+      const now = new Date();
+      let dateCutoff: Date | null = null;
+      if (range === 'day') dateCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      else if (range === 'week') dateCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      else if (range === 'month') dateCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Server-controlled staff role list — safe to inline, but kept here
+      // so all dynamic bits are visible in one place.
       const staffRoles = ['reporter', 'content_manager', 'editor', 'senior_editor', 'editor_in_chief', 'moderator', 'opinion_author'];
-      const rolesStr = staffRoles.map(r => `'${r}'`).join(', ');
-      
-      // Build user filter if specific userId provided
-      const userFilter = userId ? `AND u.id = '${userId}'` : '';
-      
-      // Execute raw SQL for efficient aggregation
-      // FIXED: Use user_roles + roles tables for accurate role filtering (RBAC)
-      const sqlQuery = `
+
+      // Compose with parameterized fragments. Drizzle's sql tag inlines
+      // the value safely (placeholder + bind), so neither dateCutoff nor
+      // userId nor staffRoles can break out of their slot.
+      const result = await db.execute(sql`
         WITH staff_members AS (
-          -- Get staff members based on their CURRENT role from user_roles table (RBAC)
           SELECT DISTINCT u.id as user_id, u.first_name, u.last_name, u.email, r.name as role_name
           FROM users u
           INNER JOIN user_roles ur ON ur.user_id = u.id
           INNER JOIN roles r ON r.id = ur.role_id
-          WHERE r.name IN (${rolesStr})
+          WHERE r.name = ANY(${staffRoles})
             AND u.deleted_at IS NULL
             AND u.status = 'active'
-            ${userFilter}
+            AND (${userId}::text IS NULL OR u.id = ${userId})
         ),
         staff_articles AS (
-          SELECT 
+          SELECT
             sm.user_id,
             a.id as article_id,
             COALESCE(a.views, 0) as views
@@ -36757,10 +36854,11 @@ Sitemap: https://sabq.org/sitemap-news.xml
             OR a.reporter_id = sm.user_id
             OR a.publisher_id = sm.user_id
             OR (a.source_metadata->>'from' = sm.email AND a.source_metadata->>'type' IN ('email', 'whatsapp'))
-          ) AND a.status = 'published' ${dateFilter}
+          ) AND a.status = 'published'
+            AND (${dateCutoff}::timestamptz IS NULL OR a.published_at >= ${dateCutoff})
         ),
         staff_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(DISTINCT sa.article_id) as articles_count,
             COALESCE(SUM(sa.views), 0) as total_views
@@ -36768,7 +36866,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           GROUP BY sa.user_id
         ),
         reaction_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(r.id) as reactions_count
           FROM staff_articles sa
@@ -36776,14 +36874,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
           GROUP BY sa.user_id
         ),
         comment_stats AS (
-          SELECT 
+          SELECT
             sa.user_id,
             COUNT(c.id) as comments_count
           FROM staff_articles sa
           LEFT JOIN comments c ON c.article_id = sa.article_id AND c.status = 'approved'
           GROUP BY sa.user_id
         )
-        SELECT 
+        SELECT
           sm.user_id as "userId",
           COALESCE(sm.first_name, '') || ' ' || COALESCE(sm.last_name, '') as name,
           sm.email,
@@ -36793,9 +36891,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
           COALESCE(rs.reactions_count, 0)::int as "reactionsCount",
           COALESCE(cs.comments_count, 0)::int as "commentsCount",
           (
-            COALESCE(ss.articles_count, 0) * 10 + 
-            COALESCE(ss.total_views, 0) * 0.01 + 
-            COALESCE(rs.reactions_count, 0) * 2 + 
+            COALESCE(ss.articles_count, 0) * 10 +
+            COALESCE(ss.total_views, 0) * 0.01 +
+            COALESCE(rs.reactions_count, 0) * 2 +
             COALESCE(cs.comments_count, 0) * 3
           )::numeric(10,2) as "productivityScore"
         FROM staff_members sm
@@ -36803,14 +36901,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
         LEFT JOIN reaction_stats rs ON rs.user_id = sm.user_id
         LEFT JOIN comment_stats cs ON cs.user_id = sm.user_id
         ORDER BY (
-          COALESCE(ss.articles_count, 0) * 10 + 
-          COALESCE(ss.total_views, 0) * 0.01 + 
-          COALESCE(rs.reactions_count, 0) * 2 + 
+          COALESCE(ss.articles_count, 0) * 10 +
+          COALESCE(ss.total_views, 0) * 0.01 +
+          COALESCE(rs.reactions_count, 0) * 2 +
           COALESCE(cs.comments_count, 0) * 3
         ) DESC
-      `;
-      
-      const result = await db.execute(sql.raw(sqlQuery));
+      `);
       
       const staffData = result.rows.map((row: any) => ({
         userId: row.userId,

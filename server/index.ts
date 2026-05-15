@@ -135,10 +135,31 @@ app.use(cors({
     if (!origin) {
       return callback(null, true);
     }
+    // Reject anything that doesn't parse cleanly as a URL and isn't
+    // https in production (security audit M7, 2026-05-11). The
+    // allowedOriginsSet check below is an exact-string match on the
+    // origin (good), but the regex preview pattern is only as tight
+    // as the operator wrote it. We add a parse-and-protocol gate so
+    // a malformed origin can't smuggle past even a loose regex.
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      console.warn(`[CORS] Rejected non-URL origin: ${origin}`);
+      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+    }
+    if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+      console.warn(`[CORS] Rejected non-HTTPS origin in production: ${origin}`);
+      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+    }
     const normalizedOrigin = origin.replace(/:5000$/, '').replace(/:5001$/, '');
     if (allowedOriginsSet.has(origin) || normalizedOriginsSet.has(normalizedOrigin)) {
       return callback(null, true);
     }
+    // NOTE: previewPattern is matched against the *whole* origin string,
+    // anchored. Make sure FRONTEND_PREVIEW_PATTERN env var is tight —
+    // e.g. `^https://sabq-[a-z0-9-]+-<team-id>\.vercel\.app$` — because
+    // any Vercel user can deploy a project named "sabq-*" otherwise.
     if (previewPattern && previewPattern.test(origin)) {
       return callback(null, true);
     }
@@ -320,20 +341,21 @@ function hasSessionCookie(req: Request): boolean {
 
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10000, // 10000 requests per IP per window (high-traffic site behind CDN)
+  max: 10000, // 10000 requests per IP/user per window (high-traffic site behind CDN)
   handler: rateLimitHandler,
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  // Per-user keying when authenticated, IP otherwise (security audit H7).
   keyGenerator: (req) => {
+    const userId = (req as any).user?.id;
+    if (userId) return `u:${userId}`;
     const cfIp = req.headers['cf-connecting-ip'] as string;
     const xForwardedFor = req.headers['x-forwarded-for'] as string;
-    const realIp = cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
-    return realIp;
+    return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
   },
   skip: (req) => {
     if (req.path.startsWith("/health") || req.path.startsWith("/ready")) return true;
-    if (hasSessionCookie(req)) return true;
     if (req.method === "GET") return true;
     return false;
   },
@@ -363,14 +385,19 @@ const writeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  // Key by authenticated user when available, IP otherwise (security
+  // audit H7, 2026-05-11). The previous skip-on-session-cookie meant a
+  // stolen session token bypassed every write limit; per-user keying
+  // closes that path while keeping anonymous writes IP-limited.
   keyGenerator: (req) => {
+    const userId = (req as any).user?.id;
+    if (userId) return `u:${userId}`;
     const cfIp = req.headers['cf-connecting-ip'] as string;
     const xForwardedFor = req.headers['x-forwarded-for'] as string;
     return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
   },
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
-    if (hasSessionCookie(req)) return true;
     return false;
   },
 });
@@ -992,7 +1019,11 @@ if (!(globalThis as any).__sabqServer) {
     // Set SERVE_SPA=false on Railway (or any headless deployment where the
     // frontend lives elsewhere, e.g. Vercel) to disable SPA wiring entirely.
     // Production on Replit (no env override) → unchanged.
-    const serveSpa = process.env.SERVE_SPA !== "false";
+    // Lenient parser: accepts "false"/"0"/"no"/"off" in any case with
+    // surrounding whitespace, since Railway/CI env editors sometimes inject
+    // them on copy-paste.
+    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
+    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
 
     if (!serveSpa) {
       console.log("[Server] 🛰  Headless mode — SPA serving disabled (SERVE_SPA=false). Frontend is served externally.");
@@ -1005,7 +1036,15 @@ if (!(globalThis as any).__sabqServer) {
       });
     } else if (!isProductionMode && app.get("env") === "development") {
       console.log("[Server] Starting in DEVELOPMENT mode with Vite");
-      const { setupVite } = await import("./vite");
+      // Computed-string import keeps esbuild from following ./vite during
+      // bundling. Without this, server/vite.ts (which `import`s the `vite`
+      // npm package — a devDependency) gets inlined into dist/index.js,
+      // and the production stage's `npm ci --omit=dev` removes vite,
+      // crashing the container at startup with ERR_MODULE_NOT_FOUND.
+      // This file path is only resolved at runtime in dev mode (where vite
+      // IS installed); production code paths never reach this branch.
+      const viteModulePath = "./vite";
+      const { setupVite } = await import(/* @vite-ignore */ viteModulePath);
       await setupVite(app, server);
       console.log("[Server] ✅ Vite setup completed");
     } else {

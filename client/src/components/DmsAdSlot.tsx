@@ -96,18 +96,16 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     const fallbackTimeout = setTimeout(() => {
       if (adState === 'loading') {
         const container = containerRef.current;
+        let hasContent = false;
         if (container) {
           const iframes = container.querySelectorAll('iframe');
-          let hasContent = false;
           iframes.forEach(iframe => {
             const w = iframe.offsetWidth || parseInt(iframe.getAttribute('width') || '0');
             const h = iframe.offsetHeight || parseInt(iframe.getAttribute('height') || '0');
             if (w >= 50 && h >= 50) hasContent = true;
           });
-          if (hasContent) {
-            setAdState('filled');
-          }
         }
+        setAdState(hasContent ? 'filled' : 'empty');
       }
     }, 5000);
 
@@ -188,16 +186,16 @@ export function LiteModeAdSlot({ index }: { index: number }) {
     const fallbackTimeout = setTimeout(() => {
       if (adState === 'loading') {
         const container = containerRef.current;
+        let hasContent = false;
         if (container) {
           const iframes = container.querySelectorAll('iframe');
-          let hasContent = false;
           iframes.forEach(iframe => {
             const w = iframe.offsetWidth || parseInt(iframe.getAttribute('width') || '0');
             const h = iframe.offsetHeight || parseInt(iframe.getAttribute('height') || '0');
             if (w >= 50 && h >= 50) hasContent = true;
           });
-          if (hasContent) setAdState('filled');
         }
+        setAdState(hasContent ? 'filled' : 'empty');
       }
     }, 5000);
 
@@ -213,7 +211,7 @@ export function LiteModeAdSlot({ index }: { index: number }) {
     : mpuFilledStyle;
 
   return (
-    <div 
+    <div
       ref={containerRef}
       id="MPU"
       data-slot-index={index}
@@ -266,16 +264,16 @@ export function LiteModeArticleAd() {
     const fallbackTimeout = setTimeout(() => {
       if (adState === 'loading') {
         const container = containerRef.current;
+        let hasContent = false;
         if (container) {
           const iframes = container.querySelectorAll('iframe');
-          let hasContent = false;
           iframes.forEach(iframe => {
             const w = iframe.offsetWidth || parseInt(iframe.getAttribute('width') || '0');
             const h = iframe.offsetHeight || parseInt(iframe.getAttribute('height') || '0');
             if (w >= 50 && h >= 50) hasContent = true;
           });
-          if (hasContent) setAdState('filled');
         }
+        setAdState(hasContent ? 'filled' : 'empty');
       }
     }, 5000);
 

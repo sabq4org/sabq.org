@@ -1962,6 +1962,25 @@ input, select, textarea {
   aspect-ratio: auto;
 }
 
+/*
+ * Paragraph spacing in article bodies. Tailwind Typography's defaults
+ * sit at 1.25em which reads cramped at our prose-lg size — bump to a
+ * calmer 1.75em so paragraphs breathe (user request 2026-05-14).
+ */
+.prose p,
+.prose-lg p {
+  margin-top: 1.75em;
+  margin-bottom: 1.75em;
+}
+.prose p:first-child,
+.prose-lg p:first-child {
+  margin-top: 0;
+}
+.prose p:last-child,
+.prose-lg p:last-child {
+  margin-bottom: 0;
+}
+
 .embed-responsive {
   position: relative;
   width: 100%;

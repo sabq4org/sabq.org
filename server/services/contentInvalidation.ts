@@ -17,6 +17,8 @@ const PUBLISHED_CONTENT_PATTERNS = [
   "^insights:",         // insights:ai
   "^opinion:",          // opinion:list:...
   "^articles:",         // articles:list:..., articles:featured, articles:recent:..., articles:latest-footer
+  "^article:",          // article:detail:<slug>, article:id:<id>, article:passport:<lang>:<slug>:*, article:media-assets:<id>:<locale>, article:related:..., article:sidebar:...
+  "^sidebar:",          // sidebar:<articleId> — server cache for /api/articles/:slug/sidebar (related + tags + mediaAssets)
   "^lite-feed",         // lite-feed
   "^news-",             // news-paginated-total, news-analytics-ar/en/ur
   "^mobile:",           // mobile:sections, mobile:trending, mobile:homepage
@@ -138,9 +140,13 @@ export function invalidatePublishedContent(
 
   if (!skipCloudflare) {
     try {
-      void purgeHomepage();
-      if (isBreaking) void purgeBreakingNews();
-      if (articleSlug) void purgeArticle(articleSlug);
+      // immediate:true bypasses the 30s batch flush so the editor's change is
+      // visible at the Cloudflare edge within ~1s of save. Without it, CDN
+      // would keep serving the stale article HTML/JSON (sMaxAge=3600) until
+      // the next scheduled flush.
+      void purgeHomepage({ immediate: true });
+      if (isBreaking) void purgeBreakingNews({ immediate: true });
+      if (articleSlug) void purgeArticle(articleSlug, { immediate: true });
     } catch (e: any) {
       console.error("[ContentInvalidation] cloudflare purge failed:", e?.message);
     }
@@ -149,4 +155,54 @@ export function invalidatePublishedContent(
   if (reason) {
     console.log(`[ContentInvalidation] triggered (${reason})${articleSlug ? ` slug=${articleSlug}` : ""}${isBreaking ? " breaking" : ""}`);
   }
+}
+
+type ArticleLike = {
+  slug?: string | null;
+  englishSlug?: string | null;
+  newsType?: string | null;
+} | null | undefined;
+
+/**
+ * Convenience wrapper for the common "an article was just written" path.
+ * Reads slug + englishSlug + newsType off the article row so callers don't
+ * have to spell them out, and also purges the old slug(s) if the rename
+ * changed them.
+ *
+ * Why we purge BOTH `slug` AND `englishSlug`: after `slugRedirect` middleware
+ * 301s Arabic slugs to `/article/<englishSlug>`, browsers/CDN cache the JSON
+ * at `/api/articles/<englishSlug>` — NOT `/api/articles/<slug>`. If we only
+ * purge by `slug`, the edge keeps serving stale JSON (incl. old imageUrl)
+ * for sMaxAge=3600s. Reported symptom: image visibly stale ~35min after
+ * editing even though listings updated immediately.
+ *
+ * Use this instead of calling invalidatePublishedContent() with just a
+ * reason string — without articleSlug, the article URL never gets purged
+ * from Cloudflare and stays stale at the edge for sMaxAge=3600s.
+ */
+export function invalidateArticleWrite(
+  article: ArticleLike,
+  opts: {
+    reason?: string;
+    oldSlug?: string | null;
+    oldEnglishSlug?: string | null;
+  } = {},
+): void {
+  const reason = opts.reason ?? "article-write";
+  const isBreaking = article?.newsType === "breaking";
+
+  const slugs = new Set<string>();
+  if (article?.slug) slugs.add(article.slug);
+  if (article?.englishSlug) slugs.add(article.englishSlug);
+  if (opts.oldSlug) slugs.add(opts.oldSlug);
+  if (opts.oldEnglishSlug) slugs.add(opts.oldEnglishSlug);
+
+  if (slugs.size === 0) {
+    invalidatePublishedContent({ isBreaking, reason });
+    return;
+  }
+
+  Array.from(slugs).forEach((slug) => {
+    invalidatePublishedContent({ articleSlug: slug, isBreaking, reason });
+  });
 }

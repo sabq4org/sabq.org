@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -40,8 +41,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { 
-  MessageSquare, 
+import {
+  MessageSquare,
   Search,
   Eye,
   Check,
@@ -57,12 +58,12 @@ import {
   FileText,
   Clock,
   Send,
+  Inbox,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { motion } from "framer-motion";
 import type { ContactMessage } from "@shared/schema";
 
 type ContactMessageStatus = "pending" | "read" | "replied";
@@ -135,6 +136,8 @@ export default function ContactMessagesManagement() {
   const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [messageToReply, setMessageToReply] = useState<ContactMessage | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [markAllConfirmOpen, setMarkAllConfirmOpen] = useState(false);
 
   useEffect(() => {
     document.title = "إدارة رسائل التواصل - لوحة التحكم";
@@ -216,6 +219,34 @@ export default function ContactMessagesManagement() {
     },
   });
 
+  const bulkMarkReadMutation = useMutation({
+    mutationFn: async (payload: { ids?: string[]; all?: boolean }) => {
+      return await apiRequest("/api/admin/contact-messages/bulk-mark-read", {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: (result: { updatedCount?: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/contact-messages"] });
+      setSelectedIds(new Set());
+      toast({
+        title: "تم التحديث",
+        description:
+          result?.updatedCount != null
+            ? `تم تعليم ${result.updatedCount} رسالة كمقروءة`
+            : "تم تعليم الرسائل كمقروءة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل في تعليم الرسائل كمقروءة",
+        variant: "destructive",
+      });
+    },
+  });
+
   const replyMutation = useMutation({
     mutationFn: async ({ id, replyText }: { id: string; replyText: string }) => {
       return await apiRequest(`/api/admin/contact-messages/${id}/reply`, {
@@ -259,92 +290,230 @@ export default function ContactMessagesManagement() {
     }
   };
 
-  const messages = data?.messages || [];
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
   const totalPages = data?.totalPages || 1;
   const total = data?.total || 0;
 
+  const pendingOnPage = useMemo(
+    () => messages.filter((m) => m.status === "pending"),
+    [messages],
+  );
+
+  const allPendingOnPageSelected =
+    pendingOnPage.length > 0 && pendingOnPage.every((m) => selectedIds.has(m.id));
+
+  const toggleSelectAllOnPage = () => {
+    if (allPendingOnPageSelected) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectedIds(new Set(pendingOnPage.map((m) => m.id)));
+  };
+
+  const toggleSelectMessage = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleMarkSelectedRead = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    bulkMarkReadMutation.mutate({ ids });
+  };
+
+  const handleMarkAllRead = () => {
+    bulkMarkReadMutation.mutate(
+      { all: true },
+      { onSuccess: () => setMarkAllConfirmOpen(false) },
+    );
+  };
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, statusFilter, searchTerm]);
+
+  const counts = {
+    total,
+    pending: messages.filter((m) => m.status === "pending").length,
+    read: messages.filter((m) => m.status === "read").length,
+    replied: messages.filter((m) => m.status === "replied").length,
+  };
+
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl" data-testid="contact-messages-page">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="flex items-center justify-end gap-3 mb-2">
-            <div className="text-right">
-              <h1 className="text-3xl font-bold">رسائل التواصل</h1>
-              <p className="text-muted-foreground">إدارة رسائل الزوار والتواصل</p>
-            </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
-              <MessageSquare className="h-6 w-6 text-white" />
-            </div>
+      <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-500/10">
+            <MessageSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
-        </motion.div>
+          <div>
+            <h1 className="text-2xl font-bold">رسائل التواصل</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              إدارة رسائل الزوار والرد عليها
+            </p>
+          </div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <Card data-testid="filters-card">
-            <CardHeader className="text-right">
-              <CardTitle className="flex items-center justify-end gap-2">
-                <span>البحث والتصفية</span>
-                <Search className="h-5 w-5" />
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="relative">
-                  <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="بحث بالاسم أو البريد..."
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setPage(1);
-                    }}
-                    className="pr-10"
-                    data-testid="input-search"
-                  />
+        {/* Stats overview */}
+        {isLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-20 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card data-testid="card-total-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Inbox className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">الإجمالي</p>
+                    <p className="text-2xl font-bold">{counts.total.toLocaleString("en-US")}</p>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-pending-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-yellow-500/10">
+                    <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">قيد الانتظار</p>
+                    <p className="text-2xl font-bold">{counts.pending.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-read-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">تمت القراءة</p>
+                    <p className="text-2xl font-bold">{counts.read.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-replied-messages">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <CheckCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">تم الرد</p>
+                    <p className="text-2xl font-bold">{counts.replied.toLocaleString("en-US")}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-                <Select
-                  value={statusFilter}
-                  onValueChange={(value) => {
-                    setStatusFilter(value);
-                    setPage(1);
-                  }}
+        {/* Filters */}
+        <div className="grid gap-3 md:grid-cols-[1fr_220px]" data-testid="filters-card">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="بحث بالاسم أو البريد..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="pr-10"
+              data-testid="input-search"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger data-testid="select-status-filter">
+              <SelectValue placeholder="جميع الحالات" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">جميع الحالات</SelectItem>
+              <SelectItem value="pending">قيد الانتظار</SelectItem>
+              <SelectItem value="read">تم القراءة</SelectItem>
+              <SelectItem value="replied">تم الرد</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Table */}
+        <div data-testid="messages-table-card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold">قائمة الرسائل</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total}`}
+              </p>
+            </div>
+            {!isLoading && messages.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {pendingOnPage.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSelectAllOnPage}
+                    data-testid="button-select-all-page"
+                  >
+                    {allPendingOnPageSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleMarkSelectedRead}
+                  disabled={selectedIds.size === 0 || bulkMarkReadMutation.isPending}
+                  data-testid="button-mark-selected-read"
                 >
-                  <SelectTrigger data-testid="select-status-filter">
-                    <SelectValue placeholder="تصفية حسب الحالة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">جميع الحالات</SelectItem>
-                    <SelectItem value="pending">قيد الانتظار</SelectItem>
-                    <SelectItem value="read">تم القراءة</SelectItem>
-                    <SelectItem value="replied">تم الرد</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {bulkMarkReadMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin ms-1" />
+                  ) : (
+                    <Check className="h-4 w-4 ms-1" />
+                  )}
+                  جعل المحدد مقروءاً
+                  {selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setMarkAllConfirmOpen(true)}
+                  disabled={bulkMarkReadMutation.isPending}
+                  data-testid="button-mark-all-read"
+                >
+                  <CheckCheck className="h-4 w-4 ms-1" />
+                  جعل الكل مقروء
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-        >
-          <Card data-testid="messages-table-card">
-            <CardHeader className="text-right">
-              <CardTitle>الرسائل</CardTitle>
-              <CardDescription>
-                {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total} رسالة`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+            )}
+          </div>
+          <div>
               {isLoading ? (
                 <TableSkeleton />
               ) : messages.length === 0 ? (
@@ -355,6 +524,17 @@ export default function ContactMessagesManagement() {
                     <Table data-testid="messages-table">
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-10 text-center">
+                            <Checkbox
+                              checked={
+                                pendingOnPage.length > 0 && allPendingOnPageSelected
+                              }
+                              onCheckedChange={() => toggleSelectAllOnPage()}
+                              disabled={pendingOnPage.length === 0}
+                              aria-label="تحديد كل الرسائل قيد الانتظار في الصفحة"
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
                           <TableHead className="text-right">الاسم</TableHead>
                           <TableHead className="text-right">البريد</TableHead>
                           <TableHead className="text-right">الهاتف</TableHead>
@@ -367,6 +547,7 @@ export default function ContactMessagesManagement() {
                       <TableBody>
                         {messages.map((message) => {
                           const StatusIcon = statusIcons[message.status as ContactMessageStatus] || Clock;
+                          const isPending = message.status === "pending";
                           return (
                             <TableRow
                               key={message.id}
@@ -374,6 +555,20 @@ export default function ContactMessagesManagement() {
                               onClick={() => handleViewMessage(message)}
                               data-testid={`message-row-${message.id}`}
                             >
+                              <TableCell
+                                className="w-10 text-center"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Checkbox
+                                  checked={selectedIds.has(message.id)}
+                                  disabled={!isPending}
+                                  onCheckedChange={(checked) =>
+                                    toggleSelectMessage(message.id, checked === true)
+                                  }
+                                  aria-label={`تحديد رسالة ${message.name}`}
+                                  data-testid={`checkbox-message-${message.id}`}
+                                />
+                              </TableCell>
                               <TableCell className="font-medium">
                                 <div className="flex items-center gap-2 flex-row-reverse justify-end">
                                   <User className="h-4 w-4 text-muted-foreground" />
@@ -468,9 +663,8 @@ export default function ContactMessagesManagement() {
                   )}
                 </>
               )}
-            </CardContent>
-          </Card>
-        </motion.div>
+          </div>
+        </div>
 
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
           <DialogContent className="max-w-2xl" dir="rtl" data-testid="message-details-dialog">
@@ -585,6 +779,32 @@ export default function ContactMessagesManagement() {
             )}
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={markAllConfirmOpen} onOpenChange={setMarkAllConfirmOpen}>
+          <AlertDialogContent dir="rtl" data-testid="mark-all-read-confirm-dialog">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-right">جعل كل الرسائل مقروءة؟</AlertDialogTitle>
+              <AlertDialogDescription className="text-right">
+                سيتم تعليم جميع الرسائل «قيد الانتظار» كمقروءة في النظام. لن تتأثر الرسائل التي تم الرد عليها.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-row-reverse gap-2">
+              <AlertDialogCancel data-testid="button-cancel-mark-all-read">إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleMarkAllRead}
+                disabled={bulkMarkReadMutation.isPending}
+                data-testid="button-confirm-mark-all-read"
+              >
+                {bulkMarkReadMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin me-2" />
+                ) : (
+                  <CheckCheck className="h-4 w-4 me-2" />
+                )}
+                تأكيد
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <AlertDialog open={!!messageToDelete} onOpenChange={() => setMessageToDelete(null)}>
           <AlertDialogContent dir="rtl" data-testid="delete-confirm-dialog">

@@ -50,6 +50,7 @@ import {
   Send,
   ArrowRight,
   Sparkles,
+  FileText,
   ImagePlus,
   Loader2,
   Upload,
@@ -1253,49 +1254,22 @@ export default function ArticleEditor() {
     setIsUploadingImage(true);
 
     try {
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "article");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload image");
-      }
-
-      // Extract the actual file path without query parameters
-      const fileUrl = uploadData.uploadURL.split('?')[0];
-      console.log("[Image Upload] File URL:", fileUrl);
-
-      const aclData = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL: fileUrl }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }) as { objectPath: string };
-
-      console.log("[Image Upload] ACL Response:", aclData);
-      console.log("[Image Upload] Object Path:", aclData.objectPath);
-
-      setImageUrl(aclData.objectPath);
-      setIsAiGeneratedImage(false); // Manual upload is not AI generated
-
-      // Auto-save to media library in background and save media ID
-      const mediaId = await saveToMediaLibrary(aclData.objectPath);
-      if (mediaId) {
-        setHeroImageMediaId(mediaId);
-      }
+      setImageUrl(uploaded.url);
+      setIsAiGeneratedImage(false);
+      setHeroImageMediaId(uploaded.id);
 
       toast({
         title: "تم الرفع بنجاح",
-        description: `الرابط: ${aclData.objectPath.substring(0, 50)}...`,
+        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
       });
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -1335,33 +1309,16 @@ export default function ArticleEditor() {
     setIsUploadingInfographicBanner(true);
 
     try {
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "article-infographic-banner");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload file");
-      }
-
-      const fileUrl = uploadData.uploadURL.split('?')[0];
-
-      const aclData = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL: fileUrl }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }) as { objectPath: string };
-
-      setInfographicBannerUrl(aclData.objectPath);
+      setInfographicBannerUrl(uploaded.url);
       setIsAiGeneratedInfographicBanner(false);
 
       toast({
@@ -3221,7 +3178,99 @@ const generateSlug = (text: string) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="container mx-auto px-4 py-6">
+      {/* Scope wrapper for the per-card CSS below. Page background is
+          deliberately left at the DashboardLayout default so this
+          editor matches the rest of the dashboard. */}
+      <div className="article-editor-stage" dir="rtl">
+        <style>{`
+          /* Flat, no-shadow cards with sharp 1px borders and a very
+             faint cool tint. Inputs / selects / textareas / the
+             editor surface stay white so they pop out of the card
+             instead of blending into it. */
+          .article-editor-stage .shadcn-card {
+            box-shadow: none !important;
+            border-width: 1px;
+            border-color: hsl(var(--border));
+          }
+
+          /* Cool palette — sky / slate / mint / cyan / lavender / teal.
+             Direct-child Cards of each grid column rotate through these.
+             Opacity is tiny so the colour reads as "paper of a different
+             stock" rather than a coloured panel. */
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
+            background-color: hsl(210 40% 97.5%);  /* slate paper */
+            border-color: hsl(210 25% 88%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
+            background-color: hsl(205 70% 97%);    /* sky paper */
+            border-color: hsl(205 50% 88%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
+            background-color: hsl(160 45% 97%);    /* mint paper */
+            border-color: hsl(160 30% 86%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
+            background-color: hsl(190 55% 97%);    /* cyan paper */
+            border-color: hsl(190 40% 86%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
+            background-color: hsl(240 35% 97.5%);  /* lavender paper */
+            border-color: hsl(240 25% 88%);
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
+            background-color: hsl(180 35% 97%);    /* teal paper */
+            border-color: hsl(180 25% 86%);
+          }
+
+          /* Force every interactive surface inside a tinted card back to
+             white so they read as distinct fields, not as part of the
+             card itself. */
+          .article-editor-stage .shadcn-card input:not([type="checkbox"]):not([type="radio"]),
+          .article-editor-stage .shadcn-card textarea,
+          .article-editor-stage .shadcn-card select,
+          .article-editor-stage .shadcn-card [role="combobox"],
+          .article-editor-stage .shadcn-card [role="textbox"],
+          .article-editor-stage .shadcn-card .ProseMirror,
+          .article-editor-stage .shadcn-card [contenteditable="true"] {
+            background-color: hsl(var(--background)) !important;
+          }
+          /* The rich-text editor wrapper (toolbar + surface) — keep its
+             outer wrapper neutral so the giant editor block doesn't
+             flood the page with one tint. */
+          .article-editor-stage .shadcn-card .tiptap,
+          .article-editor-stage .shadcn-card .editor-shell,
+          .article-editor-stage .shadcn-card [data-editor-shell] {
+            background-color: hsl(var(--background)) !important;
+            border-radius: 0.5rem;
+          }
+
+          /* Dark mode — cool tones at low lightness, sharp borders. */
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+1) {
+            background-color: hsl(210 25% 12%);
+            border-color: hsl(210 15% 22%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+2) {
+            background-color: hsl(205 30% 13%);
+            border-color: hsl(205 20% 23%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+3) {
+            background-color: hsl(160 20% 12%);
+            border-color: hsl(160 15% 22%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+4) {
+            background-color: hsl(190 25% 12%);
+            border-color: hsl(190 18% 22%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+5) {
+            background-color: hsl(240 20% 13%);
+            border-color: hsl(240 15% 23%);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(6n+6) {
+            background-color: hsl(180 20% 12%);
+            border-color: hsl(180 15% 22%);
+          }
+        `}</style>
+       <div className="container mx-auto">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
           <div
@@ -3287,7 +3336,7 @@ const generateSlug = (text: string) => {
         )}
 
         {/* Page Header with Actions - Mobile Optimized */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 p-4 shadow-sm">
           {/* Title Row */}
           <div className="flex items-center gap-3 min-w-0">
             <Button
@@ -3304,9 +3353,17 @@ const generateSlug = (text: string) => {
                 </a>
               </Link>
             </Button>
-            <h1 className="text-xl sm:text-2xl font-bold truncate">
-              {isNewArticle ? "خبر جديد" : "تحرير الخبر"}
-            </h1>
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold truncate">
+                {isNewArticle ? "خبر جديد" : "تحرير الخبر"}
+              </h1>
+              <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">
+                {isNewArticle ? "اكتب خبراً جديداً وحدد إعدادات النشر" : "حدّث محتوى الخبر وأعدّ نشره"}
+              </p>
+            </div>
             {/* Auto-save indicator - visible on desktop */}
             {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground shrink-0" data-testid="autosave-indicator">
@@ -5440,6 +5497,7 @@ const generateSlug = (text: string) => {
             </Card>
           </div>
         </div>
+       </div>
       </div>
 
       {/* Media Library Picker - Hidden for opinion authors */}

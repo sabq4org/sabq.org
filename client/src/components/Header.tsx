@@ -30,6 +30,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
+import { hasPermission } from "@/hooks/useAuth";
 
 interface HeaderProps {
   user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
@@ -230,7 +231,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                     </div>
                     <DropdownMenuSeparator />
-                    {user.permissions?.includes("dashboard.view") && (
+                    {hasPermission(user as any, "dashboard.view") && (
                       <>
                         <DropdownMenuItem asChild>
                           <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard-mobile">
@@ -238,7 +239,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                             لوحة التحكم
                           </a>
                         </DropdownMenuItem>
-                        {user.permissions?.includes("dashboard.view_messages") && (
+                        {hasPermission(user as any, "dashboard.view_messages") && (
                           <DropdownMenuItem asChild>
                             <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications-mobile">
                               <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
@@ -332,7 +333,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                     </div>
                     <DropdownMenuSeparator />
-                    {user.permissions?.includes("dashboard.view") && (
+                    {hasPermission(user as any, "dashboard.view") && (
                       <>
                         <DropdownMenuItem asChild>
                           <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard">
@@ -340,7 +341,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                             لوحة التحكم
                           </a>
                         </DropdownMenuItem>
-                        {user.permissions?.includes("dashboard.view_messages") && (
+                        {hasPermission(user as any, "dashboard.view_messages") && (
                           <DropdownMenuItem asChild>
                             <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications">
                               <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
@@ -557,7 +558,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   أدواتي
                 </h3>
                 <div className="space-y-1">
-                  {user.permissions?.includes("dashboard.view") && (
+                  {hasPermission(user as any, "dashboard.view") && (
                     <Link href="/dashboard">
                       <span
                         className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"

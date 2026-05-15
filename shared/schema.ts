@@ -12437,4 +12437,84 @@ export const imageMigrations = pgTable("image_migrations", {
   index("image_migrations_status_idx").on(table.status),
 ]);
 
+// ============================================
+// OPINION WRITER ↔ EDITORIAL TICKETS
+// ============================================
+// Internal ticket/messaging system between opinion-column writers
+// (role: opinion_author) and editorial admins. Each ticket is a thread of
+// messages; messages can optionally reply to another message in the same
+// ticket (parentMessageId) for nested replies. lastReadByWriterAt /
+// lastReadByAdminAt drive the "new reply" badge.
+
+export const opinionTicketStatuses = ["open", "answered", "closed"] as const;
+export type OpinionTicketStatus = (typeof opinionTicketStatuses)[number];
+
+export const opinionTickets = pgTable("opinion_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  writerId: varchar("writer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).default("open").notNull(),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  lastReadByWriterAt: timestamp("last_read_by_writer_at"),
+  lastReadByAdminAt: timestamp("last_read_by_admin_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_opinion_tickets_writer").on(table.writerId),
+  index("idx_opinion_tickets_status").on(table.status),
+  index("idx_opinion_tickets_last_message").on(table.lastMessageAt),
+]);
+
+export const opinionTicketMessages = pgTable("opinion_ticket_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").notNull().references(() => opinionTickets.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id),
+  senderRole: varchar("sender_role", { length: 10 }).notNull(), // "writer" | "admin"
+  message: text("message").notNull(),
+  parentMessageId: varchar("parent_message_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_opinion_ticket_msgs_ticket").on(table.ticketId),
+  index("idx_opinion_ticket_msgs_created").on(table.createdAt),
+  index("idx_opinion_ticket_msgs_parent").on(table.parentMessageId),
+]);
+
+export const opinionTicketsRelations = relations(opinionTickets, ({ one, many }) => ({
+  writer: one(users, {
+    fields: [opinionTickets.writerId],
+    references: [users.id],
+  }),
+  messages: many(opinionTicketMessages),
+}));
+
+export const opinionTicketMessagesRelations = relations(opinionTicketMessages, ({ one }) => ({
+  ticket: one(opinionTickets, {
+    fields: [opinionTicketMessages.ticketId],
+    references: [opinionTickets.id],
+  }),
+  sender: one(users, {
+    fields: [opinionTicketMessages.senderId],
+    references: [users.id],
+  }),
+}));
+
+export const insertOpinionTicketSchema = z.object({
+  title: z.string().trim().min(3, "العنوان قصير جداً").max(255, "العنوان طويل جداً"),
+  message: z.string().trim().min(1, "نص الاستفسار مطلوب").max(10000, "النص طويل جداً"),
+});
+
+export const insertOpinionTicketMessageSchema = z.object({
+  message: z.string().trim().min(1, "الرسالة مطلوبة").max(10000, "النص طويل جداً"),
+  parentMessageId: z.string().uuid().optional().nullable(),
+});
+
+export const updateOpinionTicketStatusSchema = z.object({
+  status: z.enum(opinionTicketStatuses),
+});
+
+export type OpinionTicket = typeof opinionTickets.$inferSelect;
+export type InsertOpinionTicket = z.infer<typeof insertOpinionTicketSchema>;
+export type OpinionTicketMessage = typeof opinionTicketMessages.$inferSelect;
+export type InsertOpinionTicketMessage = z.infer<typeof insertOpinionTicketMessageSchema>;
+
 export type ImageMigration = typeof imageMigrations.$inferSelect;

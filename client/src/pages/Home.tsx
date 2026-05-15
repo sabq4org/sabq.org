@@ -357,8 +357,13 @@ export default function Home() {
             <div className="scroll-fade-in">
               <OpinionArticlesBlock enabled={true} />
             </div>
-            <ContinueReadingWidget />
           </div>
+        </LazySection>
+
+        {/* Continue Reading — stands alone (its own container + padding)
+            so the inner grid uses the full max-w-7xl width like TrendingWeek. */}
+        <LazySection>
+          <ContinueReadingWidget />
         </LazySection>
 
         <LazySection>

@@ -221,42 +221,20 @@ export default function EnglishArticleEditor() {
     setIsUploadingImage(true);
 
     try {
-      const uploadData = await apiRequest("/api/objects/upload", {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "en-article");
+      const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
-      }) as { uploadURL: string };
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
 
-      const uploadResponse = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload image");
-      }
-
-      // Extract the actual file path without query parameters
-      const fileUrl = uploadData.uploadURL.split('?')[0];
-      console.log("[Image Upload] File URL:", fileUrl);
-
-      const aclData = await apiRequest("/api/article-images", {
-        method: "PUT",
-        body: JSON.stringify({ imageURL: fileUrl }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }) as { objectPath: string };
-
-      console.log("[Image Upload] ACL Response:", aclData);
-      console.log("[Image Upload] Object Path:", aclData.objectPath);
-
-      setImageUrl(aclData.objectPath);
+      setImageUrl(uploaded.url);
 
       toast({
         title: "Upload Successful",
-        description: `URL: ${aclData.objectPath.substring(0, 50)}...`,
+        description: `URL: ${uploaded.url.substring(0, 50)}...`,
       });
     } catch (error) {
       console.error("Error uploading image:", error);

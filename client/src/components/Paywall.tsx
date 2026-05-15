@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -90,7 +91,7 @@ export function Paywall({
     <div className="relative" dir="rtl">
       <div 
         className="prose prose-lg dark:prose-invert max-w-none mb-8"
-        dangerouslySetInnerHTML={{ __html: article.content.substring(0, article.previewLength || 200) + '...' }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content.substring(0, article.previewLength || 200) + '...') }}
         data-testid="text-preview-content"
       />
       

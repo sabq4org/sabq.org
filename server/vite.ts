@@ -4,6 +4,12 @@ import path from "path";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 
+// NOTE: vite is a devDependency. Static imports of "vite" or "../vite.config"
+// would force esbuild (with --bundle) to embed those modules into the server
+// bundle, leading to ERR_MODULE_NOT_FOUND in production where `npm ci
+// --omit=dev` strips vite. Defer them to inside `setupVite` (only called in
+// development) so the production bundle never references vite at all.
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

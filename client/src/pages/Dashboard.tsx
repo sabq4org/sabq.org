@@ -45,6 +45,7 @@ import { OnlineModeratorsWidget } from "@/components/OnlineModeratorsWidget";
 import { ContactMessagesWidget } from "@/components/ContactMessagesWidget";
 import { UpcomingWorldDaysWidget } from "@/components/dashboard/UpcomingWorldDaysWidget";
 import { DashboardAnnouncementBanner } from "@/components/DashboardAnnouncementBanner";
+import { MessagesTabs } from "@/components/dashboard/MessagesTabs";
 import { formatDistanceToNow, formatDistance } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
@@ -325,6 +326,22 @@ function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Top inbox tabs — visitor messages + writer inquiries.
+            Visible to staff with the relevant access (messages perm /
+            admin-tier roles). Each tab carries a live pending-count
+            badge and a pulsing dot when something new lands. */}
+        {(hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES) ||
+          hasRole(user, "admin") ||
+          hasRole(user, "editor") ||
+          hasRole(user, "system_admin")) && (
+          <MessagesTabs
+            showVisitorMessages={hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES)}
+            showWriterTickets={
+              hasRole(user, "admin") || hasRole(user, "editor") || hasRole(user, "system_admin")
+            }
+          />
+        )}
 
         {/* Urgent Reminder Banner */}
         <UrgentReminderBanner />

@@ -1,5 +1,5 @@
 import { useParams } from "wouter";
-import { getObjectPosition } from "@/lib/imageUtils";
+import { getObjectPosition, getCacheBustedImageUrl } from "@/lib/imageUtils";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { CommentsTeaser } from "@/components/CommentsTeaser";
 import { Header } from "@/components/Header";
@@ -118,7 +118,11 @@ export default function ArticleDetail() {
 
   const { data: article, isLoading } = useQuery<ArticleWithDetails>({
     queryKey: ["/api/articles", slug],
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    // Editorial credibility: corrections must surface instantly. Override the
+    // global 5min staleTime and refetch on tab focus so editors verifying
+    // their own save (and readers returning to the tab) see the latest copy.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   // Parse stored aiSummary text into up to 3 bullets (no extra request needed)
@@ -155,7 +159,15 @@ export default function ArticleDetail() {
   useAdTracking(article?.category?.nameAr || '', article?.id);
 
   const isVideoTemplate = !!(article?.isVideoTemplate && article?.videoUrl);
-  useHeroPreload(!isVideoTemplate && article?.imageUrl ? article.imageUrl : null);
+  // Cache-bust the hero so a re-uploaded image refreshes immediately for
+  // anyone with the article page already loaded (mirrors ArticleCard).
+  // Without this, the browser cache + Cloudflare edge can keep showing the
+  // previous image even after the JSON is repurged.
+  const heroImageUrl = useMemo(
+    () => (article?.imageUrl ? getCacheBustedImageUrl(article.imageUrl, article.updatedAt) : null),
+    [article?.imageUrl, article?.updatedAt],
+  );
+  useHeroPreload(!isVideoTemplate && heroImageUrl ? heroImageUrl : null);
 
   const sanitizedArticleHtml = useMemo(() => {
     if (!article?.content) return "";
@@ -227,7 +239,10 @@ export default function ArticleDetail() {
   }>({
     queryKey: ["/api/articles", slug, "sidebar"],
     enabled: !!slug,
-    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+    // Mirrors the article query: editors adding photographer photos need
+    // them visible immediately on the public page.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const relatedArticles = sidebarData?.related || [];
@@ -1053,8 +1068,8 @@ export default function ArticleDetail() {
             <div className="bg-card border rounded-lg p-6 space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 {article.category && (
-                  <Badge 
-                    variant="secondary" 
+                  <Badge
+                    variant="secondary"
                     className="gap-1 text-black"
                     style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
                     data-testid="badge-article-category"
@@ -1062,6 +1077,12 @@ export default function ArticleDetail() {
                     {article.category.icon} {article.category.nameAr}
                   </Badge>
                 )}
+                <PassportTrustBadge slug={slug!} language="ar" />
+                <DigitalPassportButton
+                  slug={slug!}
+                  language="ar"
+                  className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none ms-auto"
+                />
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
                     <Zap className="h-3 w-3" />
@@ -1161,22 +1182,19 @@ export default function ArticleDetail() {
                     </span>
                   </div>
 
-                  {/* Verified trust chip → links to Content Passport */}
-                  <PassportTrustBadge slug={slug!} language="ar" />
                 </div>
               )}
 
-              {/* Primary article actions: Content Passport above the fold */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <DigitalPassportButton slug={slug!} language="ar" />
-              </div>
             </div>
 
             {/* Featured Image or Video - Clean TailAdmin Style */}
             {(article as any).isVideoTemplate && (article as any).videoUrl ? (
               <VideoPlayer
                 videoUrl={(article as any).videoUrl}
-                thumbnailUrl={(article as any).videoThumbnailUrl || article.imageUrl}
+                thumbnailUrl={getCacheBustedImageUrl(
+                  (article as any).videoThumbnailUrl || article.imageUrl,
+                  article.updatedAt,
+                )}
                 title={article.title}
                 className="rounded-lg"
               />
@@ -1192,7 +1210,7 @@ export default function ArticleDetail() {
 
               return (
                 <ImageWithCaption
-                  imageUrl={article.imageUrl}
+                  imageUrl={heroImageUrl ?? article.imageUrl}
                   altText={heroImageAsset?.altText || article.title}
                   captionHtml={heroImageAsset?.captionHtml}
                   captionPlain={heroImageAsset?.captionPlain || heroImageAsset?.altText || article.title}
@@ -1519,6 +1537,7 @@ export default function ArticleDetail() {
                 <SocialShareBar
                   title={article.title}
                   url={shortLink?.shortCode ? `https://sabq.org/s/${shortLink.shortCode}` : `https://sabq.org/article/${slug}`}
+                  copyUrl={`https://sabq.org/article/${slug}`}
                   description={article.excerpt || ""}
                   articleId={article.id}
                 />
