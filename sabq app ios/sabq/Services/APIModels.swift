@@ -353,19 +353,51 @@ nonisolated struct APIStory: Decodable, Identifiable {
 
 // MARK: - Comment
 
-nonisolated struct APIComment: Decodable, Identifiable {
-    let id: Int
+nonisolated struct APIComment: Decodable, Identifiable, Hashable {
+    let id: String
     let body: String
     let userName: String?
     let userAvatar: String?
     let createdAt: String
     let likesCount: Int?
+    let status: String?
+    let parentId: String?
+    let replies: [APIComment]
+
+    init(
+        id: String,
+        body: String,
+        userName: String?,
+        userAvatar: String?,
+        createdAt: String,
+        likesCount: Int?,
+        status: String?,
+        parentId: String?,
+        replies: [APIComment] = []
+    ) {
+        self.id = id
+        self.body = body
+        self.userName = userName
+        self.userAvatar = userAvatar
+        self.createdAt = createdAt
+        self.likesCount = likesCount
+        self.status = status
+        self.parentId = parentId
+        self.replies = replies
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        id = (try? c.decode(Int.self, forKey: FlexKey("id"))) ?? 0
-        body = (try? c.decode(String.self, forKey: FlexKey("body")))
-            ?? (try? c.decode(String.self, forKey: FlexKey("content")))
+        // Backend uses UUID strings; legacy v1 payloads may send Int.
+        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
+            id = strId
+        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
+            id = String(intId)
+        } else {
+            id = UUID().uuidString
+        }
+        body = (try? c.decode(String.self, forKey: FlexKey("content")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("body")))
             ?? (try? c.decode(String.self, forKey: FlexKey("text")))
             ?? ""
         if let user = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("user")) {
@@ -384,6 +416,10 @@ nonisolated struct APIComment: Decodable, Identifiable {
             ?? (try? c.decode(String.self, forKey: FlexKey("created_at")))
             ?? ""
         likesCount = try? c.decode(Int.self, forKey: FlexKey("likes_count"))
+        status = (try? c.decode(String.self, forKey: FlexKey("status")))
+        parentId = (try? c.decode(String.self, forKey: FlexKey("parentId")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("parent_id")))
+        replies = (try? c.decode([APIComment].self, forKey: FlexKey("replies"))) ?? []
     }
 }
 

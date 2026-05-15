@@ -168,8 +168,8 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
-    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
-        let url = try buildURL(path: path)
+    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil, apiRoot: String? = nil) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         applyHeaders(&request)
@@ -314,7 +314,15 @@ actor APIClient {
     }
 
     func fetchComments(slug: String) async throws -> [APIComment] {
-        try await get(WrappedArray<APIComment>.self, path: "/articles/\(slug)/comments").items
+        // v1 mirror at `/api/v1/articles/:slug/comments` returns a bare array
+        // of top-level comments with `replies: []` nested. We use v1 (not the
+        // public surface) so the same Bearer auth used elsewhere can be
+        // applied — though this GET is public, keeping it on v1 lets us share
+        // any future auth-conditional fields (own pending comments, etc.).
+        try await get(
+            WrappedArray<APIComment>.self,
+            path: "/articles/\(slug)/comments"
+        ).items
     }
 
     func fetchAudioSummary(slug: String) async throws -> APIAudioSummary {
@@ -500,8 +508,19 @@ actor APIClient {
         try await postRaw(path: "/articles/\(articleId)/bookmark")
     }
 
-    func postComment(slug: String, body: String) async throws -> APIComment {
-        try await post(WrappedObject<APIComment>.self, path: "/articles/\(slug)/comments", body: ["body": body]).item
+    func postComment(slug: String, content: String, parentId: String? = nil) async throws -> APIComment {
+        // v1 mobile endpoint authenticates via the Bearer token returned by
+        // `/api/v1/auth/login` (table `appMemberSessions`). The public route
+        // at `/api/articles/...` uses Passport sessions which iOS doesn't
+        // own, so we'd get 401 there. Body schema is `{ content, parentId? }`.
+        // Default DB status is "pending"; the AI moderation job (GPT-4o-mini)
+        // runs async after this returns and may flip to approved/rejected.
+        let body = CommentSubmitBody(content: content, parentId: parentId)
+        return try await post(
+            APIComment.self,
+            path: "/articles/\(slug)/comments",
+            body: body
+        )
     }
 
     // MARK: - Auth
@@ -897,6 +916,13 @@ nonisolated private struct WrappedOrDirect<T: Decodable>: Decodable {
             value = try T(from: decoder)
         }
     }
+}
+
+// MARK: - Comment Submission Body
+
+nonisolated struct CommentSubmitBody: Encodable {
+    let content: String
+    let parentId: String?
 }
 
 // MARK: - Type Erasure for Encodable

@@ -115,7 +115,7 @@ function getOptimizedUrl(src: string, options?: {
   };
   
   const width = options?.width || (options?.preferSize ? sizeMap[options.preferSize] : 640);
-  const quality = options?.quality || 80;
+  const quality = options?.quality || 85;
   
   // Use Cloudflare CDN for optimization
   if (width > 0) {
