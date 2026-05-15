@@ -566,6 +566,15 @@ actor APIClient {
         try await get(WrappedOrDirect<APIUser>.self, path: "/members/profile").value
     }
 
+    /// Replace the authenticated user's interest list with the supplied
+    /// category ids (sorted by priority). Backend wipes prior rows and
+    /// inserts the new ones — see `mobileApiRoutes.updateMemberInterests`.
+    /// Returns nothing; caller should refetch profile.
+    func updateMemberInterests(categoryIds: [String]) async throws {
+        struct Body: Encodable { let interestIds: [String] }
+        try await postRaw(path: "/members/interests", body: Body(interestIds: categoryIds))
+    }
+
     func updateProfile(firstName: String, lastName: String, bio: String?, city: String?) async throws -> APIUser {
         await ensureCSRF()
         var body: [String: String] = [

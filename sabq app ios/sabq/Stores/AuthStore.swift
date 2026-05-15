@@ -100,6 +100,20 @@ final class AuthStore {
         isLoading = false
     }
 
+    /// Push the user's selected interest category ids to the backend and
+    /// refresh `currentUser` so the new `interests[]` array surfaces in the
+    /// UI immediately. No-op for guests (the backend would 401).
+    @MainActor
+    func updateInterests(categoryIds: [String]) async {
+        guard isLoggedIn else { return }
+        do {
+            try await APIClient.shared.updateMemberInterests(categoryIds: categoryIds)
+            await fetchFullProfile()
+        } catch {
+            errorMessage = "تعذر تحديث الاهتمامات"
+        }
+    }
+
     @MainActor
     func updateProfile(firstName: String, lastName: String, bio: String?, city: String?) async {
         isLoading = true

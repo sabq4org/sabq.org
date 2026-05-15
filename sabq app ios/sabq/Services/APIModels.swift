@@ -209,7 +209,7 @@ nonisolated struct APITag: Decodable {
 
 // MARK: - API Category
 
-nonisolated struct APICategory: Decodable {
+nonisolated struct APICategory: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     let slug: String?
@@ -697,6 +697,29 @@ nonisolated private struct APIRoleValue: Decodable {
     }
 }
 
+/// One row of `/api/v1/members/profile` → `user.interests[]`. Returned by
+/// `mobileApiRoutes.ts` after joining `userInterests` with `categories`.
+nonisolated struct APIUserInterest: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String?
+    let slug: String?
+    let color: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
+            id = strId
+        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
+            id = String(intId)
+        } else {
+            id = UUID().uuidString
+        }
+        name = try? c.decode(String.self, forKey: FlexKey("name"))
+        slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        color = try? c.decode(String.self, forKey: FlexKey("color"))
+    }
+}
+
 nonisolated struct APIUser: Decodable, Identifiable {
     let id: String
     let firstName: String?
@@ -723,6 +746,10 @@ nonisolated struct APIUser: Decodable, Identifiable {
     let hasPressCard: Bool?
     let authProvider: String?
     let createdAt: String?
+    /// User-selected interest categories returned by `/api/v1/members/profile`
+    /// (see `mobileApiRoutes.ts` — joins userInterests + categories). Drives
+    /// the logged-in DailyBriefView dashboard.
+    let interests: [APIUserInterest]
     private let roleDisplayName: String?
     private let roleDisplayNames: [String]
     private let membershipDisplayName: String?
@@ -935,6 +962,7 @@ nonisolated struct APIUser: Decodable, Identifiable {
             ?? (try? c.decode(String.self, forKey: FlexKey("auth_provider")))
         createdAt = (try? c.decode(String.self, forKey: FlexKey("createdAt")))
             ?? (try? c.decode(String.self, forKey: FlexKey("created_at")))
+        interests = (try? c.decode([APIUserInterest].self, forKey: FlexKey("interests"))) ?? []
     }
 
     private var preferredRoleLabel: String? {
