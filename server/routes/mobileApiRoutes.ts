@@ -28,6 +28,8 @@ import {
   gulfEvents,
   comments,
   insertCommentSchema,
+  roles,
+  userRoles,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable } from "drizzle-orm";
 
@@ -1466,17 +1468,32 @@ router.get("/members/profile", async (req: Request, res: Response) => {
         emailVerified: users.emailVerified,
         phoneVerified: users.phoneVerified,
         createdAt: users.createdAt,
+        // Legacy single-role column kept for compatibility. The iOS APIUser
+        // decoder reads `role` as a fallback when no RBAC roles are returned.
+        role: users.role,
+        jobTitle: users.jobTitle,
       })
       .from(users)
       .where(eq(users.id, session.userId))
       .limit(1);
 
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "المستخدم غير موجود" 
+      return res.status(404).json({
+        success: false,
+        message: "المستخدم غير موجود"
       });
     }
+
+    // RBAC roles — these are the authoritative roles assigned to the user
+    // via the `user_roles` join table. iOS's `localizedRole` prefers any
+    // non-reader role from this array over the legacy `users.role` column,
+    // so an opinion author with RBAC role `opinion_author` will correctly
+    // surface as "كاتب مقال رأي" instead of falling back to "قارئ".
+    const rbacRoles = await db
+      .select({ name: roles.name, nameAr: roles.nameAr })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(eq(userRoles.userId, session.userId));
 
     // Get user interests
     const interests = await db
@@ -1490,11 +1507,16 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       .leftJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, session.userId));
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       user: {
         ...user,
         phone: user.phoneNumber,
+        // `roles` is the array of role names (e.g. ["opinion_author"]) the
+        // iOS decoder iterates over via `primaryRoleKey`. Including the
+        // Arabic display name lets the decoder skip its own translation
+        // table when the backend already has the canonical label.
+        roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
         interests: interests.map(i => ({
           id: i.categoryId,
           name: i.categoryName,

@@ -50,7 +50,9 @@ struct LiveCoverageView: View {
                 .buttonStyle(.plain)
             }
             ToolbarItem(placement: .principal) {
-                Text("البث الحي")
+                // "لحظة بلحظة" is the brand label the user picked for live
+                // coverage on the homepage — surface the same wording here.
+                Text("لحظة بلحظة")
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundStyle(SabqTheme.ink)
             }
@@ -64,7 +66,7 @@ struct LiveCoverageView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 livePulse
-                Text(liveData?.titleAr ?? "البث الحي")
+                Text(liveData?.titleAr ?? "لحظة بلحظة")
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(SabqTheme.ink)
             }

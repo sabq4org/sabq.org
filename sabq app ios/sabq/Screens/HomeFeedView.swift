@@ -4,8 +4,14 @@ struct HomeFeedView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
-    @State private var showNotifications = false
+    /// Mirror of the dark-mode flag in `sabqApp` so the header toggle flips
+    /// the scene-level `.preferredColorScheme`. The setting also lives in the
+    /// in-app preferences screen; both write to the same UserDefaults key.
+    @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var isFirstLoad = true
+    /// Drives the slowly-pulsing "live" ring around the new live-coverage
+    /// entry point in the header. Animated on appear; idle otherwise.
+    @State private var livePulse = false
     @State private var todayInsights: [String: String] = [:]
     @State private var latestOmq: APIDeepAnalysis?
     @State private var calendarToday: [APICalendarEvent] = []
@@ -84,9 +90,9 @@ struct HomeFeedView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .sheet(isPresented: $showNotifications) {
-            NotificationsSheet()
-        }
+        // Notifications sheet removed from this screen — the header now
+        // surfaces the live-coverage entry point instead. The notifications
+        // page is still reachable from the Settings tab.
         .onChange(of: isContentReady) { _, ready in
             if ready && isFirstLoad {
                 isFirstLoad = false
@@ -121,27 +127,15 @@ struct HomeFeedView: View {
 
             HStack(spacing: 10) {
                 NavigationLink(value: SearchRoute()) {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(SabqTheme.primaryEnd)
-                        }
+                    headerIcon("magnifyingglass")
                 }
                 .buttonStyle(.plain)
 
-                Button {
-                    SabqHaptics.light()
-                    showNotifications = true
-                } label: {
+                // Live coverage entry point — replaces the previous bell
+                // (notifications) button. The route is already wired in
+                // ContentView via `LiveCoverageRoute` → `LiveCoverageView`.
+                // A subtle pulsing red dot signals "live" without yelling.
+                NavigationLink(value: LiveCoverageRoute()) {
                     ZStack {
                         Circle()
                             .fill(
@@ -153,24 +147,61 @@ struct HomeFeedView: View {
                             )
                             .frame(width: 44, height: 44)
 
-                        Image(systemName: "bell")
+                        Image(systemName: "dot.radiowaves.left.and.right")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
 
-                        if authStore.unreadNotifications > 0 {
-                            Text("\(min(authStore.unreadNotifications, 99))")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(SabqTheme.coral))
-                                .offset(x: 14, y: -14)
-                        }
+                        // Pulsing live indicator dot.
+                        Circle()
+                            .fill(SabqTheme.coral)
+                            .frame(width: 8, height: 8)
+                            .overlay(
+                                Circle()
+                                    .stroke(SabqTheme.coral.opacity(0.5), lineWidth: 2)
+                                    .scaleEffect(livePulse ? 1.8 : 1)
+                                    .opacity(livePulse ? 0 : 0.7)
+                            )
+                            .offset(x: 14, y: -14)
                     }
+                }
+                .buttonStyle(.plain)
+
+                // Dark-mode toggle — mirrors the in-app setting. Tap flips
+                // `isDarkMode` AppStorage which `sabqApp` reads to drive
+                // `.preferredColorScheme(...)` for the whole scene.
+                Button {
+                    SabqHaptics.light()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                        isDarkMode.toggle()
+                    }
+                } label: {
+                    headerIcon(isDarkMode ? "sun.max.fill" : "moon.fill")
                 }
                 .buttonStyle(.plain)
             }
         }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                livePulse = true
+            }
+        }
+    }
+
+    private func headerIcon(_ systemName: String) -> some View {
+        Circle()
+            .fill(
+                LinearGradient(
+                    colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .frame(width: 44, height: 44)
+            .overlay {
+                Image(systemName: systemName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+            }
     }
 
     // MARK: - Breaking News
