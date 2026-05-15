@@ -205,12 +205,17 @@ enum NewsService {
         (try? await APIClient.shared.fetchStories()) ?? []
     }
 
-    static func fetchOpinions() async -> [OpinionArticle] {
-        let publicOpinions = await fetchPrimaryOpinions()
+    static func fetchOpinions(sort: String? = nil) async -> [OpinionArticle] {
+        let publicOpinions = await fetchPrimaryOpinions(sort: sort)
         if !publicOpinions.isEmpty {
             return deduplicatedOpinions(publicOpinions)
         }
 
+        // Fallback chains below only apply when the primary `/api/opinion`
+        // endpoint returns empty — they don't honour `sort` since the
+        // dashboard + paginated endpoints don't expose that knob. Acceptable
+        // because the homepage feed sort matters far less than the fact that
+        // *something* renders.
         let dashboardOpinions = ((try? await APIClient.shared.fetchDashboardOpinions()) ?? [])
             .map(OpinionArticle.from)
         if !dashboardOpinions.isEmpty {
@@ -260,8 +265,8 @@ enum NewsService {
             }
     }
 
-    private static func fetchPrimaryOpinions() async -> [OpinionArticle] {
-        ((try? await APIClient.shared.fetchOpinions(page: 1, limit: 30)) ?? [])
+    private static func fetchPrimaryOpinions(sort: String? = nil) async -> [OpinionArticle] {
+        ((try? await APIClient.shared.fetchOpinions(page: 1, limit: 30, sort: sort)) ?? [])
             .map(OpinionArticle.from)
     }
 

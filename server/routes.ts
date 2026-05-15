@@ -24390,10 +24390,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // Public: Get all published opinion articles
   app.get("/api/opinion", async (req, res) => {
     try {
-      const { page = 1, limit = 12, authorId, search } = req.query;
-      
+      const { page = 1, limit = 12, authorId, search, sort } = req.query;
+      // `sort=views` orders opinions by view count desc (most-read first) —
+      // used by the iOS "all articles" screen to render the highlighted
+      // top-of-page section. Any other value (including unset) falls back
+      // to publishedAt desc, which is the long-standing default.
+      const sortByViews = String(sort || "") === "views";
+
       // Check cache first - TTL 20 seconds
-      const cacheKey = `opinion:list:${page}:${limit}:${authorId || ''}:${search || ''}`;
+      const cacheKey = `opinion:list:${page}:${limit}:${authorId || ''}:${search || ''}:${sortByViews ? 'views' : 'latest'}`;
       const cached = memoryCache.get(cacheKey);
       if (cached !== null) {
         return res.json(cached);
@@ -24441,7 +24446,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       const results = await query
-        .orderBy(desc(articles.publishedAt))
+        .orderBy(sortByViews ? desc(articles.views) : desc(articles.publishedAt))
         .limit(Number(limit))
         .offset(offset);
 

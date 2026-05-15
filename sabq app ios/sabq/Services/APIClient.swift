@@ -437,25 +437,28 @@ actor APIClient {
 
     // MARK: - Opinions
 
-    func fetchOpinions(page: Int = 1, limit: Int = 30) async throws -> [APIOpinion] {
+    /// Opinion-articles list. `sort = "views"` returns the most-read
+    /// opinions first; any other value (including `nil`) falls back to the
+    /// backend default of newest-first.
+    func fetchOpinions(page: Int = 1, limit: Int = 30, sort: String? = nil) async throws -> [APIOpinion] {
+        var query: [String: String] = [
+            "page": "\(page)",
+            "limit": "\(limit)"
+        ]
+        if let sort, !sort.isEmpty { query["sort"] = sort }
+
         do {
             return try await get(
                 WrappedArray<APIOpinion>.self,
                 path: "/opinion",
-                query: [
-                    "page": "\(page)",
-                    "limit": "\(limit)"
-                ],
+                query: query,
                 apiRoot: publicAPIBaseURL
             ).items
         } catch {
             return try await get(
                 WrappedArray<APIOpinion>.self,
                 path: "/opinion",
-                query: [
-                    "page": "\(page)",
-                    "limit": "\(limit)"
-                ]
+                query: query
             ).items
         }
     }

@@ -667,19 +667,11 @@ struct FeaturedArticleCard: View {
                     articleImagePlaceholder
                 }
 
-                LinearGradient(
-                    colors: [.black.opacity(0.5), .clear],
-                    startPoint: .bottom,
-                    endPoint: .top
-                )
-                .frame(height: 80)
-
-                HStack {
-                    StatusChip(title: article.category.title, tint: .white)
-                    Spacer(minLength: 0)
-                    StatusChip(title: article.author, tint: .white.opacity(0.8))
-                }
-                .padding(16)
+                // Category badge + author chip removed from the carousel
+                // image overlay per user direction (2026-05-15). Category and
+                // byline still appear in the article detail; the carousel
+                // card now leads with the hero photo + title alone for a
+                // cleaner, more editorial look.
             }
 
             VStack(alignment: .leading, spacing: 12) {
