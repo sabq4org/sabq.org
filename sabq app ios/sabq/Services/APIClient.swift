@@ -916,6 +916,10 @@ nonisolated private struct WrappedArray<T: Decodable>: Decodable {
             ?? (try? c.decode([T].self, forKey: FlexKey("opinions")))
             ?? (try? c.decode([T].self, forKey: FlexKey("related_articles")))
             ?? (try? c.decode([T].self, forKey: FlexKey("articles")))
+            // `/api/v1/sections` wraps the list under `sections` — without
+            // this the interests-picker and category fetch surfaces both
+            // got an empty array and rendered as a blank screen.
+            ?? (try? c.decode([T].self, forKey: FlexKey("sections")))
             ?? []
     }
 }

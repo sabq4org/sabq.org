@@ -14,6 +14,12 @@
 # Stage 1: Builder
 FROM node:20-alpine AS builder
 
+# Bumped to bust Railway's docker layer cache when mobileApiRoutes.ts
+# changes weren't being picked up despite commits landing on main. Any
+# string change here invalidates every cached layer below.
+ARG DEPLOY_MARKER=2026-05-16-mobileapi-redeploy
+ENV DEPLOY_MARKER=$DEPLOY_MARKER
+
 WORKDIR /app
 
 COPY package*.json ./
