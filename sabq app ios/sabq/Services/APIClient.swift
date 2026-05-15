@@ -168,8 +168,8 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
-    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
-        let url = try buildURL(path: path)
+    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil, apiRoot: String? = nil) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         applyHeaders(&request)
@@ -314,7 +314,14 @@ actor APIClient {
     }
 
     func fetchComments(slug: String) async throws -> [APIComment] {
-        try await get(WrappedArray<APIComment>.self, path: "/articles/\(slug)/comments").items
+        // Comments live under the public API (`/api/articles/:slug/comments`),
+        // not under `/api/v1`. Backend returns a bare array of top-level
+        // comments with `replies: []` nested inside each.
+        try await get(
+            WrappedArray<APIComment>.self,
+            path: "/articles/\(slug)/comments",
+            apiRoot: publicAPIBaseURL
+        ).items
     }
 
     func fetchAudioSummary(slug: String) async throws -> APIAudioSummary {
@@ -500,8 +507,19 @@ actor APIClient {
         try await postRaw(path: "/articles/\(articleId)/bookmark")
     }
 
-    func postComment(slug: String, body: String) async throws -> APIComment {
-        try await post(WrappedObject<APIComment>.self, path: "/articles/\(slug)/comments", body: ["body": body]).item
+    func postComment(slug: String, content: String, parentId: String? = nil) async throws -> APIComment {
+        // Submit lives under public API (auth + CSRF required). Backend schema
+        // expects `content`; `parentId` is optional and creates a reply.
+        // Default DB status is "pending"; the AI moderation job (GPT-4o-mini)
+        // runs async after this returns and may flip to approved/rejected.
+        await ensureCSRF()
+        let body = CommentSubmitBody(content: content, parentId: parentId)
+        return try await post(
+            APIComment.self,
+            path: "/articles/\(slug)/comments",
+            body: body,
+            apiRoot: publicAPIBaseURL
+        )
     }
 
     // MARK: - Auth
@@ -897,6 +915,13 @@ nonisolated private struct WrappedOrDirect<T: Decodable>: Decodable {
             value = try T(from: decoder)
         }
     }
+}
+
+// MARK: - Comment Submission Body
+
+nonisolated struct CommentSubmitBody: Encodable {
+    let content: String
+    let parentId: String?
 }
 
 // MARK: - Type Erasure for Encodable

@@ -4,6 +4,7 @@ import AVFoundation
 struct ArticleDetailView: View {
     let article: Article
     @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(AuthStore.self) private var authStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage("articleFontSize") private var fontSize: Double = 17
     @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
@@ -14,12 +15,15 @@ struct ArticleDetailView: View {
     @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
-    @State private var comments: [APIComment] = []
     @State private var audioSummary: APIAudioSummary?
     @State private var isPlayingAudio = false
     @State private var audioPlayer: AVPlayer?
-    @State private var commentText = ""
-    @State private var isPostingComment = false
+    /// Comments are owned by a per-article store. Lazily created the first time
+    /// the article slug is available — `nil` for articles that have no slug
+    /// (extremely rare; we hide the section in that case).
+    @State private var commentsStore: CommentsStore?
+    @State private var showLoginForCommentSheet = false
+    @State private var commentFeedback: CommentFeedback?
     @State private var fullArticle: Article?
     @State private var resolvedTags: [String] = []
     @State private var isExcerptExpanded = false
@@ -102,8 +106,8 @@ struct ArticleDetailView: View {
                             relatedSection
                         }
 
-                        if !isFocusMode && (!comments.isEmpty || article.slug != nil) {
-                            commentsSection
+                        if !isFocusMode, let store = commentsStore {
+                            commentsSection(store: store)
                         }
                     }
                     .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
@@ -230,15 +234,25 @@ struct ArticleDetailView: View {
         Task { try? await APIClient.shared.trackView(articleId: article.id) }
 
         if let slug = article.slug {
+            // Create the per-article comments store on first appearance so the
+            // section can show its own skeleton while the article bundle loads.
+            if commentsStore == nil {
+                commentsStore = CommentsStore(slug: slug)
+            }
+            let store = commentsStore
+
             async let detail = NewsService.fetchArticleDetail(slug: slug)
-            async let c = NewsService.fetchComments(slug: slug)
             async let a = NewsService.fetchAudioSummary(slug: slug)
             // Best-effort: returns sentiment + credibility hints when ai
             // processing has run for this article. Failures are silent.
             async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
+            // Drive the comments store load in parallel — it manages its own
+            // state, so we don't await its return value.
+            if let store {
+                Task { await store.load() }
+            }
 
-            let (bundle, com, aud, ins) = await (detail, c, a, insights)
-            comments = com
+            let (bundle, aud, ins) = await (detail, a, insights)
             audioSummary = aud
             if let ins { aiInsights = ins }
 
@@ -1009,108 +1023,253 @@ struct ArticleDetailView: View {
 
     // MARK: - Comments
 
-    private var commentsSection: some View {
+    @ViewBuilder
+    private func commentsSection(store: CommentsStore) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Divider().foregroundStyle(SabqTheme.outline)
 
             SectionHeader(
                 title: "التعليقات",
-                subtitle: comments.isEmpty ? "كن أول من يعلّق" : "\(comments.count) تعليق",
+                subtitle: commentsSubtitle(for: store),
                 icon: "bubble.left.and.bubble.right.fill",
                 tint: SabqTheme.teal
             )
 
-            if article.slug != nil {
-                HStack(spacing: 10) {
-                    TextField("أضف تعليقاً...", text: $commentText)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(SabqTheme.ink)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                .fill(SabqTheme.paleFill)
-                        )
-
-                    Button {
-                        Task { await postComment() }
-                    } label: {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(
-                                commentText.trimmingCharacters(in: .whitespaces).isEmpty
-                                    ? SabqTheme.tertiaryInk
-                                    : SabqTheme.primaryEnd
-                            )
-                            .rotationEffect(.degrees(180))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(commentText.trimmingCharacters(in: .whitespaces).isEmpty || isPostingComment)
-                }
+            if let feedback = commentFeedback {
+                commentFeedbackBanner(feedback)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            ForEach(comments) { comment in
-                commentRow(comment)
+            if authStore.isLoggedIn {
+                CommentComposer(
+                    store: store,
+                    onSubmit: { outcome in
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            commentFeedback = .init(outcome: outcome)
+                        }
+                        scheduleFeedbackDismissal()
+                    },
+                    onAuthRequired: { showLoginForCommentSheet = true },
+                    onError: { message in
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                            commentFeedback = .init(message: message, isError: true)
+                        }
+                        scheduleFeedbackDismissal()
+                    }
+                )
+            } else {
+                signInPromptCard
+            }
+
+            commentsList(store: store)
+        }
+        .sheet(isPresented: $showLoginForCommentSheet) {
+            LoginSheet()
+        }
+    }
+
+    private func commentsSubtitle(for store: CommentsStore) -> String {
+        switch store.loadState {
+        case .idle, .loading: return "يتم التحميل…"
+        case .failed: return "تعذر التحميل"
+        case .loaded:
+            let total = store.comments.reduce(0) { $0 + 1 + $1.replies.count }
+            return total == 0 ? "كن أول من يعلّق" : "\(total) تعليق"
+        }
+    }
+
+    @ViewBuilder
+    private func commentsList(store: CommentsStore) -> some View {
+        switch store.loadState {
+        case .idle, .loading where store.comments.isEmpty:
+            commentSkeletonList
+        case .failed(let message) where store.comments.isEmpty:
+            commentErrorState(message: message, store: store)
+        case .loaded where store.comments.isEmpty:
+            commentEmptyState
+        default:
+            LazyVStack(alignment: .leading, spacing: 6) {
+                ForEach(store.comments) { comment in
+                    CommentRow(comment: comment) { tapped in
+                        store.replyingTo = tapped
+                    }
+                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.4))
+                }
             }
         }
     }
 
-    private func commentRow(_ comment: APIComment) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.15))
-                    .frame(width: 32, height: 32)
-                    .overlay {
-                        Text(String((comment.userName ?? "م").prefix(1)))
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.primaryEnd)
-                    }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(comment.userName ?? "مستخدم")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-
-                    Text(comment.createdAt)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-
-                Spacer(minLength: 0)
+    private var signInPromptCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(SabqTheme.primaryEnd)
+            Text("سجّل دخولك لإضافة تعليق")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+            Button {
+                SabqHaptics.light()
+                showLoginForCommentSheet = true
+            } label: {
+                Text("تسجيل الدخول")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(SabqTheme.primaryEnd)
+                    )
             }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.paleFill)
+        )
+    }
 
-            Text(comment.body)
-                .font(.system(size: 14, weight: .regular))
+    private var commentEmptyState: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "bubble.left")
+                .font(.system(size: 14, weight: .light))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+            Text("لا توجد تعليقات بعد")
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
-                .lineSpacing(4)
-                .lineLimit(nil)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var commentSkeletonList: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(alignment: .top, spacing: 10) {
+                    Circle()
+                        .fill(SabqTheme.paleFill)
+                        .frame(width: 32, height: 32)
+                    VStack(alignment: .leading, spacing: 6) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SabqTheme.paleFill)
+                            .frame(width: 110, height: 12)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SabqTheme.paleFill)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 10)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SabqTheme.paleFill)
+                            .frame(width: 220, height: 10)
+                    }
+                }
+            }
+        }
+        .redacted(reason: .placeholder)
+    }
+
+    private func commentErrorState(message: String, store: CommentsStore) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+            Button {
+                Task { await store.load() }
+            } label: {
+                Text("إعادة المحاولة")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule().fill(SabqTheme.primaryEnd.opacity(0.12))
+                    )
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 18)
+    }
+
+    private func commentFeedbackBanner(_ feedback: CommentFeedback) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: feedback.icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(feedback.tint)
+            Text(feedback.message)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 40)
+            Button {
+                withAnimation { commentFeedback = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 8)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                .fill(feedback.tint.opacity(0.12))
+        )
     }
 
-    private static func sanitizeComment(_ text: String) -> String {
-        text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    private func scheduleFeedbackDismissal() {
+        Task {
+            try? await Task.sleep(nanoseconds: 4_500_000_000)
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    commentFeedback = nil
+                }
+            }
+        }
+    }
+}
+
+/// One-shot toast/banner state for the comments section. Lives on the view
+/// (not on the store) so it can be cleared by user interaction independently
+/// from the underlying submission state.
+struct CommentFeedback: Equatable {
+    let message: String
+    let icon: String
+    let tint: Color
+    let isError: Bool
+
+    init(message: String, icon: String = "info.circle.fill", tint: Color = SabqTheme.teal, isError: Bool = false) {
+        self.message = message
+        self.icon = icon
+        self.tint = tint
+        self.isError = isError
     }
 
-    private func postComment() async {
-        guard let slug = article.slug else { return }
-        let sanitized = Self.sanitizeComment(commentText)
-        guard !sanitized.isEmpty else { return }
-        isPostingComment = true
-        SabqHaptics.light()
-        if let newComment = try? await APIClient.shared.postComment(slug: slug, body: sanitized) {
-            comments.insert(newComment, at: 0)
-            commentText = ""
-            SabqHaptics.success()
-        } else {
-            SabqHaptics.error()
+    init(outcome: CommentsStore.SubmitOutcome) {
+        switch outcome {
+        case .published:
+            self.init(
+                message: "تم نشر تعليقك",
+                icon: "checkmark.circle.fill",
+                tint: SabqTheme.teal
+            )
+        case .awaitingReview:
+            self.init(
+                message: "تعليقك قيد المراجعة وسيُنشر بعد لحظات",
+                icon: "clock.fill",
+                tint: .orange
+            )
+        case .rejected:
+            self.init(
+                message: "لم يستوفِ التعليق سياسة النشر",
+                icon: "xmark.octagon.fill",
+                tint: .red,
+                isError: true
+            )
         }
-        isPostingComment = false
     }
 }
 
