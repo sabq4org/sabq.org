@@ -725,6 +725,7 @@ nonisolated struct APIUser: Decodable, Identifiable {
     let createdAt: String?
     private let roleDisplayName: String?
     private let roleDisplayNames: [String]
+    private let membershipDisplayName: String?
 
     var displayName: String {
         let parts = [firstName, lastName].compactMap { $0 }.filter { !$0.isEmpty }
@@ -746,12 +747,17 @@ nonisolated struct APIUser: Decodable, Identifiable {
             return label
         }
 
-        if let key = primaryRoleKey {
-            return Self.roleTranslations[key] ?? key
+        if let membershipDisplayName = Self.sanitizedText(membershipDisplayName),
+           Self.isNonReaderRoleLabel(membershipDisplayName) {
+            return membershipDisplayName
         }
 
         if let jobTitle = Self.sanitizedText(jobTitle) {
             return jobTitle
+        }
+
+        if let key = primaryRoleKey {
+            return Self.roleTranslations[key] ?? key
         }
 
         return "قارئ"
@@ -767,8 +773,15 @@ nonisolated struct APIUser: Decodable, Identifiable {
             "reporter": "مراسل",
             "journalist": "صحفي",
             "writer": "كاتب",
+            "author": "كاتب",
+            "article_writer": "كاتب مقال",
+            "article_author": "كاتب مقال",
             "opinion_author": "كاتب مقال رأي",
             "columnist": "كاتب عمود",
+            "correspondent": "مراسل",
+            "managing_editor": "مدير تحرير",
+            "editorial_manager": "مدير تحرير",
+            "content_manager": "مدير محتوى",
             "comments_moderator": "مشرف تعليقات",
             "moderator": "مشرف",
             "media_manager": "مدير وسائط",
@@ -837,6 +850,10 @@ nonisolated struct APIUser: Decodable, Identifiable {
 
         roleDisplayName = Self.displayLabel(from: roleValue?.displayName)
             ?? Self.displayLabel(from: roleString)
+            ?? Self.displayLabel(from: try? c.decode(String.self, forKey: FlexKey("roleLabel")))
+            ?? Self.displayLabel(from: try? c.decode(String.self, forKey: FlexKey("role_label")))
+            ?? Self.displayLabel(from: try? c.decode(String.self, forKey: FlexKey("roleDisplayName")))
+            ?? Self.displayLabel(from: try? c.decode(String.self, forKey: FlexKey("role_display_name")))
 
         let mergedRoleDisplayNames = roleValues.compactMap { Self.displayLabel(from: $0.displayName) }
             + roleStrings.compactMap(Self.displayLabel(from:))
@@ -858,8 +875,35 @@ nonisolated struct APIUser: Decodable, Identifiable {
         gender = try? c.decode(String.self, forKey: FlexKey("gender"))
         birthDate = (try? c.decode(String.self, forKey: FlexKey("birthDate")))
             ?? (try? c.decode(String.self, forKey: FlexKey("birth_date")))
-        jobTitle = (try? c.decode(String.self, forKey: FlexKey("jobTitle")))
-            ?? (try? c.decode(String.self, forKey: FlexKey("job_title")))
+        let decodedJobTitle = try? c.decode(String.self, forKey: FlexKey("jobTitle"))
+        let decodedJobTitleSnake = try? c.decode(String.self, forKey: FlexKey("job_title"))
+        let decodedTitleAr = try? c.decode(String.self, forKey: FlexKey("titleAr"))
+        let decodedTitleArSnake = try? c.decode(String.self, forKey: FlexKey("title_ar"))
+        let decodedTitle = try? c.decode(String.self, forKey: FlexKey("title"))
+        let decodedPosition = try? c.decode(String.self, forKey: FlexKey("position"))
+        let decodedStaffTitle = try? c.decode(String.self, forKey: FlexKey("staffTitle"))
+        let decodedStaffTitleSnake = try? c.decode(String.self, forKey: FlexKey("staff_title"))
+        jobTitle = decodedJobTitle
+            ?? decodedJobTitleSnake
+            ?? decodedTitleAr
+            ?? decodedTitleArSnake
+            ?? decodedTitle
+            ?? decodedPosition
+            ?? decodedStaffTitle
+            ?? decodedStaffTitleSnake
+
+        let decodedMembershipLabel = try? c.decode(String.self, forKey: FlexKey("membershipLabel"))
+        let decodedMembershipLabelSnake = try? c.decode(String.self, forKey: FlexKey("membership_label"))
+        let decodedMembershipTitle = try? c.decode(String.self, forKey: FlexKey("membershipTitle"))
+        let decodedMembershipTitleSnake = try? c.decode(String.self, forKey: FlexKey("membership_title"))
+        let decodedMemberType = try? c.decode(String.self, forKey: FlexKey("memberType"))
+        let decodedMemberTypeSnake = try? c.decode(String.self, forKey: FlexKey("member_type"))
+        membershipDisplayName = decodedMembershipLabel
+            ?? decodedMembershipLabelSnake
+            ?? decodedMembershipTitle
+            ?? decodedMembershipTitleSnake
+            ?? decodedMemberType
+            ?? decodedMemberTypeSnake
         department = try? c.decode(String.self, forKey: FlexKey("department"))
         verificationBadge = (try? c.decode(String.self, forKey: FlexKey("verificationBadge")))
             ?? (try? c.decode(String.self, forKey: FlexKey("verification_badge")))

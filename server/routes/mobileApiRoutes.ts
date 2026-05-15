@@ -1468,10 +1468,14 @@ router.get("/members/profile", async (req: Request, res: Response) => {
         emailVerified: users.emailVerified,
         phoneVerified: users.phoneVerified,
         createdAt: users.createdAt,
+        bio: users.bio,
         // Legacy single-role column kept for compatibility. The iOS APIUser
         // decoder reads `role` as a fallback when no RBAC roles are returned.
         role: users.role,
         jobTitle: users.jobTitle,
+        department: users.department,
+        verificationBadge: users.verificationBadge,
+        hasPressCard: users.hasPressCard,
       })
       .from(users)
       .where(eq(users.id, session.userId))
@@ -1503,6 +1507,38 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} rbacRoles=${JSON.stringify(rbacRoles)}`
     );
 
+    const roleLabels: Record<string, string> = {
+      system_admin: "مدير النظام",
+      admin: "مسؤول",
+      editor: "محرر",
+      editor_in_chief: "رئيس التحرير",
+      senior_editor: "محرر أول",
+      reporter: "مراسل",
+      correspondent: "مراسل",
+      journalist: "صحفي",
+      writer: "كاتب",
+      author: "كاتب",
+      article_writer: "كاتب مقال",
+      article_author: "كاتب مقال",
+      opinion_author: "كاتب مقال رأي",
+      columnist: "كاتب عمود",
+      managing_editor: "مدير تحرير",
+      editorial_manager: "مدير تحرير",
+      content_manager: "مدير محتوى",
+      comments_moderator: "مشرف تعليقات",
+      moderator: "مشرف",
+      media_manager: "مدير وسائط",
+      publisher: "ناشر",
+      photographer: "مصور",
+      contributor: "مساهم",
+      reader: "قارئ",
+    };
+    const normalizeRole = (value?: string | null) => value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
+    const nonReaderRbacRole = rbacRoles.find((r) => normalizeRole(r.name) !== "reader");
+    const legacyRole = normalizeRole(user.role);
+    const effectiveRoleKey = normalizeRole(nonReaderRbacRole?.name) || legacyRole || "reader";
+    const explicitRoleLabel = nonReaderRbacRole?.nameAr || user.jobTitle || roleLabels[effectiveRoleKey] || user.role || "قارئ";
+
     // Get user interests
     const interests = await db
       .select({
@@ -1519,6 +1555,9 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       success: true,
       user: {
         ...user,
+        role: effectiveRoleKey,
+        roleLabel: explicitRoleLabel,
+        membershipLabel: explicitRoleLabel,
         phone: user.phoneNumber,
         // `roles` is the array of role names (e.g. ["opinion_author"]) the
         // iOS decoder iterates over via `primaryRoleKey`. Including the

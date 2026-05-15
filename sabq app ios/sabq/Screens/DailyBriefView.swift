@@ -3,13 +3,16 @@ import SwiftUI
 struct DailyBriefRoute: Hashable {}
 
 // Authenticated personal-analytics dashboard. Source: GET /api/ai/daily-summary.
-// Falls back to a friendly "sign-in" prompt when the response is 401.
+// Guests see the membership landing page immediately instead of a failed API state.
 struct DailyBriefView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthStore.self) private var authStore
     @State private var summary: APIDailySummary?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var needsAuth = false
+    @State private var showLogin = false
+    @State private var loginInitialMode = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -17,7 +20,7 @@ struct DailyBriefView: View {
                 if isLoading {
                     skeleton
                 } else if needsAuth {
-                    authPrompt
+                    guestLanding
                 } else if let errorMessage {
                     EmptyStateView(
                         icon: "exclamationmark.shield",
@@ -62,6 +65,13 @@ struct DailyBriefView: View {
                 }
             }
         }
+        .sheet(isPresented: $showLogin, onDismiss: {
+            if authStore.isLoggedIn {
+                Task { await load() }
+            }
+        }) {
+            LoginSheet(initialMode: loginInitialMode)
+        }
         .task { await load() }
     }
 
@@ -77,28 +87,193 @@ struct DailyBriefView: View {
         }
     }
 
-    private var authPrompt: some View {
-        VStack(spacing: 14) {
+    private var guestLanding: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            guestHero
+            guestValueGrid
+            guestInterestsPreview
+            guestBenefits
+            guestActions
+        }
+    }
+
+    private var guestHero: some View {
+        VStack(alignment: .leading, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.14))
-                    .frame(width: 80, height: 80)
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.system(size: 36, weight: .light))
+                    .fill(SabqTheme.primaryEnd.opacity(0.12))
+                    .frame(width: 74, height: 74)
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .font(.system(size: 32, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd)
                     .symbolRenderingMode(.hierarchical)
             }
-            Text("سجّل دخولك لمشاهدة موجزك")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-            Text("اللوحة الشخصية تعرض إحصاءات قراءتك، اهتماماتك، ومقترحات الذكاء الاصطناعي بناءً على نشاطك.")
-                .font(.system(size: 13))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("موجزك في سبق")
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                Text("صفحة شخصية تبدأ من اهتماماتك: تختار ما يهمك، وسبق ترتّب لك موجزاً يومياً، توصيات، وإحصاءات قراءة واضحة.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.vertical, 40)
-        .frame(maxWidth: .infinity)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [SabqTheme.primaryEnd.opacity(0.08), SabqTheme.sky.opacity(0.04)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+        )
+    }
+
+    private var guestValueGrid: some View {
+        let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+        return LazyVGrid(columns: columns, spacing: 12) {
+            guestFeatureTile(title: "اهتماماتك", subtitle: "محليات، اقتصاد، رياضة وأكثر", icon: "slider.horizontal.3", tint: SabqTheme.primaryEnd)
+            guestFeatureTile(title: "موجز يومي", subtitle: "أهم ما يهمك في دقائق", icon: "doc.text.magnifyingglass", tint: SabqTheme.teal)
+            guestFeatureTile(title: "إحصاءات القراءة", subtitle: "مقالاتك، وقتك، ومحفوظاتك", icon: "chart.bar.fill", tint: SabqTheme.gold)
+            guestFeatureTile(title: "اقتراحات ذكية", subtitle: "توصيات من سبق AI", icon: "sparkles", tint: SabqTheme.coral)
+        }
+    }
+
+    private func guestFeatureTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack {
+                Circle().fill(tint.opacity(0.13)).frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            Text(title)
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+            Text(subtitle)
+                .font(.system(size: 11))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(2)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+        )
+    }
+
+    private var guestInterestsPreview: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 7) {
+                Image(systemName: "person.text.rectangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                Text("ابدأ باختيار ما يهمك")
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
+                    Text(item)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(SabqTheme.primaryEnd.opacity(0.08))
+                        )
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    private var guestBenefits: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("بعد التسجيل تحصل على")
+                .font(.system(size: 15, weight: .heavy, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+
+            benefitRow("موجز صباحي أو مسائي مبني على اهتماماتك", icon: "sun.max.fill")
+            benefitRow("اقتراحات أخبار أدق كلما قرأت أكثر", icon: "wand.and.stars")
+            benefitRow("حفظ المقالات والعودة لها من أي جهاز", icon: "bookmark.fill")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.primaryEnd.opacity(0.05))
+        )
+    }
+
+    private func benefitRow(_ text: String, icon: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+                .frame(width: 18)
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var guestActions: some View {
+        VStack(spacing: 10) {
+            Button {
+                loginInitialMode = true
+                showLogin = true
+            } label: {
+                Text("أنشئ حسابك")
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                loginInitialMode = false
+                showLogin = true
+            } label: {
+                Text("لديك حساب؟ تسجيل الدخول")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func greetingCard(_ g: APIDailySummary.PersonalizedGreeting) -> some View {
@@ -279,12 +454,22 @@ struct DailyBriefView: View {
     }
 
     private func load() async {
+        guard authStore.isLoggedIn else {
+            summary = nil
+            errorMessage = nil
+            needsAuth = true
+            isLoading = false
+            return
+        }
+
         isLoading = true
         errorMessage = nil
         do {
             summary = try await APIClient.shared.fetchDailySummary()
             needsAuth = false
         } catch APIError.unauthorized {
+            needsAuth = true
+        } catch APIError.forbidden {
             needsAuth = true
         } catch {
             errorMessage = "تحقّق من الاتصال ثم أعد المحاولة."

@@ -299,8 +299,8 @@ struct SettingsView: View {
         switch role {
         case "admin": return "shield.fill"
         case "system_admin": return "shield.lefthalf.filled"
-        case "editor", "editor-in-chief", "editor_in_chief", "senior-editor", "senior_editor": return "pencil.circle.fill"
-        case "journalist", "reporter", "writer", "opinion_author", "opinion-author": return "newspaper.fill"
+        case "editor", "editor-in-chief", "editor_in_chief", "senior-editor", "senior_editor", "managing_editor", "managing-editor", "editorial_manager", "editorial-manager": return "pencil.circle.fill"
+        case "journalist", "reporter", "correspondent", "writer", "author", "article_writer", "article-writer", "article_author", "article-author", "opinion_author", "opinion-author": return "newspaper.fill"
         case "columnist": return "text.quote"
         case "photographer": return "camera.fill"
         case "moderator", "comments_moderator", "comments-moderator": return "flag.fill"
@@ -577,8 +577,12 @@ struct LoginSheet: View {
     @State private var email = ""
     @State private var password = ""
     @State private var name = ""
-    @State private var isRegisterMode = false
+    @State private var isRegisterMode: Bool
     @State private var showForgotPassword = false
+
+    init(initialMode: Bool = false) {
+        _isRegisterMode = State(initialValue: initialMode)
+    }
 
     var body: some View {
         NavigationStack {
