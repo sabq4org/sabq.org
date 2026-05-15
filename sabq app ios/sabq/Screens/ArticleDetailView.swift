@@ -1260,9 +1260,9 @@ struct CommentFeedback: Equatable {
             )
         case .awaitingReview:
             self.init(
-                message: "تعليقك قيد المراجعة وسيُنشر بعد لحظات",
-                icon: "clock.fill",
-                tint: .orange
+                message: "SABQ AI يراجع تعليقك الآن — يظهر فور الاعتماد",
+                icon: "sparkles",
+                tint: SabqTheme.primaryEnd
             )
         case .rejected:
             self.init(
