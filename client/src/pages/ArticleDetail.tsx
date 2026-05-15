@@ -55,7 +55,6 @@ import {
   Zap,
   Lock,
   User,
-  BadgeCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -1078,15 +1077,12 @@ export default function ArticleDetail() {
                     {article.category.icon} {article.category.nameAr}
                   </Badge>
                 )}
-                {article.verifiedBy && article.verifiedAt && (
-                  <Badge
-                    className="gap-1 bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700"
-                    data-testid="badge-article-verified"
-                  >
-                    <BadgeCheck className="h-3 w-3" />
-                    موثّق
-                  </Badge>
-                )}
+                <PassportTrustBadge slug={slug!} language="ar" />
+                <DigitalPassportButton
+                  slug={slug!}
+                  language="ar"
+                  className="h-6 px-2.5 py-0 text-xs font-semibold gap-1 rounded-full [&>svg]:h-3 [&>svg]:w-3 ms-auto"
+                />
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
                     <Zap className="h-3 w-3" />
@@ -1186,15 +1182,9 @@ export default function ArticleDetail() {
                     </span>
                   </div>
 
-                  {/* Verified trust chip → links to Content Passport */}
-                  <PassportTrustBadge slug={slug!} language="ar" />
                 </div>
               )}
 
-              {/* Primary article actions: Content Passport above the fold */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <DigitalPassportButton slug={slug!} language="ar" />
-              </div>
             </div>
 
             {/* Featured Image or Video - Clean TailAdmin Style */}
