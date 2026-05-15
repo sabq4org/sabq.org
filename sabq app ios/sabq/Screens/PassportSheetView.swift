@@ -429,10 +429,14 @@ private struct PassportPeopleCard: View {
     let publisher: APIPassport.Publisher?
 
     private var rows: [(label: String, person: APIPassport.Person)] {
+        // Match the web passport (`ArticlePassportPage.tsx`): the public-facing
+        // people list is built from submitter/reporter/reviewer/verifier/
+        // publisherApprover. `people.author` (= `articles.authorId`, the staff
+        // member who entered the article into the dashboard) is intentionally
+        // omitted because it's an internal audit field, not a byline.
         var out: [(String, APIPassport.Person)] = []
-        if let p = people.author { out.append(("كاتب", p)) }
-        if let p = people.reporter, p.id != people.author?.id { out.append(("مراسل", p)) }
-        if let p = people.submitter, p.id != people.author?.id && p.id != people.reporter?.id {
+        if let p = people.reporter { out.append(("مراسل", p)) }
+        if let p = people.submitter, p.id != people.reporter?.id {
             out.append(("أرسل", p))
         }
         if let p = people.reviewer { out.append(("مُراجِع", p)) }

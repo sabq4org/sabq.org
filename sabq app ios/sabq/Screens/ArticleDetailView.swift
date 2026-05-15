@@ -586,8 +586,13 @@ struct ArticleDetailView: View {
     // text flow above or below it.
     private var articleMeta: some View {
         HStack(spacing: 8) {
-            NavigationLink(value: AuthorRoute(name: article.author)) {
-                Text(article.author)
+            // Use `displayArticle.author` (not `article.author`) so the byline
+            // refreshes from the home-feed cached value to the freshly-loaded
+            // full-article value. The backend prefers `reporterId` over
+            // `authorId`, so the full-article fetch can replace a "staff who
+            // entered" name with the actual reporter chosen in the dashboard.
+            NavigationLink(value: AuthorRoute(name: displayArticle.author)) {
+                Text(displayArticle.author)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                     .lineLimit(1)

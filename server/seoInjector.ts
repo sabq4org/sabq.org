@@ -1,7 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags } from "@shared/schema";
-import { eq, or, desc, and, sql } from "drizzle-orm";
+import { eq, or, desc, and, sql, aliasedTable } from "drizzle-orm";
+
+// Pulled into a module-level alias so we can join the `users` table twice in
+// the same query — once for `authorId` (the staff member who entered the
+// article into the dashboard) and once for `reporterId` (the actual byline
+// chosen from a dropdown). The SEO `article:author` meta tag should reflect
+// the reporter whenever one is set.
+const reporterUsers = aliasedTable(users, "reporter_user");
 import fs from "fs";
 import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
@@ -244,10 +251,13 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         categoryName: categories.nameAr,
         authorFirstName: users.firstName,
         authorLastName: users.lastName,
+        reporterFirstName: reporterUsers.firstName,
+        reporterLastName: reporterUsers.lastName,
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
       .limit(1)
   );
@@ -262,7 +272,12 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const canonicalSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/${urlPrefix}/${canonicalSlug}`;
-  const authorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ') || 'صحيفة سبق الإلكترونية';
+  // Byline prefers the reporter (chosen from a dropdown in the editor) over
+  // the author (staff member who entered the article). Falls back to the
+  // newspaper brand when neither is available.
+  const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
+  const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
+  const authorName = reporterName || editorName || 'صحيفة سبق الإلكترونية';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
   let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
   if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {

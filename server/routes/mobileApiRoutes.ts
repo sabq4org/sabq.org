@@ -29,7 +29,12 @@ import {
   comments,
   insertCommentSchema,
 } from "@shared/schema";
-import { eq, sql, and, gt, gte, desc, or, ne, ilike } from "drizzle-orm";
+import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable } from "drizzle-orm";
+
+// Aliased users join target so we can pull both authorId (the staff member who
+// entered the article) AND reporterId (the actual byline) in the same query.
+// The byline shown to readers must always be the reporter when one is set.
+const reporterUsers = aliasedTable(users, "reporter_user");
 import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -2199,6 +2204,16 @@ const BASE_URL = "https://sabq.org";
 
 function formatArticleForMobile(row: any, baseUrl: string) {
   const article = row.article;
+  // The byline shown to readers is the **reporter** chosen from the editor's
+  // dropdown (`articles.reporterId`), NOT the staff member who entered the
+  // article (`articles.authorId`, auto-set to req.user.id). Fall through to
+  // author only when no reporter was selected, then to the generic newspaper
+  // label as a last resort.
+  const byline = row.reporter
+    ? `${row.reporter.firstName || ""} ${row.reporter.lastName || ""}`.trim()
+    : row.author
+    ? `${row.author.firstName || ""} ${row.author.lastName || ""}`.trim()
+    : "";
   return {
     id: article.id,
     title: article.title,
@@ -2208,9 +2223,7 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     excerpt: article.excerpt || makeExcerpt(article.content || ""),
     section: row.category?.nameAr || "عام",
     section_id: row.category?.id || null,
-    author: row.author
-      ? `${row.author.firstName || ""} ${row.author.lastName || ""}`.trim()
-      : "سبق",
+    author: byline || "سبق",
     published_at: article.publishedAt?.toISOString() || null,
     updated_at: article.updatedAt?.toISOString() || null,
     image_url: article.imageUrl || article.thumbnailUrl || null,
@@ -2269,10 +2282,15 @@ router.get("/articles", async (req: Request, res: Response) => {
           firstName: users.firstName,
           lastName: users.lastName,
         },
+        reporter: {
+          firstName: reporterUsers.firstName,
+          lastName: reporterUsers.lastName,
+        },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
       .limit(limit)
@@ -2335,6 +2353,25 @@ router.get("/articles/:id", async (req: Request, res: Response) => {
       if (author) { authorFirstName = author.firstName; authorLastName = author.lastName; authorProfileImage = author.profileImageUrl; }
     }
 
+    // Reporter (`articles.reporterId`) is the byline picked from the dashboard
+    // dropdown and takes priority over the author (the staff member who
+    // entered the article into the system).
+    let reporterFirstName: string | null = null;
+    let reporterLastName: string | null = null;
+    let reporterProfileImage: string | null = null;
+    if (articleRow.reporterId) {
+      const [reporter] = await db
+        .select({ firstName: users.firstName, lastName: users.lastName, profileImageUrl: users.profileImageUrl })
+        .from(users)
+        .where(eq(users.id, articleRow.reporterId))
+        .limit(1);
+      if (reporter) {
+        reporterFirstName = reporter.firstName;
+        reporterLastName = reporter.lastName;
+        reporterProfileImage = reporter.profileImageUrl;
+      }
+    }
+
     const articleTagsData = await db
       .select({ nameAr: tags.nameAr })
       .from(articleTags)
@@ -2373,13 +2410,16 @@ router.get("/articles/:id", async (req: Request, res: Response) => {
       article: articleRow,
       category: categoryNameAr ? { nameAr: categoryNameAr, id: categoryIdVal } : null,
       author: authorFirstName ? { firstName: authorFirstName, lastName: authorLastName } : null,
+      reporter: reporterFirstName ? { firstName: reporterFirstName, lastName: reporterLastName } : null,
     };
     const formatted = formatArticleForMobile(formattedResult, BASE_URL);
 
     res.json({
       ...formatted,
       tags: tagsList,
-      author_image: authorProfileImage || null,
+      // `author_image` is the byline avatar. Prefer reporter's image for the
+      // same reason `formatArticleForMobile` prefers the reporter's name.
+      author_image: reporterProfileImage || authorProfileImage || null,
       album_images: articleRow.albumImages || [],
       related_articles: relatedResults.map((r) => ({
         id: r.id,
@@ -2472,10 +2512,12 @@ router.get("/breaking", async (req: Request, res: Response) => {
         article: articleCardSelect,
         category: { nameAr: categories.nameAr, id: categories.id },
         author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(
         and(
           eq(articles.status, "published"),
@@ -2526,10 +2568,12 @@ router.get("/search", async (req: Request, res: Response) => {
         article: articleCardSelect,
         category: { nameAr: categories.nameAr, id: categories.id },
         author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(and(...conditions))
       .orderBy(desc(articles.publishedAt))
       .limit(limit)
@@ -2924,10 +2968,12 @@ router.get("/homepage", async (req: Request, res: Response) => {
         article: articleCardSelect,
         category: { nameAr: categories.nameAr, id: categories.id },
         author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(
         and(
           eq(articles.status, "published"),
@@ -2943,10 +2989,12 @@ router.get("/homepage", async (req: Request, res: Response) => {
         article: articleCardSelect,
         category: { nameAr: categories.nameAr, id: categories.id },
         author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(
         and(
           eq(articles.status, "published"),
@@ -2961,10 +3009,12 @@ router.get("/homepage", async (req: Request, res: Response) => {
         article: articleCardSelect,
         category: { nameAr: categories.nameAr, id: categories.id },
         author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
       .where(
         and(
           eq(articles.status, "published"),
