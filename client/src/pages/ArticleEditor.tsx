@@ -3178,11 +3178,46 @@ const generateSlug = (text: string) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Tinted page surface so the white Cards read as elevated panels
-          instead of merging with the page bg. Negative margins fight the
-          DashboardLayout padding so the tint reaches edge-to-edge inside
-          the main content area. */}
-      <div className="bg-muted/40 dark:bg-muted/10 -m-4 md:-m-6 p-4 md:p-6 min-h-[calc(100vh-4rem)]" dir="rtl">
+      {/* Tinted page surface + scoped CSS that lifts the inner Cards.
+          The Card component renders as bg-card (white), which on the
+          default page bg disappears. The wrapper paints a soft slate
+          backdrop so the white cards read as elevated; the scoped
+          shadow + right-edge accent stripe (RTL) adds the "life" the
+          flat layout was missing. */}
+      <div
+        className="article-editor-stage bg-slate-100/80 dark:bg-slate-900/40 -m-4 md:-m-6 p-4 md:p-6 min-h-[calc(100vh-4rem)]"
+        dir="rtl"
+      >
+        <style>{`
+          .article-editor-stage > div > .grid > div > .shadcn-card,
+          .article-editor-stage > div > .grid > div > div > .shadcn-card {
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+            border-color: hsl(var(--border) / 0.7);
+            position: relative;
+            overflow: hidden;
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card::before,
+          .article-editor-stage > div > .grid > div > div > .shadcn-card::before {
+            content: "";
+            position: absolute;
+            inset-inline-end: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, hsl(var(--primary) / 0.55), hsl(var(--primary) / 0.15));
+          }
+          .article-editor-stage > div > .grid > div > .shadcn-card:hover,
+          .article-editor-stage > div > .grid > div > div > .shadcn-card:hover {
+            box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06), 0 12px 24px rgba(15, 23, 42, 0.08);
+          }
+          /* Even rows get a faint tint so adjacent cards do not blur together */
+          .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(even) {
+            background-color: hsl(var(--muted) / 0.35);
+          }
+          .dark .article-editor-stage > div > .grid > div > .shadcn-card:nth-of-type(even) {
+            background-color: hsl(var(--muted) / 0.15);
+          }
+        `}</style>
        <div className="container mx-auto">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
