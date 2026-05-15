@@ -314,13 +314,14 @@ actor APIClient {
     }
 
     func fetchComments(slug: String) async throws -> [APIComment] {
-        // Comments live under the public API (`/api/articles/:slug/comments`),
-        // not under `/api/v1`. Backend returns a bare array of top-level
-        // comments with `replies: []` nested inside each.
+        // v1 mirror at `/api/v1/articles/:slug/comments` returns a bare array
+        // of top-level comments with `replies: []` nested. We use v1 (not the
+        // public surface) so the same Bearer auth used elsewhere can be
+        // applied — though this GET is public, keeping it on v1 lets us share
+        // any future auth-conditional fields (own pending comments, etc.).
         try await get(
             WrappedArray<APIComment>.self,
-            path: "/articles/\(slug)/comments",
-            apiRoot: publicAPIBaseURL
+            path: "/articles/\(slug)/comments"
         ).items
     }
 
@@ -508,17 +509,17 @@ actor APIClient {
     }
 
     func postComment(slug: String, content: String, parentId: String? = nil) async throws -> APIComment {
-        // Submit lives under public API (auth + CSRF required). Backend schema
-        // expects `content`; `parentId` is optional and creates a reply.
+        // v1 mobile endpoint authenticates via the Bearer token returned by
+        // `/api/v1/auth/login` (table `appMemberSessions`). The public route
+        // at `/api/articles/...` uses Passport sessions which iOS doesn't
+        // own, so we'd get 401 there. Body schema is `{ content, parentId? }`.
         // Default DB status is "pending"; the AI moderation job (GPT-4o-mini)
         // runs async after this returns and may flip to approved/rejected.
-        await ensureCSRF()
         let body = CommentSubmitBody(content: content, parentId: parentId)
         return try await post(
             APIComment.self,
             path: "/articles/\(slug)/comments",
-            body: body,
-            apiRoot: publicAPIBaseURL
+            body: body
         )
     }
 

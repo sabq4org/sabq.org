@@ -12,11 +12,11 @@
 
 import { Router, Request, Response } from "express";
 import { db, pool } from "../db";
-import { 
-  categories, 
-  articles, 
-  pushDevices, 
-  pushCampaigns, 
+import {
+  categories,
+  articles,
+  pushDevices,
+  pushCampaigns,
   pushCampaignEvents,
   users,
   userInterests,
@@ -26,6 +26,8 @@ import {
   tags,
   articleTags,
   gulfEvents,
+  comments,
+  insertCommentSchema,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, desc, or, ne, ilike } from "drizzle-orm";
 import { articleCardSelect } from "../selectHelpers";
@@ -2985,6 +2987,193 @@ router.get("/homepage", async (req: Request, res: Response) => {
     res.status(500).json({
       error: { code: "SERVER_ERROR", message: "فشل في جلب الصفحة الرئيسية", status: 500 },
     });
+  }
+});
+
+// ============================================================================
+// COMMENTS — v1 mobile endpoints
+//
+// Background: the existing public `/api/articles/:slug/comments` POST relies
+// on Passport's session cookie via `isAuthenticated`. Mobile auth uses a
+// separate Bearer token (`appMemberSessions` table) that Passport doesn't
+// know about, so the existing route returns 401 for app users. These v1
+// endpoints mirror the public surface but authenticate via
+// `verifyMemberSession` and write to the same `comments` table.
+// ============================================================================
+
+router.get("/articles/:slug/comments", async (req: Request, res: Response) => {
+  try {
+    const slug = req.params.slug;
+    const [article] = await db
+      .select({ id: articles.id })
+      .from(articles)
+      .where(eq(articles.slug, slug))
+      .limit(1);
+
+    if (!article) {
+      return res.status(404).json({ success: false, message: "Article not found" });
+    }
+
+    // Public view: approved comments only. Threading is one level deep —
+    // top-level rows carry their replies inline, matching what the web's
+    // `storage.getCommentsByArticle` produces.
+    const rows = await db
+      .select({
+        comment: comments,
+        user: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(comments)
+      .leftJoin(users, eq(comments.userId, users.id))
+      .where(and(eq(comments.articleId, article.id), eq(comments.status, "approved")))
+      .orderBy(comments.createdAt);
+
+    type CommentNode = (typeof rows)[number]["comment"] & {
+      user: (typeof rows)[number]["user"];
+      replies: CommentNode[];
+    };
+
+    const nodes = new Map<string, CommentNode>();
+    const topLevel: CommentNode[] = [];
+    for (const r of rows) {
+      nodes.set(r.comment.id, { ...r.comment, user: r.user, replies: [] });
+    }
+    for (const r of rows) {
+      const node = nodes.get(r.comment.id)!;
+      if (r.comment.parentId) {
+        const parent = nodes.get(r.comment.parentId);
+        if (parent) parent.replies.push(node);
+        else topLevel.push(node);
+      } else {
+        topLevel.push(node);
+      }
+    }
+
+    res.json(topLevel);
+  } catch (error) {
+    console.error("[Mobile API] GET /articles/:slug/comments error:", error);
+    res.status(500).json({ success: false, message: "فشل في جلب التعليقات" });
+  }
+});
+
+router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مصرح" });
+    }
+
+    const slug = req.params.slug;
+    const [article] = await db
+      .select({ id: articles.id, slug: articles.slug, englishSlug: articles.englishSlug })
+      .from(articles)
+      .where(eq(articles.slug, slug))
+      .limit(1);
+
+    if (!article) {
+      return res.status(404).json({ success: false, message: "Article not found" });
+    }
+
+    const parsed = insertCommentSchema.safeParse({
+      ...req.body,
+      articleId: article.id,
+      userId: session.userId,
+    });
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: "Invalid comment data" });
+    }
+
+    // Mirror the public route: pre-flight suspicious-words check forces a
+    // "pending" hold so AI moderation can't accidentally auto-approve a known
+    // bad pattern even if it scores "safe".
+    const { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } =
+      await import("../utils/suspiciousWordsChecker");
+    const suspiciousCheck = await checkTextForSuspiciousWords(parsed.data.content);
+    const blockedBySuspiciousWords = suspiciousCheck.hasSuspiciousWords;
+
+    const [created] = await db.insert(comments).values(parsed.data).returning();
+
+    if (blockedBySuspiciousWords && suspiciousCheck.foundWords.length > 0) {
+      const foundWordsStr = suspiciousCheck.foundWords.map((w) => w.word).join(", ");
+      const wordIds = suspiciousCheck.foundWords.map((w) => w.wordId);
+      await db
+        .update(comments)
+        .set({
+          status: "pending",
+          moderationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
+        })
+        .where(eq(comments.id, created.id));
+      await incrementSuspiciousWordFlagCount(wordIds);
+    }
+
+    // Fire-and-forget AI moderation. The status the mobile client receives
+    // here will be the initial DB default ("pending"); the AI job flips it to
+    // approved/rejected within a few seconds and the next list refresh shows
+    // the final state.
+    const commentId = created.id;
+    const commentContent = created.content;
+    void (async () => {
+      try {
+        const { moderateComment, getStatusFromClassification } = await import(
+          "../ai/commentModeration"
+        );
+        const moderationResult = await moderateComment(commentContent);
+        const aiStatus = getStatusFromClassification(moderationResult.classification);
+        const newStatus = blockedBySuspiciousWords ? "pending" : aiStatus;
+        await db
+          .update(comments)
+          .set({
+            aiModerationScore: moderationResult.score,
+            aiClassification: moderationResult.classification,
+            aiDetectedIssues: moderationResult.detected,
+            aiModerationReason: moderationResult.reason,
+            aiAnalyzedAt: new Date(),
+            ...(newStatus !== "pending"
+              ? {
+                  status: newStatus,
+                  moderatedAt: new Date(),
+                  moderationReason:
+                    moderationResult.classification === "safe"
+                      ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
+                      : `تم الرفض تلقائياً - ${moderationResult.reason}`,
+                }
+              : {}),
+          })
+          .where(eq(comments.id, commentId));
+      } catch (error) {
+        console.error("[Mobile API] AI moderation failed:", error);
+      }
+    })();
+
+    // Hydrate the user so the iOS decoder can fill `userName` / `userAvatar`
+    // without a second round-trip.
+    const [user] = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+      })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+
+    // Read the row back so the response reflects any sync status mutation
+    // (suspicious-words hold) that happened after the initial insert.
+    const [finalRow] = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.id, created.id))
+      .limit(1);
+
+    res.json({ ...finalRow, user, replies: [] });
+  } catch (error) {
+    console.error("[Mobile API] POST /articles/:slug/comments error:", error);
+    res.status(500).json({ success: false, message: "فشل في إنشاء التعليق" });
   }
 });
 
