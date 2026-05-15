@@ -1,6 +1,8 @@
 import SwiftUI
 import PhotosUI
 
+import UIKit
+
 struct SettingsView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
@@ -9,6 +11,8 @@ struct SettingsView: View {
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
     @State private var showLogin = false
+    @State private var showRoleDebug = false
+    @State private var roleDebugMessage = ""
     @State private var showContact = false
     @State private var showNewsletter = false
     @State private var showEditProfile = false
@@ -40,6 +44,14 @@ struct SettingsView: View {
         .sabqRTL()
         .sheet(isPresented: $showLogin) {
             LoginSheet()
+        }
+        .alert("بيانات الدور المستلمة", isPresented: $showRoleDebug) {
+            Button("نسخ") {
+                UIPasteboard.general.string = roleDebugMessage
+            }
+            Button("إغلاق", role: .cancel) { }
+        } message: {
+            Text(roleDebugMessage)
         }
         .sheet(isPresented: $showContact) {
             ContactSheet()
@@ -90,6 +102,14 @@ struct SettingsView: View {
                                 Text(user.localizedRole)
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
+                            }
+                            // Long-press the role label to surface the raw
+                            // role-payload the backend sent. Temporary
+                            // diagnostic for the "قارئ" mismatch report.
+                            .contentShape(Rectangle())
+                            .onLongPressGesture(minimumDuration: 0.6) {
+                                roleDebugMessage = user.roleDebugSummary
+                                showRoleDebug = true
                             }
 
                             if let email = user.email, !email.isEmpty {

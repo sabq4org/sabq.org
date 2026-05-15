@@ -732,6 +732,28 @@ nonisolated struct APIUser: Decodable, Identifiable {
         return parts.isEmpty ? (email ?? "مستخدم") : parts.joined(separator: " ")
     }
 
+    /// Human-readable dump of the decoded role/membership fields. Wired to a
+    /// long-press gesture on the profile-role label so we can see exactly
+    /// what the backend sent the device — useful when the displayed role
+    /// disagrees with what's in the dashboard. Temporary diagnostic; delete
+    /// once the "قارئ" reports stop.
+    var roleDebugSummary: String {
+        let rolesStr = roles.isEmpty ? "—" : roles.joined(separator: ", ")
+        let displayName = roleDisplayName ?? "—"
+        let displayNames = roleDisplayNames.isEmpty ? "—" : roleDisplayNames.joined(separator: ", ")
+        let membership = membershipDisplayName ?? "—"
+        let job = jobTitle ?? "—"
+        return """
+        role: \(role ?? "—")
+        roles[]: \(rolesStr)
+        roleDisplayName: \(displayName)
+        roleDisplayNames[]: \(displayNames)
+        membershipDisplayName: \(membership)
+        jobTitle: \(job)
+        ➜ localizedRole: \(localizedRole)
+        """
+    }
+
     var primaryRoleKey: String? {
         if let key = roles.first(where: { Self.isNonReaderRole($0) }) {
             return key
