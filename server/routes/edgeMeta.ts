@@ -127,6 +127,44 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .select({
           title: articles.title,
           excerpt: articles.excerpt,
+          aiSummary: articles.aiSummary,
+          imageUrl: articles.imageUrl,
+          englishSlug: articles.englishSlug,
+        })
+        .from(articles)
+        .where(where!)
+        .limit(1);
+      if (!row) return null;
+      // Description prefers the AI-generated summary so the crawler unfurl
+      // matches what the user picked editorially — same change made in
+      // `seoInjector.ts` on 2026-05-15 per user request.
+      return {
+        title: `${row.title} | سبق`,
+        description: trunc(row.aiSummary || row.excerpt || row.title, 220),
+        image: abs(row.imageUrl),
+        canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
+        robots: "index,follow",
+        type: "article",
+        locale: "ar_SA",
+      };
+    },
+  },
+  // Opinion article: /opinion/:slug
+  // Lives in the same `articles` table with articleType='opinion' — same
+  // schema as the article handler, just canonicalises to /opinion/<slug>.
+  // Was missing entirely, so opinion shares unfurled with the generic SPA
+  // shell meta ("سبق الذكية" + icon.png) instead of the article's image +
+  // title + summary.
+  {
+    pattern: /^\/opinion\/([^/?#]+)/,
+    handle: async (m) => {
+      const slug = decodeURIComponent(m[1]);
+      const where = or(eq(articles.englishSlug, slug), eq(articles.slug, slug));
+      const [row] = await db
+        .select({
+          title: articles.title,
+          excerpt: articles.excerpt,
+          aiSummary: articles.aiSummary,
           imageUrl: articles.imageUrl,
           englishSlug: articles.englishSlug,
         })
@@ -136,9 +174,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       if (!row) return null;
       return {
         title: `${row.title} | سبق`,
-        description: trunc(row.excerpt || row.title, 220),
+        description: trunc(row.aiSummary || row.excerpt || row.title, 220),
         image: abs(row.imageUrl),
-        canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
+        canonical: `${SITE_URL}/opinion/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "ar_SA",
