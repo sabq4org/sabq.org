@@ -388,14 +388,20 @@ struct HomeFeedView: View {
     private var trendingPreviewSection: some View {
         if !articlesStore.trendingArticles.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    HStack(spacing: 8) {
+                HStack(alignment: .top) {
+                    HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "flame.fill")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(.orange)
-                        Text("الأكثر تداولاً")
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundStyle(SabqTheme.ink)
+                            .padding(.top, 2)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("الأكثر تداولاً")
+                                .font(.system(size: 17, weight: .bold, design: .rounded))
+                                .foregroundStyle(SabqTheme.ink)
+                            Text("خلال آخر 48 ساعة")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(SabqTheme.tertiaryInk)
+                        }
                     }
 
                     Spacer()
@@ -615,12 +621,7 @@ struct HomeFeedView: View {
             )
 
             SurfaceCard {
-                ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { index, article in
-                    if index > 0 {
-                        Divider()
-                            .foregroundStyle(SabqTheme.outline)
-                    }
-
+                ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { _, article in
                     NavigationLink(value: article) {
                         CompactArticleRow(
                             article: article,
@@ -629,6 +630,7 @@ struct HomeFeedView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .padding(.vertical, 4)
                 }
 
                 if articlesStore.hasMore && articlesStore.selectedCategory == nil {

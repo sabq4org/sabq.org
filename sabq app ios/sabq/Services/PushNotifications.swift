@@ -44,6 +44,19 @@ final class NotificationsStore {
     /// In-memory unread counter, updated after every history fetch.
     var unreadCount: Int = 0
 
+    /// Refetch the unread count from the backend. Called on every push
+    /// receipt (foreground + tap) and on app-becomes-active transitions
+    /// so the bell's red dot stays in sync without needing a manual
+    /// home-feed pull-to-refresh. Cheap single API call; safely no-ops
+    /// when the user isn't signed in (the call returns 401 and we
+    /// silently swallow it).
+    func refreshUnreadCount() async {
+        guard let page = try? await APIClient.shared.fetchEditorialNotifications() else {
+            return
+        }
+        unreadCount = page.unread
+    }
+
     func setDeviceToken(_ token: String) {
         deviceToken = token
         Task { await registerWithBackend(token: token) }
@@ -182,17 +195,24 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     }
 
     // Foreground delivery — show banner + play sound so the user sees it
-    // even when the app is open.
+    // even when the app is open. Also refresh the header bell's unread
+    // count so the red dot appears immediately rather than waiting for
+    // the next home-feed pull-to-refresh.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .list, .sound, .badge])
+        Task { @MainActor in
+            await NotificationsStore.shared.refreshUnreadCount()
+        }
     }
 
     // Tap from notification center / lock screen — extract deep link and
-    // hand it to NotificationsStore for SwiftUI to react to.
+    // hand it to NotificationsStore for SwiftUI to react to. Also refresh
+    // the unread count so the bell's red dot updates the moment the user
+    // returns to the app from the notification banner.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -203,6 +223,7 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             if let link = NotificationsStore.shared.extractDeepLink(from: userInfo) {
                 NotificationsStore.shared.pendingDeepLink = link
             }
+            await NotificationsStore.shared.refreshUnreadCount()
             completionHandler()
         }
     }

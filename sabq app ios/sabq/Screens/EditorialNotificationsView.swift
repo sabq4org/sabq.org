@@ -458,15 +458,16 @@ struct EditorialNotificationDetailView: View {
         case "published":
             guard let slug = item.articleSlug, !slug.isEmpty else { return nil }
             return ActionDescriptor(title: "اقرأ المقال", icon: "doc.text.fill", deepLink: .article(slug: slug))
-        case "needs_revision":
-            guard let id = item.articleId, !id.isEmpty else { return nil }
-            return ActionDescriptor(title: "اطّلع على المسودة", icon: "pencil.and.scribble", deepLink: .draft(id: id))
-        case "scheduled":
-            guard let id = item.articleId, !id.isEmpty else { return nil }
-            return ActionDescriptor(title: "تفاصيل الجدولة", icon: "calendar", deepLink: .draft(id: id))
-        case "rejected", "archived":
-            // No "open article" action — the content is no longer
-            // public. The detail view itself is the destination.
+        case "scheduled", "needs_revision", "rejected", "archived":
+            // No usable destination yet: scheduled/needs_revision route
+            // to sabq://draft/<id> which is wired as a placeholder back
+            // to this same notifications list (ContentView.handleDeepLink
+            // — "reserved for future per-draft preview"). rejected and
+            // archived have no public surface to send the author to.
+            // The detail view itself is the destination — all relevant
+            // info (date, reviewer note, article title) is already
+            // visible on this sheet, so we hide the action button until
+            // a dedicated ArticleDraftPreview screen ships.
             return nil
         default:
             return nil

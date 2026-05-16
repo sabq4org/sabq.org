@@ -378,11 +378,48 @@ async function publishScheduledArticles() {
           console.log(`[ScheduledPublisher] Reporter in-app notification sent for article: ${article.id}`);
         })().catch(error => console.error(`[ScheduledPublisher] Error sending reporter notification for article ${article.id}:`, error));
 
+        // Editorial APNs push to the author/reporter/submitter — the same
+        // pipeline the PATCH endpoint uses for manual publishes. Without
+        // this, scheduled articles publish silently from the writer's
+        // perspective: their iOS device never gets the "published" event
+        // (only the reader broadcast + reporter email fire here).
+        (async () => {
+          const { notifyArticleStakeholders } = await import("./services/editorialNotifications");
+          await notifyArticleStakeholders(
+            {
+              id: article.id,
+              title: article.title,
+              slug: article.slug,
+              englishSlug: article.englishSlug || undefined,
+              articleType: article.articleType,
+              scheduledAt: article.scheduledAt,
+              publishedAt: publishTime,
+              authorId: article.authorId,
+              reporterId: article.reporterId,
+              submitterId: article.submitterId,
+            },
+            "published",
+          );
+          console.log(`[ScheduledPublisher] Editorial APNs push dispatched for article: ${article.id}`);
+        })().catch(error => console.error(`[ScheduledPublisher] Error dispatching editorial push for article ${article.id}:`, error));
+
         (async () => {
           const { sendReporterPublishEmail } = await import("./services/editorAlerts");
           await sendReporterPublishEmail(article.id);
           console.log(`[ScheduledPublisher] Reporter email sent for article: ${article.id}`);
         })().catch(error => console.error(`[ScheduledPublisher] Error sending reporter email for article ${article.id}:`, error));
+
+        // Opinion authors get their own "your column is now live" email
+        // — the PATCH publish path sends this for opinion articles, but
+        // the scheduled-publish cron used to skip it, so writers whose
+        // opinion went out via auto-publish received nothing.
+        if (article.articleType === "opinion" && article.authorId) {
+          (async () => {
+            const { sendOpinionAuthorPublishEmail } = await import("./services/editorAlerts");
+            await sendOpinionAuthorPublishEmail(article.id);
+            console.log(`[ScheduledPublisher] Opinion author email sent for article: ${article.id}`);
+          })().catch(error => console.error(`[ScheduledPublisher] Error sending opinion-author email for article ${article.id}:`, error));
+        }
 
         (async () => {
           const { sendEditorPublishAlert, getPublisherName } = await import("./services/editorAlerts");

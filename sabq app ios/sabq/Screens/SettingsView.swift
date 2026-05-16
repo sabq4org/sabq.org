@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
+    @AppStorage("homeCardStyle") private var cardStyleRaw: String = "classic"
     @State private var showLogin = false
     @State private var showRoleDebug = false
     @State private var roleDebugMessage = ""
@@ -536,6 +537,27 @@ struct SettingsView: View {
                 tint: SabqTheme.primaryEnd,
                 isOn: $darkModeEnabled
             )
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("نمط بطاقات الأخبار")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(SabqTheme.ink)
+                        Text("اختر شكل عرض الأخبار في الواجهة")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                    }
+                    Spacer(minLength: 0)
+                    SmallSquareBadge(systemImage: "rectangle.stack.fill", tint: SabqTheme.primaryEnd)
+                }
+
+                Picker("نمط البطاقة", selection: $cardStyleRaw) {
+                    Text("موسّع").tag("spacious")
+                    Text("كلاسيكي").tag("classic")
+                }
+                .pickerStyle(.segmented)
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("لون التطبيق")

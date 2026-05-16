@@ -771,28 +771,31 @@ struct CompactArticleRow: View {
     let onBookmark: () -> Void
     let isBookmarked: Bool
 
+    // Reader can flip between the legacy thumbnail-on-the-side layout
+    // ("classic") and the experimental image-on-top hero layout
+    // ("spacious") from Settings → العرض. Default is "classic" — the
+    // spacious variant took too much vertical real estate and was rolled
+    // back. Kept as an opt-in until we can iterate on density.
+    @AppStorage("homeCardStyle") private var styleRaw: String = "classic"
+
+    private var isSpacious: Bool { styleRaw == "spacious" }
+
     var body: some View {
+        if isSpacious {
+            spaciousLayout
+        } else {
+            classicLayout
+        }
+    }
+
+    // MARK: - Classic (thumbnail on the side, original design)
+
+    private var classicLayout: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     StatusChip(title: article.category.title, tint: article.category.tint)
-
-                    if article.isBreaking {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(SabqTheme.coral)
-                                .frame(width: 6, height: 6)
-                            Text("عاجل")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(SabqTheme.coral)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(SabqTheme.coral.opacity(0.10))
-                        )
-                    }
+                    if article.isBreaking { breakingPill }
                 }
 
                 Text(article.title)
@@ -802,51 +805,132 @@ struct CompactArticleRow: View {
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
 
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 11, weight: .medium))
-                        Text(article.readingTime)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Text(article.relativeDate)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        SabqHaptics.light()
-                        onBookmark()
-                    } label: {
-                        Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
-                            .scaleEffect(isBookmarked ? 1.1 : 1)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
-                    }
-                    .buttonStyle(.plain)
-                }
+                metadataRow
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let urlString = article.imageURL, let url = URL(string: urlString) {
                 CachedAsyncImage(url: url, contentMode: .fill) {
-                    thumbnailPlaceholder
+                    thumbnailPlaceholder(size: 84)
                 }
                 .frame(width: 84, height: 84)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             } else {
-                thumbnailPlaceholder
+                thumbnailPlaceholder(size: 84)
             }
         }
         .padding(.vertical, 6)
     }
 
-    private var thumbnailPlaceholder: some View {
+    // MARK: - Spacious (image on top, 16:10 hero)
+
+    private var spaciousLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            heroImage
+
+            Text(article.title)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+                .lineSpacing(4)
+
+            metadataRow
+        }
+        .padding(.vertical, 8)
+    }
+
+    private var heroImage: some View {
+        ZStack(alignment: .topLeading) {
+            // 16:10 container — full row width. CachedAsyncImage fills.
+            Color.clear
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .overlay(
+                    Group {
+                        if let urlString = article.imageURL, let url = URL(string: urlString) {
+                            CachedAsyncImage(url: url, contentMode: .fill) {
+                                heroPlaceholder
+                            }
+                        } else {
+                            heroPlaceholder
+                        }
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            HStack(spacing: 6) {
+                if article.isBreaking { breakingPill }
+                StatusChip(title: article.category.title, tint: article.category.tint)
+            }
+            .padding(10)
+        }
+    }
+
+    private var heroPlaceholder: some View {
+        LinearGradient(
+            colors: [article.category.tint.opacity(0.14), article.category.tint.opacity(0.04)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay {
+            Image(systemName: article.category.icon)
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(article.category.tint.opacity(0.5))
+        }
+    }
+
+    // MARK: - Shared sub-views
+
+    private var breakingPill: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(SabqTheme.coral)
+                .frame(width: 6, height: 6)
+            Text("عاجل")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(SabqTheme.coral)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(SabqTheme.coral.opacity(0.10))
+        )
+    }
+
+    private var metadataRow: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 11, weight: .medium))
+                Text(article.readingTime)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(SabqTheme.tertiaryInk)
+
+            Text(article.relativeDate)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+
+            Spacer(minLength: 0)
+
+            Button {
+                SabqHaptics.light()
+                onBookmark()
+            } label: {
+                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
+                    .scaleEffect(isBookmarked ? 1.1 : 1)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func thumbnailPlaceholder(size: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(
                 LinearGradient(
@@ -855,10 +939,10 @@ struct CompactArticleRow: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .frame(width: 84, height: 84)
+            .frame(width: size, height: size)
             .overlay {
                 Image(systemName: article.category.icon)
-                    .font(.system(size: 28, weight: .light))
+                    .font(.system(size: size * 0.33, weight: .light))
                     .foregroundStyle(article.category.tint.opacity(0.6))
             }
     }
@@ -868,42 +952,67 @@ struct CompactArticleRow: View {
 
 struct CategoryTile: View {
     let category: ArticleCategory
-    let articleCount: Int
     let action: () -> Void
+
+    // `articleCount` was removed per user request — the prominent number
+    // felt noisy and dominated the tile. Kept the initializer overload
+    // below for backwards compatibility with older call sites that still
+    // pass a count; we just ignore it.
+    init(category: ArticleCategory, action: @escaping () -> Void) {
+        self.category = category
+        self.action = action
+    }
+
+    init(category: ArticleCategory, articleCount: Int, action: @escaping () -> Void) {
+        self.category = category
+        self.action = action
+        _ = articleCount
+    }
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
                     SmallSquareBadge(systemImage: category.icon, tint: category.tint)
                     Spacer(minLength: 0)
-                    Text("\(articleCount)")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .foregroundStyle(SabqTheme.ink)
-                        .monospacedDigit()
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(category.tint.opacity(0.6))
+                        .padding(.top, 6)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(category.title)
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(SabqTheme.ink)
 
                     Text(category.subtitle)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.leading)
                 }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(SabqTheme.surface)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                category.tint.opacity(0.08),
+                                SabqTheme.surface,
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .shadow(color: SabqTheme.shadow, radius: 8, x: 0, y: 3)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+                    .stroke(category.tint.opacity(0.18), lineWidth: 0.6)
             )
         }
         .buttonStyle(.plain)

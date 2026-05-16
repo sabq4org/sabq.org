@@ -11,6 +11,7 @@ struct ContentView: View {
     /// (cold start, foreground, or background restore). We watch it via the
     /// onChange handler below and translate it into a NavigationPath entry.
     @State private var notificationsStore = NotificationsStore.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -110,6 +111,15 @@ struct ContentView: View {
                 if let link = notificationsStore.pendingDeepLink {
                     handleDeepLink(link)
                     notificationsStore.pendingDeepLink = nil
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                // When the app returns to the foreground (after being in
+                // background long enough that push handlers didn't fire),
+                // refresh the unread editorial-notification count so the
+                // header bell's red dot reflects the latest server state.
+                if newPhase == .active && authStore.isLoggedIn {
+                    Task { await notificationsStore.refreshUnreadCount() }
                 }
             }
 

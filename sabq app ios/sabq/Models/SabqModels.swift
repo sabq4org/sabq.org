@@ -55,6 +55,19 @@ enum SabqFormatters {
         return f
     }()
 
+    /// Arabic-correct "X minutes to read" label. Plain `"\(n) دقائق قراءة"`
+    /// reads wrong at n=1 ("١ دقائق") and n=2 (should be dual). We handle 1
+    /// and 2 explicitly and fall back to the plural form for 3+. Returning
+    /// no number for n=1/2 (just "دقيقة"/"دقيقتان") is closer to natural
+    /// Arabic — the article doesn't need to shout "1 minute".
+    static func arabicReadingTime(minutes: Int) -> String {
+        switch minutes {
+        case ...1: return "دقيقة قراءة"
+        case 2:    return "دقيقتان قراءة"
+        default:   return "\(minutes) دقائق قراءة"
+        }
+    }
+
     static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -315,7 +328,7 @@ struct Article: Identifiable, Equatable, Hashable {
     }
 
     var readingTime: String {
-        "\(readingMinutes) دقائق قراءة"
+        SabqFormatters.arabicReadingTime(minutes: readingMinutes)
     }
 
     var dateFormatted: String {
@@ -504,7 +517,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     }
 
     var readingTime: String {
-        "\(readingMinutes) دقائق قراءة"
+        SabqFormatters.arabicReadingTime(minutes: readingMinutes)
     }
 
     var dateFormatted: String {
