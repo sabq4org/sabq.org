@@ -353,6 +353,14 @@ actor APIClient {
         ])
     }
 
+    /// Author profile + recent articles in a single round-trip. The mobile
+    /// `AuthorArticlesView` resolves writers by their byline string (we don't
+    /// have slugs in the article payload yet), so this endpoint matches on
+    /// `first_name + ' ' + last_name`.
+    func fetchAuthorPage(name: String) async throws -> APIAuthorPage {
+        try await get(APIAuthorPage.self, path: "/authors/by-name", query: ["name": name])
+    }
+
     // MARK: - Breaking News
 
     func fetchBreakingTicker() async throws -> APIBreakingTicker {

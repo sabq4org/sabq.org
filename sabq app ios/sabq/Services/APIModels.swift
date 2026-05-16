@@ -1679,6 +1679,86 @@ nonisolated struct APIEditorialNotification: Decodable, Identifiable, Hashable {
     }
 }
 
+// MARK: - Author profile (mobile)
+//
+// Powers the redesigned writer page. Single GET /api/v1/authors/by-name
+// returns the hero (avatar/bio/role), stats strip, top categories, and
+// the recent-articles list — so the screen renders in one round-trip.
+
+nonisolated struct APIAuthorProfile: Decodable {
+    let id: String
+    let name: String
+    let role: String
+    let avatarUrl: String?
+    let bio: String?
+    let jobTitle: String?
+    let department: String?
+    let joinedAt: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? ""
+        name = (try? c.decode(String.self, forKey: FlexKey("name"))) ?? ""
+        role = (try? c.decode(String.self, forKey: FlexKey("role"))) ?? ""
+        avatarUrl = try? c.decode(String.self, forKey: FlexKey("avatarUrl"))
+        bio = try? c.decode(String.self, forKey: FlexKey("bio"))
+        jobTitle = try? c.decode(String.self, forKey: FlexKey("jobTitle"))
+        department = try? c.decode(String.self, forKey: FlexKey("department"))
+        joinedAt = try? c.decode(String.self, forKey: FlexKey("joinedAt"))
+    }
+}
+
+nonisolated struct APIAuthorStats: Decodable {
+    let articleCount: Int
+    let totalViews: Int
+    let earliestPublish: String?
+
+    init(articleCount: Int = 0, totalViews: Int = 0, earliestPublish: String? = nil) {
+        self.articleCount = articleCount
+        self.totalViews = totalViews
+        self.earliestPublish = earliestPublish
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        articleCount = (try? c.decode(Int.self, forKey: FlexKey("articleCount"))) ?? 0
+        totalViews = (try? c.decode(Int.self, forKey: FlexKey("totalViews"))) ?? 0
+        earliestPublish = try? c.decode(String.self, forKey: FlexKey("earliestPublish"))
+    }
+}
+
+nonisolated struct APIAuthorCategory: Decodable, Hashable {
+    let id: String
+    let nameAr: String
+    let color: String?
+    let icon: String?
+    let count: Int
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? ""
+        nameAr = (try? c.decode(String.self, forKey: FlexKey("nameAr"))) ?? ""
+        color = try? c.decode(String.self, forKey: FlexKey("color"))
+        icon = try? c.decode(String.self, forKey: FlexKey("icon"))
+        count = (try? c.decode(Int.self, forKey: FlexKey("count"))) ?? 0
+    }
+}
+
+nonisolated struct APIAuthorPage: Decodable {
+    let author: APIAuthorProfile
+    let stats: APIAuthorStats
+    let topCategories: [APIAuthorCategory]
+    let recentArticles: [APIArticle]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        author = try c.decode(APIAuthorProfile.self, forKey: FlexKey("author"))
+        stats = (try? c.decode(APIAuthorStats.self, forKey: FlexKey("stats"))) ?? APIAuthorStats()
+        topCategories = (try? c.decode([APIAuthorCategory].self, forKey: FlexKey("topCategories"))) ?? []
+        recentArticles = (try? c.decode([APIArticle].self, forKey: FlexKey("recentArticles"))) ?? []
+    }
+}
+
 nonisolated struct EditorialNotificationsPage: Decodable {
     let success: Bool
     let items: [APIEditorialNotification]

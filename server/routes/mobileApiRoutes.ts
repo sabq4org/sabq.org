@@ -2897,6 +2897,142 @@ router.get("/trending", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v1/authors/by-name?name=<full name>
+//
+// Lightweight author profile for the iOS "writer page". The mobile client
+// only knows the byline string (the reporter row or, as fallback, the
+// staff author row), so we resolve by concatenated first+last name in
+// either the reporter (`reporter_id`) or author (`author_id`) slot.
+//
+// Response shape — designed to power a hero card + stats strip + top-
+// categories chip row + recent-articles list in a single round trip:
+//
+//   {
+//     author: { id, name, role, avatarUrl, bio, jobTitle, department,
+//               joinedAt },
+//     stats:  { articleCount, totalViews, totalLikes, weeksActive },
+//     topCategories: [ { id, nameAr, count, color, icon } ... up to 3 ],
+//     recentArticles: [ ...formatArticleForMobile ... up to 30 ]
+//   }
+router.get("/authors/by-name", async (req: Request, res: Response) => {
+  try {
+    const rawName = (req.query.name as string | undefined)?.trim();
+    if (!rawName) {
+      return res.status(400).json({
+        error: { code: "INVALID_INPUT", message: "اسم الكاتب مطلوب", status: 400 },
+      });
+    }
+
+    const cacheKey = `mobile:author:${rawName.toLowerCase()}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
+    // Find the user whose `first_name + ' ' + last_name` matches the byline.
+    // Falls back to a `LIKE` on either part so a partial name (e.g.
+    // "محمد العتيبي" vs DB "محمد بن سعد العتيبي") still resolves.
+    const userRow = await db.execute(sql`
+      SELECT id, first_name, last_name, profile_image_url, bio,
+             job_title, department, created_at
+      FROM users
+      WHERE LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')))
+            = LOWER(${rawName})
+      LIMIT 1
+    `) as any;
+    const author = (userRow?.rows || userRow || [])[0];
+
+    if (!author) {
+      return res.status(404).json({
+        error: { code: "NOT_FOUND", message: "لم يتم العثور على الكاتب", status: 404 },
+      });
+    }
+
+    // Lifetime article + view stats. Counts when the user is either the
+    // reporter (byline) or the author (staff entry) on a PUBLISHED row.
+    const statsRow = await db.execute(sql`
+      SELECT
+        COUNT(DISTINCT a.id) AS article_count,
+        COALESCE(SUM(a.views), 0) AS total_views,
+        MIN(a.published_at) AS earliest_publish
+      FROM articles a
+      WHERE a.status = 'published'
+        AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
+    `) as any;
+    const stats = (statsRow?.rows || statsRow || [])[0] || {};
+
+    // Top 3 categories the author writes in most.
+    const topCatsRows = await db.execute(sql`
+      SELECT c.id, c.name_ar, c.color, c.icon, COUNT(*) AS count
+      FROM articles a
+      INNER JOIN categories c ON a.category_id = c.id
+      WHERE a.status = 'published'
+        AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
+      GROUP BY c.id, c.name_ar, c.color, c.icon
+      ORDER BY count DESC
+      LIMIT 3
+    `) as any;
+    const topCategories = (topCatsRows?.rows || topCatsRows || []).map((r: any) => ({
+      id: r.id,
+      nameAr: r.name_ar,
+      color: r.color,
+      icon: r.icon,
+      count: Number(r.count) || 0,
+    }));
+
+    // Recent 30 articles (formatted via the shared mobile formatter).
+    const recent = await db
+      .select({
+        article: articleCardSelect,
+        category: { nameAr: categories.nameAr, id: categories.id },
+        author: { firstName: users.firstName, lastName: users.lastName },
+        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
+      })
+      .from(articles)
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+      .where(
+        and(
+          eq(articles.status, "published"),
+          eq(articles.hideFromHomepage, false),
+          or(eq(articles.reporterId, author.id), eq(articles.authorId, author.id)),
+        )
+      )
+      .orderBy(desc(articles.publishedAt))
+      .limit(30);
+
+    const role = author.job_title || author.department || "كاتب في سبق";
+    const fullName = [author.first_name, author.last_name].filter(Boolean).join(" ").trim();
+
+    const result = {
+      author: {
+        id: author.id,
+        name: fullName || rawName,
+        role,
+        avatarUrl: author.profile_image_url || null,
+        bio: author.bio || null,
+        jobTitle: author.job_title || null,
+        department: author.department || null,
+        joinedAt: author.created_at?.toISOString?.() || author.created_at || null,
+      },
+      stats: {
+        articleCount: Number(stats.article_count) || 0,
+        totalViews: Number(stats.total_views) || 0,
+        earliestPublish: stats.earliest_publish?.toISOString?.() || stats.earliest_publish || null,
+      },
+      topCategories,
+      recentArticles: recent.map((r) => formatArticleForMobile(r, BASE_URL)),
+    };
+
+    setCache(cacheKey, result, 5 * 60 * 1000);
+    res.json(result);
+  } catch (error) {
+    console.error("[Mobile API] GET /authors/by-name error:", error);
+    res.status(500).json({
+      error: { code: "SERVER_ERROR", message: "فشل في جلب بيانات الكاتب", status: 500 },
+    });
+  }
+});
+
 const COUNTRY_MAP: Record<string, { name_ar: string; name_en: string }> = {
   saudi_arabia: { name_ar: "السعودية", name_en: "Saudi Arabia" },
   uae: { name_ar: "الإمارات", name_en: "UAE" },
