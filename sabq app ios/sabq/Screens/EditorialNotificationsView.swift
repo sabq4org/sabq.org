@@ -14,6 +14,11 @@ struct EditorialNotificationsView: View {
     @State private var items: [APIEditorialNotification] = []
     @State private var loadState: LoadState = .loading
     @State private var unreadCount: Int = 0
+    /// When the user taps a row we present a full-screen detail sheet
+    /// instead of trying to push onto a fragile nested NavigationStack.
+    /// The sheet works the same regardless of how we got to this screen
+    /// (settings → notifications, or header bell → notifications).
+    @State private var selectedNotification: APIEditorialNotification?
 
     enum LoadState {
         case loading, loaded, failed(String)
@@ -49,6 +54,9 @@ struct EditorialNotificationsView: View {
                 }
                 .task { await load() }
                 .refreshable { await load() }
+                .sheet(item: $selectedNotification) { notification in
+                    EditorialNotificationDetailView(item: notification)
+                }
         }
     }
 
@@ -135,7 +143,10 @@ struct EditorialNotificationsView: View {
         let style = rowStyle(for: item.type)
         let isUnread = item.readAt == nil
         return Button {
-            Task { await handleTap(item) }
+            // Open the rich detail sheet. Mark-read happens in the
+            // sheet's onAppear so the unread dot drops the moment the
+            // sheet animates in (felt sluggish when read was awaited).
+            selectedNotification = item
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
@@ -160,7 +171,11 @@ struct EditorialNotificationsView: View {
                                 .frame(width: 7, height: 7)
                         }
                     }
-                    Text(item.body)
+                    // Strip any "— السبب: …" / "— ملاحظة المحرر: …" tail
+                    // from the body when we have a separate reviewerNote
+                    // — otherwise the reason renders twice (body suffix +
+                    // dedicated callout below).
+                    Text(Self.cleanBody(item))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineSpacing(3)
@@ -168,12 +183,19 @@ struct EditorialNotificationsView: View {
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     if let reviewerNote = item.reviewerNote, !reviewerNote.isEmpty {
-                        Text("ملاحظة المحرر: \(reviewerNote)")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(style.tint)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .padding(.top, 2)
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "quote.bubble.fill")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(style.tint)
+                                .padding(.top, 2)
+                            Text(reviewerNote)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(style.tint)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.top, 2)
                     }
                     Text(relativeDate(from: item.createdAt))
                         .font(.system(size: 10, weight: .medium))
@@ -241,6 +263,248 @@ struct EditorialNotificationsView: View {
         } catch {
             loadState = .failed("تعذر جلب الإشعارات")
         }
+    }
+
+    /// Strip the trailing "— السبب: …" / "— ملاحظة المحرر: …" pattern from
+    /// notification bodies when the same text is available in the
+    /// reviewerNote field. Keeps the row uncluttered (the editor's note
+    /// has its own visually-distinct callout).
+    static func cleanBody(_ item: APIEditorialNotification) -> String {
+        let raw = item.body
+        guard let note = item.reviewerNote, !note.isEmpty else { return raw }
+        // Drop everything from the first "—" onward — we standardise on
+        // an em-dash separator in `editorialNotifications.ts`.
+        if let dashRange = raw.range(of: "—") {
+            return String(raw[..<dashRange.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return raw
+    }
+}
+
+// MARK: - Detail sheet
+
+/// Detail view shown when the user taps a notification row. Renders the
+/// full payload (icon, title, body, reviewer note, timestamp) plus a
+/// contextual action button that bounces back to the right place in the
+/// app via the existing deep-link mechanism.
+struct EditorialNotificationDetailView: View {
+    let item: APIEditorialNotification
+    @Environment(\.dismiss) private var dismiss
+    @State private var marked = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    typeHeader
+                    titleCard
+                    if let note = item.reviewerNote, !note.isEmpty {
+                        reviewerNoteCard(note)
+                    }
+                    metadataRow
+                    if let action = actionForType() {
+                        actionButton(action)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 40)
+            }
+            .background(SabqTheme.background)
+            .sabqRTL()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(SabqTheme.tertiaryInk)
+                    }
+                }
+                ToolbarItem(placement: .principal) {
+                    Text("تفاصيل الإشعار")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                }
+            }
+        }
+        .task {
+            guard !marked else { return }
+            marked = true
+            // Mark read silently — failure is harmless (next fetch
+            // reconciles), so we don't surface errors to the user.
+            try? await APIClient.shared.markEditorialNotificationRead(id: item.id)
+            // Optimistically decrement the header bell's unread count.
+            await MainActor.run {
+                if item.readAt == nil {
+                    NotificationsStore.shared.unreadCount = max(0, NotificationsStore.shared.unreadCount - 1)
+                }
+            }
+        }
+    }
+
+    // MARK: Sub-views
+
+    private var style: (icon: String, tint: Color, label: String) {
+        switch item.type {
+        case "scheduled":      return ("calendar.badge.clock", SabqTheme.sky, "جدولة")
+        case "published":      return ("checkmark.seal.fill", SabqTheme.leaf, "نشر")
+        case "rejected":       return ("xmark.octagon.fill", SabqTheme.coral, "اعتذار")
+        case "needs_revision": return ("pencil.and.scribble", SabqTheme.primaryEnd, "طلب تعديل")
+        case "archived":       return ("archivebox.fill", SabqTheme.tertiaryInk, "أرشفة")
+        default:               return ("bell.fill", SabqTheme.secondaryInk, "إشعار")
+        }
+    }
+
+    private var typeHeader: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(style.tint.opacity(0.14))
+                    .frame(width: 80, height: 80)
+                Image(systemName: style.icon)
+                    .font(.system(size: 36, weight: .regular))
+                    .foregroundStyle(style.tint)
+            }
+            Text(style.label)
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(style.tint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(style.tint.opacity(0.10)))
+                .overlay(Capsule().stroke(style.tint.opacity(0.25), lineWidth: 0.5))
+            Text(item.title)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+    }
+
+    private var titleCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("المحتوى المعني")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                Text(item.articleTitle ?? item.title)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(SabqTheme.ink)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(EditorialNotificationsView.cleanBody(item))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func reviewerNoteCard(_ note: String) -> some View {
+        SurfaceCard(accent: style.tint) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(style.tint)
+                    Text("ملاحظة المحرر")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                }
+                Text(note)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SabqTheme.ink)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                            .fill(style.tint.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                            .stroke(style.tint.opacity(0.20), lineWidth: 0.5)
+                    )
+            }
+        }
+    }
+
+    private var metadataRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "clock")
+                .font(.system(size: 11, weight: .semibold))
+            Text(relativeArabic(item.createdAt))
+                .font(.system(size: 12, weight: .medium))
+        }
+        .foregroundStyle(SabqTheme.tertiaryInk)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Action button
+
+    private struct ActionDescriptor {
+        let title: String
+        let icon: String
+        let deepLink: NotificationDeepLink
+    }
+
+    private func actionForType() -> ActionDescriptor? {
+        switch item.type {
+        case "published":
+            guard let slug = item.articleSlug, !slug.isEmpty else { return nil }
+            return ActionDescriptor(title: "اقرأ المقال", icon: "doc.text.fill", deepLink: .article(slug: slug))
+        case "needs_revision":
+            guard let id = item.articleId, !id.isEmpty else { return nil }
+            return ActionDescriptor(title: "اطّلع على المسودة", icon: "pencil.and.scribble", deepLink: .draft(id: id))
+        case "scheduled":
+            guard let id = item.articleId, !id.isEmpty else { return nil }
+            return ActionDescriptor(title: "تفاصيل الجدولة", icon: "calendar", deepLink: .draft(id: id))
+        case "rejected", "archived":
+            // No "open article" action — the content is no longer
+            // public. The detail view itself is the destination.
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func actionButton(_ action: ActionDescriptor) -> some View {
+        Button {
+            // Hand the deep link to the singleton so ContentView's
+            // onChange handler routes us to the home tab + the right
+            // surface. Then dismiss the sheet.
+            NotificationsStore.shared.pendingDeepLink = action.deepLink
+            dismiss()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: action.icon)
+                    .font(.system(size: 14, weight: .heavy))
+                Text(action.title)
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func relativeArabic(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        formatter.locale = Locale(identifier: "ar-u-nu-latn")
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

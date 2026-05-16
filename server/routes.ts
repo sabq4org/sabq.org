@@ -6739,6 +6739,34 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         notifySearchEngines(newArticle.slug).catch(() => {});
       }
 
+      // Editorial push notification when an article is created directly
+      // in a published or scheduled state. The PATCH handler covers the
+      // common "draft → scheduled" transition; this branch is for the
+      // less-common "create as published/scheduled in one step" path.
+      // Both routes converge on `notifyArticleStakeholders` so the iOS
+      // delivery + log row are identical.
+      if (newArticle.status === 'scheduled' || newArticle.status === 'published') {
+        const event = newArticle.status === 'scheduled' ? 'scheduled' : 'published';
+        setImmediate(async () => {
+          try {
+            await notifyArticleStakeholders({
+              id: newArticle.id,
+              title: newArticle.title,
+              slug: newArticle.slug,
+              englishSlug: newArticle.englishSlug,
+              articleType: newArticle.articleType,
+              scheduledAt: newArticle.scheduledAt,
+              publishedAt: newArticle.publishedAt,
+              authorId: newArticle.authorId,
+              reporterId: newArticle.reporterId,
+              submitterId: newArticle.submitterId,
+            }, event);
+          } catch (notifyErr: any) {
+            console.error('[CreateArticle Notify] error:', notifyErr?.message || notifyErr);
+          }
+        });
+      }
+
       console.log(`🔍 [CREATE ARTICLE] Article created with status: ${newArticle.status}`);
       console.log(`🔍 [CREATE ARTICLE] Article ID: ${newArticle.id}, Title: ${newArticle.title}`);
       

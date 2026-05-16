@@ -1101,6 +1101,18 @@ export default function ArticlesManagement() {
                                     <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
                                   </div>
                                 )}
+                                {article.status === "archived" && (article as any).reviewNotes && (
+                                  <div
+                                    className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-0.5"
+                                    data-testid={`archive-reason-desktop-${article.id}`}
+                                  >
+                                    <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                    <span>
+                                      <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                                      {(article as any).reviewNotes}
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             </td>
                             <td className="py-3 px-4">
@@ -1263,6 +1275,18 @@ export default function ArticlesManagement() {
                             <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1" data-testid={`published-date-${article.id}`}>
                               <Clock className="h-3 w-3" />
                               <span dir="ltr" className="font-medium">{formatPublishedDate(article.publishedAt)}</span>
+                            </div>
+                          )}
+                          {article.status === "archived" && (article as any).reviewNotes && (
+                            <div
+                              className="text-xs text-red-600 dark:text-red-400 flex items-start gap-1 mt-1"
+                              data-testid={`archive-reason-${article.id}`}
+                            >
+                              <Archive className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                              <span>
+                                <span className="font-semibold">سبب الأرشفة:</span>{" "}
+                                {(article as any).reviewNotes}
+                              </span>
                             </div>
                           )}
                         </div>

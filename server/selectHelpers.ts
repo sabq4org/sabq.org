@@ -90,6 +90,10 @@ export const articleListSelect = {
   reviewStatus: articles.reviewStatus,
   reviewedBy: articles.reviewedBy,
   reviewedAt: articles.reviewedAt,
+  // Editorial note from rejection / archive / needs_revision actions.
+  // Surfaced in the dashboard's "archived" tab so staff can see why a
+  // piece was archived without opening it.
+  reviewNotes: articles.reviewNotes,
   hideFromHomepage: articles.hideFromHomepage,
   aiSummary: articles.aiSummary,
   aiGenerated: articles.aiGenerated,
@@ -168,6 +172,10 @@ export const articleAdminSelect = {
   reviewStatus: articles.reviewStatus,
   reviewedBy: articles.reviewedBy,
   reviewedAt: articles.reviewedAt,
+  // Editorial note from rejection / archive / needs_revision actions.
+  // Surfaced in the dashboard's "archived" tab so staff can see why a
+  // piece was archived without opening it.
+  reviewNotes: articles.reviewNotes,
   hideFromHomepage: articles.hideFromHomepage,
   aiGenerated: articles.aiGenerated,
   isFeatured: articles.isFeatured,
