@@ -465,12 +465,15 @@ struct SettingsView: View {
                 .multilineTextAlignment(.leading)
                 .lineSpacing(5)
 
-            settingsRow(
-                title: "الموقع الإلكتروني",
-                subtitle: "sabq.org",
-                icon: "globe",
-                tint: SabqTheme.primaryEnd
-            )
+            Link(destination: URL(string: "https://sabq.org")!) {
+                settingsRow(
+                    title: "الموقع الإلكتروني",
+                    subtitle: "sabq.org",
+                    icon: "globe",
+                    tint: SabqTheme.primaryEnd
+                )
+            }
+            .buttonStyle(.plain)
 
             Button { showContact = true } label: {
                 settingsRow(
@@ -502,12 +505,15 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
 
-            settingsRow(
-                title: "تويتر",
-                subtitle: "@sababoroad",
-                icon: "at",
-                tint: SabqTheme.sky
-            )
+            Link(destination: URL(string: "https://x.com/sabqorg")!) {
+                settingsRow(
+                    title: "إكس (تويتر)",
+                    subtitle: "@sabqorg",
+                    icon: "at",
+                    tint: SabqTheme.sky
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

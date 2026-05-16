@@ -46,8 +46,17 @@ struct HomeFeedView: View {
                     featuredSection
                         .animatedAppear(index: 3)
 
-                    omqPreviewSection
+                    // Personal "knowledge journey" entry point — only for
+                    // signed-in users. Replaces the OMQ preview that used to
+                    // live here per user direction: a logged-out reader sees
+                    // nothing in this slot.
+                    if authStore.isLoggedIn {
+                        NavigationLink(value: DailyBriefRoute()) {
+                            personalJourneyBlock
+                        }
+                        .buttonStyle(.plain)
                         .animatedAppear(index: 4)
+                    }
 
                     if !calendarToday.isEmpty {
                         calendarTodayCard
@@ -726,6 +735,99 @@ struct HomeFeedView: View {
                 .stroke(tint.opacity(0.18), lineWidth: 0.5)
         )
         .shadow(color: tint.opacity(0.08), radius: 14, x: 0, y: 6)
+    }
+
+    // MARK: - Personal Journey Block (auth-gated)
+
+    /// Personalised "your knowledge journey" entry point — mirrors the web's
+    /// SmartSummaryBlock (`client/src/components/SmartSummaryBlock.tsx`) at a
+    /// minimum-viable level. Shows the time-aware greeting **with the user's
+    /// first name** and a single tap routes to the Daily Brief screen for the
+    /// full breakdown (reading time, completion, likes, comments, top
+    /// interests, AI quick summary).
+    ///
+    /// Gated on `authStore.isLoggedIn` at the call site — this block is the
+    /// signed-in-only replacement for the OMQ preview that used to live here.
+    private var personalJourneyBlock: some View {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let greetingWord: String
+        switch hour {
+        case 5..<12:  greetingWord = "صباح الخير"
+        case 12..<17: greetingWord = "نهارك سعيد"
+        case 17..<21: greetingWord = "مساء الخير"
+        default:      greetingWord = "ليلة سعيدة"
+        }
+
+        let firstName = authStore.currentUser?.firstName?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let personalised = firstName.isEmpty
+            ? greetingWord
+            : "\(greetingWord) يا \(firstName)"
+
+        return HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.55, green: 0.36, blue: 0.92),
+                                SabqTheme.primaryEnd
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 44, height: 44)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(personalised)
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                Text("رحلتك المعرفية في سبق اليوم باختصار")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.55, green: 0.36, blue: 0.92).opacity(0.06),
+                                    SabqTheme.primaryEnd.opacity(0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+        )
+        .shadow(color: SabqTheme.primaryEnd.opacity(0.08), radius: 12, x: 0, y: 5)
     }
 
     /// SABQ-AI-branded headlines for the greeting block. Picked by a stable
