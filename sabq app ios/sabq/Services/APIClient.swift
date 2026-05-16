@@ -665,8 +665,57 @@ actor APIClient {
 
     // MARK: - Newsletter
 
-    func subscribeNewsletter(email: String) async throws {
-        try await postRaw(path: "/newsletter/subscribe", body: ["email": email])
+    /// Subscribe to the smart newsletter. Hits `POST /api/v1/newsletter/subscribe`
+    /// which auto-exempts from CSRF and reuses the same `newsletterSubscriptions`
+    /// + MailerLite pipeline as the web. Server responds 201 on new active
+    /// subscription, 409 with `alreadySubscribed: true` if the email is already
+    /// active — we surface that as `NewsletterAlreadySubscribed` so the UI can
+    /// jump straight to the "manage" state instead of showing an error.
+    func subscribeNewsletter(email: String, firstName: String? = nil) async throws {
+        struct Body: Encodable {
+            let email: String
+            let firstName: String?
+            let language: String
+            let source: String
+        }
+        let body = Body(email: email, firstName: firstName, language: "ar", source: "ios-app")
+        do {
+            try await postRaw(path: "/newsletter/subscribe", body: body)
+        } catch APIError.serverError(let code) where code == 409 {
+            throw NewsletterError.alreadySubscribed
+        }
+    }
+
+    /// Check whether `email` already has an active subscription. Used by the
+    /// NewsletterSheet on appear so the user lands on the right state
+    /// immediately (manage vs subscribe).
+    func checkNewsletterStatus(email: String) async -> Bool {
+        struct Response: Decodable { let subscribed: Bool? }
+        do {
+            let r = try await get(Response.self, path: "/newsletter/status", query: ["email": email])
+            return r.subscribed == true
+        } catch {
+            return false
+        }
+    }
+
+    func unsubscribeNewsletter(email: String, reason: String? = nil) async throws {
+        struct Body: Encodable {
+            let email: String
+            let reason: String?
+        }
+        try await postRaw(path: "/newsletter/unsubscribe", body: Body(email: email, reason: reason))
+    }
+
+    enum NewsletterError: Error, LocalizedError {
+        case alreadySubscribed
+
+        var errorDescription: String? {
+            switch self {
+            case .alreadySubscribed:
+                return "هذا البريد مشترك بالفعل في النشرة. يمكنك إلغاء الاشتراك في أي وقت."
+            }
+        }
     }
 
     // MARK: - Contact

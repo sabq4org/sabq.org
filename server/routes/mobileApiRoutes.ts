@@ -3536,4 +3536,229 @@ router.post("/contact", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// Newsletter (Smart Newsletter for mobile)
+// ==========================================
+// Three thin mobile endpoints that reuse the same `newsletterSubscriptions`
+// table + MailerLite integration as `/api/smart-newsletter/*`. Lives under
+// `/api/v1/*` so iOS bypasses the web's CSRF guard cleanly — same pattern
+// as the /contact migration.
+//
+// We import the MailerLite helpers + welcome/unsubscribe emails dynamically
+// inside each handler so a missing MAILERLITE_API_KEY at boot doesn't break
+// module loading. Subscriptions still persist locally even when MailerLite
+// is offline.
+
+// POST /api/v1/newsletter/subscribe
+router.post("/newsletter/subscribe", async (req: Request, res: Response) => {
+  try {
+    const { newsletterSubscriptions } = await import("@shared/schema");
+    const { z } = await import("zod");
+
+    const schema = z.object({
+      email: z.string().email("البريد الإلكتروني غير صحيح"),
+      firstName: z.string().optional(),
+      language: z.enum(["ar", "en", "ur"]).default("ar"),
+      interests: z.array(z.string()).optional(),
+      source: z.string().optional(),
+    });
+
+    const data = schema.parse(req.body);
+
+    // If a member session is attached, link the subscription to that user.
+    const session = await verifyMemberSession(req);
+    const userId = session?.userId ?? null;
+
+    const [existing] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.email, data.email))
+      .limit(1);
+
+    let subscription;
+    if (existing) {
+      if (existing.status === "active") {
+        return res.status(409).json({
+          success: false,
+          alreadySubscribed: true,
+          message: "هذا البريد مشترك بالفعل في النشرة. يمكنك إلغاء الاشتراك في أي وقت.",
+          subscription: { email: existing.email, language: existing.language },
+        });
+      }
+      [subscription] = await db
+        .update(newsletterSubscriptions)
+        .set({
+          status: "active",
+          language: data.language,
+          userId: userId || existing.userId,
+          preferences: {
+            ...(existing.preferences as object || {}),
+            categories: data.interests || [],
+          },
+          unsubscribedAt: null,
+          unsubscribeReason: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(newsletterSubscriptions.id, existing.id))
+        .returning();
+    } else {
+      const ipRaw = req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
+      const ipAddress = typeof ipRaw === "string" ? ipRaw : Array.isArray(ipRaw) ? ipRaw[0] : null;
+      const userAgent = req.headers["user-agent"] || null;
+
+      [subscription] = await db
+        .insert(newsletterSubscriptions)
+        .values({
+          email: data.email,
+          status: "active",
+          language: data.language,
+          userId,
+          preferences: { frequency: "weekly", categories: data.interests || [] },
+          ipAddress,
+          userAgent,
+          source: data.source || "mobile-app",
+          verifiedAt: new Date(),
+        })
+        .returning();
+    }
+
+    // Best-effort MailerLite sync + welcome email. Never fail the response
+    // on outbound issues — the local subscription is the source of truth.
+    try {
+      const { subscribeToMailerLite, isMailerLiteConfigured } = await import("../services/mailerlite");
+      if (isMailerLiteConfigured()) {
+        await subscribeToMailerLite({
+          email: data.email,
+          firstName: data.firstName,
+          language: data.language,
+          interests: data.interests,
+          source: data.source || "mobile-app",
+        });
+      }
+    } catch (e) {
+      console.warn("[Mobile API] MailerLite sync failed:", e);
+    }
+
+    try {
+      const { sendNewsletterWelcomeEmail } = await import("../services/email");
+      await sendNewsletterWelcomeEmail({
+        to: data.email,
+        firstName: data.firstName,
+        language: data.language,
+        interests: data.interests,
+      });
+    } catch (e) {
+      console.warn("[Mobile API] Welcome email failed:", e);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "أهلاً بك! 🎉 تم اشتراكك في النشرة الذكية بنجاح.",
+      subscription: {
+        id: subscription.id,
+        email: subscription.email,
+        language: subscription.language,
+      },
+    });
+  } catch (error: any) {
+    console.error("[Mobile API] /newsletter/subscribe error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({ success: false, message: "بيانات غير صالحة", errors: error.errors });
+    }
+    res.status(500).json({ success: false, message: "تعذر الاشتراك حالياً. حاول لاحقاً." });
+  }
+});
+
+// GET /api/v1/newsletter/status?email=...
+router.get("/newsletter/status", async (req: Request, res: Response) => {
+  try {
+    const { newsletterSubscriptions } = await import("@shared/schema");
+    const email = typeof req.query.email === "string" ? req.query.email.trim() : "";
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
+    }
+
+    const [sub] = await db
+      .select({
+        email: newsletterSubscriptions.email,
+        status: newsletterSubscriptions.status,
+        language: newsletterSubscriptions.language,
+      })
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.email, email))
+      .limit(1);
+
+    res.json({
+      success: true,
+      subscribed: sub?.status === "active",
+      status: sub?.status || "none",
+      language: sub?.language || null,
+    });
+  } catch (error) {
+    console.error("[Mobile API] /newsletter/status error:", error);
+    res.status(500).json({ success: false, message: "خطأ في فحص الاشتراك" });
+  }
+});
+
+// POST /api/v1/newsletter/unsubscribe
+router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
+  try {
+    const { newsletterSubscriptions } = await import("@shared/schema");
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
+
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, message: "البريد الإلكتروني مطلوب" });
+    }
+
+    const [existing] = await db
+      .select()
+      .from(newsletterSubscriptions)
+      .where(eq(newsletterSubscriptions.email, email))
+      .limit(1);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "لم نجد اشتراكاً بهذا البريد" });
+    }
+
+    await db
+      .update(newsletterSubscriptions)
+      .set({
+        status: "unsubscribed",
+        unsubscribedAt: new Date(),
+        unsubscribeReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(newsletterSubscriptions.id, existing.id));
+
+    // MailerLite + confirmation email — best-effort.
+    try {
+      const { isMailerLiteConfigured, getMailerLiteSubscriber, unsubscribeFromMailerLite } = await import("../services/mailerlite");
+      if (isMailerLiteConfigured()) {
+        const mlSub = await getMailerLiteSubscriber(email);
+        if (mlSub.success && mlSub.data) {
+          await unsubscribeFromMailerLite(mlSub.data.id);
+        }
+      }
+    } catch (e) {
+      console.warn("[Mobile API] MailerLite unsubscribe failed:", e);
+    }
+
+    try {
+      const { sendNewsletterUnsubscribeEmail } = await import("../services/email");
+      await sendNewsletterUnsubscribeEmail({ to: email });
+    } catch (e) {
+      console.warn("[Mobile API] Unsubscribe email failed:", e);
+    }
+
+    res.json({
+      success: true,
+      message: "تم إلغاء اشتراكك. نأمل عودتك قريباً 👋",
+    });
+  } catch (error) {
+    console.error("[Mobile API] /newsletter/unsubscribe error:", error);
+    res.status(500).json({ success: false, message: "تعذر إلغاء الاشتراك حالياً" });
+  }
+});
+
 export default router;
