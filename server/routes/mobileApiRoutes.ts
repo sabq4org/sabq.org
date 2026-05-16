@@ -3761,4 +3761,272 @@ router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// POST /api/v1/articles/submit
+// Mobile content submission. Writers send opinion drafts, reporters send
+// news drafts (multi-image). Both land in `articles` with status='draft'
+// for the editorial team to review on the dashboard.
+//
+// Role-gated via the same RBAC tables surfaced in /members/profile:
+//   Opinion (single hero image):  opinion_author, columnist, article_author,
+//                                  writer, author
+//   News (up to 10 images, first is hero, rest go into albumImages):
+//                                  reporter, correspondent, journalist
+//   Admin / editor roles can submit either by passing `kind`.
+//
+// Images come as base64 data URIs (same shape as /members/profile/image)
+// and are uploaded to Cloudflare Images. The endpoint never re-encodes the
+// image bytes — whatever the client uploaded is what CF Images stores, so
+// quality is fully controlled by the iOS picker.
+// ==========================================
+router.post("/articles/submit", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب لإرسال المحتوى" });
+    }
+
+    const { articles, users: usersTable, userRoles: userRolesTable, roles: rolesTable } = await import("@shared/schema");
+    const { z } = await import("zod");
+
+    const schema = z.object({
+      title: z.string().trim().min(3, "العنوان قصير جداً"),
+      content: z.string().trim().min(20, "النص قصير جداً"),
+      // base64 data URIs ("data:image/jpeg;base64,..."). Optional for the
+      // writer flow because some opinion pieces ship without a hero image —
+      // editorial picks one during review.
+      images: z.array(z.string()).max(10).optional().default([]),
+      // Optional override: lets admins/editors pick the article type.
+      // For writer/reporter roles we derive it from their RBAC roles.
+      kind: z.enum(["opinion", "news"]).optional(),
+    });
+
+    const data = schema.parse(req.body);
+
+    // Load user (for fallback legacy `users.role`) + RBAC role names.
+    const [user] = await db
+      .select({
+        id: usersTable.id,
+        firstName: usersTable.firstName,
+        lastName: usersTable.lastName,
+        email: usersTable.email,
+        legacyRole: usersTable.role,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, session.userId))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+    }
+
+    const rbacRoles = await db
+      .select({ name: rolesTable.name })
+      .from(userRolesTable)
+      .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
+      .where(eq(userRolesTable.userId, session.userId));
+
+    const roleNames = new Set<string>([
+      ...rbacRoles.map(r => (r.name || "").toLowerCase()),
+      (user.legacyRole || "").toLowerCase(),
+    ]);
+
+    const WRITER_ROLES = new Set([
+      "opinion_author",
+      "columnist",
+      "article_author",
+      "article_writer",
+      "writer",
+      "author",
+    ]);
+    const REPORTER_ROLES = new Set([
+      "reporter",
+      "correspondent",
+      "journalist",
+    ]);
+    const ADMIN_LIKE_ROLES = new Set([
+      "admin",
+      "system_admin",
+      "superadmin",
+      "editor",
+      "editor_in_chief",
+      "senior_editor",
+      "managing_editor",
+      "editorial_manager",
+      "content_manager",
+    ]);
+
+    const isWriter = [...roleNames].some(r => WRITER_ROLES.has(r));
+    const isReporter = [...roleNames].some(r => REPORTER_ROLES.has(r));
+    const isAdminLike = [...roleNames].some(r => ADMIN_LIKE_ROLES.has(r));
+
+    if (!isWriter && !isReporter && !isAdminLike) {
+      return res.status(403).json({
+        success: false,
+        message: "صلاحية الإرسال متاحة للكتّاب والمراسلين فقط. تواصل معنا إذا تظن أن هذا خطأ.",
+      });
+    }
+
+    // Decide article kind. Explicit `kind` wins for admin-likes; otherwise
+    // derive from role: writers always submit opinion, reporters always
+    // submit news.
+    let kind: "opinion" | "news";
+    if (data.kind && isAdminLike) {
+      kind = data.kind;
+    } else if (isWriter) {
+      kind = "opinion";
+    } else if (isReporter) {
+      kind = "news";
+    } else {
+      // admin without explicit kind — default to news
+      kind = data.kind || "news";
+    }
+
+    // Image-count rules per the user request:
+    //   Opinion: one hero image at most.
+    //   News: multiple (first = hero, rest = album).
+    const imagePayload = data.images.filter(s => typeof s === "string" && s.length > 0);
+    if (kind === "opinion" && imagePayload.length > 1) {
+      return res.status(400).json({
+        success: false,
+        message: "المقالات الرأي تدعم صورة واحدة فقط.",
+      });
+    }
+
+    // Upload images to CF Images. We treat the order client-side as the
+    // intended display order: index 0 → hero, the rest → albumImages[].
+    const uploadedUrls: string[] = [];
+    if (imagePayload.length > 0) {
+      if (!cloudflareImagesService.isCloudflareConfigured()) {
+        return res.status(502).json({ success: false, message: "خدمة رفع الصور غير مهيأة حالياً" });
+      }
+
+      for (let i = 0; i < imagePayload.length; i++) {
+        const src = imagePayload[i];
+        const matches = src.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
+        if (!matches) {
+          return res.status(400).json({
+            success: false,
+            message: `صيغة الصورة ${i + 1} غير صحيحة`,
+          });
+        }
+        const mimeType = `image/${matches[1].toLowerCase() === "heif" ? "heic" : matches[1].toLowerCase()}`;
+        const buffer = Buffer.from(matches[2], "base64");
+
+        // 20 MB per image cap — CF Images max is 10 MB for free, 20 MB Pro;
+        // we leave the actual upper bound to CF but stop egregiously large
+        // payloads early.
+        if (buffer.length > 20 * 1024 * 1024) {
+          return res.status(413).json({
+            success: false,
+            message: `حجم الصورة ${i + 1} كبير جداً (الحد الأقصى 20 ميجابايت)`,
+          });
+        }
+
+        const result = await cloudflareImagesService.uploadToCloudflare(
+          buffer,
+          `submission-${session.userId}-${Date.now()}-${i}.${matches[1]}`,
+          { type: "mobile-article-submission", userId: session.userId, slot: String(i) },
+          mimeType
+        );
+
+        if (!result.success || !result.deliveryUrl) {
+          console.error("[Mobile API] /articles/submit CF Images upload failed:", result.error);
+          return res.status(502).json({
+            success: false,
+            message: `تعذر رفع الصورة ${i + 1}. حاول لاحقاً.`,
+          });
+        }
+
+        uploadedUrls.push(result.deliveryUrl);
+      }
+    }
+
+    const heroImage = uploadedUrls[0] || null;
+    const albumImages = uploadedUrls.length > 1 ? uploadedUrls.slice(1) : [];
+
+    // Slug generation mirrors the email-agent pattern: arabic-safe lowercase
+    // + timestamp for uniqueness.
+    const baseSlug = data.title
+      .toLowerCase()
+      .trim()
+      .replace(/[\s_]+/g, "-")
+      .replace(/[^؀-ۿa-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const slug = `${baseSlug || "submission"}-${Date.now()}`;
+    const { nanoid } = await import("nanoid");
+    const englishSlug = nanoid(7);
+
+    const articleData: any = {
+      title: data.title.trim(),
+      slug,
+      englishSlug,
+      content: data.content,
+      // Editorial team enriches excerpt during review; we just store the
+      // first 220 chars as a starting point.
+      excerpt: data.content
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220),
+      authorId: session.userId,
+      submitterId: session.userId,
+      reporterId: kind === "news" ? session.userId : null,
+      articleType: kind,
+      newsType: "regular",
+      status: "draft",
+      imageUrl: heroImage,
+      albumImages,
+      source: "ios-app",
+      sourceInfo: {
+        channel: "mobile-app",
+        platform: "ios",
+        submittedBy: user.email || user.id,
+      },
+      sourceMetadata: {
+        type: "mobile",
+        platform: "ios",
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+      },
+      hideFromHomepage: false,
+      displayOrder: Math.floor(Date.now() / 1000),
+      createdAt: new Date(),
+    };
+
+    const [created] = await db.insert(articles).values(articleData).returning();
+
+    console.log(
+      `[Mobile API] /articles/submit — ${kind} draft created by ${user.email || session.userId} ` +
+      `(id=${created?.id}, images=${uploadedUrls.length})`
+    );
+
+    res.status(201).json({
+      success: true,
+      message: kind === "opinion"
+        ? "تم استلام مقالتك بنجاح ✨ ستراجعها هيئة التحرير وسيصلك إشعار بالبريد عند النشر."
+        : "وصل خبرك إلى غرفة الأخبار 📰 سيراجعه فريق التحرير وسيصلك إشعار بالبريد عند النشر أو الجدولة.",
+      article: {
+        id: created.id,
+        title: created.title,
+        slug: created.slug,
+        kind,
+        status: created.status,
+        imagesUploaded: uploadedUrls.length,
+      },
+    });
+  } catch (error: any) {
+    console.error("[Mobile API] /articles/submit error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({
+        success: false,
+        message: "بيانات غير صالحة",
+        errors: error.errors,
+      });
+    }
+    res.status(500).json({ success: false, message: "تعذر إرسال المحتوى. حاول لاحقاً." });
+  }
+});
+
 export default router;

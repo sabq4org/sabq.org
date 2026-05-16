@@ -718,6 +718,80 @@ actor APIClient {
         }
     }
 
+    // MARK: - Article Submission (writers + reporters)
+
+    /// Submit an article (opinion) or news (with multi-image) draft. Hits
+    /// `POST /api/v1/articles/submit` which lands in `articles` with
+    /// `status='draft'` for editorial review. The backend derives the article
+    /// kind from the user's RBAC roles; admin-likes can override via `kind`.
+    ///
+    /// Images are sent as base64 data URIs in the **original byte order from
+    /// the picker** — index 0 becomes the hero image, the rest go into
+    /// `albumImages[]`. We do not re-encode pixels here; whatever the picker
+    /// hands us is what CF Images stores, preserving user-perceived quality.
+    func submitArticleDraft(
+        title: String,
+        content: String,
+        kind: ArticleSubmissionKind,
+        imageData: [Data]
+    ) async throws -> ArticleSubmissionResponse {
+        struct Body: Encodable {
+            let title: String
+            let content: String
+            let kind: String
+            let images: [String]
+        }
+
+        let dataURIs: [String] = imageData.compactMap { data in
+            guard !data.isEmpty else { return nil }
+            let mime = Self.detectImageMimeType(data) ?? "image/jpeg"
+            return "data:\(mime);base64,\(data.base64EncodedString())"
+        }
+
+        let body = Body(
+            title: title,
+            content: content,
+            kind: kind.rawValue,
+            images: dataURIs
+        )
+
+        return try await post(
+            ArticleSubmissionResponse.self,
+            path: "/articles/submit",
+            body: body
+        )
+    }
+
+    /// Best-effort MIME sniff for the picker output. PNG / JPEG / WebP / GIF
+    /// / HEIC all have stable magic bytes at offset 0 (HEIC is the ftyp box
+    /// with brand "heic"/"mif1" — close enough that CF Images accepts it).
+    private static func detectImageMimeType(_ data: Data) -> String? {
+        guard data.count >= 12 else { return nil }
+        let bytes = [UInt8](data.prefix(12))
+        // PNG: 89 50 4E 47
+        if bytes[0] == 0x89, bytes[1] == 0x50, bytes[2] == 0x4E, bytes[3] == 0x47 {
+            return "image/png"
+        }
+        // JPEG: FF D8 FF
+        if bytes[0] == 0xFF, bytes[1] == 0xD8, bytes[2] == 0xFF {
+            return "image/jpeg"
+        }
+        // WebP: RIFF....WEBP
+        if bytes[0] == 0x52, bytes[1] == 0x49, bytes[2] == 0x46, bytes[3] == 0x46,
+           bytes[8] == 0x57, bytes[9] == 0x45, bytes[10] == 0x42, bytes[11] == 0x50 {
+            return "image/webp"
+        }
+        // GIF: GIF87a / GIF89a
+        if bytes[0] == 0x47, bytes[1] == 0x49, bytes[2] == 0x46 {
+            return "image/gif"
+        }
+        // HEIC: 'ftyp' box at offset 4 with major brand 'heic'/'heix'/'mif1'
+        if bytes[4] == 0x66, bytes[5] == 0x74, bytes[6] == 0x79, bytes[7] == 0x70 {
+            return "image/heic"
+        }
+        return nil
+    }
+
     // MARK: - Contact
 
     /// Submit a contact-form message. Mirrors the web /contact form: all five
@@ -921,6 +995,88 @@ actor APIClient {
             default:  throw APIError.serverError(http.statusCode)
             }
         }
+    }
+}
+
+// MARK: - Article submission types
+
+enum ArticleSubmissionKind: String, Codable, Identifiable {
+    case opinion
+    case news
+
+    var id: String { rawValue }
+}
+
+struct ArticleSubmissionResponse: Decodable {
+    let success: Bool
+    let message: String
+    let article: SubmittedArticle?
+
+    struct SubmittedArticle: Decodable {
+        let id: String
+        let title: String
+        let slug: String?
+        let kind: String
+        let status: String
+        let imagesUploaded: Int?
+    }
+}
+
+// MARK: - APIUser role helpers
+
+extension APIUser {
+    /// Canonical role identifiers the writer-submission flow honours.
+    static let writerRoleIdentifiers: Set<String> = [
+        "opinion_author",
+        "columnist",
+        "article_author",
+        "article_writer",
+        "writer",
+        "author",
+    ]
+
+    /// Canonical role identifiers the reporter-submission flow honours.
+    static let reporterRoleIdentifiers: Set<String> = [
+        "reporter",
+        "correspondent",
+        "journalist",
+    ]
+
+    static let adminLikeRoleIdentifiers: Set<String> = [
+        "admin",
+        "system_admin",
+        "superadmin",
+        "editor",
+        "editor_in_chief",
+        "senior_editor",
+        "managing_editor",
+        "editorial_manager",
+        "content_manager",
+    ]
+
+    private var allRoleKeys: [String] {
+        var keys: [String] = []
+        if let r = role { keys.append(r.lowercased()) }
+        keys.append(contentsOf: roles.map { $0.lowercased() })
+        return keys
+    }
+
+    var isWriter: Bool {
+        allRoleKeys.contains { APIUser.writerRoleIdentifiers.contains($0) }
+    }
+
+    var isReporter: Bool {
+        allRoleKeys.contains { APIUser.reporterRoleIdentifiers.contains($0) }
+    }
+
+    var isAdminLike: Bool {
+        allRoleKeys.contains { APIUser.adminLikeRoleIdentifiers.contains($0) }
+    }
+
+    /// True when the user has a role that lets them submit content from the
+    /// mobile app — surfaces the submission card in settings.
+    var canSubmitContent: Bool {
+        isWriter || isReporter || isAdminLike
     }
 }
 

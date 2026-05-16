@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var showChangePassword = false
     @State private var showDeleteAccount = false
     @State private var showForgotPassword = false
+    @State private var submissionKind: ArticleSubmissionKind?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -68,6 +69,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordSheet()
+        }
+        .sheet(item: $submissionKind) { kind in
+            ArticleSubmissionView(kind: kind)
         }
     }
 
@@ -203,6 +207,12 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
                     }
 
+                    // Role-gated submission cards. Visible only when the
+                    // signed-in user has writer / reporter / admin-like
+                    // roles. Writers see opinion submission, reporters see
+                    // news submission, admin-likes see both.
+                    submissionCards(for: user)
+
                     accountActionsSection
                 }
             } else {
@@ -267,6 +277,96 @@ struct SettingsView: View {
                     .font(.system(size: size * 0.38, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
+    }
+
+    // MARK: - Submission cards (writers + reporters)
+
+    /// Renders the "send to editorial" entry-point cards inside the profile
+    /// section. Visibility is role-gated:
+    /// - Writers (opinion_author / columnist / article_author / writer /
+    ///   author): "إرسال مقالة للنشر"
+    /// - Reporters (reporter / correspondent / journalist): "إرسال خبر"
+    /// - Admin / editor roles see both — they may submit either kind.
+    /// Regular readers see nothing.
+    @ViewBuilder
+    private func submissionCards(for user: APIUser) -> some View {
+        let writerVisible = user.isWriter || user.isAdminLike
+        let reporterVisible = user.isReporter || user.isAdminLike
+
+        if writerVisible || reporterVisible {
+            VStack(spacing: 10) {
+                if writerVisible {
+                    submissionCard(
+                        title: "إرسال مقالة للنشر",
+                        subtitle: "اكتب رأيك أو مقالتك وسنراجعها للنشر",
+                        icon: "square.and.pencil",
+                        tint: SabqTheme.primaryEnd
+                    ) {
+                        submissionKind = .opinion
+                    }
+                }
+                if reporterVisible {
+                    submissionCard(
+                        title: "إرسال خبر",
+                        subtitle: "أرسل خبرك مع الصور — يصل لغرفة الأخبار",
+                        icon: "newspaper.fill",
+                        tint: SabqTheme.coral
+                    ) {
+                        submissionKind = .news
+                    }
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private func submissionCard(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(tint.opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text(subtitle)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .fill(tint.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .stroke(tint.opacity(0.20), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
