@@ -18,7 +18,8 @@ import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlo
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
 import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
-import { PassportTrustBadge } from "@/components/passport/PassportTrustBadge";
+// PassportTrustBadge removed from this page on 2026-05-16 (user request).
+// Kept import out so esbuild doesn't pull the component into the bundle.
 import { ImageWithCaption } from "@/components/ImageWithCaption";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { InfographicDetail } from "@/components/InfographicDetail";
@@ -1077,11 +1078,18 @@ export default function ArticleDetail() {
                     {article.category.icon} {article.category.nameAr}
                   </Badge>
                 )}
-                <PassportTrustBadge slug={slug!} language="ar" />
+                {/*
+                  Per user 2026-05-16:
+                  - "جواز المحتوى" (DigitalPassportButton) sits immediately
+                    after the category badge. Dropped the `ms-auto` that
+                    previously pushed it to the opposite end of the row.
+                  - "موثق" (PassportTrustBadge) is removed from the web
+                    surface entirely — kept only inside the iOS app.
+                */}
                 <DigitalPassportButton
                   slug={slug!}
                   language="ar"
-                  className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none ms-auto"
+                  className="!min-h-0 !h-auto !py-0.5 !px-2.5 !text-xs !font-semibold !gap-1 !rounded-md [&_svg]:!size-3 !shadow-none"
                 />
                 {article.newsType === 'breaking' && (
                   <Badge className="bg-red-600 hover:bg-red-700 text-white border-red-600 gap-1" data-testid="badge-article-urgent">
