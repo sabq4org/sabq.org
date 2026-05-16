@@ -4242,6 +4242,15 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       .where(eq(pushDevices.deviceToken, data.token))
       .limit(1);
 
+    // Defensive truncation. The `push_devices.locale` column is varchar(10);
+    // some iOS versions return a fully-qualified locale identifier like
+    // "ar_SA@calendar=gregorian;numbers=latn" that overflows it. We only
+    // need the language tag for routing — strip everything past `_` /  `@`.
+    const safeLocale = (data.locale || "ar")
+      .replace(/@.*/, "")
+      .replace(/_.*$/, "")
+      .slice(0, 10);
+
     const baseValues = {
       userId: session.userId,
       tokenProvider: data.provider,
@@ -4249,7 +4258,7 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       deviceName: data.deviceName,
       osVersion: data.osVersion,
       appVersion: data.appVersion,
-      locale: data.locale || "ar",
+      locale: safeLocale,
       timezone: data.timezone,
       isActive: true,
       lastActiveAt: new Date(),

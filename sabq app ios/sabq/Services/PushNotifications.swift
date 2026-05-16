@@ -58,6 +58,13 @@ final class NotificationsStore {
     /// duplicate rows. Silently no-ops when the user isn't signed in.
     func registerWithBackend(token: String) async {
         do {
+            // Use just the BCP-47 language code (e.g. "ar", "en") so the value
+            // fits in the backend's `push_devices.locale varchar(10)` column.
+            // Locale.current.identifier on iOS 16+ can be as long as
+            // "ar_SA@calendar=gregorian;numbers=latn" which overflowed the
+            // column and produced a Postgres 22001 error on registration.
+            let langCode = Locale.current.language.languageCode?.identifier ?? "ar"
+
             try await APIClient.shared.registerPushToken(
                 token: token,
                 provider: "apns",
@@ -65,7 +72,7 @@ final class NotificationsStore {
                 deviceName: await UIDevice.current.name,
                 osVersion: await UIDevice.current.systemVersion,
                 appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                locale: Locale.current.identifier,
+                locale: langCode,
                 timezone: TimeZone.current.identifier
             )
             print("[Push] APNs token registered with backend")
