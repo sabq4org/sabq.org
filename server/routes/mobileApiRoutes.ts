@@ -4540,6 +4540,53 @@ router.post("/notifications/read-all", async (req: Request, res: Response) => {
   }
 });
 
+// DELETE /api/v1/notifications/:id — remove a single editorial notification.
+// Powers the swipe-to-delete row action in the iOS notifications screen.
+// Scoped to the session user so one writer can't delete another's entries.
+router.delete("/notifications/:id", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "معرّف الإشعار مطلوب" });
+    }
+    const { editorialNotifications } = await import("@shared/schema");
+    await db
+      .delete(editorialNotifications)
+      .where(and(
+        eq(editorialNotifications.id, id),
+        eq(editorialNotifications.userId, session.userId),
+      ));
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /notifications/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذر حذف الإشعار" });
+  }
+});
+
+// DELETE /api/v1/notifications — wipe every editorial notification for the
+// session user. Backs the "مسح كل الإشعارات" footer button on iOS so
+// writers don't accumulate months of history.
+router.delete("/notifications", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const { editorialNotifications } = await import("@shared/schema");
+    await db
+      .delete(editorialNotifications)
+      .where(eq(editorialNotifications.userId, session.userId));
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /notifications error:", error);
+    res.status(500).json({ success: false, message: "تعذر مسح الإشعارات" });
+  }
+});
+
 router.get("/notifications/preferences", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);

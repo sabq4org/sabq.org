@@ -19,6 +19,7 @@ struct EditorialNotificationsView: View {
     /// The sheet works the same regardless of how we got to this screen
     /// (settings → notifications, or header bell → notifications).
     @State private var selectedNotification: APIEditorialNotification?
+    @State private var showClearAllConfirm: Bool = false
 
     enum LoadState {
         case loading, loaded, failed(String)
@@ -82,18 +83,106 @@ struct EditorialNotificationsView: View {
             if items.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        if unreadCount > 0 { markAllReadButton }
-                        ForEach(items) { item in
-                            notificationRow(item)
-                        }
+                // List (with .swipeActions) instead of LazyVStack so each
+                // row gets a native swipe-to-delete handle. We aggressively
+                // strip List's default chrome to keep the same visual rhythm
+                // (no separators, no inset background, custom row padding).
+                List {
+                    if unreadCount > 0 {
+                        markAllReadButton
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 40)
+
+                    ForEach(items) { item in
+                        notificationRow(item)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    Task { await deleteNotification(item) }
+                                } label: {
+                                    Label("حذف", systemImage: "trash.fill")
+                                }
+                            }
+                    }
+
+                    clearAllFooter
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 40, trailing: 16))
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(SabqTheme.background)
             }
+        }
+    }
+
+    private var clearAllFooter: some View {
+        Button {
+            showClearAllConfirm = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "trash")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("مسح كل الإشعارات")
+                    .font(.system(size: 13, weight: .bold))
+            }
+            .foregroundStyle(SabqTheme.coral)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.coral.opacity(0.08))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(SabqTheme.coral.opacity(0.22), lineWidth: 0.6)
+            )
+        }
+        .buttonStyle(.plain)
+        .alert("مسح كل الإشعارات؟", isPresented: $showClearAllConfirm) {
+            Button("مسح", role: .destructive) { Task { await clearAll() } }
+            Button("إلغاء", role: .cancel) { }
+        } message: {
+            Text("سيتم حذف سجلّ إشعاراتك التحريرية بالكامل. لا يمكن التراجع عن هذه الخطوة.")
+        }
+    }
+
+    @MainActor
+    private func deleteNotification(_ item: APIEditorialNotification) async {
+        // Optimistic remove — drop from UI immediately, then send the
+        // request. If it fails we restore the row and the next manual
+        // refresh reconciles with the server.
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let removed = items.remove(at: index)
+        if removed.readAt == nil {
+            unreadCount = max(0, unreadCount - 1)
+            NotificationsStore.shared.unreadCount = max(0, NotificationsStore.shared.unreadCount - 1)
+        }
+        do {
+            try await APIClient.shared.deleteEditorialNotification(id: item.id)
+        } catch {
+            items.insert(removed, at: index)
+            if removed.readAt == nil { unreadCount += 1 }
+        }
+    }
+
+    @MainActor
+    private func clearAll() async {
+        let snapshot = items
+        let snapshotUnread = unreadCount
+        items = []
+        unreadCount = 0
+        NotificationsStore.shared.unreadCount = 0
+        do {
+            try await APIClient.shared.deleteAllEditorialNotifications()
+        } catch {
+            items = snapshot
+            unreadCount = snapshotUnread
         }
     }
 

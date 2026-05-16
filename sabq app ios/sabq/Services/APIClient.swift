@@ -193,6 +193,17 @@ actor APIClient {
         }
     }
 
+    func deleteRaw(path: String, apiRoot: String? = nil) async throws {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        applyHeaders(&request)
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
+        }
+    }
+
     func patch<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
         let url = try buildURL(path: path)
         var request = URLRequest(url: url)
@@ -735,6 +746,14 @@ actor APIClient {
 
     func markAllEditorialNotificationsRead() async throws {
         try await postRaw(path: "/notifications/read-all")
+    }
+
+    func deleteEditorialNotification(id: String) async throws {
+        try await deleteRaw(path: "/notifications/\(id)")
+    }
+
+    func deleteAllEditorialNotifications() async throws {
+        try await deleteRaw(path: "/notifications")
     }
 
     func fetchNotificationPreferences() async throws -> EditorialNotificationPreferences {
