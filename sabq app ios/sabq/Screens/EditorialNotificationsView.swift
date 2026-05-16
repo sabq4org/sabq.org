@@ -113,8 +113,8 @@ struct EditorialNotificationsView: View {
 
     private var markAllReadButton: some View {
         Button {
-            Task {
-                try? await APIClient.shared.markAllNotificationsRead()
+            Task { @MainActor in
+                try? await APIClient.shared.markAllEditorialNotificationsRead()
                 await load()
             }
         } label: {
@@ -216,7 +216,7 @@ struct EditorialNotificationsView: View {
 
     @MainActor
     private func handleTap(_ item: APIEditorialNotification) async {
-        try? await APIClient.shared.markNotificationRead(id: item.id)
+        try? await APIClient.shared.markEditorialNotificationRead(id: item.id)
         if let link = item.deepLink, let url = URL(string: link) {
             // Hand the deep link to the store so whichever view the user
             // bounces back to can route accordingly (same path the system

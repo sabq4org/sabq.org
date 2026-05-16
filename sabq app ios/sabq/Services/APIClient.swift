@@ -713,16 +713,19 @@ actor APIClient {
 
     /// Latest 50 editorial notifications (scheduled/published/rejected/
     /// needs_revision) for the signed-in user, newest first. Used by the
-    /// in-app NotificationsView.
+    /// in-app NotificationsView. Renamed from the generic `notifications`
+    /// path-set to avoid clashing with the older `markNotificationRead`
+    /// pair that powers the bell icon — these editorial helpers wrap a
+    /// completely different DB table on the backend.
     func fetchEditorialNotifications() async throws -> EditorialNotificationsPage {
         try await get(EditorialNotificationsPage.self, path: "/notifications")
     }
 
-    func markNotificationRead(id: String) async throws {
+    func markEditorialNotificationRead(id: String) async throws {
         try await postRaw(path: "/notifications/\(id)/read")
     }
 
-    func markAllNotificationsRead() async throws {
+    func markAllEditorialNotificationsRead() async throws {
         try await postRaw(path: "/notifications/read-all")
     }
 
