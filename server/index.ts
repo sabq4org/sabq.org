@@ -903,13 +903,30 @@ if (!(globalThis as any).__sabqServer) {
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-      console.error(`[Server] Error: ${status} - ${message}`, err);
-      
+
+      // Enriched 5xx logging so we can group failures by endpoint + crawler
+      // in the GSC recovery work. Logs go to Railway stdout (`[5xx]` prefix
+      // is greppable). The previous one-line log buried path + UA + stack
+      // on a single line, making patterns invisible. This shape lets us
+      // run `grep "\\[5xx\\]" railway.log | jq` to bucket failures.
+      if (status >= 500) {
+        const ua = (req.headers["user-agent"] as string | undefined) || "";
+        const isBot =
+          /googlebot|bingbot|duckduckbot|baiduspider|yandex|applebot|facebookexternalhit|twitterbot|whatsapp/i.test(ua);
+        console.error(
+          `[5xx] ${req.method} ${req.originalUrl} status=${status} bot=${isBot} msg=${JSON.stringify(message)} ua=${JSON.stringify(ua.slice(0, 120))} stack=${JSON.stringify((err.stack || "").split("\n").slice(0, 3).join(" | "))}`
+        );
+      } else {
+        // Sub-500 errors keep the old one-line log; they're not what GSC
+        // counts under "Server error".
+        console.error(`[Server] Error: ${status} - ${message}`, err);
+      }
+
       const urlPath = req.path;
       if (urlPath.startsWith('/assets/') || urlPath.endsWith('.js') || urlPath.endsWith('.css') || urlPath.endsWith('.map')) {
         return res.status(status).type('text/plain').send('Server error');
       }
-      
+
       if (req.path.startsWith('/api/') || req.headers.accept?.includes('application/json')) {
         if (process.env.NODE_ENV === 'production' && status >= 500) {
           res.status(status).json({ message: 'خطأ داخلي في الخادم', code: 'INTERNAL_SERVER_ERROR' });

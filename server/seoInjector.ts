@@ -1247,6 +1247,46 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
     const seoData = await resolveSeoData(route, baseUrl);
 
     if (!seoData) {
+      // For article-shaped routes, an unknown slug is a real 404 (the
+      // article was deleted or never existed). Previously we fell through
+      // to `next()` which served the SPA shell with HTTP 200 — Google
+      // recorded those as Soft 404 and kept them in the index for months.
+      // Returning a real 404 status here gets them removed in weeks
+      // instead. This is the single biggest lever against the 57K
+      // "Not found (404)" backlog in GSC (2026-05-16 audit).
+      const ARTICLE_LIKE = new Set([
+        "article", "opinion", "en-article", "ur-article",
+        "keyword", "keyword-en", "reporter", "reporter-en",
+        "muqtarab", "omq", "world-day", "category", "category-localized",
+      ]);
+      if (ARTICLE_LIKE.has(route.type)) {
+        console.log(`[SEO/404] Unknown ${route.type}: ${route.slug || pathname} — returning 404`);
+        try {
+          const template = await getTemplate();
+          const notFoundSeo: SeoData = {
+            title: "الصفحة غير موجودة | سبق",
+            description: "الصفحة التي تبحث عنها غير موجودة أو تم حذفها.",
+            canonicalUrl: `${baseUrl}${pathname}`,
+            ogType: "website",
+            ogImage: `${baseUrl}/branding/sabq-og-image.png`,
+            ogLocale: "ar_SA",
+            ogSiteName: "صحيفة سبق الإلكترونية",
+            twitterSite: "@sabq",
+            robots: "noindex, follow",
+          };
+          const html = injectSeoIntoHtml(template, notFoundSeo);
+          res.setHeader("Cache-Control", "private, no-store");
+          res.status(404).type("text/html").send(html);
+          return;
+        } catch (err) {
+          // Template load failed — degrade to minimal 404 body.
+          res.setHeader("Cache-Control", "private, no-store");
+          res.status(404).type("text/html").send(
+            '<!DOCTYPE html><html lang="ar"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>404 — سبق</title></head><body><h1>404</h1></body></html>'
+          );
+          return;
+        }
+      }
       console.log(`[SEO] No data found for ${route.type}: ${route.slug}`);
       return next();
     }
