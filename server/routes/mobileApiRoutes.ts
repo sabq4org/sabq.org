@@ -3457,4 +3457,83 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// POST /api/v1/contact
+// Mobile contact form. Mirrors the web /api/contact handler exactly: same
+// Zod schema, same `contactMessages` insert, same MailerSend notification.
+// Lives under /api/v1/* so it is automatically exempt from CSRF (the web
+// route is CSRF-gated and would 403 mobile clients that have no session
+// cookie or `x-csrf-token` header).
+// ==========================================
+router.post("/contact", async (req: Request, res: Response) => {
+  try {
+    const { contactMessages } = await import("@shared/schema");
+    const { z } = await import("zod");
+
+    const contactSchema = z.object({
+      name: z.string().min(2),
+      phone: z.string().regex(/^\+966[0-9]{9}$/),
+      email: z.string().email(),
+      subject: z.enum(["استفسار عام", "شراكات إعلامية", "شكوى", "اقتراح", "أخرى"]),
+      message: z.string().min(10),
+      attachments: z.array(z.object({
+        name: z.string(),
+        size: z.number(),
+        type: z.string(),
+        url: z.string(),
+      })).optional().default([]),
+    });
+
+    const validated = contactSchema.parse(req.body);
+
+    const [newMessage] = await db
+      .insert(contactMessages)
+      .values({
+        name: validated.name,
+        phone: validated.phone,
+        email: validated.email,
+        subject: validated.subject,
+        message: validated.message,
+        attachments: validated.attachments,
+        status: "pending",
+      })
+      .returning();
+
+    // Email notification to info@sabq.org — best-effort, never fails the
+    // request. Same MailerSend template the web route uses (kept inline so
+    // a future template tweak only happens in one place: that file).
+    try {
+      const { MailerSend, EmailParams, Sender, Recipient } = await import("mailersend");
+      const mailerSend = new MailerSend({ apiKey: process.env.MAILERSEND_API_KEY || "" });
+      const attachmentsList = validated.attachments.length > 0
+        ? `<div style="margin-top:16px;padding:12px;background:#f5f5f5;border-radius:8px;"><strong>المرفقات:</strong><ul style="margin:8px 0 0 0;padding-right:20px;">${validated.attachments.map(a => `<li><a href="https://sabq.org${a.url}">${a.name}</a></li>`).join("")}</ul></div>`
+        : "";
+      const html = `<div dir="rtl" style="font-family:Segoe UI,Tahoma,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:24px;border-radius:12px 12px 0 0;"><h1 style="color:#fff;margin:0;font-size:24px;">📩 رسالة جديدة من نموذج التواصل (تطبيق الجوال)</h1></div><div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;width:120px;"><strong>الاسم:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.name}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>البريد:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;"><a href="mailto:${validated.email}">${validated.email}</a></td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الهاتف:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;" dir="ltr">${validated.phone}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الموضوع:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.subject}</td></tr></table><div style="margin-top:20px;"><strong style="color:#666;">نص الرسالة:</strong><div style="margin-top:12px;padding:16px;background:#f8f9fa;border-radius:8px;border-right:4px solid #0d6efd;white-space:pre-wrap;">${validated.message}</div></div>${attachmentsList}<div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color:#0d6efd;">عرض في لوحة التحكم</a></div></div></div>`;
+
+      const params = new EmailParams()
+        .setFrom(new Sender("sabqai@sabq.org", "نموذج التواصل - سبق"))
+        .setTo([new Recipient("info@sabq.org", "فريق سبق")])
+        .setSubject(`رسالة جديدة (تطبيق): ${validated.subject} - من ${validated.name}`)
+        .setHtml(html);
+
+      await mailerSend.email.send(params);
+      console.log("[Mobile API] /contact email notification sent");
+    } catch (emailError) {
+      console.error("[Mobile API] /contact email notify failed:", emailError);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "تم استلام رسالتك بنجاح",
+      id: newMessage.id,
+    });
+  } catch (error: any) {
+    console.error("[Mobile API] /contact error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({ success: false, message: "بيانات غير صالحة", errors: error.errors });
+    }
+    res.status(500).json({ success: false, message: "حدث خطأ أثناء حفظ الرسالة" });
+  }
+});
+
 export default router;

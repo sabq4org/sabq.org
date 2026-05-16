@@ -482,6 +482,26 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
 
+            NavigationLink(destination: PrivacyPolicyView()) {
+                settingsRow(
+                    title: "سياسة الخصوصية",
+                    subtitle: "كيف نحمي بياناتك",
+                    icon: "shield.lefthalf.filled",
+                    tint: SabqTheme.leaf
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(destination: TermsOfUseView()) {
+                settingsRow(
+                    title: "الشروط والأحكام",
+                    subtitle: "شروط استخدام التطبيق",
+                    icon: "doc.text.fill",
+                    tint: SabqTheme.sky
+                )
+            }
+            .buttonStyle(.plain)
+
             settingsRow(
                 title: "تويتر",
                 subtitle: "@sababoroad",
@@ -864,10 +884,15 @@ struct ContactSheet: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    // Outer column: page header → contact-method cards →
+                    // (visual gap) → form card. The form lives inside its
+                    // own SurfaceCard with a separate SectionHeader so it
+                    // reads as a distinct "send a message" surface, clearly
+                    // separated from the quick-channel cards above.
+                    VStack(alignment: .leading, spacing: 24) {
                         SectionHeader(
                             title: "تواصل معنا",
-                            subtitle: "أرسل لنا رسالتك وسنرد عليك في أقرب وقت",
+                            subtitle: "اختر طريقة التواصل الأنسب لك",
                             icon: "envelope.fill",
                             tint: SabqTheme.teal
                         )
@@ -876,61 +901,77 @@ struct ContactSheet: View {
                         // web /contact page. Tapping opens WhatsApp / Mail.
                         contactMethodCards
 
+                        // Extra breathing room above the form so the cards
+                        // feel like their own row, not a header for the form.
+                        Color.clear.frame(height: 8)
+
                         if isSent {
-                            EmptyStateView(
-                                icon: "checkmark.circle.fill",
-                                tint: SabqTheme.leaf,
-                                title: "تم استلام رسالتك",
-                                subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
-                            )
-                        } else {
-                            VStack(spacing: 16) {
-                                if let errorMessage {
-                                    errorBanner(errorMessage)
-                                        .id(Field.errorBanner)
-                                }
-
-                                labeledField(
-                                    label: "الاسم الكامل",
-                                    placeholder: "أدخل اسمك الكامل",
-                                    text: $name,
-                                    field: .name
+                            SurfaceCard(accent: SabqTheme.leaf) {
+                                EmptyStateView(
+                                    icon: "checkmark.circle.fill",
+                                    tint: SabqTheme.leaf,
+                                    title: "تم استلام رسالتك",
+                                    subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
                                 )
-                                .id(Field.name)
-
-                                labeledField(
-                                    label: "رقم الهاتف",
-                                    placeholder: "+966500000000",
-                                    text: $phone,
-                                    keyboard: .phonePad,
-                                    disableAutocap: true,
-                                    field: .phone
-                                )
-                                .id(Field.phone)
-
-                                labeledField(
-                                    label: "البريد الإلكتروني",
-                                    placeholder: "example@email.com",
-                                    text: $email,
-                                    keyboard: .emailAddress,
-                                    disableAutocap: true,
-                                    field: .email
-                                )
-                                .id(Field.email)
-
-                                subjectPicker
-                                    .id(Field.subject)
-
-                                messageEditor
-                                    .id(Field.message)
-
-                                sendButton
-
-                                // Trailing spacer so the message editor's
-                                // bottom edge can clear the keyboard when
-                                // the user focuses it near the bottom.
-                                Color.clear.frame(height: 80)
                             }
+                        } else {
+                            SurfaceCard(accent: SabqTheme.primaryEnd) {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    SectionHeader(
+                                        title: "أرسل رسالة",
+                                        subtitle: "املأ النموذج وسنرد عليك في أقرب وقت",
+                                        icon: "square.and.pencil",
+                                        tint: SabqTheme.primaryEnd
+                                    )
+
+                                    if let errorMessage {
+                                        errorBanner(errorMessage)
+                                            .id(Field.errorBanner)
+                                    }
+
+                                    labeledField(
+                                        label: "الاسم الكامل",
+                                        placeholder: "أدخل اسمك الكامل",
+                                        text: $name,
+                                        field: .name
+                                    )
+                                    .id(Field.name)
+
+                                    labeledField(
+                                        label: "رقم الهاتف",
+                                        placeholder: "+966500000000",
+                                        text: $phone,
+                                        keyboard: .phonePad,
+                                        disableAutocap: true,
+                                        field: .phone
+                                    )
+                                    .id(Field.phone)
+
+                                    labeledField(
+                                        label: "البريد الإلكتروني",
+                                        placeholder: "example@email.com",
+                                        text: $email,
+                                        keyboard: .emailAddress,
+                                        disableAutocap: true,
+                                        field: .email
+                                    )
+                                    .id(Field.email)
+
+                                    subjectPicker
+                                        .id(Field.subject)
+
+                                    messageEditor
+                                        .id(Field.message)
+
+                                    sendButton
+                                        .padding(.top, 4)
+                                }
+                            }
+
+                            // Trailing spacer so the message editor's bottom
+                            // edge can clear the keyboard when focused near
+                            // the bottom of the sheet.
+                            Color.clear.frame(height: 80)
                         }
                     }
                     .padding(20)

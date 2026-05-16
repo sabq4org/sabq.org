@@ -247,11 +247,24 @@ struct OpinionDetailView: View {
     private var opinionMeta: some View {
         HStack(spacing: 8) {
             NavigationLink(value: AuthorRoute(name: displayOpinion.authorName)) {
-                Text("\(displayOpinion.bylineLabel): \(displayOpinion.authorName)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                // Split into icon + label + name as three separate views so
+                // the RTL HStack orders them correctly (icon first on the
+                // RIGHT, then "بقلم:", then the name). Stuffing the whole
+                // byline into one Text confuses the bidi engine at the
+                // colon boundary and flips the order visually.
+                HStack(spacing: 5) {
+                    Image(systemName: "applepencil")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    Text("\(displayOpinion.bylineLabel):")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    Text(displayOpinion.authorName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .buttonStyle(.plain)
             .layoutPriority(2)
@@ -534,10 +547,18 @@ struct OpinionDetailView: View {
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
 
-                            Text("\(opinion.bylineLabel): \(opinion.authorName)")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                Image(systemName: "applepencil")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                Text("\(opinion.bylineLabel):")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                Text(opinion.authorName)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                                    .lineLimit(1)
+                            }
 
                             Text(opinion.relativeDate)
                                 .font(.system(size: 11, weight: .medium))
