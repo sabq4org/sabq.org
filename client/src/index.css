@@ -723,10 +723,19 @@ input, select, textarea {
     margin-bottom: 0.5em;
   }
 
+  /*
+   * Dashboard / TipTap paragraph spacing. The default 0.5em was so tight
+   * that editors couldn't visually separate paragraphs in drafts coming
+   * from the mobile app — bumped to 1.5em so the editor preview matches
+   * how the published article actually reads (the `.prose p` rule below
+   * uses a similar value).
+   */
   .ProseMirror p {
-    margin-top: 0.5em;
-    margin-bottom: 0.5em;
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
   }
+  .ProseMirror p:first-child { margin-top: 0; }
+  .ProseMirror p:last-child  { margin-bottom: 0; }
 
   .ProseMirror ul,
   .ProseMirror ol {
@@ -1964,13 +1973,14 @@ input, select, textarea {
 
 /*
  * Paragraph spacing in article bodies. Tailwind Typography's defaults
- * sit at 1.25em which reads cramped at our prose-lg size — bump to a
- * calmer 1.75em so paragraphs breathe (user request 2026-05-14).
+ * sit at 1.25em which reads cramped at our prose-lg size — bumped to
+ * 1.75em on 2026-05-14, then to 2.25em on 2026-05-16 because mobile
+ * submissions arrived feeling visually mashed despite proper <p> tags.
  */
 .prose p,
 .prose-lg p {
-  margin-top: 1.75em;
-  margin-bottom: 1.75em;
+  margin-top: 2.25em;
+  margin-bottom: 2.25em;
 }
 .prose p:first-child,
 .prose-lg p:first-child {

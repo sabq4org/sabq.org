@@ -31,7 +31,7 @@ import {
   roles,
   userRoles,
 } from "@shared/schema";
-import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable } from "drizzle-orm";
+import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable, inArray } from "drizzle-orm";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -3761,6 +3761,38 @@ router.post("/newsletter/unsubscribe", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Convert plain text from the iOS TextEditor into HTML paragraph blocks
+ * the dashboard editor can render correctly. Newline rules:
+ *   - Two or more consecutive newlines → paragraph break (`<p>…</p>`)
+ *   - A single newline inside a paragraph → soft break (`<br>`)
+ *   - Empty paragraphs are skipped
+ * Idempotent: if the input already contains block-level HTML
+ * (`<p>`, `<div>`, headings, lists, blockquote, `<br>`) we return it
+ * untouched so we never re-wrap editorial-team output.
+ */
+function toMobileArticleHTML(raw: string): string {
+  const text = raw.trim();
+  if (!text) return "";
+
+  if (/<(p|div|h[1-6]|ul|ol|li|blockquote|br)\b/i.test(text)) {
+    return text;
+  }
+
+  const escapeHTML = (s: string) =>
+    s.replace(/&/g, "&amp;")
+     .replace(/</g, "&lt;")
+     .replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;");
+
+  return text
+    .split(/\n{2,}/)
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => `<p>${escapeHTML(p).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}
+
 // ==========================================
 // POST /api/v1/articles/submit
 // Mobile content submission. Writers send opinion drafts, reporters send
@@ -3958,18 +3990,26 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
     const { nanoid } = await import("nanoid");
     const englishSlug = nanoid(7);
 
+    // The iOS TextEditor sends plain text with `\n` separating paragraphs.
+    // The dashboard renders article content as HTML — if we store the raw
+    // text the editor squashes everything into one paragraph. Convert
+    // user input into proper `<p>...</p>` blocks (preserving single line
+    // breaks as `<br>`) before storing. Idempotent: if the payload already
+    // contains block-level HTML we pass it through untouched.
+    const htmlContent = toMobileArticleHTML(data.content);
+    const plainForExcerpt = data.content
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
     const articleData: any = {
       title: data.title.trim(),
       slug,
       englishSlug,
-      content: data.content,
+      content: htmlContent,
       // Editorial team enriches excerpt during review; we just store the
-      // first 220 chars as a starting point.
-      excerpt: data.content
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 220),
+      // first 220 chars of the plain version as a starting point.
+      excerpt: plainForExcerpt.slice(0, 220),
       authorId: session.userId,
       submitterId: session.userId,
       reporterId: kind === "news" ? session.userId : null,
@@ -4026,6 +4066,143 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       });
     }
     res.status(500).json({ success: false, message: "تعذر إرسال المحتوى. حاول لاحقاً." });
+  }
+});
+
+// ==========================================
+// GET /api/v1/insights/today
+// Personal "knowledge journey" payload for the mobile home screen. Mirrors
+// `/api/ai/insights/today` from `routes.ts` exactly (same shape) but
+// authenticates via the mobile Bearer-token session — the web route lives
+// behind the Passport session middleware and 401s for iOS callers per the
+// [[sabq-ios-mobile-auth]] rule.
+// ==========================================
+router.get("/insights/today", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { readingHistory, reactions } = await import("@shared/schema");
+
+    const [user] = await db
+      .select({ id: users.id, firstName: users.firstName, email: users.email })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // 1. Reading history today
+    const readingHistoryToday = await db
+      .select({ articleId: readingHistory.articleId })
+      .from(readingHistory)
+      .where(and(
+        eq(readingHistory.userId, session.userId),
+        gte(readingHistory.readAt, startOfDay)
+      ));
+    const articlesReadToday = readingHistoryToday.length;
+    const readingTimeMinutes = articlesReadToday * 3; // same 3-min-per-article estimate as web
+
+    // 2. Likes today
+    const likesToday = await db
+      .select({ id: reactions.id })
+      .from(reactions)
+      .where(and(
+        eq(reactions.userId, session.userId),
+        eq(reactions.type, "like"),
+        gte(reactions.createdAt, startOfDay)
+      ));
+    const likesCount = likesToday.length;
+
+    // 3. Comments today
+    const commentsToday = await db
+      .select({ id: comments.id })
+      .from(comments)
+      .where(and(
+        eq(comments.userId, session.userId),
+        gte(comments.createdAt, startOfDay)
+      ));
+    const commentsCount = commentsToday.length;
+
+    // 4. Top interests today (top 3 category names by frequency)
+    const articleIds = readingHistoryToday.map(r => r.articleId).filter((v): v is string => !!v);
+    let topInterests: string[] = [];
+    if (articleIds.length > 0) {
+      const articlesWithCategories = await db
+        .select({ categoryId: articles.categoryId })
+        .from(articles)
+        .where(inArray(articles.id, articleIds));
+
+      const frequency = new Map<string, number>();
+      for (const row of articlesWithCategories) {
+        if (row.categoryId) {
+          frequency.set(row.categoryId, (frequency.get(row.categoryId) || 0) + 1);
+        }
+      }
+      const topCategoryIds = Array.from(frequency.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([id]) => id);
+
+      if (topCategoryIds.length > 0) {
+        const categoryRows = await db
+          .select({ id: categories.id, nameAr: categories.nameAr })
+          .from(categories)
+          .where(inArray(categories.id, topCategoryIds));
+
+        topInterests = topCategoryIds
+          .map(id => categoryRows.find(c => c.id === id)?.nameAr)
+          .filter((n): n is string => !!n);
+      }
+    }
+
+    // 5. Daily completion rate (goal = 3 articles, capped at 100)
+    const DAILY_GOAL = 3;
+    const completionRate = articlesReadToday > 0
+      ? Math.min(100, Math.round((articlesReadToday / DAILY_GOAL) * 100))
+      : 0;
+
+    // 6. Encouragement phrase (same buckets as web)
+    let aiPhrase = "ابدأ رحلتك المعرفية اليوم";
+    if (articlesReadToday === 0) {
+      aiPhrase = "لم تقرأ أي مقال بعد اليوم، ابدأ الآن";
+    } else if (articlesReadToday <= 3) {
+      aiPhrase = "بداية جيدة! استمر في القراءة";
+    } else if (articlesReadToday <= 7) {
+      aiPhrase = "ممتاز! ذكاؤك القرائي يرتفع يوماً بعد يوم";
+    } else {
+      aiPhrase = "رائع! أنت قارئ متميز اليوم";
+    }
+
+    const hour = new Date().getHours();
+    const greetingWord = hour < 12 ? "صباح الخير" : (hour < 17 ? "نهارك سعيد" : (hour < 21 ? "مساء الخير" : "ليلة سعيدة"));
+    const firstName = user.firstName || user.email?.split("@")[0] || "عزيزي";
+
+    res.json({
+      greeting: `${greetingWord} يا ${firstName}`,
+      metrics: {
+        readingTime: readingTimeMinutes,
+        completionRate,
+        likes: likesCount,
+        comments: commentsCount,
+        articlesRead: articlesReadToday,
+      },
+      topInterests,
+      aiPhrase,
+      quickSummary: articlesReadToday > 0
+        ? `قرأت ${articlesReadToday} ${articlesReadToday === 1 ? "مقال" : "مقالات"} اليوم بإجمالي ${readingTimeMinutes} دقيقة.`
+        : "لم تقرأ أي مقال اليوم بعد.",
+    });
+  } catch (error) {
+    console.error("[Mobile API] /insights/today error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب البيانات" });
   }
 });
 

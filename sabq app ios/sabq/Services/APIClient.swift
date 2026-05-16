@@ -866,6 +866,17 @@ actor APIClient {
         try await get([String: String].self, path: "/ai/insights/today", apiRoot: publicAPIBaseURL)
     }
 
+    /// Personal knowledge-journey insights — typed shape used by the
+    /// home-feed PersonalJourneyBlock to render metric tiles + interests
+    /// inline (mirrors the web's SmartSummaryBlock layout).
+    ///
+    /// Hits `/api/v1/insights/today` (member-session) instead of the public
+    /// `/ai/insights/today` because the latter authenticates via the web's
+    /// Passport session, which iOS Bearer tokens can't satisfy.
+    func fetchTodayInsightsRich() async throws -> APITodayInsights {
+        try await get(APITodayInsights.self, path: "/insights/today")
+    }
+
     // MARK: - Phase 5: Calendar / OMQ / Daily Brief / Audio Newsletters
 
     /// Calendar events (world days, gulf events, commemorations). Public.

@@ -1614,3 +1614,23 @@ nonisolated struct APILiveUpdatesResponse: Decodable {
         nextCursor = try? c.decode(String.self, forKey: FlexKey("nextCursor"))
     }
 }
+
+// MARK: - Today insights (personal knowledge journey)
+
+/// Mirrors `GET /api/v1/insights/today`. Powers the inline metric tiles +
+/// top-interests chips on the home feed for signed-in users.
+nonisolated struct APITodayInsights: Decodable {
+    let greeting: String
+    let metrics: Metrics
+    let topInterests: [String]
+    let aiPhrase: String?
+    let quickSummary: String?
+
+    nonisolated struct Metrics: Decodable {
+        let readingTime: Int       // minutes
+        let completionRate: Int    // 0..100
+        let likes: Int
+        let comments: Int
+        let articlesRead: Int
+    }
+}

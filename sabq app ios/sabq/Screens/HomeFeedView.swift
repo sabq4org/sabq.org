@@ -13,6 +13,9 @@ struct HomeFeedView: View {
     /// entry point in the header. Animated on appear; idle otherwise.
     @State private var livePulse = false
     @State private var todayInsights: [String: String] = [:]
+    /// Rich personal-journey insights (member-session only). Drives the
+    /// inline metric tiles + interest chips in personalJourneyBlock.
+    @State private var richInsights: APITodayInsights?
     @State private var latestOmq: APIDeepAnalysis?
     @State private var calendarToday: [APICalendarEvent] = []
     @State private var latestNewsletter: APIAudioNewsletter?
@@ -46,16 +49,14 @@ struct HomeFeedView: View {
                     featuredSection
                         .animatedAppear(index: 3)
 
-                    // Personal "knowledge journey" entry point — only for
-                    // signed-in users. Replaces the OMQ preview that used to
-                    // live here per user direction: a logged-out reader sees
-                    // nothing in this slot.
+                    // Personal "knowledge journey" inline panel — signed-in
+                    // users only. Renders the four metric tiles + interest
+                    // chips directly (no navigation), mirroring the web's
+                    // SmartSummaryBlock. Logged-out readers see nothing in
+                    // this slot.
                     if authStore.isLoggedIn {
-                        NavigationLink(value: DailyBriefRoute()) {
-                            personalJourneyBlock
-                        }
-                        .buttonStyle(.plain)
-                        .animatedAppear(index: 4)
+                        personalJourneyBlock
+                            .animatedAppear(index: 4)
                     }
 
                     if !calendarToday.isEmpty {
@@ -114,11 +115,17 @@ struct HomeFeedView: View {
             async let omqList: APIOmqListResponse? = try? await APIClient.shared.fetchOmqList(page: 1, limit: 1, status: "published")
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
+            // Rich personal-journey insights (member-session only). Returns
+            // nil for logged-out users so the block stays hidden cleanly.
+            async let richJourney: APITodayInsights? = authStore.isLoggedIn
+                ? (try? await APIClient.shared.fetchTodayInsightsRich())
+                : nil
 
             if let v = await insights { todayInsights = v }
             latestOmq = (await omqList)?.analyses.first
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
+            richInsights = await richJourney
         }
     }
 
@@ -739,32 +746,34 @@ struct HomeFeedView: View {
 
     // MARK: - Personal Journey Block (auth-gated)
 
-    /// Personalised "your knowledge journey" entry point — mirrors the web's
-    /// SmartSummaryBlock (`client/src/components/SmartSummaryBlock.tsx`) at a
-    /// minimum-viable level. Shows the time-aware greeting **with the user's
-    /// first name** and a single tap routes to the Daily Brief screen for the
-    /// full breakdown (reading time, completion, likes, comments, top
-    /// interests, AI quick summary).
-    ///
-    /// Gated on `authStore.isLoggedIn` at the call site — this block is the
-    /// signed-in-only replacement for the OMQ preview that used to live here.
+    /// Compact inline "knowledge journey" panel for signed-in users —
+    /// mirrors the web's SmartSummaryBlock. Renders the four metric tiles
+    /// (reading time / completion / likes / comments) + interest chips
+    /// directly on the home feed, no navigation. Uses the backend greeting
+    /// when available so the user sees their actual name, falls back to a
+    /// device-local time greeting otherwise.
     private var personalJourneyBlock: some View {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let greetingWord: String
-        switch hour {
-        case 5..<12:  greetingWord = "صباح الخير"
-        case 12..<17: greetingWord = "نهارك سعيد"
-        case 17..<21: greetingWord = "مساء الخير"
-        default:      greetingWord = "ليلة سعيدة"
+        VStack(alignment: .leading, spacing: 14) {
+            journeyHeader
+            journeyMetrics
+            journeyInterests
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+        )
+    }
 
-        let firstName = authStore.currentUser?.firstName?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let personalised = firstName.isEmpty
-            ? greetingWord
-            : "\(greetingWord) يا \(firstName)"
+    // MARK: Journey sub-views
 
-        return HStack(alignment: .center, spacing: 14) {
+    private var journeyHeader: some View {
+        HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(
@@ -777,57 +786,123 @@ struct HomeFeedView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(personalised)
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(journeyGreeting)
+                    .font(.system(size: 15, weight: .heavy, design: .rounded))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-
                 Text("رحلتك المعرفية في سبق اليوم باختصار")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
             }
-
             Spacer(minLength: 0)
-
-            Image(systemName: "chevron.left")
-                .font(.system(size: 13, weight: .heavy))
-                .foregroundStyle(SabqTheme.tertiaryInk)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Backend greeting wins (includes the user's name); falls back to a
+    /// device-local time greeting + firstName when offline.
+    private var journeyGreeting: String {
+        if let backend = richInsights?.greeting.trimmingCharacters(in: .whitespacesAndNewlines), !backend.isEmpty {
+            return backend
+        }
+        let hour = Calendar.current.component(.hour, from: Date())
+        let word: String
+        switch hour {
+        case 5..<12:  word = "صباح الخير"
+        case 12..<17: word = "نهارك سعيد"
+        case 17..<21: word = "مساء الخير"
+        default:      word = "ليلة سعيدة"
+        }
+        let firstName = authStore.currentUser?.firstName?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return firstName.isEmpty ? word : "\(word) يا \(firstName)"
+    }
+
+    /// Four metric cells in a single row — intentionally bare. No per-cell
+    /// icons or coloured backgrounds (the user explicitly asked us to stop
+    /// "كثرة الأيقونات والألوان"). Just a number + label per cell, with a
+    /// hairline divider between them and one accent for the unit.
+    private var journeyMetrics: some View {
+        HStack(spacing: 0) {
+            metricCell(value: "\(richInsights?.metrics.readingTime ?? 0)", unit: "د", label: "وقت القراءة")
+            metricDivider
+            metricCell(value: "\(richInsights?.metrics.completionRate ?? 0)%", unit: nil, label: "الإكمال")
+            metricDivider
+            metricCell(value: "\(richInsights?.metrics.likes ?? 0)", unit: nil, label: "إعجابات")
+            metricDivider
+            metricCell(value: "\(richInsights?.metrics.comments ?? 0)", unit: nil, label: "تعليقات")
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.55, green: 0.36, blue: 0.92).opacity(0.06),
-                                    SabqTheme.primaryEnd.opacity(0.04)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.paleFill.opacity(0.5))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
-        )
-        .shadow(color: SabqTheme.primaryEnd.opacity(0.08), radius: 12, x: 0, y: 5)
+    }
+
+    private func metricCell(value: String, unit: String?, label: String) -> some View {
+        VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                if let unit {
+                    Text(unit)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+            }
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var metricDivider: some View {
+        Rectangle()
+            .fill(SabqTheme.outline.opacity(0.5))
+            .frame(width: 0.5, height: 28)
+    }
+
+    /// Top-3 interest chips — minimal styling, one neutral capsule treatment
+    /// (no per-chip colours).
+    @ViewBuilder
+    private var journeyInterests: some View {
+        if let interests = richInsights?.topInterests, !interests.isEmpty {
+            HStack(spacing: 6) {
+                Text("اهتماماتك اليوم:")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(interests, id: \.self) { name in
+                            Text(name)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(SabqTheme.secondaryInk)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(SabqTheme.paleFill))
+                                .overlay(Capsule().stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// SABQ-AI-branded headlines for the greeting block. Picked by a stable
