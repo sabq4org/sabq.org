@@ -16,7 +16,7 @@ struct ArticleSubmissionView: View {
     @Environment(AuthStore.self) private var authStore
 
     @State private var title: String = ""
-    @State private var body: String = ""
+    @State private var articleContent: String = ""
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var previewImages: [UIImage] = []
     @State private var imageData: [Data] = []
@@ -81,7 +81,7 @@ struct ArticleSubmissionView: View {
 
     private var isFormValid: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).count >= minTitleLength &&
-        body.trimmingCharacters(in: .whitespacesAndNewlines).count >= minBodyLength
+        articleContent.trimmingCharacters(in: .whitespacesAndNewlines).count >= minBodyLength
     }
 
     // MARK: - Body
@@ -192,14 +192,14 @@ struct ArticleSubmissionView: View {
 
                 fieldLabel("النص", required: true)
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: $body)
+                    TextEditor(text: $articleContent)
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(SabqTheme.ink)
                         .focused($focusedField, equals: .body)
                         .frame(minHeight: 180)
                         .scrollContentBackground(.hidden)
                         .padding(8)
-                    if body.isEmpty {
+                    if articleContent.isEmpty {
                         Text(bodyPlaceholder)
                             .font(.system(size: 15, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
@@ -568,7 +568,7 @@ struct ArticleSubmissionView: View {
         do {
             let resp = try await APIClient.shared.submitArticleDraft(
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                content: body.trimmingCharacters(in: .whitespacesAndNewlines),
+                content: articleContent.trimmingCharacters(in: .whitespacesAndNewlines),
                 kind: kind,
                 imageData: imageData
             )
