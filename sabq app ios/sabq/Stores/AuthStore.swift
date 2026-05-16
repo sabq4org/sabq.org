@@ -87,7 +87,23 @@ final class AuthStore {
         do {
             let response = try await APIClient.shared.register(name: name, email: email, password: password)
 
-            if response.emailSent == true {
+            // Backend now (2026-05-16) auto-activates accounts created
+            // via the mobile flow and returns a session token + user
+            // alongside the registration confirmation. If both are
+            // present, treat this as an instant login — the user goes
+            // straight into the app instead of staring at a "check your
+            // email" screen. Falls back to the old "registration pending"
+            // path for older builds or future flows that opt out.
+            if let token = response.token, let loginUser = response.user {
+                await APIClient.shared.setAuthToken(token)
+                await APIClient.shared.markAuthenticated()
+                UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+                currentUser = loginUser
+                isLoggedIn = true
+                successMessage = response.message ?? "تم إنشاء الحساب بنجاح"
+                // Pull the full profile so role/interests populate ASAP.
+                await fetchFullProfile()
+            } else if response.emailSent == true {
                 registrationPending = true
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح. يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب"
             } else {

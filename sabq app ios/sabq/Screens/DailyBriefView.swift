@@ -774,7 +774,6 @@ struct InterestsPickerSheet: View {
     private func interestChip(category: APICategory) -> some View {
         let id = category.id
         let isOn = selection.contains(id)
-        let tint = chipTint(for: category)
         return Button {
             SabqHaptics.light()
             withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
@@ -785,47 +784,31 @@ struct InterestsPickerSheet: View {
                 HStack(spacing: 6) {
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(isOn ? Color.white : SabqTheme.tertiaryInk)
                     Spacer(minLength: 0)
                 }
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
                     .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .foregroundStyle(isOn ? .white : SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundStyle(isOn ? .white : SabqTheme.ink)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 72)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isOn
-                          ? LinearGradient(colors: [tint, tint.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                          : LinearGradient(colors: [SabqTheme.surface, SabqTheme.surface], startPoint: .top, endPoint: .bottom))
+                    .fill(isOn ? SabqTheme.primaryEnd : SabqTheme.surface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isOn ? Color.clear : tint.opacity(0.30), lineWidth: 0.8)
+                    .stroke(isOn ? Color.clear : SabqTheme.outline.opacity(0.45), lineWidth: 0.8)
             )
-            .shadow(color: isOn ? tint.opacity(0.30) : .clear, radius: 8, y: 3)
+            .shadow(color: isOn ? SabqTheme.primaryEnd.opacity(0.18) : .clear, radius: 6, y: 2)
         }
         .buttonStyle(.plain)
-    }
-
-    /// Each category gets a stable tint derived from its slug so the chips
-    /// have visual rhythm without relying on a backend color field that may
-    /// or may not be present.
-    private func chipTint(for category: APICategory) -> Color {
-        let palette: [Color] = [
-            SabqTheme.primaryEnd,
-            SabqTheme.teal,
-            SabqTheme.coral,
-            SabqTheme.gold,
-            SabqTheme.sky,
-        ]
-        let seed = (category.slug ?? category.id).hashValue
-        return palette[abs(seed) % palette.count]
     }
 
     // MARK: - Skeleton + empty

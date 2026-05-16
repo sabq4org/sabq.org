@@ -1058,6 +1058,10 @@ struct SabqTabBar: View {
                 Text(tab.title)
                     .font(.system(size: 12.5, weight: .bold))
                     .foregroundStyle(tint)
+                    // Without these, "استكشاف" wraps onto a second line
+                    // inside the narrower active capsule on 6.1" devices.
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .move(edge: .leading)),
                         removal: .opacity

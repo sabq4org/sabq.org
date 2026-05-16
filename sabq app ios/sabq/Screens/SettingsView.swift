@@ -597,8 +597,12 @@ struct LoginSheet: View {
     @State private var email = ""
     @State private var password = ""
     @State private var name = ""
+    /// Legacy register form is gone — kept the flag only to honour the
+    /// `LoginSheet(initialMode: true)` callers (DailyBriefView CTAs). When
+    /// true on appear we immediately swap to the conversational signup.
     @State private var isRegisterMode: Bool
     @State private var showForgotPassword = false
+    @State private var showAISignUp = false
 
     init(initialMode: Bool = false) {
         _isRegisterMode = State(initialValue: initialMode)
@@ -632,6 +636,25 @@ struct LoginSheet: View {
             }
             .sheet(isPresented: $showForgotPassword) {
                 ForgotPasswordSheet()
+            }
+            .sheet(isPresented: $showAISignUp, onDismiss: {
+                // Conversational signup auto-logs the user in. If it
+                // succeeded, close this login sheet too so the user lands
+                // back on the dashboard logged in.
+                if authStore.isLoggedIn {
+                    dismiss()
+                }
+            }) {
+                SignUpFlowView()
+                    .environment(authStore)
+            }
+            .onAppear {
+                // Callers that wanted the register form (initialMode=true)
+                // now skip straight to the conversational signup sheet.
+                if isRegisterMode {
+                    isRegisterMode = false
+                    showAISignUp = true
+                }
             }
         }
     }
@@ -684,11 +707,11 @@ struct LoginSheet: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(height: 48)
 
-                Text(isRegisterMode ? "إنشاء حساب" : "تسجيل الدخول")
+                Text("تسجيل الدخول")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(SabqTheme.ink)
 
-                Text(isRegisterMode ? "أنشئ حسابك للاستفادة من جميع الميزات" : "سجّل دخولك للاستفادة من جميع الميزات")
+                Text("سجّل دخولك للاستفادة من جميع الميزات")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
@@ -696,10 +719,6 @@ struct LoginSheet: View {
             .frame(maxWidth: .infinity)
 
             VStack(spacing: 16) {
-                if isRegisterMode {
-                    inputField(icon: "person", placeholder: "الاسم", text: $name)
-                }
-
                 inputField(icon: "envelope", placeholder: "البريد الإلكتروني", text: $email)
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
@@ -729,11 +748,7 @@ struct LoginSheet: View {
 
             Button {
                 Task {
-                    if isRegisterMode {
-                        await authStore.register(name: name, email: email, password: password)
-                    } else {
-                        await authStore.login(email: email, password: password)
-                    }
+                    await authStore.login(email: email, password: password)
                     if authStore.isLoggedIn { dismiss() }
                 }
             } label: {
@@ -741,7 +756,7 @@ struct LoginSheet: View {
                     if authStore.isLoading {
                         ProgressView().tint(.white)
                     }
-                    Text(isRegisterMode ? "إنشاء حساب" : "تسجيل الدخول")
+                    Text("تسجيل الدخول")
                         .font(.system(size: 17, weight: .bold))
                 }
                 .foregroundStyle(.white)
@@ -753,27 +768,27 @@ struct LoginSheet: View {
             .disabled(authStore.isLoading)
 
             Button {
-                withAnimation {
-                    isRegisterMode.toggle()
-                    authStore.clearMessages()
-                }
+                authStore.clearMessages()
+                showAISignUp = true
             } label: {
-                Text(isRegisterMode ? "لديك حساب؟ سجّل دخولك" : "ليس لديك حساب؟ أنشئ حساباً")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .heavy))
+                    Text("ليس لديك حساب؟ ابدأ التسجيل مع SABQ AI")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundStyle(SabqTheme.primaryEnd)
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
 
-            if !isRegisterMode {
-                Button { showForgotPassword = true } label: {
-                    Text("نسيت كلمة المرور؟")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
+            Button { showForgotPassword = true } label: {
+                Text("نسيت كلمة المرور؟")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.plain)
         }
     }
 

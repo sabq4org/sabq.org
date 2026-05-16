@@ -772,17 +772,30 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
 // ==========================================
 router.post("/auth/register", async (req: Request, res: Response) => {
   try {
-    const { 
-      email, 
-      phone, 
-      password, 
-      firstName, 
-      lastName, 
+    const {
+      email,
+      phone,
+      password,
+      firstName: rawFirstName,
+      lastName: rawLastName,
+      name,
       gender,
       city,
       country,
       locale
     } = req.body;
+
+    // iOS conversational signup sends a single `name` field — split it
+    // here so the existing firstName/lastName persistence path works
+    // without an iOS-side change. If both firstName/lastName were sent
+    // (older clients), prefer those.
+    let firstName: string | undefined = rawFirstName?.trim() || undefined;
+    let lastName: string | undefined = rawLastName?.trim() || undefined;
+    if (!firstName && !lastName && typeof name === "string" && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(" ") : undefined;
+    }
 
     // Validate required fields
     if (!password || password.length < 6) {
@@ -846,12 +859,18 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       country: country || "SA",
       locale: locale || "ar",
       role: "reader",
-      status: "pending",
+      // Auto-activate accounts created via the conversational signup so
+      // the iOS client can drop the user straight into the app instead of
+      // asking them to switch to Mail. Verification email is still sent
+      // (best-effort below) so we have an audit trail of the email
+      // belonging to the user, but it no longer gates login.
+      status: "active",
       authProvider: "local",
       emailVerified: false,
     });
 
-    // Generate verification token
+    // Generate verification token + send activation email (best-effort —
+    // failures are logged but don't abort the flow now that status='active').
     const verificationToken = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
@@ -861,22 +880,51 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       expiresAt,
     });
 
-    // Send activation email
     const emailSent = await sendMobileActivationEmail(
-      email.toLowerCase().trim(), 
-      verificationToken, 
+      email.toLowerCase().trim(),
+      verificationToken,
       firstName?.trim()
     );
 
-    console.log(`[Mobile API] New user registered: ${userId}, email sent: ${emailSent}`);
+    // Issue a session token immediately so the iOS register flow can hand
+    // the user a logged-in app without a follow-up login round-trip. Same
+    // mechanism as `/api/v1/auth/login` — random token, SHA-256-stored on
+    // `appMemberSessions`, 30-day expiry.
+    const sessionToken = generateSessionToken();
+    const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+    const sessionExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await db.insert(appMemberSessions).values({
+      memberId: userId,
+      tokenHash,
+      deviceInfo: null,
+      ipAddress: req.ip || null,
+      expiresAt: sessionExpiresAt,
+    });
 
-    res.status(201).json({ 
-      success: true, 
-      message: emailSent 
-        ? "تم إنشاء الحساب بنجاح. تم إرسال رمز التفعيل إلى بريدك الإلكتروني"
-        : "تم إنشاء الحساب بنجاح. يرجى تفعيل الحساب",
+    console.log(`[Mobile API] New user registered + auto-activated: ${userId}, email sent: ${emailSent}`);
+
+    res.status(201).json({
+      success: true,
+      message: "تم إنشاء الحساب بنجاح",
       userId,
       emailSent,
+      // Token + expiry mirror the /auth/login shape so the iOS APIClient
+      // can reuse its decoder + setAuthToken pipeline.
+      token: sessionToken,
+      expiresAt: sessionExpiresAt.toISOString(),
+      user: {
+        id: userId,
+        email: email.toLowerCase().trim(),
+        firstName: firstName?.trim() ?? null,
+        lastName: lastName?.trim() ?? null,
+        phone: phone?.trim() ?? null,
+        gender: gender ?? null,
+        city: city?.trim() ?? null,
+        country: country || "SA",
+        locale: locale || "ar",
+        emailVerified: false,
+        phoneVerified: false,
+      },
     });
   } catch (error) {
     console.error("[Mobile API] auth/register error:", error);
