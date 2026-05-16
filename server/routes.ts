@@ -24587,8 +24587,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         );
       }
 
+      // For `sort=trending` we order by engagement velocity (views per
+      // hour since publish, 3-hour floor) — matches the news trending
+      // logic and prevents the opinion that's been live longest in the
+      // 24h window from automatically winning on absolute view count.
+      // `sort=views` keeps its lifetime-views semantics. Everything else
+      // falls through to newest-first.
+      const trendingOrder = sql`COALESCE(${articles.views}, 0)::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - ${articles.publishedAt})) / 3600.0, 3) DESC`;
       const results = await query
-        .orderBy((sortByViews || sortByTrending) ? desc(articles.views) : desc(articles.publishedAt))
+        .orderBy(
+          sortByTrending ? trendingOrder :
+          sortByViews    ? desc(articles.views) :
+                           desc(articles.publishedAt)
+        )
         .limit(Number(limit))
         .offset(offset);
 

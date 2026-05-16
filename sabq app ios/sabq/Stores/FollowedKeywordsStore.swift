@@ -36,4 +36,12 @@ final class FollowedKeywordsStore {
             UserDefaults.standard.set(followed, forKey: key)
         }
     }
+
+    /// Wipe in-memory + on-disk state. Mirrors BookmarksStore.clear() so
+    /// the Settings "مسح البيانات المحلية" action fully empties followed
+    /// keywords inside the same session, not only after a relaunch.
+    func clear() {
+        followed.removeAll()
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }

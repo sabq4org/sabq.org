@@ -425,31 +425,18 @@ struct HomeFeedView: View {
                         }
 
                         NavigationLink(value: article) {
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(spacing: 12) {
                                 Text("\(index + 1)")
                                     .font(.system(size: 18, weight: .heavy, design: .rounded))
                                     .foregroundStyle(index < 3 ? .orange : SabqTheme.tertiaryInk)
                                     .frame(width: 28)
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(article.title)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(SabqTheme.ink)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                                    if article.viewsCount > 0 {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "eye.fill")
-                                                .font(.system(size: 10, weight: .semibold))
-                                            Text("\(SabqFormatters.compactViewCount(article.viewsCount)) قراءة")
-                                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                                .monospacedDigit()
-                                        }
-                                        .foregroundStyle(SabqTheme.tertiaryInk)
-                                    }
-                                }
+                                Text(article.title)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.ink)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .padding(.vertical, 4)
                         }

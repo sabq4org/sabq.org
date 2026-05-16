@@ -64,6 +64,18 @@ final class BookmarksStore {
         return result.sorted { $0.publishDate > $1.publishDate }
     }
 
+    /// Wipe in-memory + on-disk state. Called by the Settings "مسح البيانات
+    /// المحلية" action — without this, clearing UserDefaults from outside
+    /// leaves the store's `@Observable` view of bookmarks untouched until
+    /// the next launch, so the bookmarks page kept showing the old list
+    /// in the same session.
+    func clear() {
+        bookmarkedIDs.removeAll()
+        cachedArticles.removeAll()
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        UserDefaults.standard.removeObject(forKey: articleCacheKey)
+    }
+
     private func persist() {
         if let data = try? JSONEncoder().encode(bookmarkedIDs) {
             UserDefaults.standard.set(data, forKey: storageKey)

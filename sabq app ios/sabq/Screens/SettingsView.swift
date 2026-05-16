@@ -6,6 +6,7 @@ import UIKit
 struct SettingsView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
+    @Environment(FollowedKeywordsStore.self) private var followedKeywords
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
@@ -106,11 +107,13 @@ struct SettingsView: View {
     /// dark mode, or the accent colour — those are explicit user
     /// settings that aren't considered "data" for this control.
     private func clearLocalData() {
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: "sabq_bookmarks_v1")
-        defaults.removeObject(forKey: "sabq_bookmarks_articles_v1")
-        defaults.removeObject(forKey: "sabq_recent_searches")
-        defaults.removeObject(forKey: "sabq_followed_keywords")
+        // Drop in-memory state on the live stores too — clearing only
+        // UserDefaults left the Observable bookmarks/followed lists
+        // populated until the next launch, so the user saw "nothing
+        // changed" right after tapping the button.
+        bookmarksStore.clear()
+        followedKeywords.clear()
+        UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
         ImageCache.clear()
         URLCache.shared.removeAllCachedResponses()
         didClearData = true
