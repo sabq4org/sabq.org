@@ -24457,6 +24457,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             email: users.email,
             profileImageUrl: users.profileImageUrl,
             bio: users.bio,
+            // gender drives the gendered byline on iOS opinion detail
+            // (الكاتب: / الكاتبة:). Falls back to a neutral "بقلم:" prefix
+            // when null.
+            gender: users.gender,
           },
         })
         .from(articles)

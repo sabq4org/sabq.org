@@ -41,6 +41,7 @@ import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { sendEmailNotification } from "../services/email";
+import { cloudflareImagesService } from "../services/cloudflareImagesService";
 
 const router = Router();
 
@@ -1761,24 +1762,35 @@ router.post("/members/profile/image", async (req: Request, res: Response) => {
       });
     }
 
-    // Import object storage service
-    const { ObjectStorageService } = await import("../objectStorage");
-    const objectStorageService = new ObjectStorageService();
-    
-    // Generate unique filename
+    // Upload to Cloudflare Images. CF is the canonical image backend
+    // per [[cloudflare-images-canonical]] — the previous ObjectStorageService
+    // path routed through the Replit sidecar (127.0.0.1:1106) and returned
+    // ECONNREFUSED on Railway, surfacing as "حدث خطأ في رفع الصورة".
+    if (!cloudflareImagesService.isCloudflareConfigured()) {
+      return res.status(502).json({
+        success: false,
+        message: "خدمة رفع الصورة غير مهيأة حالياً. حاول لاحقاً."
+      });
+    }
+
     const timestamp = Date.now();
-    const filename = `profile-images/${session.userId}-${timestamp}.${imageType}`;
-    
-    // Upload to public storage
-    const result = await objectStorageService.uploadFile(
-      filename,
+    const filename = `member-${session.userId}-${timestamp}.${imageType}`;
+    const cfResult = await cloudflareImagesService.uploadToCloudflare(
       buffer,
-      `image/${imageType}`,
-      "public"
+      filename,
+      { type: "member-avatar", userId: session.userId },
+      `image/${imageType}`
     );
 
-    // Create accessible URL
-    const imageUrl = `/public-objects/${filename}`;
+    if (!cfResult.success || !cfResult.deliveryUrl) {
+      console.error("[Mobile API] CF Images avatar upload failed:", cfResult.error);
+      return res.status(502).json({
+        success: false,
+        message: "تعذر رفع الصورة. حاول لاحقاً."
+      });
+    }
+
+    const imageUrl = cfResult.deliveryUrl;
 
     // Update user profile with new image URL
     await db.update(users)

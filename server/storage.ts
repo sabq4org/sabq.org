@@ -4028,12 +4028,14 @@ export class DatabaseStorage implements IStorage {
         u.last_name as author_last_name,
         u.profile_image_url as author_profile_image_url,
         u.bio as author_bio,
+        u.gender as author_gender,
         -- Reporter (users) fields (narrow: no password/email/secrets)
         r.id as reporter_id,
         r.first_name as reporter_first_name,
         r.last_name as reporter_last_name,
         r.profile_image_url as reporter_profile_image_url,
         r.bio as reporter_bio,
+        r.gender as reporter_gender,
         -- Staff member fields (for author)
         s.id as staff_id,
         s.name_ar as staff_name_ar,
@@ -4187,6 +4189,7 @@ export class DatabaseStorage implements IStorage {
       lastName: row.author_last_name,
       profileImageUrl: row.author_profile_image_url,
       bio: row.author_bio,
+      gender: row.author_gender,
     } : undefined;
 
     // Reconstruct reporter object (narrow: no password/email/secrets)
@@ -4196,6 +4199,7 @@ export class DatabaseStorage implements IStorage {
       lastName: row.reporter_last_name,
       profileImageUrl: row.reporter_profile_image_url,
       bio: row.reporter_bio,
+      gender: row.reporter_gender,
     } : undefined;
 
     // Reconstruct staff member object
