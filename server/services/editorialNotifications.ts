@@ -91,12 +91,13 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
   }
 }
 
-/** Format `scheduled_at` as a short Arabic date+time. Falls back to a
- *  date-only render if the time portion isn't useful. */
+/** Format `scheduled_at` as a short Arabic date+time. Uses the
+ *  `ar-SA-u-nu-latn` locale extension so digits render as 1234 instead of
+ *  ١٢٣٤ — matches the editorial team's product-wide convention. */
 function formatArabicDateTime(d?: Date | null): string {
   if (!d) return "";
   try {
-    const date = new Intl.DateTimeFormat("ar-SA", {
+    const date = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
       weekday: "short",
       day: "numeric",
       month: "long",

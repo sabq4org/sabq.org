@@ -19,6 +19,10 @@ struct HomeFeedView: View {
     @State private var latestOmq: APIDeepAnalysis?
     @State private var calendarToday: [APICalendarEvent] = []
     @State private var latestNewsletter: APIAudioNewsletter?
+    /// Reactive handle on the notifications singleton so the header bell's
+    /// red unread dot refreshes when push notifications arrive or the
+    /// user marks them read.
+    @State private var notificationsStore = NotificationsStore.shared
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -126,6 +130,15 @@ struct HomeFeedView: View {
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
             richInsights = await richJourney
+
+            // Fetch unread editorial-notification count so the header bell's
+            // red dot reflects reality on first home-screen render after
+            // launch (and on every pull-to-refresh).
+            if authStore.isLoggedIn {
+                if let page = try? await APIClient.shared.fetchEditorialNotifications() {
+                    notificationsStore.unreadCount = page.unread
+                }
+            }
         }
     }
 
@@ -147,11 +160,50 @@ struct HomeFeedView: View {
                 }
                 .buttonStyle(.plain)
 
-                // "لحظة بلحظة" entry point — replaces the previous bell
-                // (notifications) button. Routes to the published-articles
-                // live feed (`MomentByMomentView`), NOT the live-events
-                // coverage screen. A subtle pulsing red dot signals
-                // freshness without yelling.
+                // Editorial notifications bell — fast access to the user's
+                // own notifications (article scheduled/published/rejected/
+                // needs_revision/archived). Red dot when unread > 0. Visible
+                // only when signed in; readers without editorial roles still
+                // see it but its history is naturally empty.
+                if authStore.isLoggedIn {
+                    NavigationLink(value: EditorialNotificationsRoute()) {
+                        ZStack(alignment: .topTrailing) {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [SabqTheme.primaryStart.opacity(0.10), SabqTheme.primaryEnd.opacity(0.05)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 44, height: 44)
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.primaryEnd)
+                            }
+                            // Red unread dot — driven by NotificationsStore's
+                            // `unreadCount` which the EditorialNotificationsView
+                            // updates on every fetch.
+                            if notificationsStore.unreadCount > 0 {
+                                Circle()
+                                    .fill(SabqTheme.coral)
+                                    .frame(width: 10, height: 10)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(SabqTheme.background, lineWidth: 2)
+                                    )
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // "لحظة بلحظة" entry point. The red pulsing dot was removed
+                // to avoid confusing it with the editorial-notifications
+                // unread indicator on the bell next to it — same colour
+                // would have meant two different things side by side.
                 NavigationLink(value: MomentByMomentRoute()) {
                     ZStack {
                         Circle()
@@ -167,18 +219,6 @@ struct HomeFeedView: View {
                         Image(systemName: "dot.radiowaves.left.and.right")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
-
-                        // Pulsing live indicator dot.
-                        Circle()
-                            .fill(SabqTheme.coral)
-                            .frame(width: 8, height: 8)
-                            .overlay(
-                                Circle()
-                                    .stroke(SabqTheme.coral.opacity(0.5), lineWidth: 2)
-                                    .scaleEffect(livePulse ? 1.8 : 1)
-                                    .opacity(livePulse ? 0 : 0.7)
-                            )
-                            .offset(x: 14, y: -14)
                     }
                 }
                 .buttonStyle(.plain)

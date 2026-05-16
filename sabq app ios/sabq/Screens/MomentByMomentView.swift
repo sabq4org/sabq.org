@@ -324,7 +324,12 @@ struct MomentByMomentView: View {
             bodyHTML: "",
             category: ArticleCategory(fromSection: u.categoryNameAr),
             author: "سبق",
-            publishDate: ISO8601DateFormatter().date(from: u.publishedAt) ?? Date(),
+            // Use SabqFormatters.parseISO8601 (handles both fractional and
+            // basic ISO formats) — the default ISO8601DateFormatter rejects
+            // `.234Z` fractional suffixes, which made every update fall
+            // back to `Date()` (now). Result: every item rendered as "now"
+            // regardless of actual publish time.
+            publishDate: SabqFormatters.parseISO8601(u.publishedAt) ?? Date(),
             isBreaking: u.isBreaking,
             isFeatured: false,
             tags: [],
@@ -335,10 +340,15 @@ struct MomentByMomentView: View {
     }
 
     private static func relativeTime(_ raw: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: raw) else { return raw }
+        // Parse via the shared helper so fractional-seconds ISO timestamps
+        // ("2026-05-16T18:23:45.234Z") aren't silently rejected — that was
+        // making every item read "just now". Latin digits via `-u-nu-latn`
+        // so the editorial team's Latin-digit convention is honoured here
+        // too.
+        guard let date = SabqFormatters.parseISO8601(raw) else { return raw }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
-        formatter.locale = Locale(identifier: "ar")
+        formatter.locale = Locale(identifier: "ar-u-nu-latn")
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

@@ -206,12 +206,14 @@ struct EditorialNotificationsView: View {
         }
     }
 
-    // ISO-8601 → relative Arabic ("منذ 3 دقائق"). Fallback to raw string.
+    // ISO-8601 → relative Arabic ("منذ 3 دقائق") using Latin digits. The
+    // `-u-nu-latn` locale extension forces 4567 instead of ٤٥٦٧ which is
+    // the editorial team's standard across the rest of the product.
     private func relativeDate(from iso: String) -> String {
         guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
-        formatter.locale = Locale(identifier: "ar")
+        formatter.locale = Locale(identifier: "ar-u-nu-latn")
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 

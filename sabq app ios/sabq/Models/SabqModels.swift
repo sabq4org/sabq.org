@@ -4,16 +4,26 @@ import SwiftUI
 // MARK: - Shared Formatters
 
 enum SabqFormatters {
+    /// Arabic locale that ALWAYS uses Latin digits (1234) instead of the
+    /// default Eastern Arabic digits (١٢٣٤). The numbering-system override
+    /// is a BCP-47 Unicode extension — `nu-latn` forces the formatter
+    /// regardless of the device's locale preferences. Per user request
+    /// 2026-05-16: notifications + history list must read "4545" not
+    /// "٤٥٤٥" because the editorial team standardised on Latin digits
+    /// across web + email + dashboard.
+    private static let arabicLatinDigits = Locale(identifier: "ar-u-nu-latn")
+    private static let saudiArabicLatinDigits = Locale(identifier: "ar_SA-u-nu-latn")
+
     static let arabicDate: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar")
+        f.locale = arabicLatinDigits
         f.dateFormat = "d MMMM yyyy"
         return f
     }()
 
     static let relativeArabic: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ar")
+        f.locale = arabicLatinDigits
         f.unitsStyle = .short
         return f
     }()
@@ -32,7 +42,7 @@ enum SabqFormatters {
 
     static let riyadhTime: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar_SA")
+        f.locale = saudiArabicLatinDigits
         f.timeZone = TimeZone(identifier: "Asia/Riyadh")
         f.dateFormat = "HH:mm"
         return f
@@ -40,7 +50,7 @@ enum SabqFormatters {
 
     static let arabicFullDate: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar_SA")
+        f.locale = saudiArabicLatinDigits
         f.dateFormat = "EEEE d MMMM yyyy"
         return f
     }()
@@ -314,6 +324,30 @@ struct Article: Identifiable, Equatable, Hashable {
 
     var relativeDate: String {
         SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+    }
+
+    /// Minimal Article shell used by deep-link navigation when only the
+    /// slug is known. `ArticleDetailView`'s loader replaces the
+    /// placeholder fields with real values once the slug-based fetch
+    /// completes — the placeholder just keeps the navigation type-safe.
+    static func placeholder(slug: String) -> Article {
+        Article(
+            id: slug,
+            title: "",
+            excerpt: "",
+            aiSummary: "",
+            body: "",
+            bodyHTML: "",
+            category: .saudi,
+            author: "",
+            publishDate: Date(),
+            isBreaking: false,
+            isFeatured: false,
+            tags: [],
+            imageURL: nil,
+            slug: slug,
+            articleURL: nil
+        )
     }
 
     static func == (lhs: Article, rhs: Article) -> Bool {
