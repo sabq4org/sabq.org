@@ -2,6 +2,111 @@ import OpenAI from "openai";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+/**
+ * Knowledge-cutoff guardrails for the editorial agent.
+ *
+ * The underlying model's training data predates Trump's second term (started
+ * Jan 2025), so the model will autonomously describe him as "former president"
+ * unless we override it explicitly. This preamble is prepended to every
+ * SYSTEM prompt below; the post-processing filter (`applyPoliticalFactsFilter`)
+ * catches whatever still slips through.
+ *
+ * Update this when administrations change. Today (2026-05-16) Trump is
+ * serving his second term with JD Vance as VP.
+ */
+const POLITICAL_FACTS_PREAMBLE = {
+  ar: `## 📌 معلومات أساسية يجب الالتزام بها دائماً (لا تعتمد على ذاكرة النموذج)
+
+- **دونالد ترامب** هو **الرئيس الحالي** للولايات المتحدة الأمريكية (ولايته الثانية بدأت في يناير 2025).
+- ❌ ممنوع وصفه بـ"الرئيس السابق" أو "الرئيس الأمريكي الأسبق".
+- ✅ الصياغة الصحيحة: "الرئيس الأمريكي دونالد ترامب" أو "الرئيس دونالد ترامب".
+
+- **جو بايدن** هو الرئيس السابق.
+- **كَمَلا هاريس** هي نائبة الرئيس السابقة.
+- **جي دي فانس** هو نائب الرئيس الحالي.
+
+⚠️ تنبيه: معلوماتك التدريبية قد تكون قديمة. اعتمد دائماً على هذه القاعدة وليس على ذاكرتك.
+
+---
+
+`,
+  en: `## 📌 Verified facts you MUST follow (do NOT rely on training memory)
+
+- **Donald Trump** is the **current President** of the United States (his second term began in January 2025).
+- ❌ Never describe him as "former president" or "ex-president".
+- ✅ Correct phrasing: "US President Donald Trump" or "President Donald Trump".
+
+- **Joe Biden** is the former president.
+- **Kamala Harris** is the former vice president.
+- **JD Vance** is the current vice president.
+
+⚠️ Warning: your training data may be outdated. Always rely on this rule, not on your memory.
+
+---
+
+`,
+  ur: `## 📌 بنیادی حقائق جن کی پابندی لازمی ہے (ماڈل کی یادداشت پر بھروسہ نہ کریں)
+
+- **ڈونلڈ ٹرمپ** ریاستہائے متحدہ امریکہ کے **موجودہ صدر** ہیں (ان کی دوسری مدت جنوری 2025 میں شروع ہوئی)۔
+- ❌ انہیں "سابق صدر" یا "سابق امریکی صدر" کہنا ممنوع ہے۔
+- ✅ درست عبارت: "امریکی صدر ڈونلڈ ٹرمپ" یا "صدر ڈونلڈ ٹرمپ"۔
+
+- **جو بائیڈن** سابق صدر ہیں۔
+- **کملا ہیرس** سابق نائب صدر ہیں۔
+- **جے ڈی وانس** موجودہ نائب صدر ہیں۔
+
+⚠️ انتباہ: آپ کا تربیتی ڈیٹا پرانا ہو سکتا ہے۔ ہمیشہ اس قاعدے پر بھروسہ کریں، اپنی یادداشت پر نہیں۔
+
+---
+
+`,
+};
+
+/**
+ * Defensive post-processing filter. Even with the preamble above, models
+ * occasionally still emit "الرئيس السابق ترامب" / "former president Trump"
+ * etc. This catches the common patterns and rewrites them inline. Counts
+ * are logged so we can see how often the model is straying.
+ */
+export function applyPoliticalFactsFilter(text: string, lang: "ar" | "en" | "ur"): string {
+  if (!text) return text;
+  let result = text;
+  let replacements = 0;
+
+  const rules: Array<[RegExp, string]> =
+    lang === "ar" ? [
+      // الرئيس الأمريكي الأسبق ترامب / الرئيس الأمريكي السابق ترامب /
+      // الرئيس السابق الأمريكي ترامب / الرئيس السابق ترامب
+      [/الرئيس\s+(?:الأمريكي\s+)?(?:السابق|الأسبق)\s+(?:الأمريكي\s+)?(?:دونالد\s+)?(?:ج\.\s+)?ترامب/g, "الرئيس الأمريكي دونالد ترامب"],
+      // ترامب الرئيس السابق / ترامب الرئيس الأمريكي السابق
+      [/(?:دونالد\s+)?ترامب،?\s+الرئيس\s+(?:الأمريكي\s+)?(?:السابق|الأسبق)/g, "الرئيس الأمريكي دونالد ترامب"],
+      // ترامب الرئيس الأسبق
+      [/ترامب\s+الأسبق/g, "ترامب"],
+    ] : lang === "en" ? [
+      // former (US) president (Donald) (J.) Trump  /  ex-president Trump
+      [/\b(?:former|ex[- ]?)\s*(?:US\s+|American\s+)?president\s+(?:Donald\s+)?(?:J\.\s+)?Trump\b/gi, "US President Donald Trump"],
+      // Trump, (the) former (US) president
+      [/\bTrump,?\s+the\s+(?:former|ex[- ]?)\s+(?:US\s+|American\s+)?president\b/gi, "President Donald Trump"],
+    ] : [
+      // سابق امریکی صدر ٹرمپ / سابق صدر ٹرمپ
+      [/سابق\s+(?:امریکی\s+)?صدر\s+(?:ڈونلڈ\s+)?ٹرمپ/g, "امریکی صدر ڈونلڈ ٹرمپ"],
+      // ٹرمپ سابق صدر
+      [/(?:ڈونلڈ\s+)?ٹرمپ،?\s+سابق\s+(?:امریکی\s+)?صدر/g, "امریکی صدر ڈونلڈ ٹرمپ"],
+    ];
+
+  for (const [pattern, replacement] of rules) {
+    const before = result;
+    result = result.replace(pattern, replacement);
+    if (result !== before) replacements++;
+  }
+
+  if (replacements > 0) {
+    console.warn(`[Sabq Editor] applyPoliticalFactsFilter: corrected ${replacements} outdated political reference(s) in ${lang} output`);
+  }
+
+  return result;
+}
+
 // Retry helper for rate limit handling
 async function withOpenAIRetry<T>(
   fn: () => Promise<T>,
@@ -102,7 +207,7 @@ export async function analyzeAndEditWithSabqStyle(
     console.log("[Sabq Editor] Categories list (AR):", categoriesListAr);
 
     const SYSTEM_PROMPTS = {
-      ar: `أنت محرر صحفي محترف يعمل ضمن غرفة الأخبار الرقمية لصحيفة "سبق"، وتعمل وفق أسلوب الكتابة التحريرية الخاص بالصحيفة.
+      ar: POLITICAL_FACTS_PREAMBLE.ar + `أنت محرر صحفي محترف يعمل ضمن غرفة الأخبار الرقمية لصحيفة "سبق"، وتعمل وفق أسلوب الكتابة التحريرية الخاص بالصحيفة.
 
 ## 🧹 خطوة 1: تنظيف النص (إلزامي قبل التحرير!)
 
@@ -245,7 +350,7 @@ export async function analyzeAndEditWithSabqStyle(
 ## 🎯 الهدف النهائي
 خبر نظيف، محرّر باحترافية، جاهز للنشر فوراً وفق معايير صحيفة سبق! 🚀`,
 
-      en: `You are a professional news editor for **Sabq English**, producing English news stories in a professional journalistic style consistent with Sabq English's editorial identity — clear, factual, engaging, and globally relevant.
+      en: POLITICAL_FACTS_PREAMBLE.en + `You are a professional news editor for **Sabq English**, producing English news stories in a professional journalistic style consistent with Sabq English's editorial identity — clear, factual, engaging, and globally relevant.
 
 **Mission:** Present Saudi Arabia to the world with accurate, polished English media language.
 
@@ -375,7 +480,7 @@ Evaluate the ORIGINAL text (after cleaning, before editing) on a 0-100 scale:
 ## 🎯 Final Goal
 Professional English news story, ready for immediate publication, presenting Saudi Arabia to the world with accuracy and polish! 🚀`,
 
-      ur: `آپ سبق ڈیجیٹل نیوز روم میں کام کرنے والے ایک پیشہ ور خبر ایڈیٹر ہیں، اور اخبار کے تحریری انداز کے مطابق کام کرتے ہیں۔
+      ur: POLITICAL_FACTS_PREAMBLE.ur + `آپ سبق ڈیجیٹل نیوز روم میں کام کرنے والے ایک پیشہ ور خبر ایڈیٹر ہیں، اور اخبار کے تحریری انداز کے مطابق کام کرتے ہیں۔
 
 ## 🧹 مرحلہ 1: متن کی صفائی (ترمیم سے پہلے لازمی!)
 
@@ -510,17 +615,23 @@ Professional English news story, ready for immediate publication, presenting Sau
     console.log("[Sabq Editor] Has news value:", result.hasNewsValue);
     console.log("[Sabq Editor] Optimized title:", result.optimized?.title?.substring(0, 60));
 
+    const finalLang = normalizeLanguageCode(result.language || normalizedLang);
+
     return {
       qualityScore: result.qualityScore || 0,
-      language: normalizeLanguageCode(result.language || normalizedLang),
+      language: finalLang,
       detectedCategory: result.detectedCategory || "عام",
       hasNewsValue: result.hasNewsValue !== false,
       issues: result.issues || [],
       suggestions: result.suggestions || [],
       optimized: {
-        title: result.optimized?.title || "",
-        lead: result.optimized?.lead || "",
-        content: result.optimized?.content || text,
+        // Run the political-facts filter on every text-bearing field so any
+        // "former president Trump" / "الرئيس السابق ترامب" that the model
+        // emitted despite the preamble gets rewritten before the article
+        // hits the database.
+        title: applyPoliticalFactsFilter(result.optimized?.title || "", finalLang),
+        lead: applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang),
+        content: applyPoliticalFactsFilter(result.optimized?.content || text, finalLang),
         seoKeywords: result.optimized?.seoKeywords || [],
       },
     };
