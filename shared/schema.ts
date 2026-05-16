@@ -2887,6 +2887,15 @@ export const updateArticleSchema = z.object({
     sources: z.array(z.string()).optional(),
     lastUpdated: z.string().optional(),
   }).nullable().optional(),
+  // Editorial review fields. Without these here, Zod's `.strict()`-like
+  // strip behavior silently drops them from PATCH bodies — which means
+  // archive/rejection/needs-revision reasons never make it to the DB or
+  // the editorial notification payload.
+  reviewStatus: z.union([
+    z.enum(["pending_review", "approved", "rejected", "needs_changes"]),
+    z.null(),
+  ]).optional(),
+  reviewNotes: z.union([z.string(), z.null()]).optional(),
 });
 
 export const adminArticleFiltersSchema = z.object({

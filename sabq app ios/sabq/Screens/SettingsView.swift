@@ -19,6 +19,9 @@ struct SettingsView: View {
     @State private var showDeleteAccount = false
     @State private var showForgotPassword = false
     @State private var submissionKind: ArticleSubmissionKind?
+    @State private var showClearDataConfirm = false
+    @State private var showLogoutConfirm = false
+    @State private var didClearData = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -32,6 +35,9 @@ struct SettingsView: View {
                 displaySection
                 subscriptionSection
                 aboutSection
+                if authStore.isLoggedIn {
+                    accountDangerSection
+                }
                 appInfoSection
             }
             .padding(.horizontal, 16)
@@ -73,6 +79,40 @@ struct SettingsView: View {
         .sheet(item: $submissionKind) { kind in
             ArticleSubmissionView(kind: kind)
         }
+        .alert("مسح البيانات المحلية؟", isPresented: $showClearDataConfirm) {
+            Button("مسح", role: .destructive) { clearLocalData() }
+            Button("إلغاء", role: .cancel) { }
+        } message: {
+            Text("سيتم حذف المقالات المحفوظة، عمليات البحث الأخيرة، والكلمات المتابعة من هذا الجهاز. لن يتأثر حسابك ولن يتم تسجيل خروجك.")
+        }
+        .alert("تم المسح", isPresented: $didClearData) {
+            Button("حسناً", role: .cancel) { }
+        } message: {
+            Text("تم مسح البيانات المحلية بنجاح.")
+        }
+        .alert("تسجيل الخروج؟", isPresented: $showLogoutConfirm) {
+            Button("خروج", role: .destructive) {
+                Task { await authStore.logout() }
+            }
+            Button("إلغاء", role: .cancel) { }
+        } message: {
+            Text("سيتم إنهاء جلستك على هذا الجهاز.")
+        }
+    }
+
+    /// Clears bookmarks, recent searches, followed keywords, and the
+    /// in-memory image cache. Does NOT touch auth, reading preferences,
+    /// dark mode, or the accent colour — those are explicit user
+    /// settings that aren't considered "data" for this control.
+    private func clearLocalData() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "sabq_bookmarks_v1")
+        defaults.removeObject(forKey: "sabq_bookmarks_articles_v1")
+        defaults.removeObject(forKey: "sabq_recent_searches")
+        defaults.removeObject(forKey: "sabq_followed_keywords")
+        ImageCache.clear()
+        URLCache.shared.removeAllCachedResponses()
+        didClearData = true
     }
 
     // MARK: - Profile / Auth
@@ -187,24 +227,6 @@ struct SettingsView: View {
                         .buttonStyle(.plain)
 
                         Spacer()
-
-                        Button {
-                            Task { await authStore.logout() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                                Text("خروج")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(SabqTheme.coral)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(
-                                Capsule().fill(SabqTheme.coral.opacity(0.1))
-                            )
-                        }
-                        .buttonStyle(.plain)
                     }
 
                     // Role-gated submission cards. Visible only when the
@@ -416,25 +438,69 @@ struct SettingsView: View {
                 .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    private var accountDangerSection: some View {
+        SurfaceCard(accent: SabqTheme.coral) {
+            SectionHeader(
+                title: "منطقة الخطر",
+                subtitle: "إجراءات تخصّ حسابك وبياناتك",
+                icon: "exclamationmark.triangle.fill",
+                tint: SabqTheme.coral
+            )
+
+            Button { showClearDataConfirm = true } label: {
+                dangerRow(
+                    title: "مسح البيانات المحلية",
+                    subtitle: "إزالة المقالات المحفوظة وعمليات البحث والكلمات المتابعة من هذا الجهاز. لن يتأثر حسابك.",
+                    icon: "tray.2.fill"
+                )
+            }
+            .buttonStyle(.plain)
 
             Button { showDeleteAccount = true } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
-                        .frame(width: 20)
-                    Text("حذف الحساب")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.coral)
-                    Spacer()
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-                .padding(.vertical, 8)
+                dangerRow(
+                    title: "حذف الحساب",
+                    subtitle: "حذف نهائي لحسابك وكل بياناتك من سبق. لا يمكن التراجع عن هذه الخطوة.",
+                    icon: "person.crop.circle.badge.xmark"
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button { showLogoutConfirm = true } label: {
+                dangerRow(
+                    title: "تسجيل الخروج",
+                    subtitle: "إنهاء جلستك على هذا الجهاز. يمكنك تسجيل الدخول مجددًا في أي وقت.",
+                    icon: "rectangle.portrait.and.arrow.right"
+                )
             }
             .buttonStyle(.plain)
         }
+    }
+
+    private func dangerRow(title: String, subtitle: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            SmallSquareBadge(systemImage: icon, tint: SabqTheme.coral)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(SabqTheme.coral)
+
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineSpacing(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .padding(.vertical, 3)
     }
 
     private func roleIcon(for role: String?) -> String {

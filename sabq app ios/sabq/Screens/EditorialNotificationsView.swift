@@ -25,39 +25,35 @@ struct EditorialNotificationsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            content
-                .background(SabqTheme.background)
-                .sabqRTL()
-                .navigationBarTitleDisplayMode(.inline)
-                .navigationBarBackButtonHidden(true)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 22))
-                                .foregroundStyle(SabqTheme.tertiaryInk)
-                        }
-                    }
-                    ToolbarItem(placement: .principal) {
-                        Text("الإشعارات")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(SabqTheme.ink)
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        NavigationLink(destination: NotificationPreferencesView()) {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                        }
+        // NOTE: this view is pushed onto the outer NavigationStack
+        // (HomeFeedView's header bell appends `EditorialNotificationsRoute`,
+        // SettingsView's submission card uses NavigationLink). Wrapping it
+        // in another NavigationStack here caused dismiss() to fail on the
+        // back button, which left `navigationPath` non-empty in ContentView
+        // and hid the tab bar — locking the user inside the screen.
+        content
+            .background(SabqTheme.background)
+            .sabqRTL()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("الإشعارات")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink(destination: NotificationPreferencesView()) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
                     }
                 }
-                .task { await load() }
-                .refreshable { await load() }
-                .sheet(item: $selectedNotification) { notification in
-                    EditorialNotificationDetailView(item: notification)
-                }
-        }
+            }
+            .task { await load() }
+            .refreshable { await load() }
+            .sheet(item: $selectedNotification) { notification in
+                EditorialNotificationDetailView(item: notification)
+            }
     }
 
     @ViewBuilder

@@ -252,13 +252,17 @@ struct CachedAsyncImage<Placeholder: View>: View {
     }
 }
 
-private enum ImageCache {
+enum ImageCache {
     nonisolated(unsafe) static let shared: NSCache<NSURL, UIImage> = {
         let c = NSCache<NSURL, UIImage>()
         c.countLimit = 150
         c.totalCostLimit = 100 * 1024 * 1024
         return c
     }()
+
+    static func clear() {
+        shared.removeAllObjects()
+    }
 }
 
 // MARK: - Theme
