@@ -583,42 +583,25 @@ actor APIClient {
         ]
         if let bio { body["bio"] = bio }
         if let city { body["city"] = city }
-        return try await put(APIUser.self, path: "/members/profile", body: body)
+        // The backend response is `{success, message, user}` — use the
+        // WrappedOrDirect unwrapper so we get the embedded APIUser back.
+        // The previous `put(APIUser.self, ...)` call decoded the outer
+        // envelope as APIUser directly, producing an empty user object
+        // (no id/role/email) that wiped the cached `currentUser` to a
+        // blank "مستخدم / قارئ" state on every profile save.
+        return try await put(WrappedOrDirect<APIUser>.self, path: "/members/profile", body: body).value
     }
 
     func uploadAvatar(imageData: Data, filename: String = "avatar.png") async throws -> APIUser {
-        await ensureCSRF()
-        let url = try buildURL(path: "/members/profile/image")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        let boundary = "Boundary-\(UUID().uuidString)"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        if let csrf = csrfToken {
-            request.setValue(csrf, forHTTPHeaderField: "X-CSRF-TOKEN")
-        }
-
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"avatar\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.noResponse }
-        guard (200...299).contains(http.statusCode) else {
-            if let apiErr = try? decoder.decode(APIErrorResponse.self, from: data), let msg = apiErr.message {
-                throw APIError.apiMessage(msg)
-            }
-            throw APIError.serverError(http.statusCode)
-        }
-        let result = try decoder.decode(APIAvatarUploadResponse.self, from: data)
-        return result.user
+        // The v1 mobile endpoint expects a base64 data-URI in the JSON
+        // body (`{ "image": "data:image/png;base64,..." }`), NOT the
+        // multipart form payload this method used to send. The multipart
+        // version always failed with "الصورة مطلوبة (base64)" because
+        // `req.body.image` was undefined.
+        let base64 = imageData.base64EncodedString()
+        struct Body: Encodable { let image: String }
+        let body = Body(image: "data:image/png;base64,\(base64)")
+        return try await post(APIAvatarUploadResponse.self, path: "/members/profile/image", body: body).user
     }
 
     func deleteAvatar() async throws {

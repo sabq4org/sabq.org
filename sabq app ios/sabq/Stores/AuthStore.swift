@@ -152,7 +152,17 @@ final class AuthStore {
         errorMessage = nil
         do {
             let updated = try await APIClient.shared.uploadAvatar(imageData: imageData)
-            currentUser = updated
+            // The avatar endpoint now returns the freshly-updated user row,
+            // but on older deploys it may return an empty placeholder. Use
+            // the returned user only if it has an id; otherwise pull the
+            // full profile to refresh state. Either way the image URL is
+            // reflected in `currentUser` after this call.
+            if !updated.id.isEmpty,
+               (updated.email != nil || updated.firstName != nil || updated.avatar != nil) {
+                currentUser = updated
+            } else {
+                await fetchFullProfile()
+            }
             successMessage = "تم تحديث الصورة الشخصية"
         } catch {
             errorMessage = error.localizedDescription

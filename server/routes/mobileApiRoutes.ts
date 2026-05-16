@@ -1633,41 +1633,81 @@ router.get("/members/profile", async (req: Request, res: Response) => {
 router.put("/members/profile", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
-    
+
     if (!session) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "غير مصرح" 
+      return res.status(401).json({
+        success: false,
+        message: "غير مصرح"
       });
     }
 
-    const { 
-      firstName, 
-      lastName, 
-      profileImageUrl, 
-      gender, 
-      birthDate, 
+    const {
+      firstName,
+      lastName,
+      profileImageUrl,
+      gender,
+      birthDate,
+      bio,
       city,
       country,
-      locale 
+      locale
     } = req.body;
 
-    await db.update(users)
-      .set({
-        firstName: firstName?.trim(),
-        lastName: lastName?.trim(),
-        profileImageUrl: profileImageUrl?.trim(),
-        gender,
-        birthDate: birthDate ? new Date(birthDate) : undefined,
-        city: city?.trim(),
-        country: country?.trim(),
-        locale,
-      })
-      .where(eq(users.id, session.userId));
+    // Build the SET clause from ONLY the keys the client actually sent.
+    // The previous implementation destructured every field from req.body,
+    // so an iOS profile-edit that only changes `firstName` was effectively
+    // sending `{firstName, lastName, profileImageUrl: undefined, gender:
+    // undefined, ...}` and overwriting the rest of the columns with NULL.
+    // After "save", the user's name became "مستخدم" and avatar disappeared.
+    const updates: Record<string, unknown> = {};
+    if (typeof firstName === "string") updates.firstName = firstName.trim();
+    if (typeof lastName === "string") updates.lastName = lastName.trim();
+    if (typeof profileImageUrl === "string") updates.profileImageUrl = profileImageUrl.trim();
+    if (typeof gender === "string") updates.gender = gender;
+    if (birthDate) updates.birthDate = new Date(birthDate);
+    if (typeof bio === "string") updates.bio = bio.trim();
+    if (typeof city === "string") updates.city = city.trim();
+    if (typeof country === "string") updates.country = country.trim();
+    if (typeof locale === "string") updates.locale = locale;
 
-    res.json({ 
-      success: true, 
-      message: "تم تحديث الملف الشخصي بنجاح" 
+    if (Object.keys(updates).length > 0) {
+      await db.update(users).set(updates).where(eq(users.id, session.userId));
+    }
+
+    // Return the freshly-updated user row so the iOS APIClient can replace
+    // `currentUser` in one round trip — the previous response was just
+    // `{success, message}`, which the iOS decoder read as an empty APIUser
+    // and propagated as a blank ("مستخدم" / "قارئ") account on screen.
+    const [updated] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        phoneNumber: users.phoneNumber,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        gender: users.gender,
+        birthDate: users.birthDate,
+        bio: users.bio,
+        city: users.city,
+        country: users.country,
+        locale: users.locale,
+        emailVerified: users.emailVerified,
+        phoneVerified: users.phoneVerified,
+        role: users.role,
+        jobTitle: users.jobTitle,
+        department: users.department,
+        verificationBadge: users.verificationBadge,
+        hasPressCard: users.hasPressCard,
+      })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+
+    res.json({
+      success: true,
+      message: "تم تحديث الملف الشخصي بنجاح",
+      user: updated ? { ...updated, phone: updated.phoneNumber } : null,
     });
   } catch (error) {
     console.error("[Mobile API] members/profile update error:", error);
@@ -1747,10 +1787,37 @@ router.post("/members/profile/image", async (req: Request, res: Response) => {
 
     console.log(`[Mobile API] Profile image uploaded for ${session.userId}: ${imageUrl}`);
 
-    res.json({ 
-      success: true, 
+    // Hydrate and return the full user row so the iOS client can update
+    // its cached APIUser without a follow-up GET /members/profile.
+    const [updated] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        phoneNumber: users.phoneNumber,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        gender: users.gender,
+        birthDate: users.birthDate,
+        bio: users.bio,
+        city: users.city,
+        country: users.country,
+        locale: users.locale,
+        emailVerified: users.emailVerified,
+        phoneVerified: users.phoneVerified,
+        role: users.role,
+        jobTitle: users.jobTitle,
+        department: users.department,
+      })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+
+    res.json({
+      success: true,
       message: "تم رفع الصورة الشخصية بنجاح",
-      imageUrl: imageUrl
+      imageUrl: imageUrl,
+      user: updated ? { ...updated, phone: updated.phoneNumber } : null,
     });
   } catch (error) {
     console.error("[Mobile API] members/profile/image upload error:", error);

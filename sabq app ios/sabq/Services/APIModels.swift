@@ -615,8 +615,46 @@ nonisolated struct APILoginRequest: Encodable {
 
 nonisolated struct APIAvatarUploadResponse: Decodable {
     let success: Bool?
+    let imageUrl: String?
     let profileImageUrl: String?
     let user: APIUser
+
+    /// The mobile endpoint returns `{success, message, imageUrl, user}`.
+    /// Old uploads (deleted multipart legacy) returned `{user, profileImageUrl}`.
+    /// Either way we want a non-nil APIUser — if the server didn't include
+    /// one (older deploy), we synthesize a minimal placeholder so the
+    /// uploader doesn't throw and the caller can refetch the full profile.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = try? c.decode(Bool.self, forKey: FlexKey("success"))
+        imageUrl = try? c.decode(String.self, forKey: FlexKey("imageUrl"))
+        profileImageUrl = (try? c.decode(String.self, forKey: FlexKey("profileImageUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("profile_image_url")))
+        if let decodedUser = try? c.decode(APIUser.self, forKey: FlexKey("user")) {
+            user = decodedUser
+        } else {
+            // Empty fallback — AuthStore.uploadAvatar refetches the profile
+            // afterwards so this placeholder never reaches the UI.
+            user = try APIUser(from: EmptyUserDecoder().asDecoder())
+        }
+    }
+}
+
+/// Tiny shim used to construct an empty APIUser when the server response
+/// doesn't include one. APIUser's decoder is fault-tolerant (every field
+/// optional with a default), so feeding it an empty container yields a
+/// placeholder with id=UUID(), no email, no roles — discarded immediately
+/// by the caller, which refetches the full profile.
+private struct EmptyUserDecoder {
+    func asDecoder() throws -> Decoder {
+        let data = "{}".data(using: .utf8)!
+        return try JSONDecoder().decode(EmptyDecoderProxy.self, from: data).decoder
+    }
+}
+
+private struct EmptyDecoderProxy: Decodable {
+    let decoder: Decoder
+    init(from decoder: Decoder) throws { self.decoder = decoder }
 }
 
 nonisolated struct APILoginResponse: Decodable {
