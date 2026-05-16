@@ -2831,7 +2831,18 @@ router.get("/trending", async (req: Request, res: Response) => {
     if (cached) return res.json(cached);
 
     const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    
+
+    // Trending = engagement velocity, not lifetime views.
+    // The previous `ORDER BY views DESC` over a 48h window favoured
+    // articles that were published earlier in the window (they had
+    // more hours to accumulate views), so a 38-hour-old article with
+    // 37k reads beat a 7-hour-old article with 17k reads — even though
+    // the latter is clearly hotter right now.
+    //
+    // New formula: views per hour since publish, with a 3-hour floor
+    // so just-published articles don't dominate after a handful of
+    // reads. Articles need at least ~3 hours of exposure before they
+    // compete on raw rate.
     const topArticlesRaw = await db.execute(sql`
       SELECT a.*, c.name_ar AS category_name_ar, c.id AS category_id,
              u.first_name AS author_first_name, u.last_name AS author_last_name
@@ -2840,7 +2851,10 @@ router.get("/trending", async (req: Request, res: Response) => {
       LEFT JOIN users u ON a.author_id = u.id
       WHERE a.status = 'published' AND a.hide_from_homepage = false
         AND a.published_at >= ${cutoff}
-      ORDER BY a.views DESC NULLS LAST
+      ORDER BY
+        COALESCE(a.views, 0)::float
+        / GREATEST(EXTRACT(EPOCH FROM (NOW() - a.published_at)) / 3600.0, 3)
+        DESC
       LIMIT 10
     `) as any;
     const topRows: any[] = topArticlesRaw?.rows || topArticlesRaw || [];

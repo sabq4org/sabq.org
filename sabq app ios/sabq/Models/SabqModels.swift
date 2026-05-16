@@ -68,6 +68,23 @@ enum SabqFormatters {
         }
     }
 
+    /// Compact, eye-friendly view count. 1,234 → "1,234". 12,500 → "12.5K".
+    /// 1,200,000 → "1.2M". Uses Latin digits to match the rest of the app.
+    static func compactViewCount(_ n: Int) -> String {
+        if n >= 1_000_000 {
+            return String(format: "%.1fM", Double(n) / 1_000_000)
+        }
+        if n >= 1_000 {
+            // Drop the decimal when it would just be ".0" (10,000 → 10K, not 10.0K)
+            let thousands = Double(n) / 1_000
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(thousands))K"
+            }
+            return String(format: "%.1fK", thousands)
+        }
+        return "\(n)"
+    }
+
     static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -322,6 +339,10 @@ struct Article: Identifiable, Equatable, Hashable {
     let imageURL: String?
     let slug: String?
     let articleURL: String?
+    /// Total reads. Surfaced next to trending rows so the sort order
+    /// (by engagement, not by date) is visible to the reader. 0 when
+    /// the API didn't supply it.
+    var viewsCount: Int = 0
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -400,7 +421,8 @@ struct Article: Identifiable, Equatable, Hashable {
             tags: api.keywords ?? [],
             imageURL: api.imageUrl,
             slug: slug,
-            articleURL: articleURL
+            articleURL: articleURL,
+            viewsCount: api.viewsCount ?? 0
         )
     }
 
