@@ -88,15 +88,29 @@ export function getCsrfToken(): string | null {
 }
 
 /**
+ * Soft cap below Safari's 64KB keepalive quota — we leave headroom so the
+ * pagehide flush at the end of the session still has room to send the
+ * final reading-history beacon.
+ */
+const KEEPALIVE_SOFT_BUDGET_BYTES = 32 * 1024;
+let keepaliveBytesUsed = 0;
+
+/**
  * Send a fire-and-forget tracking event with maximum reliability.
  *
- * Strategy:
- *   1. Prefer `navigator.sendBeacon` so the request survives `pagehide` /
- *      `beforeunload` (browsers don't cancel beacon requests when the page
- *      is closing).
- *   2. Fall back to a silent `keepalive` fetch (which can carry the CSRF
- *      header and also survives unload up to the browser's keepalive
- *      budget).
+ * Strategy (revised 2026-05-16 after a Safari "white page after deploy"
+ * incident — long-lived tabs were exhausting Safari's 64KB keepalive cap
+ * and subsequent CSRF + API fetches were silently failing with
+ * "Load failed"):
+ *
+ *   1. **Page is visible** — page is alive and will stay alive long enough
+ *      to complete a normal `fetch`. Use a regular non-keepalive fetch so
+ *      we don't burn the precious keepalive quota on routine analytics.
+ *   2. **Page is hidden / unloading** — request must survive teardown.
+ *      Try `navigator.sendBeacon` first, fall back to `keepalive: true`
+ *      fetch. We track cumulative keepalive bytes and refuse to spend
+ *      more once we approach the 32KB soft budget — Safari simply rejects
+ *      everything past 64KB cumulative, including the next CSRF fetch.
  *
  * Returns `true` if the request was queued (via beacon) or scheduled (via
  * keepalive fetch). Errors are swallowed — telemetry must never surface as
@@ -123,7 +137,54 @@ export function trackBeacon(url: string, body?: unknown): boolean {
     }
   }
 
-  // 1) Try sendBeacon (best for pagehide/beforeunload)
+  // Best-effort size estimate. Blob / FormData uses .size; JSON string
+  // uses byte length approximation (UTF-8 worst case).
+  const estimatedBytes =
+    blobPayload instanceof Blob
+      ? blobPayload.size
+      : payloadString
+        ? payloadString.length
+        : 0;
+
+  // Path A — page is visible: this is a regular live analytics ping. No
+  // need to consume the keepalive quota; a plain fetch will complete
+  // before the page goes anywhere. This is the common path for behavior
+  // tracking on a long-lived Safari tab.
+  const pageIsVisible =
+    typeof document !== "undefined" && document.visibilityState === "visible";
+
+  if (pageIsVisible) {
+    try {
+      const headers: Record<string, string> = {};
+      if (payloadString !== undefined) headers["Content-Type"] = contentType;
+      const token = getCsrfToken();
+      if (token) headers["x-csrf-token"] = token;
+      void fetch(apiUrl(url), {
+        method: "POST",
+        headers,
+        body: blobPayload ?? payloadString,
+        credentials: "include",
+        // Deliberately no `keepalive: true` here — we're alive, the request
+        // will resolve naturally and we keep the keepalive cap untouched
+        // for the eventual pagehide flush.
+      }).catch(() => {
+        // Silent — telemetry must never surface to the visitor.
+      });
+      return true;
+    } catch {
+      // Fall through to beacon path below as a safety net.
+    }
+  }
+
+  // Path B — page is hidden / unloading: must use beacon-class transport
+  // so the request survives teardown. Spend keepalive quota carefully:
+  // refuse new beacons once we're past the 32KB soft budget so the next
+  // critical request (CSRF, login, etc.) still has room.
+  if (keepaliveBytesUsed + estimatedBytes > KEEPALIVE_SOFT_BUDGET_BYTES) {
+    return false;
+  }
+
+  // 1) Try sendBeacon (best for pagehide/beforeunload).
   try {
     if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
       const beaconBody: BodyInit | undefined =
@@ -135,13 +196,16 @@ export function trackBeacon(url: string, body?: unknown): boolean {
       const ok = beaconBody !== undefined
         ? navigator.sendBeacon(url, beaconBody)
         : navigator.sendBeacon(url);
-      if (ok) return true;
+      if (ok) {
+        keepaliveBytesUsed += estimatedBytes;
+        return true;
+      }
     }
   } catch {
     // beacon may throw on quota — fall through to keepalive fetch
   }
 
-  // 2) Fallback: keepalive fetch (carries CSRF header). Fully silent.
+  // 2) Final fallback: keepalive fetch (carries CSRF header). Silent.
   try {
     const headers: Record<string, string> = {};
     if (payloadString !== undefined) {
@@ -160,6 +224,7 @@ export function trackBeacon(url: string, body?: unknown): boolean {
     }).catch(() => {
       // Silent — telemetry must never surface to the visitor.
     });
+    keepaliveBytesUsed += estimatedBytes;
     return true;
   } catch {
     return false;
