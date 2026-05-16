@@ -34988,33 +34988,28 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
       }
 
-      // Upload photo to Object Storage
-      const objectStorageService = new ObjectStorageService();
-      
-      const timestamp = Date.now();
-      const imgMimeToExt2: Record<string, string> = { "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
-      const safeExt2 = imgMimeToExt2[req.file.mimetype] || "jpg";
-      const filename = `opinion-author-applications/${timestamp}-${randomUUID()}.${safeExt2}`;
-      
-      // Use the actual bucket ID directly for reliable access
-      const actualBucketId = 'replit-objstore-3dc2325c-bbbe-4e54-9a00-e6f10b243138';
-      const objectName = `.private/${filename}`;
+      // Upload photo. CF Images first (works everywhere); fall back to GCS
+      // only when CF isn't configured. The previous hardcoded Replit bucket +
+      // sidecar ACL path returned ECONNREFUSED 127.0.0.1:1106 on Railway.
+      let profilePhotoUrl: string | null = null;
 
-      const bucket = objectStorageClient.bucket(actualBucketId);
-      const file = bucket.file(objectName);
+      if (cloudflareImagesService.isCloudflareConfigured()) {
+        const cfResult = await cloudflareImagesService.uploadToCloudflare(
+          req.file.buffer,
+          req.file.originalname || 'profile.jpg',
+          { type: 'opinion-author-application', email },
+          req.file.mimetype
+        );
+        if (cfResult.success && cfResult.deliveryUrl) {
+          profilePhotoUrl = cfResult.deliveryUrl;
+        } else {
+          console.warn('[OpinionAuthor] CF Images upload failed:', cfResult.error);
+        }
+      }
 
-      await file.save(req.file.buffer, {
-        metadata: {
-          contentType: req.file.mimetype,
-        },
-      });
-
-      await setObjectAclPolicy(file, {
-        owner: 'system',
-        visibility: "public",
-      });
-
-      const profilePhotoUrl = `/objects/${filename}`;
+      if (!profilePhotoUrl) {
+        return res.status(502).json({ message: 'خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً.' });
+      }
 
       // Create application
       const application = await storage.createOpinionAuthorApplication({
