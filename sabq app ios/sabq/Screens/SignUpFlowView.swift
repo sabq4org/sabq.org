@@ -16,6 +16,7 @@ struct SignUpFlowView: View {
         case askPassword
         case askInterests
         case submitting
+        case building   // animated "نبني ملفك الذكي" sequence after register
         case done
         case error(String)
     }
@@ -44,37 +45,44 @@ struct SignUpFlowView: View {
         VStack(spacing: 0) {
             header
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(messages) { bubble in
-                            bubbleRow(bubble)
-                                .id(bubble.id)
-                        }
-
-                        if case .submitting = step {
-                            HStack {
-                                ProgressView().tint(SabqTheme.primaryEnd)
-                                Text("ننشئ حسابك…")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
+            // Building / done states take over the whole content area
+            // because they're not part of the chat — they're a celebration
+            // of finishing onboarding, with their own visual rhythm.
+            if step == .building {
+                buildingProfile
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            ForEach(messages) { bubble in
+                                bubbleRow(bubble)
+                                    .id(bubble.id)
                             }
-                            .padding(.vertical, 8)
-                        }
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 20)
-                }
-                .onChange(of: messages.count) { _, _ in
-                    if let last = messages.last {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                }
-            }
 
-            inputBar
+                            if case .submitting = step {
+                                HStack {
+                                    ProgressView().tint(SabqTheme.primaryEnd)
+                                    Text("ننشئ حسابك…")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(SabqTheme.secondaryInk)
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 20)
+                    }
+                    .onChange(of: messages.count) { _, _ in
+                        if let last = messages.last {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        }
+                    }
+                }
+
+                inputBar
+            }
         }
         .background(SabqTheme.background)
         .sabqRTL()
@@ -82,9 +90,162 @@ struct SignUpFlowView: View {
         .task {
             if !didStart {
                 didStart = true
-                allCategories = await NewsService.fetchCategories()
+                // Shared cache — instant when warm, network only on cold
+                // start. Same pool the InterestsPickerSheet uses, so the
+                // signup interests step and the dashboard sheet stay in
+                // sync once any of them loads.
+                await InterestsCategoryCache.shared.loadIfStale()
+                allCategories = InterestsCategoryCache.shared.get()
                 await startConversation()
             }
+        }
+    }
+
+    // MARK: - Building profile animation
+
+    @State private var buildProgress: Int = 0
+    private static let buildSteps: [(icon: String, label: String)] = [
+        ("checkmark.seal.fill", "ربط البريد بحسابك"),
+        ("sparkles.rectangle.stack.fill", "تحضير اهتماماتك"),
+        ("brain.head.profile", "تدريب موجزك اليومي"),
+        ("newspaper.fill", "تخصيص الصفحة الرئيسية"),
+    ]
+
+    @ViewBuilder
+    private var buildingProfile: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            Spacer(minLength: 30)
+
+            // Hero: animated SABQ AI orb
+            HStack {
+                Spacer()
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 96, height: 96)
+                    Circle()
+                        .stroke(SabqTheme.primaryEnd.opacity(0.4), lineWidth: 3)
+                        .frame(width: 124, height: 124)
+                        .scaleEffect(buildProgress < Self.buildSteps.count ? 1.18 : 1.0)
+                        .opacity(buildProgress < Self.buildSteps.count ? 0.0 : 0.6)
+                        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false), value: buildProgress)
+                    Image(systemName: buildProgress < Self.buildSteps.count ? "sparkles" : "checkmark")
+                        .font(.system(size: 36, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+                Spacer()
+            }
+
+            // Headline
+            VStack(alignment: .center, spacing: 6) {
+                if buildProgress < Self.buildSteps.count {
+                    Text("نُجهّز ملفّك الذكي…")
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("لحظات قليلة وتصبح سبق أقرب إليك")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                } else {
+                    Text("أهلاً \(name) 🎉")
+                        .font(.system(size: 26, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("ملفّك الذكي جاهز. كل خبر من الآن مرتّب لك أنت.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+
+            // Steps progressing one by one
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(Self.buildSteps.enumerated()), id: \.offset) { idx, item in
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(idx < buildProgress
+                                      ? SabqTheme.primaryEnd
+                                      : SabqTheme.paleFill)
+                                .frame(width: 28, height: 28)
+                            if idx < buildProgress {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(.white)
+                            } else if idx == buildProgress {
+                                ProgressView()
+                                    .tint(SabqTheme.primaryEnd)
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                            }
+                        }
+                        Text(item.label)
+                            .font(.system(size: 14, weight: idx <= buildProgress ? .bold : .medium))
+                            .foregroundStyle(idx <= buildProgress ? SabqTheme.ink : SabqTheme.tertiaryInk)
+                        Spacer(minLength: 0)
+                    }
+                    .opacity(idx <= buildProgress ? 1.0 : 0.55)
+                }
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                            .fill(SabqTheme.primaryEnd.opacity(0.04))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+            )
+            .padding(.horizontal, 18)
+
+            Spacer(minLength: 16)
+
+            // CTA appears only after all steps complete
+            if buildProgress >= Self.buildSteps.count {
+                Button {
+                    SabqHaptics.success()
+                    dismiss()
+                } label: {
+                    Text("ابدأ التصفّح")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            } else {
+                Color.clear.frame(height: 80)
+            }
+        }
+        .task(id: step == .building) {
+            // Step progress is paced so the user has time to read each
+            // line. Total ~3.4 seconds; feels considered, not staged.
+            guard step == .building else { return }
+            for i in 1...Self.buildSteps.count {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.85)) {
+                        buildProgress = i
+                    }
+                }
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            await MainActor.run { SabqHaptics.success() }
         }
     }
 
@@ -375,9 +536,12 @@ struct SignUpFlowView: View {
     }
 
     private func startConversation() async {
-        await typeAI("أهلاً 👋 أنا SABQ AI.")
-        await typeAI("سأبني ملفّك خلال دقيقتين عبر بضعة أسئلة بسيطة، وكل إجابة تجعل الرؤى التي أقدّمها لك أدقّ.")
-        await typeAI("لنبدأ — كيف تحبّ أن أناديك؟")
+        // SABQ-flavoured opening — anchored in the newspaper's identity
+        // rather than the generic "AI assistant" tone the TRENDX reference
+        // used. Each line earns its place: brand → promise → first ask.
+        await typeAI("مرحباً بك في سبق ✨")
+        await typeAI("خلف كل خبر هنا ذكاءٌ. وخلف ملفّك… ذكاءٌ مخصّص لك وحدك.")
+        await typeAI("نبدأ من شيء واحد — كيف نناديك؟")
         await MainActor.run { inputFocused = true }
     }
 
@@ -390,21 +554,23 @@ struct SignUpFlowView: View {
             name = trimmed
             messages.append(Bubble(role: .user, text: trimmed, isHero: false))
             input = ""
-            await typeAI("أهلاً \(trimmed) 🌟 — على أي بريد إلكتروني نُسجّلك؟")
+            await typeAI("تشرّفنا \(trimmed) 🌟")
+            await typeAI("على أي بريد نلتقي من جديد؟ سيكون مفتاحك إلى سبق.")
             step = .askEmail
         case .askEmail:
             guard canSubmit else { return }
             email = trimmed
             messages.append(Bubble(role: .user, text: trimmed, isHero: false))
             input = ""
-            await typeAI("اختر كلمة مرور آمنة لك — ستحتاجها للدخول لاحقاً.")
+            await typeAI("ممتاز. كلمة مرور قويّة الآن — حسابك بأمان عندنا 🔒")
             step = .askPassword
         case .askPassword:
             guard canSubmit else { return }
             password = trimmed
             messages.append(Bubble(role: .user, text: String(repeating: "•", count: trimmed.count), isHero: false))
             input = ""
-            await typeAI("أخيراً — اختر التصنيفات التي تهمك، لأرتّب لك موجزك اليومي عليها.")
+            await typeAI("الخطوة الأخيرة 🎯")
+            await typeAI("اختر ما يشدّك من التصنيفات، أعِد ترتيب الأخبار حولك أنت.")
             step = .askInterests
             inputFocused = false
         case .askInterests:
@@ -439,12 +605,13 @@ struct SignUpFlowView: View {
         if !selectedInterests.isEmpty && authStore.isLoggedIn {
             await authStore.updateInterests(categoryIds: Array(selectedInterests))
         }
-        await typeAI("جاهز! 🎉 يمكنك الآن استعراض ملفّك الشخصي ومتابعة أخبارك المخصّصة.")
+        // Transition into the animated "building your smart profile"
+        // sequence instead of dismissing the sheet immediately. The
+        // sequence gives the user a sense of "something happened" + a
+        // proper named welcome — matching the reference TRENDX flow.
         await MainActor.run {
-            step = .done
+            step = .building
         }
-        try? await Task.sleep(nanoseconds: 1_200_000_000)
-        await MainActor.run { dismiss() }
     }
 
     /// Mimic a small typing delay between AI bubbles so the conversation

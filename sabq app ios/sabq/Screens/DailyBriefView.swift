@@ -59,9 +59,11 @@ struct DailyBriefView: View {
                 .environment(authStore)
         }
         .task {
-            // Categories list powers the interests-picker sheet; cheap to
-            // prefetch even for guests since it's public.
-            allCategories = await NewsService.fetchCategories()
+            // Warm the shared cache so opening the interests sheet is
+            // instant. The sheet itself also refreshes the cache, so the
+            // user never sees a long blank state.
+            await InterestsCategoryCache.shared.loadIfStale()
+            allCategories = InterestsCategoryCache.shared.get()
         }
     }
 
@@ -598,33 +600,60 @@ struct DailyBriefView: View {
 
 /// Modal sheet that lets a logged-in user toggle their category interests on
 /// and off. Persists via `AuthStore.updateInterests(_:)` on save.
+/// Categories cache that survives sheet open/close — first launch fetches
+/// once, every subsequent open shows the saved list instantly. Lives outside
+/// the view so re-presenting the sheet doesn't re-fire the load.
+@MainActor
+final class InterestsCategoryCache {
+    static let shared = InterestsCategoryCache()
+    private(set) var categories: [APICategory] = []
+    private(set) var lastLoaded: Date?
+
+    func get() -> [APICategory] { categories }
+
+    func loadIfStale(maxAge: TimeInterval = 600) async {
+        if let last = lastLoaded, Date().timeIntervalSince(last) < maxAge, !categories.isEmpty {
+            return
+        }
+        let fetched = await NewsService.fetchCategories()
+        if !fetched.isEmpty {
+            categories = fetched
+            lastLoaded = Date()
+        }
+    }
+}
+
+/// Rebuilt interests picker — self-fetches categories (with a skeleton until
+/// the cache is warm), shows a sticky header with the live selection counter,
+/// supports "حدد الكل" / "امسح الكل" bulk actions, and uses bigger
+/// category-tinted chips that read at a glance.
 struct InterestsPickerSheet: View {
     let allCategories: [APICategory]
     let selectedIds: Set<String>
 
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthStore.self) private var authStore
+    @State private var categories: [APICategory] = []
     @State private var selection: Set<String> = []
     @State private var isSaving = false
+    @State private var isLoading = true
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("اختر التصنيفات التي تهمك. سيظهر في موجزك اليومي ما يخصها بشكل أكبر.")
-                        .font(.system(size: 14))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineSpacing(5)
+            VStack(spacing: 0) {
+                stickyHeader
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 10)], alignment: .leading, spacing: 10) {
-                        ForEach(allCategories) { category in
-                            interestChip(category: category)
-                        }
+                ScrollView {
+                    if isLoading && categories.isEmpty {
+                        skeletonGrid
+                    } else if categories.isEmpty {
+                        emptyState
+                    } else {
+                        chipGrid
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 32)
+
+                bottomBar
             }
             .background(SabqTheme.background)
             .sabqRTL()
@@ -635,51 +664,254 @@ struct InterestsPickerSheet: View {
                     Button("إلغاء") { dismiss() }
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Task { await save() }
-                    } label: {
-                        if isSaving {
-                            ProgressView().tint(SabqTheme.primaryEnd)
-                        } else {
-                            Text("حفظ")
-                                .font(.system(size: 14, weight: .heavy))
-                                .foregroundStyle(SabqTheme.primaryEnd)
-                        }
+            }
+            .task {
+                // Seed from the prop if the caller pre-loaded them, then
+                // refresh from cache (instant if warm, fetch otherwise).
+                if !allCategories.isEmpty {
+                    categories = allCategories
+                    isLoading = false
+                }
+                selection = selectedIds
+                await InterestsCategoryCache.shared.loadIfStale()
+                let cached = InterestsCategoryCache.shared.get()
+                if !cached.isEmpty {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        categories = cached
+                        isLoading = false
                     }
-                    .disabled(isSaving)
+                } else if categories.isEmpty {
+                    isLoading = false
                 }
             }
-            .onAppear { selection = selectedIds }
         }
+    }
+
+    // MARK: - Sticky header (selection counter + bulk actions)
+
+    private var stickyHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("اختر ما يهمّك")
+                        .font(.system(size: 17, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("سبق ترتّب موجزك اليومي على هذه التصنيفات.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 8)
+                Text("\(selection.count)")
+                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 40, minHeight: 32)
+                    .padding(.horizontal, 8)
+                    .background(
+                        Capsule().fill(LinearGradient(
+                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                    )
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    SabqHaptics.light()
+                    selection = Set(categories.map(\.id))
+                } label: {
+                    Text("حدد الكل")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    SabqHaptics.light()
+                    selection.removeAll()
+                } label: {
+                    Text("امسح الكل")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(SabqTheme.paleFill))
+                }
+                .buttonStyle(.plain)
+                .disabled(selection.isEmpty)
+                .opacity(selection.isEmpty ? 0.5 : 1.0)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .background(.ultraThinMaterial)
+        .overlay(
+            Rectangle()
+                .fill(SabqTheme.outline.opacity(0.35))
+                .frame(height: 0.5),
+            alignment: .bottom
+        )
+    }
+
+    // MARK: - Chip grid
+
+    private var chipGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], alignment: .leading, spacing: 10) {
+            ForEach(categories) { category in
+                interestChip(category: category)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 100)
     }
 
     private func interestChip(category: APICategory) -> some View {
         let id = category.id
         let isOn = selection.contains(id)
+        let tint = chipTint(for: category)
         return Button {
             SabqHaptics.light()
-            if isOn { selection.remove(id) } else { selection.insert(id) }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                if isOn { selection.remove(id) } else { selection.insert(id) }
+            }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 14, weight: .heavy))
+                    Spacer(minLength: 0)
+                }
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
+                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .foregroundStyle(isOn ? .white : SabqTheme.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 72)
             .background(
-                Capsule().fill(isOn ? SabqTheme.primaryEnd : SabqTheme.paleFill)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isOn
+                          ? LinearGradient(colors: [tint, tint.opacity(0.85)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                          : LinearGradient(colors: [SabqTheme.surface, SabqTheme.surface], startPoint: .top, endPoint: .bottom))
             )
             .overlay(
-                Capsule().stroke(isOn ? Color.clear : SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isOn ? Color.clear : tint.opacity(0.30), lineWidth: 0.8)
             )
+            .shadow(color: isOn ? tint.opacity(0.30) : .clear, radius: 8, y: 3)
         }
         .buttonStyle(.plain)
+    }
+
+    /// Each category gets a stable tint derived from its slug so the chips
+    /// have visual rhythm without relying on a backend color field that may
+    /// or may not be present.
+    private func chipTint(for category: APICategory) -> Color {
+        let palette: [Color] = [
+            SabqTheme.primaryEnd,
+            SabqTheme.teal,
+            SabqTheme.coral,
+            SabqTheme.gold,
+            SabqTheme.sky,
+        ]
+        let seed = (category.slug ?? category.id).hashValue
+        return palette[abs(seed) % palette.count]
+    }
+
+    // MARK: - Skeleton + empty
+
+    private var skeletonGrid: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], alignment: .leading, spacing: 10) {
+            ForEach(0..<10, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(SabqTheme.paleFill)
+                    .frame(height: 72)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 100)
+        .redacted(reason: .placeholder)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "square.grid.2x2.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+            Text("لم نستطع تحميل التصنيفات")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+            Button {
+                Task {
+                    isLoading = true
+                    await InterestsCategoryCache.shared.loadIfStale(maxAge: 0)
+                    categories = InterestsCategoryCache.shared.get()
+                    isLoading = false
+                }
+            } label: {
+                Text("إعادة المحاولة")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(SabqTheme.primaryEnd))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
+    }
+
+    // MARK: - Bottom save bar
+
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            Button {
+                Task { await save() }
+            } label: {
+                HStack(spacing: 8) {
+                    if isSaving {
+                        ProgressView().tint(.white)
+                    }
+                    Text(selection.isEmpty
+                         ? "تخطّي الآن"
+                         : "حفظ \(selection.count) تصنيف")
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    selection.isEmpty
+                    ? AnyShapeStyle(SabqTheme.tertiaryInk)
+                    : AnyShapeStyle(SabqTheme.brandGradient),
+                    in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSaving)
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
+        }
+        .background(.ultraThinMaterial)
+        .overlay(
+            Rectangle()
+                .fill(SabqTheme.outline.opacity(0.35))
+                .frame(height: 0.5),
+            alignment: .top
+        )
     }
 
     private func save() async {
