@@ -458,6 +458,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     let body: String
     let authorName: String
     let authorImageURL: String?
+    let authorGender: String?
     let publishDate: Date
     let tags: [String]
     let imageURL: String?
@@ -478,6 +479,17 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
 
     var relativeDate: String {
         SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+    }
+
+    /// Gendered byline label. Returns "الكاتبة" for female authors, "الكاتب"
+    /// for male, and the neutral "بقلم" when gender is unknown. The backend
+    /// reads `users.gender` (`"male" | "female"`).
+    var bylineLabel: String {
+        switch authorGender?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "female", "f", "أنثى": return "الكاتبة"
+        case "male", "m", "ذكر": return "الكاتب"
+        default: return "بقلم"
+        }
     }
 
     nonisolated static func from(_ api: APIOpinion) -> OpinionArticle {
@@ -505,6 +517,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty ?? "كاتب الرأي",
             authorImageURL: api.authorImage,
+            authorGender: api.authorGender,
             publishDate: Article.parsePublishedAt(api.publishedAt ?? ""),
             tags: api.tags
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -540,6 +553,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty ?? "كاتب الرأي",
             authorImageURL: nil,
+            authorGender: nil,
             publishDate: Article.parsePublishedAt(api.publishedAt),
             tags: (api.keywords ?? [])
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

@@ -6,7 +6,6 @@ import UIKit
 struct SettingsView: View {
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
-    @AppStorage("notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
@@ -29,7 +28,6 @@ struct SettingsView: View {
                 )
 
                 profileSection
-                notificationsSection
                 displaySection
                 subscriptionSection
                 aboutSection
@@ -327,35 +325,6 @@ struct SettingsView: View {
         case "publisher": return "megaphone.fill"
         case "contributor": return "person.text.rectangle"
         default: return "person.fill"
-        }
-    }
-
-    // MARK: - Notifications
-
-    private var notificationsSection: some View {
-        SurfaceCard(accent: SabqTheme.coral) {
-            SectionHeader(
-                title: "الإشعارات",
-                subtitle: "تحكم في التنبيهات",
-                icon: "bell.fill",
-                tint: SabqTheme.coral
-            )
-
-            settingsToggle(
-                title: "الأخبار العاجلة",
-                subtitle: "تنبيهات فورية للأخبار المهمة",
-                icon: "bolt.fill",
-                tint: SabqTheme.coral,
-                isOn: $notificationsEnabled
-            )
-
-            settingsToggle(
-                title: "ملخص يومي",
-                subtitle: "ملخص بأهم الأخبار كل صباح",
-                icon: "newspaper",
-                tint: SabqTheme.primaryEnd,
-                isOn: .constant(true)
-            )
         }
     }
 
@@ -824,14 +793,49 @@ struct LoginSheet: View {
 
 // MARK: - Contact Sheet
 
+/// Contact form that mirrors sabq.org/contact. Submits to the same
+/// `POST /api/contact` endpoint as the web — messages land in the dashboard's
+/// "رسائل التواصل" inbox via the shared `contactMessages` table. Prefills
+/// name + email from the signed-in user when available.
 struct ContactSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthStore.self) private var authStore
+
     @State private var name = ""
+    @State private var phone = "+966"
     @State private var email = ""
+    @State private var subject: String = ""
     @State private var message = ""
     @State private var isSending = false
     @State private var isSent = false
     @State private var errorMessage: String?
+
+    /// Canonical subjects — MUST match the backend Zod enum exactly, otherwise
+    /// the POST returns 400 "بيانات غير صالحة". See `server/routes.ts` contact
+    /// schema at the /api/contact handler.
+    private static let subjectOptions = [
+        "استفسار عام",
+        "شراكات إعلامية",
+        "شكوى",
+        "اقتراح",
+        "أخرى"
+    ]
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedMessage: String { message.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedPhone: String { phone.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Local mirror of the backend Zod constraints so we surface validation
+    /// errors immediately instead of waiting on a round trip.
+    private var isFormValid: Bool {
+        guard trimmedName.count >= 2 else { return false }
+        guard trimmedPhone.range(of: #"^\+966[0-9]{9}$"#, options: .regularExpression) != nil else { return false }
+        guard trimmedEmail.contains("@"), trimmedEmail.contains(".") else { return false }
+        guard Self.subjectOptions.contains(subject) else { return false }
+        guard trimmedMessage.count >= 10 else { return false }
+        return true
+    }
 
     var body: some View {
         NavigationStack {
@@ -839,7 +843,7 @@ struct ContactSheet: View {
                 VStack(alignment: .leading, spacing: 20) {
                     SectionHeader(
                         title: "تواصل معنا",
-                        subtitle: "أرسل لنا رسالتك وسنرد عليك",
+                        subtitle: "أرسل لنا رسالتك وسنرد عليك في أقرب وقت",
                         icon: "envelope.fill",
                         tint: SabqTheme.teal
                     )
@@ -848,59 +852,42 @@ struct ContactSheet: View {
                         EmptyStateView(
                             icon: "checkmark.circle.fill",
                             tint: SabqTheme.leaf,
-                            title: "تم الإرسال",
-                            subtitle: "شكراً لتواصلك معنا، سنرد عليك قريباً"
+                            title: "تم استلام رسالتك",
+                            subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
                         )
                     } else {
-                        VStack(spacing: 14) {
+                        VStack(spacing: 16) {
                             if let errorMessage {
                                 errorBanner(errorMessage)
                             }
 
-                            contactField(placeholder: "الاسم", text: $name)
-                            contactField(placeholder: "البريد الإلكتروني", text: $email)
-                                .keyboardType(.emailAddress)
-                                .textInputAutocapitalization(.never)
+                            labeledField(
+                                label: "الاسم الكامل",
+                                placeholder: "أدخل اسمك الكامل",
+                                text: $name
+                            )
 
-                            TextEditor(text: $message)
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundStyle(SabqTheme.ink)
-                                .frame(minHeight: 120)
-                                .padding(12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                        .fill(SabqTheme.paleFill)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                        .stroke(SabqTheme.outline, lineWidth: 0.5)
-                                )
-                                .overlay(alignment: .topLeading) {
-                                    if message.isEmpty {
-                                        Text("رسالتك...")
-                                            .font(.system(size: 15, weight: .regular))
-                                            .foregroundStyle(SabqTheme.tertiaryInk)
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 20)
-                                            .allowsHitTesting(false)
-                                    }
-                                }
+                            labeledField(
+                                label: "رقم الهاتف",
+                                placeholder: "+966500000000",
+                                text: $phone,
+                                keyboard: .phonePad,
+                                disableAutocap: true
+                            )
 
-                            Button {
-                                Task { await send() }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    if isSending { ProgressView().tint(.white) }
-                                    Text("إرسال")
-                                        .font(.system(size: 16, weight: .bold))
-                                }
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 15)
-                                .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(name.isEmpty || email.isEmpty || message.isEmpty || isSending)
+                            labeledField(
+                                label: "البريد الإلكتروني",
+                                placeholder: "example@email.com",
+                                text: $email,
+                                keyboard: .emailAddress,
+                                disableAutocap: true
+                            )
+
+                            subjectPicker
+
+                            messageEditor
+
+                            sendButton
                         }
                     }
                 }
@@ -917,30 +904,159 @@ struct ContactSheet: View {
                     }
                 }
             }
+            .onAppear { prefillFromUser() }
         }
     }
 
-    private func contactField(placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
-            .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(SabqTheme.ink)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(SabqTheme.paleFill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .stroke(SabqTheme.outline, lineWidth: 0.5)
-            )
+    // MARK: - Field helpers
+
+    private func labeledField(
+        label: String,
+        placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType = .default,
+        disableAutocap: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            TextField(placeholder, text: text)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(SabqTheme.ink)
+                .keyboardType(keyboard)
+                .textInputAutocapitalization(disableAutocap ? .never : .sentences)
+                .autocorrectionDisabled(disableAutocap)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .fill(SabqTheme.paleFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                )
+        }
+    }
+
+    private var subjectPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("موضوع الرسالة")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            Menu {
+                ForEach(Self.subjectOptions, id: \.self) { option in
+                    Button(option) { subject = option }
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(subject.isEmpty ? "اختر موضوع الرسالة" : subject)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(subject.isEmpty ? SabqTheme.tertiaryInk : SabqTheme.ink)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .fill(SabqTheme.paleFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var messageEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("الرسالة")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            TextEditor(text: $message)
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(SabqTheme.ink)
+                .frame(minHeight: 120)
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .fill(SabqTheme.paleFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                )
+                .overlay(alignment: .topLeading) {
+                    if message.isEmpty {
+                        Text("اكتب رسالتك هنا...")
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundStyle(SabqTheme.tertiaryInk)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 20)
+                            .allowsHitTesting(false)
+                    }
+                }
+        }
+    }
+
+    private var sendButton: some View {
+        Button {
+            Task { await send() }
+        } label: {
+            HStack(spacing: 8) {
+                if isSending { ProgressView().tint(.white) }
+                Text("إرسال الرسالة")
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+            .opacity(isFormValid ? 1.0 : 0.55)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isFormValid || isSending)
+    }
+
+    // MARK: - Behaviour
+
+    private func prefillFromUser() {
+        guard let user = authStore.currentUser else { return }
+        if name.isEmpty {
+            let combined = [user.firstName, user.lastName]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            name = combined
+        }
+        if email.isEmpty, let userEmail = user.email, !userEmail.isEmpty {
+            email = userEmail
+        }
+        if phone == "+966", let userPhone = user.phoneNumber, userPhone.hasPrefix("+966") {
+            phone = userPhone
+        }
     }
 
     private func send() async {
         isSending = true
         errorMessage = nil
         do {
-            try await APIClient.shared.sendContactMessage(name: name, email: email, message: message)
+            try await APIClient.shared.sendContactMessage(
+                name: trimmedName,
+                phone: trimmedPhone,
+                email: trimmedEmail,
+                subject: subject,
+                message: trimmedMessage
+            )
             isSent = true
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription ?? apiError.localizedDescription
@@ -1105,6 +1221,7 @@ struct EditProfileSheet: View {
     @State private var lastName = ""
     @State private var bio = ""
     @State private var city = ""
+    @State private var gender = ""
     @State private var saved = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImage: UIImage?
@@ -1137,6 +1254,14 @@ struct EditProfileSheet: View {
                         editField(label: "الاسم الأول", placeholder: "أدخل الاسم الأول", text: $firstName)
                         editField(label: "اسم العائلة", placeholder: "أدخل اسم العائلة", text: $lastName)
                         editField(label: "المدينة", placeholder: "أدخل مدينتك", text: $city)
+                        genderPicker
+
+                        if let email = authStore.currentUser?.email, !email.isEmpty {
+                            readOnlyField(label: "البريد الإلكتروني", value: email, icon: "envelope.fill")
+                        }
+                        if let phone = authStore.currentUser?.phoneNumber, !phone.isEmpty {
+                            readOnlyField(label: "رقم الجوال", value: phone, icon: "phone.fill")
+                        }
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("نبذة عنك")
@@ -1192,7 +1317,8 @@ struct EditProfileSheet: View {
                                 firstName: firstName,
                                 lastName: lastName,
                                 bio: bio.isEmpty ? nil : bio,
-                                city: city.isEmpty ? nil : city
+                                city: city.isEmpty ? nil : city,
+                                gender: gender.isEmpty ? nil : gender
                             )
                             if authStore.errorMessage == nil {
                                 withAnimation { saved = true }
@@ -1235,6 +1361,8 @@ struct EditProfileSheet: View {
                     lastName = user.lastName ?? ""
                     bio = user.bio ?? ""
                     city = user.city ?? ""
+                    let normalizedGender = (user.gender ?? "").lowercased()
+                    gender = (normalizedGender == "male" || normalizedGender == "female") ? normalizedGender : ""
                 }
             }
         }
@@ -1353,6 +1481,54 @@ struct EditProfileSheet: View {
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
                         .stroke(SabqTheme.outline, lineWidth: 0.5)
                 )
+        }
+    }
+
+    private var genderPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("الجنس")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            Picker("الجنس", selection: $gender) {
+                Text("غير محدد").tag("")
+                Text("ذكر").tag("male")
+                Text("أنثى").tag("female")
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private func readOnlyField(label: String, value: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                Text(value)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                    .fill(SabqTheme.paleFill.opacity(0.6))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            )
         }
     }
 }

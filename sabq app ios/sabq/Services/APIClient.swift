@@ -575,7 +575,7 @@ actor APIClient {
         try await postRaw(path: "/members/interests", body: Body(interestIds: categoryIds))
     }
 
-    func updateProfile(firstName: String, lastName: String, bio: String?, city: String?) async throws -> APIUser {
+    func updateProfile(firstName: String, lastName: String, bio: String?, city: String?, gender: String?) async throws -> APIUser {
         await ensureCSRF()
         var body: [String: String] = [
             "firstName": firstName,
@@ -583,6 +583,7 @@ actor APIClient {
         ]
         if let bio { body["bio"] = bio }
         if let city { body["city"] = city }
+        if let gender { body["gender"] = gender }
         // The backend response is `{success, message, user}` — use the
         // WrappedOrDirect unwrapper so we get the embedded APIUser back.
         // The previous `put(APIUser.self, ...)` call decoded the outer
@@ -670,10 +671,23 @@ actor APIClient {
 
     // MARK: - Contact
 
-    func sendContactMessage(name: String, email: String, message: String) async throws {
+    /// Submit a contact-form message. Mirrors the web /contact form: all five
+    /// fields are required by the backend Zod schema, and `subject` must be
+    /// one of the canonical Arabic strings the backend enums on. The phone
+    /// must be the Saudi `+966[9 digits]` format. Successful submissions land
+    /// in the dashboard's "رسائل التواصل" via the same insert as the web.
+    func sendContactMessage(
+        name: String,
+        phone: String,
+        email: String,
+        subject: String,
+        message: String
+    ) async throws {
         try await postRaw(path: "/contact", body: [
             "name": name,
+            "phone": phone,
             "email": email,
+            "subject": subject,
             "message": message
         ])
     }

@@ -443,6 +443,7 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
     let fullText: String
     let authorName: String?
     let authorImage: String?
+    let authorGender: String?
     let publishedAt: String?
     let imageUrl: String?
     let tags: [String]
@@ -485,6 +486,7 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
                 keys: ["profileImageUrl", "profile_image_url", "avatar", "avatar_url"]
             )
             authorImage = Self.absoluteMediaURL(from: rawAuthorImage)
+            authorGender = Self.decodeFirstString(in: auth, keys: ["gender"])
         } else {
             authorName = try? c.decode(String.self, forKey: FlexKey("author_name"))
             let rawAuthorImage = Self.decodeFirstString(
@@ -492,6 +494,7 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
                 keys: ["author_image", "authorImage"]
             )
             authorImage = Self.absoluteMediaURL(from: rawAuthorImage)
+            authorGender = Self.decodeFirstString(in: c, keys: ["author_gender", "authorGender"])
         }
         publishedAt = (try? c.decode(String.self, forKey: FlexKey("publishedAt")))
             ?? (try? c.decode(String.self, forKey: FlexKey("published_at")))

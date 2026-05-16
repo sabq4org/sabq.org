@@ -3,16 +3,24 @@ import SwiftUI
 struct OpinionDetailView: View {
     let opinion: OpinionArticle
     @Environment(\.dismiss) private var dismiss
+
     @State private var fullOpinion: OpinionArticle?
     @State private var moreOpinions: [OpinionArticle] = []
-    @State private var isExcerptExpanded = false
-    @State private var shortlinkURL: URL?
-    @State private var shortlinkTask: Task<URL?, Never>?
+    @State private var isSummaryExpanded = false
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
+    @State private var scrollProgress: CGFloat = 0
+    @State private var scrollOffsetY: CGFloat = 0
+    @State private var heroAppeared = false
+    @State private var showReaderControls = false
+    @State private var isFocusMode = false
+
     @AppStorage("articleFontSize") private var fontSize: Double = 17
+    @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
+    @AppStorage("articleUseReaderFont") private var useReaderFont: Bool = false
 
     private var displayOpinion: OpinionArticle { fullOpinion ?? opinion }
+
     private var displayTags: [String] {
         var seen = Set<String>()
         return displayOpinion.tags
@@ -21,32 +29,51 @@ struct OpinionDetailView: View {
             .filter { seen.insert($0).inserted }
     }
 
+    /// Hero appearance + pull-down rubber band (mirrors ArticleDetailView).
+    private var heroScale: CGFloat {
+        let appearOffset = heroAppeared ? 0 : 0.06
+        let pullZoom = min(0.18, max(0, -scrollOffsetY * 0.0015))
+        return 1 + appearOffset + pullZoom
+    }
+
+    private var heroParallaxY: CGFloat {
+        max(0, scrollOffsetY * 0.4)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     heroImage
                         .frame(width: proxy.size.width)
+                        .scaleEffect(heroScale, anchor: .top)
+                        .offset(y: heroParallaxY)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.85), value: heroAppeared)
+                        .frame(height: 300)
+                        .clipped()
 
-                    VStack(alignment: .leading, spacing: 24) {
-                        opinionMeta
-                        opinionTitle
-
-                        if !displayOpinion.excerpt.isEmpty && displayOpinion.excerpt != displayOpinion.body {
-                            opinionExcerpt
+                    VStack(alignment: .leading, spacing: 18) {
+                        if !isFocusMode {
+                            labelsRow
                         }
 
-                        Divider()
-                            .foregroundStyle(SabqTheme.outline)
+                        opinionTitle
+                        opinionMeta
 
+                        if !isFocusMode {
+                            smartSummaryCard
+                        }
+
+                        Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         opinionBody
+
                         actionBar
 
-                        if !displayTags.isEmpty {
+                        if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
                         }
 
-                        if !moreOpinions.isEmpty {
+                        if !isFocusMode, !moreOpinions.isEmpty {
                             moreOpinionsSection
                         }
                     }
@@ -57,27 +84,48 @@ struct OpinionDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
+            .onScrollGeometryChange(for: CGSize.self) { geo in
+                let contentHeight = max(1, geo.contentSize.height - geo.containerSize.height)
+                let progress = min(1, max(0, geo.contentOffset.y / contentHeight))
+                return CGSize(width: progress, height: geo.contentOffset.y)
+            } action: { _, newValue in
+                scrollProgress = newValue.width
+                scrollOffsetY = newValue.height
+            }
+            .overlay(alignment: .top) {
+                readingProgressBar
+            }
         }
-        .background(SabqTheme.surface)
+        .background(focusBackground)
         .sabqRTL()
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .onAppear {
+            if !heroAppeared { heroAppeared = true }
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button { dismiss() } label: {
+                Button {
+                    SabqHaptics.light()
+                    dismiss()
+                } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
+                        .padding(8)
+                        .background(Circle().fill(.ultraThinMaterial))
                 }
             }
-
             ToolbarItem(placement: .primaryAction) {
                 Button {
+                    SabqHaptics.light()
                     shareOpinion()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.secondaryInk)
+                        .padding(8)
+                        .background(Circle().fill(.ultraThinMaterial))
                 }
                 .buttonStyle(.plain)
             }
@@ -85,17 +133,15 @@ struct OpinionDetailView: View {
         .task {
             await loadOpinion()
         }
+        .onDisappear {
+            copyFeedbackTask?.cancel()
+        }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
         }
     }
 
-    private var fallbackShareURL: URL {
-        if let urlString = displayOpinion.articleURL, let url = URL(string: urlString) {
-            return url
-        }
-        return URL(string: "https://sabq.org")!
-    }
+    // MARK: - Loading
 
     @MainActor
     private func loadOpinion() async {
@@ -108,157 +154,203 @@ struct OpinionDetailView: View {
             .filter { $0.id != displayOpinion.id }
             .prefix(4)
             .map { $0 }
-
-        _ = await prepareShareURL()
     }
 
+    // MARK: - Hero (clean, no overlay text — matches ArticleDetailView)
+
     private var heroImage: some View {
-        ZStack(alignment: .bottom) {
+        Group {
             if let urlString = displayOpinion.imageURL, let url = URL(string: urlString) {
                 CachedAsyncImage(url: url, contentMode: .fill) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity, maxHeight: 260)
+                .frame(maxWidth: .infinity, maxHeight: 300)
                 .clipped()
             } else {
                 heroPlaceholder
             }
-
-            LinearGradient(
-                colors: [.black.opacity(0.6), .black.opacity(0.2), .clear],
-                startPoint: .bottom,
-                endPoint: .top
-            )
-            .frame(maxWidth: .infinity, maxHeight: 140, alignment: .bottom)
-            .allowsHitTesting(false)
-
-            HStack(spacing: 8) {
-                StatusChip(title: "مقال رأي", tint: .white)
-                StatusChip(title: displayOpinion.authorName, tint: .white.opacity(0.86))
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 260)
+        .frame(height: 300)
         .clipped()
     }
 
     private var heroPlaceholder: some View {
         LinearGradient(
-            colors: [SabqTheme.primaryEnd.opacity(0.16), SabqTheme.primaryStart.opacity(0.05)],
+            colors: [SabqTheme.primaryEnd.opacity(0.20), SabqTheme.primaryStart.opacity(0.05)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-        .frame(height: 260)
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
         .overlay {
             Image(systemName: "text.quote")
-                .font(.system(size: 92, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.15))
+                .font(.system(size: 100, weight: .ultraLight))
+                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.18))
         }
     }
 
-    private var opinionMeta: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 10) {
-                OpinionAuthorAvatar(
-                    name: displayOpinion.authorName,
-                    imageURL: displayOpinion.authorImageURL,
-                    size: 38
-                )
+    // MARK: - Reading Progress Bar
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayOpinion.authorName)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
+    private var readingProgressBar: some View {
+        ProgressView(value: scrollProgress)
+            .progressViewStyle(ReadingProgressStyle())
+            .frame(height: 4)
+            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: scrollProgress)
+            .opacity(scrollProgress > 0.001 ? 1 : 0)
+            .animation(.easeOut(duration: 0.25), value: scrollProgress > 0.001)
+    }
 
-                    Text("كاتب المقال")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
+    // MARK: - Labels (opinion marker pill)
+
+    /// Labels row directly under the hero. Contains the "مقال رأي" pill —
+    /// the visual differentiator from a news detail. Same FlowLayout footprint
+    /// as the article labelsRow so future additions (sentiment, breaking, etc.)
+    /// drop in cleanly.
+    private var labelsRow: some View {
+        FlowLayout(spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "text.quote")
+                    .font(.system(size: 11, weight: .heavy))
+                Text("مقال رأي")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .tracking(0.5)
             }
-
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 5) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 12, weight: .medium))
-                    Text(displayOpinion.readingTime)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .monospacedDigit()
-                }
-                .foregroundStyle(SabqTheme.tertiaryInk)
-
-                HStack(spacing: 5) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 12, weight: .medium))
-                    Text(displayOpinion.dateFormatted)
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .foregroundStyle(SabqTheme.tertiaryInk)
-            }
+            .foregroundStyle(SabqTheme.primaryEnd)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous).fill(SabqTheme.primaryEnd.opacity(0.10))
+            )
+            .overlay(
+                Capsule(style: .continuous).stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 0.5)
+            )
         }
     }
+
+    // MARK: - Title
 
     private var opinionTitle: some View {
         Text(displayOpinion.title)
-            .font(.system(size: CGFloat(fontSize + 6), weight: .bold))
+            .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
             .foregroundStyle(SabqTheme.ink)
             .multilineTextAlignment(.leading)
-            .lineSpacing(6)
+            .lineSpacing(3)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
     }
 
-    private var opinionExcerpt: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(SabqTheme.primaryEnd)
-                .frame(width: 3)
+    // MARK: - Meta (gendered byline + reading time + date)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.primaryEnd.opacity(0.7))
-                    Text("الموجز الذكي")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-
-                Text(displayOpinion.excerpt)
-                    .font(.system(size: CGFloat(fontSize - 1), weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(6)
-                    .lineLimit(isExcerptExpanded ? nil : 3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .animation(.easeInOut(duration: 0.25), value: isExcerptExpanded)
-
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        isExcerptExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(isExcerptExpanded ? "عرض أقل" : "عرض المزيد")
-                            .font(.system(size: 13, weight: .medium))
-                        Image(systemName: isExcerptExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
+    private var opinionMeta: some View {
+        HStack(spacing: 8) {
+            NavigationLink(value: AuthorRoute(name: displayOpinion.authorName)) {
+                Text("\(displayOpinion.bylineLabel): \(displayOpinion.authorName)")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
-                }
-                .buttonStyle(.plain)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .buttonStyle(.plain)
+            .layoutPriority(2)
+
+            Text("·")
+                .font(.system(size: 11))
+                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
+
+            Text(displayOpinion.readingTime)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .monospacedDigit()
+                .lineLimit(1)
+                .layoutPriority(1)
+
+            Text("·")
+                .font(.system(size: 11))
+                .foregroundStyle(SabqTheme.tertiaryInk.opacity(0.6))
+
+            Text(displayOpinion.dateFormatted)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .layoutPriority(3)
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    // MARK: - Smart Summary Card
+
+    private var smartSummaryText: String {
+        let excerpt = displayOpinion.excerpt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (excerpt == displayOpinion.body) ? "" : excerpt
+    }
+
+    @ViewBuilder
+    private var smartSummaryCard: some View {
+        let body = smartSummaryText
+        if body.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    Text("الموجز الذكي")
+                        .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Spacer(minLength: 0)
+                }
+
+                Text(body)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(4)
+                    .lineLimit(isSummaryExpanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if body.count > 120 {
+                    Button {
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                            isSummaryExpanded.toggle()
+                        }
+                        SabqHaptics.light()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(isSummaryExpanded ? "طيّ" : "عرض المزيد")
+                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: isSummaryExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                            .fill(SabqTheme.primaryEnd.opacity(0.04))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                    .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+            )
+        }
+    }
+
+    // MARK: - Body
 
     private var opinionBody: some View {
         Group {
@@ -273,13 +365,17 @@ struct OpinionDetailView: View {
             } else {
                 let paragraphs = Article.displayParagraphs(for: body)
 
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                VStack(alignment: .leading, spacing: 18) {
+                    ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
                         Text(paragraph)
-                            .font(.system(size: CGFloat(fontSize), weight: .regular))
-                            .foregroundStyle(SabqTheme.ink.opacity(0.90))
+                            .font(.system(
+                                size: CGFloat(index == 0 ? fontSize + 1 : fontSize),
+                                weight: index == 0 ? .medium : .regular,
+                                design: useReaderFont ? .serif : .default
+                            ))
+                            .foregroundStyle(SabqTheme.ink.opacity(0.92))
                             .multilineTextAlignment(.leading)
-                            .lineSpacing(8)
+                            .lineSpacing(CGFloat(lineSpacing) + (index == 0 ? 4 : 3))
                             .lineLimit(nil)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -290,38 +386,78 @@ struct OpinionDetailView: View {
         }
     }
 
+    // MARK: - Action Bar (مشاركة / نسخ / تنسيق / قراءة)
+
     private var actionBar: some View {
         HStack(spacing: 0) {
             Button {
+                SabqHaptics.light()
                 shareOpinion()
             } label: {
                 actionButton(icon: "square.and.arrow.up", label: "مشاركة")
             }
             .buttonStyle(.plain)
 
-            Divider()
-                .frame(height: 28)
+            Divider().frame(height: 28)
 
             Button {
+                SabqHaptics.light()
                 copyShareLink()
             } label: {
                 actionButton(
                     icon: isCopyFeedbackVisible ? "checkmark.circle.fill" : "link",
-                    label: isCopyFeedbackVisible ? "تم النسخ" : "نسخ الرابط",
+                    label: isCopyFeedbackVisible ? "تم النسخ" : "نسخ",
                     isActive: isCopyFeedbackVisible
                 )
             }
             .buttonStyle(.plain)
+
+            Divider().frame(height: 28)
+
+            Button {
+                SabqHaptics.light()
+                showReaderControls = true
+            } label: {
+                actionButton(icon: "textformat.size", label: "تنسيق")
+            }
+            .buttonStyle(.plain)
+
+            Divider().frame(height: 28)
+
+            Button {
+                SabqHaptics.medium()
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                    isFocusMode.toggle()
+                }
+            } label: {
+                actionButton(
+                    icon: isFocusMode ? "book.closed.fill" : "book",
+                    label: isFocusMode ? "خروج" : "قراءة",
+                    isActive: isFocusMode
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .fill(SabqTheme.paleFill)
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                        .fill(SabqTheme.paleFill.opacity(0.4))
+                )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                .stroke(SabqTheme.outline, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
         )
+        .sheet(isPresented: $showReaderControls) {
+            ReaderControlsSheet(
+                fontSize: $fontSize,
+                lineSpacing: $lineSpacing,
+                useReaderFont: $useReaderFont
+            )
+        }
     }
 
     private func actionButton(icon: String, label: String, isActive: Bool = false) -> some View {
@@ -336,62 +472,19 @@ struct OpinionDetailView: View {
         .padding(.vertical, 10)
     }
 
-    private func shareOpinion() {
-        Task {
-            let url = await prepareShareURL()
-            presentShareSheet(with: url)
-        }
+    // MARK: - Focus background (warmer cream tone in focus mode)
+
+    private var focusBackground: Color {
+        isFocusMode
+            ? Color(UIColor { t in
+                t.userInterfaceStyle == .dark
+                    ? UIColor(red: 0.10, green: 0.09, blue: 0.08, alpha: 1)
+                    : UIColor(red: 0.98, green: 0.95, blue: 0.91, alpha: 1)
+            })
+            : SabqTheme.surface
     }
 
-    private func copyShareLink() {
-        Task {
-            let url = await prepareShareURL()
-            await MainActor.run {
-                UIPasteboard.general.string = url.absoluteString
-                showCopyFeedback()
-            }
-        }
-    }
-
-    @MainActor
-    private func showCopyFeedback() {
-        copyFeedbackTask?.cancel()
-
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-            isCopyFeedbackVisible = true
-        }
-
-        copyFeedbackTask = Task {
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isCopyFeedbackVisible = false
-                }
-                copyFeedbackTask = nil
-            }
-        }
-    }
-
-    @MainActor
-    private func prepareShareURL() async -> URL {
-        // Same reasoning as ArticleDetailView: skip the shortlink path and
-        // share the canonical `/opinion/<slug>` URL so crawlers unfurl with
-        // the proper og:image / og:title / og:description from seoInjector.
-        return fallbackShareURL
-    }
-
-    private func resolveShortlinkURL(opinionId: String) async -> URL? {
-        await SabqShareHelper.resolveShortlink(articleId: opinionId)
-    }
-
-    @MainActor
-    private func presentShareSheet(with url: URL) {
-        SabqShareHelper.presentShareSheet(with: url)
-    }
+    // MARK: - Tags
 
     private var tagsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -418,10 +511,11 @@ struct OpinionDetailView: View {
         }
     }
 
+    // MARK: - More Opinions
+
     private var moreOpinionsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Divider()
-                .foregroundStyle(SabqTheme.outline)
+            Divider().foregroundStyle(SabqTheme.outline)
 
             SectionHeader(
                 title: "مقالات أخرى",
@@ -440,9 +534,10 @@ struct OpinionDetailView: View {
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
 
-                            Text(opinion.authorName)
+                            Text("\(opinion.bylineLabel): \(opinion.authorName)")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(SabqTheme.secondaryInk)
+                                .lineLimit(1)
 
                             Text(opinion.relativeDate)
                                 .font(.system(size: 11, weight: .medium))
@@ -459,6 +554,53 @@ struct OpinionDetailView: View {
                     .padding(.vertical, 4)
                 }
                 .buttonStyle(.plain)
+
+                if opinion.id != moreOpinions.last?.id {
+                    Divider().foregroundStyle(SabqTheme.outline.opacity(0.5))
+                }
+            }
+        }
+    }
+
+    // MARK: - Share / Copy
+
+    private var fallbackShareURL: URL {
+        if let urlString = displayOpinion.articleURL, let url = URL(string: urlString) {
+            return url
+        }
+        return URL(string: "https://sabq.org")!
+    }
+
+    private func shareOpinion() {
+        let url = fallbackShareURL
+        SabqShareHelper.presentShareSheet(with: url)
+    }
+
+    private func copyShareLink() {
+        let url = fallbackShareURL
+        UIPasteboard.general.string = url.absoluteString
+        showCopyFeedback()
+    }
+
+    @MainActor
+    private func showCopyFeedback() {
+        copyFeedbackTask?.cancel()
+
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(.success)
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+            isCopyFeedbackVisible = true
+        }
+
+        copyFeedbackTask = Task {
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isCopyFeedbackVisible = false
+                }
+                copyFeedbackTask = nil
             }
         }
     }

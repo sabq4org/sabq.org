@@ -131,12 +131,12 @@ final class AuthStore {
     }
 
     @MainActor
-    func updateProfile(firstName: String, lastName: String, bio: String?, city: String?) async {
+    func updateProfile(firstName: String, lastName: String, bio: String?, city: String?, gender: String?) async {
         isLoading = true
         errorMessage = nil
         do {
             let updated = try await APIClient.shared.updateProfile(
-                firstName: firstName, lastName: lastName, bio: bio, city: city
+                firstName: firstName, lastName: lastName, bio: bio, city: city, gender: gender
             )
             currentUser = updated
             successMessage = "تم تحديث الملف الشخصي"
