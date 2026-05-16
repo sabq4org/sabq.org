@@ -2,7 +2,7 @@ import { Component, ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { cacheBustReload, canCacheBust, markCacheBust } from "@/lib/cacheBust";
+import { cacheBustReload, canCacheBust, isRecoveryPending, markCacheBust } from "@/lib/cacheBust";
 
 interface Props {
   children: ReactNode;
@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: any) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
 
-    if (isChunkLoadError(error) && shouldAutoReload()) {
+    if (isChunkLoadError(error) && shouldAutoReload() && !isRecoveryPending()) {
       // Use cacheBustReload (not plain window.location.reload) so any
       // edge/browser cache that's still serving the stale HTML pointing
       // at the renamed chunks is bypassed. Plain reload reuses the same

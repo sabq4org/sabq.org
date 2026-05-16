@@ -17,7 +17,7 @@ import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "reac
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
-import { canCacheBust, markCacheBust, cacheBustReload, hardReset, canHardReset, getCacheBustCount } from "@/lib/cacheBust";
+import { canCacheBust, markCacheBust, cacheBustReload, hardReset, canHardReset, getCacheBustCount, getRecoveryPendingMs } from "@/lib/cacheBust";
 import { useAuth } from "@/hooks/useAuth";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
@@ -77,6 +77,15 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
               .catch(reject);
           }, delay);
         } else if (isModuleError) {
+          const pendingRecoveryMs = getRecoveryPendingMs();
+          if (pendingRecoveryMs > 0) {
+            console.warn("[LazyLoad] Chunk recovery already in progress - waiting for navigation");
+            setTimeout(() => {
+              reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
+            }, pendingRecoveryMs + 1000);
+            return;
+          }
+
           // All retries exhausted — JS chunks renamed after deploy.
           // Cache-bust reload forces browser AND CDN to fetch fresh HTML.
           if (canCacheBust()) {
@@ -443,6 +452,9 @@ class ErrorBoundary extends Component<
     // If this looks like a chunk/module error, attempt one last cache-bust reload
     // before showing the user-facing error screen.
     if (isChunkErrorMessage(error?.message)) {
+      if (getRecoveryPendingMs() > 0) {
+        return;
+      }
       if (canCacheBust()) {
         console.warn("[ErrorBoundary] Chunk error detected — attempting cache-bust reload");
         markCacheBust();

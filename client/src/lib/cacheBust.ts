@@ -6,6 +6,33 @@ const CB_MAX_PER_WINDOW = 5;
 const CB_COOLDOWN_MS = 30_000;
 const CB_WINDOW_MS = 5 * 60_000;
 const HR_COOLDOWN_MS = 10 * 60_000;
+const RECOVERY_PENDING_KEY = "sabq_recovery_pending";
+const RECOVERY_PENDING_TTL_MS = 20_000;
+
+function markRecoveryPending(): void {
+  try {
+    sessionStorage.setItem(RECOVERY_PENDING_KEY, String(Date.now()));
+  } catch {}
+}
+
+export function getRecoveryPendingMs(): number {
+  try {
+    const started = parseInt(sessionStorage.getItem(RECOVERY_PENDING_KEY) || "0", 10);
+    if (!started) return 0;
+    const remaining = RECOVERY_PENDING_TTL_MS - (Date.now() - started);
+    if (remaining <= 0) {
+      sessionStorage.removeItem(RECOVERY_PENDING_KEY);
+      return 0;
+    }
+    return remaining;
+  } catch {
+    return 0;
+  }
+}
+
+export function isRecoveryPending(): boolean {
+  return getRecoveryPendingMs() > 0;
+}
 
 export function canCacheBust(): boolean {
   try {
@@ -47,6 +74,7 @@ export function getCacheBustCount(): number {
 }
 
 export function cacheBustReload(): void {
+  markRecoveryPending();
   try {
     const url = new URL(window.location.href);
     url.searchParams.set(CB_PARAM, String(Date.now()));
@@ -76,6 +104,7 @@ export function resetCacheBustState(): void {
     CB_COUNT_KEY,
     CB_LAST_KEY,
     HR_DONE_KEY,
+    RECOVERY_PENDING_KEY,
     "sabq_chunk_reload",
     "sabq_chunk_error_reload",
     "__sabq_safety_reload_ts",
@@ -88,6 +117,7 @@ export function resetCacheBustState(): void {
 }
 
 export function hardReset(): void {
+  markRecoveryPending();
   try {
     sessionStorage.setItem(HR_DONE_KEY, String(Date.now()));
   } catch {}

@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
-import { cacheBustReload, canCacheBust, markCacheBust, resetCacheBustState } from "@/lib/cacheBust";
+import { cacheBustReload, canCacheBust, isRecoveryPending, markCacheBust, resetCacheBustState } from "@/lib/cacheBust";
 
 const CHUNK_RELOAD_KEY = 'sabq_chunk_error_reload';
 const CHUNK_RELOAD_TIMEOUT = 60000;
@@ -22,6 +22,8 @@ function isChunkLoadError(message: string): boolean {
 }
 
 function handleChunkError(): void {
+  if (isRecoveryPending()) return;
+
   const lastReload = sessionStorage.getItem(CHUNK_RELOAD_KEY);
   const now = Date.now();
 
