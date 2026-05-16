@@ -132,25 +132,31 @@ const previewPattern = process.env.FRONTEND_PREVIEW_PATTERN
 
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // No Origin header at all → same-origin request or server-side call.
+    // Allow so curl, health checks, and SSR-internal requests keep working.
     if (!origin) {
       return callback(null, true);
     }
-    // Reject anything that doesn't parse cleanly as a URL and isn't
-    // https in production (security audit M7, 2026-05-11). The
-    // allowedOriginsSet check below is an exact-string match on the
-    // origin (good), but the regex preview pattern is only as tight
-    // as the operator wrote it. We add a parse-and-protocol gate so
-    // a malformed origin can't smuggle past even a loose regex.
+    // Literal string "null" → opaque origins (sandboxed iframes, cross-origin
+    // redirects, file://, data:, privacy modes, some Edge configurations).
+    // Deny CORS but DON'T throw — `callback(null, false)` just omits the
+    // Access-Control-Allow-Origin header, letting the browser block the
+    // response on its own. Throwing here surfaced as user-visible 500s.
+    if (origin === 'null') {
+      return callback(null, false);
+    }
+    // Parse-and-protocol gate (security audit M7, 2026-05-11) — a malformed
+    // origin can't smuggle past a loose preview-pattern regex.
     let parsed: URL;
     try {
       parsed = new URL(origin);
     } catch {
       console.warn(`[CORS] Rejected non-URL origin: ${origin}`);
-      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+      return callback(null, false);
     }
     if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
       console.warn(`[CORS] Rejected non-HTTPS origin in production: ${origin}`);
-      return callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+      return callback(null, false);
     }
     const normalizedOrigin = origin.replace(/:5000$/, '').replace(/:5001$/, '');
     if (allowedOriginsSet.has(origin) || normalizedOriginsSet.has(normalizedOrigin)) {
@@ -164,7 +170,7 @@ app.use(cors({
       return callback(null, true);
     }
     console.warn(`[CORS] Blocked origin: ${origin}`);
-    callback(new Error('غير مسموح بالوصول من هذا المصدر'));
+    callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
