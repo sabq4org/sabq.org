@@ -6946,6 +6946,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(403).json({ message: "You don't have permission to edit this article" });
       }
 
+      // Archive guard: when the editor transitions an article to `archived`,
+      // they MUST supply a `reviewNotes` (= archive reason) so the author/
+      // reporter receives a meaningful push instead of a silent deletion.
+      // This mirrors the rejection flow's reviewer-note requirement.
+      const isArchivingNow =
+        req.body?.status === "archived" && existingArticle.status !== "archived";
+      if (isArchivingNow) {
+        const noteCandidate = (req.body?.reviewNotes ?? "").toString().trim();
+        if (!noteCandidate) {
+          return res.status(400).json({
+            message: "سبب الأرشفة مطلوب — أدخل ملاحظة يصلها الكاتب/المراسل قبل التأكيد",
+            field: "reviewNotes",
+          });
+        }
+      }
+
       // Preprocess request body: convert null values to undefined for optional fields
       // This handles cases where the client sends null but schema expects undefined
       const sanitizedBody = { ...req.body };
@@ -7203,6 +7219,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               await notifyArticleStakeholders(
                 articleForNotify,
                 "needs_revision",
+                updatedArticle.reviewNotes
+              );
+            }
+
+            // status: anything → archived. Pairs with the archive-reason
+            // guard above — at this point the reviewNotes field is
+            // guaranteed to carry the archive explanation.
+            if (updatedArticle.status === "archived" && existingArticle.status !== "archived") {
+              await notifyArticleStakeholders(
+                articleForNotify,
+                "archived",
                 updatedArticle.reviewNotes
               );
             }

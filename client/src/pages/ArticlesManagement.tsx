@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -199,6 +200,11 @@ export default function ArticlesManagement() {
 
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
+  // Reason captured in the archive dialog. Required by the backend
+  // (`PATCH /api/admin/articles/:id` with status='archived'), and used as
+  // the editorial-notification body for the author/reporter.
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -349,19 +355,27 @@ export default function ArticlesManagement() {
     },
   });
 
-  // Delete mutation
+  // Archive mutation (formerly "delete"). Goes through PATCH so the
+  // backend's editorial-notification trigger fires: the author/reporter
+  // receives a push with the archive reason instead of seeing their
+  // article silently vanish. The dedicated DELETE endpoint still exists
+  // for hard-deletes but is intentionally not wired up to this dialog.
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, reviewNotes }: { id: string; reviewNotes: string }) => {
       return await apiRequest(`/api/admin/articles/${id}`, {
-        method: "DELETE",
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "archived", reviewNotes }),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
       setDeletingArticle(null);
+      setArchiveReason("");
+      setArchiveReasonError(null);
       toast({
         title: "تم الأرشفة",
-        description: "تم أرشفة المقال بنجاح",
+        description: "تم أرشفة المقال + إرسال إشعار للكاتب/المراسل بالسبب",
       });
     },
     onError: (error: any) => {
@@ -1377,15 +1391,12 @@ export default function ArticlesManagement() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={async () => {
-                          try {
-                            await apiRequest(`/api/admin/articles/${article.id}/archive`, { method: "POST" });
-                            queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
-                            toast({ title: "تم الأرشفة", description: "تم أرشفة المقال بنجاح" });
-                          } catch (error: any) {
-                            toast({ title: "خطأ", description: error.message || "فشلت عملية الأرشفة", variant: "destructive" });
-                          }
-                        }}
+                        // Route through the same confirmation dialog as the
+                        // desktop trash button so the editor is forced to
+                        // capture an archive reason. The previous direct
+                        // POST to `/archive` was silent — the author got
+                        // zero feedback when their content disappeared.
+                        onClick={() => setDeletingArticle(article)}
                         data-testid={`button-archive-mobile-${article.id}`}
                         title="أرشفة"
                       >
@@ -1485,22 +1496,70 @@ export default function ArticlesManagement() {
       )}
         </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingArticle} onOpenChange={() => setDeletingArticle(null)}>
+      {/* Archive Confirmation Dialog — captures the reason that's pushed
+          back to the author/reporter as a notification body. */}
+      <AlertDialog
+        open={!!deletingArticle}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingArticle(null);
+            setArchiveReason("");
+            setArchiveReasonError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الأرشفة</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من أرشفة المقال "{deletingArticle?.title}"؟ يمكن استعادته لاحقاً.
+              عند الأرشفة، سيصل إشعار للكاتب/المراسل بالسبب الذي تكتبه أدناه. الحقل إلزامي.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <div className="text-sm font-medium">المقال:</div>
+            <div className="text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-2">
+              {deletingArticle?.title}
+            </div>
+            <label htmlFor="archive-reason" className="text-sm font-medium block pt-2">
+              سبب الأرشفة <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="archive-reason"
+              data-testid="textarea-archive-reason"
+              placeholder="مثال: تكرار الموضوع، تجاوز الفترة الزمنية، عدم استيفاء معايير النشر..."
+              value={archiveReason}
+              onChange={(e) => {
+                setArchiveReason(e.target.value);
+                if (archiveReasonError) setArchiveReasonError(null);
+              }}
+              rows={4}
+              className="resize-none"
+            />
+            {archiveReasonError && (
+              <p className="text-xs text-destructive">{archiveReasonError}</p>
+            )}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingArticle && deleteMutation.mutate(deletingArticle.id)}
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = archiveReason.trim();
+                if (trimmed.length < 5) {
+                  setArchiveReasonError("اكتب سبباً واضحاً للأرشفة (5 أحرف على الأقل)");
+                  return;
+                }
+                if (deletingArticle) {
+                  deleteMutation.mutate({
+                    id: deletingArticle.id,
+                    reviewNotes: trimmed,
+                  });
+                }
+              }}
               data-testid="button-confirm-delete"
             >
-              أرشفة
+              {deleteMutation.isPending ? "جاري الأرشفة..." : "أرشفة وإرسال الإشعار"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

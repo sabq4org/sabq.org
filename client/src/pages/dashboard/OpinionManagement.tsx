@@ -36,6 +36,7 @@ import {
   User,
   Eye,
   GripVertical,
+  PenSquare,
 } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -212,7 +213,7 @@ export default function OpinionManagement() {
   const [reviewStatusFilter, setReviewStatusFilter] = useState<string>("all");
 
   const [reviewingArticle, setReviewingArticle] = useState<OpinionArticle | null>(null);
-  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | null>(null);
+  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | "request_revision" | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
 
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -295,6 +296,37 @@ export default function OpinionManagement() {
     },
   });
 
+  // Request a revision instead of outright rejecting. Sets reviewStatus to
+  // `needs_changes` + carries the reviewer's note as feedback for the
+  // author. The backend fires an editorial "needs_revision" push so the
+  // writer sees it on iOS immediately.
+  const requestRevisionMutation = useMutation({
+    mutationFn: async ({ articleId, notes }: { articleId: string; notes: string }) => {
+      await apiRequest(`/api/dashboard/opinion/${articleId}/request-revision`, {
+        method: "POST",
+        body: JSON.stringify({ reviewNotes: notes }),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/opinion"] });
+      toast({
+        title: "تم إرسال طلب التعديل",
+        description: "وصل الكاتب إشعار بملاحظاتك",
+      });
+      setReviewingArticle(null);
+      setReviewAction(null);
+      setReviewNotes("");
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء إرسال طلب التعديل",
+        variant: "destructive",
+      });
+    },
+  });
+
   const publishMutation = useMutation({
     mutationFn: async (articleId: string) => {
       await apiRequest(`/api/dashboard/opinion/${articleId}/publish`, {
@@ -328,6 +360,12 @@ export default function OpinionManagement() {
     setReviewNotes("");
   };
 
+  const handleRequestRevision = (article: OpinionArticle) => {
+    setReviewingArticle(article);
+    setReviewAction("request_revision");
+    setReviewNotes("");
+  };
+
   const confirmReview = () => {
     if (!reviewingArticle) return;
 
@@ -343,6 +381,16 @@ export default function OpinionManagement() {
         return;
       }
       rejectMutation.mutate({ articleId: reviewingArticle.id, notes: reviewNotes });
+    } else if (reviewAction === "request_revision") {
+      if (!reviewNotes.trim()) {
+        toast({
+          title: "خطأ",
+          description: "اكتب الملاحظات التي تريد الكاتب يطّلع عليها",
+          variant: "destructive",
+        });
+        return;
+      }
+      requestRevisionMutation.mutate({ articleId: reviewingArticle.id, notes: reviewNotes });
     }
   };
 
@@ -654,6 +702,16 @@ export default function OpinionManagement() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
+                                      onClick={() => handleRequestRevision(article)}
+                                      className="text-orange-600 hover:text-orange-700"
+                                      data-testid={`button-request-revision-${article.id}`}
+                                      title="طلب تعديل"
+                                    >
+                                      <PenSquare className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
                                       onClick={() => handleReject(article)}
                                       className="text-destructive hover:text-destructive/90"
                                       data-testid={`button-reject-${article.id}`}
@@ -790,6 +848,16 @@ export default function OpinionManagement() {
                         </Button>
                         <Button
                           size="sm"
+                          variant="outline"
+                          onClick={() => handleRequestRevision(article)}
+                          className="flex-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-300"
+                          data-testid={`button-request-revision-mobile-${article.id}`}
+                        >
+                          <PenSquare className="ml-1.5 h-3.5 w-3.5" />
+                          طلب تعديل
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="destructive"
                           onClick={() => handleReject(article)}
                           className="flex-1"
@@ -834,18 +902,28 @@ export default function OpinionManagement() {
         <DialogContent data-testid="dialog-review-opinion">
           <DialogHeader>
             <DialogTitle>
-              {reviewAction === "approve" ? "الموافقة على المقال" : "رفض المقال"}
+              {reviewAction === "approve"
+                ? "الموافقة على المقال"
+                : reviewAction === "request_revision"
+                  ? "طلب تعديل على المقال"
+                  : "رفض المقال"}
             </DialogTitle>
             <DialogDescription>
               {reviewAction === "approve"
                 ? "هل أنت متأكد من الموافقة على هذا المقال؟"
-                : "يرجى تقديم ملاحظات للكاتب حول سبب الرفض"}
+                : reviewAction === "request_revision"
+                  ? "اكتب الملاحظات/التعديلات المطلوبة — سيصل الكاتب إشعار فوري بالتفاصيل."
+                  : "يرجى تقديم ملاحظات للكاتب حول سبب الرفض"}
             </DialogDescription>
           </DialogHeader>
 
-          {reviewAction === "reject" && (
+          {(reviewAction === "reject" || reviewAction === "request_revision") && (
             <Textarea
-              placeholder="اكتب ملاحظاتك هنا..."
+              placeholder={
+                reviewAction === "request_revision"
+                  ? "مثال: راجع الفقرة الثانية، اختصر العنوان، أضف مصدراً للأرقام المذكورة..."
+                  : "اكتب ملاحظاتك هنا..."
+              }
               value={reviewNotes}
               onChange={(e) => setReviewNotes(e.target.value)}
               rows={5}
@@ -866,12 +944,31 @@ export default function OpinionManagement() {
               إلغاء
             </Button>
             <Button
-              variant={reviewAction === "approve" ? "default" : "destructive"}
+              variant={
+                reviewAction === "approve"
+                  ? "default"
+                  : reviewAction === "request_revision"
+                    ? "default"
+                    : "destructive"
+              }
+              className={
+                reviewAction === "request_revision"
+                  ? "bg-orange-600 hover:bg-orange-700 text-white"
+                  : undefined
+              }
               onClick={confirmReview}
-              disabled={approveMutation.isPending || rejectMutation.isPending}
+              disabled={
+                approveMutation.isPending ||
+                rejectMutation.isPending ||
+                requestRevisionMutation.isPending
+              }
               data-testid="button-confirm-review"
             >
-              {reviewAction === "approve" ? "تأكيد الموافقة" : "تأكيد الرفض"}
+              {reviewAction === "approve"
+                ? "تأكيد الموافقة"
+                : reviewAction === "request_revision"
+                  ? "إرسال طلب التعديل"
+                  : "تأكيد الرفض"}
             </Button>
           </DialogFooter>
         </DialogContent>

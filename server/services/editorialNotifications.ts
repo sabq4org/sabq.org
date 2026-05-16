@@ -34,7 +34,8 @@ export type EditorialEvent =
   | "scheduled"
   | "published"
   | "rejected"
-  | "needs_revision";
+  | "needs_revision"
+  | "archived";
 
 export interface NotifyEditorialArgs {
   /** Recipient — typically `articles.authorId` or `articles.reporterId`. */
@@ -82,6 +83,11 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
     case "published":      return prefs.publishedEnabled;
     case "rejected":       return prefs.rejectedEnabled;
     case "needs_revision": return prefs.revisionEnabled;
+    // Archiving is a deletion-class event — author always needs to know,
+    // so we treat it under the same toggle as rejection. (Adding a
+    // separate preference would let users silently disappear off the
+    // platform without notice.)
+    case "archived":       return prefs.rejectedEnabled;
   }
 }
 
@@ -152,6 +158,15 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
           : `«${title}» — تواصل معك المحرّر بملاحظات للتعديل.`,
       };
     }
+    case "archived": {
+      const reason = (args.reviewerNote || "").trim();
+      return {
+        title: `🗄️ تمت أرشفة ${labels.my}`,
+        body: reason
+          ? `«${title}» — السبب: ${reason}`
+          : `«${title}» — اطّلع على تفاصيل الأرشفة داخل التطبيق.`,
+      };
+    }
   }
 }
 
@@ -166,6 +181,9 @@ function buildDeepLink(args: NotifyEditorialArgs): string {
     case "scheduled":      return `sabq://draft/${id}`;
     case "needs_revision": return `sabq://draft/${id}`;
     case "rejected":       return `sabq://feedback/${id}`;
+    // Same surface as rejection — the author opens an in-app screen that
+    // shows the archive reason and (where applicable) a "resubmit" path.
+    case "archived":       return `sabq://feedback/${id}`;
   }
 }
 
@@ -254,7 +272,7 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
           // "active" = banner + sound, "time-sensitive" = bypasses focus modes
           // when relevant. Rejected/revision are time-sensitive so the author
           // sees them in their next focus window.
-          priority: args.event === "rejected" || args.event === "needs_revision"
+          priority: (args.event === "rejected" || args.event === "needs_revision" || args.event === "archived")
             ? "time-sensitive"
             : "active",
           category: `EDITORIAL_${args.event.toUpperCase()}`,

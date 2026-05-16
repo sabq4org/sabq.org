@@ -201,6 +201,7 @@ struct EditorialNotificationsView: View {
         case "published":      return ("checkmark.seal.fill", SabqTheme.leaf)
         case "rejected":       return ("xmark.octagon.fill", SabqTheme.coral)
         case "needs_revision": return ("pencil.and.scribble", SabqTheme.primaryEnd)
+        case "archived":       return ("archivebox.fill", SabqTheme.tertiaryInk)
         default:               return ("bell.fill", SabqTheme.secondaryInk)
         }
     }
