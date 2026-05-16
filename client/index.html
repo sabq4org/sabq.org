@@ -363,8 +363,22 @@
       crossorigin
     >
 
-    <!-- Load fonts with display=swap for faster text rendering (deferred to avoid render-blocking) -->
-    <link id="google-fonts" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Inter:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" media="print">
+    <!--
+      Font weights trimmed 2026-05-16 from 18 (IBM Plex 4 + Tajawal 3 +
+      Inter 3 + Noto Naskh 4 + JetBrains Mono 4) down to 7 essentials.
+      With Google Fonts splitting each weight across Latin + Arabic
+      subsets, the old config easily downloaded 30+ woff2 files (~600KB)
+      on first load — measurable LCP hit on mobile per the 2026-05-16
+      GSC Core Web Vitals report (0 "fast" pages). Trimmed to what the
+      app actually uses in CSS:
+        - IBM Plex Sans Arabic: 400 + 700 (primary body + bold)
+        - Tajawal: 700 (headlines only)
+        - Inter: 400 + 600 (English UI)
+        - JetBrains Mono: 400 (code blocks)
+      Noto Naskh dropped entirely — IBM Plex covers Arabic. If a rare
+      page needs additional weights it can lazy-load them on its own.
+    -->
+    <link id="google-fonts" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&family=Tajawal:wght@700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" media="print">
     <script data-cfasync="false">
       // Switch font stylesheet to 'all' after load (CSP-compliant replacement for inline onload)
       (function() {
@@ -376,7 +390,7 @@
       })();
     </script>
     <noscript>
-      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Inter:wght@400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;700&family=Tajawal:wght@700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     </noscript>
   </head>
   <body>
