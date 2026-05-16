@@ -169,6 +169,35 @@
           } catch (_) {}
         }
 
+        // Safari-specific: bypass BFCache (Back/Forward Cache) restoration.
+        //
+        // WebKit aggressively keeps the previous page in memory even when
+        // the server sends `Cache-Control: no-store`. When the user later
+        // navigates back, taps a recent-app card, or relaunches the PWA,
+        // Safari pulls the OLD HTML out of BFCache — which still
+        // references the previous build's hashed JS chunks. Those chunks
+        // no longer exist on Vercel after a deploy, so the page hangs in
+        // a loading state. This was the dominant "loading after deploy"
+        // signal coming from Safari users (the user confirmed
+        // 2026-05-16). Firefox + Chrome respect no-store for BFCache, so
+        // they don't see it.
+        //
+        // Fix: listen for `pageshow` with `event.persisted === true`
+        // (the only reliable signal that the page came from BFCache) and
+        // force a reload. This trades one extra round-trip for a working
+        // page. The reload uses the cache-bust path so any stale edge
+        // copy is bypassed too.
+        window.addEventListener('pageshow', function(event) {
+          if (event && event.persisted) {
+            try { console.warn('[Sabq BFCache] Page restored from BFCache — reloading'); } catch (_) {}
+            if (typeof reloadWithBust === 'function') {
+              reloadWithBust();
+            } else {
+              location.reload();
+            }
+          }
+        });
+
         // Catch <script src="/assets/*.js"> load failures. These are the
         // dominant signal that the HTML is referencing dead chunks.
         document.addEventListener('error', function(e) {
