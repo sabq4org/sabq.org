@@ -11929,6 +11929,59 @@ export const pushDevices = pgTable("push_devices", {
   index("idx_push_devices_provider").on(table.tokenProvider),
 ]);
 
+/**
+ * Per-user log of every targeted push notification we've sent for editorial
+ * events (article scheduled / published / rejected / needs revision). Powers
+ * the "Notifications" tab inside the iOS app — even when push delivery
+ * fails or the device is offline, the user can pull up the history here.
+ */
+export const editorialNotifications = pgTable("editorial_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  // One of: 'scheduled', 'published', 'rejected', 'needs_revision'
+  type: varchar("type", { length: 30 }).notNull(),
+  title: text("title").notNull(),         // Arabic notification title
+  body: text("body").notNull(),           // Arabic notification body
+  // Article reference + deep-link metadata (consumed by the iOS notification
+  // center to navigate to the right surface on tap).
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "set null" }),
+  articleTitle: text("article_title"),
+  articleSlug: text("article_slug"),
+  deepLink: text("deep_link"),            // sabq://article/<slug> | sabq://draft/<id> | sabq://feedback/<id>
+  // Editor-supplied note (rejection reason / revision request). NULL for
+  // scheduled/published events.
+  reviewerNote: text("reviewer_note"),
+  // Apple/FCM delivery outcome. Always logged regardless of delivery success
+  // so the in-app history stays consistent.
+  deliveryStatus: varchar("delivery_status", { length: 20 }).default("pending").notNull(), // pending, sent, failed, no_device
+  deliveryError: text("delivery_error"),
+  // User-side read state — set when the iOS app calls the mark-read endpoint
+  // (also auto-flipped when the user taps the notification).
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_editorial_notifs_user").on(table.userId, table.createdAt),
+  index("idx_editorial_notifs_unread").on(table.userId, table.readAt),
+  index("idx_editorial_notifs_article").on(table.articleId),
+]);
+
+/**
+ * Per-user notification preferences for the four editorial event types.
+ * Defaults to all-enabled so first-time users get notified by default; they
+ * can opt out individually from the iOS settings screen.
+ */
+export const editorialNotificationPrefs = pgTable("editorial_notification_prefs", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  scheduledEnabled: boolean("scheduled_enabled").default(true).notNull(),
+  publishedEnabled: boolean("published_enabled").default(true).notNull(),
+  rejectedEnabled: boolean("rejected_enabled").default(true).notNull(),
+  revisionEnabled: boolean("revision_enabled").default(true).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type EditorialNotification = typeof editorialNotifications.$inferSelect;
+export type EditorialNotificationPrefs = typeof editorialNotificationPrefs.$inferSelect;
+
 export const pushSegments = pgTable("push_segments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),

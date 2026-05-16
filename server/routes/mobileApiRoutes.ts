@@ -4206,4 +4206,255 @@ router.get("/insights/today", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// APNs token registration (native iOS push)
+// POST   /api/v1/members/push-token
+// DELETE /api/v1/members/push-token
+// ==========================================
+// Native iOS calls these directly after `application:didRegister…`. We
+// upsert into `pushDevices` keyed on `deviceToken` (unique) so the same
+// device + user combination never produces duplicate rows. On logout the
+// iOS app DELETEs by token so we stop targeting that device.
+router.post("/members/push-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { pushDevices } = await import("@shared/schema");
+    const { z } = await import("zod");
+    const schema = z.object({
+      token: z.string().min(20),                  // APNs hex tokens are 64 chars
+      provider: z.enum(["apns", "fcm"]).default("apns"),
+      platform: z.enum(["ios", "android"]).default("ios"),
+      deviceName: z.string().optional(),
+      osVersion: z.string().optional(),
+      appVersion: z.string().optional(),
+      locale: z.string().optional(),
+      timezone: z.string().optional(),
+    });
+    const data = schema.parse(req.body);
+
+    const existing = await db
+      .select({ id: pushDevices.id })
+      .from(pushDevices)
+      .where(eq(pushDevices.deviceToken, data.token))
+      .limit(1);
+
+    const baseValues = {
+      userId: session.userId,
+      tokenProvider: data.provider,
+      platform: data.platform,
+      deviceName: data.deviceName,
+      osVersion: data.osVersion,
+      appVersion: data.appVersion,
+      locale: data.locale || "ar",
+      timezone: data.timezone,
+      isActive: true,
+      lastActiveAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    if (existing.length > 0) {
+      await db.update(pushDevices)
+        .set(baseValues)
+        .where(eq(pushDevices.id, existing[0].id));
+    } else {
+      await db.insert(pushDevices).values({
+        ...baseValues,
+        deviceToken: data.token,
+      });
+    }
+
+    console.log(`[Mobile API] /push-token registered (user=${session.userId} provider=${data.provider})`);
+    res.json({ success: true, message: "تم تفعيل الإشعارات" });
+  } catch (error: any) {
+    console.error("[Mobile API] /push-token error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({ success: false, message: "بيانات غير صالحة", errors: error.errors });
+    }
+    res.status(500).json({ success: false, message: "تعذر تسجيل الجهاز" });
+  }
+});
+
+router.delete("/members/push-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { pushDevices } = await import("@shared/schema");
+    const token = typeof req.body?.token === "string" ? req.body.token : null;
+    if (!token) {
+      return res.status(400).json({ success: false, message: "device token مطلوب" });
+    }
+
+    await db.update(pushDevices)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(and(
+        eq(pushDevices.deviceToken, token),
+        eq(pushDevices.userId, session.userId),
+      ));
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /push-token error:", error);
+    res.status(500).json({ success: false, message: "تعذر إلغاء تفعيل الجهاز" });
+  }
+});
+
+// ==========================================
+// Editorial notifications history + preferences
+// GET    /api/v1/notifications                 — last 50 events for the user
+// POST   /api/v1/notifications/:id/read        — mark a single entry read
+// POST   /api/v1/notifications/read-all        — mark every unread row read
+// GET    /api/v1/notifications/preferences     — current per-type toggles
+// PUT    /api/v1/notifications/preferences     — update toggles
+// ==========================================
+router.get("/notifications", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { editorialNotifications } = await import("@shared/schema");
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+
+    const rows = await db
+      .select()
+      .from(editorialNotifications)
+      .where(eq(editorialNotifications.userId, session.userId))
+      .orderBy(desc(editorialNotifications.createdAt))
+      .limit(limit);
+
+    const unread = rows.filter(r => !r.readAt).length;
+    res.json({ success: true, items: rows, unread });
+  } catch (error) {
+    console.error("[Mobile API] GET /notifications error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الإشعارات" });
+  }
+});
+
+router.post("/notifications/:id/read", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { editorialNotifications } = await import("@shared/schema");
+    await db.update(editorialNotifications)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(editorialNotifications.id, req.params.id),
+        eq(editorialNotifications.userId, session.userId),
+      ));
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /notifications/:id/read error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحديث الإشعار" });
+  }
+});
+
+router.post("/notifications/read-all", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { editorialNotifications } = await import("@shared/schema");
+    await db.execute(sql`
+      UPDATE editorial_notifications
+      SET read_at = NOW()
+      WHERE user_id = ${session.userId} AND read_at IS NULL
+    `);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] read-all error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحديث الإشعارات" });
+  }
+});
+
+router.get("/notifications/preferences", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { editorialNotificationPrefs } = await import("@shared/schema");
+    const [row] = await db
+      .select()
+      .from(editorialNotificationPrefs)
+      .where(eq(editorialNotificationPrefs.userId, session.userId))
+      .limit(1);
+
+    res.json({
+      success: true,
+      preferences: {
+        scheduledEnabled: row?.scheduledEnabled ?? true,
+        publishedEnabled: row?.publishedEnabled ?? true,
+        rejectedEnabled: row?.rejectedEnabled ?? true,
+        revisionEnabled: row?.revisionEnabled ?? true,
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /notifications/preferences error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الإعدادات" });
+  }
+});
+
+router.put("/notifications/preferences", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { editorialNotificationPrefs } = await import("@shared/schema");
+    const { z } = await import("zod");
+    const data = z.object({
+      scheduledEnabled: z.boolean().optional(),
+      publishedEnabled: z.boolean().optional(),
+      rejectedEnabled: z.boolean().optional(),
+      revisionEnabled: z.boolean().optional(),
+    }).parse(req.body);
+
+    // Upsert — first call creates the row, subsequent calls update fields.
+    const [existing] = await db
+      .select()
+      .from(editorialNotificationPrefs)
+      .where(eq(editorialNotificationPrefs.userId, session.userId))
+      .limit(1);
+
+    if (existing) {
+      await db.update(editorialNotificationPrefs)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(editorialNotificationPrefs.userId, session.userId));
+    } else {
+      await db.insert(editorialNotificationPrefs).values({
+        userId: session.userId,
+        scheduledEnabled: data.scheduledEnabled ?? true,
+        publishedEnabled: data.publishedEnabled ?? true,
+        rejectedEnabled: data.rejectedEnabled ?? true,
+        revisionEnabled: data.revisionEnabled ?? true,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("[Mobile API] PUT /notifications/preferences error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({ success: false, message: "بيانات غير صالحة" });
+    }
+    res.status(500).json({ success: false, message: "تعذر تحديث الإعدادات" });
+  }
+});
+
 export default router;

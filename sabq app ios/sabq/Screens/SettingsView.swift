@@ -315,9 +315,69 @@ struct SettingsView: View {
                         submissionKind = .news
                     }
                 }
+
+                // Editorial notification center for writers/reporters/admins
+                // — shows scheduled / published / rejected / needs_revision
+                // events on their submissions.
+                NavigationLink(destination: EditorialNotificationsView()) {
+                    submissionCardContent(
+                        title: "إشعاراتي التحريرية",
+                        subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
+                        icon: "bell.badge.fill",
+                        tint: SabqTheme.teal
+                    )
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 4)
         }
+    }
+
+    /// Visual shell for a submission-style row — reusable inside Button or
+    /// NavigationLink wrappers without nesting tap handlers.
+    private func submissionCardContent(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 44, height: 44)
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(SabqTheme.ink)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(tint.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+        )
     }
 
     private func submissionCard(
@@ -328,43 +388,7 @@ struct SettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(tint.opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(tint.opacity(0.05))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(tint.opacity(0.20), lineWidth: 0.5)
-            )
+            submissionCardContent(title: title, subtitle: subtitle, icon: icon, tint: tint)
         }
         .buttonStyle(.plain)
     }

@@ -36,6 +36,12 @@ final class AuthStore {
         }
 
         await fetchFullProfile()
+        // Returning session — re-register the APNs token so a stale token
+        // gets refreshed lastActiveAt-wise and a new token (if iOS rotated)
+        // is linked to the user.
+        if isLoggedIn, let token = await NotificationsStore.shared.deviceToken {
+            await NotificationsStore.shared.registerWithBackend(token: token)
+        }
     }
 
     private var isLoginLockedOut: Bool {
@@ -70,12 +76,29 @@ final class AuthStore {
                 isLoggedIn = true
             }
             await fetchFullProfile()
+            // Request push permission + register the device token. Permission
+            // is asked once per install — if the user previously granted or
+            // denied, the system surfaces no prompt and the call completes
+            // immediately. Editorial pushes route through this token.
+            await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
         } catch {
             errorMessage = "حدث خطأ في تسجيل الدخول"
         }
         isLoading = false
+    }
+
+    /// Called after every successful auth (login, register, checkAuth) to
+    /// link the current APNs device token to this account. Asks for
+    /// permission on first run; relies on the system delegate to deliver
+    /// the token to NotificationsStore which then PUTs it to backend.
+    @MainActor
+    private func registerPushTokenAfterAuth() async {
+        _ = await NotificationsStore.shared.requestPermission()
+        if let token = NotificationsStore.shared.deviceToken {
+            await NotificationsStore.shared.registerWithBackend(token: token)
+        }
     }
 
     @MainActor
@@ -103,6 +126,7 @@ final class AuthStore {
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح"
                 // Pull the full profile so role/interests populate ASAP.
                 await fetchFullProfile()
+                await registerPushTokenAfterAuth()
             } else if response.emailSent == true {
                 registrationPending = true
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح. يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب"
@@ -217,6 +241,11 @@ final class AuthStore {
 
     @MainActor
     func logout() async {
+        // Stop targeting this device with editorial pushes before the
+        // session is torn down — once the auth token clears, the
+        // unregister endpoint would 401.
+        await NotificationsStore.shared.unregisterCurrentToken()
+
         try? await APIClient.shared.logout()
         currentUser = nil
         isLoggedIn = false

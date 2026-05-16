@@ -52,6 +52,7 @@ import { notificationBus } from "./notificationBus";
 import { indexArticle, isGoogleIndexingConfigured } from "./services/googleIndexingService";
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterRejectionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail } from "./services/editorAlerts";
+import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
 import { findSimilarArticles, getPersonalizedRecommendations } from "./similarityEngine";
@@ -7158,6 +7159,55 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             } catch (creditError: any) {
               console.warn(`⚠️ [PUBLISHER CREDIT] Could not deduct credit: ${creditError.message}`);
             }
+          }
+
+          // Editorial push notifications — fire on real status transitions
+          // only (so a routine edit doesn't re-notify the author). Each
+          // helper invocation is best-effort; failures never block the
+          // editorial workflow.
+          try {
+            const articleForNotify = {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+              submitterId: updatedArticle.submitterId,
+            };
+
+            // status: draft/needs_review → scheduled
+            if (updatedArticle.status === "scheduled" && existingArticle.status !== "scheduled") {
+              await notifyArticleStakeholders(articleForNotify, "scheduled");
+            }
+
+            // status: anything → published (only first transition)
+            if (updatedArticle.status === "published" && existingArticle.status !== "published") {
+              await notifyArticleStakeholders(articleForNotify, "published");
+            }
+
+            // reviewStatus: anything → rejected (carries reviewer note)
+            if (updatedArticle.reviewStatus === "rejected" && existingArticle.reviewStatus !== "rejected") {
+              await notifyArticleStakeholders(
+                articleForNotify,
+                "rejected",
+                updatedArticle.reviewNotes
+              );
+            }
+
+            // reviewStatus: anything → needs_changes (revision requested)
+            if (updatedArticle.reviewStatus === "needs_changes" && existingArticle.reviewStatus !== "needs_changes") {
+              await notifyArticleStakeholders(
+                articleForNotify,
+                "needs_revision",
+                updatedArticle.reviewNotes
+              );
+            }
+          } catch (notifyErr: any) {
+            console.error('[Editorial Notify] background task error:', notifyErr?.message || notifyErr);
           }
         } catch (bgErr: any) {
           console.error('[UPDATE ARTICLE] Background task error:', bgErr.message);
@@ -25152,6 +25202,26 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         console.error("[OpinionReject] Error sending rejection email to opinion author:", emailError);
       }
 
+      // iOS push notification (best-effort). Mirrors the same trigger
+      // logic in PATCH /api/admin/articles so opinion rejections from the
+      // dedicated dashboard endpoint reach the author's device too.
+      try {
+        await notifyArticleStakeholders({
+          id: updatedArticle.id,
+          title: updatedArticle.title,
+          slug: updatedArticle.slug,
+          englishSlug: updatedArticle.englishSlug,
+          articleType: updatedArticle.articleType,
+          scheduledAt: updatedArticle.scheduledAt,
+          publishedAt: updatedArticle.publishedAt,
+          authorId: updatedArticle.authorId,
+          reporterId: updatedArticle.reporterId,
+          submitterId: updatedArticle.submitterId,
+        }, "rejected", reviewNotes);
+      } catch (notifyErr: any) {
+        console.error("[OpinionReject] push notify failed:", notifyErr?.message || notifyErr);
+      }
+
       // Invalidate cache and broadcast to all connected clients for instant update
       invalidatePublishedContent({ reason: "article-write" });
       memoryCache.delete('lite-feed'); // Clear mobile app feed cache
@@ -25262,10 +25332,94 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         } catch (emailError) {
           console.error("[OpinionPublish] Error sending email to opinion author:", emailError);
         }
+
+        // iOS push notification to the author
+        try {
+          await notifyArticleStakeholders({
+            id: articleForNotification.id,
+            title: articleForNotification.title,
+            slug: articleForNotification.slug,
+            englishSlug: articleForNotification.englishSlug,
+            articleType: articleForNotification.articleType,
+            scheduledAt: articleForNotification.scheduledAt,
+            publishedAt: articleForNotification.publishedAt,
+            authorId: articleForNotification.authorId,
+            reporterId: articleForNotification.reporterId,
+            submitterId: articleForNotification.submitterId,
+          }, "published");
+        } catch (notifyErr: any) {
+          console.error("[OpinionPublish] push notify failed:", notifyErr?.message || notifyErr);
+        }
       });
     } catch (error) {
       console.error("Error publishing opinion article:", error);
       res.status(500).json({ message: "Failed to publish opinion article" });
+    }
+  });
+
+  // Dashboard: request revisions on an opinion article (mobile users need
+  // a "needs_changes" path on top of approve/reject — same as the iOS app
+  // surfaces in the editorial notifications screen).
+  app.post("/api/dashboard/opinion/:id/request-revision", requireAuth, requirePermission("articles.edit_any"), async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const articleId = req.params.id;
+      const { reviewNotes } = req.body;
+      if (!reviewNotes || typeof reviewNotes !== "string") {
+        return res.status(400).json({ message: "Review notes are required when requesting revision" });
+      }
+
+      const [existingArticle] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+
+      if (!existingArticle) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+
+      const [updatedArticle] = await db
+        .update(articles)
+        .set({
+          reviewStatus: "needs_changes",
+          reviewedBy: userId,
+          reviewedAt: new Date(),
+          reviewNotes,
+          status: "draft",
+          updatedAt: new Date(),
+        })
+        .where(eq(articles.id, articleId))
+        .returning();
+
+      res.json(updatedArticle);
+
+      // Fire-and-forget push notification — same trigger path as the
+      // PATCH route, but invoked explicitly here since this dedicated
+      // endpoint bypasses the generic update flow.
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders({
+            id: updatedArticle.id,
+            title: updatedArticle.title,
+            slug: updatedArticle.slug,
+            englishSlug: updatedArticle.englishSlug,
+            articleType: updatedArticle.articleType,
+            scheduledAt: updatedArticle.scheduledAt,
+            publishedAt: updatedArticle.publishedAt,
+            authorId: updatedArticle.authorId,
+            reporterId: updatedArticle.reporterId,
+            submitterId: updatedArticle.submitterId,
+          }, "needs_revision", reviewNotes);
+        } catch (notifyErr: any) {
+          console.error("[OpinionRevision] push notify failed:", notifyErr?.message || notifyErr);
+        }
+      });
+    } catch (error) {
+      console.error("Error requesting revision on opinion article:", error);
+      res.status(500).json({ message: "Failed to request revision" });
     }
   });
 

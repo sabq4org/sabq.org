@@ -1634,3 +1634,76 @@ nonisolated struct APITodayInsights: Decodable {
         let articlesRead: Int
     }
 }
+
+// MARK: - Editorial notifications (push history + preferences)
+
+/// Single notification entry returned by GET /api/v1/notifications.
+/// Mirrors `editorialNotifications` rows. `readAt` is an ISO-8601 string
+/// when set so the same shape works for both Date encoders/decoders.
+nonisolated struct APIEditorialNotification: Decodable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let type: String        // "scheduled" | "published" | "rejected" | "needs_revision"
+    let title: String
+    let body: String
+    let articleId: String?
+    let articleTitle: String?
+    let articleSlug: String?
+    let deepLink: String?
+    let reviewerNote: String?
+    let deliveryStatus: String?
+    let readAt: String?
+    let createdAt: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? UUID().uuidString
+        userId = (try? c.decode(String.self, forKey: FlexKey("userId"))) ?? ""
+        type = (try? c.decode(String.self, forKey: FlexKey("type"))) ?? ""
+        title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
+        body = (try? c.decode(String.self, forKey: FlexKey("body"))) ?? ""
+        articleId = try? c.decode(String.self, forKey: FlexKey("articleId"))
+        articleTitle = try? c.decode(String.self, forKey: FlexKey("articleTitle"))
+        articleSlug = try? c.decode(String.self, forKey: FlexKey("articleSlug"))
+        deepLink = (try? c.decode(String.self, forKey: FlexKey("deepLink")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("deep_link")))
+        reviewerNote = (try? c.decode(String.self, forKey: FlexKey("reviewerNote")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("reviewer_note")))
+        deliveryStatus = (try? c.decode(String.self, forKey: FlexKey("deliveryStatus")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("delivery_status")))
+        readAt = (try? c.decode(String.self, forKey: FlexKey("readAt")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("read_at")))
+        createdAt = (try? c.decode(String.self, forKey: FlexKey("createdAt")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("created_at")))
+            ?? ""
+    }
+}
+
+nonisolated struct EditorialNotificationsPage: Decodable {
+    let success: Bool
+    let items: [APIEditorialNotification]
+    let unread: Int
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = (try? c.decode(Bool.self, forKey: FlexKey("success"))) ?? true
+        items = (try? c.decode([APIEditorialNotification].self, forKey: FlexKey("items"))) ?? []
+        unread = (try? c.decode(Int.self, forKey: FlexKey("unread"))) ?? 0
+    }
+}
+
+/// Per-type toggles surfaced in the iOS settings screen. Round-trips through
+/// `GET` / `PUT /api/v1/notifications/preferences`.
+nonisolated struct EditorialNotificationPreferences: Codable, Hashable {
+    var scheduledEnabled: Bool
+    var publishedEnabled: Bool
+    var rejectedEnabled: Bool
+    var revisionEnabled: Bool
+
+    static let allOn = EditorialNotificationPreferences(
+        scheduledEnabled: true,
+        publishedEnabled: true,
+        rejectedEnabled: true,
+        revisionEnabled: true
+    )
+}

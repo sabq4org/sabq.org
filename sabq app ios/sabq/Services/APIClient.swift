@@ -663,6 +663,86 @@ actor APIClient {
         try await postRaw(path: "/notifications/mark-all-read")
     }
 
+    // MARK: - Push token + editorial notifications
+
+    /// Register the APNs device token + device metadata with the backend so
+    /// targeted editorial pushes (scheduled / published / rejected /
+    /// needs_revision) can reach this device. Idempotent — calling
+    /// repeatedly with the same token just refreshes `lastActiveAt`.
+    func registerPushToken(
+        token: String,
+        provider: String = "apns",
+        platform: String = "ios",
+        deviceName: String? = nil,
+        osVersion: String? = nil,
+        appVersion: String? = nil,
+        locale: String? = nil,
+        timezone: String? = nil
+    ) async throws {
+        struct Body: Encodable {
+            let token: String
+            let provider: String
+            let platform: String
+            let deviceName: String?
+            let osVersion: String?
+            let appVersion: String?
+            let locale: String?
+            let timezone: String?
+        }
+        try await postRaw(path: "/members/push-token", body: Body(
+            token: token, provider: provider, platform: platform,
+            deviceName: deviceName, osVersion: osVersion, appVersion: appVersion,
+            locale: locale, timezone: timezone
+        ))
+    }
+
+    /// Tell the backend to stop targeting this device — called on sign-out
+    /// or when the user revokes notification permission.
+    func unregisterPushToken(token: String) async throws {
+        struct Body: Encodable { let token: String }
+        let url = try buildURL(path: "/members/push-token")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(Body(token: token))
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
+        }
+    }
+
+    /// Latest 50 editorial notifications (scheduled/published/rejected/
+    /// needs_revision) for the signed-in user, newest first. Used by the
+    /// in-app NotificationsView.
+    func fetchEditorialNotifications() async throws -> EditorialNotificationsPage {
+        try await get(EditorialNotificationsPage.self, path: "/notifications")
+    }
+
+    func markNotificationRead(id: String) async throws {
+        try await postRaw(path: "/notifications/\(id)/read")
+    }
+
+    func markAllNotificationsRead() async throws {
+        try await postRaw(path: "/notifications/read-all")
+    }
+
+    func fetchNotificationPreferences() async throws -> EditorialNotificationPreferences {
+        struct Response: Decodable { let preferences: EditorialNotificationPreferences }
+        return try await get(Response.self, path: "/notifications/preferences").preferences
+    }
+
+    func updateNotificationPreferences(_ prefs: EditorialNotificationPreferences) async throws {
+        let url = try buildURL(path: "/notifications/preferences")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(prefs)
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
+        }
+    }
+
     // MARK: - Newsletter
 
     /// Subscribe to the smart newsletter. Hits `POST /api/v1/newsletter/subscribe`
