@@ -1269,7 +1269,7 @@ struct CommentFeedback: Equatable {
 
 // MARK: - Reading Progress Style
 
-private struct ReadingProgressStyle: ProgressViewStyle {
+struct ReadingProgressStyle: ProgressViewStyle {
     @Environment(\.layoutDirection) private var layoutDirection
 
     func makeBody(configuration: Configuration) -> some View {
@@ -1300,7 +1300,7 @@ private struct ReadingProgressStyle: ProgressViewStyle {
 /// (articleFontSize, articleLineSpacing, articleUseReaderFont). Each control
 /// previews the change instantly via @AppStorage so the user sees the body
 /// re-flow behind the sheet.
-private struct ReaderControlsSheet: View {
+struct ReaderControlsSheet: View {
     @Binding var fontSize: Double
     @Binding var lineSpacing: Double
     @Binding var useReaderFont: Bool
