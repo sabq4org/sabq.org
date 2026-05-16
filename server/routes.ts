@@ -2863,15 +2863,27 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     try {
       // Extract the full path after /api/public-media/
       const fullPath = req.params[0] as string;
-      
+
       if (!fullPath) {
         console.error(`[Public Media Proxy] Empty file path requested`);
         return res.status(400).json({ message: "مسار الملف مطلوب" });
       }
 
+      // The underlying objectStorageClient uses Replit's sidecar workload
+      // identity federation (127.0.0.1:1106). On Railway that endpoint
+      // doesn't exist and every call fails with ECONNREFUSED → unhandled
+      // stack trace in the logs. Short-circuit to 404 (cached for a day)
+      // when not running on Replit. Migrated legacy /public-media/* URLs
+      // already point at CF Images; the surviving callers are crawlers
+      // chasing old Arabic article references and should give up.
+      if (!process.env.REPLIT_DOMAINS && !process.env.REPL_ID) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.status(404).json({ message: "الملف غير متاح" });
+      }
+
       // Get file from Object Storage
       const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
-      
+
       // Use getBucketConfig for reliable bucket resolution
       const { bucketName, publicPrefix } = getBucketConfig();
 
@@ -16473,6 +16485,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // ============================================================
 
   app.get("/objects/:objectPath(*)", async (req: any, res) => {
+    // Same Replit-sidecar guard as /api/public-media/* — see comment there.
+    if (!process.env.REPLIT_DOMAINS && !process.env.REPL_ID) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.sendStatus(404);
+    }
     const objectStorageService = new ObjectStorageService();
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
@@ -16652,6 +16669,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   app.get("/public-objects/:filePath(*)", async (req, res) => {
+    // Same Replit-sidecar guard as /api/public-media/* — see comment there.
+    if (!process.env.REPLIT_DOMAINS && !process.env.REPL_ID) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(404).json({ error: "File not found" });
+    }
     const filePath = req.params.filePath;
     const objectStorageService = new ObjectStorageService();
     
