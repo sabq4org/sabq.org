@@ -581,7 +581,15 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             id: api.id,
             title: api.title,
             excerpt: excerpt,
-            body: body.isEmpty ? excerpt : body,
+            // Keep `body` and `excerpt` strictly separate. The previous
+            // `body.isEmpty ? excerpt : body` fallback meant that when the
+            // list-payload (no `content` field) loaded first, the body
+            // field was silently filled with the AI summary — so the
+            // opinion detail screen showed the summary AS the article
+            // body until the detail fetch resolved (or forever, if it
+            // failed). Now an empty body honestly renders the "loading"
+            // empty state, and the summary card carries the excerpt.
+            body: body,
             authorName: api.authorName?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty ?? "كاتب الرأي",
@@ -617,7 +625,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             id: api.id,
             title: api.title,
             excerpt: excerpt,
-            body: body.isEmpty ? excerpt : body,
+            body: body, // see same comment on the APIOpinion overload above
             authorName: api.authorName?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty ?? "كاتب الرأي",
