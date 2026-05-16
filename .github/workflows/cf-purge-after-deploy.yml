@@ -1,0 +1,65 @@
+name: Cloudflare purge after deploy
+
+# Fires the CF cache purge AFTER Vercel has had time to promote the deploy.
+# The previous approach (running purge-cdn-after-deploy.js inside Vercel's
+# `npm run build:client`) misfired: the script ran BEFORE the build was
+# uploaded + promoted, so Cloudflare cleared its cache, asked the origin
+# (still on the previous code) and re-cached stale content — exactly what
+# the user was reporting as "white pages even after the build succeeded".
+#
+# This workflow runs entirely outside Vercel, on GitHub's runners. It
+# triggers on every push to the deployable branches, waits 150 seconds
+# (long enough for a typical Vercel deploy to go from queued → ready),
+# then POSTs to the Railway-hosted purge webhook. Reliable, transparent,
+# and the build logs in Vercel are no longer required to debug a purge.
+
+on:
+  push:
+    branches:
+      - main
+      - experimental/split-deploy
+
+# A new push supersedes any in-flight workflow for the same branch — no
+# point firing two purges if the user is rapidly pushing.
+concurrency:
+  group: cf-purge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Wait for Vercel deploy to promote
+        # 150s covers the 95th-percentile Vercel build time for this repo
+        # (build:client takes ~70s, promote adds another 20-40s). If a
+        # particular build takes longer the purge just fires earlier than
+        # ideal — still better than the previous "inside build" timing,
+        # which fired ~90s too early.
+        run: sleep 150
+
+      - name: Purge Cloudflare cache
+        env:
+          # Same secret Railway accepts on /api/webhooks/deploy-cache-purge.
+          # Stored in repo secrets — never echoed to the build log.
+          DEPLOY_WEBHOOK_SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+        run: |
+          set -e
+          if [ -z "$DEPLOY_WEBHOOK_SECRET" ]; then
+            echo "::error::Missing DEPLOY_WEBHOOK_SECRET repo secret"
+            exit 1
+          fi
+          echo "Purging Cloudflare cache (commit ${GITHUB_SHA::7}, branch ${GITHUB_REF_NAME})"
+          HTTP_CODE=$(curl -s -o /tmp/purge.out -w "%{http_code}" \
+            -X POST "https://api.sabq.org/api/webhooks/deploy-cache-purge" \
+            -H "Content-Type: application/json" \
+            -H "X-Deploy-Webhook-Secret: $DEPLOY_WEBHOOK_SECRET" \
+            -H "X-Deploy-Source: github-actions" \
+            -d "{\"source\":\"github-actions\",\"commit\":\"$GITHUB_SHA\",\"branch\":\"$GITHUB_REF_NAME\"}")
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/purge.out
+          echo
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Purge failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
