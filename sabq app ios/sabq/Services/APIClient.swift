@@ -179,8 +179,8 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
-    func postRaw(path: String, body: Encodable? = nil) async throws {
-        let url = try buildURL(path: path)
+    func postRaw(path: String, body: Encodable? = nil, apiRoot: String? = nil) async throws {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         applyHeaders(&request)
@@ -676,6 +676,10 @@ actor APIClient {
     /// one of the canonical Arabic strings the backend enums on. The phone
     /// must be the Saudi `+966[9 digits]` format. Successful submissions land
     /// in the dashboard's "رسائل التواصل" via the same insert as the web.
+    ///
+    /// IMPORTANT: the endpoint is registered as `POST /api/contact` (NOT under
+    /// `/api/v1/...`), so we must route through `publicAPIBaseURL`. The default
+    /// `baseURL` would produce `/api/v1/contact` → 404.
     func sendContactMessage(
         name: String,
         phone: String,
@@ -683,13 +687,17 @@ actor APIClient {
         subject: String,
         message: String
     ) async throws {
-        try await postRaw(path: "/contact", body: [
-            "name": name,
-            "phone": phone,
-            "email": email,
-            "subject": subject,
-            "message": message
-        ])
+        try await postRaw(
+            path: "/contact",
+            body: [
+                "name": name,
+                "phone": phone,
+                "email": email,
+                "subject": subject,
+                "message": message
+            ],
+            apiRoot: publicAPIBaseURL
+        )
     }
 
     // MARK: - Shortlinks

@@ -793,11 +793,23 @@ struct LoginSheet: View {
 
 // MARK: - Contact Sheet
 
-/// Contact form that mirrors sabq.org/contact. Submits to the same
-/// `POST /api/contact` endpoint as the web — messages land in the dashboard's
-/// "رسائل التواصل" inbox via the shared `contactMessages` table. Prefills
-/// name + email from the signed-in user when available.
+/// Contact form that mirrors sabq.org/contact end-to-end:
+/// - Two contact-method cards at the top (WhatsApp + Email) for users who
+///   prefer those channels over the form.
+/// - 5-field form (name/phone/email/subject/message) submitted to
+///   `POST /api/contact` (NOT under /api/v1), with messages landing in the
+///   dashboard's "رسائل التواصل" inbox.
+/// - `@FocusState` + `ScrollViewReader` ensures the focused field is always
+///   above the keyboard, with `scrollDismissesKeyboard(.interactively)` so
+///   the user can swipe to hide it.
+/// - Submit errors auto-dismiss the keyboard and scroll the banner into view.
 struct ContactSheet: View {
+    /// Logical IDs for each scroll anchor — the focus listener uses these to
+    /// scroll the active field above the keyboard.
+    private enum Field: Hashable {
+        case name, phone, email, subject, message, errorBanner
+    }
+
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthStore.self) private var authStore
 
@@ -810,6 +822,10 @@ struct ContactSheet: View {
     @State private var isSent = false
     @State private var errorMessage: String?
 
+    /// Tracks which form field has focus. We watch this and use a
+    /// ScrollViewReader to bring the active field above the keyboard.
+    @FocusState private var focusedField: Field?
+
     /// Canonical subjects — MUST match the backend Zod enum exactly, otherwise
     /// the POST returns 400 "بيانات غير صالحة". See `server/routes.ts` contact
     /// schema at the /api/contact handler.
@@ -820,6 +836,13 @@ struct ContactSheet: View {
         "اقتراح",
         "أخرى"
     ]
+
+    /// Canonical contact methods — mirrors the two cards at the top of
+    /// sabq.org/contact.
+    private let whatsAppNumber = "+966 500 226 622"
+    private let whatsAppURL = URL(string: "https://wa.me/966500226622")!
+    private let supportEmail = "info@sabq.org"
+    private var emailURL: URL { URL(string: "mailto:\(supportEmail)")! }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -839,59 +862,95 @@ struct ContactSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    SectionHeader(
-                        title: "تواصل معنا",
-                        subtitle: "أرسل لنا رسالتك وسنرد عليك في أقرب وقت",
-                        icon: "envelope.fill",
-                        tint: SabqTheme.teal
-                    )
-
-                    if isSent {
-                        EmptyStateView(
-                            icon: "checkmark.circle.fill",
-                            tint: SabqTheme.leaf,
-                            title: "تم استلام رسالتك",
-                            subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        SectionHeader(
+                            title: "تواصل معنا",
+                            subtitle: "أرسل لنا رسالتك وسنرد عليك في أقرب وقت",
+                            icon: "envelope.fill",
+                            tint: SabqTheme.teal
                         )
-                    } else {
-                        VStack(spacing: 16) {
-                            if let errorMessage {
-                                errorBanner(errorMessage)
+
+                        // Two contact-method cards at the top — matches the
+                        // web /contact page. Tapping opens WhatsApp / Mail.
+                        contactMethodCards
+
+                        if isSent {
+                            EmptyStateView(
+                                icon: "checkmark.circle.fill",
+                                tint: SabqTheme.leaf,
+                                title: "تم استلام رسالتك",
+                                subtitle: "شكراً لتواصلك معنا، سيتم الرد عليك قريباً"
+                            )
+                        } else {
+                            VStack(spacing: 16) {
+                                if let errorMessage {
+                                    errorBanner(errorMessage)
+                                        .id(Field.errorBanner)
+                                }
+
+                                labeledField(
+                                    label: "الاسم الكامل",
+                                    placeholder: "أدخل اسمك الكامل",
+                                    text: $name,
+                                    field: .name
+                                )
+                                .id(Field.name)
+
+                                labeledField(
+                                    label: "رقم الهاتف",
+                                    placeholder: "+966500000000",
+                                    text: $phone,
+                                    keyboard: .phonePad,
+                                    disableAutocap: true,
+                                    field: .phone
+                                )
+                                .id(Field.phone)
+
+                                labeledField(
+                                    label: "البريد الإلكتروني",
+                                    placeholder: "example@email.com",
+                                    text: $email,
+                                    keyboard: .emailAddress,
+                                    disableAutocap: true,
+                                    field: .email
+                                )
+                                .id(Field.email)
+
+                                subjectPicker
+                                    .id(Field.subject)
+
+                                messageEditor
+                                    .id(Field.message)
+
+                                sendButton
+
+                                // Trailing spacer so the message editor's
+                                // bottom edge can clear the keyboard when
+                                // the user focuses it near the bottom.
+                                Color.clear.frame(height: 80)
                             }
-
-                            labeledField(
-                                label: "الاسم الكامل",
-                                placeholder: "أدخل اسمك الكامل",
-                                text: $name
-                            )
-
-                            labeledField(
-                                label: "رقم الهاتف",
-                                placeholder: "+966500000000",
-                                text: $phone,
-                                keyboard: .phonePad,
-                                disableAutocap: true
-                            )
-
-                            labeledField(
-                                label: "البريد الإلكتروني",
-                                placeholder: "example@email.com",
-                                text: $email,
-                                keyboard: .emailAddress,
-                                disableAutocap: true
-                            )
-
-                            subjectPicker
-
-                            messageEditor
-
-                            sendButton
+                        }
+                    }
+                    .padding(20)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: focusedField) { _, newField in
+                    guard let newField else { return }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        proxy.scrollTo(newField, anchor: .center)
+                    }
+                }
+                .onChange(of: errorMessage) { _, newError in
+                    guard newError != nil else { return }
+                    focusedField = nil // dismiss keyboard so banner is visible
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            proxy.scrollTo(Field.errorBanner, anchor: .top)
                         }
                     }
                 }
-                .padding(20)
             }
             .background(SabqTheme.background)
             .sabqRTL()
@@ -903,9 +962,76 @@ struct ContactSheet: View {
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("تم") { focusedField = nil }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                }
             }
             .onAppear { prefillFromUser() }
         }
+    }
+
+    // MARK: - Contact-method cards (WhatsApp + Email — matches the web)
+
+    private var contactMethodCards: some View {
+        HStack(spacing: 12) {
+            Link(destination: whatsAppURL) {
+                contactMethodCard(
+                    icon: "message.fill",
+                    title: "واتساب",
+                    value: whatsAppNumber,
+                    tint: Color(red: 0.16, green: 0.74, blue: 0.42)
+                )
+            }
+            .buttonStyle(.plain)
+
+            Link(destination: emailURL) {
+                contactMethodCard(
+                    icon: "envelope.fill",
+                    title: "البريد الإلكتروني",
+                    value: supportEmail,
+                    tint: SabqTheme.primaryEnd
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func contactMethodCard(icon: String, title: String, value: String, tint: Color) -> some View {
+        VStack(spacing: 10) {
+            Circle()
+                .fill(tint)
+                .frame(width: 44, height: 44)
+                .overlay {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+
+            Text(value)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tint)
+                .environment(\.layoutDirection, .leftToRight)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(tint.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+        )
     }
 
     // MARK: - Field helpers
@@ -915,7 +1041,8 @@ struct ContactSheet: View {
         placeholder: String,
         text: Binding<String>,
         keyboard: UIKeyboardType = .default,
-        disableAutocap: Bool = false
+        disableAutocap: Bool = false,
+        field: Field
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
@@ -928,6 +1055,8 @@ struct ContactSheet: View {
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(disableAutocap ? .never : .sentences)
                 .autocorrectionDisabled(disableAutocap)
+                .focused($focusedField, equals: field)
+                .submitLabel(.next)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
                 .background(
@@ -936,7 +1065,10 @@ struct ContactSheet: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                        .stroke(
+                            focusedField == field ? SabqTheme.primaryEnd.opacity(0.4) : SabqTheme.outline,
+                            lineWidth: focusedField == field ? 1 : 0.5
+                        )
                 )
         }
     }
@@ -985,7 +1117,9 @@ struct ContactSheet: View {
             TextEditor(text: $message)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.ink)
-                .frame(minHeight: 120)
+                .focused($focusedField, equals: .message)
+                .frame(minHeight: 140)
+                .scrollContentBackground(.hidden)
                 .padding(12)
                 .background(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
@@ -993,7 +1127,10 @@ struct ContactSheet: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(SabqTheme.outline, lineWidth: 0.5)
+                        .stroke(
+                            focusedField == .message ? SabqTheme.primaryEnd.opacity(0.4) : SabqTheme.outline,
+                            lineWidth: focusedField == .message ? 1 : 0.5
+                        )
                 )
                 .overlay(alignment: .topLeading) {
                     if message.isEmpty {
