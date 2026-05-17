@@ -7981,11 +7981,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Persist the reason alongside the status flip in one update so the
       // in-app push (fired below) always reads back the value the editor
-      // typed, even if the request gets retried.
+      // typed, even if the request gets retried. `reviewStatus` is
+      // explicitly nulled — without that, an article that was earlier in
+      // `needs_changes` keeps surfacing as a pending revision request in
+      // the contributor dashboard even after being archived.
       const [updatedArticle] = await db
         .update(articles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
@@ -8423,11 +8427,15 @@ Respond in valid JSON format only:
         ? req.body.reviewNotes.trim().slice(0, 1000) || null
         : null;
 
-      // Soft delete by setting status to archived
+      // Soft delete by setting status to archived. `reviewStatus` is
+      // nulled too so contributor dashboards stop rendering archived
+      // pieces as pending revision requests — same rationale as the
+      // POST /:id/archive endpoint above.
       const [updatedArticle] = await db
         .update(articles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
@@ -8658,10 +8666,13 @@ Respond in valid JSON format only:
 
       // Archive all selected articles. Reason is written to every row so the
       // PATCH/inspector views see the same explanation editors typed.
+      // `reviewStatus` is nulled so previously-revision-flagged pieces stop
+      // surfacing on contributor dashboards as pending notes.
       await db
         .update(articles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
@@ -13587,11 +13598,13 @@ Respond in valid JSON format only:
         return res.status(404).json({ message: "Article not found" });
       }
 
-      // Soft delete by setting status to archived
+      // Soft delete by setting status to archived. reviewStatus cleared
+      // so contributor dashboards stop showing pending revision notes.
       const [updatedArticle] = await db
         .update(enArticles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
@@ -13894,11 +13907,14 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Article IDs are required" });
       }
 
-      // Archive articles by setting status to archived
+      // Archive articles by setting status to archived; null reviewStatus
+      // so contributor dashboards stop flagging archived pieces as
+      // pending revision requests.
       await db
         .update(enArticles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
@@ -13981,11 +13997,14 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "Article IDs are required" });
       }
 
-      // Archive articles by setting status to archived
+      // Archive articles by setting status to archived; null reviewStatus
+      // so contributor dashboards stop flagging archived pieces as
+      // pending revision requests.
       await db
         .update(enArticles)
         .set({
           status: "archived",
+          reviewStatus: null,
           ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
