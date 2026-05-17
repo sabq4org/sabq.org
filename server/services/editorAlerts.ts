@@ -958,6 +958,408 @@ export async function sendReporterRejectionEmail(articleId: string, rejectionRea
 }
 
 /**
+ * Reporter News Archive Email Template (خبر)
+ * Neutral, professional tone — used when an article is moved to the archive,
+ * regardless of whether it was previously published or not.
+ */
+function generateReporterArchiveEmailTemplate(data: {
+  articleTitle: string;
+  reporterName: string;
+  archiveReason?: string;
+  articleUrl?: string;
+  archivedAt?: Date;
+}): { html: string; text: string } {
+  const reason = data.archiveReason?.trim() || "لم يتم تحديد سبب";
+  const archivedAt = data.archivedAt ? formatArabicDateTime(data.archivedAt) : formatArabicDateTime(new Date());
+  const articleLinkBlock = data.articleUrl
+    ? `
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${data.articleUrl}"
+           style="display: inline-block; padding: 12px 28px; background: #1f2937; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          📄 عرض الخبر المؤرشف
+        </a>
+      </div>`
+    : "";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #d97706, #b45309); color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.9; }
+    .content { padding: 32px; }
+    .article-title { font-size: 18px; color: #1f2937; margin: 20px 0; padding: 16px; background: #fffbeb; border-radius: 8px; border-right: 4px solid #d97706; }
+    .reason-box { background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border-right: 4px solid #f97316; }
+    .reason-box h3 { margin: 0 0 8px 0; color: #9a3412; font-size: 14px; }
+    .reason-box p { margin: 0; color: #c2410c; font-size: 14px; line-height: 1.7; }
+    .meta { color: #6b7280; font-size: 13px; margin-top: 16px; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📦 تم نقل الخبر إلى الأرشيف</h1>
+      <p>إشعار من فريق التحرير</p>
+    </div>
+
+    <div class="content">
+      <p style="font-size: 16px; color: #374151;">مرحباً <strong>${data.reporterName}</strong>،</p>
+
+      <p style="color: #4b5563; line-height: 1.8;">
+        نودّ إعلامك بأنه تم نقل الخبر التالي إلى الأرشيف من قِبَل فريق التحرير.
+        الخبر لم يُحذف، ويمكن للمحرّرين الرجوع إليه أو إعادة نشره لاحقاً عند الحاجة.
+      </p>
+
+      <div class="article-title">
+        <strong>📰 عنوان الخبر:</strong><br>
+        ${data.articleTitle}
+      </div>
+
+      <div class="reason-box">
+        <h3>📋 سبب الأرشفة:</h3>
+        <p>${reason}</p>
+      </div>
+
+      <div class="meta">
+        🕒 وقت الأرشفة: ${archivedAt}
+      </div>
+${articleLinkBlock}
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px;">
+        إن كانت لديك أي ملاحظات أو ترغب في إعادة معالجة الخبر، يُرجى التواصل مع رئيس التحرير.
+      </p>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
+        شكراً لتعاونك ومساهمتك في تغطية الأخبار
+      </p>
+    </div>
+
+    <div class="footer">
+      هذا إشعار تلقائي من نظام إدارة المحتوى<br>
+      © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+مرحباً ${data.reporterName}،
+
+تم نقل الخبر التالي إلى الأرشيف من قِبَل فريق التحرير.
+الخبر لم يُحذف ويمكن إعادة نشره لاحقاً عند الحاجة.
+
+📰 عنوان الخبر: ${data.articleTitle}
+
+📋 سبب الأرشفة: ${reason}
+
+🕒 وقت الأرشفة: ${archivedAt}
+${data.articleUrl ? `\n📄 رابط الخبر: ${data.articleUrl}\n` : ""}
+إن كانت لديك أي ملاحظات يُرجى التواصل مع رئيس التحرير.
+
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Reporter News PERMANENT-DELETE Email Template (خبر)
+ * Apologetic, final tone — sent when an article is permanently removed
+ * from the database. There is no recovery path, so the copy emphasises
+ * permanence and gives the editorial reason.
+ *
+ * No article link is rendered: the row is gone by the time this fires.
+ */
+function generateReporterDeletionEmailTemplate(data: {
+  articleTitle: string;
+  reporterName: string;
+  deletionReason?: string;
+  deletedAt?: Date;
+}): { html: string; text: string } {
+  const reason = data.deletionReason?.trim() || "لم يتم تحديد سبب";
+  const deletedAt = data.deletedAt ? formatArabicDateTime(data.deletedAt) : formatArabicDateTime(new Date());
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.9; }
+    .content { padding: 32px; }
+    .article-title { font-size: 18px; color: #1f2937; margin: 20px 0; padding: 16px; background: #fef2f2; border-radius: 8px; border-right: 4px solid #dc2626; }
+    .reason-box { background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border-right: 4px solid #f97316; }
+    .reason-box h3 { margin: 0 0 8px 0; color: #9a3412; font-size: 14px; }
+    .reason-box p { margin: 0; color: #c2410c; font-size: 14px; line-height: 1.7; }
+    .warning { background: #fef2f2; border-radius: 8px; padding: 14px 16px; margin: 20px 0; border-right: 4px solid #dc2626; color: #991b1b; font-size: 13px; line-height: 1.7; }
+    .meta { color: #6b7280; font-size: 13px; margin-top: 16px; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>❌ تم حذف الخبر نهائياً</h1>
+      <p>إشعار من فريق التحرير</p>
+    </div>
+
+    <div class="content">
+      <p style="font-size: 16px; color: #374151;">مرحباً <strong>${data.reporterName}</strong>،</p>
+
+      <p style="color: #4b5563; line-height: 1.8;">
+        نُؤسفنا إبلاغك بأنه تم حذف الخبر التالي نهائياً من قِبَل فريق التحرير.
+      </p>
+
+      <div class="article-title">
+        <strong>📰 عنوان الخبر:</strong><br>
+        ${data.articleTitle}
+      </div>
+
+      <div class="reason-box">
+        <h3>📋 سبب الحذف:</h3>
+        <p>${reason}</p>
+      </div>
+
+      <div class="warning">
+        ⚠️ <strong>تنبيه:</strong> هذا الإجراء نهائي ولا يمكن التراجع عنه.
+        لم يعد المحتوى متاحاً في النظام أو على المنصة.
+      </div>
+
+      <div class="meta">
+        🕒 وقت الحذف: ${deletedAt}
+      </div>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px;">
+        إن كانت لديك أي استفسارات أو ترغب بمناقشة هذا الإجراء، يُرجى التواصل مع رئيس التحرير.
+      </p>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
+        نشكر لك تفهمك وتعاونك
+      </p>
+    </div>
+
+    <div class="footer">
+      هذا إشعار تلقائي من نظام إدارة المحتوى<br>
+      © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+مرحباً ${data.reporterName}،
+
+نُؤسفنا إبلاغك بأنه تم حذف الخبر التالي نهائياً من قِبَل فريق التحرير.
+
+📰 عنوان الخبر: ${data.articleTitle}
+
+📋 سبب الحذف: ${reason}
+
+⚠️ تنبيه: هذا الإجراء نهائي ولا يمكن التراجع عنه. لم يعد المحتوى متاحاً.
+
+🕒 وقت الحذف: ${deletedAt}
+
+إن كانت لديك أي استفسارات يُرجى التواصل مع رئيس التحرير.
+
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Send permanent-deletion email to news reporter (خبر only).
+ *
+ * Takes a pre-fetched article snapshot (not just id) because the
+ * row no longer exists in the DB by the time this is called.
+ * Caller MUST capture article fields BEFORE running `db.delete(...)`.
+ */
+export async function sendReporterDeletionEmail(
+  article: {
+    id: string;
+    title: string;
+    reporterId: string | null;
+  },
+  deletionReason?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    if (!article.reporterId) {
+      log.info(`[ReporterDeletionEmail] No reporter assigned to article: ${article.id}`);
+      return { sent: false, error: "No reporter assigned" };
+    }
+
+    const [reporter] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, article.reporterId))
+      .limit(1);
+
+    if (!reporter) {
+      log.info(`[ReporterDeletionEmail] Reporter not found: ${article.reporterId}`);
+      return { sent: false, error: "Reporter not found" };
+    }
+
+    if (reporter.notifyOnPublish === false) {
+      log.info(`[ReporterDeletionEmail] Reporter ${reporter.email} has disabled notifications`);
+      return { sent: false, error: "Reporter disabled notifications" };
+    }
+
+    if (!reporter.email) {
+      log.info(`[ReporterDeletionEmail] Reporter has no email address`);
+      return { sent: false, error: "No email address" };
+    }
+
+    const reporterName =
+      [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") ||
+      reporter.email.split("@")[0];
+
+    log.info(`[ReporterDeletionEmail] 📧 Sending deletion email to reporter: ${reporter.email}`);
+
+    const { html, text } = generateReporterDeletionEmailTemplate({
+      articleTitle: article.title,
+      reporterName,
+      deletionReason,
+      deletedAt: new Date(),
+    });
+
+    const result = await sendEmailNotification({
+      to: reporter.email,
+      subject: `❌ تم حذف خبرك نهائياً: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    if (result.success) {
+      log.info(`[ReporterDeletionEmail] ✅ Deletion email sent successfully to ${reporter.email}`);
+      return { sent: true };
+    } else {
+      console.error(`[ReporterDeletionEmail] ❌ Failed to send deletion email:`, result.error);
+      return { sent: false, error: result.error };
+    }
+  } catch (error) {
+    console.error("[ReporterDeletionEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/**
+ * Send archive email to news reporter (خبر only)
+ */
+export async function sendReporterArchiveEmail(
+  articleId: string,
+  archiveReason?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const [article] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        reporterId: articles.reporterId,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+
+    if (!article) {
+      log.info(`[ReporterArchiveEmail] Article not found: ${articleId}`);
+      return { sent: false, error: "Article not found" };
+    }
+
+    if (!article.reporterId) {
+      log.info(`[ReporterArchiveEmail] No reporter assigned to article: ${articleId}`);
+      return { sent: false, error: "No reporter assigned" };
+    }
+
+    const [reporter] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, article.reporterId))
+      .limit(1);
+
+    if (!reporter) {
+      log.info(`[ReporterArchiveEmail] Reporter not found: ${article.reporterId}`);
+      return { sent: false, error: "Reporter not found" };
+    }
+
+    if (reporter.notifyOnPublish === false) {
+      log.info(`[ReporterArchiveEmail] Reporter ${reporter.email} has disabled notifications`);
+      return { sent: false, error: "Reporter disabled notifications" };
+    }
+
+    if (!reporter.email) {
+      log.info(`[ReporterArchiveEmail] Reporter has no email address`);
+      return { sent: false, error: "No email address" };
+    }
+
+    const reporterName =
+      [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") ||
+      reporter.email.split("@")[0];
+
+    const frontendUrl = getFrontendUrl();
+    const slug = article.englishSlug || article.slug;
+    const articleUrl = slug ? `${frontendUrl}/article/${slug}` : undefined;
+
+    log.info(`[ReporterArchiveEmail] 📧 Sending archive email to reporter: ${reporter.email}`);
+
+    const { html, text } = generateReporterArchiveEmailTemplate({
+      articleTitle: article.title,
+      reporterName,
+      archiveReason,
+      articleUrl,
+      archivedAt: new Date(),
+    });
+
+    const result = await sendEmailNotification({
+      to: reporter.email,
+      subject: `📦 تم أرشفة خبرك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    if (result.success) {
+      log.info(`[ReporterArchiveEmail] ✅ Archive email sent successfully to ${reporter.email}`);
+      return { sent: true };
+    } else {
+      console.error(`[ReporterArchiveEmail] ❌ Failed to send archive email:`, result.error);
+      return { sent: false, error: result.error };
+    }
+  } catch (error) {
+    console.error("[ReporterArchiveEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/**
  * Opinion Author Article Published Email Template
  * Uses the same design as reporter publish email
  */
@@ -1420,6 +1822,428 @@ export async function sendOpinionAuthorRejectionEmail(articleId: string, rejecti
     }
   } catch (error) {
     console.error("[OpinionAuthorRejectionEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/**
+ * Opinion Author Article Archive Email Template (مقال)
+ * Respectful, professional tone aimed at columnists/opinion writers
+ * (separate from the news/reporter version because columnists expect a different register).
+ */
+function generateOpinionAuthorArchiveEmailTemplate(data: {
+  articleTitle: string;
+  authorName: string;
+  archiveReason?: string;
+  articleUrl?: string;
+  archivedAt?: Date;
+}): { html: string; text: string } {
+  const reason = data.archiveReason?.trim() || "لم يتم تحديد سبب";
+  const archivedAt = data.archivedAt ? formatArabicDateTime(data.archivedAt) : formatArabicDateTime(new Date());
+  const articleLinkBlock = data.articleUrl
+    ? `
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${data.articleUrl}"
+           style="display: inline-block; padding: 12px 28px; background: #1f2937; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          ✍️ عرض المقال المؤرشف
+        </a>
+      </div>`
+    : "";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #7c3aed, #5b21b6); color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.9; }
+    .content { padding: 32px; }
+    .article-title { font-size: 18px; color: #1f2937; margin: 20px 0; padding: 16px; background: #f5f3ff; border-radius: 8px; border-right: 4px solid #7c3aed; }
+    .reason-box { background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border-right: 4px solid #f97316; }
+    .reason-box h3 { margin: 0 0 8px 0; color: #9a3412; font-size: 14px; }
+    .reason-box p { margin: 0; color: #c2410c; font-size: 14px; line-height: 1.7; }
+    .meta { color: #6b7280; font-size: 13px; margin-top: 16px; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📦 تم نقل المقال إلى الأرشيف</h1>
+      <p>إشعار من هيئة التحرير</p>
+    </div>
+
+    <div class="content">
+      <p style="font-size: 16px; color: #374151;">الأستاذ/ة <strong>${data.authorName}</strong> المحترم/ة،</p>
+
+      <p style="color: #4b5563; line-height: 1.8;">
+        نُحيطكم علماً بأنه تم نقل المقال التالي إلى الأرشيف.
+        المقال لا يزال محفوظاً في النظام، ويسعدنا تواصلكم مع هيئة التحرير
+        في حال رغبتم بإعادة نشره أو إجراء أي تعديلات.
+      </p>
+
+      <div class="article-title">
+        <strong>✍️ عنوان المقال:</strong><br>
+        ${data.articleTitle}
+      </div>
+
+      <div class="reason-box">
+        <h3>📋 سبب الأرشفة:</h3>
+        <p>${reason}</p>
+      </div>
+
+      <div class="meta">
+        🕒 وقت الأرشفة: ${archivedAt}
+      </div>
+${articleLinkBlock}
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px;">
+        نشكر لكم قلمكم القيّم ومساهماتكم المستمرة على صفحات صحيفة سبق.
+      </p>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
+        مع خالص التقدير،<br>
+        هيئة التحرير
+      </p>
+    </div>
+
+    <div class="footer">
+      هذا إشعار تلقائي من نظام إدارة المحتوى<br>
+      © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+الأستاذ/ة ${data.authorName} المحترم/ة،
+
+نُحيطكم علماً بأنه تم نقل المقال التالي إلى الأرشيف.
+المقال لا يزال محفوظاً في النظام، ويسعدنا تواصلكم مع هيئة التحرير
+في حال رغبتم بإعادة نشره أو إجراء أي تعديلات.
+
+✍️ عنوان المقال: ${data.articleTitle}
+
+📋 سبب الأرشفة: ${reason}
+
+🕒 وقت الأرشفة: ${archivedAt}
+${data.articleUrl ? `\n✍️ رابط المقال: ${data.articleUrl}\n` : ""}
+نشكر لكم قلمكم القيّم ومساهماتكم المستمرة على صفحات صحيفة سبق.
+
+مع خالص التقدير،
+هيئة التحرير
+
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Opinion Author PERMANENT-DELETE Email Template (مقال)
+ * Respectful, apologetic tone for columnists/opinion writers.
+ * Like the news version, conveys finality and gives the reason.
+ *
+ * No article link is rendered: the row is gone by the time this fires.
+ */
+function generateOpinionAuthorDeletionEmailTemplate(data: {
+  articleTitle: string;
+  authorName: string;
+  deletionReason?: string;
+  deletedAt?: Date;
+}): { html: string; text: string } {
+  const reason = data.deletionReason?.trim() || "لم يتم تحديد سبب";
+  const deletedAt = data.deletedAt ? formatArabicDateTime(data.deletedAt) : formatArabicDateTime(new Date());
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #dc2626, #991b1b); color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .header p { margin: 6px 0 0; font-size: 13px; opacity: 0.9; }
+    .content { padding: 32px; }
+    .article-title { font-size: 18px; color: #1f2937; margin: 20px 0; padding: 16px; background: #f5f3ff; border-radius: 8px; border-right: 4px solid #7c3aed; }
+    .reason-box { background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border-right: 4px solid #f97316; }
+    .reason-box h3 { margin: 0 0 8px 0; color: #9a3412; font-size: 14px; }
+    .reason-box p { margin: 0; color: #c2410c; font-size: 14px; line-height: 1.7; }
+    .warning { background: #fef2f2; border-radius: 8px; padding: 14px 16px; margin: 20px 0; border-right: 4px solid #dc2626; color: #991b1b; font-size: 13px; line-height: 1.7; }
+    .meta { color: #6b7280; font-size: 13px; margin-top: 16px; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>❌ تم حذف المقال نهائياً</h1>
+      <p>إشعار من هيئة التحرير</p>
+    </div>
+
+    <div class="content">
+      <p style="font-size: 16px; color: #374151;">الأستاذ/ة <strong>${data.authorName}</strong> المحترم/ة،</p>
+
+      <p style="color: #4b5563; line-height: 1.8;">
+        يؤسفنا إبلاغكم بأنه تم حذف المقال التالي نهائياً من قِبَل هيئة التحرير.
+        نتفهّم أن هذا الإجراء قد لا يكون متوقعاً، ونعتذر عن أي إزعاج قد يسببه.
+      </p>
+
+      <div class="article-title">
+        <strong>✍️ عنوان المقال:</strong><br>
+        ${data.articleTitle}
+      </div>
+
+      <div class="reason-box">
+        <h3>📋 سبب الحذف:</h3>
+        <p>${reason}</p>
+      </div>
+
+      <div class="warning">
+        ⚠️ <strong>تنبيه:</strong> هذا الإجراء نهائي ولا يمكن التراجع عنه.
+        لم يعد المقال متاحاً في النظام أو على المنصة.
+      </div>
+
+      <div class="meta">
+        🕒 وقت الحذف: ${deletedAt}
+      </div>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px;">
+        يسعدنا تواصلكم مع هيئة التحرير لمناقشة هذا الإجراء أو لأي استفسار حوله.
+        كما نرحب بأي مساهمات جديدة منكم على صفحات سبق.
+      </p>
+
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
+        مع خالص التقدير،<br>
+        هيئة التحرير
+      </p>
+    </div>
+
+    <div class="footer">
+      هذا إشعار تلقائي من نظام إدارة المحتوى<br>
+      © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+الأستاذ/ة ${data.authorName} المحترم/ة،
+
+يؤسفنا إبلاغكم بأنه تم حذف المقال التالي نهائياً من قِبَل هيئة التحرير.
+نتفهّم أن هذا الإجراء قد لا يكون متوقعاً، ونعتذر عن أي إزعاج قد يسببه.
+
+✍️ عنوان المقال: ${data.articleTitle}
+
+📋 سبب الحذف: ${reason}
+
+⚠️ تنبيه: هذا الإجراء نهائي ولا يمكن التراجع عنه. لم يعد المقال متاحاً.
+
+🕒 وقت الحذف: ${deletedAt}
+
+يسعدنا تواصلكم مع هيئة التحرير لمناقشة هذا الإجراء.
+كما نرحب بأي مساهمات جديدة منكم.
+
+مع خالص التقدير،
+هيئة التحرير
+
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
+/**
+ * Send permanent-deletion email to opinion author (مقال only).
+ *
+ * Takes a pre-fetched article snapshot (not just id) because the
+ * row no longer exists in the DB by the time this is called.
+ * Caller MUST capture article fields BEFORE running `db.delete(...)`,
+ * and MUST verify the article was an opinion article (articleType==='opinion').
+ */
+export async function sendOpinionAuthorDeletionEmail(
+  article: {
+    id: string;
+    title: string;
+    authorId: string | null;
+  },
+  deletionReason?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    if (!article.authorId) {
+      log.info(`[OpinionAuthorDeletionEmail] No author assigned to article: ${article.id}`);
+      return { sent: false, error: "No author assigned" };
+    }
+
+    const [author] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, article.authorId))
+      .limit(1);
+
+    if (!author) {
+      log.info(`[OpinionAuthorDeletionEmail] Author not found: ${article.authorId}`);
+      return { sent: false, error: "Author not found" };
+    }
+
+    if (author.notifyOnPublish === false) {
+      log.info(`[OpinionAuthorDeletionEmail] Author ${author.email} has disabled notifications`);
+      return { sent: false, error: "Author disabled notifications" };
+    }
+
+    if (!author.email) {
+      log.info(`[OpinionAuthorDeletionEmail] Author has no email address`);
+      return { sent: false, error: "No email address" };
+    }
+
+    const authorName =
+      [author.firstName, author.lastName].filter(Boolean).join(" ") ||
+      author.email.split("@")[0];
+
+    log.info(`[OpinionAuthorDeletionEmail] 📧 Sending deletion email to opinion author: ${author.email}`);
+
+    const { html, text } = generateOpinionAuthorDeletionEmailTemplate({
+      articleTitle: article.title,
+      authorName,
+      deletionReason,
+      deletedAt: new Date(),
+    });
+
+    const result = await sendEmailNotification({
+      to: author.email,
+      subject: `❌ تم حذف مقالك نهائياً: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    if (result.success) {
+      log.info(`[OpinionAuthorDeletionEmail] ✅ Deletion email sent successfully to ${author.email}`);
+      return { sent: true };
+    } else {
+      console.error(`[OpinionAuthorDeletionEmail] ❌ Failed to send deletion email:`, result.error);
+      return { sent: false, error: result.error };
+    }
+  } catch (error) {
+    console.error("[OpinionAuthorDeletionEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/**
+ * Send archive email to opinion article author (مقال only)
+ */
+export async function sendOpinionAuthorArchiveEmail(
+  articleId: string,
+  archiveReason?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const [article] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        authorId: articles.authorId,
+        articleType: articles.articleType,
+      })
+      .from(articles)
+      .where(
+        and(
+          eq(articles.id, articleId),
+          eq(articles.articleType, "opinion"),
+        ),
+      )
+      .limit(1);
+
+    if (!article) {
+      log.info(`[OpinionAuthorArchiveEmail] Article not found or not an opinion article: ${articleId}`);
+      return { sent: false, error: "Opinion article not found" };
+    }
+
+    if (!article.authorId) {
+      log.info(`[OpinionAuthorArchiveEmail] No author assigned to article: ${articleId}`);
+      return { sent: false, error: "No author assigned" };
+    }
+
+    const [author] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, article.authorId))
+      .limit(1);
+
+    if (!author) {
+      log.info(`[OpinionAuthorArchiveEmail] Author not found: ${article.authorId}`);
+      return { sent: false, error: "Author not found" };
+    }
+
+    if (author.notifyOnPublish === false) {
+      log.info(`[OpinionAuthorArchiveEmail] Author ${author.email} has disabled notifications`);
+      return { sent: false, error: "Author disabled notifications" };
+    }
+
+    if (!author.email) {
+      log.info(`[OpinionAuthorArchiveEmail] Author has no email address`);
+      return { sent: false, error: "No email address" };
+    }
+
+    const authorName =
+      [author.firstName, author.lastName].filter(Boolean).join(" ") ||
+      author.email.split("@")[0];
+
+    const frontendUrl = getFrontendUrl();
+    const slug = article.englishSlug || article.slug;
+    const articleUrl = slug ? `${frontendUrl}/article/${slug}` : undefined;
+
+    log.info(`[OpinionAuthorArchiveEmail] 📧 Sending archive email to opinion author: ${author.email}`);
+
+    const { html, text } = generateOpinionAuthorArchiveEmailTemplate({
+      articleTitle: article.title,
+      authorName,
+      archiveReason,
+      articleUrl,
+      archivedAt: new Date(),
+    });
+
+    const result = await sendEmailNotification({
+      to: author.email,
+      subject: `📦 تم أرشفة مقالك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    if (result.success) {
+      log.info(`[OpinionAuthorArchiveEmail] ✅ Archive email sent successfully to ${author.email}`);
+      return { sent: true };
+    } else {
+      console.error(`[OpinionAuthorArchiveEmail] ❌ Failed to send archive email:`, result.error);
+      return { sent: false, error: result.error };
+    }
+  } catch (error) {
+    console.error("[OpinionAuthorArchiveEmail] ❌ Error:", error);
     return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }

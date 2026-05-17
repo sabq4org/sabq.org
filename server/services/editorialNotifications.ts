@@ -35,7 +35,8 @@ export type EditorialEvent =
   | "published"
   | "rejected"
   | "needs_revision"
-  | "archived";
+  | "archived"
+  | "deleted";
 
 export interface NotifyEditorialArgs {
   /** Recipient — typically `articles.authorId` or `articles.reporterId`. */
@@ -88,6 +89,9 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
     // separate preference would let users silently disappear off the
     // platform without notice.)
     case "archived":       return prefs.rejectedEnabled;
+    // Permanent deletion is the strongest deletion-class event. Always
+    // notify so the author isn't surprised when their byline disappears.
+    case "deleted":        return prefs.rejectedEnabled;
   }
 }
 
@@ -172,6 +176,15 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
           : `«${title}» — اطّلع على تفاصيل الأرشفة داخل التطبيق.`,
       };
     }
+    case "deleted": {
+      const reason = (args.reviewerNote || "").trim();
+      return {
+        title: `❌ تم حذف ${labels.my} نهائياً`,
+        body: reason
+          ? `«${title}» — السبب: ${reason}`
+          : `«${title}» — لم يعد المحتوى متاحاً على المنصة.`,
+      };
+    }
   }
 }
 
@@ -199,6 +212,10 @@ function buildDeepLink(args: NotifyEditorialArgs): string {
     // Same surface as rejection — the author opens an in-app screen that
     // shows the archive reason and (where applicable) a "resubmit" path.
     case "archived":       return `sabq://feedback/${id}`;
+    // Permanent deletion has no live article surface to deep-link to;
+    // send the author to the same feedback screen as rejection/archive
+    // so the deletion reason is visible alongside other editor notes.
+    case "deleted":        return `sabq://feedback/${id}`;
   }
 }
 

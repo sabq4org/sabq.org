@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { UrduDashboardLayout } from "@/components/ur/UrduDashboardLayout";
@@ -118,6 +120,8 @@ export default function EnglishArticlesPage() {
 
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -228,19 +232,24 @@ export default function EnglishArticlesPage() {
     },
   });
 
-  // Delete mutation
+  // Delete (archive) mutation — push-only notification on backend; we
+  // forward `reviewNotes` so the author sees the reason in-app.
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, reviewNotes }: { id: string; reviewNotes?: string }) => {
       return await apiRequest(`/api/ur/dashboard/articles/${id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reviewNotes ? { reviewNotes } : {}),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ur/dashboard/articles"] });
       setDeletingArticle(null);
+      setArchiveReason("");
+      setArchiveReasonError(null);
       toast({
         title: "Archived",
-        description: "Article archived successfully",
+        description: "Article archived and author notified in-app",
       });
     },
     onError: (error: any) => {
@@ -981,22 +990,68 @@ export default function EnglishArticlesPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingArticle} onOpenChange={() => setDeletingArticle(null)}>
+      {/* Archive Confirmation Dialog — pushes the reason to the author
+          via in-app notification (no email). */}
+      <AlertDialog
+        open={!!deletingArticle}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingArticle(null);
+            setArchiveReason("");
+            setArchiveReasonError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Archive</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to archive the article "{deletingArticle?.title}"? You can restore it later.
+              Archiving sends an in-app notification (no email) to the author with the reason you type below.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <div className="text-sm font-medium">Article:</div>
+            <div className="text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-2">
+              {deletingArticle?.title}
+            </div>
+            <Label htmlFor="ur-archive-reason" className="block pt-2">
+              Archive reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="ur-archive-reason"
+              data-testid="textarea-archive-reason-ur"
+              placeholder="e.g. Duplicate coverage, outdated, fails editorial guidelines..."
+              value={archiveReason}
+              onChange={(e) => {
+                setArchiveReason(e.target.value);
+                if (archiveReasonError) setArchiveReasonError(null);
+              }}
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+            />
+            {archiveReasonError && (
+              <p className="text-xs text-destructive">{archiveReasonError}</p>
+            )}
+          </div>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete-en">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-cancel-delete-ur">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingArticle && deleteMutation.mutate(deletingArticle.id)}
-              data-testid="button-confirm-delete-en"
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = archiveReason.trim();
+                if (trimmed.length < 5) {
+                  setArchiveReasonError("Please write a clear reason (at least 5 characters)");
+                  return;
+                }
+                if (deletingArticle) {
+                  deleteMutation.mutate({ id: deletingArticle.id, reviewNotes: trimmed });
+                }
+              }}
+              data-testid="button-confirm-delete-ur"
             >
-              Archive
+              {deleteMutation.isPending ? "Archiving..." : "Archive & notify"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

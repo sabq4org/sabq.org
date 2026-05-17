@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Archive, Trash2, Send, Bell, Loader2, Languages } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,11 +20,15 @@ interface RowActionsProps {
   status: string;
   onEdit: () => void;
   isFeatured: boolean;
+  /** Triggers the parent's archive flow (red trash icon). The parent
+   *  is expected to open a dialog that captures the reason and PATCHes
+   *  the article to `status: "archived"` with `reviewNotes`. The reason
+   *  is then delivered to the colleague via in-app push + email by the
+   *  backend. */
   onDelete: () => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canFeature?: boolean;
-  canArchive?: boolean;
   canPublish?: boolean;
   canSendNotification?: boolean;
   canTranslate?: boolean;
@@ -40,7 +44,6 @@ export function RowActions({
   canEdit = true,
   canDelete = true,
   canFeature = true,
-  canArchive = true,
   canPublish = true,
   canSendNotification = true,
   canTranslate = true,
@@ -102,33 +105,6 @@ export function RowActions({
       });
     } finally {
       setIsTranslating(false);
-    }
-  };
-
-  const handleArchive = async () => {
-    setIsLoading(true);
-    try {
-      await apiRequest(`/api/admin/articles/${articleId}/archive`, {
-        method: "POST",
-      });
-      
-      queryClient.removeQueries({ queryKey: ["/api/admin/articles"] });
-      queryClient.removeQueries({ queryKey: ["/api/admin/articles/metrics"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/admin/articles"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/admin/articles/metrics"] });
-      
-      toast({
-        title: "تم الأرشفة",
-        description: "تم أرشفة المقال بنجاح",
-      });
-    } catch (error: any) {
-      toast({
-        title: "خطأ",
-        description: error.message || "فشلت عملية الأرشفة",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -238,7 +214,9 @@ export function RowActions({
     );
   }
 
-  // للمقالات النشطة (منشور/مسودة/مجدول): تعديل - مميز - إشعار - أرشفة - حذف
+  // للمقالات النشطة (منشور/مسودة/مجدول): تعديل - مميز - ترجمة - إشعار - أرشفة بالسبب
+  // ملاحظة: زر سلة المهملات الأحمر = أرشفة + إشعار + إيميل للكاتب بالسبب
+  // (يفتح حواراً في الصفحة الأم يطلب السبب إلزامياً ثم يرسل PATCH).
   return (
     <>
       <div className="flex gap-1">
@@ -294,18 +272,6 @@ export function RowActions({
             <Bell className="w-4 h-4 text-blue-500" />
           </Button>
         )}
-        {canArchive && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleArchive}
-            disabled={isLoading}
-            data-testid={`button-action-archive-${articleId}`}
-            title="أرشفة"
-          >
-            <Archive className="w-4 h-4" />
-          </Button>
-        )}
         {canDelete && (
           <Button
             variant="ghost"
@@ -313,7 +279,7 @@ export function RowActions({
             onClick={onDelete}
             disabled={isLoading}
             data-testid={`button-action-delete-${articleId}`}
-            title="حذف"
+            title="أرشفة (مع ذكر السبب)"
           >
             <Trash2 className="w-4 h-4 text-destructive" />
           </Button>

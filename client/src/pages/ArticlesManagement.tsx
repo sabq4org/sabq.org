@@ -216,6 +216,11 @@ export default function ArticlesManagement() {
   // State for bulk selection
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleteReason, setBulkDeleteReason] = useState("");
+  const [bulkDeleteReasonError, setBulkDeleteReasonError] = useState<string | null>(null);
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
+  const [bulkArchiveReason, setBulkArchiveReason] = useState("");
+  const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
 
   // State for drag and drop
   const [localArticles, setLocalArticles] = useState<Article[]>([]);
@@ -482,12 +487,13 @@ export default function ArticlesManagement() {
     },
   });
 
-  // Bulk archive mutation
+  // Bulk archive mutation — sends `reviewNotes` so every reporter/opinion
+  // author in the batch sees the same archive reason in the iOS push.
   const bulkArchiveMutation = useMutation({
-    mutationFn: async (articleIds: string[]) => {
+    mutationFn: async ({ articleIds, reviewNotes }: { articleIds: string[]; reviewNotes?: string }) => {
       return await apiRequest("/api/admin/articles/bulk-archive", {
         method: "POST",
-        body: JSON.stringify({ articleIds }),
+        body: JSON.stringify(reviewNotes ? { articleIds, reviewNotes } : { articleIds }),
         headers: { "Content-Type": "application/json" },
       });
     },
@@ -495,6 +501,9 @@ export default function ArticlesManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/articles/metrics"] });
       setSelectedArticles(new Set());
+      setShowBulkArchiveDialog(false);
+      setBulkArchiveReason("");
+      setBulkArchiveReasonError(null);
       toast({
         title: "تم الأرشفة",
         description: "تم أرشفة المقالات المحددة بنجاح",
@@ -509,12 +518,15 @@ export default function ArticlesManagement() {
     },
   });
 
-  // Bulk permanent delete mutation
+  // Bulk permanent delete mutation. Mirrors the bulk-archive shape:
+  // the reason is required by the dashboard (5+ chars) so that every
+  // affected reporter/author gets a push + email with a meaningful
+  // "why your content is gone" message.
   const bulkPermanentDeleteMutation = useMutation({
-    mutationFn: async (articleIds: string[]) => {
+    mutationFn: async (args: { articleIds: string[]; deletionReason: string }) => {
       return await apiRequest("/api/admin/articles/bulk-delete-permanent", {
         method: "POST",
-        body: JSON.stringify({ articleIds }),
+        body: JSON.stringify(args),
         headers: { "Content-Type": "application/json" },
       });
     },
@@ -523,9 +535,11 @@ export default function ArticlesManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/articles/metrics"] });
       setSelectedArticles(new Set());
       setShowBulkDeleteDialog(false);
+      setBulkDeleteReason("");
+      setBulkDeleteReasonError(null);
       toast({
-        title: "تم الحذف",
-        description: "تم حذف المقالات المحددة نهائياً",
+        title: "تم الحذف النهائي",
+        description: "تم حذف المقالات المحددة نهائياً، وأُرسل للكتّاب/المراسلين إشعار + إيميل بالسبب.",
       });
     },
     onError: (error: any) => {
@@ -640,7 +654,9 @@ export default function ArticlesManagement() {
 
   const handleBulkArchive = () => {
     if (selectedArticles.size === 0) return;
-    bulkArchiveMutation.mutate(Array.from(selectedArticles));
+    setBulkArchiveReason("");
+    setBulkArchiveReasonError(null);
+    setShowBulkArchiveDialog(true);
   };
 
   const handleBulkPermanentDelete = () => {
@@ -1183,9 +1199,8 @@ export default function ArticlesManagement() {
                                   isFeatured={article.isFeatured}
                                   onDelete={() => setDeletingArticle(article)}
                                   canEdit={canEditArticle(article)}
-                                  canDelete={!!canDeleteArticle}
+                                  canDelete={!!(canDeleteArticle || canArchiveArticle)}
                                   canFeature={!!canFeatureArticle}
-                                  canArchive={!!canArchiveArticle}
                                   canPublish={!!canPublishArticle}
                                 />
                               </div>
@@ -1494,7 +1509,7 @@ export default function ArticlesManagement() {
               <Button
                 size="default"
                 variant="outline"
-                onClick={() => bulkArchiveMutation.mutate(Array.from(selectedArticles))}
+                onClick={handleBulkArchive}
                 disabled={bulkArchiveMutation.isPending}
                 className="flex-1"
                 data-testid="button-bulk-archive-mobile"
@@ -1536,7 +1551,7 @@ export default function ArticlesManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الأرشفة</AlertDialogTitle>
             <AlertDialogDescription>
-              عند الأرشفة، سيصل إشعار للكاتب/المراسل بالسبب الذي تكتبه أدناه. الحقل إلزامي.
+              عند الأرشفة، سيصل للكاتب/المراسل إشعار داخل التطبيق + إيميل بالسبب الذي تكتبه أدناه. الحقل إلزامي.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2 py-2">
@@ -1589,23 +1604,139 @@ export default function ArticlesManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Bulk Permanent Delete Confirmation Dialog */}
-      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+      {/* Bulk Archive Confirmation Dialog — captures the reason that's
+          pushed to every reporter/author in the batch (in-app + email).
+          Backend treats the body field as optional, but we strongly
+          prompt for one so colleagues don't get a faceless "تم أرشفة
+          المقال" ping. */}
+      <AlertDialog
+        open={showBulkArchiveDialog}
+        onOpenChange={(open) => {
+          setShowBulkArchiveDialog(open);
+          if (!open) {
+            setBulkArchiveReason("");
+            setBulkArchiveReasonError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الأرشفة الجماعية</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم أرشفة {selectedArticles.size} مقال. عند الأرشفة، يصل لكل كاتب/مراسل إشعار داخل التطبيق + إيميل بالسبب الذي تكتبه أدناه.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <label htmlFor="bulk-archive-reason" className="text-sm font-medium block">
+              سبب الأرشفة <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="bulk-archive-reason"
+              data-testid="textarea-bulk-archive-reason"
+              placeholder="مثال: تكرار الموضوع، تجاوز الفترة الزمنية، حملة تحديث محتوى..."
+              value={bulkArchiveReason}
+              onChange={(e) => {
+                setBulkArchiveReason(e.target.value);
+                if (bulkArchiveReasonError) setBulkArchiveReasonError(null);
+              }}
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+              dir="rtl"
+            />
+            {bulkArchiveReasonError && (
+              <p className="text-xs text-destructive">{bulkArchiveReasonError}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-archive">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkArchiveMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = bulkArchiveReason.trim();
+                if (trimmed.length < 5) {
+                  setBulkArchiveReasonError("اكتب سبباً واضحاً للأرشفة (5 أحرف على الأقل)");
+                  return;
+                }
+                bulkArchiveMutation.mutate({
+                  articleIds: Array.from(selectedArticles),
+                  reviewNotes: trimmed,
+                });
+              }}
+              data-testid="button-confirm-bulk-archive"
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {bulkArchiveMutation.isPending ? "جاري الأرشفة..." : "أرشفة وإرسال الإشعار"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Permanent Delete Confirmation Dialog — like archive, the
+          reason captured here is sent (in-app push + email) to every
+          affected reporter/author. Required so colleagues never get a
+          faceless "content deleted" notification. */}
+      <AlertDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={(open) => {
+          setShowBulkDeleteDialog(open);
+          if (!open) {
+            setBulkDeleteReason("");
+            setBulkDeleteReasonError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف النهائي</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف {selectedArticles.size} مقال نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.
+              سيتم حذف {selectedArticles.size} مقال نهائياً ولن يمكن استرجاعها.
+              يصل لكل كاتب/مراسل إشعار داخل التطبيق + إيميل اعتذاري بالسبب الذي تكتبه أدناه.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <label htmlFor="bulk-delete-reason" className="text-sm font-medium block">
+              سبب الحذف النهائي <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="bulk-delete-reason"
+              data-testid="textarea-bulk-delete-reason"
+              placeholder="مثال: محتوى غير دقيق، طلب من جهة رسمية، انتهاك سياسة، تكرار نهائي..."
+              value={bulkDeleteReason}
+              onChange={(e) => {
+                setBulkDeleteReason(e.target.value);
+                if (bulkDeleteReasonError) setBulkDeleteReasonError(null);
+              }}
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+              dir="rtl"
+            />
+            {bulkDeleteReasonError && (
+              <p className="text-xs text-destructive">{bulkDeleteReasonError}</p>
+            )}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-bulk-delete">إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => bulkPermanentDeleteMutation.mutate(Array.from(selectedArticles))}
+              disabled={bulkPermanentDeleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = bulkDeleteReason.trim();
+                if (trimmed.length < 5) {
+                  setBulkDeleteReasonError("اكتب سبباً واضحاً للحذف النهائي (5 أحرف على الأقل)");
+                  return;
+                }
+                bulkPermanentDeleteMutation.mutate({
+                  articleIds: Array.from(selectedArticles),
+                  deletionReason: trimmed,
+                });
+              }}
               data-testid="button-confirm-bulk-delete"
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              حذف نهائي
+              {bulkPermanentDeleteMutation.isPending ? "جاري الحذف..." : "حذف نهائي وإرسال الإشعار"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

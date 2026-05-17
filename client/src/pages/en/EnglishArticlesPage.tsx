@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
@@ -120,6 +122,11 @@ export default function EnglishArticlesPage() {
 
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveReasonError, setArchiveReasonError] = useState<string | null>(null);
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
+  const [bulkArchiveReason, setBulkArchiveReason] = useState("");
+  const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -234,17 +241,21 @@ export default function EnglishArticlesPage() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, reviewNotes }: { id: string; reviewNotes?: string }) => {
       return await apiRequest(`/api/en/dashboard/articles/${id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reviewNotes ? { reviewNotes } : {}),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/en/dashboard/articles"] });
       setDeletingArticle(null);
+      setArchiveReason("");
+      setArchiveReasonError(null);
       toast({
         title: "Archived",
-        description: "Article archived successfully",
+        description: "Article archived and author notified in-app",
       });
     },
     onError: (error: any) => {
@@ -327,10 +338,10 @@ export default function EnglishArticlesPage() {
 
   // Bulk archive mutation
   const bulkArchiveMutation = useMutation({
-    mutationFn: async (articleIds: string[]) => {
+    mutationFn: async ({ articleIds, reviewNotes }: { articleIds: string[]; reviewNotes?: string }) => {
       return await apiRequest("/api/en/dashboard/articles/bulk-archive", {
         method: "POST",
-        body: JSON.stringify({ articleIds }),
+        body: JSON.stringify(reviewNotes ? { articleIds, reviewNotes } : { articleIds }),
         headers: { "Content-Type": "application/json" },
       });
     },
@@ -338,9 +349,12 @@ export default function EnglishArticlesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/en/dashboard/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/en/dashboard/articles/metrics"] });
       setSelectedArticles(new Set());
+      setShowBulkArchiveDialog(false);
+      setBulkArchiveReason("");
+      setBulkArchiveReasonError(null);
       toast({
         title: "Archived",
-        description: "Selected articles archived successfully",
+        description: "Selected articles archived and authors notified",
       });
     },
     onError: (error: any) => {
@@ -430,7 +444,9 @@ export default function EnglishArticlesPage() {
 
   const handleBulkArchive = () => {
     if (selectedArticles.size === 0) return;
-    bulkArchiveMutation.mutate(Array.from(selectedArticles));
+    setBulkArchiveReason("");
+    setBulkArchiveReasonError(null);
+    setShowBulkArchiveDialog(true);
   };
 
   const handleBulkPermanentDelete = () => {
@@ -990,21 +1006,130 @@ export default function EnglishArticlesPage() {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingArticle} onOpenChange={() => setDeletingArticle(null)}>
+      <AlertDialog
+        open={!!deletingArticle}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingArticle(null);
+            setArchiveReason("");
+            setArchiveReasonError(null);
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Archive</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to archive the article "{deletingArticle?.title}"? You can restore it later.
+              Archiving sends an in-app notification (no email) to the author with the reason you type below.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <div className="text-sm font-medium">Article:</div>
+            <div className="text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-2">
+              {deletingArticle?.title}
+            </div>
+            <Label htmlFor="en-archive-reason" className="block pt-2">
+              Archive reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="en-archive-reason"
+              data-testid="textarea-archive-reason-en"
+              placeholder="e.g. Duplicate coverage, outdated, fails editorial guidelines..."
+              value={archiveReason}
+              onChange={(e) => {
+                setArchiveReason(e.target.value);
+                if (archiveReasonError) setArchiveReasonError(null);
+              }}
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+            />
+            {archiveReasonError && (
+              <p className="text-xs text-destructive">{archiveReasonError}</p>
+            )}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-cancel-delete-en">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deletingArticle && deleteMutation.mutate(deletingArticle.id)}
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = archiveReason.trim();
+                if (trimmed.length < 5) {
+                  setArchiveReasonError("Please write a clear reason (at least 5 characters)");
+                  return;
+                }
+                if (deletingArticle) {
+                  deleteMutation.mutate({ id: deletingArticle.id, reviewNotes: trimmed });
+                }
+              }}
               data-testid="button-confirm-delete-en"
             >
-              Archive
+              {deleteMutation.isPending ? "Archiving..." : "Archive & notify"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Archive Confirmation Dialog */}
+      <AlertDialog
+        open={showBulkArchiveDialog}
+        onOpenChange={(open) => {
+          setShowBulkArchiveDialog(open);
+          if (!open) {
+            setBulkArchiveReason("");
+            setBulkArchiveReasonError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Bulk Archive</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedArticles.size} article(s) will be archived. Each author receives an in-app push (no email) with the reason below.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="en-bulk-archive-reason" className="block">
+              Archive reason <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="en-bulk-archive-reason"
+              data-testid="textarea-bulk-archive-reason-en"
+              placeholder="e.g. Refreshing topic coverage, removing outdated stories..."
+              value={bulkArchiveReason}
+              onChange={(e) => {
+                setBulkArchiveReason(e.target.value);
+                if (bulkArchiveReasonError) setBulkArchiveReasonError(null);
+              }}
+              rows={4}
+              maxLength={1000}
+              className="resize-none"
+            />
+            {bulkArchiveReasonError && (
+              <p className="text-xs text-destructive">{bulkArchiveReasonError}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-bulk-archive-en">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkArchiveMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = bulkArchiveReason.trim();
+                if (trimmed.length < 5) {
+                  setBulkArchiveReasonError("Please write a clear reason (at least 5 characters)");
+                  return;
+                }
+                bulkArchiveMutation.mutate({
+                  articleIds: Array.from(selectedArticles),
+                  reviewNotes: trimmed,
+                });
+              }}
+              data-testid="button-confirm-bulk-archive-en"
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {bulkArchiveMutation.isPending ? "Archiving..." : "Archive & notify"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

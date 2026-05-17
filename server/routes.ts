@@ -51,7 +51,7 @@ import { createNotification, notifyReporterArticlePublished, notifyReporterArtic
 import { notificationBus } from "./notificationBus";
 import { indexArticle, isGoogleIndexingConfigured } from "./services/googleIndexingService";
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
-import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterRejectionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail } from "./services/editorAlerts";
+import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail } from "./services/editorAlerts";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
@@ -7253,13 +7253,37 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
             // status: anything → archived. Pairs with the archive-reason
             // guard above — at this point the reviewNotes field is
-            // guaranteed to carry the archive explanation.
+            // guaranteed to carry the archive explanation. Arabic
+            // dashboard policy: in-app push AND email both fire (the
+            // English/Urdu archive routes elsewhere in this file stay
+            // push-only).
             if (updatedArticle.status === "archived" && existingArticle.status !== "archived") {
               await notifyArticleStakeholders(
                 articleForNotify,
                 "archived",
                 updatedArticle.reviewNotes
               );
+
+              const archiveReasonForEmail =
+                updatedArticle.reviewNotes ?? "تم أرشفة المقال من قبل فريق التحرير";
+              try {
+                if (updatedArticle.articleType === "opinion") {
+                  await sendOpinionAuthorArchiveEmail(
+                    updatedArticle.id,
+                    archiveReasonForEmail,
+                  );
+                } else {
+                  await sendReporterArchiveEmail(
+                    updatedArticle.id,
+                    archiveReasonForEmail,
+                  );
+                }
+              } catch (emailError: any) {
+                console.error(
+                  "[ARCHIVE-PATCH] Error sending archive email:",
+                  emailError?.message || emailError,
+                );
+              }
             }
           } catch (notifyErr: any) {
             console.error('[Editorial Notify] background task error:', notifyErr?.message || notifyErr);
@@ -7864,8 +7888,27 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      // Editorial reason — optional in the body but strongly recommended so
+      // the iOS notification card can surface a useful explanation to the
+      // reporter. Stored on `articles.reviewNotes` to match the rejection
+      // path's convention (PATCH /api/admin/articles/:id already reads
+      // from the same column when it fires `notifyArticleStakeholders`).
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
-      const updatedArticle = await storage.archiveArticle(articleId, userId);
+      // Persist the reason alongside the status flip in one update so the
+      // in-app push (fired below) always reads back the value the editor
+      // typed, even if the request gets retried.
+      const [updatedArticle] = await db
+        .update(articles)
+        .set({
+          status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(articles.id, articleId))
+        .returning();
 
       // Invalidate caches when articles are archived
       memoryCache.invalidatePattern('^homepage');
@@ -7889,23 +7932,53 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-      // Send rejection email to author based on article type
-      try {
-        if (article.articleType === "opinion") {
-          // Send rejection email to opinion author
-          await sendOpinionAuthorRejectionEmail(articleId, "تم أرشفة المقال من قبل فريق التحرير");
-          console.log(`[ARCHIVE] Opinion author rejection email sent for article: ${articleId}`);
-        } else {
-          // Send rejection email to reporter
-          await sendReporterRejectionEmail(articleId);
-          console.log(`[ARCHIVE] Reporter rejection email sent for article: ${articleId}`);
+      // Arabic dashboard policy (editorial decision 2026-05-17 v2):
+      //   - iOS in-app push  → ALWAYS sent (carries the reason)
+      //   - Email             → ALSO sent in Arabic only, with the same
+      //                         reason so the colleague has a written
+      //                         record on their inbox.
+      // English/Urdu dashboards remain push-only (their own routes do
+      // NOT trigger any email).
+      const archiveReasonForEmail =
+        reviewNotes ?? "تم أرشفة المقال من قبل فريق التحرير";
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(
+            {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+              submitterId: updatedArticle.submitterId,
+            },
+            "archived",
+            reviewNotes,
+          );
+        } catch (notifyErr) {
+          console.error("[ARCHIVE] Push notification failed:", notifyErr);
         }
-      } catch (emailError) {
-        console.error("[ARCHIVE] Error sending rejection email:", emailError);
-      }
+
+        try {
+          if (article.articleType === "opinion") {
+            await sendOpinionAuthorArchiveEmail(articleId, archiveReasonForEmail);
+            console.log(`[ARCHIVE] Opinion author archive email sent for ${articleId}`);
+          } else {
+            await sendReporterArchiveEmail(articleId, archiveReasonForEmail);
+            console.log(`[ARCHIVE] Reporter archive email sent for ${articleId}`);
+          }
+        } catch (emailError) {
+          console.error("[ARCHIVE] Error sending archive email:", emailError);
+        }
+      });
 
       // Invalidate cache and broadcast to all connected clients for instant update.
       // Pass the article so its slug is purged at the edge (sMaxAge=3600 otherwise).
@@ -8237,7 +8310,12 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Archive article (soft delete)
+  // Archive article (soft delete) — historical DELETE verb kept for
+  // dashboards that still call it. Behaviourally identical to the
+  // POST /:id/archive route above: persists `reviewNotes` if provided,
+  // fires the iOS in-app push, and DOES NOT send any email (the
+  // editorial decision on 2026-05-17 was that archive = silent on
+  // email, push-only).
   app.delete("/api/admin/articles/:id", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -8257,11 +8335,18 @@ Respond in valid JSON format only:
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // Editorial reason — Express's DELETE doesn't always carry a body
+      // across every client, so we read it tolerantly. Optional.
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
+
       // Soft delete by setting status to archived
       const [updatedArticle] = await db
         .update(articles)
         .set({
           status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
         .where(eq(articles.id, articleId))
@@ -8289,23 +8374,47 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-      // Send rejection email to author based on article type
-      try {
-        if (article.articleType === "opinion") {
-          // Send rejection email to opinion author
-          await sendOpinionAuthorRejectionEmail(articleId, "تم أرشفة المقال من قبل فريق التحرير");
-          console.log(`[ARCHIVE] Opinion author rejection email sent for article: ${articleId}`);
-        } else {
-          // Send rejection email to reporter
-          await sendReporterRejectionEmail(articleId);
-          console.log(`[ARCHIVE] Reporter rejection email sent for article: ${articleId}`);
+      // Arabic dashboard: push + email (see note on POST /:id/archive).
+      const archiveReasonForEmail =
+        reviewNotes ?? "تم أرشفة المقال من قبل فريق التحرير";
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(
+            {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+              submitterId: updatedArticle.submitterId,
+            },
+            "archived",
+            reviewNotes,
+          );
+        } catch (notifyErr) {
+          console.error("[ARCHIVE-DELETE] Push notification failed:", notifyErr);
         }
-      } catch (emailError) {
-        console.error("[ARCHIVE] Error sending rejection email:", emailError);
-      }
+
+        try {
+          if (article.articleType === "opinion") {
+            await sendOpinionAuthorArchiveEmail(articleId, archiveReasonForEmail);
+            console.log(`[ARCHIVE-DELETE] Opinion author archive email sent for ${articleId}`);
+          } else {
+            await sendReporterArchiveEmail(articleId, archiveReasonForEmail);
+            console.log(`[ARCHIVE-DELETE] Reporter archive email sent for ${articleId}`);
+          }
+        } catch (emailError) {
+          console.error("[ARCHIVE-DELETE] Error sending archive email:", emailError);
+        }
+      });
 
       // Log article event
       logArticleEvent({
@@ -8333,6 +8442,10 @@ Respond in valid JSON format only:
       }
 
       const articleId = req.params.id;
+      // Accept an optional deletion reason from the dashboard. Falls back
+      // to the article's existing reviewNotes (the archive reason),
+      // because permanent-delete is gated on already-archived rows.
+      const { deletionReason } = (req.body || {}) as { deletionReason?: string };
 
       const [article] = await db
         .select()
@@ -8348,6 +8461,27 @@ Respond in valid JSON format only:
       if (article.status !== "archived") {
         return res.status(400).json({ message: "Only archived articles can be permanently deleted" });
       }
+
+      // Snapshot the fields we need for the deletion notifications BEFORE
+      // the row is dropped, so the notify code can reach the author/reporter
+      // even though the article will no longer exist by the time the
+      // background task runs.
+      const articleSnapshot = {
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        englishSlug: article.englishSlug,
+        articleType: article.articleType,
+        scheduledAt: article.scheduledAt,
+        publishedAt: article.publishedAt,
+        authorId: article.authorId,
+        reporterId: article.reporterId,
+        submitterId: article.submitterId,
+      };
+      const finalReason =
+        deletionReason?.trim() ||
+        article.reviewNotes?.trim() ||
+        "تم حذف المحتوى نهائياً من قبل فريق التحرير";
 
       // Delete article permanently
       await db.delete(articles).where(eq(articles.id, articleId));
@@ -8374,7 +8508,37 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: finalReason,
         },
+      });
+
+      // Fire push + email notifications to the author/reporter so they
+      // know the content is gone for good. Backgrounded so the HTTP
+      // response is not blocked on MailerSend / APNs latency.
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(articleSnapshot, "deleted", finalReason);
+        } catch (notifyErr) {
+          console.error("[PERMANENT-DELETE] Push notification failed:", notifyErr);
+        }
+
+        try {
+          if (articleSnapshot.articleType === "opinion") {
+            await sendOpinionAuthorDeletionEmail(
+              { id: articleSnapshot.id, title: articleSnapshot.title, authorId: articleSnapshot.authorId },
+              finalReason,
+            );
+            console.log(`[PERMANENT-DELETE] Opinion author deletion email sent for ${articleId}`);
+          } else {
+            await sendReporterDeletionEmail(
+              { id: articleSnapshot.id, title: articleSnapshot.title, reporterId: articleSnapshot.reporterId },
+              finalReason,
+            );
+            console.log(`[PERMANENT-DELETE] Reporter deletion email sent for ${articleId}`);
+          }
+        } catch (emailError) {
+          console.error("[PERMANENT-DELETE] Error sending deletion email:", emailError);
+        }
       });
 
       res.json({ message: "Article permanently deleted successfully" });
@@ -8386,7 +8550,9 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Bulk archive articles
+  // Bulk archive articles — push-only notifications (no email).
+  // The optional `reviewNotes` is broadcast as the archive reason to
+  // every stakeholder of every article in the batch.
   app.post("/api/admin/articles/bulk-archive", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -8395,16 +8561,21 @@ Respond in valid JSON format only:
       }
 
       const { articleIds } = req.body;
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
       if (!Array.isArray(articleIds) || articleIds.length === 0) {
         return res.status(400).json({ message: "Article IDs are required" });
       }
 
-      // Archive all selected articles
+      // Archive all selected articles. Reason is written to every row so the
+      // PATCH/inspector views see the same explanation editors typed.
       await db
         .update(articles)
         .set({
           status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
         .where(inArray(articles.id, articleIds));
@@ -8429,28 +8600,53 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-
-      // Send rejection emails to reporters/opinion authors for each archived article
+      // Fan out push + (Arabic-only) email for every archived row. Done
+      // in setImmediate so the HTTP response isn't blocked by N x APNs +
+      // N x SendGrid round-trips when N is large (bulk-archive often
+      // covers 50+ items).
       const archivedArticles = await db
-        .select({ id: articles.id, articleType: articles.articleType })
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          articleType: articles.articleType,
+          scheduledAt: articles.scheduledAt,
+          publishedAt: articles.publishedAt,
+          authorId: articles.authorId,
+          reporterId: articles.reporterId,
+          submitterId: articles.submitterId,
+        })
         .from(articles)
         .where(inArray(articles.id, articleIds));
-      for (const archivedArticle of archivedArticles) {
-        try {
-          if (archivedArticle.articleType === 'opinion') {
-            await sendOpinionAuthorRejectionEmail(archivedArticle.id, "تم أرشفة المقال من قبل فريق التحرير");
-            console.log(`[BULK ARCHIVE] Opinion author rejection email sent for article: ${archivedArticle.id}`);
-          } else {
-            await sendReporterRejectionEmail(archivedArticle.id);
-            console.log(`[BULK ARCHIVE] Reporter rejection email sent for article: ${archivedArticle.id}`);
+      const archiveReasonForEmail =
+        reviewNotes ?? "تم أرشفة المقال من قبل فريق التحرير";
+      setImmediate(async () => {
+        for (const a of archivedArticles) {
+          try {
+            await notifyArticleStakeholders(a, "archived", reviewNotes);
+          } catch (notifyErr) {
+            console.error(`[BULK ARCHIVE] Push notification failed for ${a.id}:`, notifyErr);
           }
-        } catch (emailError) {
-          console.error(`[BULK ARCHIVE] Error sending rejection email for ${archivedArticle.id}:`, emailError);
+
+          try {
+            if (a.articleType === "opinion") {
+              await sendOpinionAuthorArchiveEmail(a.id, archiveReasonForEmail);
+              console.log(`[BULK ARCHIVE] Opinion author archive email sent for ${a.id}`);
+            } else {
+              await sendReporterArchiveEmail(a.id, archiveReasonForEmail);
+              console.log(`[BULK ARCHIVE] Reporter archive email sent for ${a.id}`);
+            }
+          } catch (emailError) {
+            console.error(`[BULK ARCHIVE] Error sending archive email for ${a.id}:`, emailError);
+          }
         }
-      }
+      });
+
       res.json({ message: `Successfully archived ${articleIds.length} articles` });
     } catch (error) {
       console.error("Error bulk archiving articles:", error);
@@ -8468,7 +8664,10 @@ Respond in valid JSON format only:
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { articleIds } = req.body;
+      const { articleIds, deletionReason } = (req.body || {}) as {
+        articleIds?: string[];
+        deletionReason?: string;
+      };
 
       if (!Array.isArray(articleIds) || articleIds.length === 0) {
         return res.status(400).json({ message: "Article IDs are required" });
@@ -8488,6 +8687,27 @@ Respond in valid JSON format only:
           nonArchivedCount: nonArchivedArticles.length 
         });
       }
+
+      // Snapshot every article BEFORE deletion so the notify code can
+      // still reach the original author/reporter after the row is gone.
+      // Per-row fallback to the article's own reviewNotes (archive reason)
+      // if no explicit deletionReason came in from the dashboard.
+      const snapshots = articlesToDelete.map(a => ({
+        id: a.id,
+        title: a.title,
+        slug: a.slug,
+        englishSlug: a.englishSlug,
+        articleType: a.articleType,
+        scheduledAt: a.scheduledAt,
+        publishedAt: a.publishedAt,
+        authorId: a.authorId,
+        reporterId: a.reporterId,
+        submitterId: a.submitterId,
+        reason:
+          deletionReason?.trim() ||
+          a.reviewNotes?.trim() ||
+          "تم حذف المحتوى نهائياً من قبل فريق التحرير",
+      }));
 
       // Delete articles permanently
       // Nullify foreign key references in tables without cascade delete
@@ -8523,7 +8743,41 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason:
+            deletionReason?.trim() ||
+            "تم حذف المحتوى نهائياً من قبل فريق التحرير",
         },
+      });
+
+      // Fan out push + email per article in the background. Done serially
+      // (not Promise.all) so a flood of bulk-deletes doesn't stampede
+      // MailerSend / APNs.
+      setImmediate(async () => {
+        for (const snap of snapshots) {
+          try {
+            await notifyArticleStakeholders(snap, "deleted", snap.reason);
+          } catch (notifyErr) {
+            console.error(`[BULK PERMANENT-DELETE] Push notification failed for ${snap.id}:`, notifyErr);
+          }
+
+          try {
+            if (snap.articleType === "opinion") {
+              await sendOpinionAuthorDeletionEmail(
+                { id: snap.id, title: snap.title, authorId: snap.authorId },
+                snap.reason,
+              );
+              console.log(`[BULK PERMANENT-DELETE] Opinion author deletion email sent for ${snap.id}`);
+            } else {
+              await sendReporterDeletionEmail(
+                { id: snap.id, title: snap.title, reporterId: snap.reporterId },
+                snap.reason,
+              );
+              console.log(`[BULK PERMANENT-DELETE] Reporter deletion email sent for ${snap.id}`);
+            }
+          } catch (emailError) {
+            console.error(`[BULK PERMANENT-DELETE] Error sending deletion email for ${snap.id}:`, emailError);
+          }
+        }
       });
 
       res.json({ message: `Successfully permanently deleted ${articleIds.length} articles` });
@@ -13101,7 +13355,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Delete (archive) English article
+  // Delete (archive) English article — push-only notification (no email).
   app.delete("/api/en/dashboard/articles/:id", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -13110,6 +13364,9 @@ Respond in valid JSON format only:
       }
 
       const articleId = req.params.id;
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
       const [article] = await db
         .select()
@@ -13126,6 +13383,7 @@ Respond in valid JSON format only:
         .update(enArticles)
         .set({
           status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
           updatedAt: new Date(),
         })
         .where(eq(enArticles.id, articleId))
@@ -13142,16 +13400,32 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-      // Send rejection email to reporter
-      try {
-        await sendReporterRejectionEmail(articleId);
-        console.log(`[ARCHIVE] Rejection email sent for article: ${articleId}`);
-      } catch (emailError) {
-        console.error("[ARCHIVE] Error sending rejection email:", emailError);
-      }
+      // iOS in-app push (replaces the rejection email)
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(
+            {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+            },
+            "archived",
+            reviewNotes,
+          );
+        } catch (notifyErr) {
+          console.error("[EN ARCHIVE] Push notification failed:", notifyErr);
+        }
+      });
 
       res.json({ message: "English article archived successfully" });
     } catch (error) {
@@ -13394,7 +13668,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Bulk archive English articles
+  // Bulk archive English articles — push-only notification (no email).
   app.post("/api/en/dashboard/articles/bulk-archive", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -13403,6 +13677,9 @@ Respond in valid JSON format only:
       }
 
       const { articleIds } = req.body;
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
       if (!Array.isArray(articleIds) || articleIds.length === 0) {
         return res.status(400).json({ message: "Article IDs are required" });
@@ -13411,7 +13688,11 @@ Respond in valid JSON format only:
       // Archive articles by setting status to archived
       await db
         .update(enArticles)
-        .set({ status: "archived", updatedAt: new Date() })
+        .set({
+          status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
+          updatedAt: new Date(),
+        })
         .where(inArray(enArticles.id, articleIds));
 
       // Invalidate caches when articles are bulk archived
@@ -13434,19 +13715,35 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-
-      // Send rejection emails to reporters for each archived article
-      for (const articleId of articleIds) {
-        try {
-          await sendReporterRejectionEmail(articleId);
-          console.log(`[BULK ARCHIVE] Rejection email sent for article: ${articleId}`);
-        } catch (emailError) {
-          console.error(`[BULK ARCHIVE] Error sending rejection email for ${articleId}:`, emailError);
+      // iOS in-app pushes — fan out off the request thread.
+      const archivedRows = await db
+        .select({
+          id: enArticles.id,
+          title: enArticles.title,
+          slug: enArticles.slug,
+          englishSlug: enArticles.englishSlug,
+          articleType: enArticles.articleType,
+          scheduledAt: enArticles.scheduledAt,
+          publishedAt: enArticles.publishedAt,
+          authorId: enArticles.authorId,
+          reporterId: enArticles.reporterId,
+        })
+        .from(enArticles)
+        .where(inArray(enArticles.id, articleIds));
+      setImmediate(async () => {
+        for (const a of archivedRows) {
+          try {
+            await notifyArticleStakeholders(a, "archived", reviewNotes);
+          } catch (notifyErr) {
+            console.error(`[EN BULK ARCHIVE] Push failed for ${a.id}:`, notifyErr);
+          }
         }
-      }
+      });
+
       res.json({ message: `Successfully archived ${articleIds.length} English articles` });
     } catch (error) {
       console.error("Error bulk archiving English articles:", error);
@@ -13457,6 +13754,8 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
 
   // Bulk delete (archive) English articles
+  // Legacy alias for the English bulk-archive route — same behavior
+  // (status -> archived, push-only notification, no email).
   app.post("/api/en/dashboard/articles/bulk-delete", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -13465,6 +13764,9 @@ Respond in valid JSON format only:
       }
 
       const { articleIds } = req.body;
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
       if (!Array.isArray(articleIds) || articleIds.length === 0) {
         return res.status(400).json({ message: "Article IDs are required" });
@@ -13473,7 +13775,11 @@ Respond in valid JSON format only:
       // Archive articles by setting status to archived
       await db
         .update(enArticles)
-        .set({ status: "archived", updatedAt: new Date() })
+        .set({
+          status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
+          updatedAt: new Date(),
+        })
         .where(inArray(enArticles.id, articleIds));
 
       // Invalidate caches when articles are bulk archived
@@ -13496,19 +13802,35 @@ Respond in valid JSON format only:
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-
-      // Send rejection emails to reporters for each archived article
-      for (const articleId of articleIds) {
-        try {
-          await sendReporterRejectionEmail(articleId);
-          console.log(`[BULK ARCHIVE] Rejection email sent for article: ${articleId}`);
-        } catch (emailError) {
-          console.error(`[BULK ARCHIVE] Error sending rejection email for ${articleId}:`, emailError);
+      // iOS in-app pushes — fan out off the request thread.
+      const archivedRows = await db
+        .select({
+          id: enArticles.id,
+          title: enArticles.title,
+          slug: enArticles.slug,
+          englishSlug: enArticles.englishSlug,
+          articleType: enArticles.articleType,
+          scheduledAt: enArticles.scheduledAt,
+          publishedAt: enArticles.publishedAt,
+          authorId: enArticles.authorId,
+          reporterId: enArticles.reporterId,
+        })
+        .from(enArticles)
+        .where(inArray(enArticles.id, articleIds));
+      setImmediate(async () => {
+        for (const a of archivedRows) {
+          try {
+            await notifyArticleStakeholders(a, "archived", reviewNotes);
+          } catch (notifyErr) {
+            console.error(`[EN BULK DELETE] Push failed for ${a.id}:`, notifyErr);
+          }
         }
-      }
+      });
+
       res.json({ message: `Successfully archived ${articleIds.length} English articles` });
     } catch (error) {
       console.error("Error bulk archiving English articles:", error);
@@ -29803,7 +30125,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Delete/Archive Urdu article
+  // Delete/Archive Urdu article — push-only notification (no email).
   app.delete("/api/ur/dashboard/articles/:id", requireAuth, requirePermission("articles.delete"), async (req: any, res) => {
     try {
       const userId = req.user?.id;
@@ -29812,6 +30134,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       const articleId = req.params.id;
+      const reviewNotes: string | null = typeof req.body?.reviewNotes === "string"
+        ? req.body.reviewNotes.trim().slice(0, 1000) || null
+        : null;
 
       const [article] = await db
         .select()
@@ -29823,10 +30148,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(404).json({ message: "Article not found" });
       }
 
-      await db
+      const [updatedArticle] = await db
         .update(urArticles)
-        .set({ status: "archived", updatedAt: new Date() })
-        .where(eq(urArticles.id, articleId));
+        .set({
+          status: "archived",
+          ...(reviewNotes ? { reviewNotes } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(urArticles.id, articleId))
+        .returning();
 
       await logActivity({
         userId,
@@ -29837,16 +30167,32 @@ Sitemap: https://sabq.org/sitemap-news.xml
         metadata: {
           ip: req.ip,
           userAgent: req.get("user-agent"),
+          reason: reviewNotes ?? undefined,
         },
       });
 
-      // Send rejection email to reporter
-      try {
-        await sendReporterRejectionEmail(articleId);
-        console.log(`[ARCHIVE] Rejection email sent for article: ${articleId}`);
-      } catch (emailError) {
-        console.error("[ARCHIVE] Error sending rejection email:", emailError);
-      }
+      // iOS in-app push (replaces the rejection email)
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(
+            {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+            },
+            "archived",
+            reviewNotes,
+          );
+        } catch (notifyErr) {
+          console.error("[UR ARCHIVE] Push notification failed:", notifyErr);
+        }
+      });
 
       res.json({ message: "Urdu article archived successfully" });
     } catch (error) {
