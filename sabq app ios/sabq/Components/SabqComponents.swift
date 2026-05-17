@@ -199,6 +199,59 @@ extension View {
     }
 }
 
+// MARK: - Scroll Geometry Compat (iOS 18+ → iOS 17 no-op)
+
+/// Reports the scroll Y offset using `.onScrollGeometryChange` on
+/// iOS 18+ and silently no-ops on iOS 17. Callers that depend on the
+/// offset (scroll-to-top thresholds, parallax) should pick safe
+/// defaults so the absence of updates degrades gracefully.
+private struct ScrollOffsetTracker: ViewModifier {
+    let onChange: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, y in
+                onChange(y)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Reports scroll progress in [0, 1] using `.onScrollGeometryChange`
+/// on iOS 18+ and no-ops on iOS 17. The reading-progress bar in the
+/// article/opinion detail screens uses this; on iOS 17 the bar simply
+/// stays at zero, which is acceptable.
+private struct ScrollProgressTracker: ViewModifier {
+    let onChange: (CGFloat) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                let h = max(1, geo.contentSize.height - geo.containerSize.height)
+                return min(1, max(0, geo.contentOffset.y / h))
+            } action: { _, p in
+                onChange(p)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func sabqScrollOffsetTracker(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        modifier(ScrollOffsetTracker(onChange: onChange))
+    }
+
+    func sabqScrollProgressTracker(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        modifier(ScrollProgressTracker(onChange: onChange))
+    }
+}
+
 // MARK: - Cached Image
 
 struct CachedAsyncImage<Placeholder: View>: View {

@@ -105,10 +105,7 @@ struct OpinionDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                let contentHeight = max(1, geo.contentSize.height - geo.containerSize.height)
-                return min(1, max(0, geo.contentOffset.y / contentHeight))
-            } action: { _, progress in
+            .sabqScrollProgressTracker { progress in
                 scrollProgress = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }

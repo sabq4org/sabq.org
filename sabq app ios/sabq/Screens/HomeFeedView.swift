@@ -125,9 +125,7 @@ struct HomeFeedView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                geo.contentOffset.y
-            } action: { _, y in
+            .sabqScrollOffsetTracker { y in
                 scrollOffsetY = y
             }
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
