@@ -139,20 +139,20 @@ struct AuthorArticlesView: View {
         )
     }
 
-    @ViewBuilder
     private var avatar: some View {
-        if let urlString = page?.author.avatarUrl, let url = URL(string: urlString) {
-            CachedAsyncImage(url: url, contentMode: .fill) { avatarInitial }
-                .frame(width: 88, height: 88)
-                .clipShape(Circle())
-                .overlay(
-                    Circle().stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 2)
-                )
-                .shadow(color: SabqTheme.primaryEnd.opacity(0.18), radius: 10, y: 4)
-        } else {
+        let avatarURL = page?.author.avatarUrl.flatMap { URL(string: $0) }
+
+        return CachedAsyncImage(url: avatarURL, contentMode: .fill) {
             avatarInitial
-                .shadow(color: SabqTheme.primaryEnd.opacity(0.18), radius: 10, y: 4)
         }
+        .frame(width: 88, height: 88)
+        .clipShape(Circle())
+        .overlay(
+            Circle().stroke(SabqTheme.primaryEnd.opacity(0.25), lineWidth: 2)
+        )
+        .shadow(color: SabqTheme.primaryEnd.opacity(0.18), radius: 10, y: 4)
+        // Re-load when the profile payload arrives (page starts nil).
+        .id(avatarURL?.absoluteString ?? "author-avatar-\(authorName)")
     }
 
     private var avatarInitial: some View {

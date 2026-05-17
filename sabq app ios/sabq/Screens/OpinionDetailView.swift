@@ -58,6 +58,12 @@ struct OpinionDetailView: View {
                         .animation(.spring(response: 0.6, dampingFraction: 0.85), value: heroAppeared)
                         .frame(height: 300)
                         .clipped()
+                        .aiImageBadgeOverlay(
+                            isVisible: displayOpinion.isAiGeneratedImage,
+                            model: displayOpinion.aiImageModel,
+                            inset: 12,
+                            corner: .topLeading
+                        )
 
                     VStack(alignment: .leading, spacing: 18) {
                         if !isFocusMode {
@@ -320,11 +326,6 @@ struct OpinionDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 300)
         .clipped()
-        .overlay(alignment: .topTrailing) {
-            if displayOpinion.isAiGeneratedImage {
-                AIImageBadge(model: displayOpinion.aiImageModel)
-            }
-        }
     }
 
     private var heroPlaceholder: some View {

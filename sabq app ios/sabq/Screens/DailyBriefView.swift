@@ -169,6 +169,12 @@ struct DailyBriefView: View {
                 }
                 .frame(width: 220, height: 124)
                 .clipShape(RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous))
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 6,
+                    sizeScale: 0.75
+                )
             } else {
                 RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
                     .fill(article.category.tint.opacity(0.15))

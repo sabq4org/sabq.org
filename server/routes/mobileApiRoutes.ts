@@ -3114,7 +3114,11 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
         id: author.id,
         name: fullName || rawName,
         role,
-        avatarUrl: author.profile_image_url || null,
+        avatarUrl: author.profile_image_url
+          ? (String(author.profile_image_url).startsWith("http")
+              ? author.profile_image_url
+              : `${BASE_URL}${String(author.profile_image_url).startsWith("/") ? "" : "/"}${author.profile_image_url}`)
+          : null,
         bio: author.bio || null,
         jobTitle: author.job_title || null,
         department: author.department || null,

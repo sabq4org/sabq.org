@@ -140,9 +140,15 @@ struct ContentView: View {
             // binding's value.
             SabqTabBar(
                 selectedTab: $selectedTab,
-                onSelect: { _ in
+                onSelect: { tab in
                     if !navigationPath.isEmpty {
                         navigationPath = NavigationPath()
+                    }
+                    // Re-tap Home while already on the feed → scroll to top
+                    // (Instagram/Twitter pattern). Tab switches from other
+                    // tabs preserve scroll position — only same-tab re-tap.
+                    if tab == .home && selectedTab == .home {
+                        NotificationCenter.default.post(name: .sabqHomeScrollToTop, object: nil)
                     }
                 }
             )

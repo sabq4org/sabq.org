@@ -17,22 +17,10 @@ struct PassportInlineBadge: View {
             SabqHaptics.light()
             isPresented = true
         } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 11, weight: .bold))
-                Text("موثَّق")
-                    .font(.system(size: 12, weight: .bold))
-            }
-            .foregroundStyle(Self.emerald)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Self.emerald.opacity(0.10))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Self.emerald.opacity(0.40), lineWidth: 1)
+            DetailLabelPill(
+                title: "موثَّق",
+                tint: Self.emerald,
+                icon: "checkmark.shield.fill"
             )
         }
         .buttonStyle(.plain)

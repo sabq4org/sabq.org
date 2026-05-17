@@ -207,8 +207,6 @@ struct CachedAsyncImage<Placeholder: View>: View {
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
-    @State private var isLoading = false
-    @State private var didAppear = false
 
     var body: some View {
         Group {
@@ -219,46 +217,44 @@ struct CachedAsyncImage<Placeholder: View>: View {
                     .transition(.opacity.animation(.easeOut(duration: 0.25)))
             } else {
                 placeholder()
-                    .onAppear {
-                        guard !didAppear else { return }
-                        didAppear = true
-                        loadImage()
-                    }
             }
+        }
+        .task(id: url) {
+            await loadImage(for: url)
         }
     }
 
-    private func loadImage() {
-        guard let url, !isLoading else { return }
-        if let cached = ImageCache.shared.object(forKey: url as NSURL) {
+    @MainActor
+    private func loadImage(for requestedURL: URL?) async {
+        guard let requestedURL else {
+            image = nil
+            return
+        }
+        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
             image = cached
             return
         }
-        isLoading = true
-        Task.detached(priority: .userInitiated) {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                // Downsample full-resolution news photos (often 1920×1080 +
-                // 1–2 MB JPEGs) to a sane on-screen max. Removes the worst
-                // memory + decode cost when the same image renders as a
-                // 84×84 thumbnail. 2048 keeps room for retina hero shots.
-                if let uiImage = ImageCache.decodedImage(data: data, maxPixelSize: 2048) {
-                    ImageCache.shared.setObject(
-                        uiImage,
-                        forKey: url as NSURL,
-                        // NSCache enforces `totalCostLimit` only when items
-                        // declare a cost — without this, the 100 MB ceiling
-                        // is unenforceable and the cache could grow to GBs.
-                        cost: ImageCache.byteCost(of: uiImage)
-                    )
-                    await MainActor.run {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            image = uiImage
-                        }
-                    }
-                }
-            } catch {}
-            await MainActor.run { isLoading = false }
+
+        let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let (data, _) = try? await URLSession.shared.data(from: requestedURL) else {
+                return nil
+            }
+            return ImageCache.decodedImage(data: data, maxPixelSize: 2048)
+        }.value
+
+        guard !Task.isCancelled, url == requestedURL else { return }
+
+        if let loaded {
+            ImageCache.shared.setObject(
+                loaded,
+                forKey: requestedURL as NSURL,
+                cost: ImageCache.byteCost(of: loaded)
+            )
+            withAnimation(.easeOut(duration: 0.25)) {
+                image = loaded
+            }
+        } else {
+            image = nil
         }
     }
 }
@@ -678,6 +674,39 @@ struct StatusChip: View {
     }
 }
 
+/// Detail-page label pill — shared by category, passport "موثَّق", etc.
+struct DetailLabelPill: View {
+    let title: String
+    let tint: Color
+    var icon: String? = nil
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .bold))
+                    // SF Symbols vary in bounding box — lock size so every pill
+                    // matches the passport "موثَّق" chip height.
+                    .frame(width: 11, height: 11)
+            }
+            Text(title)
+                .font(.system(size: 12, weight: .bold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(tint.opacity(0.10))
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(tint.opacity(0.40), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Featured Article Card
 
 struct FeaturedArticleCard: View {
@@ -728,11 +757,11 @@ struct FeaturedArticleCard: View {
                         style: .continuous
                     )
                 )
-                .overlay(alignment: .topTrailing) {
-                    if article.isAiGeneratedImage {
-                        AIImageBadge(model: article.aiImageModel)
-                    }
-                }
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 10
+                )
 
             // (Category badge + author chip removed from the carousel
             // image overlay per user direction 2026-05-15 — carousel
@@ -887,6 +916,12 @@ struct CompactArticleRow: View {
                 }
                 .frame(width: 84, height: 84)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 4,
+                    sizeScale: 0.65
+                )
             } else {
                 thumbnailPlaceholder(size: 84)
             }
@@ -930,6 +965,11 @@ struct CompactArticleRow: View {
                     }
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .aiImageBadgeOverlay(
+                    isVisible: article.isAiGeneratedImage,
+                    model: article.aiImageModel,
+                    inset: 10
+                )
 
             HStack(spacing: 6) {
                 if article.isBreaking { breakingPill }

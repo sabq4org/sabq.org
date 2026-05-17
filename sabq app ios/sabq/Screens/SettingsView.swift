@@ -689,36 +689,20 @@ struct SettingsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            Text("سبق.. حيث يلتقي الخبر الموثوق بذكاء المستقبل. تغطية لحظية لا تتوقف، بتقنيات الذكاء الاصطناعي وأقلام محررين من قلب الحدث.")
+            (Text("سبق.. حيث يلتقي الخبر الموثوق بذكاء المستقبل ")
+             + Text(Image(systemName: "sparkles"))
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+             + Text(". تغطية لحظية لا تتوقف، بتقنيات الذكاء الاصطناعي وأقلام محررين من قلب الحدث."))
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(5)
 
-            Link(destination: URL(string: URLConstants.webOrigin)!) {
-                settingsRow(
-                    title: "الموقع الإلكتروني",
-                    subtitle: "sabq.org — اقرأ أكثر على موقعنا",
-                    icon: "globe",
-                    tint: SabqTheme.primaryEnd
-                )
-            }
-            .buttonStyle(.plain)
-
-            Button { showContact = true } label: {
-                settingsRow(
-                    title: "تواصل معنا",
-                    subtitle: "راسلنا — آراؤك تهمنا، نرد في أقرب وقت",
-                    icon: "envelope.fill",
-                    tint: SabqTheme.teal
-                )
-            }
-            .buttonStyle(.plain)
-
             NavigationLink(destination: PrivacyPolicyView()) {
                 settingsRow(
-                    title: "سياسة الخصوصية",
-                    subtitle: "خصوصيتك أولاً — كيف نحمي بياناتك الشخصية",
+                    title: "خصوصيتك أولاً",
+                    subtitle: "كيف نحمي بياناتك الشخصية؟",
                     icon: "shield.lefthalf.filled",
                     tint: SabqTheme.leaf
                 )
@@ -727,20 +711,40 @@ struct SettingsView: View {
 
             NavigationLink(destination: TermsOfUseView()) {
                 settingsRow(
-                    title: "الشروط والأحكام",
-                    subtitle: "شروط الاستخدام — اعرف حقوقك وحقوقنا",
+                    title: "شروط الاستخدام",
+                    subtitle: "اعرف حقوقك وحقوقنا",
                     icon: "doc.text.fill",
                     tint: SabqTheme.sky
                 )
             }
             .buttonStyle(.plain)
 
+            Link(destination: URL(string: URLConstants.webOrigin)!) {
+                settingsRow(
+                    title: "اقرأ أكثر على موقعنا",
+                    subtitle: "sabq.org",
+                    icon: "globe",
+                    tint: SabqTheme.primaryEnd
+                )
+            }
+            .buttonStyle(.plain)
+
             Link(destination: URL(string: "https://x.com/sabqorg")!) {
                 settingsRow(
-                    title: "إكس (تويتر)",
-                    subtitle: "تابعنا على إكس — @sabqorg آخر الأخبار لحظة بلحظة",
+                    title: "تابعنا على إكس",
+                    subtitle: "@sabqorg آخر الأخبار لحظة بلحظة",
                     icon: "at",
                     tint: SabqTheme.sky
+                )
+            }
+            .buttonStyle(.plain)
+
+            Button { showContact = true } label: {
+                settingsRow(
+                    title: "راسلنا",
+                    subtitle: "آراؤك تهمنا، نرد في أقرب وقت",
+                    icon: "envelope.fill",
+                    tint: SabqTheme.teal
                 )
             }
             .buttonStyle(.plain)

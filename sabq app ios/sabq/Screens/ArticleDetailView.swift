@@ -110,6 +110,13 @@ struct ArticleDetailView: View {
                         // doesn't visually bleed into the labelsRow below.
                         .frame(height: 300)
                         .clipped()
+                        // Badge after clip + scale so parallax/zoom never crop it.
+                        .aiImageBadgeOverlay(
+                            isVisible: displayArticle.isAiGeneratedImage,
+                            model: displayArticle.aiImageModel,
+                            inset: 12,
+                            corner: .topLeading
+                        )
 
                     VStack(alignment: .leading, spacing: 18) {
                         // Editorial column order (per user 2026-05-14):
@@ -430,14 +437,6 @@ struct ArticleDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 300)
         .clipped()
-        // AI-generated disclosure on the top-LEFT of the hero visually
-        // — matches the web's `top-3 left-3` placement. In RTL,
-        // `.topTrailing` resolves to top-left.
-        .overlay(alignment: .topTrailing) {
-            if displayArticle.isAiGeneratedImage {
-                AIImageBadge(model: displayArticle.aiImageModel)
-            }
-        }
     }
 
     private var heroPlaceholder: some View {
@@ -526,19 +525,10 @@ struct ArticleDetailView: View {
     /// FlowLayout wraps onto a second line on narrow screens.
     private var labelsRow: some View {
         FlowLayout(spacing: 8) {
-            // Category pill
-            Text(article.category.title)
-                .font(.system(size: 11, weight: .heavy, design: .rounded))
-                .tracking(0.5)
-                .foregroundStyle(article.category.tint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous).fill(article.category.tint.opacity(0.10))
-                )
-                .overlay(
-                    Capsule(style: .continuous).stroke(article.category.tint.opacity(0.25), lineWidth: 0.5)
-                )
+            DetailLabelPill(
+                title: article.category.title,
+                tint: article.category.tint
+            )
 
             // Breaking pill (only when applicable)
             if article.isBreaking {

@@ -172,6 +172,12 @@ struct TrendingView: View {
                             }
                             .frame(width: 64, height: 64)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .aiImageBadgeOverlay(
+                                isVisible: article.isAiGeneratedImage,
+                                model: article.aiImageModel,
+                                inset: 3,
+                                sizeScale: 0.55
+                            )
                         }
                     }
                     .padding(.vertical, 6)

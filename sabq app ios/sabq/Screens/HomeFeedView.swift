@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct HomeFeedView: View {
+    private static let scrollTopID = "home-feed-top"
+    /// Ignore scroll-to-top when the reader is already near the header.
+    private static let scrollToTopThreshold: CGFloat = 120
+
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
@@ -23,22 +27,28 @@ struct HomeFeedView: View {
     /// red unread dot refreshes when push notifications arrive or the
     /// user marks them read.
     @State private var notificationsStore = NotificationsStore.shared
+    @State private var scrollOffsetY: CGFloat = 0
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            if isContentReady {
-                // 26pt outer spacing — gives the home feed enough
-                // breathing room between visually heterogeneous blocks
-                // (raw header → padded greeting card → breaking pill
-                // → stories rail → 420pt featured carousel → analytic
-                // cards → section previews). 20pt felt cramped right
-                // around the cards-to-section-preview transition.
-                VStack(alignment: .leading, spacing: 26) {
-                    headerSection
+        ScrollViewReader { scrollProxy in
+            ScrollView(showsIndicators: false) {
+                if isContentReady {
+                    // 26pt outer spacing — gives the home feed enough
+                    // breathing room between visually heterogeneous blocks
+                    // (raw header → padded greeting card → breaking pill
+                    // → stories rail → 420pt featured carousel → analytic
+                    // cards → section previews). 20pt felt cramped right
+                    // around the cards-to-section-preview transition.
+                    VStack(alignment: .leading, spacing: 26) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(Self.scrollTopID)
+
+                        headerSection
 
                     NavigationLink(value: DailyBriefRoute()) {
                         greetingBlock
@@ -97,11 +107,29 @@ struct HomeFeedView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 40)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                HomeFeedSkeleton()
+                } else {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(Self.scrollTopID)
+
+                        HomeFeedSkeleton()
+                    }
                     .padding(.horizontal, 16)
                     .padding(.top, 18)
                     .padding(.bottom, 40)
+                }
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, y in
+                scrollOffsetY = y
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
+                guard scrollOffsetY > Self.scrollToTopThreshold else { return }
+                withAnimation(.easeOut(duration: 0.28)) {
+                    scrollProxy.scrollTo(Self.scrollTopID, anchor: .top)
+                }
             }
         }
         .refreshable {
@@ -551,6 +579,12 @@ struct HomeFeedView: View {
             }
             .frame(width: 200, height: 120)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 12))
+            .aiImageBadgeOverlay(
+                isVisible: opinion.isAiGeneratedImage,
+                model: opinion.aiImageModel,
+                inset: 6,
+                sizeScale: 0.7
+            )
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(opinion.title)
@@ -1475,4 +1509,9 @@ struct NotificationsSheet: View {
         }
         .padding(.vertical, 14)
     }
+}
+
+extension Notification.Name {
+    /// Posted when the user re-taps the Home tab while already on the feed.
+    static let sabqHomeScrollToTop = Notification.Name("sabq.home.scrollToTop")
 }

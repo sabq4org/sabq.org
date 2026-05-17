@@ -1776,7 +1776,21 @@ nonisolated struct APIAuthorProfile: Decodable {
         id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? ""
         name = (try? c.decode(String.self, forKey: FlexKey("name"))) ?? ""
         role = (try? c.decode(String.self, forKey: FlexKey("role"))) ?? ""
-        avatarUrl = try? c.decode(String.self, forKey: FlexKey("avatarUrl"))
+        var resolvedAvatar: String?
+        for key in ["avatarUrl", "avatar_url", "profileImageUrl", "profile_image_url", "profile_image", "avatar"] {
+            if let value = try? c.decode(String.self, forKey: FlexKey(key)) {
+                let trimmed = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    resolvedAvatar = trimmed
+                    break
+                }
+            }
+        }
+        if let resolvedAvatar {
+            avatarUrl = URLConstants.absolutize(resolvedAvatar)
+        } else {
+            avatarUrl = nil
+        }
         bio = try? c.decode(String.self, forKey: FlexKey("bio"))
         jobTitle = try? c.decode(String.self, forKey: FlexKey("jobTitle"))
         department = try? c.decode(String.self, forKey: FlexKey("department"))
