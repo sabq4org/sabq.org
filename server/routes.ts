@@ -7090,6 +7090,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         updateData.publishedAt = new Date();
       }
       // If republish is false or not present, keep the original publishedAt (don't update it)
+
+      // When archiving, drop any leftover review state. Otherwise the
+      // contributor dashboard still renders the archived piece as a
+      // pending revision request because `reviewStatus === "needs_changes"`
+      // (left over from a prior request-revision) controls the notes
+      // banner. We KEEP `reviewNotes` because the archive flow stores
+      // the archive reason there — that's intentional.
+      if (parsed.data.status === "archived" && existingArticle.status !== "archived") {
+        updateData.reviewStatus = null;
+      }
       
       // Convert empty categoryId to null
       if (updateData.categoryId === "") {
@@ -10383,12 +10393,22 @@ Respond in valid JSON format only:
         .from(comments)
         .where(inArray(comments.articleId, articleIds));
       
+      // Articles displayed in the reporter's "needs attention" table:
+      // hide pieces the reporter can't or shouldn't act on right now —
+      // archived (closed) and pending_review (already with the editor).
+      // Stats (totalArticles/Views/Likes/Comments) still cover everything.
+      const displayedArticles = myArticles.filter((a) => {
+        if (a.status === "archived") return false;
+        if (a.reviewStatus === "pending_review") return false;
+        return true;
+      });
+
       res.json({
         totalArticles: myArticles.length,
         totalViews,
         totalLikes: likesResult[0]?.count || 0,
         totalComments: commentsResult[0]?.count || 0,
-        articles: myArticles.map(a => ({
+        articles: displayedArticles.map(a => ({
           id: a.id,
           title: a.title,
           status: a.status,
@@ -10487,6 +10507,17 @@ Respond in valid JSON format only:
           new Date(a.updatedAt || a.createdAt).getTime();
       });
       
+      // Same filter as /api/reporter/analytics — pieces the opinion
+      // author can't or shouldn't act on right now (archived = closed,
+      // pending_review = already with the editor) drop out of the
+      // displayed list while the headline counts above still cover the
+      // full history.
+      const displayedArticles = sortedArticles.filter((a) => {
+        if (a.status === "archived") return false;
+        if (a.reviewStatus === "pending_review") return false;
+        return true;
+      });
+
       res.json({
         totalArticles: myArticles.length,
         publishedArticles,
@@ -10497,7 +10528,7 @@ Respond in valid JSON format only:
         totalViews,
         totalLikes: likesResult[0]?.count || 0,
         totalComments: commentsResult[0]?.count || 0,
-        articles: sortedArticles.map(a => ({
+        articles: displayedArticles.map(a => ({
           id: a.id,
           title: a.title,
           status: a.status,
