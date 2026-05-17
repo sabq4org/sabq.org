@@ -2479,7 +2479,7 @@ const BASE_URL = "https://sabq.org";
 // on Railway — strings here surface via the `X-Mobile-Routes-Build` header
 // added below). Bump the timestamp string whenever a deploy-correctness
 // check is needed.
-const MOBILE_ROUTES_BUILD = "2026-05-16T12:45Z+sidecar-guard";
+const MOBILE_ROUTES_BUILD = "2026-05-17T13:15Z+ai-image-flag";
 
 router.use((_req, res, next) => {
   res.setHeader("X-Mobile-Routes-Build", MOBILE_ROUTES_BUILD);
