@@ -315,6 +315,37 @@ enum AppAccent: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Image Focal Point
+
+/// Editorial focal point for an image, expressed as percentages from the
+/// top-left corner (matches the web `image_focal_point` jsonb shape
+/// shipped by the backend). Used by `FocalCachedAsyncImage` to anchor a
+/// fill-mode crop so the key subject (face, ball, logo…) is never cropped
+/// out of the frame — same behaviour as CSS `object-position` on the web.
+struct ImageFocalPoint: Equatable, Hashable {
+    /// 0–100 from the left edge.
+    let x: Double
+    /// 0–100 from the top edge.
+    let y: Double
+
+    init(x: Double, y: Double) {
+        self.x = Self.clamp(x)
+        self.y = Self.clamp(y)
+    }
+
+    static let center = ImageFocalPoint(x: 50, y: 50)
+
+    /// Normalised 0–1 coordinates — convenient for layout math that
+    /// expects unit space.
+    var unit: CGPoint {
+        CGPoint(x: x / 100, y: y / 100)
+    }
+
+    private static func clamp(_ value: Double) -> Double {
+        min(100, max(0, value))
+    }
+}
+
 // MARK: - Article
 
 struct Article: Identifiable, Equatable, Hashable {
@@ -337,6 +368,11 @@ struct Article: Identifiable, Equatable, Hashable {
     let isFeatured: Bool
     var tags: [String]
     let imageURL: String?
+    /// Editorial focal point (percentages from top-left) shipped by the
+    /// backend's `image_focal_point` jsonb column. Mirrors the web
+    /// behaviour: hero & card crops anchor on the editor-picked subject
+    /// instead of always centering. Nil → default centre.
+    var imageFocalPoint: ImageFocalPoint? = nil
     /// True when the hero image was produced by the dashboard's AI
     /// generator. Drives the "مولّدة بالذكاء الاصطناعي" badge overlay
     /// that ArticleDetailView + the carousel cards paint on top-leading
@@ -432,6 +468,7 @@ struct Article: Identifiable, Equatable, Hashable {
             isFeatured: api.isFeatured ?? false,
             tags: api.keywords ?? [],
             imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
@@ -571,6 +608,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     let publishDate: Date
     let tags: [String]
     let imageURL: String?
+    /// Editorial focal point — see `Article.imageFocalPoint`.
+    var imageFocalPoint: ImageFocalPoint? = nil
     var isAiGeneratedImage: Bool = false
     var aiImageModel: String? = nil
     let slug: String?
@@ -647,6 +686,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
             isFeatured: false,
             tags: tags,
             imageURL: imageURL,
+            imageFocalPoint: imageFocalPoint,
             slug: slug,
             articleURL: articleURL
         )
@@ -691,6 +731,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty },
             imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,
@@ -729,6 +770,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty },
             imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
             isAiGeneratedImage: api.isAiGeneratedImage ?? false,
             aiImageModel: api.aiImageModel,
             slug: slug,

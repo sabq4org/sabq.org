@@ -17,6 +17,12 @@ struct ArticleContentView: View {
     let fontSize: Double
     let lineSpacing: Double
     let useReaderFont: Bool
+    /// Called when the user taps an inline image (single body image or
+    /// an entry inside the horizontal gallery). The host view opens the
+    /// shared `ImageLightbox` viewer so the reader can pinch-zoom +
+    /// tap-to-dismiss. Optional — passing nil keeps the existing
+    /// non-interactive behaviour.
+    var onImageTap: ((URL) -> Void)? = nil
 
     private var design: Font.Design { useReaderFont ? .serif : .default }
 
@@ -193,7 +199,14 @@ struct ArticleContentView: View {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 200)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .onTapGesture {
+                guard let onImageTap else { return }
+                SabqHaptics.light()
+                onImageTap(url)
+            }
             .accessibilityLabel(alt ?? "صورة من المقال")
+            .accessibilityAddTraits(onImageTap != nil ? .isButton : [])
 
             if let caption, !caption.isEmpty {
                 Text(caption)
@@ -244,6 +257,12 @@ struct ArticleContentView: View {
                             }
                             .frame(width: 260, height: 260)
                             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .onTapGesture {
+                                guard let onImageTap else { return }
+                                SabqHaptics.light()
+                                onImageTap(img.url)
+                            }
 
                             if let caption = img.caption, !caption.isEmpty {
                                 Text(caption)

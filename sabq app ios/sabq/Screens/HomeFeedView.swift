@@ -28,6 +28,11 @@ struct HomeFeedView: View {
     /// user marks them read.
     @State private var notificationsStore = NotificationsStore.shared
     @State private var scrollOffsetY: CGFloat = 0
+    /// Drives the custom page-indicator row under the featured carousel.
+    /// We hide TabView's built-in dots (they sit at the bottom of the
+    /// TabView frame, which leaves a visible gap above them on short
+    /// cards) and render our own tight against the card bottom.
+    @State private var featuredIndex: Int = 0
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -358,50 +363,54 @@ struct HomeFeedView: View {
     // MARK: - Featured
 
     private var featuredSection: some View {
-        TabView {
-            ForEach(Array(articlesStore.featuredArticles.prefix(3))) { article in
-                // VStack + trailing Spacer anchors the card to the top
-                // of its TabView page. Without this, TabView's default
-                // center-alignment lets a tall (3-line-title) card slide
-                // upward and clip against the section above it. The
-                // page's reserved bottom padding for page-indicator
-                // dots stays as Spacer-absorbed slack.
-                VStack(spacing: 0) {
-                    NavigationLink(value: article) {
-                        FeaturedArticleCard(
-                            article: article,
-                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                            isBookmarked: bookmarksStore.isBookmarked(article.id)
-                        )
+        let featured = Array(articlesStore.featuredArticles.prefix(3))
+        return VStack(spacing: 10) {
+            TabView(selection: $featuredIndex) {
+                ForEach(Array(featured.enumerated()), id: \.element.id) { idx, article in
+                    // VStack + trailing Spacer anchors the card to the top
+                    // of its TabView page. Without this, TabView's default
+                    // center-alignment lets a tall (3-line-title) card
+                    // slide upward and clip against the section above it.
+                    VStack(spacing: 0) {
+                        NavigationLink(value: article) {
+                            FeaturedArticleCard(
+                                article: article,
+                                onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                isBookmarked: bookmarksStore.isBookmarked(article.id)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
-                    Spacer(minLength: 0)
+                    .padding(.horizontal, 4)
+                    .tag(idx)
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 40)
+            }
+            // System dots are hidden; we draw our own immediately below the
+            // TabView so the indicator hugs the card instead of floating at
+            // the bottom of the TabView frame with a Spacer-sized gap above.
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            // 425pt covers the worst-case featured card: 200pt hero + 40pt
+            // vertical padding + 3-line title (~80pt) + 12pt + 2-line
+            // excerpt (~45pt) + 12pt + 30pt meta row + a few pt slack. Most
+            // cards sit shorter than this; the Spacer inside still absorbs
+            // the remainder so the card top stays pinned.
+            .frame(height: 425)
+
+            if featured.count > 1 {
+                HStack(spacing: 7) {
+                    ForEach(featured.indices, id: \.self) { i in
+                        Circle()
+                            .fill(i == featuredIndex
+                                  ? SabqTheme.primaryEnd
+                                  : SabqTheme.ink.opacity(0.30))
+                            .frame(width: 7, height: 7)
+                            .animation(.easeInOut(duration: 0.2), value: featuredIndex)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .always))
-        .onAppear {
-            // The previous `whenContainedInInstancesOf: [UIHostingController<HomeFeedView>.self]`
-            // scope no longer matches what SwiftUI's TabView produces on
-            // iOS 16+, so the indicator fell back to the default white tint
-            // and disappeared against the page background. Apply the
-            // appearance globally and bump the unselected colour from
-            // primary@30% to ink@45% so the dots read clearly in both
-            // light and dark mode.
-            let appearance = UIPageControl.appearance()
-            appearance.currentPageIndicatorTintColor = UIColor(SabqTheme.primaryEnd)
-            appearance.pageIndicatorTintColor = UIColor(SabqTheme.ink.opacity(0.45))
-        }
-        // 480pt accommodates the worst-case featured card: 200pt hero +
-        // 40pt vertical padding + 3-line title (~80pt) + 12pt spacing +
-        // 2-line excerpt (~45pt) + 12pt spacing + 30pt meta row + 40pt
-        // bottom padding for page-indicator dots = ~459pt. 420pt
-        // overflowed for Arabic 3-line headlines, which TabView centred
-        // vertically inside the frame — the result was a card visibly
-        // pushed down with its top edge clipped by the section above.
-        .frame(height: 480)
     }
 
     // MARK: - Category Chips

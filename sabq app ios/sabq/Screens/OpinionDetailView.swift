@@ -12,10 +12,14 @@ struct OpinionDetailView: View {
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var scrollProgress: CGFloat = 0
-    @State private var scrollOffsetY: CGFloat = 0
-    @State private var heroAppeared = false
     @State private var showReaderControls = false
     @State private var isFocusMode = false
+    /// Drives the hero `ImageLightbox` fullScreenCover when the reader
+    /// taps the cover photo. Inline body images on opinion pages are
+    /// rare today but if they ever land in opinion bodies they'll wire
+    /// through the same `inlineLightboxURL` binding.
+    @State private var isHeroLightboxPresented = false
+    @State private var inlineLightboxURL: URL?
     @State private var isLiked: Bool = false
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
@@ -36,28 +40,23 @@ struct OpinionDetailView: View {
             .filter { seen.insert($0).inserted }
     }
 
-    /// Hero appearance + pull-down rubber band (mirrors ArticleDetailView).
-    private var heroScale: CGFloat {
-        let appearOffset = heroAppeared ? 0 : 0.06
-        let pullZoom = min(0.18, max(0, -scrollOffsetY * 0.0015))
-        return 1 + appearOffset + pullZoom
-    }
-
-    private var heroParallaxY: CGFloat {
-        max(0, scrollOffsetY * 0.4)
-    }
-
     var body: some View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
+                    // Hero stays STATIC under scroll — matches the
+                    // article detail behaviour (no scroll-driven
+                    // zoom/parallax) so the editor-picked focal point
+                    // remains honoured.
                     heroImage
-                        .frame(width: proxy.size.width)
-                        .scaleEffect(heroScale, anchor: .top)
-                        .offset(y: heroParallaxY)
-                        .animation(.spring(response: 0.6, dampingFraction: 0.85), value: heroAppeared)
-                        .frame(height: 300)
+                        .frame(width: proxy.size.width, height: 300)
                         .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard displayOpinion.imageURL?.isEmpty == false else { return }
+                            SabqHaptics.light()
+                            isHeroLightboxPresented = true
+                        }
                         .aiImageBadgeOverlay(
                             isVisible: displayOpinion.isAiGeneratedImage,
                             model: displayOpinion.aiImageModel,
@@ -106,14 +105,12 @@ struct OpinionDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
-            .onScrollGeometryChange(for: CGSize.self) { geo in
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
                 let contentHeight = max(1, geo.contentSize.height - geo.containerSize.height)
-                let progress = min(1, max(0, geo.contentOffset.y / contentHeight))
-                return CGSize(width: progress, height: geo.contentOffset.y)
-            } action: { _, newValue in
-                scrollProgress = newValue.width
-                scrollOffsetY = newValue.height
-                BehaviorTracker.shared.updateScroll(percent: Double(newValue.width))
+                return min(1, max(0, geo.contentOffset.y / contentHeight))
+            } action: { _, progress in
+                scrollProgress = progress
+                BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
             .overlay(alignment: .top) {
                 readingProgressBar
@@ -124,6 +121,23 @@ struct OpinionDetailView: View {
         .sabqScreen("OpinionDetail")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .fullScreenCover(isPresented: $isHeroLightboxPresented) {
+            ImageLightbox(
+                url: displayOpinion.imageURL.flatMap(URL.init(string:)),
+                placeholderImage: displayOpinion.imageURL
+                    .flatMap(URL.init(string:))
+                    .flatMap { ImageCache.shared.object(forKey: $0 as NSURL) }
+            )
+        }
+        .fullScreenCover(item: Binding(
+            get: { inlineLightboxURL.map(IdentifiableURL.init) },
+            set: { inlineLightboxURL = $0?.url }
+        )) { holder in
+            ImageLightbox(
+                url: holder.url,
+                placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
+            )
+        }
         .onAppear {
             SabqAnalytics.opinionView(
                 id: opinion.id,
@@ -133,7 +147,6 @@ struct OpinionDetailView: View {
             // Unified tracker — opinion reads feed both the home
             // "Reading Journey" card and the weighted trending score.
             BehaviorTracker.shared.startSession(articleId: opinion.id)
-            if !heroAppeared { heroAppeared = true }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -314,18 +327,18 @@ struct OpinionDetailView: View {
     private var heroImage: some View {
         Group {
             if let urlString = displayOpinion.imageURL, let url = URL(string: urlString) {
-                // Native aspect ratio — see ArticleDetailView.heroImage for
-                // the rationale. Portrait opinion photos extend below the
-                // fold so the full image stays visible after a small scroll.
-                CachedAsyncImage(url: url, contentMode: .fit) {
+                FocalCachedAsyncImage(url: url, focalPoint: displayOpinion.imageFocalPoint) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: 300)
+                .clipped()
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: 300)
+        .clipped()
     }
 
     private var heroPlaceholder: some View {

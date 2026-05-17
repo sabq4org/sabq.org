@@ -66,6 +66,12 @@ nonisolated struct APIArticle: Decodable {
     let isFeatured: Bool?
     var keywords: [String]?
     let imageUrl: String?
+    /// Editorial focal point shipped by the backend as
+    /// `image_focal_point: { x, y }` (percentages 0–100 from top-left).
+    /// Mirrors the web's `imageFocalPoint` field — drives
+    /// `FocalCachedAsyncImage` so hero / card crops anchor on the
+    /// dashboard-picked subject. Nil → default centre.
+    let imageFocalPoint: ImageFocalPoint?
     /// True when the hero/thumbnail was produced by the dashboard's AI
     /// image generator. Drives the "مولّدة بالذكاء الاصطناعي" badge
     /// overlay on iOS hero images — matches the web convention in
@@ -187,6 +193,8 @@ nonisolated struct APIArticle: Decodable {
             imageUrl = nil
         }
 
+        imageFocalPoint = Self.decodeFocalPoint(in: c)
+
         isAiGeneratedImage = (try? c.decode(Bool.self, forKey: FlexKey("is_ai_generated_image")))
             ?? (try? c.decode(Bool.self, forKey: FlexKey("isAiGeneratedImage")))
         aiImageModel = (try? c.decode(String.self, forKey: FlexKey("ai_image_model")))
@@ -215,6 +223,32 @@ nonisolated struct APIArticle: Decodable {
         var copy = self
         copy.keywords = newKeywords
         return copy
+    }
+
+    /// Pulls `image_focal_point` / `imageFocalPoint` out of the API
+    /// envelope. The backend writes a `{x, y}` JSONB blob (percentages
+    /// 0–100) — older payloads may omit it entirely, in which case we
+    /// fall back to centre at the call site. Numeric, string, and
+    /// integer encodings are all tolerated since the column is jsonb.
+    static func decodeFocalPoint(in c: KeyedDecodingContainer<FlexKey>) -> ImageFocalPoint? {
+        for key in ["imageFocalPoint", "image_focal_point", "focalPoint", "focal_point"] {
+            if let nested = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey(key)) {
+                let x = decodeFocalAxis(nested, key: "x")
+                let y = decodeFocalAxis(nested, key: "y")
+                if let x, let y { return ImageFocalPoint(x: x, y: y) }
+            }
+        }
+        return nil
+    }
+
+    private static func decodeFocalAxis(_ c: KeyedDecodingContainer<FlexKey>, key: String) -> Double? {
+        let k = FlexKey(key)
+        if let v = try? c.decode(Double.self, forKey: k) { return v }
+        if let v = try? c.decode(Int.self, forKey: k) { return Double(v) }
+        if let s = try? c.decode(String.self, forKey: k) {
+            return Double(s.trimmingCharacters(in: .whitespaces))
+        }
+        return nil
     }
 
     var isOpinionContent: Bool {
@@ -504,6 +538,7 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
     let authorGender: String?
     let publishedAt: String?
     let imageUrl: String?
+    let imageFocalPoint: ImageFocalPoint?
     let isAiGeneratedImage: Bool?
     let aiImageModel: String?
     let tags: [String]
@@ -584,6 +619,7 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
             keys: ["imageUrl", "image_url", "image", "coverImage", "cover_image", "thumbnailUrl"]
         )
         imageUrl = Self.absoluteMediaURL(from: rawImage)
+        imageFocalPoint = APIArticle.decodeFocalPoint(in: c)
         isAiGeneratedImage = (try? c.decode(Bool.self, forKey: FlexKey("is_ai_generated_image")))
             ?? (try? c.decode(Bool.self, forKey: FlexKey("isAiGeneratedImage")))
         aiImageModel = (try? c.decode(String.self, forKey: FlexKey("ai_image_model")))

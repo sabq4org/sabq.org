@@ -36,8 +36,6 @@ struct ArticleDetailView: View {
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var scrollProgress: CGFloat = 0
-    @State private var scrollOffsetY: CGFloat = 0
-    @State private var heroAppeared: Bool = false
     @State private var isLiked: Bool = false
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
@@ -65,22 +63,17 @@ struct ArticleDetailView: View {
     /// stalling scroll on long articles. Cache key is the raw HTML string so
     /// a same-article re-render is a dictionary hit.
     @State private var cachedBlocks: (html: String, items: [ArticleBlock]) = ("", [])
-
-    /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
-    /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
-    /// so violent flicks don't overscale.
-    private var heroScale: CGFloat {
-        let appearOffset = heroAppeared ? 0 : 0.06
-        let pullZoom = min(0.18, max(0, -scrollOffsetY * 0.0015))
-        return 1 + appearOffset + pullZoom
-    }
-
-    /// Hero moves slower than the surrounding content (40%) for parallax;
-    /// only applied when user is scrolling AWAY from the top to avoid
-    /// fighting the pull-zoom above.
-    private var heroParallaxY: CGFloat {
-        max(0, scrollOffsetY * 0.4)
-    }
+    /// True when the reader has tapped the hero. Drives the
+    /// `ImageLightbox` fullScreenCover. Scoped to the hero — body
+    /// images use the URL-based binding below so any image in the
+    /// article can drive the same viewer without bloating the state.
+    @State private var isHeroLightboxPresented = false
+    /// URL of an inline body image the user tapped. Setting this opens
+    /// the lightbox; clearing it (or the user's tap-to-dismiss) closes
+    /// it. Hero taps flip `isHeroLightboxPresented` instead so the
+    /// `placeholderImage` short-circuit can hand the lightbox the
+    /// already-cached bitmap.
+    @State private var inlineLightboxURL: URL?
 
     var body: some View {
         if let opinion = redirectToOpinion {
@@ -97,20 +90,23 @@ struct ArticleDetailView: View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
+                    // Hero is intentionally STATIC under scroll — no
+                    // pull-zoom, no parallax, no scale change. Reader
+                    // feedback (2026-05-17): the scroll-driven zoom
+                    // was distracting and made the editor's focal
+                    // point drift. Now the hero stays fixed and the
+                    // focal point picked in the dashboard is honoured
+                    // via `FocalCachedAsyncImage` — same behaviour as
+                    // the web `object-position` crop.
                     heroImage
-                        .frame(width: proxy.size.width)
-                        // Phase-1 motion: zoom-on-appear (1.06→1.0 spring),
-                        // pull-down rubber-band zoom, gentle parallax when
-                        // scrolling away from the top. heroAppeared flips
-                        // via the .onAppear at the bottom of the body.
-                        .scaleEffect(heroScale, anchor: .top)
-                        .offset(y: heroParallaxY)
-                        .animation(.spring(response: 0.6, dampingFraction: 0.85), value: heroAppeared)
-                        // Clip AFTER the transforms so the zoomed-up hero
-                        // doesn't visually bleed into the labelsRow below.
-                        .frame(height: 300)
+                        .frame(width: proxy.size.width, height: 300)
                         .clipped()
-                        // Badge after clip + scale so parallax/zoom never crop it.
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard displayArticle.imageURL?.isEmpty == false else { return }
+                            SabqHaptics.light()
+                            isHeroLightboxPresented = true
+                        }
                         .aiImageBadgeOverlay(
                             isVisible: displayArticle.isAiGeneratedImage,
                             model: displayArticle.aiImageModel,
@@ -184,16 +180,12 @@ struct ArticleDetailView: View {
                 }
                 .frame(width: proxy.size.width, alignment: .leading)
             }
-            .onScrollGeometryChange(for: CGSize.self) { geo in
+            .onScrollGeometryChange(for: CGFloat.self) { geo in
                 let contentHeight = max(1, geo.contentSize.height - geo.containerSize.height)
-                let progress = min(1, max(0, geo.contentOffset.y / contentHeight))
-                // Packed as CGSize so a single observer feeds both the
-                // reading progress bar AND the hero parallax math.
-                return CGSize(width: progress, height: geo.contentOffset.y)
-            } action: { _, newValue in
-                scrollProgress = newValue.width
-                scrollOffsetY = newValue.height
-                BehaviorTracker.shared.updateScroll(percent: Double(newValue.width))
+                return min(1, max(0, geo.contentOffset.y / contentHeight))
+            } action: { _, progress in
+                scrollProgress = progress
+                BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
             .overlay(alignment: .top) {
                 readingProgressBar
@@ -204,6 +196,23 @@ struct ArticleDetailView: View {
         .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .fullScreenCover(isPresented: $isHeroLightboxPresented) {
+            ImageLightbox(
+                url: displayArticle.imageURL.flatMap(URL.init(string:)),
+                placeholderImage: displayArticle.imageURL
+                    .flatMap(URL.init(string:))
+                    .flatMap { ImageCache.shared.object(forKey: $0 as NSURL) }
+            )
+        }
+        .fullScreenCover(item: Binding(
+            get: { inlineLightboxURL.map(IdentifiableURL.init) },
+            set: { inlineLightboxURL = $0?.url }
+        )) { holder in
+            ImageLightbox(
+                url: holder.url,
+                placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
+            )
+        }
         .onAppear {
             SabqAnalytics.articleView(
                 id: article.id,
@@ -215,10 +224,6 @@ struct ArticleDetailView: View {
             // home "Reading Journey" card and the trending opinion
             // ranking on equal footing with web reads.
             BehaviorTracker.shared.startSession(articleId: article.id)
-            // Trigger one-shot zoom-on-appear unless we've already settled.
-            if !heroAppeared {
-                heroAppeared = true
-            }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -424,22 +429,23 @@ struct ArticleDetailView: View {
     // the hero between the title and excerpt (calm row, low-emphasis).
     private var heroImage: some View {
         Group {
-            if let urlString = article.imageURL, let url = URL(string: urlString) {
-                // Render the hero at the image's native aspect ratio rather
-                // than cropping to a fixed 300pt height. Landscape photos
-                // come out shorter (≈220pt at 16:9); portrait photos extend
-                // below the fold so the reader can see the full image with
-                // a small scroll, which is what editors expect when they
-                // publish a portrait shot.
-                CachedAsyncImage(url: url, contentMode: .fit) {
+            // Prefer the freshly-loaded `displayArticle` so the focal
+            // point picked in the dashboard kicks in once the detail
+            // fetch resolves (list payloads sometimes ship a list-tier
+            // image without the focal-point blob).
+            if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
+                FocalCachedAsyncImage(url: url, focalPoint: displayArticle.imageFocalPoint) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: 300)
+                .clipped()
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
+        .frame(height: 300)
+        .clipped()
     }
 
     private var heroPlaceholder: some View {
@@ -1208,7 +1214,8 @@ struct ArticleDetailView: View {
                     blocks: blocks,
                     fontSize: fontSize,
                     lineSpacing: lineSpacing,
-                    useReaderFont: useReaderFont
+                    useReaderFont: useReaderFont,
+                    onImageTap: { url in inlineLightboxURL = url }
                 )
                 .padding(.horizontal, 6)
             } else {

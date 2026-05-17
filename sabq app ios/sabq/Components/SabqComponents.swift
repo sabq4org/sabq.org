@@ -259,6 +259,113 @@ struct CachedAsyncImage<Placeholder: View>: View {
     }
 }
 
+// MARK: - Focal Cached Image
+
+/// Cached image that fills its container while keeping the editor-picked
+/// focal point inside the visible viewport — same behaviour as
+/// `object-fit: cover` + `object-position: x% y%` on the web. When
+/// `focalPoint` is nil it degrades gracefully to a centred fill (i.e.
+/// identical to `CachedAsyncImage(contentMode: .fill)`).
+///
+/// The trick is that SwiftUI's `aspectRatio(contentMode: .fill)` always
+/// centres the overflow. To honour the focal point we load the UIImage
+/// ourselves, compute the fill-scale + clamped offset against the
+/// container bounds in a GeometryReader, and translate the image so the
+/// focal point lands at the same percentage position inside the
+/// container.
+struct FocalCachedAsyncImage<Placeholder: View>: View {
+    let url: URL?
+    let focalPoint: ImageFocalPoint?
+    @ViewBuilder let placeholder: () -> Placeholder
+
+    @State private var image: UIImage?
+
+    init(
+        url: URL?,
+        focalPoint: ImageFocalPoint?,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
+    ) {
+        self.url = url
+        self.focalPoint = focalPoint
+        self.placeholder = placeholder
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                if let image {
+                    focalImage(image, in: proxy.size)
+                        .transition(.opacity.animation(.easeOut(duration: 0.25)))
+                } else {
+                    placeholder()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
+        }
+        .task(id: url) {
+            await loadImage(for: url)
+        }
+    }
+
+    private func focalImage(_ image: UIImage, in container: CGSize) -> some View {
+        let containerW = max(1, container.width)
+        let containerH = max(1, container.height)
+        let imgW = max(1, image.size.width)
+        let imgH = max(1, image.size.height)
+        let scale = max(containerW / imgW, containerH / imgH)
+        let drawnW = imgW * scale
+        let drawnH = imgH * scale
+
+        let focal = focalPoint?.unit ?? CGPoint(x: 0.5, y: 0.5)
+        let rawX = containerW * focal.x - drawnW * focal.x
+        let rawY = containerH * focal.y - drawnH * focal.y
+        let offsetX = min(0, max(containerW - drawnW, rawX))
+        let offsetY = min(0, max(containerH - drawnH, rawY))
+
+        return Image(uiImage: image)
+            .resizable()
+            .interpolation(.high)
+            .frame(width: drawnW, height: drawnH)
+            .offset(x: offsetX, y: offsetY)
+    }
+
+    @MainActor
+    private func loadImage(for requestedURL: URL?) async {
+        guard let requestedURL else {
+            image = nil
+            return
+        }
+        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+            image = cached
+            return
+        }
+
+        let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let (data, _) = try? await URLSession.shared.data(from: requestedURL) else {
+                return nil
+            }
+            return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
+        }.value
+
+        guard !Task.isCancelled, url == requestedURL else { return }
+
+        if let loaded {
+            ImageCache.shared.setObject(
+                loaded,
+                forKey: requestedURL as NSURL,
+                cost: ImageCache.byteCost(of: loaded)
+            )
+            withAnimation(.easeOut(duration: 0.25)) {
+                image = loaded
+            }
+        } else {
+            image = nil
+        }
+    }
+}
+
 enum ImageCache {
     nonisolated(unsafe) static let shared: NSCache<NSURL, UIImage> = {
         let c = NSCache<NSURL, UIImage>()
@@ -297,6 +404,171 @@ enum ImageCache {
     /// memory ceiling.
     static func byteCost(of image: UIImage) -> Int {
         Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+    }
+}
+
+// MARK: - Identifiable URL
+
+/// Wrapper that lets a URL drive `.fullScreenCover(item:)`-style sheets
+/// without forcing every caller to declare a one-off Identifiable type.
+/// Used by the lightbox flows in ArticleDetail / OpinionDetail /
+/// ArticleContentView so tapping any image in the article body opens the
+/// shared `ImageLightbox` viewer.
+struct IdentifiableURL: Identifiable, Hashable {
+    let url: URL
+    var id: String { url.absoluteString }
+
+    init(_ url: URL) { self.url = url }
+}
+
+// MARK: - Image Lightbox
+
+/// Full-screen image viewer surfaced when a reader taps the hero or an
+/// inline image inside the article body. Shows the asset at the highest
+/// resolution we can fetch (up to 4096 px on the longest side — well
+/// above any iPhone screen) on a black backdrop, with pinch-to-zoom +
+/// double-tap to toggle zoom + drag-to-pan when zoomed. A single tap
+/// anywhere dismisses, matching the user's expectation that "تطبيق على
+/// الصورة" → close.
+struct ImageLightbox: View {
+    let url: URL?
+    let placeholderImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var image: UIImage?
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    init(url: URL?, placeholderImage: UIImage? = nil) {
+        self.url = url
+        self.placeholderImage = placeholderImage
+        _image = State(initialValue: placeholderImage)
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let image {
+                GeometryReader { proxy in
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let next = lastScale * value
+                                    scale = min(5.0, max(1.0, next))
+                                }
+                                .onEnded { _ in
+                                    lastScale = scale
+                                    if scale <= 1.01 {
+                                        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                                            scale = 1
+                                            offset = .zero
+                                            lastOffset = .zero
+                                        }
+                                        lastScale = 1
+                                    }
+                                }
+                                .simultaneously(with:
+                                    DragGesture()
+                                        .onChanged { value in
+                                            guard scale > 1.01 else { return }
+                                            offset = CGSize(
+                                                width: lastOffset.width + value.translation.width,
+                                                height: lastOffset.height + value.translation.height
+                                            )
+                                        }
+                                        .onEnded { _ in
+                                            lastOffset = offset
+                                        }
+                                )
+                        )
+                }
+            } else {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.3)
+            }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        SabqHaptics.light()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(Circle().fill(.white.opacity(0.18)))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 18)
+                    .padding(.top, 8)
+                }
+                Spacer()
+            }
+        }
+        // Single tap anywhere dismisses — primary affordance per user.
+        // The MagnificationGesture is attached to the image only, so a
+        // tap on the backdrop or even the image (while not zoomed) is
+        // unambiguous. Double-tap zooms in / resets.
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                if scale > 1.01 {
+                    scale = 1; offset = .zero; lastOffset = .zero
+                } else {
+                    scale = 2.4
+                }
+                lastScale = scale
+            }
+        }
+        .onTapGesture {
+            SabqHaptics.light()
+            dismiss()
+        }
+        .task(id: url) {
+            await loadFullResolution()
+        }
+        .statusBarHidden(true)
+    }
+
+    @MainActor
+    private func loadFullResolution() async {
+        guard let url else { return }
+
+        // Bigger budget than CachedAsyncImage's 2400 ceiling so pinch-zoom
+        // stays sharp. NSCache hit short-circuits to the already-loaded
+        // bitmap; otherwise we download once and seed both `image` and
+        // the cache.
+        if let cached = ImageCache.shared.object(forKey: url as NSURL) {
+            // Show the cached (lower-res) bitmap immediately so the user
+            // never sees a blank lightbox, then upgrade if a higher-res
+            // version is available below.
+            if image == nil { image = cached }
+        }
+
+        let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else {
+                return nil
+            }
+            return ImageCache.decodedImage(data: data, maxPixelSize: 4096)
+        }.value
+
+        guard !Task.isCancelled else { return }
+        if let loaded {
+            withAnimation(.easeOut(duration: 0.25)) { image = loaded }
+        }
     }
 }
 
