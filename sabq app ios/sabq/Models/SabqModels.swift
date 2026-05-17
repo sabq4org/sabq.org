@@ -438,24 +438,48 @@ struct Article: Identifiable, Equatable, Hashable {
         SabqFormatters.parseISO8601(string) ?? Date()
     }
 
+    // Regex compilation is the slow part of `replacingOccurrences(of:options:.regularExpression)`
+    // and `String` recompiles on every call. With ~9 regex passes per
+    // article × dozens of articles per home load, that adds up. Pre-
+    // compile once as static `NSRegularExpression` instances and reuse.
+    nonisolated private static let stripHTMLRegexRules: [(regex: NSRegularExpression, replacement: String)] = {
+        let patterns: [(String, String, NSRegularExpression.Options)] = [
+            ("<p[^>]*>",                          "\n\n", [.caseInsensitive]),
+            ("</p>",                              "\n\n", [.caseInsensitive]),
+            ("<br\\s*/?>",                        "\n",   [.caseInsensitive]),
+            ("</div>",                            "\n\n", [.caseInsensitive]),
+            ("</li>",                             "\n",   [.caseInsensitive]),
+            ("</h[1-6]>",                         "\n\n", [.caseInsensitive]),
+            ("<[^>]+>",                           "",     [.caseInsensitive]),
+            (#"[^\S\n]+"#,                        " ",    []),
+            (#"\n[ \t]+"#,                        "\n",   []),
+            (#"\n{3,}"#,                          "\n\n", []),
+        ]
+        return patterns.compactMap { pattern, replacement, opts in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: opts) else { return nil }
+            return (regex, replacement)
+        }
+    }()
+
     nonisolated fileprivate static func stripHTMLTags(from html: String) -> String {
         var text = html
-        text = text.replacingOccurrences(of: "<p[^>]*>", with: "\n\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "</p>", with: "\n\n", options: .caseInsensitive)
-        text = text.replacingOccurrences(of: "<br\\s*/?>", with: "\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "</div>", with: "\n\n", options: .caseInsensitive)
-        text = text.replacingOccurrences(of: "</li>", with: "\n", options: .caseInsensitive)
-        text = text.replacingOccurrences(of: "</h[1-6]>", with: "\n\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        for (regex, replacement) in stripHTMLRegexRules {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(
+                in: text,
+                options: [],
+                range: range,
+                withTemplate: replacement
+            )
+        }
+        // Entity decoding is a handful of literal replacements — cheaper
+        // as plain `replacingOccurrences` than wrapping in a regex.
         text = text.replacingOccurrences(of: "&nbsp;", with: " ")
-        text = text.replacingOccurrences(of: "&amp;", with: "&")
-        text = text.replacingOccurrences(of: "&lt;", with: "<")
-        text = text.replacingOccurrences(of: "&gt;", with: ">")
+        text = text.replacingOccurrences(of: "&amp;",  with: "&")
+        text = text.replacingOccurrences(of: "&lt;",   with: "<")
+        text = text.replacingOccurrences(of: "&gt;",   with: ">")
         text = text.replacingOccurrences(of: "&quot;", with: "\"")
-        text = text.replacingOccurrences(of: "&#39;", with: "'")
-        text = text.replacingOccurrences(of: #"[^\S\n]+"#, with: " ", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"\n[ \t]+"#, with: "\n", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+        text = text.replacingOccurrences(of: "&#39;",  with: "'")
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

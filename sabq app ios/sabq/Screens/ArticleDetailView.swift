@@ -50,6 +50,12 @@ struct ArticleDetailView: View {
     /// OpinionDetailView so the user never sees the empty article
     /// skeleton.
     @State private var redirectToOpinion: OpinionArticle? = nil
+    /// Cached output of `Article.displayParagraphs(for:)` keyed by body
+    /// content. Recomputed only when the body text changes (i.e. when
+    /// `fullArticle` lands). Without this cache, the paragraph split
+    /// would run on every body re-render — including each font-size or
+    /// line-spacing tick.
+    @State private var cachedParagraphs: (body: String, items: [String]) = ("", [])
 
     /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
     /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
@@ -1104,7 +1110,14 @@ struct ArticleDetailView: View {
             } else {
                 // Legacy plain-text fallback for articles still stored as
                 // newline-separated paragraphs (or list-payload previews).
-                let paragraphs = Article.displayParagraphs(for: plain)
+                // Cached so the paragraph split doesn't rerun on every
+                // body re-render (font-size slider, line-spacing tick…).
+                let paragraphs: [String] = {
+                    if cachedParagraphs.body == plain { return cachedParagraphs.items }
+                    let items = Article.displayParagraphs(for: plain)
+                    DispatchQueue.main.async { cachedParagraphs = (plain, items) }
+                    return items
+                }()
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
                         Text(paragraph)

@@ -238,8 +238,19 @@ struct CachedAsyncImage<Placeholder: View>: View {
         Task.detached(priority: .userInitiated) {
             do {
                 let (data, _) = try await URLSession.shared.data(from: url)
-                if let uiImage = UIImage(data: data) {
-                    ImageCache.shared.setObject(uiImage, forKey: url as NSURL)
+                // Downsample full-resolution news photos (often 1920×1080 +
+                // 1–2 MB JPEGs) to a sane on-screen max. Removes the worst
+                // memory + decode cost when the same image renders as a
+                // 84×84 thumbnail. 2048 keeps room for retina hero shots.
+                if let uiImage = ImageCache.decodedImage(data: data, maxPixelSize: 2048) {
+                    ImageCache.shared.setObject(
+                        uiImage,
+                        forKey: url as NSURL,
+                        // NSCache enforces `totalCostLimit` only when items
+                        // declare a cost — without this, the 100 MB ceiling
+                        // is unenforceable and the cache could grow to GBs.
+                        cost: ImageCache.byteCost(of: uiImage)
+                    )
                     await MainActor.run {
                         withAnimation(.easeOut(duration: 0.25)) {
                             image = uiImage
@@ -262,6 +273,34 @@ enum ImageCache {
 
     static func clear() {
         shared.removeAllObjects()
+    }
+
+    /// Decode + downsample an image to a sensible on-screen maximum.
+    /// Uses ImageIO's `kCGImageSourceCreateThumbnailFromImageAlways` so
+    /// the full-resolution bitmap never lives in memory.
+    static func decodedImage(data: Data, maxPixelSize: CGFloat) -> UIImage? {
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard
+            let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, opts as CFDictionary)
+        else {
+            // Fall back to the standard decoder when ImageIO can't process
+            // the payload (rare — usually corrupt or unsupported formats).
+            return UIImage(data: data)
+        }
+        return UIImage(cgImage: cg)
+    }
+
+    /// Approximate bitmap cost in bytes (width × height × 4 for RGBA).
+    /// Used as the NSCache `cost` so `totalCostLimit` actually enforces a
+    /// memory ceiling.
+    static func byteCost(of image: UIImage) -> Int {
+        Int(image.size.width * image.scale * image.size.height * image.scale * 4)
     }
 }
 
