@@ -4329,18 +4329,27 @@ export class DatabaseStorage implements IStorage {
       ...article,
       englishSlug: article.englishSlug || generateEnglishSlug(),
     };
-    
+
     // Auto-link articles by specific content managers to their publishers
     // أحمد بديوي (DI1H7gaTfZ5mr765EhQNW) -> شركة عنوان الإعلام (948fdde0-97b0-44ac-872d-639337ebcafa)
     const contentManagerPublisherMap: Record<string, string> = {
       'DI1H7gaTfZ5mr765EhQNW': '948fdde0-97b0-44ac-872d-639337ebcafa', // أحمد بديوي -> شركة عنوان الإعلام
     };
-    
+
     if (article.authorId && contentManagerPublisherMap[article.authorId]) {
       (articleWithSlug as any).publisherId = contentManagerPublisherMap[article.authorId];
       (articleWithSlug as any).isPublisherNews = true;
     }
-    
+
+    // Pre-fill ai_image flag from media_files if the chosen image URL
+    // matches an AI-generated media row. The dashboard's nano-banana
+    // flow only flags the media_files row, not the article row, so
+    // without this step every fresh article ships with
+    // is_ai_generated_image=false even when the cover image clearly
+    // came from the AI generator. iOS uses this flag to overlay the
+    // "ذكاء اصطناعي" badge on the hero image.
+    await this.applyAiImageFlagFromMedia(articleWithSlug);
+
     const [created] = await db.insert(articles).values([articleWithSlug as any]).returning();
     return created;
   }
@@ -4350,12 +4359,47 @@ export class DatabaseStorage implements IStorage {
     if (updateData.imageFocalPoint === null || updateData.imageFocalPoint === undefined) {
       delete updateData.imageFocalPoint;
     }
+    // Same sync as createArticle — pick up the AI flag from the
+    // matching media_files row whenever the cover image changes.
+    await this.applyAiImageFlagFromMedia(updateData);
     const [updated] = await db
       .update(articles)
       .set(updateData)
       .where(eq(articles.id, id))
       .returning();
     return updated;
+  }
+
+  /// Mutates `data` in-place: when `data.imageUrl` matches a
+  /// media_files row whose `is_ai_generated` is true and the caller
+  /// hasn't already set `isAiGeneratedImage`, copy the AI metadata
+  /// (model + prompt) onto the article. No-op when the URL doesn't
+  /// resolve to a known media row or when the caller already provided
+  /// an explicit value.
+  private async applyAiImageFlagFromMedia(data: any): Promise<void> {
+    if (data?.isAiGeneratedImage === true) return; // caller already set it
+    const url = data?.imageUrl;
+    if (typeof url !== 'string' || url.length === 0) return;
+    try {
+      const [media] = await db
+        .select({
+          isAi: mediaFiles.isAiGenerated,
+          model: mediaFiles.aiGenerationModel,
+          prompt: mediaFiles.aiGenerationPrompt,
+        })
+        .from(mediaFiles)
+        .where(eq(mediaFiles.url, url))
+        .limit(1);
+      if (media?.isAi) {
+        data.isAiGeneratedImage = true;
+        if (!data.aiImageModel && media.model) data.aiImageModel = media.model;
+        if (!data.aiImagePrompt && media.prompt) data.aiImagePrompt = media.prompt;
+      }
+    } catch (err) {
+      // Best-effort — never block the actual write because of a sync
+      // lookup failure. The article saves with the original payload.
+      console.warn('[storage] applyAiImageFlagFromMedia failed:', err);
+    }
   }
 
   async deleteArticle(id: string): Promise<void> {

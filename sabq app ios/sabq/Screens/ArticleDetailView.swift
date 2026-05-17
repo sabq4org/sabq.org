@@ -502,11 +502,21 @@ struct ArticleDetailView: View {
         if isPlayingAudio {
             audioPlayer?.pause()
             isPlayingAudio = false
-        } else if let urlStr = audioSummary?.url, let url = URL(string: urlStr) {
-            audioPlayer = AVPlayer(url: url)
-            audioPlayer?.play()
-            isPlayingAudio = true
+            return
         }
+        // The backend's /api/articles/:slug/summary-audio streams
+        // ElevenLabs (or Google fallback) MP3 bytes directly, not a
+        // JSON envelope. We don't need to pre-fetch metadata — point
+        // AVPlayer at the URL and let it start streaming. ElevenLabs
+        // synthesis takes ~3-8s the first time; subsequent loads hit
+        // the backend's 24h Cache-Control header.
+        guard let slug = displayArticle.slug, !slug.isEmpty,
+              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
+        else { return }
+        SabqHaptics.medium()
+        audioPlayer = AVPlayer(url: url)
+        audioPlayer?.play()
+        isPlayingAudio = true
     }
 
     // MARK: - Meta
@@ -625,9 +635,17 @@ struct ArticleDetailView: View {
     @ViewBuilder
     private var smartSummaryCard: some View {
         let body = smartSummaryText
-        let hasAudio = audioSummary?.url != nil
+        // The listen button drives ElevenLabs TTS at request time, so
+        // we surface it whenever there's actual text to speak (and a
+        // slug to address the backend endpoint with). The previous
+        // `hasAudio = audioSummary?.url != nil` gate was permanently
+        // false because /api/articles/:slug/summary-audio responds
+        // with raw MP3 bytes, not a JSON URL envelope, so the
+        // decode-on-fetch always failed.
+        let canListen = !body.isEmpty
+            && (displayArticle.slug?.isEmpty == false)
 
-        if body.isEmpty && !hasAudio {
+        if body.isEmpty && !canListen {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -639,7 +657,7 @@ struct ArticleDetailView: View {
                         .font(.system(size: 13, weight: .heavy, design: .rounded))
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
-                    if hasAudio {
+                    if canListen {
                         listenButton
                     }
                 }
@@ -711,12 +729,6 @@ struct ArticleDetailView: View {
                     .font(.system(size: 11, weight: .heavy))
                 Text(isPlayingAudio ? "إيقاف" : "استماع")
                     .font(.system(size: 11, weight: .heavy))
-                if let duration = audioSummary?.duration, !isPlayingAudio {
-                    Text("· \(duration / 60):\(String(format: "%02d", duration % 60))")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.85))
-                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 10)

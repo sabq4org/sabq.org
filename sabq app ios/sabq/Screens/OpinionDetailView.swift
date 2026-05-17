@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct OpinionDetailView: View {
     let opinion: OpinionArticle
@@ -18,6 +19,8 @@ struct OpinionDetailView: View {
     @State private var isLiked: Bool = false
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
+    @State private var audioPlayer: AVPlayer?
+    @State private var isPlayingAudio = false
 
     @AppStorage("articleFontSize") private var fontSize: Double = 17
     @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
@@ -182,6 +185,9 @@ struct OpinionDetailView: View {
         .onDisappear {
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
+            audioPlayer?.pause()
+            audioPlayer = nil
+            isPlayingAudio = false
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -229,6 +235,51 @@ struct OpinionDetailView: View {
         } catch {
             // Silent — defaults to unliked.
         }
+    }
+
+    // MARK: - Audio Summary
+
+    /// Compact play/pause pill that drives ElevenLabs TTS for the
+    /// "الموجز الذكي" card. Mirrors ArticleDetailView's listenButton.
+    private var listenButton: some View {
+        Button {
+            SabqHaptics.light()
+            toggleAudio()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isPlayingAudio ? "pause.fill" : "play.fill")
+                    .font(.system(size: 11, weight: .heavy))
+                Text(isPlayingAudio ? "إيقاف" : "استماع")
+                    .font(.system(size: 11, weight: .heavy))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule(style: .continuous).fill(SabqTheme.primaryEnd)
+            )
+            .shadow(color: SabqTheme.primaryEnd.opacity(0.30), radius: 6, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func toggleAudio() {
+        if isPlayingAudio {
+            audioPlayer?.pause()
+            isPlayingAudio = false
+            return
+        }
+        // Same TTS endpoint as articles — backend's
+        // /api/articles/:slug/summary-audio streams ElevenLabs MP3
+        // bytes. Opinions live in the same `articles` table, so the
+        // slug works for both kinds.
+        guard let slug = displayOpinion.slug, !slug.isEmpty,
+              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
+        else { return }
+        SabqHaptics.medium()
+        audioPlayer = AVPlayer(url: url)
+        audioPlayer?.play()
+        isPlayingAudio = true
     }
 
     private func toggleLike() {
@@ -407,6 +458,8 @@ struct OpinionDetailView: View {
     @ViewBuilder
     private var smartSummaryCard: some View {
         let body = smartSummaryText
+        let canListen = !body.isEmpty
+            && (displayOpinion.slug?.isEmpty == false)
         if body.isEmpty {
             EmptyView()
         } else {
@@ -419,6 +472,9 @@ struct OpinionDetailView: View {
                         .font(.system(size: 13, weight: .heavy, design: .rounded))
                         .foregroundStyle(SabqTheme.ink)
                     Spacer(minLength: 0)
+                    if canListen {
+                        listenButton
+                    }
                 }
 
                 Text(body)
