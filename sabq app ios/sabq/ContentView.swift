@@ -130,14 +130,25 @@ struct ContentView: View {
                 }
             }
 
-            if navigationPath.isEmpty {
-                SabqTabBar(selectedTab: $selectedTab)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 2)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            // Tab bar stays visible at all times — including inside pushed
+            // detail views — so a tap on any tab is always an escape
+            // hatch. The `onSelect` callback fires on every tap (even
+            // taps on the already-selected tab), which is exactly when
+            // we need to pop the navigation stack to root. Using
+            // `.onChange(of: selectedTab)` alone wouldn't work because
+            // tapping Home while already on Home doesn't change the
+            // binding's value.
+            SabqTabBar(
+                selectedTab: $selectedTab,
+                onSelect: { _ in
+                    if !navigationPath.isEmpty {
+                        navigationPath = NavigationPath()
+                    }
+                }
+            )
+            .padding(.horizontal, 20)
+            .padding(.bottom, 2)
         }
-        .animation(.easeInOut(duration: 0.2), value: navigationPath.isEmpty)
         .sabqRTL()
     }
 

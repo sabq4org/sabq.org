@@ -39,6 +39,11 @@ export default function OpinionPage() {
   useAdTracking('رأي');
   
   const [currentPage, setCurrentPage] = useState(1);
+  // Sort mode toggle — "latest" is the historical default, "trending"
+  // hits the backend's 48h-engagement-window ranking (see
+  // `/api/opinion?sort=trending` — the backend joins user_events for
+  // primary scoring and filters to articles published in the last 7 days).
+  const [sortMode, setSortMode] = useState<"latest" | "trending">("latest");
   const limit = 12;
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
@@ -55,7 +60,11 @@ export default function OpinionPage() {
       totalPages: number;
     };
   }>({
-    queryKey: [`/api/opinion?page=${currentPage}&limit=${limit}`],
+    queryKey: [
+      `/api/opinion?page=${currentPage}&limit=${limit}${
+        sortMode === "trending" ? "&sort=trending" : ""
+      }`,
+    ],
   });
 
   const handlePageChange = (page: number) => {
@@ -109,6 +118,35 @@ export default function OpinionPage() {
             <p className="text-lg text-muted-foreground">
               آراء وتحليلات من كتّابنا المتميزين
             </p>
+
+            {/* Sort toggle. "الأكثر تداولاً" hits the backend's
+                48h-engagement window ranking (filtered to articles
+                published in the last 7 days); "الأحدث" preserves
+                the previous default of newest-first. */}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                variant={sortMode === "trending" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setSortMode("trending");
+                  setCurrentPage(1);
+                }}
+                data-testid="button-opinion-sort-trending"
+              >
+                الأكثر تداولاً
+              </Button>
+              <Button
+                variant={sortMode === "latest" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setSortMode("latest");
+                  setCurrentPage(1);
+                }}
+                data-testid="button-opinion-sort-latest"
+              >
+                الأحدث
+              </Button>
+            </div>
           </div>
 
           {/* DMS Ads - Leaderboard for desktop, MPU for mobile */}

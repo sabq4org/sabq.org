@@ -41,7 +41,11 @@ struct MomentByMomentView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                // Extra breathing room between the page title and the
+                // filter tabs — `spacing: 16` alone left them feeling
+                // glued to the title row.
                 filterRow
+                    .padding(.top, 12)
 
                 if isLoading && items.isEmpty {
                     loadingSkeleton
@@ -104,7 +108,13 @@ struct MomentByMomentView: View {
         .sabqRTL()
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            // `.cancellationAction` is the app-wide convention for the
+            // back chevron — places it on the leading edge (visual
+            // right in RTL) so Article, Opinion, Settings sheets,
+            // Author, Trending, OMQ, … all match. Was previously
+            // `.navigationBarTrailing` which put the chevron on the
+            // left edge in RTL, inconsistent with every other screen.
+            ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 16, weight: .bold))

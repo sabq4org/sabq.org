@@ -18,6 +18,7 @@ struct ArticleSubmissionView: View {
     @State private var title: String = ""
     @State private var articleContent: String = ""
     @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var showImagePicker = false
     @State private var previewImages: [UIImage] = []
     @State private var imageData: [Data] = []
     @State private var loadingImages = false
@@ -258,15 +259,31 @@ struct ArticleSubmissionView: View {
                 imagePreviewGrid
             }
         }
-    }
-
-    private var imagePickerPlaceholder: some View {
-        PhotosPicker(
+        // Mount the photo picker at the section root so both the initial
+        // placeholder Button and the "add more" Button in the grid can
+        // open it via the shared `showImagePicker` flag.
+        .photosPicker(
+            isPresented: $showImagePicker,
             selection: $pickerItems,
             maxSelectionCount: maxImages,
             matching: .images,
             preferredItemEncoding: .current
-        ) {
+        )
+        .onChange(of: pickerItems) { _, newItems in
+            Task { await loadImages(from: newItems) }
+        }
+    }
+
+    private var imagePickerPlaceholder: some View {
+        Button {
+            Task {
+                // Surface the photo-library permission alert before
+                // opening the picker — required by App Store review even
+                // though PhotosUI.PhotosPicker doesn't strictly need it.
+                await SabqPhotoPermission.ensureRequested()
+                showImagePicker = true
+            }
+        } label: {
             VStack(spacing: 10) {
                 Image(systemName: "photo.badge.plus")
                     .font(.system(size: 32, weight: .light))
@@ -291,9 +308,10 @@ struct ArticleSubmissionView: View {
             )
         }
         .buttonStyle(.plain)
-        .onChange(of: pickerItems) { _, newItems in
-            Task { await loadImages(from: newItems) }
-        }
+        // The `.photosPicker` modifier + `pickerItems.onChange` listener
+        // are mounted on the parent section so the same `showImagePicker`
+        // flag works for both this initial placeholder and the
+        // "add more" Button inside `imagePreviewGrid`.
     }
 
     private var imagePreviewGrid: some View {
@@ -330,12 +348,12 @@ struct ArticleSubmissionView: View {
                 }
 
                 if previewImages.count < maxImages {
-                    PhotosPicker(
-                        selection: $pickerItems,
-                        maxSelectionCount: maxImages,
-                        matching: .images,
-                        preferredItemEncoding: .current
-                    ) {
+                    Button {
+                        Task {
+                            await SabqPhotoPermission.ensureRequested()
+                            showImagePicker = true
+                        }
+                    } label: {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(pageTint.opacity(0.06))
                             .frame(width: 100, height: 100)

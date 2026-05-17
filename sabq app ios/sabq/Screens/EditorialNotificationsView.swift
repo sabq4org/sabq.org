@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 /// In-app history of editorial push notifications (scheduled / published /
 /// rejected / needs_revision). Mirrors what the user sees in the iOS
@@ -362,6 +363,40 @@ struct EditorialNotificationsView: View {
         } catch {
             loadState = .failed("تعذر جلب الإشعارات")
         }
+        // The user is actively viewing the in-app list now, so any
+        // editorial notifications still sitting in the system
+        // notification center are stale. Sweep them so the iPhone
+        // banner / notification center matches the in-app state.
+        await Self.clearDeliveredEditorialNotifications()
+    }
+
+    /// Removes every iOS-level delivered notification whose userInfo
+    /// `type` starts with "editorial." (matches the categories the
+    /// backend sets in `editorialNotifications.ts` — `EDITORIAL_PUBLISHED`
+    /// etc. — and also clears the app badge). Non-editorial pushes are
+    /// left untouched.
+    static func clearDeliveredEditorialNotifications() async {
+        let center = UNUserNotificationCenter.current()
+        let delivered = await center.deliveredNotifications()
+        let editorialIds: [String] = delivered.compactMap { notif in
+            let userInfo = notif.request.content.userInfo
+            if let t = userInfo["type"] as? String, t.hasPrefix("editorial.") {
+                return notif.request.identifier
+            }
+            // Fallback heuristic for older notifications that didn't
+            // include a `type` key — clear them too if their category
+            // starts with EDITORIAL_.
+            if notif.request.content.categoryIdentifier.uppercased().hasPrefix("EDITORIAL_") {
+                return notif.request.identifier
+            }
+            return nil
+        }
+        if !editorialIds.isEmpty {
+            center.removeDeliveredNotifications(withIdentifiers: editorialIds)
+        }
+        // Reset the app badge so the home screen icon no longer carries
+        // a stale count from already-seen editorial pushes.
+        try? await center.setBadgeCount(0)
     }
 
     /// Strip the trailing "— السبب: …" / "— ملاحظة المحرر: …" pattern from
@@ -440,6 +475,10 @@ struct EditorialNotificationDetailView: View {
                     NotificationsStore.shared.unreadCount = max(0, NotificationsStore.shared.unreadCount - 1)
                 }
             }
+            // Sweep any iOS-level delivered notifications too — the user
+            // is clearly looking at this content, no need to keep an
+            // entry hanging in the notification center.
+            await EditorialNotificationsView.clearDeliveredEditorialNotifications()
         }
     }
 
@@ -486,24 +525,95 @@ struct EditorialNotificationDetailView: View {
 
     private var titleCard: some View {
         SurfaceCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 14) {
                 Text("المحتوى المعني")
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(SabqTheme.tertiaryInk)
+
                 Text(item.articleTitle ?? item.title)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(EditorialNotificationsView.cleanBody(item))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                if let parts = extractScheduleParts() {
+                    Divider().background(SabqTheme.outline.opacity(0.5))
+                    scheduleMetaRow(icon: "calendar", label: parts.dateText)
+                    scheduleMetaRow(icon: "clock", label: parts.timeText)
+                } else {
+                    // Non-scheduled events: render the body once with the
+                    // duplicated "«title» —" prefix stripped, so the title
+                    // doesn't appear twice in the same card.
+                    let body = bodyWithoutTitlePrefix()
+                    if !body.isEmpty {
+                        Text(body)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .multilineTextAlignment(.leading)
+                            .lineSpacing(5)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
+    }
+
+    private func scheduleMetaRow(icon: String, label: String) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(SabqTheme.sky.opacity(0.14))
+                    .frame(width: 28, height: 28)
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.sky)
+            }
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+                .monospacedDigit() // no-op for Arabic glyphs, aligns Latin digits in time
+        }
+    }
+
+    /// Parses a scheduled-notification body of the form
+    /// `«{title}» — تنشر يوم {weekday}، {day} {month} في {hh:mm} {صباحًا/مساءً}`
+    /// into separate date / time text. Returns nil for non-scheduled
+    /// events or when the expected shape isn't present.
+    private func extractScheduleParts() -> (dateText: String, timeText: String)? {
+        guard item.type == "scheduled" else { return nil }
+
+        var text = item.body
+        // Drop the `«title» — ` prefix.
+        if let dashRange = text.range(of: "—") {
+            text = String(text[text.index(after: dashRange.lowerBound)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Drop the "تنشر يوم " lead so the date reads as a clean
+        // "weekday، day month" string.
+        for prefix in ["تنشر يوم ", "ستُنشر يوم "] {
+            if text.hasPrefix(prefix) {
+                text = String(text.dropFirst(prefix.count))
+                break
+            }
+        }
+        // Split on " في " to separate date from time.
+        guard let r = text.range(of: " في ") else { return nil }
+        let date = String(text[..<r.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let time = String(text[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !date.isEmpty, !time.isEmpty else { return nil }
+        return (date, time)
+    }
+
+    /// Removes the leading `«title» — ` from the body so the article
+    /// title doesn't render twice in the detail card.
+    private func bodyWithoutTitlePrefix() -> String {
+        let raw = EditorialNotificationsView.cleanBody(item)
+        if let dashRange = raw.range(of: "—") {
+            return String(raw[raw.index(after: dashRange.lowerBound)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return raw
     }
 
     private func reviewerNoteCard(_ note: String) -> some View {

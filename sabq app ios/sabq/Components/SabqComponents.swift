@@ -1162,6 +1162,13 @@ struct ErrorStateView: View {
 // shrink to icon-only so the bar feels light, not crowded.
 struct SabqTabBar: View {
     @Binding var selectedTab: AppTab
+    /// Fires on every tap, even when the tap targets the already-selected
+    /// tab. ContentView uses this hook to empty its `navigationPath`
+    /// (pop-to-root behaviour) — `.onChange(of: selectedTab)` alone
+    /// wouldn't fire when the value doesn't change, which is exactly the
+    /// case when the user is deep inside a pushed view of the Home tab
+    /// and taps Home again hoping to escape.
+    var onSelect: ((AppTab) -> Void)? = nil
     @Namespace private var selectionNamespace
 
     private let tabs: [AppTab] = [.home, .explore, .bookmarks, .profile]
@@ -1171,10 +1178,12 @@ struct SabqTabBar: View {
             ForEach(tabs) { tab in
                 let isSelected = selectedTab == tab
                 Button {
-                    guard selectedTab != tab else { return }
                     SabqHaptics.light()
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                        selectedTab = tab
+                    onSelect?(tab)
+                    if selectedTab != tab {
+                        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                            selectedTab = tab
+                        }
                     }
                 } label: {
                     tabLabel(tab: tab, isSelected: isSelected)

@@ -41,7 +41,10 @@ struct LiveCoverageView: View {
         .sabqRTL()
         .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            // `.cancellationAction` — app-wide convention, leading edge
+            // (visual right in RTL). Matches Article, Opinion, Settings,
+            // and the rest of the navigation surfaces.
+            ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 16, weight: .bold))

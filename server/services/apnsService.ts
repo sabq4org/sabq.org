@@ -298,8 +298,18 @@ export async function sendBatchPushNotifications(
         }
       }
 
-      // Automatically deactivate bad/unregistered device tokens
-      if (!response.success && (response.reason === 'BadDeviceToken' || response.reason === 'Unregistered')) {
+      // Automatically deactivate bad/unregistered device tokens.
+      // `DeviceTokenNotForTopic` is what APNs returns when a token was
+      // registered under a different bundle ID than the one we're
+      // sending under — exactly the state of every token saved before
+      // the `com.sabq.sabqapp` → `com.sabq.sabqorg` migration. Without
+      // this branch those rows would stay `is_active = true` forever
+      // and every broadcast would re-attempt them.
+      if (!response.success && (
+        response.reason === 'BadDeviceToken' ||
+        response.reason === 'Unregistered' ||
+        response.reason === 'DeviceTokenNotForTopic'
+      )) {
         try {
           await db
             .update(pushDevices)

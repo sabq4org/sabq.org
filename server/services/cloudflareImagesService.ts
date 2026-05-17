@@ -240,6 +240,44 @@ class CloudflareImagesService {
   }
 
   /**
+   * Extract the Cloudflare Images image ID from a delivery URL.
+   * imagedelivery.net URLs are shaped:
+   *   https://imagedelivery.net/{accountHash}/{imageId}/{variant}
+   * Returns null when the URL doesn't match that shape (e.g. it's an
+   * S3 / R2 URL from a different storage path).
+   */
+  extractImageId(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const match = url.match(/imagedelivery\.net\/[^/]+\/([^/]+)\//);
+    return match?.[1] ?? null;
+  }
+
+  /**
+   * Permanently delete an image from Cloudflare Images by ID. Called
+   * when a user deletes their account so the avatar isn't kept on CF
+   * after the user's personal data is wiped from our DB. Best-effort —
+   * a failure here doesn't block the rest of the account-delete flow.
+   */
+  async deleteImage(imageId: string): Promise<boolean> {
+    if (!this.isCloudflareConfigured() || !imageId) return false;
+    const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim();
+    const apiToken = (process.env.CLOUDFLARE_IMAGES_TOKEN || '').trim();
+    try {
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1/${imageId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${apiToken}` },
+        },
+      );
+      return res.ok;
+    } catch (err) {
+      console.error(`[CFImages] deleteImage(${imageId}) failed:`, err);
+      return false;
+    }
+  }
+
+  /**
    * Determine MIME type from filename
    * @param filename - The filename to check
    * @returns MIME type string
