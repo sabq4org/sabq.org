@@ -4,6 +4,16 @@ import PhotosUI
 import UIKit
 
 struct SettingsView: View {
+    /// "الإصدار {short} ({build})" sourced from the bundle's Info.plist,
+    /// so the about-section label tracks the actual TestFlight / App
+    /// Store build instead of the previously hard-coded "1.0.0".
+    static var versionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty ? "الإصدار \(short)" : "الإصدار \(short) (\(build))"
+    }
+
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
@@ -743,7 +753,10 @@ struct SettingsView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(height: 56)
 
-            Text("الإصدار 1.0.0")
+            // Reads CFBundleShortVersionString + CFBundleVersion from the
+            // bundle's Info.plist so the displayed version always matches
+            // what's actually shipping — no more hard-coded "1.0.0".
+            Text(Self.versionLabel)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
 

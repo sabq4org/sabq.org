@@ -136,18 +136,29 @@ struct ArticleDetailView: View {
                             weeklyPhotosGallery(photos)
                         }
 
+                        // Lower sections — body / keywords / share /
+                        // related / comments — used to all share the
+                        // VStack's 18 pt spacing, which made the page
+                        // feel cramped right where the reader's eye is
+                        // already tired. Add explicit top-padding so each
+                        // section settles into its own breathing room
+                        // (effective gap = 18 base + N below).
                         actionBar
+                            .padding(.top, 16)
 
                         if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
+                                .padding(.top, 20)
                         }
 
                         if !isFocusMode, !relatedArticles.isEmpty {
                             relatedSection
+                                .padding(.top, 24)
                         }
 
                         if !isFocusMode, let store = commentsStore {
                             commentsSection(store: store)
+                                .padding(.top, 24)
                         }
                     }
                     .frame(width: max(0, proxy.size.width - 40), alignment: .leading)

@@ -67,14 +67,23 @@ struct OpinionDetailView: View {
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         opinionBody
 
+                        // Mirrors ArticleDetailView's spacing pass —
+                        // the lower share / keywords / more-opinions
+                        // sections used to inherit the parent VStack's
+                        // 18 pt spacing and felt squashed together.
+                        // Explicit top-padding gives each its own
+                        // breathing room.
                         actionBar
+                            .padding(.top, 16)
 
                         if !isFocusMode, !displayTags.isEmpty {
                             tagsSection
+                                .padding(.top, 20)
                         }
 
                         if !isFocusMode, !moreOpinions.isEmpty {
                             moreOpinionsSection
+                                .padding(.top, 24)
                         }
                     }
                     .frame(width: max(0, proxy.size.width - 40), alignment: .leading)
