@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import SwiftUI
 import UserNotifications
+import FirebaseCore
 
 /// Editorial-event types we receive as targeted pushes.
 /// Mirrors the backend's `EditorialEvent` union.
@@ -162,6 +163,14 @@ final class SabqAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Firebase Analytics → GA4 stream `Sabq iOS` on the `sabq-prod`
+        // project. Reads GoogleService-Info.plist from the bundle; the
+        // file is auto-included via the fileSystemSynchronizedGroups
+        // entry on the sabq/ root. Configure BEFORE anything else so
+        // automatic session / first_open events fire as early as
+        // possible.
+        FirebaseApp.configure()
+
         UNUserNotificationCenter.current().delegate = self
 
         // If iOS launched the app *because* the user tapped a notification,

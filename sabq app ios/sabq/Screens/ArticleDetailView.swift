@@ -149,9 +149,15 @@ struct ArticleDetailView: View {
         }
         .background(focusBackground)
         .sabqRTL()
+        .sabqScreen("ArticleDetail")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .onAppear {
+            SabqAnalytics.articleView(
+                id: article.id,
+                title: article.title,
+                category: article.category.title
+            )
             // Trigger one-shot zoom-on-appear unless we've already settled.
             if !heroAppeared {
                 heroAppeared = true

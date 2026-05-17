@@ -66,6 +66,7 @@ struct SearchView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .sabqScreen("Search")
         .task {
             trendingKeywords = await NewsService.fetchTrending()
             if trendingKeywords.isEmpty {

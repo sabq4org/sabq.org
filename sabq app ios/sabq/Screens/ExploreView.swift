@@ -73,6 +73,7 @@ struct ExploreView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .sabqScreen("Explore")
         .scrollDismissesKeyboard(.interactively)
         .sheet(item: $selectedCategory) { category in
             CategoryArticlesSheet(category: category)

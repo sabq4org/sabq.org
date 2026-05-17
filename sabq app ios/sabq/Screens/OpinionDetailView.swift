@@ -98,9 +98,15 @@ struct OpinionDetailView: View {
         }
         .background(focusBackground)
         .sabqRTL()
+        .sabqScreen("OpinionDetail")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .onAppear {
+            SabqAnalytics.opinionView(
+                id: opinion.id,
+                title: opinion.title,
+                authorName: opinion.authorName
+            )
             if !heroAppeared { heroAppeared = true }
         }
         .toolbar {

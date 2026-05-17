@@ -104,6 +104,7 @@ struct HomeFeedView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .sabqScreen("Home")
         // Notifications sheet removed from this screen — the header now
         // surfaces the live-coverage entry point instead. The notifications
         // page is still reachable from the Settings tab.

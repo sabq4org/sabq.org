@@ -49,6 +49,7 @@ struct SettingsView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .sabqScreen("More")
         .sheet(isPresented: $showLogin) {
             LoginSheet()
         }

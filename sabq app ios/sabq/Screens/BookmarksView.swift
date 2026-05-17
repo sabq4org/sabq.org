@@ -31,6 +31,7 @@ struct BookmarksView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
+        .sabqScreen("Bookmarks")
     }
 
     // MARK: - Empty State
