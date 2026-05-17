@@ -63,7 +63,7 @@ struct OpinionsView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(
                 title: "ترند المقالات",
-                subtitle: "الأكثر قراءةً خلال آخر 24 ساعة",
+                subtitle: "الأكثر تفاعلاً خلال آخر 48 ساعة",
                 icon: "flame.fill",
                 tint: SabqTheme.coral
             )

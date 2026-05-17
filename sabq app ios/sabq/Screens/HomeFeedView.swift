@@ -31,7 +31,13 @@ struct HomeFeedView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             if isContentReady {
-                VStack(alignment: .leading, spacing: 20) {
+                // 26pt outer spacing — gives the home feed enough
+                // breathing room between visually heterogeneous blocks
+                // (raw header → padded greeting card → breaking pill
+                // → stories rail → 420pt featured carousel → analytic
+                // cards → section previews). 20pt felt cramped right
+                // around the cards-to-section-preview transition.
+                VStack(alignment: .leading, spacing: 26) {
                     headerSection
 
                     NavigationLink(value: DailyBriefRoute()) {
@@ -317,7 +323,7 @@ struct HomeFeedView: View {
                     StoryBubble(story: story)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 6)
         }
     }
 

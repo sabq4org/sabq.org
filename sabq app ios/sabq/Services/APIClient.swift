@@ -987,6 +987,47 @@ actor APIClient {
         try await get(APITodayInsights.self, path: "/insights/today")
     }
 
+    // MARK: - Unified Behavior Tracking (web parity)
+
+    /// Send a behavior event to the unified iOS tracking endpoint.
+    /// Backend writes to reading_history (view/read) or reactions
+    /// (like/unlike) so `/insights/today` and the trending opinion
+    /// query both reflect iOS reads alongside web.
+    ///
+    /// Best-effort: swallows non-200 responses so analytics failures
+    /// never bubble into the article-reading flow.
+    func trackBehaviorEvent(articleId: String,
+                            eventType: String,
+                            dwellSeconds: Int?,
+                            scrollDepth: Int?,
+                            completionRate: Int?) async throws {
+        struct Body: Encodable {
+            let articleId: String
+            let eventType: String
+            let dwellSeconds: Int?
+            let scrollDepth: Int?
+            let completionRate: Int?
+            let platform: String
+        }
+        let body = Body(
+            articleId: articleId,
+            eventType: eventType,
+            dwellSeconds: dwellSeconds,
+            scrollDepth: scrollDepth,
+            completionRate: completionRate,
+            platform: "ios"
+        )
+        try await postRaw(path: "/behavior/track", body: body)
+    }
+
+    func toggleArticleLike(articleId: String) async throws -> APIArticleReactionResponse {
+        try await post(APIArticleReactionResponse.self, path: "/articles/\(articleId)/react")
+    }
+
+    func fetchArticleLikeStatus(articleId: String) async throws -> APIArticleReactionResponse {
+        try await get(APIArticleReactionResponse.self, path: "/articles/\(articleId)/react")
+    }
+
     // MARK: - Phase 5: Calendar / OMQ / Daily Brief / Audio Newsletters
 
     /// Calendar events (world days, gulf events, commemorations). Public.

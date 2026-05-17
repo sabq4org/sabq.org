@@ -24539,16 +24539,22 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
-      // 24h cutoff for the trending window. Computed once per request so it
-      // matches the count query too.
-      const trendingCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // Trending window: published within the last 7 days AND at least
+      // 3 hours ago. The lower bound is what fixes "a brand-new article
+      // with 50 views ranking #1 just because the rate per hour is
+      // technically the highest" — every new opinion gets a 3-hour
+      // grace period to gather actual reader signal before competing
+      // in the trending list.
+      const trendingMaxAge = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days back
+      const trendingMinAge = new Date(Date.now() - 3 * 60 * 60 * 1000);      // 3 hours back
 
       const baseConditions = [
         eq(articles.articleType, "opinion"),
         eq(articles.status, "published"),
       ];
       if (sortByTrending) {
-        baseConditions.push(gte(articles.publishedAt, trendingCutoff));
+        baseConditions.push(gte(articles.publishedAt, trendingMaxAge));
+        baseConditions.push(lte(articles.publishedAt, trendingMinAge));
       }
 
       let query = db
@@ -24587,13 +24593,25 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         );
       }
 
-      // For `sort=trending` we order by engagement velocity (views per
-      // hour since publish, 3-hour floor) — matches the news trending
-      // logic and prevents the opinion that's been live longest in the
-      // 24h window from automatically winning on absolute view count.
-      // `sort=views` keeps its lifetime-views semantics. Everything else
-      // falls through to newest-first.
-      const trendingOrder = sql`COALESCE(${articles.views}, 0)::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - ${articles.publishedAt})) / 3600.0, 3) DESC`;
+      // `sort=trending` — weighted engagement score across all
+      // platforms (web + iOS). The 3h floor + 7d ceiling still
+      // filters the candidate pool to prevent fresh-article gaming.
+      // Within that pool, rank by:
+      //   raw views (cross-platform: iOS bumps articles.views via
+      //     /api/v1/articles/:id/view, same shape as web)
+      //   + likes ×3  (reactions table, last 48h)
+      //   + comments ×5 (approved only, last 48h)
+      //   + reads ×2 (reading_history rows w/ completion >= 70%,
+      //     last 48h — these are the "actually finished" sessions)
+      // The 48h window keeps the signal recent without losing
+      // articles that gain late traction (12–36h after publish is
+      // the typical opinion-piece peak per analytics).
+      const trendingOrder = sql`(
+        COALESCE(${articles.views}, 0)
+        + (SELECT COUNT(*) FROM reactions WHERE reactions.article_id = articles.id AND reactions.type = 'like' AND reactions.created_at >= NOW() - INTERVAL '48 hours') * 3
+        + (SELECT COUNT(*) FROM comments WHERE comments.article_id = articles.id AND comments.status = 'approved' AND comments.created_at >= NOW() - INTERVAL '48 hours') * 5
+        + (SELECT COUNT(*) FROM reading_history WHERE reading_history.article_id = articles.id AND reading_history.completion_rate >= 70 AND reading_history.read_at >= NOW() - INTERVAL '48 hours') * 2
+      ) DESC, ${articles.publishedAt} DESC`;
       const results = await query
         .orderBy(
           sortByTrending ? trendingOrder :

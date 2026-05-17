@@ -14,6 +14,9 @@ struct OpinionDetailView: View {
     @State private var heroAppeared = false
     @State private var showReaderControls = false
     @State private var isFocusMode = false
+    @State private var isLiked: Bool = false
+    @State private var likesCount: Int = 0
+    @State private var isLikeBusy: Bool = false
 
     @AppStorage("articleFontSize") private var fontSize: Double = 17
     @AppStorage("articleLineSpacing") private var lineSpacing: Double = 6
@@ -100,6 +103,7 @@ struct OpinionDetailView: View {
             } action: { _, newValue in
                 scrollProgress = newValue.width
                 scrollOffsetY = newValue.height
+                BehaviorTracker.shared.updateScroll(percent: Double(newValue.width))
             }
             .overlay(alignment: .top) {
                 readingProgressBar
@@ -116,6 +120,9 @@ struct OpinionDetailView: View {
                 title: opinion.title,
                 authorName: opinion.authorName
             )
+            // Unified tracker — opinion reads feed both the home
+            // "Reading Journey" card and the weighted trending score.
+            BehaviorTracker.shared.startSession(articleId: opinion.id)
             if !heroAppeared { heroAppeared = true }
         }
         .toolbar {
@@ -132,24 +139,30 @@ struct OpinionDetailView: View {
                 }
             }
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    SabqHaptics.light()
-                    shareOpinion()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .padding(8)
-                        .background(Circle().fill(.ultraThinMaterial))
+                HStack(spacing: 8) {
+                    likeButton
+
+                    Button {
+                        SabqHaptics.light()
+                        shareOpinion()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .padding(8)
+                            .background(Circle().fill(.ultraThinMaterial))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .task {
             await loadOpinion()
+            await refreshLikeStatus()
         }
         .onDisappear {
             copyFeedbackTask?.cancel()
+            BehaviorTracker.shared.endSession()
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)
@@ -169,6 +182,66 @@ struct OpinionDetailView: View {
             .filter { $0.id != displayOpinion.id }
             .prefix(4)
             .map { $0 }
+    }
+
+    // MARK: - Like
+
+    private var likeButton: some View {
+        Button {
+            SabqHaptics.medium()
+            toggleLike()
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: isLiked ? "heart.fill" : "heart")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+                if likesCount > 0 {
+                    Text("\(likesCount)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color(red: 0.95, green: 0.30, blue: 0.36)))
+                        .offset(x: 6, y: -4)
+                }
+            }
+        }
+        .disabled(isLikeBusy)
+        .buttonStyle(.plain)
+    }
+
+    @MainActor
+    private func refreshLikeStatus() async {
+        do {
+            let status = try await BehaviorTracker.shared.fetchLikeStatus(articleId: opinion.id)
+            isLiked = status.liked
+            likesCount = status.count
+        } catch {
+            // Silent — defaults to unliked.
+        }
+    }
+
+    private func toggleLike() {
+        guard !isLikeBusy else { return }
+        isLikeBusy = true
+        let articleId = opinion.id
+        isLiked.toggle()
+        likesCount += isLiked ? 1 : -1
+        if likesCount < 0 { likesCount = 0 }
+        Task { @MainActor in
+            defer { isLikeBusy = false }
+            do {
+                let result = try await BehaviorTracker.shared.toggleLike(articleId: articleId)
+                isLiked = result.liked
+                likesCount = result.count
+            } catch {
+                isLiked.toggle()
+                likesCount += isLiked ? 1 : -1
+                if likesCount < 0 { likesCount = 0 }
+            }
+        }
     }
 
     // MARK: - Hero (clean, no overlay text — matches ArticleDetailView)

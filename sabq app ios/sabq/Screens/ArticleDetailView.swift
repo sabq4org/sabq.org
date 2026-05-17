@@ -38,6 +38,9 @@ struct ArticleDetailView: View {
     @State private var scrollProgress: CGFloat = 0
     @State private var scrollOffsetY: CGFloat = 0
     @State private var heroAppeared: Bool = false
+    @State private var isLiked: Bool = false
+    @State private var likesCount: Int = 0
+    @State private var isLikeBusy: Bool = false
     @State private var isPassportPresented = false
     /// Index of the weekly photo opened in fullscreen lightbox, or nil when
     /// no lightbox is showing. Mirrors the `selectedIndex` state on the web
@@ -177,6 +180,7 @@ struct ArticleDetailView: View {
             } action: { _, newValue in
                 scrollProgress = newValue.width
                 scrollOffsetY = newValue.height
+                BehaviorTracker.shared.updateScroll(percent: Double(newValue.width))
             }
             .overlay(alignment: .top) {
                 readingProgressBar
@@ -193,6 +197,11 @@ struct ArticleDetailView: View {
                 title: article.title,
                 category: article.category.title
             )
+            // Unified behavior tracker — writes reading_history seed
+            // row + bumps articles.views so iOS reads show up in the
+            // home "Reading Journey" card and the trending opinion
+            // ranking on equal footing with web reads.
+            BehaviorTracker.shared.startSession(articleId: article.id)
             // Trigger one-shot zoom-on-appear unless we've already settled.
             if !heroAppeared {
                 heroAppeared = true
@@ -219,6 +228,8 @@ struct ArticleDetailView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
+                    likeButton
+
                     Button {
                         SabqHaptics.medium()
                         bookmarksStore.toggle(article.id, article: article)
@@ -255,6 +266,7 @@ struct ArticleDetailView: View {
         .task {
             updateResolvedTags(from: article)
             await loadExtras()
+            await refreshLikeStatus()
         }
         .onDisappear {
             audioPlayer?.pause()
@@ -262,6 +274,7 @@ struct ArticleDetailView: View {
             isPlayingAudio = false
             shortlinkTask?.cancel()
             copyFeedbackTask?.cancel()
+            BehaviorTracker.shared.endSession()
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
@@ -284,6 +297,71 @@ struct ArticleDetailView: View {
             return url
         }
         return URL(string: "https://sabq.org")!
+    }
+
+    // Like button — heart that toggles a reactions row server-side.
+    // Mirrors the bookmark/share affordance; surfaces likesCount as a
+    // small overlay badge once we know it. Disabled while a toggle is
+    // in flight so a rapid double-tap can't create duplicate rows.
+    private var likeButton: some View {
+        Button {
+            SabqHaptics.medium()
+            toggleLike()
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: isLiked ? "heart.fill" : "heart")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
+                    .padding(8)
+                    .background(Circle().fill(.ultraThinMaterial))
+                if likesCount > 0 {
+                    Text("\(likesCount)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color(red: 0.95, green: 0.30, blue: 0.36)))
+                        .offset(x: 6, y: -4)
+                }
+            }
+        }
+        .disabled(isLikeBusy)
+        .buttonStyle(.plain)
+    }
+
+    @MainActor
+    private func refreshLikeStatus() async {
+        do {
+            let status = try await BehaviorTracker.shared.fetchLikeStatus(articleId: article.id)
+            isLiked = status.liked
+            likesCount = status.count
+        } catch {
+            // Silent — the button defaults to unliked and re-tries
+            // on next .task firing.
+        }
+    }
+
+    private func toggleLike() {
+        guard !isLikeBusy else { return }
+        isLikeBusy = true
+        let articleId = article.id
+        // Optimistic flip — server response wins.
+        isLiked.toggle()
+        likesCount += isLiked ? 1 : -1
+        if likesCount < 0 { likesCount = 0 }
+        Task { @MainActor in
+            defer { isLikeBusy = false }
+            do {
+                let result = try await BehaviorTracker.shared.toggleLike(articleId: articleId)
+                isLiked = result.liked
+                likesCount = result.count
+            } catch {
+                // Revert optimistic update on failure.
+                isLiked.toggle()
+                likesCount += isLiked ? 1 : -1
+                if likesCount < 0 { likesCount = 0 }
+            }
+        }
     }
 
     @MainActor

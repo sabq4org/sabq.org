@@ -30,6 +30,8 @@ import {
   insertCommentSchema,
   roles,
   userRoles,
+  readingHistory,
+  reactions,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable, inArray } from "drizzle-orm";
 
@@ -2210,69 +2212,144 @@ router.post("/members/fcm-token", async (req: Request, res: Response) => {
 });
 
 // ==========================================
-// حذف الحساب - Delete Account (Soft Delete)
+// حذف الحساب - Delete Account
 // DELETE /api/v1/members/account
+//
+// Apple App Store guideline 5.1.1(v) requires apps that support
+// account creation to also let users actually DELETE their data, not
+// merely deactivate it. The previous version was a soft-delete only —
+// users.status = 'deleted' but every other personal artefact stayed in
+// the DB (push tokens kept receiving broadcasts, editorial history
+// stayed, bookmarks lingered, avatar stayed on Cloudflare Images).
+// This rewrite wipes the per-user rows in every user-scoped table and
+// anonymises the row in `users` itself (kept as a tombstone so existing
+// foreign keys from `articles` still resolve).
 // ==========================================
 router.delete("/members/account", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
-    
+
     if (!session) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "غير مصرح" 
+      return res.status(401).json({
+        success: false,
+        message: "غير مصرح",
       });
     }
 
     const { password } = req.body;
 
     if (!password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "كلمة المرور مطلوبة لتأكيد الحذف" 
+      return res.status(400).json({
+        success: false,
+        message: "كلمة المرور مطلوبة لتأكيد الحذف",
       });
     }
 
-    // Verify password
+    // Verify password (and capture profile image URL for Cloudflare cleanup).
     const [user] = await db
-      .select({ passwordHash: users.passwordHash })
+      .select({
+        passwordHash: users.passwordHash,
+        profileImageUrl: users.profileImageUrl,
+      })
       .from(users)
       .where(eq(users.id, session.userId))
       .limit(1);
 
     if (!user?.passwordHash) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "كلمة المرور غير صحيحة" 
+      return res.status(401).json({
+        success: false,
+        message: "كلمة المرور غير صحيحة",
       });
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "كلمة المرور غير صحيحة" 
+      return res.status(401).json({
+        success: false,
+        message: "كلمة المرور غير صحيحة",
       });
     }
 
-    // Soft delete - set status to deleted and add deletedAt timestamp
-    await db.update(users)
-      .set({ 
-        status: "deleted",
-        deletedAt: new Date()
-      })
-      .where(eq(users.id, session.userId));
+    const userId = session.userId;
+    const anonEmail = `deleted-${userId}@anon.local`;
 
-    // Invalidate all sessions
-    await db.update(appMemberSessions)
-      .set({ isActive: false })
-      .where(eq(appMemberSessions.memberId, session.userId));
+    // Wipe per-user data across the relevant tables, then anonymise
+    // the users row. Each DELETE is wrapped in its own try so a
+    // missing/optional table doesn't block the rest — App Store
+    // compliance is about removing the user's personal footprint,
+    // not about every secondary table being present.
+    const wipeQueries: Array<{ label: string; query: ReturnType<typeof sql> }> = [
+      { label: "push_devices",                 query: sql`DELETE FROM push_devices WHERE user_id = ${userId}` },
+      { label: "editorial_notifications",      query: sql`DELETE FROM editorial_notifications WHERE user_id = ${userId}` },
+      { label: "editorial_notification_prefs", query: sql`DELETE FROM editorial_notification_prefs WHERE user_id = ${userId}` },
+      { label: "bookmarks",                    query: sql`DELETE FROM bookmarks WHERE user_id = ${userId}` },
+      { label: "user_interests",               query: sql`DELETE FROM user_interests WHERE user_id = ${userId}` },
+      { label: "reading_history",              query: sql`DELETE FROM reading_history WHERE user_id = ${userId}` },
+      { label: "user_reading_history",         query: sql`DELETE FROM user_reading_history WHERE user_id = ${userId}` },
+      { label: "reactions",                    query: sql`DELETE FROM reactions WHERE user_id = ${userId}` },
+      { label: "user_preferences",             query: sql`DELETE FROM user_preferences WHERE user_id = ${userId}` },
+      { label: "user_notification_prefs",      query: sql`DELETE FROM user_notification_prefs WHERE user_id = ${userId}` },
+      { label: "user_segment_assignments",     query: sql`DELETE FROM user_segment_assignments WHERE user_id = ${userId}` },
+      { label: "app_member_sessions",          query: sql`DELETE FROM app_member_sessions WHERE member_id = ${userId}` },
+    ];
 
-    console.log(`[Mobile API] User account deleted: ${session.userId}`);
+    for (const { label, query } of wipeQueries) {
+      try {
+        await db.execute(query);
+      } catch (err: any) {
+        console.warn(`[Account Delete] ${label} wipe skipped:`, err?.message || err);
+      }
+    }
 
-    res.json({ 
-      success: true, 
-      message: "تم حذف الحساب بنجاح" 
+    // Anonymise the users row itself. Personal identifiers go null /
+    // generic; the row stays so `articles.author_id` / `reporter_id`
+    // foreign keys still resolve historically.
+    await db.execute(sql`
+      UPDATE users
+      SET email = ${anonEmail},
+          password_hash = NULL,
+          first_name = 'محذوف',
+          last_name = '',
+          first_name_en = 'Deleted',
+          last_name_en = '',
+          bio = NULL,
+          phone_number = NULL,
+          profile_image_url = NULL,
+          google_id = NULL,
+          apple_id = NULL,
+          gender = NULL,
+          birth_date = NULL,
+          city = NULL,
+          country = NULL,
+          fcm_token = NULL,
+          fcm_topics = '[]'::jsonb,
+          last_device_info = NULL,
+          two_factor_secret = NULL,
+          two_factor_backup_codes = NULL,
+          two_factor_enabled = false,
+          status = 'deleted',
+          deleted_at = NOW()
+      WHERE id = ${userId}
+    `);
+
+    console.log(`[Mobile API] Account hard-deleted (anonymised + cascaded): ${userId}`);
+
+    // Best-effort: clean up the Cloudflare Images avatar so the file
+    // doesn't sit on CF after the user's data has been wiped from our
+    // DB. Runs after the destructive ops succeed so a CF outage doesn't
+    // block the deletion the user actually asked for.
+    if (user.profileImageUrl) {
+      const imageId = cloudflareImagesService.extractImageId(user.profileImageUrl);
+      if (imageId) {
+        cloudflareImagesService.deleteImage(imageId).catch((err) => {
+          console.warn(`[Account Delete] CF Images cleanup failed for ${imageId}:`, err);
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "تم حذف الحساب بنجاح",
     });
   } catch (error) {
     console.error("[Mobile API] members/account delete error:", error);
@@ -2832,17 +2909,22 @@ router.get("/trending", async (req: Request, res: Response) => {
 
     const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    // Trending = engagement velocity, not lifetime views.
-    // The previous `ORDER BY views DESC` over a 48h window favoured
-    // articles that were published earlier in the window (they had
-    // more hours to accumulate views), so a 38-hour-old article with
-    // 37k reads beat a 7-hour-old article with 17k reads — even though
-    // the latter is clearly hotter right now.
+    // Trending = weighted engagement velocity across all platforms
+    // (web + iOS). Previous formula was raw `views / hour-since-publish`,
+    // which made every article in the window look basically tied (most
+    // reads come in the first few hours) — so the rank ended up almost
+    // chronological by publishedAt and the user kept seeing
+    // "newest-first" instead of actual engagement.
     //
-    // New formula: views per hour since publish, with a 3-hour floor
-    // so just-published articles don't dominate after a handful of
-    // reads. Articles need at least ~3 hours of exposure before they
-    // compete on raw rate.
+    // New score per article:
+    //   raw views (iOS bumps articles.views via /v1/articles/:id/view)
+    //   + likes ×3      (reactions, last 48h, type='like')
+    //   + comments ×5   (approved only, last 48h)
+    //   + completions ×2 (reading_history rows w/ completionRate >= 70,
+    //                    last 48h — these are "actually finished" reads)
+    // Divided by hours-since-publish (floored at 3h) so a 3-hour-old
+    // article with strong engagement can beat a 36-hour-old one that
+    // peaked early.
     const topArticlesRaw = await db.execute(sql`
       SELECT a.*, c.name_ar AS category_name_ar, c.id AS category_id,
              u.first_name AS author_first_name, u.last_name AS author_last_name
@@ -2852,7 +2934,12 @@ router.get("/trending", async (req: Request, res: Response) => {
       WHERE a.status = 'published' AND a.hide_from_homepage = false
         AND a.published_at >= ${cutoff}
       ORDER BY
-        COALESCE(a.views, 0)::float
+        (
+          COALESCE(a.views, 0)
+          + (SELECT COUNT(*) FROM reactions WHERE article_id = a.id AND type = 'like' AND created_at >= NOW() - INTERVAL '48 hours') * 3
+          + (SELECT COUNT(*) FROM comments WHERE article_id = a.id AND status = 'approved' AND created_at >= NOW() - INTERVAL '48 hours') * 5
+          + (SELECT COUNT(*) FROM reading_history WHERE article_id = a.id AND completion_rate >= 70 AND read_at >= NOW() - INTERVAL '48 hours') * 2
+        )::float
         / GREATEST(EXTRACT(EPOCH FROM (NOW() - a.published_at)) / 3600.0, 3)
         DESC
       LIMIT 10
@@ -2927,15 +3014,26 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
-    // Find the user whose `first_name + ' ' + last_name` matches the byline.
-    // Falls back to a `LIKE` on either part so a partial name (e.g.
-    // "محمد العتيبي" vs DB "محمد بن سعد العتيبي") still resolves.
+    // Find the user whose `first_name + ' ' + last_name` matches the
+    // byline. The DB has duplicate user rows for some authors (e.g.
+    // "عبدالرحمن الجاسر" exists twice — one active writer, one dormant
+    // stub) and the previous `LIMIT 1` was picking arbitrarily, often
+    // landing on the empty duplicate which made the iOS author page
+    // look blank. We now rank candidates by published-article count
+    // descending, so the row tied to actual content always wins.
     const userRow = await db.execute(sql`
-      SELECT id, first_name, last_name, profile_image_url, bio,
-             job_title, department, created_at
-      FROM users
-      WHERE LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')))
+      SELECT u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
+             u.job_title, u.department, u.created_at,
+             COUNT(a.id) AS published_count
+      FROM users u
+      LEFT JOIN articles a
+        ON a.status = 'published'
+        AND (a.author_id = u.id OR a.reporter_id = u.id)
+      WHERE LOWER(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')))
             = LOWER(${rawName})
+      GROUP BY u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
+               u.job_title, u.department, u.created_at
+      ORDER BY published_count DESC, u.created_at ASC
       LIMIT 1
     `) as any;
     const author = (userRow?.rows || userRow || [])[0];
@@ -4353,6 +4451,291 @@ router.get("/insights/today", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] /insights/today error:", error);
     res.status(500).json({ success: false, message: "تعذر جلب البيانات" });
+  }
+});
+
+// ==========================================
+// Unified Behavior Tracking (iOS → web parity)
+// POST /api/v1/behavior/track
+//
+// One endpoint for every reader-side signal the iOS app can produce.
+// Mirrors the web's reading_history + reactions writes so the same
+// `/api/v1/insights/today` aggregator (and the trending opinion query)
+// see iOS and web identically.
+//
+// Event types:
+//   - `view`     fired on article open. Bumps articles.views (matches
+//                the existing /articles/:id/view boost) and upserts a
+//                reading_history seed row (readDuration = 0).
+//   - `read`    fired on close / background / scroll-end. Updates the
+//                same reading_history row with dwell + scroll +
+//                completionRate. Pure UPDATE — does NOT bump views.
+//   - `like`    inserts into reactions (idempotent on user+article).
+//   - `unlike`  deletes the reaction row.
+//
+// All writes are scoped to the Bearer-token member. Anonymous iOS
+// users (no token) get a 401 — they should still hit
+// /articles/:id/view directly, which already works without auth.
+// ==========================================
+router.post("/behavior/track", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const { z } = await import("zod");
+    const schema = z.object({
+      articleId: z.string().min(1),
+      eventType: z.enum(["view", "read", "like", "unlike"]),
+      dwellSeconds: z.number().int().min(0).max(60 * 60 * 6).optional(),
+      scrollDepth: z.number().int().min(0).max(100).optional(),
+      completionRate: z.number().int().min(0).max(100).optional(),
+      platform: z.enum(["ios", "android", "web"]).default("ios"),
+    });
+
+    const data = schema.parse(req.body);
+
+    const [article] = await db
+      .select({ id: articles.id })
+      .from(articles)
+      .where(eq(articles.id, data.articleId))
+      .limit(1);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
+
+    if (data.eventType === "view") {
+      // Bump global counter (random 5-10 boost — same shape as
+      // /articles/:id/view so trending stays internally consistent).
+      const boostOptions = [5, 6, 7, 8, 9, 10];
+      const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
+      await db.update(articles)
+        .set({ views: sql`${articles.views} + ${randomBoost}` })
+        .where(eq(articles.id, data.articleId));
+
+      // Seed a reading_history row so insights/today and trending can
+      // count this open. We do NOT upsert here — every open is a
+      // separate session row (matches how the web's
+      // /api/me/reading-history records dedup per timestamp).
+      await db.insert(readingHistory).values({
+        userId: session.userId,
+        articleId: data.articleId,
+        readDuration: 0,
+        scrollDepth: 0,
+        completionRate: 0,
+        platform: data.platform,
+        deviceType: "mobile",
+      });
+
+      return res.json({ success: true });
+    }
+
+    if (data.eventType === "read") {
+      // Update the most recent reading_history row for this user+article.
+      // If none exists (e.g. iOS missed firing `view`), insert a fresh
+      // row so the stats don't drop the session.
+      const [existing] = await db
+        .select({ id: readingHistory.id })
+        .from(readingHistory)
+        .where(and(
+          eq(readingHistory.userId, session.userId),
+          eq(readingHistory.articleId, data.articleId),
+        ))
+        .orderBy(desc(readingHistory.readAt))
+        .limit(1);
+
+      const engagementScore = computeEngagementScore({
+        dwellSeconds: data.dwellSeconds ?? 0,
+        scrollDepth: data.scrollDepth ?? 0,
+        completionRate: data.completionRate ?? 0,
+      });
+
+      if (existing) {
+        await db.update(readingHistory)
+          .set({
+            readDuration: data.dwellSeconds ?? 0,
+            scrollDepth: data.scrollDepth ?? 0,
+            completionRate: data.completionRate ?? 0,
+            engagementScore,
+            platform: data.platform,
+            deviceType: "mobile",
+          })
+          .where(eq(readingHistory.id, existing.id));
+      } else {
+        await db.insert(readingHistory).values({
+          userId: session.userId,
+          articleId: data.articleId,
+          readDuration: data.dwellSeconds ?? 0,
+          scrollDepth: data.scrollDepth ?? 0,
+          completionRate: data.completionRate ?? 0,
+          engagementScore,
+          platform: data.platform,
+          deviceType: "mobile",
+        });
+      }
+
+      return res.json({ success: true });
+    }
+
+    if (data.eventType === "like" || data.eventType === "unlike") {
+      const [existing] = await db
+        .select({ id: reactions.id })
+        .from(reactions)
+        .where(and(
+          eq(reactions.userId, session.userId),
+          eq(reactions.articleId, data.articleId),
+          eq(reactions.type, "like"),
+        ))
+        .limit(1);
+
+      if (data.eventType === "like" && !existing) {
+        await db.insert(reactions).values({
+          userId: session.userId,
+          articleId: data.articleId,
+          type: "like",
+        });
+      } else if (data.eventType === "unlike" && existing) {
+        await db.delete(reactions).where(eq(reactions.id, existing.id));
+      }
+
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reactions)
+        .where(and(
+          eq(reactions.articleId, data.articleId),
+          eq(reactions.type, "like"),
+        ));
+
+      return res.json({
+        success: true,
+        liked: data.eventType === "like",
+        likesCount: Number(count) || 0,
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    if (error?.name === "ZodError") {
+      return res.status(400).json({ success: false, message: "بيانات غير صحيحة", issues: error.issues });
+    }
+    console.error("[Mobile API] /behavior/track error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل الحدث" });
+  }
+});
+
+// Weighted score (0..1) used to power reading_history.engagementScore.
+// Dwell saturates at 5 minutes (heuristic — past that signal is noise
+// from leaving the screen open). Scroll + completion contribute the
+// other two thirds. Same shape as the web `eventTrackingService.ts`
+// boost rules so the two pipelines stay comparable.
+function computeEngagementScore(input: {
+  dwellSeconds: number;
+  scrollDepth: number;
+  completionRate: number;
+}): number {
+  const dwellNormalized = Math.min(1, input.dwellSeconds / 300);
+  const scrollNormalized = Math.min(1, Math.max(0, input.scrollDepth) / 100);
+  const completionNormalized = Math.min(1, Math.max(0, input.completionRate) / 100);
+  const raw = dwellNormalized * 0.3 + scrollNormalized * 0.3 + completionNormalized * 0.4;
+  return Math.round(raw * 1000) / 1000;
+}
+
+// ==========================================
+// Like / Unlike an article from iOS
+// POST /api/v1/articles/:id/react        — toggles like
+// GET  /api/v1/articles/:id/react        — { liked, likesCount }
+//
+// Thin convenience wrappers around the reactions table. The same
+// state can be set/read via /behavior/track but the dedicated routes
+// keep ArticleDetailView's like-button logic tidy.
+// ==========================================
+router.get("/articles/:id/react", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    const articleId = req.params.id;
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reactions)
+      .where(and(
+        eq(reactions.articleId, articleId),
+        eq(reactions.type, "like"),
+      ));
+
+    let liked = false;
+    if (session) {
+      const [own] = await db
+        .select({ id: reactions.id })
+        .from(reactions)
+        .where(and(
+          eq(reactions.userId, session.userId),
+          eq(reactions.articleId, articleId),
+          eq(reactions.type, "like"),
+        ))
+        .limit(1);
+      liked = !!own;
+    }
+
+    res.json({ liked, likesCount: Number(count) || 0 });
+  } catch (error) {
+    console.error("[Mobile API] GET /articles/:id/react error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الحالة" });
+  }
+});
+
+router.post("/articles/:id/react", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const articleId = req.params.id;
+
+    const [article] = await db
+      .select({ id: articles.id })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
+
+    const [existing] = await db
+      .select({ id: reactions.id })
+      .from(reactions)
+      .where(and(
+        eq(reactions.userId, session.userId),
+        eq(reactions.articleId, articleId),
+        eq(reactions.type, "like"),
+      ))
+      .limit(1);
+
+    let liked: boolean;
+    if (existing) {
+      await db.delete(reactions).where(eq(reactions.id, existing.id));
+      liked = false;
+    } else {
+      await db.insert(reactions).values({
+        userId: session.userId,
+        articleId,
+        type: "like",
+      });
+      liked = true;
+    }
+
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reactions)
+      .where(and(
+        eq(reactions.articleId, articleId),
+        eq(reactions.type, "like"),
+      ));
+
+    res.json({ liked, likesCount: Number(count) || 0 });
+  } catch (error) {
+    console.error("[Mobile API] POST /articles/:id/react error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل التفاعل" });
   }
 });
 

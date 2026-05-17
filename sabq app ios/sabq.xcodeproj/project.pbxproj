@@ -507,7 +507,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -517,7 +517,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "سبق";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية";
+				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -557,7 +559,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -567,7 +569,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "سبق";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.magazines-and-newspapers";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية";
+				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -604,7 +608,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -630,7 +634,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -655,7 +659,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -680,7 +684,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -707,7 +711,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";
@@ -739,7 +743,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051705;
+				CURRENT_PROJECT_VERSION = 2026051706;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";

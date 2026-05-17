@@ -355,8 +355,12 @@ struct SettingsView: View {
 
                 // Editorial notification center for writers/reporters/admins
                 // — shows scheduled / published / rejected / needs_revision
-                // events on their submissions.
-                NavigationLink(destination: EditorialNotificationsView()) {
+                // events on their submissions. Uses the value-based form
+                // so this push is recorded in ContentView's
+                // `navigationPath` — without that, the floating tab bar
+                // couldn't pop the screen (selectedTab changed but the
+                // pushed view stayed on the stack).
+                NavigationLink(value: EditorialNotificationsRoute()) {
                     submissionCardContent(
                         title: "إشعاراتي التحريرية",
                         subtitle: "متابعة جدولة ونشر ومراجعة محتواك",
@@ -685,7 +689,7 @@ struct SettingsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            Text("سبق هي صحيفة إلكترونية سعودية تهدف إلى تقديم أحدث الأخبار والمعلومات الموثوقة باللغة العربية.")
+            Text("سبق — صحيفة إلكترونية سعودية رائدة منذ أكثر من عقدين. أسرع تغطية إخبارية موثوقة على مدار الساعة، بأقلام نخبة من المحررين والمراسلين في قلب الحدث.")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.leading)
@@ -694,7 +698,7 @@ struct SettingsView: View {
             Link(destination: URL(string: "https://sabq.org")!) {
                 settingsRow(
                     title: "الموقع الإلكتروني",
-                    subtitle: "sabq.org",
+                    subtitle: "sabq.org — اقرأ أكثر على موقعنا",
                     icon: "globe",
                     tint: SabqTheme.primaryEnd
                 )
@@ -704,7 +708,7 @@ struct SettingsView: View {
             Button { showContact = true } label: {
                 settingsRow(
                     title: "تواصل معنا",
-                    subtitle: "أرسل رسالة أو استفسار",
+                    subtitle: "راسلنا — آراؤك تهمنا، نرد في أقرب وقت",
                     icon: "envelope.fill",
                     tint: SabqTheme.teal
                 )
@@ -714,7 +718,7 @@ struct SettingsView: View {
             NavigationLink(destination: PrivacyPolicyView()) {
                 settingsRow(
                     title: "سياسة الخصوصية",
-                    subtitle: "كيف نحمي بياناتك",
+                    subtitle: "خصوصيتك أولاً — كيف نحمي بياناتك الشخصية",
                     icon: "shield.lefthalf.filled",
                     tint: SabqTheme.leaf
                 )
@@ -724,7 +728,7 @@ struct SettingsView: View {
             NavigationLink(destination: TermsOfUseView()) {
                 settingsRow(
                     title: "الشروط والأحكام",
-                    subtitle: "شروط استخدام التطبيق",
+                    subtitle: "شروط الاستخدام — اعرف حقوقك وحقوقنا",
                     icon: "doc.text.fill",
                     tint: SabqTheme.sky
                 )
@@ -734,7 +738,7 @@ struct SettingsView: View {
             Link(destination: URL(string: "https://x.com/sabqorg")!) {
                 settingsRow(
                     title: "إكس (تويتر)",
-                    subtitle: "@sabqorg",
+                    subtitle: "تابعنا على إكس — @sabqorg آخر الأخبار لحظة بلحظة",
                     icon: "at",
                     tint: SabqTheme.sky
                 )
@@ -1984,6 +1988,7 @@ struct EditProfileSheet: View {
     @State private var gender = ""
     @State private var saved = false
     @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showAvatarPicker = false
     @State private var selectedImage: UIImage?
     @State private var showUploadNotice = false
 
@@ -2147,7 +2152,17 @@ struct EditProfileSheet: View {
                     avatarPlaceholder
                 }
 
-                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Button {
+                    Task {
+                        // App Store review expects the platform's
+                        // photo-library permission alert to appear at
+                        // the moment the user invokes a photo flow —
+                        // PhotosUI.PhotosPicker alone bypasses it
+                        // because it runs out-of-process.
+                        await SabqPhotoPermission.ensureRequested()
+                        showAvatarPicker = true
+                    }
+                } label: {
                     Circle()
                         .fill(SabqTheme.primaryEnd)
                         .frame(width: 30, height: 30)
@@ -2159,6 +2174,7 @@ struct EditProfileSheet: View {
                         .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
                 }
                 .buttonStyle(.plain)
+                .photosPicker(isPresented: $showAvatarPicker, selection: $selectedPhoto, matching: .images)
             }
             .onChange(of: selectedPhoto) { _, newValue in
                 Task {
@@ -2443,6 +2459,8 @@ struct ChangePasswordSheet: View {
 
 struct DeleteAccountSheet: View {
     @Environment(AuthStore.self) private var authStore
+    @Environment(BookmarksStore.self) private var bookmarksStore
+    @Environment(FollowedKeywordsStore.self) private var followedKeywords
     @Environment(\.dismiss) private var dismiss
     @State private var password = ""
     @State private var confirmText = ""
@@ -2559,6 +2577,17 @@ struct DeleteAccountSheet: View {
                             Task {
                                 await authStore.deleteAccount(password: password)
                                 if authStore.isLoggedIn == false && authStore.errorMessage == nil {
+                                    // Account is gone on the server — make sure
+                                    // no shred of the user's data lingers on
+                                    // this device either. Bookmarks, followed
+                                    // keywords, recent searches and the image
+                                    // cache all get wiped so the next user on
+                                    // this device sees a clean slate.
+                                    bookmarksStore.clear()
+                                    followedKeywords.clear()
+                                    UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
+                                    ImageCache.clear()
+                                    URLCache.shared.removeAllCachedResponses()
                                     dismiss()
                                 }
                             }

@@ -1682,6 +1682,18 @@ nonisolated struct APITodayInsights: Decodable {
     }
 }
 
+// MARK: - Article reactions (like toggle)
+
+/// Mirrors `POST /api/v1/articles/:id/react` and
+/// `GET /api/v1/articles/:id/react`. Backend toggles a row in the
+/// reactions table for the current member; both verbs return the
+/// post-mutation count so the Like button can update without a
+/// second fetch.
+nonisolated struct APIArticleReactionResponse: Decodable {
+    let liked: Bool
+    let likesCount: Int
+}
+
 // MARK: - Editorial notifications (push history + preferences)
 
 /// Single notification entry returned by GET /api/v1/notifications.
