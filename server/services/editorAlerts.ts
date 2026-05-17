@@ -6,7 +6,7 @@
 import { log } from "../utils/logger";
 
 import { sendEmailNotification } from "./email";
-import { NEWSPAPER_REPORTER_ID } from "./editorialNotifications";
+import { NEWSPAPER_REPORTER_ID, resolveArticleStakeholderIds } from "./editorialNotifications";
 import { sendWhatsAppMessage } from "./whatsapp";
 import { sendArticlePublishedEmail, sendArticleRejectedEmail } from "./employeeNotifications";
 import { db } from "../db";
@@ -1577,7 +1577,7 @@ export async function sendReporterRevisionEmail(
       [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") ||
       reporter.email.split("@")[0];
     const frontendUrl = getFrontendUrl();
-    const dashboardUrl = `${frontendUrl}/dashboard/articles/${articleId}/edit`;
+    const dashboardUrl = `${frontendUrl}/dashboard/reporter/articles`;
 
     const { html, text } = generateReporterRevisionEmailTemplate({
       articleTitle: article.title,
@@ -2497,12 +2497,20 @@ export async function sendOpinionAuthorRevisionEmail(
         id: articles.id,
         title: articles.title,
         authorId: articles.authorId,
+        reporterId: articles.reporterId,
+        submitterId: articles.submitterId,
       })
       .from(articles)
       .where(eq(articles.id, articleId))
       .limit(1);
 
-    if (!article?.authorId) {
+    if (!article) {
+      return { sent: false, error: "Article not found" };
+    }
+
+    const stakeholderIds = resolveArticleStakeholderIds(article);
+    const recipientId = stakeholderIds[0] ?? article.authorId;
+    if (!recipientId) {
       return { sent: false, error: "Article or author not found" };
     }
 
@@ -2514,7 +2522,7 @@ export async function sendOpinionAuthorRevisionEmail(
         notifyOnPublish: users.notifyOnPublish,
       })
       .from(users)
-      .where(eq(users.id, article.authorId))
+      .where(eq(users.id, recipientId))
       .limit(1);
 
     if (!author?.email || author.notifyOnPublish === false) {
@@ -2525,7 +2533,7 @@ export async function sendOpinionAuthorRevisionEmail(
       [author.firstName, author.lastName].filter(Boolean).join(" ") ||
       author.email.split("@")[0];
     const frontendUrl = getFrontendUrl();
-    const dashboardUrl = `${frontendUrl}/dashboard/articles/${articleId}/edit`;
+    const dashboardUrl = `${frontendUrl}/dashboard/opinion-author`;
 
     const { html, text } = generateOpinionAuthorRevisionEmailTemplate({
       articleTitle: article.title,

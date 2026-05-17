@@ -30,6 +30,7 @@ interface OpinionAuthorAnalytics {
   publishedArticles: number;
   draftArticles: number;
   pendingArticles: number;
+  needsChangesArticles?: number;
   rejectedArticles: number;
   totalViews: number;
   totalLikes: number;
@@ -64,9 +65,19 @@ export default function OpinionAuthorDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const { data: analytics, isLoading } = useQuery<OpinionAuthorAnalytics>({
+  const {
+    data: analytics,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery<OpinionAuthorAnalytics>({
     queryKey: ["/api/opinion-author/analytics"],
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
+
+  const needsChangesList =
+    analytics?.articles?.filter((a) => a.reviewStatus === "needs_changes") ?? [];
 
   const { data: ticketsUnread } = useQuery<{ unreadCount: number }>({
     queryKey: ["/api/opinion-tickets/unread-count"],
@@ -146,7 +157,14 @@ export default function OpinionAuthorDashboard() {
           </div>
         </div>
 
-        {isLoading ? (
+        {isError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+            <p className="text-sm text-destructive">تعذّر تحميل مقالاتك. جرّب تحديث الصفحة.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <Card key={i}>
@@ -159,6 +177,54 @@ export default function OpinionAuthorDashboard() {
           </div>
         ) : (
           <>
+            {needsChangesList.length > 0 && (
+              <div className="rounded-xl border-2 border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40 p-4 md:p-5 space-y-3">
+                <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100 font-semibold">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  مقالات تحتاج تعديلك ({needsChangesList.length})
+                </div>
+                <p className="text-sm text-amber-800/90 dark:text-amber-200/90">
+                  يؤسفنا إبلاغكم بوجود بعض الملاحظات — عدّل المقال ثم اضغط «إرسال» ليعود إلى مسودات التحرير.
+                </p>
+                <ul className="space-y-2">
+                  {needsChangesList.map((article) => (
+                    <li
+                      key={article.id}
+                      className="rounded-lg border border-amber-200/80 bg-white/60 dark:bg-background/40 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                    >
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="font-medium line-clamp-2">{article.title}</p>
+                        {article.reviewNotes && (
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                            <span className="font-medium text-foreground">الملاحظات: </span>
+                            {article.reviewNotes}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditArticle(article.id)}
+                        >
+                          <Edit className="h-4 w-4 ml-1" />
+                          تعديل
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={submitReviewMutation.isPending}
+                          onClick={() => submitReviewMutation.mutate(article.id)}
+                        >
+                          <Send className="h-4 w-4 ml-1" />
+                          إرسال
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card data-testid="card-total-articles">
                 <CardContent className="p-4">

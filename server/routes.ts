@@ -45,7 +45,7 @@ import { summarizeText, generateSocialPost, suggestImageQuery, translateContent,
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
 import { generateNewsletterSubtitle } from "./services/smartCategoryClassifier";
-import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasPermission, invalidateUserPermissionCache } from "./rbac";
+import { requireAuth, requirePermission, requireAnyPermission, requireRole, logActivity, getUserPermissions, userHasAnyRole, userHasPermission, invalidateUserPermissionCache } from "./rbac";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
@@ -10332,9 +10332,12 @@ Respond in valid JSON format only:
   app.get("/api/reporter/analytics", requireAuth, async (req: any, res) => {
     try {
       const user = req.user;
-      
-      // التحقق من أن المستخدم مراسل
-      if (user.role !== 'reporter') {
+      if (!user?.id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const isReporter = await userHasAnyRole(user.id, ["reporter"]);
+      if (!isReporter) {
         return res.status(403).json({ error: "هذا الـ endpoint خاص بالمراسلين فقط" });
       }
       
@@ -10346,6 +10349,7 @@ Respond in valid JSON format only:
           or(
             eq(articles.authorId, user.id),
             eq(articles.reporterId, user.id),
+            eq(articles.submitterId, user.id),
           ),
         );
       
@@ -10407,17 +10411,28 @@ Respond in valid JSON format only:
   app.get("/api/opinion-author/analytics", requireAuth, async (req: any, res) => {
     try {
       const user = req.user;
-      
-      // التحقق من أن المستخدم كاتب رأي
-      if (user.role !== 'opinion_author') {
+      if (!user?.id) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const isOpinionAuthor = await userHasAnyRole(user.id, ["opinion_author"]);
+      if (!isOpinionAuthor) {
         return res.status(403).json({ error: "هذا الـ endpoint خاص بكتّاب الرأي فقط" });
       }
       
-      // جلب مقالات كاتب الرأي
+      // مقالات الرأي المرتبطة بالكاتب (مؤلف أو مُرسِل)
       const myArticles = await db
         .select()
         .from(articles)
-        .where(eq(articles.authorId, user.id));
+        .where(
+          and(
+            eq(articles.articleType, "opinion"),
+            or(
+              eq(articles.authorId, user.id),
+              eq(articles.submitterId, user.id),
+            ),
+          ),
+        );
       
       const articleIds = myArticles.map(a => a.id);
       
@@ -10438,7 +10453,12 @@ Respond in valid JSON format only:
       // حساب الإحصائيات بناءً على الحالة
       const publishedArticles = myArticles.filter(a => a.status === 'published').length;
       const draftArticles = myArticles.filter(a => a.status === 'draft').length;
-      const pendingArticles = myArticles.filter(a => a.status === 'pending').length;
+      const pendingArticles = myArticles.filter(
+        (a) => a.reviewStatus === "pending_review" || a.status === "pending",
+      ).length;
+      const needsChangesArticles = myArticles.filter(
+        (a) => a.reviewStatus === "needs_changes",
+      ).length;
       const rejectedArticles = myArticles.filter(a => a.status === 'rejected').length;
       const totalViews = myArticles.reduce((sum, a) => sum + (a.views || 0), 0);
       
@@ -10456,17 +10476,26 @@ Respond in valid JSON format only:
         .select({ count: sql<number>`count(*)::int` })
         .from(comments)
         .where(inArray(comments.articleId, articleIds));
+
+      const sortedArticles = [...myArticles].sort((a, b) => {
+        const aNeeds = a.reviewStatus === "needs_changes" ? 0 : 1;
+        const bNeeds = b.reviewStatus === "needs_changes" ? 0 : 1;
+        if (aNeeds !== bNeeds) return aNeeds - bNeeds;
+        return new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime();
+      });
       
       res.json({
         totalArticles: myArticles.length,
         publishedArticles,
         draftArticles,
         pendingArticles,
+        needsChangesArticles,
         rejectedArticles,
         totalViews,
         totalLikes: likesResult[0]?.count || 0,
         totalComments: commentsResult[0]?.count || 0,
-        articles: myArticles.map(a => ({
+        articles: sortedArticles.map(a => ({
           id: a.id,
           title: a.title,
           status: a.status,
@@ -10475,6 +10504,7 @@ Respond in valid JSON format only:
           views: a.views,
           publishedAt: a.publishedAt,
           createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
         })),
       });
     } catch (error) {
@@ -10504,7 +10534,9 @@ Respond in valid JSON format only:
       }
 
       const isOwner =
-        existingArticle.authorId === userId || existingArticle.reporterId === userId;
+        existingArticle.authorId === userId ||
+        existingArticle.reporterId === userId ||
+        existingArticle.submitterId === userId;
       if (!isOwner) {
         return res.status(403).json({ message: "ليس لديك صلاحية إرسال هذا المحتوى" });
       }

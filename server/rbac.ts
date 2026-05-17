@@ -60,6 +60,34 @@ export async function userHasPermission(
 // every consumer that does `.includes("articles.publish")` etc. gets a true
 // match without needing wildcard awareness. This matches the behavior of
 // userHasPermission() which already short-circuits superusers.
+/** All role names for a user (RBAC user_roles, falling back to users.role). */
+export async function getUserRoleNames(userId: string): Promise<string[]> {
+  const rbacRoles = await db
+    .select({ roleName: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(userRoles.userId, userId));
+
+  const names = rbacRoles.map((r) => r.roleName);
+  if (names.length > 0) return names;
+
+  const [user] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return user?.role ? [user.role] : [];
+}
+
+export async function userHasAnyRole(
+  userId: string,
+  roleNames: string[],
+): Promise<boolean> {
+  const userRolesList = await getUserRoleNames(userId);
+  return roleNames.some((r) => userRolesList.includes(r));
+}
+
 export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
     // Superuser check — matches userHasPermission's logic.
