@@ -4543,6 +4543,12 @@ router.post("/notifications/read-all", async (req: Request, res: Response) => {
 // DELETE /api/v1/notifications/:id — remove a single editorial notification.
 // Powers the swipe-to-delete row action in the iOS notifications screen.
 // Scoped to the session user so one writer can't delete another's entries.
+//
+// Uses raw SQL via `db.execute(sql\`...\`)` to mirror the read-all
+// handler above. The first version used the Drizzle query builder and
+// the rows weren't actually being removed in production — switching to
+// the same parameterised SQL pattern as `read-all` makes the DELETE
+// reliable.
 router.delete("/notifications/:id", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
@@ -4553,14 +4559,12 @@ router.delete("/notifications/:id", async (req: Request, res: Response) => {
     if (!id) {
       return res.status(400).json({ success: false, message: "معرّف الإشعار مطلوب" });
     }
-    const { editorialNotifications } = await import("@shared/schema");
-    await db
-      .delete(editorialNotifications)
-      .where(and(
-        eq(editorialNotifications.id, id),
-        eq(editorialNotifications.userId, session.userId),
-      ));
-    res.json({ success: true });
+    const result = await db.execute(sql`
+      DELETE FROM editorial_notifications
+      WHERE id = ${id} AND user_id = ${session.userId}
+    `);
+    const affected = (result as any)?.rowCount ?? 0;
+    res.json({ success: true, deleted: affected });
   } catch (error) {
     console.error("[Mobile API] DELETE /notifications/:id error:", error);
     res.status(500).json({ success: false, message: "تعذر حذف الإشعار" });
@@ -4576,11 +4580,12 @@ router.delete("/notifications", async (req: Request, res: Response) => {
     if (!session) {
       return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
     }
-    const { editorialNotifications } = await import("@shared/schema");
-    await db
-      .delete(editorialNotifications)
-      .where(eq(editorialNotifications.userId, session.userId));
-    res.json({ success: true });
+    const result = await db.execute(sql`
+      DELETE FROM editorial_notifications
+      WHERE user_id = ${session.userId}
+    `);
+    const affected = (result as any)?.rowCount ?? 0;
+    res.json({ success: true, deleted: affected });
   } catch (error) {
     console.error("[Mobile API] DELETE /notifications error:", error);
     res.status(500).json({ success: false, message: "تعذر مسح الإشعارات" });

@@ -102,7 +102,17 @@ struct EditorialNotificationsView: View {
                             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
-                                    Task { await deleteNotification(item) }
+                                    // The optimistic remove MUST happen
+                                    // synchronously inside this action so
+                                    // SwiftUI's swipe animation has an empty
+                                    // slot to settle into. With the previous
+                                    // `Task { await deleteNotification(item) }`
+                                    // wrapper, the items array wasn't mutated
+                                    // until the API call returned — by then
+                                    // SwiftUI had already snapped the row
+                                    // back into place. User-visible bug: every
+                                    // delete appeared to "come back".
+                                    deleteNotification(item)
                                 } label: {
                                     Label("حذف", systemImage: "trash.fill")
                                 }
@@ -153,21 +163,25 @@ struct EditorialNotificationsView: View {
     }
 
     @MainActor
-    private func deleteNotification(_ item: APIEditorialNotification) async {
-        // Optimistic remove — drop from UI immediately, then send the
-        // request. If it fails we restore the row and the next manual
-        // refresh reconciles with the server.
+    private func deleteNotification(_ item: APIEditorialNotification) {
+        // Synchronously drop the row from UI state so the List's swipe
+        // animation can complete cleanly. The network call is fire-and-
+        // forget; on failure we restore the row at the original index.
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         let removed = items.remove(at: index)
         if removed.readAt == nil {
             unreadCount = max(0, unreadCount - 1)
             NotificationsStore.shared.unreadCount = max(0, NotificationsStore.shared.unreadCount - 1)
         }
-        do {
-            try await APIClient.shared.deleteEditorialNotification(id: item.id)
-        } catch {
-            items.insert(removed, at: index)
-            if removed.readAt == nil { unreadCount += 1 }
+        Task {
+            do {
+                try await APIClient.shared.deleteEditorialNotification(id: item.id)
+            } catch {
+                await MainActor.run {
+                    items.insert(removed, at: index)
+                    if removed.readAt == nil { unreadCount += 1 }
+                }
+            }
         }
     }
 
