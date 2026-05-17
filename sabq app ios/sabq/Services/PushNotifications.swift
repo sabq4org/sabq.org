@@ -19,6 +19,7 @@ enum EditorialPushEvent: String {
 /// open the feedback screen).
 enum NotificationDeepLink: Hashable {
     case article(slug: String)
+    case opinion(slug: String)
     case draft(id: String)
     case feedback(id: String)
 }
@@ -119,15 +120,17 @@ final class NotificationsStore {
     }
 
     private func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
-        // sabq://article/<slug>
-        // sabq://draft/<id>
-        // sabq://feedback/<id>
+        // sabq://article/<slug>   — news article detail
+        // sabq://opinion/<slug>   — opinion article detail
+        // sabq://draft/<id>       — editorial notifications (draft surface)
+        // sabq://feedback/<id>    — editorial notifications (feedback surface)
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
         let value = path.first ?? ""
         switch host {
         case "article" where !value.isEmpty: return .article(slug: value)
+        case "opinion" where !value.isEmpty: return .opinion(slug: value)
         case "draft" where !value.isEmpty:   return .draft(id: value)
         case "feedback" where !value.isEmpty: return .feedback(id: value)
         default: return nil

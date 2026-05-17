@@ -176,13 +176,23 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
 }
 
 function buildDeepLink(args: NotifyEditorialArgs): string {
-  // sabq://article/<slug>  → public article view (only for published)
+  // sabq://article/<slug>  → news article detail
+  // sabq://opinion/<slug>  → opinion article detail (separate iOS view)
   // sabq://draft/<id>      → in-app draft preview (scheduled / needs_revision)
   // sabq://feedback/<id>   → rejection screen with reason + resubmit button
+  //
+  // Opinion articles MUST use the `opinion` host: ArticleDetailView's
+  // loader bails on opinion content (`isOpinionContent` guard), so a
+  // `sabq://article/<opinion-slug>` deep link used to leave the user
+  // stuck on a skeleton-loading screen forever. The split mirrors how
+  // the rest of the iOS app routes opinions vs news.
   const id = args.article.id;
   const slug = args.article.slug || args.article.englishSlug || "";
+  const isOpinion = (args.article.articleType || "").toLowerCase() === "opinion";
   switch (args.event) {
-    case "published":      return slug ? `sabq://article/${slug}` : `sabq://draft/${id}`;
+    case "published":
+      if (!slug) return `sabq://draft/${id}`;
+      return isOpinion ? `sabq://opinion/${slug}` : `sabq://article/${slug}`;
     case "scheduled":      return `sabq://draft/${id}`;
     case "needs_revision": return `sabq://draft/${id}`;
     case "rejected":       return `sabq://feedback/${id}`;

@@ -86,6 +86,13 @@ struct ContentView: View {
                     // full payload from the slug via NewsService.
                     ArticleDetailView(article: Article.placeholder(slug: route.slug))
                 }
+                .navigationDestination(for: OpinionSlugRoute.self) { route in
+                    // Same pattern as ArticleSlugRoute but for opinion
+                    // articles. OpinionDetailView's `.task { loadOpinion() }`
+                    // hydrates the real payload (title, body, author, etc.)
+                    // from `/api/opinion/<slug>` on first appear.
+                    OpinionDetailView(opinion: OpinionArticle.placeholder(slug: route.slug))
+                }
                 .navigationDestination(for: DraftDeepLinkRoute.self) { route in
                     // For now, route to the editorial notifications screen
                     // which is the closest "manage your draft" surface
@@ -147,6 +154,8 @@ struct ContentView: View {
         switch link {
         case .article(let slug):
             navigationPath.append(ArticleSlugRoute(slug: slug))
+        case .opinion(let slug):
+            navigationPath.append(OpinionSlugRoute(slug: slug))
         case .draft(let id):
             navigationPath.append(EditorialNotificationsRoute())
             _ = id // reserved for future per-draft preview
@@ -167,6 +176,13 @@ struct EditorialNotificationsRoute: Hashable {}
 /// only the slug is available. ArticleDetailView's existing loader
 /// hydrates the full payload from the slug.
 struct ArticleSlugRoute: Hashable {
+    let slug: String
+}
+
+/// Opinion equivalent of `ArticleSlugRoute`. Backend `sabq://opinion/<slug>`
+/// deep links land here so the user gets the proper OpinionDetailView
+/// instead of the article view (which refuses opinion payloads).
+struct OpinionSlugRoute: Hashable {
     let slug: String
 }
 

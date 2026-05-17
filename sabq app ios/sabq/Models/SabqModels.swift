@@ -542,6 +542,28 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     let slug: String?
     let articleURL: String?
 
+    /// Minimal opinion shell used by deep-link routes that only carry a
+    /// slug. OpinionDetailView re-fetches the full payload via
+    /// `loadOpinion()` on appear, so all the fields below are
+    /// placeholders that get overwritten as soon as the network call
+    /// resolves.
+    static func placeholder(slug: String) -> OpinionArticle {
+        OpinionArticle(
+            id: slug,
+            title: "",
+            excerpt: "",
+            body: "",
+            authorName: "",
+            authorImageURL: nil,
+            authorGender: nil,
+            publishDate: Date(),
+            tags: [],
+            imageURL: nil,
+            slug: slug,
+            articleURL: nil
+        )
+    }
+
     var readingMinutes: Int {
         max(1, body.count / 800)
     }

@@ -43,6 +43,13 @@ struct ArticleDetailView: View {
     /// no lightbox is showing. Mirrors the `selectedIndex` state on the web
     /// `WeeklyPhotosDisplay` component.
     @State private var weeklyPhotoIndex: Int? = nil
+    /// Set when the slug we tried to load turns out to be an opinion
+    /// (e.g. an old `sabq://article/<opinion-slug>` deep link emitted
+    /// before the backend started splitting article vs opinion deep
+    /// links). When non-nil, the body redirects in-place to
+    /// OpinionDetailView so the user never sees the empty article
+    /// skeleton.
+    @State private var redirectToOpinion: OpinionArticle? = nil
 
     /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
     /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
@@ -61,6 +68,17 @@ struct ArticleDetailView: View {
     }
 
     var body: some View {
+        if let opinion = redirectToOpinion {
+            // Slug landed here as an article but the API returned opinion
+            // content — render OpinionDetailView in place so old deep links
+            // still work after the article/opinion split.
+            OpinionDetailView(opinion: opinion)
+        } else {
+            articleDetailContent
+        }
+    }
+
+    private var articleDetailContent: some View {
         GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -282,6 +300,16 @@ struct ArticleDetailView: View {
                 fullArticle = bundle.article
                 relatedArticles = bundle.related
                 updateResolvedTags(from: bundle.article)
+            } else {
+                // No news bundle for this slug. Old `sabq://article/<slug>`
+                // deep links emitted before the article/opinion split point
+                // here for opinion slugs too — try the opinion endpoint and
+                // redirect in-place so the user never sees an empty article
+                // skeleton.
+                if let opinion = await NewsService.fetchOpinionDetail(slug: slug) {
+                    redirectToOpinion = opinion
+                    return
+                }
             }
 
             if relatedArticles.isEmpty {
