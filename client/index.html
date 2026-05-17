@@ -240,21 +240,30 @@
       })();
     </script>
     
-    <!-- Google Analytics GA4 - Deferred for performance -->
+    <!-- Google Analytics GA4 -->
+    <!--
+      Previously the gtag.js library load was wrapped in a 5-second
+      setTimeout for Core Web Vitals optimisation. The `gtag()` calls
+      below queued into dataLayer correctly, but nothing was actually
+      transmitted to Google until the library finally loaded — so every
+      visitor who bounced inside the first 5 seconds (a huge share of
+      news traffic) was never counted.
+
+      Loading the library immediately as `async` keeps the document
+      parse non-blocking (modern browsers don't block on `async`), while
+      ensuring the very first pageview from a fast-bounce visitor
+      actually fires. SPA route changes are tracked separately from
+      App.tsx — `send_page_view: false` here so we don't double-count.
+    -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-EEB5593GY7" data-cfasync="false"></script>
     <script data-cfasync="false">
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'G-EEB5593GY7', {
-        send_page_view: true,
+        send_page_view: false,
         cookie_flags: 'SameSite=None;Secure'
       });
-      setTimeout(function() {
-        var s = document.createElement('script');
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-EEB5593GY7';
-        s.async = true;
-        document.head.appendChild(s);
-      }, 5000);
     </script>
     
     <!-- Initialize DMS Signal Object (required by DMS) - sync, fast -->
