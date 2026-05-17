@@ -314,18 +314,18 @@ struct OpinionDetailView: View {
     private var heroImage: some View {
         Group {
             if let urlString = displayOpinion.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
+                // Native aspect ratio — see ArticleDetailView.heroImage for
+                // the rationale. Portrait opinion photos extend below the
+                // fold so the full image stays visible after a small scroll.
+                CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity, maxHeight: 300)
-                .clipped()
+                .frame(maxWidth: .infinity)
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .clipped()
     }
 
     private var heroPlaceholder: some View {

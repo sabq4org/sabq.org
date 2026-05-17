@@ -425,18 +425,21 @@ struct ArticleDetailView: View {
     private var heroImage: some View {
         Group {
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
+                // Render the hero at the image's native aspect ratio rather
+                // than cropping to a fixed 300pt height. Landscape photos
+                // come out shorter (≈220pt at 16:9); portrait photos extend
+                // below the fold so the reader can see the full image with
+                // a small scroll, which is what editors expect when they
+                // publish a portrait shot.
+                CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity, maxHeight: 300)
-                .clipped()
+                .frame(maxWidth: .infinity)
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .clipped()
     }
 
     private var heroPlaceholder: some View {
