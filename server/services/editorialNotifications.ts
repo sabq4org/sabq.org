@@ -56,12 +56,24 @@ export interface NotifyEditorialArgs {
   reviewerNote?: string | null;
 }
 
+/** Generic "صحيفة سبق" byline account — not a human colleague. */
+export const NEWSPAPER_REPORTER_ID = "RnP7eDOAl5T5rGpib9_8d";
+
 const PREFS_DEFAULTS = {
   scheduledEnabled: true,
   publishedEnabled: true,
   rejectedEnabled: true,
   revisionEnabled: true,
 };
+
+function isNonHumanAccount(userId: string): boolean {
+  return (
+    userId === "newspaper" ||
+    userId === "system" ||
+    userId === "sabq-newspaper" ||
+    userId === NEWSPAPER_REPORTER_ID
+  );
+}
 
 async function fetchUserPrefs(userId: string) {
   const [row] = await db
@@ -84,15 +96,46 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
     case "published":      return prefs.publishedEnabled;
     case "rejected":       return prefs.rejectedEnabled;
     case "needs_revision": return prefs.revisionEnabled;
-    // Archiving is a deletion-class event — author always needs to know,
-    // so we treat it under the same toggle as rejection. (Adding a
-    // separate preference would let users silently disappear off the
-    // platform without notice.)
-    case "archived":       return prefs.rejectedEnabled;
-    // Permanent deletion is the strongest deletion-class event. Always
-    // notify so the author isn't surprised when their byline disappears.
-    case "deleted":        return prefs.rejectedEnabled;
+    // Archive/delete are critical — always deliver (in-app + push attempt).
+    // Previously gated on `rejectedEnabled` ("الاعتذار / الرفض" toggle in
+    // iOS) which caused writers to miss archive/delete entirely when they
+    // disabled rejection notifications.
+    case "archived":
+    case "deleted":
+      return true;
   }
+}
+
+/** Who should receive editorial pushes for this article? */
+export function resolveArticleStakeholderIds(article: {
+  reporterId?: string | null;
+  authorId?: string | null;
+  submitterId?: string | null;
+}): string[] {
+  const seen = new Set<string>();
+  const add = (id?: string | null) => {
+    if (!id || isNonHumanAccount(id) || seen.has(id)) return;
+    seen.add(id);
+  };
+
+  const reporter = article.reporterId;
+  const author = article.authorId;
+
+  // Prefer the human byline reporter. When the dropdown still points at the
+  // generic newspaper account, fall through to authorId (staff writer / editor
+  // who filed the piece) so someone actually receives the alert.
+  if (reporter && !isNonHumanAccount(reporter)) {
+    add(reporter);
+  } else if (author) {
+    add(author);
+  } else if (reporter) {
+    add(reporter);
+  }
+
+  if (author) add(author);
+  if (article.submitterId) add(article.submitterId);
+
+  return [...seen];
 }
 
 /** Format `scheduled_at` as a short Arabic date+time. Uses the
@@ -226,9 +269,7 @@ function buildDeepLink(args: NotifyEditorialArgs): string {
  */
 export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<void> {
   try {
-    // Skip system-account events (e.g. when the newspaper account is the
-    // submitter). We never want to push to it.
-    if (!args.userId || args.userId === "newspaper" || args.userId === "system") {
+    if (!args.userId || isNonHumanAccount(args.userId)) {
       return;
     }
 
@@ -342,16 +383,24 @@ export async function notifyArticleStakeholders(
   event: EditorialEvent,
   reviewerNote?: string | null,
 ): Promise<void> {
-  const seen = new Set<string>();
-  const targets = [article.reporterId, article.authorId, article.submitterId]
-    .filter((id): id is string => !!id)
-    .filter(id => {
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
+  const targets = resolveArticleStakeholderIds(article);
 
-  await Promise.all(targets.map(userId =>
-    notifyEditorialEvent({ userId, event, article, reviewerNote })
-  ));
+  if (targets.length === 0) {
+    console.warn(
+      `[Editorial Notify] No human stakeholders for article ${article.id} ` +
+      `(reporterId=${article.reporterId ?? "null"}, authorId=${article.authorId ?? "null"}) — ` +
+      `event=${event} skipped`,
+    );
+    return;
+  }
+
+  console.log(
+    `[Editorial Notify] Fan-out event=${event} article=${article.id} targets=[${targets.join(", ")}]`,
+  );
+
+  await Promise.all(
+    targets.map(userId =>
+      notifyEditorialEvent({ userId, event, article, reviewerNote }),
+    ),
+  );
 }

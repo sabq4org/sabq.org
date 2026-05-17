@@ -8531,7 +8531,12 @@ Respond in valid JSON format only:
             console.log(`[PERMANENT-DELETE] Opinion author deletion email sent for ${articleId}`);
           } else {
             await sendReporterDeletionEmail(
-              { id: articleSnapshot.id, title: articleSnapshot.title, reporterId: articleSnapshot.reporterId },
+              {
+                id: articleSnapshot.id,
+                title: articleSnapshot.title,
+                reporterId: articleSnapshot.reporterId,
+                authorId: articleSnapshot.authorId,
+              },
               finalReason,
             );
             console.log(`[PERMANENT-DELETE] Reporter deletion email sent for ${articleId}`);
@@ -8769,7 +8774,12 @@ Respond in valid JSON format only:
               console.log(`[BULK PERMANENT-DELETE] Opinion author deletion email sent for ${snap.id}`);
             } else {
               await sendReporterDeletionEmail(
-                { id: snap.id, title: snap.title, reporterId: snap.reporterId },
+                {
+                  id: snap.id,
+                  title: snap.title,
+                  reporterId: snap.reporterId,
+                  authorId: snap.authorId,
+                },
                 snap.reason,
               );
               console.log(`[BULK PERMANENT-DELETE] Reporter deletion email sent for ${snap.id}`);

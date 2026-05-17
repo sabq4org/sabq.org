@@ -6,6 +6,7 @@
 import { log } from "../utils/logger";
 
 import { sendEmailNotification } from "./email";
+import { NEWSPAPER_REPORTER_ID } from "./editorialNotifications";
 import { sendWhatsAppMessage } from "./whatsapp";
 import { sendArticlePublishedEmail, sendArticleRejectedEmail } from "./employeeNotifications";
 import { db } from "../db";
@@ -1183,6 +1184,20 @@ function generateReporterDeletionEmailTemplate(data: {
   return { html, text };
 }
 
+/** Pick a human user to email for a news article when reporter is the generic newspaper account. */
+function resolveNewsEmailUserId(article: {
+  reporterId: string | null;
+  authorId?: string | null;
+}): string | null {
+  if (article.reporterId && article.reporterId !== NEWSPAPER_REPORTER_ID) {
+    return article.reporterId;
+  }
+  if (article.authorId && article.authorId !== NEWSPAPER_REPORTER_ID) {
+    return article.authorId;
+  }
+  return article.reporterId || article.authorId || null;
+}
+
 /**
  * Send permanent-deletion email to news reporter (خبر only).
  *
@@ -1195,12 +1210,14 @@ export async function sendReporterDeletionEmail(
     id: string;
     title: string;
     reporterId: string | null;
+    authorId?: string | null;
   },
   deletionReason?: string,
 ): Promise<{ sent: boolean; error?: string }> {
   try {
-    if (!article.reporterId) {
-      log.info(`[ReporterDeletionEmail] No reporter assigned to article: ${article.id}`);
+    const emailUserId = resolveNewsEmailUserId(article);
+    if (!emailUserId) {
+      log.info(`[ReporterDeletionEmail] No reporter/author to email for article: ${article.id}`);
       return { sent: false, error: "No reporter assigned" };
     }
 
@@ -1213,11 +1230,11 @@ export async function sendReporterDeletionEmail(
         notifyOnPublish: users.notifyOnPublish,
       })
       .from(users)
-      .where(eq(users.id, article.reporterId))
+      .where(eq(users.id, emailUserId))
       .limit(1);
 
     if (!reporter) {
-      log.info(`[ReporterDeletionEmail] Reporter not found: ${article.reporterId}`);
+      log.info(`[ReporterDeletionEmail] Recipient not found: ${emailUserId}`);
       return { sent: false, error: "Reporter not found" };
     }
 
@@ -1279,6 +1296,7 @@ export async function sendReporterArchiveEmail(
         slug: articles.slug,
         englishSlug: articles.englishSlug,
         reporterId: articles.reporterId,
+        authorId: articles.authorId,
       })
       .from(articles)
       .where(eq(articles.id, articleId))
@@ -1289,8 +1307,9 @@ export async function sendReporterArchiveEmail(
       return { sent: false, error: "Article not found" };
     }
 
-    if (!article.reporterId) {
-      log.info(`[ReporterArchiveEmail] No reporter assigned to article: ${articleId}`);
+    const emailUserId = resolveNewsEmailUserId(article);
+    if (!emailUserId) {
+      log.info(`[ReporterArchiveEmail] No reporter/author to email for article: ${articleId}`);
       return { sent: false, error: "No reporter assigned" };
     }
 
@@ -1303,7 +1322,7 @@ export async function sendReporterArchiveEmail(
         notifyOnPublish: users.notifyOnPublish,
       })
       .from(users)
-      .where(eq(users.id, article.reporterId))
+      .where(eq(users.id, emailUserId))
       .limit(1);
 
     if (!reporter) {
