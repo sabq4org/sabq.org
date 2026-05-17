@@ -1436,13 +1436,18 @@ function generateReporterScheduleEmailTemplate(data: {
   const frontendUrl = process.env.FRONTEND_URL || "https://sabq.org";
   const editUrl = `${frontendUrl}/dashboard/articles/${data.articleId}/edit`;
   
+  // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
+  // timezone caused scheduled-publish emails to display "4:25 ص" for an
+  // article actually scheduled at 7:25 AM Saudi time.
   const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
+    timeZone: 'Asia/Riyadh',
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
   const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
+    timeZone: 'Asia/Riyadh',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -1632,13 +1637,18 @@ function generateOpinionAuthorScheduleEmailTemplate(data: {
   const frontendUrl = process.env.FRONTEND_URL || "https://sabq.org";
   const editUrl = `${frontendUrl}/dashboard/articles/${data.articleId}/edit`;
   
+  // Pin to Asia/Riyadh — the Railway server runs in UTC, so omitting the
+  // timezone caused scheduled-publish emails to display "4:25 ص" for an
+  // article actually scheduled at 7:25 AM Saudi time.
   const scheduledDateStr = data.scheduledAt.toLocaleDateString('ar-SA-u-ca-gregory', {
+    timeZone: 'Asia/Riyadh',
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
   const scheduledTimeStr = data.scheduledAt.toLocaleTimeString('ar-SA', {
+    timeZone: 'Asia/Riyadh',
     hour: '2-digit',
     minute: '2-digit',
   });

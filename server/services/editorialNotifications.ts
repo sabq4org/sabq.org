@@ -93,11 +93,15 @@ function eventEnabled(prefs: typeof PREFS_DEFAULTS, event: EditorialEvent): bool
 
 /** Format `scheduled_at` as a short Arabic date+time. Uses the
  *  `ar-SA-u-nu-latn` locale extension so digits render as 1234 instead of
- *  ١٢٣٤ — matches the editorial team's product-wide convention. */
+ *  ١٢٣٤ — matches the editorial team's product-wide convention. Pinned
+ *  to `Asia/Riyadh` because the server runs on UTC; without the
+ *  explicit timezone, a 7:25 AM Riyadh schedule was being shown to
+ *  authors as 4:25 AM. */
 function formatArabicDateTime(d?: Date | null): string {
   if (!d) return "";
   try {
     const date = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+      timeZone: "Asia/Riyadh",
       weekday: "short",
       day: "numeric",
       month: "long",
@@ -107,7 +111,7 @@ function formatArabicDateTime(d?: Date | null): string {
     }).format(d);
     return date;
   } catch {
-    return d.toLocaleString("ar-SA");
+    return d.toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
   }
 }
 
