@@ -239,7 +239,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
             guard let (data, _) = try? await URLSession.shared.data(from: requestedURL) else {
                 return nil
             }
-            return ImageCache.decodedImage(data: data, maxPixelSize: 2048)
+            return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
         }.value
 
         guard !Task.isCancelled, url == requestedURL else { return }
