@@ -204,19 +204,19 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
     case "needs_revision": {
       const note = (args.reviewerNote || "").trim();
       return {
-        title: `📝 ${labels.my} بحاجة تعديل قبل النشر`,
+        title: `📝 طلب تعديل على ${labels.the}`,
         body: note
-          ? `«${title}» — ${note}`
-          : `«${title}» — تواصل معك المحرّر بملاحظات للتعديل.`,
+          ? `يؤسفنا إبلاغكم بوجود بعض الملاحظات على ${labels.the} «${title}». الملاحظات: ${note}`
+          : `يؤسفنا إبلاغكم بوجود بعض الملاحظات على ${labels.the} «${title}». اطّلع على التفاصيل داخل التطبيق.`,
       };
     }
     case "archived": {
       const reason = (args.reviewerNote || "").trim();
       return {
-        title: `🗄️ تمت أرشفة ${labels.my}`,
+        title: `📦 قرار بعدم نشر ${labels.the}`,
         body: reason
-          ? `«${title}» — السبب: ${reason}`
-          : `«${title}» — اطّلع على تفاصيل الأرشفة داخل التطبيق.`,
+          ? `يؤسفنا إبلاغكم بعدم نشر ${labels.the} «${title}». السبب: ${reason}`
+          : `يؤسفنا إبلاغكم بعدم نشر ${labels.the} «${title}». اطّلع على التفاصيل داخل التطبيق.`,
       };
     }
     case "deleted": {

@@ -870,6 +870,164 @@ function generateReporterRejectionEmailTemplate(data: {
   return { html, text };
 }
 
+/** Revision-request email for news reporters (خبر) — article returns to draft for editing. */
+function generateReporterRevisionEmailTemplate(data: {
+  articleTitle: string;
+  reporterName: string;
+  revisionNotes?: string;
+  dashboardUrl?: string;
+}): { html: string; text: string } {
+  const notes = data.revisionNotes?.trim() || "لم يتم تحديد ملاحظات";
+  const dashboardBlock = data.dashboardUrl
+    ? `
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${data.dashboardUrl}"
+           style="display: inline-block; padding: 12px 28px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          ✏️ فتح الخبر وتعديله
+        </a>
+      </div>`
+    : "";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 0; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .content { padding: 32px; }
+    .article-title { font-size: 18px; color: #1f2937; margin: 20px 0; padding: 16px; background: #eff6ff; border-radius: 8px; border-right: 4px solid #2563eb; }
+    .reason-box { background: #fff7ed; border-radius: 8px; padding: 16px; margin: 20px 0; border-right: 4px solid #f97316; }
+    .reason-box h3 { margin: 0 0 8px 0; color: #9a3412; font-size: 14px; }
+    .reason-box p { margin: 0; color: #c2410c; font-size: 14px; line-height: 1.7; }
+    .footer { background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📝 طلب تعديل على الخبر</h1>
+    </div>
+    <div class="content">
+      <p style="font-size: 16px; color: #374151;">مرحباً <strong>${data.reporterName}</strong>،</p>
+      <p style="color: #4b5563; line-height: 1.8;">
+        يؤسفنا إبلاغكم بوجود بعض الملاحظات على الخبر التالي. يُرجى مراجعتها وإجراء التعديلات
+        ثم الضغط على «إرسال» من لوحة التحكم ليعود الخبر إلى مسودات فريق التحرير.
+      </p>
+      <div class="article-title">
+        <strong>📰 عنوان الخبر:</strong><br>
+        ${data.articleTitle}
+      </div>
+      <div class="reason-box">
+        <h3>📋 الملاحظات:</h3>
+        <p>${notes}</p>
+      </div>
+${dashboardBlock}
+      <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
+        شكراً لتعاونكم — فريق التحرير
+      </p>
+    </div>
+    <div class="footer">
+      © ${new Date().getFullYear()} صحيفة سبق الإلكترونية
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+مرحباً ${data.reporterName}،
+
+يؤسفنا إبلاغكم بوجود بعض الملاحظات على الخبر التالي.
+
+📰 عنوان الخبر: ${data.articleTitle}
+
+📋 الملاحظات: ${notes}
+${data.dashboardUrl ? `\n✏️ تعديل الخبر: ${data.dashboardUrl}\n` : ""}
+بعد التعديل، اضغط «إرسال» من لوحة التحكم ليعود الخبر إلى مسودات فريق التحرير.
+
+شكراً لتعاونكم — فريق التحرير
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
+/** Revision-request email for opinion authors (مقال). */
+function generateOpinionAuthorRevisionEmailTemplate(data: {
+  articleTitle: string;
+  authorName: string;
+  revisionNotes?: string;
+  dashboardUrl?: string;
+}): { html: string; text: string } {
+  const notes = data.revisionNotes?.trim() || "لم يتم تحديد ملاحظات";
+  const dashboardBlock = data.dashboardUrl
+    ? `
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${data.dashboardUrl}"
+           style="display: inline-block; padding: 12px 28px; background: #7c3aed; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+          ✏️ فتح المقال وتعديله
+        </a>
+      </div>`
+    : "";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: 'Tajawal', Arial, sans-serif; background: #f5f5f5; direction: rtl; }
+    .container { max-width: 600px; margin: 40px auto; background: white; border-radius: 12px; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #7c3aed, #5b21b6); color: white; padding: 24px; text-align: center; }
+    .content { padding: 32px; }
+    .article-title { padding: 16px; background: #f5f3ff; border-radius: 8px; border-right: 4px solid #7c3aed; margin: 20px 0; }
+    .reason-box { background: #fff7ed; padding: 16px; border-radius: 8px; border-right: 4px solid #f97316; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1>📝 طلب تعديل على المقال</h1></div>
+    <div class="content">
+      <p>الأستاذ/ة <strong>${data.authorName}</strong> المحترم/ة،</p>
+      <p style="line-height: 1.8; color: #4b5563;">
+        يؤسفنا إبلاغكم بوجود بعض الملاحظات على المقال التالي. يُرجى مراجعتها وإجراء التعديلات
+        ثم الضغط على «إرسال» من لوحة التحكم ليعود المقال إلى مسودات هيئة التحرير.
+      </p>
+      <div class="article-title"><strong>✍️ عنوان المقال:</strong><br>${data.articleTitle}</div>
+      <div class="reason-box"><h3>📋 الملاحظات:</h3><p>${notes}</p></div>
+${dashboardBlock}
+      <p style="text-align: center; color: #64748b;">مع خالص التقدير، هيئة التحرير</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+الأستاذ/ة ${data.authorName} المحترم/ة،
+
+يؤسفنا إبلاغكم بوجود بعض الملاحظات على المقال التالي.
+
+✍️ عنوان المقال: ${data.articleTitle}
+
+📋 الملاحظات: ${notes}
+${data.dashboardUrl ? `\n✏️ تعديل المقال: ${data.dashboardUrl}\n` : ""}
+بعد التعديل، اضغط «إرسال» من لوحة التحكم.
+
+مع خالص التقدير، هيئة التحرير
+---
+صحيفة سبق الإلكترونية
+  `.trim();
+
+  return { html, text };
+}
+
 /**
  * Send email notification to reporter when their article is rejected/archived
  */
@@ -1006,16 +1164,16 @@ function generateReporterArchiveEmailTemplate(data: {
 <body>
   <div class="container">
     <div class="header">
-      <h1>📦 تم نقل الخبر إلى الأرشيف</h1>
-      <p>إشعار من فريق التحرير</p>
+      <h1>📦 قرار بعدم نشر الخبر</h1>
+      <p>إشعار من فريق التحرير — صحيفة سبق</p>
     </div>
 
     <div class="content">
       <p style="font-size: 16px; color: #374151;">مرحباً <strong>${data.reporterName}</strong>،</p>
 
       <p style="color: #4b5563; line-height: 1.8;">
-        نودّ إعلامك بأنه تم نقل الخبر التالي إلى الأرشيف من قِبَل فريق التحرير.
-        الخبر لم يُحذف، ويمكن للمحرّرين الرجوع إليه أو إعادة نشره لاحقاً عند الحاجة.
+        يؤسفنا إبلاغكم بعدم نشر الخبر التالي على صحيفة سبق الإلكترونية.
+        نقدّر جهودكم ومساهمتكم، ونأمل أن تتفهموا قرار فريق التحرير.
       </p>
 
       <div class="article-title">
@@ -1024,7 +1182,7 @@ function generateReporterArchiveEmailTemplate(data: {
       </div>
 
       <div class="reason-box">
-        <h3>📋 سبب الأرشفة:</h3>
+        <h3>📋 السبب:</h3>
         <p>${reason}</p>
       </div>
 
@@ -1033,12 +1191,9 @@ function generateReporterArchiveEmailTemplate(data: {
       </div>
 ${articleLinkBlock}
 
-      <p style="color: #64748b; font-size: 14px; margin-top: 24px;">
-        إن كانت لديك أي ملاحظات أو ترغب في إعادة معالجة الخبر، يُرجى التواصل مع رئيس التحرير.
-      </p>
-
       <p style="color: #64748b; font-size: 14px; margin-top: 24px; text-align: center;">
-        شكراً لتعاونك ومساهمتك في تغطية الأخبار
+        مع خالص التقدير والتقدير لجهودكم،<br>
+        فريق التحرير — صحيفة سبق
       </p>
     </div>
 
@@ -1054,16 +1209,15 @@ ${articleLinkBlock}
   const text = `
 مرحباً ${data.reporterName}،
 
-تم نقل الخبر التالي إلى الأرشيف من قِبَل فريق التحرير.
-الخبر لم يُحذف ويمكن إعادة نشره لاحقاً عند الحاجة.
+يؤسفنا إبلاغكم بعدم نشر الخبر التالي على صحيفة سبق الإلكترونية.
 
 📰 عنوان الخبر: ${data.articleTitle}
 
-📋 سبب الأرشفة: ${reason}
+📋 السبب: ${reason}
 
 🕒 وقت الأرشفة: ${archivedAt}
 ${data.articleUrl ? `\n📄 رابط الخبر: ${data.articleUrl}\n` : ""}
-إن كانت لديك أي ملاحظات يُرجى التواصل مع رئيس التحرير.
+مع خالص التقدير، فريق التحرير — صحيفة سبق
 
 ---
 صحيفة سبق الإلكترونية
@@ -1360,7 +1514,7 @@ export async function sendReporterArchiveEmail(
 
     const result = await sendEmailNotification({
       to: reporter.email,
-      subject: `📦 تم أرشفة خبرك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      subject: `📦 قرار بعدم نشر خبرك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
       html,
       text,
     });
@@ -1374,6 +1528,74 @@ export async function sendReporterArchiveEmail(
     }
   } catch (error) {
     console.error("[ReporterArchiveEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/** Send revision-request email to news reporter (خبر). */
+export async function sendReporterRevisionEmail(
+  articleId: string,
+  revisionNotes?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const [article] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        reporterId: articles.reporterId,
+        authorId: articles.authorId,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+
+    if (!article) {
+      return { sent: false, error: "Article not found" };
+    }
+
+    const emailUserId = resolveNewsEmailUserId(article);
+    if (!emailUserId) {
+      return { sent: false, error: "No reporter assigned" };
+    }
+
+    const [reporter] = await db
+      .select({
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, emailUserId))
+      .limit(1);
+
+    if (!reporter?.email || reporter.notifyOnPublish === false) {
+      return { sent: false, error: "Reporter unavailable or notifications disabled" };
+    }
+
+    const reporterName =
+      [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") ||
+      reporter.email.split("@")[0];
+    const frontendUrl = getFrontendUrl();
+    const dashboardUrl = `${frontendUrl}/dashboard/articles/${articleId}/edit`;
+
+    const { html, text } = generateReporterRevisionEmailTemplate({
+      articleTitle: article.title,
+      reporterName,
+      revisionNotes,
+      dashboardUrl,
+    });
+
+    const result = await sendEmailNotification({
+      to: reporter.email,
+      subject: `📝 طلب تعديل على خبرك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    return result.success ? { sent: true } : { sent: false, error: result.error };
+  } catch (error) {
+    console.error("[ReporterRevisionEmail] ❌ Error:", error);
     return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -1893,17 +2115,16 @@ function generateOpinionAuthorArchiveEmailTemplate(data: {
 <body>
   <div class="container">
     <div class="header">
-      <h1>📦 تم نقل المقال إلى الأرشيف</h1>
-      <p>إشعار من هيئة التحرير</p>
+      <h1>📦 قرار بعدم نشر المقال</h1>
+      <p>إشعار من هيئة التحرير — صحيفة سبق</p>
     </div>
 
     <div class="content">
       <p style="font-size: 16px; color: #374151;">الأستاذ/ة <strong>${data.authorName}</strong> المحترم/ة،</p>
 
       <p style="color: #4b5563; line-height: 1.8;">
-        نُحيطكم علماً بأنه تم نقل المقال التالي إلى الأرشيف.
-        المقال لا يزال محفوظاً في النظام، ويسعدنا تواصلكم مع هيئة التحرير
-        في حال رغبتم بإعادة نشره أو إجراء أي تعديلات.
+        يؤسفنا إبلاغكم بعدم نشر المقال التالي على صحيفة سبق الإلكترونية.
+        نقدّر قلمكم ومساهماتكم، ونأمل أن تتفهموا قرار هيئة التحرير.
       </p>
 
       <div class="article-title">
@@ -1912,7 +2133,7 @@ function generateOpinionAuthorArchiveEmailTemplate(data: {
       </div>
 
       <div class="reason-box">
-        <h3>📋 سبب الأرشفة:</h3>
+        <h3>📋 السبب:</h3>
         <p>${reason}</p>
       </div>
 
@@ -1943,13 +2164,11 @@ ${articleLinkBlock}
   const text = `
 الأستاذ/ة ${data.authorName} المحترم/ة،
 
-نُحيطكم علماً بأنه تم نقل المقال التالي إلى الأرشيف.
-المقال لا يزال محفوظاً في النظام، ويسعدنا تواصلكم مع هيئة التحرير
-في حال رغبتم بإعادة نشره أو إجراء أي تعديلات.
+يؤسفنا إبلاغكم بعدم نشر المقال التالي على صحيفة سبق الإلكترونية.
 
 ✍️ عنوان المقال: ${data.articleTitle}
 
-📋 سبب الأرشفة: ${reason}
+📋 السبب: ${reason}
 
 🕒 وقت الأرشفة: ${archivedAt}
 ${data.articleUrl ? `\n✍️ رابط المقال: ${data.articleUrl}\n` : ""}
@@ -2249,7 +2468,7 @@ export async function sendOpinionAuthorArchiveEmail(
 
     const result = await sendEmailNotification({
       to: author.email,
-      subject: `📦 تم أرشفة مقالك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      subject: `📦 قرار بعدم نشر مقالك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
       html,
       text,
     });
@@ -2263,6 +2482,68 @@ export async function sendOpinionAuthorArchiveEmail(
     }
   } catch (error) {
     console.error("[OpinionAuthorArchiveEmail] ❌ Error:", error);
+    return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+/** Send revision-request email to opinion author (مقال). */
+export async function sendOpinionAuthorRevisionEmail(
+  articleId: string,
+  revisionNotes?: string,
+): Promise<{ sent: boolean; error?: string }> {
+  try {
+    const [article] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        authorId: articles.authorId,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+
+    if (!article?.authorId) {
+      return { sent: false, error: "Article or author not found" };
+    }
+
+    const [author] = await db
+      .select({
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        notifyOnPublish: users.notifyOnPublish,
+      })
+      .from(users)
+      .where(eq(users.id, article.authorId))
+      .limit(1);
+
+    if (!author?.email || author.notifyOnPublish === false) {
+      return { sent: false, error: "Author unavailable or notifications disabled" };
+    }
+
+    const authorName =
+      [author.firstName, author.lastName].filter(Boolean).join(" ") ||
+      author.email.split("@")[0];
+    const frontendUrl = getFrontendUrl();
+    const dashboardUrl = `${frontendUrl}/dashboard/articles/${articleId}/edit`;
+
+    const { html, text } = generateOpinionAuthorRevisionEmailTemplate({
+      articleTitle: article.title,
+      authorName,
+      revisionNotes,
+      dashboardUrl,
+    });
+
+    const result = await sendEmailNotification({
+      to: author.email,
+      subject: `📝 طلب تعديل على مقالك: ${article.title.substring(0, 50)}${article.title.length > 50 ? "..." : ""}`,
+      html,
+      text,
+    });
+
+    return result.success ? { sent: true } : { sent: false, error: result.error };
+  } catch (error) {
+    console.error("[OpinionAuthorRevisionEmail] ❌ Error:", error);
     return { sent: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }

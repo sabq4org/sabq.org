@@ -200,6 +200,9 @@ export default function ArticlesManagement() {
 
   // State for dialogs and filters
   const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
+  const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [revisionNotesError, setRevisionNotesError] = useState<string | null>(null);
   // Reason captured in the archive dialog. Required by the backend
   // (`PATCH /api/admin/articles/:id` with status='archived'), and used as
   // the editorial-notification body for the author/reporter.
@@ -365,6 +368,33 @@ export default function ArticlesManagement() {
   // receives a push with the archive reason instead of seeing their
   // article silently vanish. The dedicated DELETE endpoint still exists
   // for hard-deletes but is intentionally not wired up to this dialog.
+  const requestRevisionMutation = useMutation({
+    mutationFn: async ({ id, reviewNotes: notes }: { id: string; reviewNotes: string }) => {
+      return await apiRequest(`/api/admin/articles/${id}/request-revision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewNotes: notes }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/articles"] });
+      setRevisionArticle(null);
+      setRevisionNotes("");
+      setRevisionNotesError(null);
+      toast({
+        title: "تم إرسال طلب التعديل",
+        description: "عاد المحتوى لمسودات الكاتب/المراسل مع الملاحظات",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال طلب التعديل",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ id, reviewNotes }: { id: string; reviewNotes: string }) => {
       return await apiRequest(`/api/admin/articles/${id}`, {
@@ -380,7 +410,7 @@ export default function ArticlesManagement() {
       setArchiveReasonError(null);
       toast({
         title: "تم الأرشفة",
-        description: "تم أرشفة المقال + إرسال إشعار للكاتب/المراسل بالسبب",
+        description: "تم إبلاغ الكاتب/المراسل بعدم النشر مع ذكر السبب",
       });
     },
     onError: (error: any) => {
@@ -1198,6 +1228,11 @@ export default function ArticlesManagement() {
                                   onEdit={() => handleEdit(article)}
                                   isFeatured={article.isFeatured}
                                   onDelete={() => setDeletingArticle(article)}
+                                  onRequestRevision={
+                                    activeStatus !== "archived"
+                                      ? () => setRevisionArticle(article)
+                                      : undefined
+                                  }
                                   canEdit={canEditArticle(article)}
                                   canDelete={!!(canDeleteArticle || canArchiveArticle)}
                                   canFeature={!!canFeatureArticle}
@@ -1549,9 +1584,9 @@ export default function ArticlesManagement() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الأرشفة</AlertDialogTitle>
+            <AlertDialogTitle>أرشفة — عدم النشر</AlertDialogTitle>
             <AlertDialogDescription>
-              عند الأرشفة، سيصل للكاتب/المراسل إشعار داخل التطبيق + إيميل بالسبب الذي تكتبه أدناه. الحقل إلزامي.
+              يُرسل للكاتب/المراسل: «يؤسفنا إبلاغكم بعدم نشر المقال/الخبر» مع السبب (إشعار + إيميل). هذا قرار نهائي وليس طلب تعديل — استخدم زر «طلب تعديل» إذا أردت إعادة المحتوى للكاتب.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2 py-2">
@@ -1560,12 +1595,12 @@ export default function ArticlesManagement() {
               {deletingArticle?.title}
             </div>
             <label htmlFor="archive-reason" className="text-sm font-medium block pt-2">
-              سبب الأرشفة <span className="text-destructive">*</span>
+              السبب <span className="text-destructive">*</span>
             </label>
             <Textarea
               id="archive-reason"
               data-testid="textarea-archive-reason"
-              placeholder="مثال: تكرار الموضوع، تجاوز الفترة الزمنية، عدم استيفاء معايير النشر..."
+              placeholder="اكتب سبب عدم النشر بوضوح..."
               value={archiveReason}
               onChange={(e) => {
                 setArchiveReason(e.target.value);
@@ -1599,6 +1634,75 @@ export default function ArticlesManagement() {
               data-testid="button-confirm-delete"
             >
               {deleteMutation.isPending ? "جاري الأرشفة..." : "أرشفة وإرسال الإشعار"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Request revision — returns article to author/reporter as draft */}
+      <AlertDialog
+        open={!!revisionArticle}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRevisionArticle(null);
+            setRevisionNotes("");
+            setRevisionNotesError(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>طلب تعديل</AlertDialogTitle>
+            <AlertDialogDescription>
+              يُرسل للكاتب/المراسل: «يؤسفنا إبلاغكم بوجود بعض الملاحظات» مع الملاحظات أدناه.
+              يعود المحتوى لمسوداته ويستطيع التعديل ثم الضغط على «إرسال».
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2 py-2">
+            <div className="text-sm text-muted-foreground rounded-md border bg-muted/30 px-3 py-2">
+              {revisionArticle?.title}
+            </div>
+            <label htmlFor="revision-notes" className="text-sm font-medium block">
+              الملاحظات <span className="text-destructive">*</span>
+            </label>
+            <Textarea
+              id="revision-notes"
+              data-testid="textarea-revision-notes"
+              placeholder="اكتب ملاحظات التحرير التي يحتاج الكاتب/المراسل لمعالجتها..."
+              value={revisionNotes}
+              onChange={(e) => {
+                setRevisionNotes(e.target.value);
+                if (revisionNotesError) setRevisionNotesError(null);
+              }}
+              rows={4}
+              className="resize-none"
+            />
+            {revisionNotesError && (
+              <p className="text-xs text-destructive">{revisionNotesError}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={requestRevisionMutation.isPending}
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={(e) => {
+                e.preventDefault();
+                const trimmed = revisionNotes.trim();
+                if (trimmed.length < 5) {
+                  setRevisionNotesError("اكتب ملاحظات واضحة (5 أحرف على الأقل)");
+                  return;
+                }
+                if (revisionArticle) {
+                  requestRevisionMutation.mutate({
+                    id: revisionArticle.id,
+                    reviewNotes: trimmed,
+                  });
+                }
+              }}
+              data-testid="button-confirm-revision"
+            >
+              {requestRevisionMutation.isPending ? "جاري الإرسال..." : "إرسال طلب التعديل"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

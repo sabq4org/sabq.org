@@ -51,7 +51,7 @@ import { createNotification, notifyReporterArticlePublished, notifyReporterArtic
 import { notificationBus } from "./notificationBus";
 import { indexArticle, isGoogleIndexingConfigured } from "./services/googleIndexingService";
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
-import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail } from "./services/editorAlerts";
+import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
@@ -7794,6 +7794,78 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
+  // Admin: request revisions on any article (news or opinion). Returns the
+  // piece to draft with reviewStatus=needs_changes so the author/reporter
+  // can edit and resubmit from their dashboard.
+  app.post("/api/admin/articles/:id/request-revision", requireAuth, requireAnyPermission("articles.edit", "articles.edit_any"), async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const articleId = req.params.id;
+      const { reviewNotes } = req.body;
+      if (!reviewNotes || typeof reviewNotes !== "string" || !reviewNotes.trim()) {
+        return res.status(400).json({ message: "الملاحظات مطلوبة عند طلب التعديل" });
+      }
+
+      const [existingArticle] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+
+      if (!existingArticle) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+
+      const [updatedArticle] = await db
+        .update(articles)
+        .set({
+          reviewStatus: "needs_changes",
+          reviewedBy: userId,
+          reviewedAt: new Date(),
+          reviewNotes: reviewNotes.trim(),
+          status: "draft",
+          updatedAt: new Date(),
+        })
+        .where(eq(articles.id, articleId))
+        .returning();
+
+      res.json(updatedArticle);
+
+      setImmediate(async () => {
+        try {
+          await notifyArticleStakeholders(
+            {
+              id: updatedArticle.id,
+              title: updatedArticle.title,
+              slug: updatedArticle.slug,
+              englishSlug: updatedArticle.englishSlug,
+              articleType: updatedArticle.articleType,
+              scheduledAt: updatedArticle.scheduledAt,
+              publishedAt: updatedArticle.publishedAt,
+              authorId: updatedArticle.authorId,
+              reporterId: updatedArticle.reporterId,
+              submitterId: updatedArticle.submitterId,
+            },
+            "needs_revision",
+            reviewNotes.trim(),
+          );
+          if (updatedArticle.articleType === "opinion") {
+            await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes.trim());
+          } else {
+            await sendReporterRevisionEmail(updatedArticle.id, reviewNotes.trim());
+          }
+        } catch (notifyErr: any) {
+          console.error("[AdminRevision] notify/email failed:", notifyErr?.message || notifyErr);
+        }
+      });
+    } catch (error) {
+      console.error("Error requesting article revision:", error);
+      res.status(500).json({ message: "Failed to request revision" });
+    }
+  });
+
   // News Analytics Endpoint - Smart statistics and insights
 
   // Feature/unfeature article
@@ -10266,11 +10338,16 @@ Respond in valid JSON format only:
         return res.status(403).json({ error: "هذا الـ endpoint خاص بالمراسلين فقط" });
       }
       
-      // جلب مقالات المراسل
+      // جلب مقالات المراسل (byline أو مؤلف)
       const myArticles = await db
         .select()
         .from(articles)
-        .where(eq(articles.authorId, user.id));
+        .where(
+          or(
+            eq(articles.authorId, user.id),
+            eq(articles.reporterId, user.id),
+          ),
+        );
       
       const articleIds = myArticles.map(a => a.id);
       
@@ -10307,7 +10384,16 @@ Respond in valid JSON format only:
         totalViews,
         totalLikes: likesResult[0]?.count || 0,
         totalComments: commentsResult[0]?.count || 0,
-        articles: myArticles,
+        articles: myArticles.map(a => ({
+          id: a.id,
+          title: a.title,
+          status: a.status,
+          reviewStatus: a.reviewStatus,
+          reviewNotes: a.reviewNotes,
+          views: a.views,
+          publishedAt: a.publishedAt,
+          createdAt: a.createdAt,
+        })),
       });
     } catch (error) {
       console.error("Error fetching reporter analytics:", error);
@@ -10384,6 +10470,8 @@ Respond in valid JSON format only:
           id: a.id,
           title: a.title,
           status: a.status,
+          reviewStatus: a.reviewStatus,
+          reviewNotes: a.reviewNotes,
           views: a.views,
           publishedAt: a.publishedAt,
           createdAt: a.createdAt,
@@ -10392,6 +10480,62 @@ Respond in valid JSON format only:
     } catch (error) {
       console.error("Error fetching opinion author analytics:", error);
       res.status(500).json({ message: "فشل في جلب الإحصائيات" });
+    }
+  });
+
+  // Contributor resubmit after revision — opinion authors & reporters
+  app.post("/api/my/articles/:id/submit-review", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const articleId = req.params.id;
+
+      const [existingArticle] = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.id, articleId))
+        .limit(1);
+
+      if (!existingArticle) {
+        return res.status(404).json({ message: "Article not found" });
+      }
+
+      const isOwner =
+        existingArticle.authorId === userId || existingArticle.reporterId === userId;
+      if (!isOwner) {
+        return res.status(403).json({ message: "ليس لديك صلاحية إرسال هذا المحتوى" });
+      }
+
+      if (existingArticle.reviewStatus === "pending_review") {
+        return res.status(400).json({ message: "المحتوى قيد المراجعة بالفعل" });
+      }
+
+      const [updatedArticle] = await db
+        .update(articles)
+        .set({
+          reviewStatus: "pending_review",
+          status: "draft",
+          updatedAt: new Date(),
+        })
+        .where(eq(articles.id, articleId))
+        .returning();
+
+      await logActivity({
+        userId,
+        action: "submitted_for_review",
+        entityType: "article",
+        entityId: articleId,
+        oldValue: existingArticle,
+        newValue: updatedArticle,
+      });
+
+      res.json(updatedArticle);
+    } catch (error) {
+      console.error("Error submitting article for review:", error);
+      res.status(500).json({ message: "فشل إرسال المحتوى للمراجعة" });
     }
   });
 
@@ -25829,6 +25973,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             reporterId: updatedArticle.reporterId,
             submitterId: updatedArticle.submitterId,
           }, "needs_revision", reviewNotes);
+          if (updatedArticle.articleType === "opinion") {
+            await sendOpinionAuthorRevisionEmail(updatedArticle.id, reviewNotes);
+          } else {
+            await sendReporterRevisionEmail(updatedArticle.id, reviewNotes);
+          }
         } catch (notifyErr: any) {
           console.error("[OpinionRevision] push notify failed:", notifyErr?.message || notifyErr);
         }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,8 @@ interface RowActionsProps {
    *  is then delivered to the colleague via in-app push + email by the
    *  backend. */
   onDelete: () => void;
+  /** Opens the parent's revision-request dialog (returns article to author as draft). */
+  onRequestRevision?: () => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canFeature?: boolean;
@@ -41,6 +43,7 @@ export function RowActions({
   onEdit, 
   isFeatured: initialIsFeatured, 
   onDelete,
+  onRequestRevision,
   canEdit = true,
   canDelete = true,
   canFeature = true,
@@ -270,6 +273,18 @@ export function RowActions({
             title="إرسال إشعار"
           >
             <Bell className="w-4 h-4 text-blue-500" />
+          </Button>
+        )}
+        {onRequestRevision && status !== "archived" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRequestRevision}
+            disabled={isLoading}
+            data-testid={`button-action-revision-${articleId}`}
+            title="طلب تعديل (مع ملاحظات)"
+          >
+            <FilePenLine className="w-4 h-4 text-amber-600" />
           </Button>
         )}
         {canDelete && (

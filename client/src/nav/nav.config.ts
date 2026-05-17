@@ -77,6 +77,33 @@ export const navConfig: NavItem[] = [
     meta: { exact: true },
   },
 
+  // ===== المراسل / Reporter =====
+  {
+    id: "reporter_section",
+    labelKey: "nav.my_news",
+    labelAr: "أخباري",
+    icon: Newspaper,
+    roles: ["reporter"],
+    children: [
+      {
+        id: "reporter_my_articles",
+        labelKey: "nav.reporter_articles",
+        labelAr: "أخباري",
+        path: "/dashboard/reporter/articles",
+        icon: FileText,
+        roles: ["reporter"],
+      },
+      {
+        id: "reporter_new_article",
+        labelKey: "nav.new_article",
+        labelAr: "خبر جديد",
+        path: "/dashboard/articles/new",
+        icon: PlusCircle,
+        roles: ["reporter"],
+      },
+    ],
+  },
+
   // ===== كاتب الرأي / Opinion Author =====
   {
     id: "opinion_author_section",

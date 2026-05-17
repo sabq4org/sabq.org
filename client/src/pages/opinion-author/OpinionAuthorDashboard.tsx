@@ -1,12 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   FileText,
   CheckCircle,
@@ -19,7 +21,8 @@ import {
   PlusCircle,
   FileEdit,
   MessageSquare,
-  ChevronLeft,
+  Send,
+  AlertCircle,
 } from "lucide-react";
 
 interface OpinionAuthorAnalytics {
@@ -35,6 +38,8 @@ interface OpinionAuthorAnalytics {
     id: string;
     title: string;
     status: string;
+    reviewStatus?: string | null;
+    reviewNotes?: string | null;
     views: number;
     publishedAt: string | null;
     createdAt: string;
@@ -49,8 +54,15 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
   archived: { label: "مؤرشف", variant: "destructive" },
 };
 
+function articleStatusLabel(article: { status: string; reviewStatus?: string | null }) {
+  if (article.reviewStatus === "needs_changes") return { label: "يحتاج تعديل", variant: "outline" as const };
+  if (article.reviewStatus === "pending_review") return { label: "قيد المراجعة", variant: "outline" as const };
+  return statusConfig[article.status] || { label: article.status, variant: "secondary" as const };
+}
+
 export default function OpinionAuthorDashboard() {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   const { data: analytics, isLoading } = useQuery<OpinionAuthorAnalytics>({
     queryKey: ["/api/opinion-author/analytics"],
@@ -69,6 +81,26 @@ export default function OpinionAuthorDashboard() {
   const handleNewArticle = () => {
     navigate("/dashboard/articles/new");
   };
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async (articleId: string) => {
+      return apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
+      toast({
+        title: "تم الإرسال",
+        description: "عاد المقال إلى مسودات فريق التحرير للمراجعة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال المقال",
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <DashboardLayout>
@@ -253,6 +285,7 @@ export default function OpinionAuthorDashboard() {
                       <tr>
                         <th className="text-right py-3 px-4 font-medium">العنوان</th>
                         <th className="text-right py-3 px-4 font-medium">الحالة</th>
+                        <th className="text-right py-3 px-4 font-medium min-w-[200px]">ملاحظات التحرير</th>
                         <th className="text-right py-3 px-4 font-medium">المشاهدات</th>
                         <th className="text-right py-3 px-4 font-medium">تاريخ الإنشاء</th>
                         <th className="text-center py-3 px-4 font-medium">إجراءات</th>
@@ -270,11 +303,24 @@ export default function OpinionAuthorDashboard() {
                           </td>
                           <td className="py-3 px-4">
                             <Badge
-                              variant={statusConfig[article.status]?.variant || "secondary"}
+                              variant={articleStatusLabel(article).variant}
                               data-testid={`badge-status-${article.id}`}
                             >
-                              {statusConfig[article.status]?.label || article.status}
+                              {articleStatusLabel(article).label}
                             </Badge>
+                          </td>
+                          <td className="py-3 px-4">
+                            {article.reviewStatus === "needs_changes" && article.reviewNotes ? (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 leading-relaxed max-w-md">
+                                <span className="font-medium flex items-center gap-1 mb-1">
+                                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                  ملاحظات التحرير
+                                </span>
+                                {article.reviewNotes}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             {article.views?.toLocaleString("en-US") || 0}
@@ -285,16 +331,34 @@ export default function OpinionAuthorDashboard() {
                               : "-"}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            {article.status === "draft" && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleEditArticle(article.id)}
-                                data-testid={`button-edit-${article.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-center gap-1">
+                              {(article.status === "draft" || article.reviewStatus === "needs_changes") &&
+                                article.reviewStatus !== "pending_review" && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleEditArticle(article.id)}
+                                  data-testid={`button-edit-${article.id}`}
+                                  title="تعديل"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {article.reviewStatus === "needs_changes" && (
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="gap-1 h-8"
+                                  disabled={submitReviewMutation.isPending}
+                                  onClick={() => submitReviewMutation.mutate(article.id)}
+                                  data-testid={`button-submit-${article.id}`}
+                                  title="إرسال بعد التعديل"
+                                >
+                                  <Send className="h-3.5 w-3.5" />
+                                  إرسال
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

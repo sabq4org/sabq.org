@@ -330,6 +330,8 @@ export default function ArticleEditor() {
   const [metaDescription, setMetaDescription] = useState("");
   
   const [status, setStatus] = useState<"draft" | "published">("draft");
+  const [reviewStatus, setReviewStatus] = useState<string | null>(null);
+  const [reviewNotes, setReviewNotes] = useState<string | null>(null);
   const [pollData, setPollData] = useState<PollData | null>(null);
   const [republish, setRepublish] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -477,6 +479,29 @@ export default function ArticleEditor() {
   
   // Check if user can publish directly (otherwise saves as draft)
   const canPublish = user && hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH);
+  const isContributorRole =
+    user?.role === "reporter" || user?.role === "opinion_author";
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("معرّف المقال غير متوفر");
+      return apiRequest(`/api/my/articles/${id}/submit-review`, { method: "POST" });
+    },
+    onSuccess: () => {
+      setReviewStatus("pending_review");
+      toast({
+        title: "تم الإرسال",
+        description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إرسال المحتوى للمراجعة",
+        variant: "destructive",
+      });
+    },
+  });
   
   // Permission checks for article editor features
   const canUseAIGenerate = user && hasPermission(user, PERMISSION_CODES.ARTICLES_AI_GENERATE);
@@ -936,6 +961,8 @@ export default function ArticleEditor() {
       setMetaDescription(validMetaDescription);
       setKeywords(article.seo?.keywords || []);
       setStatus(article.status as any);
+      setReviewStatus((article as any).reviewStatus ?? null);
+      setReviewNotes((article as any).reviewNotes ?? null);
       hasLoadedArticleRef.current = true;
       
       // Load existing poll for this article
@@ -3435,6 +3462,23 @@ const generateSlug = (text: string) => {
                 <span className="hidden xs:inline">حفظ كمسودة</span>
                 <span className="xs:hidden">حفظ</span>
               </Button>
+              {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => submitReviewMutation.mutate()}
+                  disabled={submitReviewMutation.isPending || isSaving || isLockedByOther}
+                  className="gap-1.5 sm:gap-2"
+                  data-testid="button-resubmit-review"
+                >
+                  {submitReviewMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  إرسال بعد التعديل
+                </Button>
+              )}
               <Button
                 size="sm"
                 onClick={() => handleSave(canPublish ? true : false)}
@@ -3463,6 +3507,19 @@ const generateSlug = (text: string) => {
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
           {/* Main Content Area - 70% */}
           <div className="lg:col-span-7 space-y-6">
+            {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-4 space-y-3">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  يؤسفنا إبلاغكم بوجود بعض الملاحظات على {articleType === "opinion" ? "المقال" : "الخبر"}
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200/90 whitespace-pre-wrap leading-relaxed">
+                  {reviewNotes}
+                </p>
+                <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                  بعد إجراء التعديلات، احفظ ثم اضغط «إرسال بعد التعديل» ليعود المحتوى إلى مسودات فريق التحرير.
+                </p>
+              </div>
+            )}
             {/* Reporter Info Banner - shows actual person who entered content */}
             {(() => {
               const sourceMetadata = (article as any)?.sourceMetadata;
