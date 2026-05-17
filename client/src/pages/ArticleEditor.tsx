@@ -105,6 +105,17 @@ import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
+import { canSubmitAfterRevision, REVISION_SUBMIT_HINT } from "@/lib/articleRevision";
+import {
+  markArticleSubmittedInAnalyticsCache,
+  refetchContributorAnalytics,
+} from "@/lib/contributorAnalyticsCache";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Category, ArticleWithDetails } from "@shared/schema";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
@@ -332,6 +343,8 @@ export default function ArticleEditor() {
   const [status, setStatus] = useState<"draft" | "published">("draft");
   const [reviewStatus, setReviewStatus] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<string | null>(null);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [articleUpdatedAt, setArticleUpdatedAt] = useState<string | null>(null);
   const [pollData, setPollData] = useState<PollData | null>(null);
   const [republish, setRepublish] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -480,15 +493,33 @@ export default function ArticleEditor() {
   // Check if user can publish directly (otherwise saves as draft)
   const canPublish = user && hasPermission(user, PERMISSION_CODES.ARTICLES_PUBLISH);
   const isContributorRole =
-    user?.role === "reporter" || user?.role === "opinion_author";
+    user?.role === "reporter" ||
+    user?.role === "opinion_author" ||
+    (user?.roles?.includes("reporter") ?? false) ||
+    (user?.roles?.includes("opinion_author") ?? false);
+
+  const canResubmitAfterEdit = canSubmitAfterRevision({
+    reviewStatus,
+    reviewedAt,
+    updatedAt: articleUpdatedAt,
+  });
 
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
       if (!id) throw new Error("معرّف المقال غير متوفر");
       return apiRequest(`/api/my/articles/${id}/submit-review`, { method: "POST" });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setReviewStatus("pending_review");
+      if (id) {
+        markArticleSubmittedInAnalyticsCache(queryClient, {
+          id,
+          reviewStatus: data?.reviewStatus ?? "pending_review",
+          status: data?.status,
+          updatedAt: data?.updatedAt ?? articleUpdatedAt,
+        });
+        void refetchContributorAnalytics(queryClient);
+      }
       toast({
         title: "تم الإرسال",
         description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
@@ -963,6 +994,8 @@ export default function ArticleEditor() {
       setStatus(article.status as any);
       setReviewStatus((article as any).reviewStatus ?? null);
       setReviewNotes((article as any).reviewNotes ?? null);
+      setReviewedAt((article as any).reviewedAt ?? null);
+      setArticleUpdatedAt((article as any).updatedAt ?? null);
       hasLoadedArticleRef.current = true;
       
       // Load existing poll for this article
@@ -1579,6 +1612,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     onSuccess: async (data, variables) => {
       // Get the article ID (from response for new articles, or from params for existing)
       const savedArticleId = data?.id || id;
+
+      if (data?.updatedAt) {
+        setArticleUpdatedAt(
+          typeof data.updatedAt === "string" ? data.updatedAt : new Date(data.updatedAt).toISOString(),
+        );
+      }
       
       // Sync angles if any are selected and we have an article ID
       if (savedArticleId && selectedAngleIds.length > 0) {
@@ -3463,21 +3502,39 @@ const generateSlug = (text: string) => {
                 <span className="xs:hidden">حفظ</span>
               </Button>
               {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => submitReviewMutation.mutate()}
-                  disabled={submitReviewMutation.isPending || isSaving || isLockedByOther}
-                  className="gap-1.5 sm:gap-2"
-                  data-testid="button-resubmit-review"
-                >
-                  {submitReviewMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                  إرسال بعد التعديل
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => submitReviewMutation.mutate()}
+                          disabled={
+                            !canResubmitAfterEdit ||
+                            submitReviewMutation.isPending ||
+                            isSaving ||
+                            isLockedByOther
+                          }
+                          className="gap-1.5 sm:gap-2"
+                          data-testid="button-resubmit-review"
+                        >
+                          {submitReviewMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                          إرسال بعد التعديل
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!canResubmitAfterEdit && (
+                      <TooltipContent side="bottom" className="max-w-xs text-center">
+                        {REVISION_SUBMIT_HINT}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               )}
               <Button
                 size="sm"

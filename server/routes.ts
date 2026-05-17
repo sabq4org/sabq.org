@@ -10394,9 +10394,11 @@ Respond in valid JSON format only:
           status: a.status,
           reviewStatus: a.reviewStatus,
           reviewNotes: a.reviewNotes,
+          reviewedAt: a.reviewedAt,
           views: a.views,
           publishedAt: a.publishedAt,
           createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
         })),
       });
     } catch (error) {
@@ -10501,6 +10503,7 @@ Respond in valid JSON format only:
           status: a.status,
           reviewStatus: a.reviewStatus,
           reviewNotes: a.reviewNotes,
+          reviewedAt: a.reviewedAt,
           views: a.views,
           publishedAt: a.publishedAt,
           createdAt: a.createdAt,
@@ -10543,6 +10546,16 @@ Respond in valid JSON format only:
 
       if (existingArticle.reviewStatus === "pending_review") {
         return res.status(400).json({ message: "المحتوى قيد المراجعة بالفعل" });
+      }
+
+      if (existingArticle.reviewStatus === "needs_changes" && existingArticle.reviewedAt) {
+        const reviewedMs = new Date(existingArticle.reviewedAt).getTime();
+        const updatedMs = new Date(existingArticle.updatedAt || 0).getTime();
+        if (!Number.isNaN(reviewedMs) && !Number.isNaN(updatedMs) && updatedMs <= reviewedMs) {
+          return res.status(400).json({
+            message: "يجب تعديل المقال وحفظه قبل الإرسال — افتح المحرر واضغط حفظ ثم أرسل",
+          });
+        }
       }
 
       const [updatedArticle] = await db
@@ -25602,6 +25615,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       if (existingArticle.reviewStatus === "pending_review") {
         return res.status(400).json({ message: "Article is already pending review" });
+      }
+
+      if (existingArticle.reviewStatus === "needs_changes" && existingArticle.reviewedAt) {
+        const reviewedMs = new Date(existingArticle.reviewedAt).getTime();
+        const updatedMs = new Date(existingArticle.updatedAt || 0).getTime();
+        if (!Number.isNaN(reviewedMs) && !Number.isNaN(updatedMs) && updatedMs <= reviewedMs) {
+          return res.status(400).json({
+            message: "يجب تعديل المقال وحفظه قبل الإرسال — افتح المحرر واضغط حفظ ثم أرسل",
+          });
+        }
       }
 
       const [updatedArticle] = await db

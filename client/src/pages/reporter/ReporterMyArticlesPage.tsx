@@ -7,6 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
+import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
+import {
+  markArticleSubmittedInAnalyticsCache,
+  refetchContributorAnalytics,
+} from "@/lib/contributorAnalyticsCache";
 import {
   FileText,
   Edit,
@@ -14,7 +20,6 @@ import {
   ThumbsUp,
   MessageCircle,
   PlusCircle,
-  Send,
   AlertCircle,
 } from "lucide-react";
 
@@ -29,18 +34,12 @@ interface ReporterAnalytics {
     status: string;
     reviewStatus?: string | null;
     reviewNotes?: string | null;
+    reviewedAt?: string | null;
+    updatedAt?: string | null;
     views: number;
     publishedAt: string | null;
     createdAt: string;
   }>;
-}
-
-function articleStatusLabel(article: { status: string; reviewStatus?: string | null }) {
-  if (article.reviewStatus === "needs_changes") return { label: "يحتاج تعديل", variant: "outline" as const };
-  if (article.reviewStatus === "pending_review") return { label: "قيد المراجعة", variant: "outline" as const };
-  if (article.status === "published") return { label: "منشور", variant: "default" as const };
-  if (article.status === "archived") return { label: "مؤرشف", variant: "destructive" as const };
-  return { label: "مسودة", variant: "secondary" as const };
 }
 
 export default function ReporterMyArticlesPage() {
@@ -49,14 +48,22 @@ export default function ReporterMyArticlesPage() {
 
   const { data: analytics, isLoading } = useQuery<ReporterAnalytics>({
     queryKey: ["/api/reporter/analytics"],
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const submitReviewMutation = useMutation({
     mutationFn: async (articleId: string) => {
       return apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/reporter/analytics"] });
+    onSuccess: (data, articleId) => {
+      markArticleSubmittedInAnalyticsCache(queryClient, {
+        id: articleId,
+        reviewStatus: data?.reviewStatus,
+        status: data?.status,
+        updatedAt: data?.updatedAt,
+      });
+      void refetchContributorAnalytics(queryClient);
       toast({
         title: "تم الإرسال",
         description: "عاد الخبر إلى مسودات فريق التحرير للمراجعة",
@@ -145,8 +152,8 @@ export default function ReporterMyArticlesPage() {
                     <tr key={article.id} className="border-t hover:bg-muted/30">
                       <td className="py-3 px-4 font-medium line-clamp-1">{article.title}</td>
                       <td className="py-3 px-4">
-                        <Badge variant={articleStatusLabel(article).variant}>
-                          {articleStatusLabel(article).label}
+                        <Badge variant={contributorArticleStatusLabel(article).variant}>
+                          {contributorArticleStatusLabel(article).label}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
@@ -175,15 +182,12 @@ export default function ReporterMyArticlesPage() {
                             </Button>
                           )}
                           {article.reviewStatus === "needs_changes" && (
-                            <Button
-                              size="sm"
+                            <SubmitRevisionButton
+                              article={article}
+                              isPending={submitReviewMutation.isPending}
+                              onSubmit={(aid) => submitReviewMutation.mutate(aid)}
                               className="gap-1 h-8"
-                              disabled={submitReviewMutation.isPending}
-                              onClick={() => submitReviewMutation.mutate(article.id)}
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                              إرسال
-                            </Button>
+                            />
                           )}
                         </div>
                       </td>

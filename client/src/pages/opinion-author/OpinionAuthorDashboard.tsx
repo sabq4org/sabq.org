@@ -9,6 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
+import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
+import {
+  markArticleSubmittedInAnalyticsCache,
+  refetchContributorAnalytics,
+} from "@/lib/contributorAnalyticsCache";
 import {
   FileText,
   CheckCircle,
@@ -21,7 +27,6 @@ import {
   PlusCircle,
   FileEdit,
   MessageSquare,
-  Send,
   AlertCircle,
 } from "lucide-react";
 
@@ -41,24 +46,12 @@ interface OpinionAuthorAnalytics {
     status: string;
     reviewStatus?: string | null;
     reviewNotes?: string | null;
+    reviewedAt?: string | null;
+    updatedAt?: string | null;
     views: number;
     publishedAt: string | null;
     createdAt: string;
   }>;
-}
-
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  published: { label: "منشور", variant: "default" },
-  draft: { label: "مسودة", variant: "secondary" },
-  pending: { label: "قيد المراجعة", variant: "outline" },
-  rejected: { label: "مرفوض", variant: "destructive" },
-  archived: { label: "مؤرشف", variant: "destructive" },
-};
-
-function articleStatusLabel(article: { status: string; reviewStatus?: string | null }) {
-  if (article.reviewStatus === "needs_changes") return { label: "يحتاج تعديل", variant: "outline" as const };
-  if (article.reviewStatus === "pending_review") return { label: "قيد المراجعة", variant: "outline" as const };
-  return statusConfig[article.status] || { label: article.status, variant: "secondary" as const };
 }
 
 export default function OpinionAuthorDashboard() {
@@ -73,7 +66,7 @@ export default function OpinionAuthorDashboard() {
   } = useQuery<OpinionAuthorAnalytics>({
     queryKey: ["/api/opinion-author/analytics"],
     refetchOnWindowFocus: true,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const needsChangesList =
@@ -97,8 +90,14 @@ export default function OpinionAuthorDashboard() {
     mutationFn: async (articleId: string) => {
       return apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
+    onSuccess: (data, articleId) => {
+      markArticleSubmittedInAnalyticsCache(queryClient, {
+        id: articleId,
+        reviewStatus: data?.reviewStatus,
+        status: data?.status,
+        updatedAt: data?.updatedAt,
+      });
+      void refetchContributorAnalytics(queryClient);
       toast({
         title: "تم الإرسال",
         description: "عاد المقال إلى مسودات فريق التحرير للمراجعة",
@@ -210,14 +209,11 @@ export default function OpinionAuthorDashboard() {
                           <Edit className="h-4 w-4 ml-1" />
                           تعديل
                         </Button>
-                        <Button
-                          size="sm"
-                          disabled={submitReviewMutation.isPending}
-                          onClick={() => submitReviewMutation.mutate(article.id)}
-                        >
-                          <Send className="h-4 w-4 ml-1" />
-                          إرسال
-                        </Button>
+                        <SubmitRevisionButton
+                          article={article}
+                          isPending={submitReviewMutation.isPending}
+                          onSubmit={(id) => submitReviewMutation.mutate(id)}
+                        />
                       </div>
                     </li>
                   ))}
@@ -369,10 +365,10 @@ export default function OpinionAuthorDashboard() {
                           </td>
                           <td className="py-3 px-4">
                             <Badge
-                              variant={articleStatusLabel(article).variant}
+                              variant={contributorArticleStatusLabel(article).variant}
                               data-testid={`badge-status-${article.id}`}
                             >
-                              {articleStatusLabel(article).label}
+                              {contributorArticleStatusLabel(article).label}
                             </Badge>
                           </td>
                           <td className="py-3 px-4">
@@ -411,18 +407,13 @@ export default function OpinionAuthorDashboard() {
                                 </Button>
                               )}
                               {article.reviewStatus === "needs_changes" && (
-                                <Button
-                                  size="sm"
-                                  variant="default"
+                                <SubmitRevisionButton
+                                  article={article}
+                                  isPending={submitReviewMutation.isPending}
+                                  onSubmit={(aid) => submitReviewMutation.mutate(aid)}
                                   className="gap-1 h-8"
-                                  disabled={submitReviewMutation.isPending}
-                                  onClick={() => submitReviewMutation.mutate(article.id)}
-                                  data-testid={`button-submit-${article.id}`}
-                                  title="إرسال بعد التعديل"
-                                >
-                                  <Send className="h-3.5 w-3.5" />
-                                  إرسال
-                                </Button>
+                                  testId={`button-submit-${article.id}`}
+                                />
                               )}
                             </div>
                           </td>
