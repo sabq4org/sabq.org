@@ -12,6 +12,37 @@ nonisolated struct FlexKey: CodingKey, Sendable {
 
 // MARK: - API Article
 
+/// One photo inside a `weekly_photos` article — image + Arabic caption +
+/// photographer/source credit. Backend lives at
+/// `articles.weeklyPhotosData.photos`. Decoder is permissive so missing
+/// caption/credit values still yield a renderable struct.
+nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
+    let imageUrl: String
+    let caption: String
+    let credit: String
+
+    var id: String { imageUrl }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        let raw = (try? c.decode(String.self, forKey: FlexKey("imageUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("image_url")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("image")))
+            ?? ""
+        if raw.hasPrefix("http") {
+            imageUrl = raw
+        } else if raw.isEmpty {
+            imageUrl = ""
+        } else {
+            imageUrl = "https://sabq.org" + raw
+        }
+        caption = ((try? c.decode(String.self, forKey: FlexKey("caption"))) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        credit = ((try? c.decode(String.self, forKey: FlexKey("credit"))) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 nonisolated struct APIArticle: Decodable {
     let id: String
     let title: String
@@ -39,6 +70,10 @@ nonisolated struct APIArticle: Decodable {
     let commentsCount: Int?
     /// Present on `GET /articles/{slug}`; used for related stories in article detail.
     let relatedArticles: [APIArticle]?
+    /// Editorial weekly-photos packs. When `articleType == "weekly_photos"`
+    /// the detail endpoint ships a `weeklyPhotosData.photos` array. iOS
+    /// renders these as a numbered gallery inside the article body.
+    let weeklyPhotos: [APIWeeklyPhoto]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -151,6 +186,18 @@ nonisolated struct APIArticle: Decodable {
         commentsCount = try? c.decode(Int.self, forKey: FlexKey("comments_count"))
 
         relatedArticles = try? c.decode([APIArticle].self, forKey: FlexKey("related_articles"))
+
+        // weeklyPhotosData → { photos: [{ imageUrl, caption, credit }, ...] }
+        // Surfaced for `articleType == "weekly_photos"` posts so the iOS
+        // article detail view can render the numbered gallery instead of
+        // showing only the intro paragraph.
+        if let wpContainer = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("weeklyPhotosData")) {
+            weeklyPhotos = try? wpContainer.decode([APIWeeklyPhoto].self, forKey: FlexKey("photos"))
+        } else if let wpContainer = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("weekly_photos_data")) {
+            weeklyPhotos = try? wpContainer.decode([APIWeeklyPhoto].self, forKey: FlexKey("photos"))
+        } else {
+            weeklyPhotos = nil
+        }
     }
 
     func withKeywords(_ newKeywords: [String]) -> APIArticle {

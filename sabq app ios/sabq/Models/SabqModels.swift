@@ -343,6 +343,12 @@ struct Article: Identifiable, Equatable, Hashable {
     /// (by engagement, not by date) is visible to the reader. 0 when
     /// the API didn't supply it.
     var viewsCount: Int = 0
+    /// Backend article type — only `"weekly_photos"` matters to the UI
+    /// today (triggers the photo-pack gallery inside the detail view).
+    /// Plain news articles leave this nil.
+    var articleType: String? = nil
+    /// Photo packs for weekly-photos articles. Nil for everything else.
+    var weeklyPhotos: [APIWeeklyPhoto]? = nil
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -422,7 +428,9 @@ struct Article: Identifiable, Equatable, Hashable {
             imageURL: api.imageUrl,
             slug: slug,
             articleURL: articleURL,
-            viewsCount: api.viewsCount ?? 0
+            viewsCount: api.viewsCount ?? 0,
+            articleType: api.articleType,
+            weeklyPhotos: api.weeklyPhotos
         )
     }
 

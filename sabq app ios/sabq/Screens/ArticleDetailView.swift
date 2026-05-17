@@ -39,6 +39,10 @@ struct ArticleDetailView: View {
     @State private var scrollOffsetY: CGFloat = 0
     @State private var heroAppeared: Bool = false
     @State private var isPassportPresented = false
+    /// Index of the weekly photo opened in fullscreen lightbox, or nil when
+    /// no lightbox is showing. Mirrors the `selectedIndex` state on the web
+    /// `WeeklyPhotosDisplay` component.
+    @State private var weeklyPhotoIndex: Int? = nil
 
     /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
     /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
@@ -99,6 +103,14 @@ struct ArticleDetailView: View {
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         articleBody
+
+                        // Weekly-photos pack — only renders when the
+                        // backend tagged this article as a photo
+                        // collection. Shows up right after the intro
+                        // paragraph, before the action bar.
+                        if let photos = displayArticle.weeklyPhotos, !photos.isEmpty {
+                            weeklyPhotosGallery(photos)
+                        }
 
                         actionBar
 
@@ -809,6 +821,229 @@ struct ArticleDetailView: View {
         }
     }
 
+    /// Weekly-photos gallery — iOS port of the web `WeeklyPhotosDisplay`
+    /// component. Layout intent:
+    ///   • Header: rounded-square camera tile + "صور الأسبوع" + gradient
+    ///     divider trailing into the empty space.
+    ///   • Continuous vertical timeline rail on the leading (right, in
+    ///     RTL) edge.
+    ///   • For each photo, a dot marker sits on the rail next to a
+    ///     stacked photo + caption pair.
+    ///   • Photo: 16:10 image with a primary-coloured rank pill in the
+    ///     top-leading corner. Tappable — opens a fullscreen lightbox.
+    ///   • Caption card: muted-bg rounded panel with caption text and a
+    ///     border-separated credit row (camera glyph + photographer).
+    ///   • Footer: a tiny primary dot under the last entry, matching web.
+    private func weeklyPhotosGallery(_ photos: [APIWeeklyPhoto]) -> some View {
+        let validPhotos = photos.filter { !$0.imageUrl.isEmpty }
+        return VStack(alignment: .leading, spacing: 0) {
+            weeklyPhotosHeader
+
+            ZStack(alignment: .topLeading) {
+                // Vertical timeline rail on the leading edge (visual
+                // right in RTL — matches the web's `right-6` placement).
+                // Padded from top/bottom so it doesn't bleed past the
+                // first / last dot.
+                LinearGradient(
+                    colors: [
+                        SabqTheme.primaryEnd.opacity(0.20),
+                        SabqTheme.primaryEnd.opacity(0.40),
+                        SabqTheme.primaryEnd.opacity(0.20),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(width: 2)
+                .padding(.top, 20)
+                .padding(.bottom, 20)
+                .padding(.leading, 10)
+
+                VStack(spacing: 28) {
+                    ForEach(Array(validPhotos.enumerated()), id: \.element.id) { index, photo in
+                        weeklyPhotoEntry(index: index, photo: photo)
+                    }
+                }
+            }
+
+            // Closing dot below the last entry, same as web.
+            HStack {
+                Spacer()
+                Circle()
+                    .fill(SabqTheme.primaryEnd)
+                    .frame(width: 8, height: 8)
+                Spacer()
+            }
+            .padding(.top, 22)
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { weeklyPhotoIndex != nil },
+                set: { if !$0 { weeklyPhotoIndex = nil } }
+            )
+        ) {
+            if let startIndex = weeklyPhotoIndex {
+                WeeklyPhotosLightbox(
+                    photos: validPhotos,
+                    startIndex: startIndex
+                )
+            }
+        }
+    }
+
+    private var weeklyPhotosHeader: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(SabqTheme.primaryEnd.opacity(0.10))
+                )
+
+            Text("صور الأسبوع")
+                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .foregroundStyle(SabqTheme.ink)
+
+            LinearGradient(
+                colors: [.clear, SabqTheme.outline, .clear],
+                startPoint: .trailing,
+                endPoint: .leading
+            )
+            .frame(height: 1)
+        }
+        .padding(.bottom, 28)
+    }
+
+    private func weeklyPhotoEntry(index: Int, photo: APIWeeklyPhoto) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            // Dot column rendered FIRST so it occupies the leading edge
+            // (visual right in RTL). Its width (22pt) is centred at 11pt
+            // from the leading edge — exactly where the rail's `.leading
+            // padding 10pt + rail width 2pt` puts the rail's centre.
+            ZStack {
+                Circle()
+                    .fill(SabqTheme.primaryEnd)
+                    .frame(width: 14, height: 14)
+                    .overlay(
+                        Circle().stroke(SabqTheme.background, lineWidth: 4)
+                    )
+                    .shadow(color: SabqTheme.primaryEnd.opacity(0.4), radius: 4, y: 2)
+            }
+            .frame(width: 22, alignment: .top)
+            .padding(.top, 16)
+
+            VStack(alignment: .leading, spacing: 14) {
+                weeklyPhotoImage(index: index, photo: photo)
+                weeklyPhotoCaption(photo: photo)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func weeklyPhotoImage(index: Int, photo: APIWeeklyPhoto) -> some View {
+        Button {
+            SabqHaptics.light()
+            weeklyPhotoIndex = index
+        } label: {
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .overlay(
+                        Group {
+                            if let url = URL(string: photo.imageUrl) {
+                                CachedAsyncImage(url: url, contentMode: .fill) {
+                                    weeklyPhotoPlaceholder
+                                }
+                            } else {
+                                weeklyPhotoPlaceholder
+                            }
+                        }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(SabqTheme.outline.opacity(0.30), lineWidth: 0.5)
+                    )
+                    .shadow(color: SabqTheme.shadow, radius: 10, x: 0, y: 4)
+
+                // Rank pill in the top-leading corner (visual top-right
+                // in RTL — matches web's `top-3 right-3` placement).
+                Text("\(index + 1)")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(SabqTheme.primaryEnd)
+                    )
+                    .shadow(color: SabqTheme.primaryEnd.opacity(0.4), radius: 5, y: 2)
+                    .padding(12)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var weeklyPhotoPlaceholder: some View {
+        LinearGradient(
+            colors: [
+                SabqTheme.primaryEnd.opacity(0.10),
+                SabqTheme.coral.opacity(0.06),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay {
+            Image(systemName: "photo")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(SabqTheme.primaryEnd.opacity(0.35))
+        }
+    }
+
+    private func weeklyPhotoCaption(photo: APIWeeklyPhoto) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !photo.caption.isEmpty {
+                Text(photo.caption)
+                    .font(.system(size: CGFloat(fontSize), weight: .regular))
+                    .foregroundStyle(SabqTheme.ink.opacity(0.92))
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(CGFloat(lineSpacing))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if !photo.credit.isEmpty {
+                Divider()
+                    .background(SabqTheme.outline.opacity(0.5))
+
+                HStack(spacing: 8) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(photo.credit)
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(SabqTheme.tertiaryInk)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(SabqTheme.paleFill.opacity(0.40))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
     private var articleBody: some View {
         Group {
             let html = displayArticle.bodyHTML
@@ -1425,6 +1660,184 @@ struct ReaderControlsSheet: View {
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .frame(width: 18)
             }
+        }
+    }
+}
+
+// MARK: - Weekly Photos Lightbox
+//
+// Fullscreen image viewer matching the web's `WeeklyPhotosDisplay`
+// lightbox: blurred black backdrop, 16:10 photo, chevron-right (prev,
+// RTL-correct) and chevron-left (next) navigation arrows, rank pill
+// (N / Total) top-leading, close X top-trailing, caption + credit panel
+// underneath, and a dot indicator row below.
+struct WeeklyPhotosLightbox: View {
+    let photos: [APIWeeklyPhoto]
+    let startIndex: Int
+    @Environment(\.dismiss) private var dismiss
+    @State private var index: Int
+
+    init(photos: [APIWeeklyPhoto], startIndex: Int) {
+        self.photos = photos
+        self.startIndex = startIndex
+        _index = State(initialValue: startIndex)
+    }
+
+    private var current: APIWeeklyPhoto { photos[index] }
+
+    var body: some View {
+        ZStack {
+            // Backdrop — tap anywhere to dismiss.
+            Color.black.opacity(0.92).ignoresSafeArea()
+                .background(.ultraThinMaterial)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    SabqHaptics.light()
+                    dismiss()
+                }
+
+            VStack(spacing: 18) {
+                ZStack {
+                    Color.clear
+                        .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .overlay(
+                            Group {
+                                if let url = URL(string: current.imageUrl) {
+                                    CachedAsyncImage(url: url, contentMode: .fit) {
+                                        Color.black.opacity(0.6)
+                                    }
+                                } else {
+                                    Color.black.opacity(0.6)
+                                }
+                            }
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                    // Rank pill — top-leading (visually top-right in RTL).
+                    VStack {
+                        HStack {
+                            Text("\(index + 1) / \(photos.count)")
+                                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .monospacedDigit()
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(SabqTheme.primaryEnd)
+                                )
+                                .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                            Spacer()
+                            Button {
+                                SabqHaptics.light()
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 36, height: 36)
+                                    .background(
+                                        Circle().fill(.white.opacity(0.15))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Spacer()
+                    }
+                    .padding(14)
+
+                    // Right-side arrow goes to PREVIOUS in RTL.
+                    HStack {
+                        Button { goToPrevious() } label: {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 22, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(
+                                    Circle().fill(.white.opacity(0.18))
+                                )
+                                .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        Spacer()
+                        Button { goToNext() } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 22, weight: .heavy))
+                                .foregroundStyle(.white)
+                                .frame(width: 48, height: 48)
+                                .background(
+                                    Circle().fill(.white.opacity(0.18))
+                                )
+                                .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 14)
+                }
+                .padding(.horizontal, 12)
+
+                // Caption + credit panel.
+                if !current.caption.isEmpty || !current.credit.isEmpty {
+                    VStack(spacing: 12) {
+                        if !current.caption.isEmpty {
+                            Text(current.caption)
+                                .font(.system(size: 15, weight: .regular))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(6)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if !current.credit.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(current.credit)
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .foregroundStyle(.white.opacity(0.55))
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.white.opacity(0.06))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(.white.opacity(0.12), lineWidth: 0.5)
+                            )
+                    )
+                    .padding(.horizontal, 18)
+                }
+
+                // Dot indicators.
+                HStack(spacing: 8) {
+                    ForEach(Array(photos.enumerated()), id: \.offset) { i, _ in
+                        Capsule()
+                            .fill(i == index ? SabqTheme.primaryEnd : .white.opacity(0.30))
+                            .frame(width: i == index ? 22 : 6, height: 6)
+                            .animation(.spring(response: 0.3), value: index)
+                    }
+                }
+                .padding(.top, 4)
+                .padding(.bottom, 8)
+            }
+        }
+        .sabqRTL()
+    }
+
+    private func goToPrevious() {
+        SabqHaptics.light()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            index = (index == 0) ? photos.count - 1 : index - 1
+        }
+    }
+
+    private func goToNext() {
+        SabqHaptics.light()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            index = (index == photos.count - 1) ? 0 : index + 1
         }
     }
 }
