@@ -2524,6 +2524,15 @@ function formatArticleForMobile(row: any, baseUrl: string) {
       || (article.imageUrl == null && article.isAiGeneratedThumbnail)
       || false,
     ai_image_model: article.aiImageModel || null,
+    // Temporary debug — strip after the AI-image-flag pipeline is
+    // verified end-to-end. Surfaces the raw values pulled from the
+    // articleCardSelect to distinguish "DB returned false" from
+    // "drizzle/bundler dropped the field" from "|| short-circuit
+    // bug in the line above".
+    _debug_ai_raw_image: article.isAiGeneratedImage,
+    _debug_ai_raw_thumb: article.isAiGeneratedThumbnail,
+    _debug_ai_raw_model: article.aiImageModel,
+    _debug_select_keys: Object.keys(article).filter((k) => k.toLowerCase().includes('ai')),
     article_url: `${baseUrl}/article/${article.slug}`,
     is_breaking: article.newsType === "breaking",
     is_featured: article.isFeatured || false,
