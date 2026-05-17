@@ -59,6 +59,12 @@ struct ArticleDetailView: View {
     /// would run on every body re-render — including each font-size or
     /// line-spacing tick.
     @State private var cachedParagraphs: (body: String, items: [String]) = ("", [])
+    /// Mirror of `cachedParagraphs` for the rich-HTML pipeline. Without this,
+    /// `ArticleHtmlParser.parse(html)` ran on every body re-render (font-size
+    /// slider, line-spacing change, scroll-progress tick, like-button toggle),
+    /// stalling scroll on long articles. Cache key is the raw HTML string so
+    /// a same-article re-render is a dictionary hit.
+    @State private var cachedBlocks: (html: String, items: [ArticleBlock]) = ("", [])
 
     /// Hero scale combines a one-shot 1.06→1.0 "zoom-on-appear" with a
     /// rubber-band zoom when the user pulls down (scrollOffsetY < 0). Capped
@@ -296,7 +302,7 @@ struct ArticleDetailView: View {
         if let urlStr = displayArticle.articleURL, let url = URL(string: urlStr) {
             return url
         }
-        return URL(string: "https://sabq.org")!
+        return URL(string: URLConstants.webOrigin)!
     }
 
     // Like button — heart that toggles a reactions row server-side.
@@ -308,22 +314,11 @@ struct ArticleDetailView: View {
             SabqHaptics.medium()
             toggleLike()
         } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: isLiked ? "heart.fill" : "heart")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-                if likesCount > 0 {
-                    Text("\(likesCount)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(Color(red: 0.95, green: 0.30, blue: 0.36)))
-                        .offset(x: 6, y: -4)
-                }
-            }
+            Image(systemName: isLiked ? "heart.fill" : "heart")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
+                .padding(8)
+                .background(Circle().fill(.ultraThinMaterial))
         }
         .disabled(isLikeBusy)
         .buttonStyle(.plain)
@@ -435,6 +430,14 @@ struct ArticleDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 300)
         .clipped()
+        // AI-generated disclosure on the top-LEFT of the hero visually
+        // — matches the web's `top-3 left-3` placement. In RTL,
+        // `.topTrailing` resolves to top-left.
+        .overlay(alignment: .topTrailing) {
+            if displayArticle.isAiGeneratedImage {
+                AIImageBadge(model: displayArticle.aiImageModel)
+            }
+        }
     }
 
     private var heroPlaceholder: some View {
@@ -1187,8 +1190,15 @@ struct ArticleDetailView: View {
             } else if !html.isEmpty && isHTMLContent(html) {
                 // Rich HTML pipeline: parse into structured blocks and render
                 // each natively (paragraph/heading/list/quote/image/gallery/
-                // tweet/video). Honours the Aa controls live.
-                let blocks = ArticleHtmlParser.parse(html)
+                // tweet/video). Honours the Aa controls live. Parse result
+                // is memoised in `cachedBlocks` so the heavy regex/scanner
+                // work only runs on the first render of a new article.
+                let blocks: [ArticleBlock] = {
+                    if cachedBlocks.html == html { return cachedBlocks.items }
+                    let parsed = ArticleHtmlParser.parse(html)
+                    DispatchQueue.main.async { cachedBlocks = (html, parsed) }
+                    return parsed
+                }()
                 ArticleContentView(
                     blocks: blocks,
                     fontSize: fontSize,

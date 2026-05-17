@@ -332,14 +332,23 @@ struct HomeFeedView: View {
     private var featuredSection: some View {
         TabView {
             ForEach(Array(articlesStore.featuredArticles.prefix(3))) { article in
-                NavigationLink(value: article) {
-                    FeaturedArticleCard(
-                        article: article,
-                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                        isBookmarked: bookmarksStore.isBookmarked(article.id)
-                    )
+                // VStack + trailing Spacer anchors the card to the top
+                // of its TabView page. Without this, TabView's default
+                // center-alignment lets a tall (3-line-title) card slide
+                // upward and clip against the section above it. The
+                // page's reserved bottom padding for page-indicator
+                // dots stays as Spacer-absorbed slack.
+                VStack(spacing: 0) {
+                    NavigationLink(value: article) {
+                        FeaturedArticleCard(
+                            article: article,
+                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                            isBookmarked: bookmarksStore.isBookmarked(article.id)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    Spacer(minLength: 0)
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 4)
                 .padding(.bottom, 40)
             }
@@ -357,7 +366,14 @@ struct HomeFeedView: View {
             appearance.currentPageIndicatorTintColor = UIColor(SabqTheme.primaryEnd)
             appearance.pageIndicatorTintColor = UIColor(SabqTheme.ink.opacity(0.45))
         }
-        .frame(height: 420)
+        // 480pt accommodates the worst-case featured card: 200pt hero +
+        // 40pt vertical padding + 3-line title (~80pt) + 12pt spacing +
+        // 2-line excerpt (~45pt) + 12pt spacing + 30pt meta row + 40pt
+        // bottom padding for page-indicator dots = ~459pt. 420pt
+        // overflowed for Arabic 3-line headlines, which TabView centred
+        // vertically inside the frame — the result was a card visibly
+        // pushed down with its top edge clipped by the section above.
+        .frame(height: 480)
     }
 
     // MARK: - Category Chips
@@ -628,16 +644,22 @@ struct HomeFeedView: View {
             )
 
             SurfaceCard {
-                ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { _, article in
-                    NavigationLink(value: article) {
-                        CompactArticleRow(
-                            article: article,
-                            onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                            isBookmarked: bookmarksStore.isBookmarked(article.id)
-                        )
+                // LazyVStack so the home feed only materialises rows
+                // for articles entering the viewport — previous plain
+                // VStack rendered all ~15-50 CompactArticleRow views
+                // upfront on every paginated `تحميل المزيد` tap.
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { _, article in
+                        NavigationLink(value: article) {
+                            CompactArticleRow(
+                                article: article,
+                                onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                isBookmarked: bookmarksStore.isBookmarked(article.id)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 4)
                 }
 
                 if articlesStore.hasMore && articlesStore.selectedCategory == nil {
@@ -860,9 +882,13 @@ struct HomeFeedView: View {
     /// Backend greeting wins (includes the user's name); falls back to a
     /// device-local time greeting + firstName when offline.
     private var journeyGreeting: String {
-        if let backend = richInsights?.greeting.trimmingCharacters(in: .whitespacesAndNewlines), !backend.isEmpty {
-            return backend
-        }
+        // Greeting word is ALWAYS computed from the device's local clock
+        // — never from the backend. The Railway server runs in UTC, so
+        // `new Date().getHours()` there returned 11 at 2 PM Riyadh and
+        // sent back "صباح الخير" for the entire afternoon. The user's
+        // own device knows their actual hour-of-day, so we trust it.
+        // We still prefer the backend's *name* if it embeds one in the
+        // greeting string (e.g. "صباح الخير يا علي" → pluck "علي").
         let hour = Calendar.current.component(.hour, from: Date())
         let word: String
         switch hour {
@@ -871,8 +897,20 @@ struct HomeFeedView: View {
         case 17..<21: word = "مساء الخير"
         default:      word = "ليلة سعيدة"
         }
-        let firstName = authStore.currentUser?.firstName?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        // Try to pluck the name from a backend greeting like
+        // "صباح الخير يا علي" so we don't lose personalization. Falls
+        // back to AuthStore's cached firstName, then to no-name.
+        let nameFromBackend: String? = {
+            let raw = (richInsights?.greeting ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let range = raw.range(of: " يا ") else { return nil }
+            let candidate = String(raw[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return candidate.isEmpty ? nil : candidate
+        }()
+
+        let firstName = nameFromBackend
+            ?? authStore.currentUser?.firstName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? ""
         return firstName.isEmpty ? word : "\(word) يا \(firstName)"
     }
 

@@ -66,6 +66,12 @@ nonisolated struct APIArticle: Decodable {
     let isFeatured: Bool?
     var keywords: [String]?
     let imageUrl: String?
+    /// True when the hero/thumbnail was produced by the dashboard's AI
+    /// image generator. Drives the "مولّدة بالذكاء الاصطناعي" badge
+    /// overlay on iOS hero images — matches the web convention in
+    /// `client/src/components/ImageWithCaption.tsx`.
+    let isAiGeneratedImage: Bool?
+    let aiImageModel: String?
     let viewsCount: Int?
     let commentsCount: Int?
     /// Present on `GET /articles/{slug}`; used for related stories in article detail.
@@ -180,6 +186,11 @@ nonisolated struct APIArticle: Decodable {
         } else {
             imageUrl = nil
         }
+
+        isAiGeneratedImage = (try? c.decode(Bool.self, forKey: FlexKey("is_ai_generated_image")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("isAiGeneratedImage")))
+        aiImageModel = (try? c.decode(String.self, forKey: FlexKey("ai_image_model")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("aiImageModel")))
 
         viewsCount = (try? c.decode(Int.self, forKey: FlexKey("views")))
             ?? (try? c.decode(Int.self, forKey: FlexKey("views_count")))
@@ -493,6 +504,8 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
     let authorGender: String?
     let publishedAt: String?
     let imageUrl: String?
+    let isAiGeneratedImage: Bool?
+    let aiImageModel: String?
     let tags: [String]
 
     init(from decoder: Decoder) throws {
@@ -571,6 +584,10 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
             keys: ["imageUrl", "image_url", "image", "coverImage", "cover_image", "thumbnailUrl"]
         )
         imageUrl = Self.absoluteMediaURL(from: rawImage)
+        isAiGeneratedImage = (try? c.decode(Bool.self, forKey: FlexKey("is_ai_generated_image")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("isAiGeneratedImage")))
+        aiImageModel = (try? c.decode(String.self, forKey: FlexKey("ai_image_model")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("aiImageModel")))
     }
 
     private static func decodeFirstString(

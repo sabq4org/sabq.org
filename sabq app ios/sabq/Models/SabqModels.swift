@@ -337,6 +337,12 @@ struct Article: Identifiable, Equatable, Hashable {
     let isFeatured: Bool
     var tags: [String]
     let imageURL: String?
+    /// True when the hero image was produced by the dashboard's AI
+    /// generator. Drives the "مولّدة بالذكاء الاصطناعي" badge overlay
+    /// that ArticleDetailView + the carousel cards paint on top-leading
+    /// of the hero. Matches the web convention.
+    var isAiGeneratedImage: Bool = false
+    var aiImageModel: String? = nil
     let slug: String?
     let articleURL: String?
     /// Total reads. Surfaced next to trending rows so the sort order
@@ -410,7 +416,7 @@ struct Article: Identifiable, Equatable, Hashable {
         let sharePath = api.englishSlug?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? slug
-        let articleURL = sharePath.map { "https://sabq.org/article/\($0)" }
+        let articleURL = sharePath.map { URLConstants.articleURL(slug: $0) }
 
         return Article(
             id: api.id,
@@ -426,6 +432,8 @@ struct Article: Identifiable, Equatable, Hashable {
             isFeatured: api.isFeatured ?? false,
             tags: api.keywords ?? [],
             imageURL: api.imageUrl,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
             slug: slug,
             articleURL: articleURL,
             viewsCount: api.viewsCount ?? 0,
@@ -563,6 +571,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
     let publishDate: Date
     let tags: [String]
     let imageURL: String?
+    var isAiGeneratedImage: Bool = false
+    var aiImageModel: String? = nil
     let slug: String?
     let articleURL: String?
 
@@ -615,6 +625,33 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
         }
     }
 
+    /// Bridge an opinion into an Article shell so the existing bookmarks
+    /// store (which is `Article`-typed end-to-end) can cache + render it
+    /// alongside news items. `articleURL` is set to the public /opinion/…
+    /// route so deep-links from the bookmarks list re-open in
+    /// OpinionDetailView via the existing URL handler. Category is set to
+    /// `.community` as a neutral fallback — opinion isn't its own
+    /// ArticleCategory case today.
+    func asArticleForBookmark() -> Article {
+        Article(
+            id: id,
+            title: title,
+            excerpt: excerpt,
+            aiSummary: "",
+            body: body,
+            bodyHTML: "",
+            category: .community,
+            author: authorName,
+            publishDate: publishDate,
+            isBreaking: false,
+            isFeatured: false,
+            tags: tags,
+            imageURL: imageURL,
+            slug: slug,
+            articleURL: articleURL
+        )
+    }
+
     nonisolated static func from(_ api: APIOpinion) -> OpinionArticle {
         let body = Article.stripHTMLTags(from: api.fullText)
         let excerpt = Article.resolveExcerpt(
@@ -629,7 +666,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
         let sharePath = api.englishSlug?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? slug
-        let articleURL = sharePath.map { "https://sabq.org/opinion/\($0)" }
+        let articleURL = sharePath.map { URLConstants.opinionURL(slug: $0) }
 
         return OpinionArticle(
             id: api.id,
@@ -654,6 +691,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty },
             imageURL: api.imageUrl,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
             slug: slug,
             articleURL: articleURL
         )
@@ -673,7 +712,7 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
         let sharePath = api.englishSlug?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty ?? slug
-        let articleURL = sharePath.map { "https://sabq.org/article/\($0)" }
+        let articleURL = sharePath.map { URLConstants.articleURL(slug: $0) }
 
         return OpinionArticle(
             id: api.id,
@@ -690,6 +729,8 @@ struct OpinionArticle: Identifiable, Equatable, Hashable {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty },
             imageURL: api.imageUrl,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
             slug: slug,
             articleURL: articleURL
         )

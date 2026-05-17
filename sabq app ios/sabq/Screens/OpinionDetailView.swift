@@ -3,6 +3,7 @@ import SwiftUI
 struct OpinionDetailView: View {
     let opinion: OpinionArticle
     @Environment(\.dismiss) private var dismiss
+    @Environment(BookmarksStore.self) private var bookmarksStore
 
     @State private var fullOpinion: OpinionArticle?
     @State private var moreOpinions: [OpinionArticle] = []
@@ -143,6 +144,24 @@ struct OpinionDetailView: View {
                     likeButton
 
                     Button {
+                        SabqHaptics.medium()
+                        // Pass an Article-shaped bookmark payload so the
+                        // bookmarks list can render this opinion offline
+                        // — passing `nil` only saves the ID, and the
+                        // BookmarksView lookup then has nothing to show.
+                        bookmarksStore.toggle(opinion.id, article: displayOpinion.asArticleForBookmark())
+                    } label: {
+                        Image(systemName: bookmarksStore.isBookmarked(opinion.id) ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                bookmarksStore.isBookmarked(opinion.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                            )
+                            .padding(8)
+                            .background(Circle().fill(.ultraThinMaterial))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
                         SabqHaptics.light()
                         shareOpinion()
                     } label: {
@@ -191,22 +210,11 @@ struct OpinionDetailView: View {
             SabqHaptics.medium()
             toggleLike()
         } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: isLiked ? "heart.fill" : "heart")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
-                    .padding(8)
-                    .background(Circle().fill(.ultraThinMaterial))
-                if likesCount > 0 {
-                    Text("\(likesCount)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(Color(red: 0.95, green: 0.30, blue: 0.36)))
-                        .offset(x: 6, y: -4)
-                }
-            }
+            Image(systemName: isLiked ? "heart.fill" : "heart")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isLiked ? Color(red: 0.95, green: 0.30, blue: 0.36) : SabqTheme.secondaryInk)
+                .padding(8)
+                .background(Circle().fill(.ultraThinMaterial))
         }
         .disabled(isLikeBusy)
         .buttonStyle(.plain)
@@ -261,6 +269,11 @@ struct OpinionDetailView: View {
         .frame(maxWidth: .infinity)
         .frame(height: 300)
         .clipped()
+        .overlay(alignment: .topTrailing) {
+            if displayOpinion.isAiGeneratedImage {
+                AIImageBadge(model: displayOpinion.aiImageModel)
+            }
+        }
     }
 
     private var heroPlaceholder: some View {
@@ -677,7 +690,7 @@ struct OpinionDetailView: View {
         if let urlString = displayOpinion.articleURL, let url = URL(string: urlString) {
             return url
         }
-        return URL(string: "https://sabq.org")!
+        return URL(string: URLConstants.webOrigin)!
     }
 
     private func shareOpinion() {

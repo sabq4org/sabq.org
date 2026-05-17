@@ -256,13 +256,17 @@ enum NewsService {
     }
 
     private static func deduplicatedOpinions(_ opinions: [OpinionArticle]) -> [OpinionArticle] {
+        // Preserves the backend's ordering — important for `sort=trending`,
+        // which returns articles ranked by the 48h engagement score. The
+        // previous version re-sorted by publishDate DESC after dedup, which
+        // silently flipped every trending response back into a chronological
+        // "newest-first" list (this was the bug behind "ترند المقالات يعرض
+        // الأحدث فالأحدث" — backend was correct, iOS was clobbering it).
         var seen = Set<String>()
-        return opinions
-            .sorted { $0.publishDate > $1.publishDate }
-            .filter { opinion in
-                let key = opinion.slug ?? opinion.id
-                return seen.insert(key).inserted
-            }
+        return opinions.filter { opinion in
+            let key = opinion.slug ?? opinion.id
+            return seen.insert(key).inserted
+        }
     }
 
     private static func fetchPrimaryOpinions(sort: String? = nil) async -> [OpinionArticle] {

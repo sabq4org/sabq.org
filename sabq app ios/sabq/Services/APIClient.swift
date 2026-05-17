@@ -45,8 +45,8 @@ private enum KeychainHelper {
 actor APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "https://sabq.org/api/v1"
-    private let publicAPIBaseURL = "https://sabq.org/api"
+    private let baseURL = URLConstants.mobileAPI
+    private let publicAPIBaseURL = URLConstants.publicAPI
     private let session: URLSession
     private let ephemeralSession: URLSession
     private let decoder: JSONDecoder
@@ -57,9 +57,14 @@ actor APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
         config.timeoutIntervalForResource = 30
+        // 30/100 MB was too generous for a news app dominated by image-rich
+        // responses — each paginated payload is 5-10 MB so we churned the
+        // cache constantly without keeping much value. 10/50 MB matches
+        // the working set (one home feed + ~5 recent article details) and
+        // halves the memory footprint on cold start.
         config.urlCache = URLCache(
-            memoryCapacity: 30_000_000,
-            diskCapacity: 100_000_000
+            memoryCapacity: 10_000_000,
+            diskCapacity: 50_000_000
         )
         config.requestCachePolicy = .useProtocolCachePolicy
         config.httpAdditionalHeaders = [
@@ -108,29 +113,42 @@ actor APIClient {
 
     func getAuthToken() -> String? { authToken }
 
+    /// Retained as a no-op for callsite compatibility — `setAuthToken`
+    /// already persists the Bearer token to Keychain, which is the only
+    /// signal `hasSession` consults now. The previous implementation
+    /// wrote a `sabq_is_authenticated` boolean to UserDefaults; that
+    /// flag was both redundant (token presence is the truth) and a
+    /// tamper-risk (plaintext, manipulable from the Settings app).
     func markAuthenticated() {
-        UserDefaults.standard.set(true, forKey: "sabq_is_authenticated")
+        // Intentionally empty — see Keychain-token-driven `hasSession`.
+        // Migration: clear the legacy UserDefaults key if it's still there.
+        UserDefaults.standard.removeObject(forKey: "sabq_is_authenticated")
     }
 
     func markLoggedOut() {
-        UserDefaults.standard.removeObject(forKey: "sabq_is_authenticated")
         authToken = nil
         KeychainHelper.delete(forKey: "sabq_auth_token")
+        // Also drop the legacy boolean in case an older build wrote it.
+        UserDefaults.standard.removeObject(forKey: "sabq_is_authenticated")
         guard let url = URL(string: baseURL) else { return }
         if let cookies = HTTPCookieStorage.shared.cookies(for: url) {
             for cookie in cookies { HTTPCookieStorage.shared.deleteCookie(cookie) }
         }
     }
 
+    /// True when a Bearer token is held in memory (loaded from Keychain
+    /// on init). Replaces the prior UserDefaults flag — keychain
+    /// presence is now the single source of truth so the session can't
+    /// be flipped on by editing UserDefaults from outside the app.
     var hasSession: Bool {
-        UserDefaults.standard.bool(forKey: "sabq_is_authenticated")
+        authToken != nil
     }
 
     // MARK: - CSRF
 
     private func ensureCSRF() async {
         guard csrfToken == nil else { return }
-        guard let url = URL(string: "https://sabq.org/api/csrf-token") else { return }
+        guard let url = URL(string: URLConstants.csrfToken) else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -179,6 +197,23 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
+    /// Single shared helper that converts a `URLResponse` into either a
+    /// success ack or a thrown `APIError`. Replaces the five copies of
+    /// `guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { throw APIError.serverError(...) }`
+    /// that drifted across the file (postRaw, deleteRaw ×2, pushTokenDelete,
+    /// updateNotificationPreferences). Centralising means future status-code
+    /// handling (e.g. surfacing 401 as APIError.unauthorized) lives in one
+    /// spot.
+    private func ensureSuccess(_ response: URLResponse) throws {
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 500
+        if (200...299).contains(status) { return }
+        if status == 401 { throw APIError.unauthorized }
+        if status == 403 { throw APIError.forbidden }
+        if status == 404 { throw APIError.notFound }
+        if status == 429 { throw APIError.rateLimited }
+        throw APIError.serverError(status)
+    }
+
     func postRaw(path: String, body: Encodable? = nil, apiRoot: String? = nil) async throws {
         let url = try buildURL(path: path, apiRoot: apiRoot)
         var request = URLRequest(url: url)
@@ -188,9 +223,7 @@ actor APIClient {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
-        }
+        try ensureSuccess(response)
     }
 
     func deleteRaw(path: String, apiRoot: String? = nil) async throws {
@@ -199,9 +232,7 @@ actor APIClient {
         request.httpMethod = "DELETE"
         applyHeaders(&request)
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
-        }
+        try ensureSuccess(response)
     }
 
     func patch<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
@@ -246,9 +277,7 @@ actor APIClient {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
-        }
+        try ensureSuccess(response)
     }
 
     // MARK: - Homepage
@@ -725,9 +754,7 @@ actor APIClient {
         applyHeaders(&request)
         request.httpBody = try JSONEncoder().encode(Body(token: token))
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
-        }
+        try ensureSuccess(response)
     }
 
     /// Latest 50 editorial notifications (scheduled/published/rejected/
@@ -768,9 +795,7 @@ actor APIClient {
         applyHeaders(&request)
         request.httpBody = try JSONEncoder().encode(prefs)
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
-        }
+        try ensureSuccess(response)
     }
 
     // MARK: - Newsletter

@@ -275,12 +275,35 @@ final class AuthStore {
             }
             await refreshUnreadCount()
         } catch {
-            if await MainActor.run(body: { currentUser }) == nil {
+            // Only clear the session on an authoritative auth failure
+            // (401/403 from the server). Previously ANY error — including
+            // transient airplane-mode hiccups, server 500s, or DNS — wiped
+            // the user, surprising the reader with an unexpected logout
+            // every time the network blipped. Now transient errors leave
+            // the cached currentUser in place and the next foreground
+            // fetch tries again.
+            let isAuthFailure: Bool = {
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .unauthorized, .forbidden: return true
+                    default: return false
+                    }
+                }
+                return false
+            }()
+
+            if isAuthFailure {
                 await APIClient.shared.markLoggedOut()
                 await MainActor.run {
                     isLoggedIn = false
                     currentUser = nil
                 }
+            } else if await MainActor.run(body: { currentUser }) == nil {
+                // Cold start + transient error → no cached user to fall
+                // back on. Leave `isLoggedIn = false` so the UI doesn't
+                // pretend we have a session, but DON'T wipe the keychain
+                // token — the next attempt will retry with the same auth.
+                await MainActor.run { isLoggedIn = false }
             }
         }
     }

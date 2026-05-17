@@ -687,43 +687,72 @@ struct FeaturedArticleCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                if let urlString = article.imageURL, let url = URL(string: urlString) {
-                    CachedAsyncImage(url: url, contentMode: .fill) {
+            // Hero container uses the `Color.clear → .overlay(image)`
+            // pattern instead of letting the Image drive intrinsic size.
+            // Why: in RTL TabView pages (especially the first page,
+            // which is *visually* the last because of layoutDirection
+            // inversion), CachedAsyncImage's intrinsic width — derived
+            // from .fill's aspect-ratio math on the loaded UIImage —
+            // would leak into the card's layout pass, making the card
+            // wider than the TabView page. The Arabic title + excerpt
+            // then bled past the screen's right edge, clipping the
+            // first word of every line (e.g. "أبو" missing from
+            // "أبوظبي"). `Color.clear` gives the container a fixed,
+            // parent-driven width, and `.overlay { image.scaledToFill }
+            // .clipped()` paints the image inside that fixed frame
+            // without ever asking SwiftUI to recompute layout from the
+            // image's pixel size.
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 200)
+                .overlay {
+                    if let urlString = article.imageURL, let url = URL(string: urlString) {
+                        CachedAsyncImage(url: url, contentMode: .fill) {
+                            articleImagePlaceholder
+                                .overlay {
+                                    ProgressView()
+                                        .tint(SabqTheme.primaryEnd)
+                                }
+                        }
+                    } else {
                         articleImagePlaceholder
-                            .overlay {
-                                ProgressView()
-                                    .tint(SabqTheme.primaryEnd)
-                            }
                     }
-                    .frame(height: 200)
-                    .clipShape(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: SabqTheme.cardRadius,
-                            bottomLeadingRadius: 0,
-                            bottomTrailingRadius: 0,
-                            topTrailingRadius: SabqTheme.cardRadius,
-                            style: .continuous
-                        )
+                }
+                .clipped()
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: SabqTheme.cardRadius,
+                        bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: SabqTheme.cardRadius,
+                        style: .continuous
                     )
-                } else {
-                    articleImagePlaceholder
+                )
+                .overlay(alignment: .topTrailing) {
+                    if article.isAiGeneratedImage {
+                        AIImageBadge(model: article.aiImageModel)
+                    }
                 }
 
-                // Category badge + author chip removed from the carousel
-                // image overlay per user direction (2026-05-15). Category and
-                // byline still appear in the article detail; the carousel
-                // card now leads with the hero photo + title alone for a
-                // cleaner, more editorial look.
-            }
+            // (Category badge + author chip removed from the carousel
+            // image overlay per user direction 2026-05-15 — carousel
+            // card leads with hero photo + title alone.)
 
             VStack(alignment: .leading, spacing: 12) {
+                // `fixedSize(horizontal: false, vertical: true)` is what
+                // forces the Text to respect the parent's width instead
+                // of taking its intrinsic single-line width. Without it
+                // the long Arabic title bled past the card edge, clipping
+                // the start of every line (looked like "أبو" was missing
+                // from "أبوظبي").
                 Text(article.title)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(article.excerpt)
                     .font(.system(size: 15, weight: .regular))
@@ -731,6 +760,8 @@ struct FeaturedArticleCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 12) {
                     HStack(spacing: 5) {
@@ -766,7 +797,9 @@ struct FeaturedArticleCard: View {
                 }
             }
             .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .fill(SabqTheme.surface)

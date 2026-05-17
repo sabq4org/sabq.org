@@ -689,13 +689,13 @@ struct SettingsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            Text("سبق — صحيفة إلكترونية سعودية رائدة منذ أكثر من عقدين. أسرع تغطية إخبارية موثوقة على مدار الساعة، بأقلام نخبة من المحررين والمراسلين في قلب الحدث.")
+            Text("سبق.. حيث يلتقي الخبر الموثوق بذكاء المستقبل. تغطية لحظية لا تتوقف، بتقنيات الذكاء الاصطناعي وأقلام محررين من قلب الحدث.")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(5)
 
-            Link(destination: URL(string: "https://sabq.org")!) {
+            Link(destination: URL(string: URLConstants.webOrigin)!) {
                 settingsRow(
                     title: "الموقع الإلكتروني",
                     subtitle: "sabq.org — اقرأ أكثر على موقعنا",

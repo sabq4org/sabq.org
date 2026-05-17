@@ -2516,6 +2516,14 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     published_at: article.publishedAt?.toISOString() || null,
     updated_at: article.updatedAt?.toISOString() || null,
     image_url: article.imageUrl || article.thumbnailUrl || null,
+    // True when the hero (or thumbnail, when no hero exists) was
+    // produced by the dashboard's AI image generator. iOS uses this
+    // to overlay a "مولّدة بالذكاء الاصطناعي" badge on the image —
+    // same convention as ImageWithCaption.tsx on the web.
+    is_ai_generated_image: article.isAiGeneratedImage
+      || (article.imageUrl == null && article.isAiGeneratedThumbnail)
+      || false,
+    ai_image_model: article.aiImageModel || null,
     article_url: `${baseUrl}/article/${article.slug}`,
     is_breaking: article.newsType === "breaking",
     is_featured: article.isFeatured || false,
@@ -4429,8 +4437,23 @@ router.get("/insights/today", async (req: Request, res: Response) => {
       aiPhrase = "رائع! أنت قارئ متميز اليوم";
     }
 
-    const hour = new Date().getHours();
-    const greetingWord = hour < 12 ? "صباح الخير" : (hour < 17 ? "نهارك سعيد" : (hour < 21 ? "مساء الخير" : "ليلة سعيدة"));
+    // Compute the greeting word against Asia/Riyadh instead of the
+    // server's local timezone — Railway runs in UTC, so `getHours()`
+    // there returns 11 when it's 2 PM in Riyadh and the user used to
+    // see "صباح الخير" for the entire local afternoon. Intl gives us a
+    // tz-aware hour without pulling in a date lib.
+    const riyadhHour = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: "Asia/Riyadh",
+      }).format(new Date()),
+      10,
+    );
+    const greetingWord = riyadhHour < 12 ? "صباح الخير"
+      : riyadhHour < 17 ? "نهارك سعيد"
+      : riyadhHour < 21 ? "مساء الخير"
+      : "ليلة سعيدة";
     const firstName = user.firstName || user.email?.split("@")[0] || "عزيزي";
 
     res.json({

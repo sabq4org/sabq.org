@@ -203,16 +203,8 @@ struct OpinionsView: View {
                 Text(opinion.title)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .multilineTextAlignment(.leading)
-
-                if !opinion.excerpt.isEmpty {
-                    Text(opinion.excerpt)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                }
 
                 authorPill(opinion)
             }
