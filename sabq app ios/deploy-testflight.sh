@@ -59,20 +59,35 @@ echo "✅ البناء نجح"
 
 # 4. رفع لـ App Store Connect
 echo "📤 رفع لـ TestFlight..."
-xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportOptionsPlist "$EXPORT_PLIST" \
-  -exportPath "$EXPORT_PATH" \
-  -allowProvisioningUpdates \
-  2>&1 | grep -E "Progress|EXPORT|Upload|Error" || true
+EXPORT_LOG="/tmp/sabq-testflight-export.log"
 
-if [ $? -ne 0 ]; then
-    echo "❌ فشل الرفع!"
+# The previous version piped xcodebuild output through `grep ... || true`
+# and then checked `$?` — but that checked grep's exit code, not the
+# upload's. Apple's daily upload cap or a code-sign failure would still
+# print "تم الرفع بنجاح!". Now: tee the full log + check the pipe's
+# leftmost exit code via PIPESTATUS so a real failure is surfaced.
+if xcodebuild -exportArchive \
+    -archivePath "$ARCHIVE_PATH" \
+    -exportOptionsPlist "$EXPORT_PLIST" \
+    -exportPath "$EXPORT_PATH" \
+    -allowProvisioningUpdates \
+    2>&1 | tee "$EXPORT_LOG" | grep --line-buffered -E "Progress|EXPORT|Upload|Error|altool"; then
+    EXPORT_EXIT=${PIPESTATUS[0]}
+else
+    EXPORT_EXIT=${PIPESTATUS[0]}
+fi
+
+if [ "$EXPORT_EXIT" -ne 0 ]; then
+    echo ""
+    echo "❌ فشل الرفع! (exit $EXPORT_EXIT)"
+    echo "📄 السجل الكامل: $EXPORT_LOG"
+    tail -20 "$EXPORT_LOG" || true
     exit 1
 fi
 
 echo ""
 echo "🎉 تم الرفع بنجاح! التطبيق بيظهر في TestFlight خلال 5-15 دقيقة"
+echo "📄 السجل الكامل: $EXPORT_LOG"
 echo ""
 
 # 5. تنظيف
