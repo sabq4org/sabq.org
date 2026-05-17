@@ -106,7 +106,7 @@ Add these four variables to the Railway service that runs the backend
 | `APNS_KEY_ID` | The 10-char Key ID from above |
 | `APNS_TEAM_ID` | `CBU7MJEC5R` (or your team's ID) |
 | `APNS_KEY_P8` | The full `.p8` file contents, including `BEGIN`/`END` lines |
-| `APNS_BUNDLE_ID` | `com.sabq.sabqapp` (must match Xcode's `PRODUCT_BUNDLE_IDENTIFIER`) |
+| `APNS_BUNDLE_ID` | `com.sabq.sabqorg` (must match Xcode's `PRODUCT_BUNDLE_IDENTIFIER`) |
 | `APNS_ENVIRONMENT` | `production` (TestFlight + App Store both use production) |
 
 > **Important**: the backend `apnsService.ts` reads `APNS_KEY_P8` (not
@@ -122,8 +122,8 @@ Once Railway redeploys, the backend logs the configuration status at
 startup. Look for:
 
 ```
-[APNs] Using credentials: keyId=ABCD1EFGHI, teamId=CBU7MJEC5R, bundleId=com.sabq.sabqapp, keyLength=234
-✅ APNs service initialized (production, bundle: com.sabq.sabqapp)
+[APNs] Using credentials: keyId=ABCD1EFGHI, teamId=CBU7MJEC5R, bundleId=com.sabq.sabqorg, keyLength=234
+✅ APNs service initialized (production, bundle: com.sabq.sabqorg)
 ```
 
 If you see `⚠️ APNs service not configured`, the env vars aren't being

@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.sabq.sabqapp</string>
+	<string>com.sabq.sabqorg</string>
 	<key>PROJECT_ID</key>
 	<string>sabq-prod</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:708447631777:ios:1ad9f16468352cc89db3e0</string>
+	<string>1:708447631777:ios:1f7f9b3d3f0beadb9db3e0</string>
 </dict>
 </plist>
