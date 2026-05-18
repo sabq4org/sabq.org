@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		BB000016AAAA0001006270F8 /* sabqWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000AAAAA0001006270F8 /* sabqWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F1FB001100000000000000F1 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = F1FB003100000000000000F1 /* FirebaseAnalytics */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,7 +83,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F1FB001100000000000000F1 /* FirebaseAnalytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,7 +155,6 @@
 			);
 			name = sabq;
 			packageProductDependencies = (
-				F1FB003100000000000000F1 /* FirebaseAnalytics */,
 			);
 			productName = sabq;
 			productReference = 3AFE5FD82F60C121006270F8 /* sabq.app */;
@@ -268,7 +265,6 @@
 			mainGroup = 3AFE5FCF2F60C121006270F8;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F1FB002100000000000000F1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3AFE5FD92F60C121006270F8 /* Products */;
@@ -507,7 +503,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -522,7 +518,6 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "نستخدم معرّف جهازك لتحسين تجربة الأخبار المخصّصة. يمكنك الرفض ولن يؤثر ذلك على استخدامك للتطبيق.";
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -564,7 +559,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -579,7 +574,6 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "نستخدم معرّف جهازك لتحسين تجربة الأخبار المخصّصة. يمكنك الرفض ولن يؤثر ذلك على استخدامك للتطبيق.";
 				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -618,7 +612,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -644,7 +638,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -669,7 +663,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -694,7 +688,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -721,7 +715,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";
@@ -753,7 +747,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051805;
+				CURRENT_PROJECT_VERSION = 2026051806;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";
@@ -829,24 +823,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		F1FB002100000000000000F1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 11.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		F1FB003100000000000000F1 /* FirebaseAnalytics */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = F1FB002100000000000000F1 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAnalytics;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 3AFE5FD02F60C121006270F8 /* Project object */;
 }

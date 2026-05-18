@@ -3,11 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>NSPrivacyTracking</key>
-    <true/>
+    <false/>
     <key>NSPrivacyTrackingDomains</key>
-    <array>
-        <string>app-measurement.com</string>
-    </array>
+    <array/>
     <key>NSPrivacyCollectedDataTypes</key>
     <array>
         <dict>
