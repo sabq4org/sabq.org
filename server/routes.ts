@@ -6968,8 +6968,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const canEditOwn = userPermissions.includes("articles.edit_own");
       const canEditAny = userPermissions.includes("articles.edit_any");
 
-      // User can edit if they have edit_any, or if they have edit_own AND are the author OR reporter
-      const isOwner = existingArticle.authorId === userId || existingArticle.reporterId === userId;
+      // User can edit if they have edit_any, or if they have edit_own AND own the row
+      // (author, reporter, or original submitter — matches contributor analytics).
+      const isOwner =
+        existingArticle.authorId === userId ||
+        existingArticle.reporterId === userId ||
+        existingArticle.submitterId === userId;
       if (!canEditAny && (!canEditOwn || !isOwner)) {
         return res.status(403).json({ message: "You don't have permission to edit this article" });
       }
@@ -7109,6 +7113,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Convert empty thumbnailUrl to null (for proper deletion)
       if (updateData.thumbnailUrl === "") {
         updateData.thumbnailUrl = null;
+      }
+
+      // Contributor "save + send for review" — one PATCH instead of save then
+      // POST submit-review (avoids races where the UI refetches needs_changes
+      // before the second request lands).
+      const wantsSubmitForReview = req.body?.submitForReview === true;
+      if (wantsSubmitForReview && !canEditAny && canEditOwn && isOwner) {
+        if (existingArticle.reviewStatus !== "pending_review") {
+          updateData.reviewStatus = "pending_review";
+          updateData.status = "draft";
+        }
       }
 
       // Handle opinionAuthorId for opinion articles - update authorId

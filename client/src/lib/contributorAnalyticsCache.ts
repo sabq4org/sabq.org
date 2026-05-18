@@ -13,6 +13,15 @@ type ContributorAnalytics = {
   pendingArticles?: number;
 };
 
+function recalcContributorCounts(articles: AnalyticsArticle[]) {
+  return {
+    needsChangesArticles: articles.filter((a) => a.reviewStatus === "needs_changes").length,
+    pendingArticles: articles.filter(
+      (a) => a.reviewStatus === "pending_review" || a.status === "pending",
+    ).length,
+  };
+}
+
 /** Immediately reflect resubmit in contributor dashboards (banner + table). */
 export function markArticleSubmittedInAnalyticsCache(
   queryClient: QueryClient,
@@ -31,36 +40,53 @@ export function markArticleSubmittedInAnalyticsCache(
         : new Date(article.updatedAt).toISOString();
 
   const patch = (prev: ContributorAnalytics | undefined): ContributorAnalytics | undefined => {
-    if (!prev?.articles) return prev;
+    const reviewStatus = article.reviewStatus ?? "pending_review";
+    const status = article.status ?? "draft";
+
+    if (!prev?.articles?.length) {
+      return {
+        ...prev,
+        articles: [
+          {
+            id: article.id,
+            reviewStatus,
+            status,
+            updatedAt: updatedAtIso,
+          },
+        ],
+        ...recalcContributorCounts([
+          {
+            id: article.id,
+            reviewStatus,
+            status,
+          },
+        ]),
+      };
+    }
+
     const articles = prev.articles.map((a) =>
       a.id === article.id
         ? {
             ...a,
-            reviewStatus: "pending_review",
-            status: article.status ?? "draft",
+            reviewStatus,
+            status,
             updatedAt: updatedAtIso,
           }
         : a,
     );
-    const next: ContributorAnalytics = { ...prev, articles };
-    if (typeof prev.needsChangesArticles === "number") {
-      next.needsChangesArticles = articles.filter((a) => a.reviewStatus === "needs_changes").length;
-    }
-    if (typeof prev.pendingArticles === "number") {
-      next.pendingArticles = articles.filter(
-        (a) => a.reviewStatus === "pending_review" || a.status === "pending",
-      ).length;
-    }
-    return next;
+    return {
+      ...prev,
+      articles,
+      ...recalcContributorCounts(articles),
+    };
   };
 
   queryClient.setQueryData(["/api/opinion-author/analytics"], patch);
   queryClient.setQueryData(["/api/reporter/analytics"], patch);
 }
 
-export async function refetchContributorAnalytics(queryClient: QueryClient) {
-  await Promise.all([
-    queryClient.refetchQueries({ queryKey: ["/api/opinion-author/analytics"] }),
-    queryClient.refetchQueries({ queryKey: ["/api/reporter/analytics"] }),
-  ]);
+/** Background sync — do not await in mutation onSuccess (race with optimistic cache). */
+export function invalidateContributorAnalytics(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/analytics"] });
+  void queryClient.invalidateQueries({ queryKey: ["/api/reporter/analytics"] });
 }

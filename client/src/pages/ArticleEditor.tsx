@@ -107,7 +107,7 @@ import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
 import {
   markArticleSubmittedInAnalyticsCache,
-  refetchContributorAnalytics,
+  invalidateContributorAnalytics,
 } from "@/lib/contributorAnalyticsCache";
 import {
   Tooltip,
@@ -513,7 +513,7 @@ export default function ArticleEditor() {
           status: data?.status,
           updatedAt: data?.updatedAt ?? articleUpdatedAt,
         });
-        void refetchContributorAnalytics(queryClient);
+        invalidateContributorAnalytics(queryClient);
       }
     },
     onError: (error: any) => {
@@ -1456,10 +1456,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       publishNow,
       skipNavigate: _skipNavigate,
       skipToast: _skipToast,
+      submitForReview,
     }: {
       publishNow: boolean;
       skipNavigate?: boolean;
       skipToast?: boolean;
+      submitForReview?: boolean;
     }) => {
       console.log('[Save Article] Starting save...', {
         isNewArticle,
@@ -1510,6 +1512,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         status: publishNow 
           ? (publishType === "scheduled" ? "scheduled" : "published")
           : "draft",
+        ...(submitForReview ? { submitForReview: true } : {}),
         seo: {
           metaTitle: metaTitle ? metaTitle.substring(0, 70) : (title ? title.substring(0, 70) : ""),
           metaDescription: metaDescription ? metaDescription.substring(0, 160) : (excerpt ? excerpt.substring(0, 160) : ""),
@@ -2677,7 +2680,7 @@ const generateSlug = (text: string) => {
 
   const handleSave = async (
     publishNow = false,
-    options?: { skipNavigate?: boolean; skipToast?: boolean },
+    options?: { skipNavigate?: boolean; skipToast?: boolean; submitForReview?: boolean },
   ): Promise<{ ok: true; articleId: string } | { ok: false }> => {
     console.log('[handleSave] Called with publishNow:', publishNow, 'albumImages:', albumImages?.length, 'isSaving:', isSaving, 'isLockedByOther:', isLockedByOther);
 
@@ -2717,9 +2720,20 @@ const generateSlug = (text: string) => {
         publishNow,
         skipNavigate: options?.skipNavigate,
         skipToast: options?.skipToast,
+        submitForReview: options?.submitForReview,
       });
       const articleId = saved?.id || id;
       if (!articleId) return { ok: false };
+      if (options?.submitForReview) {
+        setReviewStatus(saved?.reviewStatus ?? "pending_review");
+        markArticleSubmittedInAnalyticsCache(queryClient, {
+          id: articleId,
+          reviewStatus: saved?.reviewStatus ?? "pending_review",
+          status: saved?.status,
+          updatedAt: saved?.updatedAt,
+        });
+        invalidateContributorAnalytics(queryClient);
+      }
       return { ok: true, articleId };
     } catch (err) {
       console.error('[handleSave] Save failed:', err);
@@ -2733,22 +2747,21 @@ const generateSlug = (text: string) => {
     }, 600);
   };
 
-  /** Save then POST submit-review — must finish before leaving the editor. */
+  /** Save + submit-for-review in one PATCH (no race with a follow-up POST). */
   const handleSaveAndSubmitForReview = async () => {
-    const saveResult = await handleSave(false, { skipNavigate: true, skipToast: true });
+    const saveResult = await handleSave(false, {
+      skipNavigate: true,
+      skipToast: true,
+      submitForReview: true,
+    });
     if (!saveResult.ok) return;
 
-    try {
-      await submitReviewMutation.mutateAsync(saveResult.articleId);
-      toast({
-        title: "تم الإرسال",
-        description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
-        className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
-      });
-      navigateAfterContributorSubmit();
-    } catch {
-      // submitReviewMutation.onError surfaces the toast
-    }
+    toast({
+      title: "تم الإرسال",
+      description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
+      className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
+    });
+    navigateAfterContributorSubmit();
   };
 
   const handleAddLink = (suggestion: { text: string; position: number; length: number }, url: string) => {

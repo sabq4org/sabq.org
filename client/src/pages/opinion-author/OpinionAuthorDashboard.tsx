@@ -13,7 +13,7 @@ import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
 import {
   markArticleSubmittedInAnalyticsCache,
-  refetchContributorAnalytics,
+  invalidateContributorAnalytics,
 } from "@/lib/contributorAnalyticsCache";
 import {
   FileText,
@@ -93,11 +93,11 @@ export default function OpinionAuthorDashboard() {
     onSuccess: (data, articleId) => {
       markArticleSubmittedInAnalyticsCache(queryClient, {
         id: articleId,
-        reviewStatus: data?.reviewStatus,
-        status: data?.status,
+        reviewStatus: data?.reviewStatus ?? "pending_review",
+        status: data?.status ?? "draft",
         updatedAt: data?.updatedAt,
       });
-      void refetchContributorAnalytics(queryClient);
+      invalidateContributorAnalytics(queryClient);
       toast({
         title: "تم الإرسال",
         description: "عاد المقال إلى مسودات فريق التحرير للمراجعة",
