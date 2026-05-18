@@ -114,25 +114,50 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     };
   }, [adState]);
 
-  const filledStyle: React.CSSProperties = type === 'leaderboard'
-    ? { minHeight: '90px', marginBottom: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' }
-    : { minHeight: '250px', marginTop: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' };
-
-  const style: React.CSSProperties = adState === 'filled'
-    ? filledStyle
-    : adState === 'empty'
+  // Inner style: just the slot's own size/centering. Spacing is on the
+  // wrapper so we don't lose it when the slot is wrapped.
+  const innerStyle: React.CSSProperties = adState === 'empty'
     ? { minHeight: 0, height: 0, overflow: 'hidden', margin: 0, padding: 0, border: 'none' }
-    : filledStyle;
+    : type === 'leaderboard'
+    ? { minHeight: '90px', width: '100%', textAlign: 'center', overflow: 'hidden' }
+    : { minHeight: '250px', width: '100%', textAlign: 'center', overflow: 'hidden' };
+
+  // Ad creatives are served by DMS as cross-origin iframes whose body
+  // background we can't restyle. Most ads ship with a light/white
+  // canvas, which clashes hard against the dark theme. Wrapping the
+  // slot in a `bg-card` rounded container with light padding gives the
+  // creative a subtle "card" frame in dark mode (and is near-invisible
+  // in light mode), so the boundary between page and ad looks
+  // intentional instead of jarring. The wrapper collapses to nothing
+  // when adState is 'empty' so unsold slots don't reserve visual space.
+  if (adState === 'empty') {
+    return (
+      <div
+        ref={containerRef}
+        id={id}
+        style={innerStyle}
+        className={className}
+        data-testid={`dms-ad-slot-${id}`}
+        data-ad-state={adState}
+      />
+    );
+  }
+
+  const wrapperSpacing = type === 'leaderboard' ? 'mb-8' : 'mt-8';
 
   return (
-    <div 
-      ref={containerRef}
-      id={id}
-      style={style}
-      className={className}
-      data-testid={`dms-ad-slot-${id}`}
-      data-ad-state={adState}
-    />
+    <div
+      className={`rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim()}
+      data-testid={`dms-ad-slot-wrapper-${id}`}
+    >
+      <div
+        ref={containerRef}
+        id={id}
+        style={innerStyle}
+        data-testid={`dms-ad-slot-${id}`}
+        data-ad-state={adState}
+      />
+    </div>
   );
 }
 
