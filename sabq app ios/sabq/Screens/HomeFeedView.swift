@@ -185,7 +185,7 @@ struct HomeFeedView: View {
         .sheet(isPresented: $showLoyaltyAccount) {
             NavigationStack {
                 LoyaltyAccountView()
-                    .environmentObject(authStore)
+                    .environment(authStore)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("إغلاق") { showLoyaltyAccount = false }

@@ -6,7 +6,7 @@ import SwiftUI
 // dismisses to the LoyaltyAccountView. Renders nothing for signed-out
 // users.
 struct LoyaltyStripView: View {
-    @StateObject private var loader = LoyaltySummaryLoader()
+    @State private var loader = LoyaltySummaryLoader()
     let onTap: () -> Void
 
     var body: some View {
@@ -101,10 +101,14 @@ struct LoyaltyStripView: View {
     }
 }
 
+// Observation-macro-backed loader (matches the project's AuthStore /
+// ArticlesStore convention — the app uses Swift 5.9 @Observable
+// throughout, not the older ObservableObject + @Published).
 @MainActor
-final class LoyaltySummaryLoader: ObservableObject {
-    @Published var summary: LoyaltySummary?
-    @Published var isLoading = false
+@Observable
+final class LoyaltySummaryLoader {
+    var summary: LoyaltySummary?
+    var isLoading = false
 
     func load() async {
         guard summary == nil else { return }

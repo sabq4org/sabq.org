@@ -547,7 +547,7 @@ struct SettingsView: View {
     // the display/subscription rows. Avoids duplicating the full hero
     // card here — that lives inside LoyaltyAccountView.
     private var loyaltyEntrySection: some View {
-        NavigationLink(destination: LoyaltyAccountView().environmentObject(authStore)) {
+        NavigationLink(destination: LoyaltyAccountView().environment(authStore)) {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)

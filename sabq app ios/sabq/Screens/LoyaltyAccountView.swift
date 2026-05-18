@@ -4,9 +4,18 @@ import SwiftUI
 // surface: hero card with tier-colored gradient + progress bar, the
 // 5-tier ladder (locked icons on unreached tiers), week/month/streak
 // triplet, and a recent events strip. Linked from SettingsView.
+private func parseIsoDate(_ s: String?) -> Date? {
+    guard let s, !s.isEmpty else { return nil }
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = f.date(from: s) { return d }
+    f.formatOptions = [.withInternetDateTime]
+    return f.date(from: s)
+}
+
 struct LoyaltyAccountView: View {
-    @EnvironmentObject private var authStore: AuthStore
-    @StateObject private var loader = LoyaltySummaryLoader()
+    @Environment(AuthStore.self) private var authStore
+    @State private var loader = LoyaltySummaryLoader()
 
     var body: some View {
         ScrollView {
@@ -17,7 +26,7 @@ struct LoyaltyAccountView: View {
             }
             .padding(16)
         }
-        .background(SabqTheme.canvas.ignoresSafeArea())
+        .background(SabqTheme.background.ignoresSafeArea())
         .navigationTitle("نقاطي والمكافآت")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loader.load() }
@@ -42,7 +51,7 @@ struct LoyaltyAccountView: View {
             userName: userName,
             userId: authStore.currentUser?.id ?? "00000000",
             lifetimePoints: lifetime,
-            memberSince: authStore.currentUser?.createdAt,
+            memberSince: parseIsoDate(authStore.currentUser?.createdAt),
             rankLevelOverride: rankLevel
         )
     }
