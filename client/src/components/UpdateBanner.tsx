@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { RefreshCw, X } from "lucide-react";
 import { useBuildVersionCheck } from "@/hooks/useBuildVersionCheck";
 import { cacheBustReload } from "@/lib/cacheBust";
@@ -10,11 +11,18 @@ import { cacheBustReload } from "@/lib/cacheBust";
  * stale-chunk ChunkLoadError later.
  *
  * Calm, non-intrusive style — sits at the bottom-center, dismissible.
+ *
+ * Suppressed inside the dashboard: editors are working in deep flows
+ * (article editor, RBAC, etc.) and a sudden refresh banner is jarring.
+ * Dashboard sessions are long-running and the editorial team can simply
+ * reload the tab whenever they finish a task.
  */
 export function UpdateBanner() {
   const hasUpdate = useBuildVersionCheck();
   const [dismissed, setDismissed] = useState(false);
+  const [location] = useLocation();
 
+  if (location.startsWith("/dashboard")) return null;
   if (!hasUpdate || dismissed) return null;
 
   return (
