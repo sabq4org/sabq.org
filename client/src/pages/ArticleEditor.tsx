@@ -498,25 +498,23 @@ export default function ArticleEditor() {
     (user?.roles?.includes("opinion_author") ?? false);
 
   const submitReviewMutation = useMutation({
-    mutationFn: async () => {
-      if (!id) throw new Error("معرّف المقال غير متوفر");
-      return apiRequest(`/api/my/articles/${id}/submit-review`, { method: "POST" });
+    mutationFn: async (articleId?: string) => {
+      const targetId = articleId || id;
+      if (!targetId) throw new Error("معرّف المقال غير متوفر");
+      return apiRequest(`/api/my/articles/${targetId}/submit-review`, { method: "POST" });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, articleId) => {
+      const resolvedId = articleId || id;
       setReviewStatus("pending_review");
-      if (id) {
+      if (resolvedId) {
         markArticleSubmittedInAnalyticsCache(queryClient, {
-          id,
+          id: resolvedId,
           reviewStatus: data?.reviewStatus ?? "pending_review",
           status: data?.status,
           updatedAt: data?.updatedAt ?? articleUpdatedAt,
         });
         void refetchContributorAnalytics(queryClient);
       }
-      toast({
-        title: "تم الإرسال",
-        description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
-      });
     },
     onError: (error: any) => {
       toast({
@@ -1454,7 +1452,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
   };
 
   const saveArticleMutation = useMutation({
-    mutationFn: async ({ publishNow }: { publishNow: boolean }) => {
+    mutationFn: async ({
+      publishNow,
+      skipNavigate: _skipNavigate,
+      skipToast: _skipToast,
+    }: {
+      publishNow: boolean;
+      skipNavigate?: boolean;
+      skipToast?: boolean;
+    }) => {
       console.log('[Save Article] Starting save...', {
         isNewArticle,
         publishNow,
@@ -1705,15 +1711,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         ? (isUpdate ? "تم تحديث الخبر بنجاح" : "تم نشر المقال بنجاح")
         : "تم حفظ المقال كمسودة";
       
-      toast({
-        title: successTitle,
-        description: successDescription,
-        className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
-      });
-      // العودة للصفحة السابقة (لوحة التحكم)
-      setTimeout(() => {
-        navigate(isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles");
-      }, 1000);
+      if (!variables.skipToast) {
+        toast({
+          title: successTitle,
+          description: successDescription,
+          className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
+        });
+      }
+      if (!variables.skipNavigate) {
+        setTimeout(() => {
+          navigate(isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles");
+        }, 1000);
+      }
     },
     onError: (error: Error) => {
       console.error('[Save Article] Error:', error.message, error);
@@ -2666,12 +2675,15 @@ const generateSlug = (text: string) => {
     generateAllInOneMutation.mutate();
   };
 
-  const handleSave = async (publishNow = false): Promise<boolean> => {
+  const handleSave = async (
+    publishNow = false,
+    options?: { skipNavigate?: boolean; skipToast?: boolean },
+  ): Promise<{ ok: true; articleId: string } | { ok: false }> => {
     console.log('[handleSave] Called with publishNow:', publishNow, 'albumImages:', albumImages?.length, 'isSaving:', isSaving, 'isLockedByOther:', isLockedByOther);
 
     if (isSaving) {
       console.warn('[handleSave] Already saving, ignoring click');
-      return false;
+      return { ok: false };
     }
 
     const missingFields = [];
@@ -2696,16 +2708,46 @@ const generateSlug = (text: string) => {
         description: `الرجاء ملء: ${missingFields.join(" - ")}`,
         variant: "destructive",
       });
-      return false;
+      return { ok: false };
     }
 
     try {
       console.log('[handleSave] Calling saveArticleMutation.mutateAsync');
-      await saveArticleMutation.mutateAsync({ publishNow });
-      return true;
+      const saved = await saveArticleMutation.mutateAsync({
+        publishNow,
+        skipNavigate: options?.skipNavigate,
+        skipToast: options?.skipToast,
+      });
+      const articleId = saved?.id || id;
+      if (!articleId) return { ok: false };
+      return { ok: true, articleId };
     } catch (err) {
       console.error('[handleSave] Save failed:', err);
-      return false;
+      return { ok: false };
+    }
+  };
+
+  const navigateAfterContributorSubmit = () => {
+    setTimeout(() => {
+      navigate(isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles");
+    }, 600);
+  };
+
+  /** Save then POST submit-review — must finish before leaving the editor. */
+  const handleSaveAndSubmitForReview = async () => {
+    const saveResult = await handleSave(false, { skipNavigate: true, skipToast: true });
+    if (!saveResult.ok) return;
+
+    try {
+      await submitReviewMutation.mutateAsync(saveResult.articleId);
+      toast({
+        title: "تم الإرسال",
+        description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
+        className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
+      });
+      navigateAfterContributorSubmit();
+    } catch {
+      // submitReviewMutation.onError surfaces the toast
     }
   };
 
@@ -3504,10 +3546,7 @@ const generateSlug = (text: string) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={async () => {
-                    const ok = await handleSave(false);
-                    if (ok) submitReviewMutation.mutate();
-                  }}
+                  onClick={() => void handleSaveAndSubmitForReview()}
                   disabled={
                     submitReviewMutation.isPending ||
                     isSaving ||
@@ -3526,8 +3565,14 @@ const generateSlug = (text: string) => {
               )}
               <Button
                 size="sm"
-                onClick={() => handleSave(canPublish ? true : false)}
-                disabled={isSaving || isLockedByOther}
+                onClick={() => {
+                  if (!canPublish) {
+                    void handleSaveAndSubmitForReview();
+                    return;
+                  }
+                  void handleSave(true);
+                }}
+                disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
                 className="gap-1.5 sm:gap-2"
                 data-testid="button-publish"
               >

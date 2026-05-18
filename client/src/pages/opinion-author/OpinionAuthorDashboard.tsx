@@ -380,6 +380,13 @@ export default function OpinionAuthorDashboard() {
                                 </span>
                                 {article.reviewNotes}
                               </div>
+                            ) : article.reviewStatus === "pending_review" && article.reviewedAt ? (
+                              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/30 px-3 py-2 text-xs text-blue-900 dark:text-blue-100 leading-relaxed max-w-md">
+                                <span className="font-medium">أُرسل للمراجعة</span>
+                                {article.reviewNotes ? (
+                                  <p className="mt-1 text-muted-foreground">{article.reviewNotes}</p>
+                                ) : null}
+                              </div>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}

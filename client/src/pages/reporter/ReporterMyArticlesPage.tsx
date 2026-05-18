@@ -165,6 +165,13 @@ export default function ReporterMyArticlesPage() {
                             </span>
                             {article.reviewNotes}
                           </div>
+                        ) : article.reviewStatus === "pending_review" && article.reviewedAt ? (
+                          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-500/10 px-3 py-2 text-xs leading-relaxed max-w-md text-blue-900 dark:text-blue-100">
+                            <span className="font-medium">أُرسل للمراجعة</span>
+                            {article.reviewNotes ? (
+                              <p className="mt-1 text-muted-foreground">{article.reviewNotes}</p>
+                            ) : null}
+                          </div>
                         ) : (
                           "—"
                         )}

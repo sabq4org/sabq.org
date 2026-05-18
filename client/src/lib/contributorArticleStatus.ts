@@ -7,7 +7,7 @@ export function contributorArticleStatusLabel(article: {
     return { label: "يحتاج تعديل", variant: "outline" as const };
   }
   if (article.reviewStatus === "pending_review") {
-    return { label: "مرسل للتحرير", variant: "secondary" as const };
+    return { label: "أُرسل للمراجعة", variant: "secondary" as const };
   }
   if (article.status === "published") {
     return { label: "منشور", variant: "default" as const };
