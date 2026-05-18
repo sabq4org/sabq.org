@@ -8,7 +8,8 @@
 name = "sabq-frontend-edge"
 main = "frontend-edge-worker.js"
 compatibility_date = "2024-09-01"
-account_id = ""
+# From `wrangler whoami` after login (sabq Cloudflare account).
+account_id = "1ac069d5f5c7a3dd7f4e3c864f51446d"
 
 # These get overridden per-environment.
 [vars]
@@ -16,10 +17,11 @@ API_ORIGIN = "https://api.sabq.org"
 FRONTEND_ORIGIN = "https://sabq.org"
 
 # Production: bind to the Vercel apex domain.
+# Use zone_name (not empty zone_id) — empty zone_id caused API error 10002 on deploy.
 [env.production]
 routes = [
-  { pattern = "sabq.org/*", zone_id = "" },
-  { pattern = "www.sabq.org/*", zone_id = "" }
+  { pattern = "sabq.org/*", zone_name = "sabq.org" },
+  { pattern = "www.sabq.org/*", zone_name = "sabq.org" }
 ]
 
 [env.production.vars]
@@ -29,7 +31,7 @@ FRONTEND_ORIGIN = "https://sabq.org"
 # Staging / experiment: point at a preview Vercel deployment.
 [env.staging]
 routes = [
-  { pattern = "staging.sabq.news/*", zone_id = "" }
+  { pattern = "staging.sabq.news/*", zone_name = "sabq.news" }
 ]
 
 [env.staging.vars]
