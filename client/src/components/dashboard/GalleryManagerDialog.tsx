@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
@@ -24,6 +24,8 @@ import {
   Check,
   CheckCircle2,
   Paperclip,
+  Sparkles,
+  UploadCloud,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -97,6 +99,14 @@ export function GalleryManagerDialog({
   const [drafts, setDrafts] = useState<Record<string, AssetDraft>>({});
   const [lightboxAsset, setLightboxAsset] = useState<any | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  /// Drag-drop multi-upload progress state. The queue tracks each file
+  /// the editor dropped so we can render per-file status without a
+  /// global spinner that hides which ones failed.
+  const [uploadQueue, setUploadQueue] = useState<
+    Array<{ id: string; name: string; status: "pending" | "uploading" | "done" | "failed" }>
+  >([]);
+  const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clear local state whenever the dialog closes so a re-open starts fresh.
   useEffect(() => {
@@ -105,6 +115,8 @@ export function GalleryManagerDialog({
       setExpandedId(null);
       setDrafts({});
       setLightboxAsset(null);
+      setUploadQueue([]);
+      setIsDragOverDropzone(false);
     }
   }, [isOpen]);
 
@@ -157,6 +169,79 @@ export function GalleryManagerDialog({
     onError: () => toast({ title: "فشل الحفظ", variant: "destructive" }),
   });
 
+  /// Per-card "suggest with AI" state. We track by asset id so multiple
+  /// cards can be edited in parallel without the spinner racing between
+  /// them. Only the most recent click sets the state — backend cost is
+  /// bounded by the user's clicks (no auto-fire on mount).
+  const [aiSuggestingId, setAiSuggestingId] = useState<string | null>(null);
+
+  /// Call POST /api/visual-ai/analyze for a single image, then update
+  /// the draft for its asset with the returned altTextAr +
+  /// contentDescription. Doesn't auto-save — the editor reviews before
+  /// hitting حفظ. Uses generateAltText + detectContent flags so the
+  /// model returns both a short alt-string and a longer description we
+  /// can drop into the caption field.
+  const requestAiCaption = async (asset: any) => {
+    const imageUrl = asset.mediaFile?.url || asset.url;
+    if (!imageUrl) return;
+    setAiSuggestingId(asset.id);
+    try {
+      const response = await apiRequest(`/api/visual-ai/analyze`, {
+        method: "POST",
+        body: JSON.stringify({
+          imageUrl,
+          articleId,
+          articleTitle,
+          articleContent: articleContent?.substring(0, 800),
+          generateAltText: true,
+          detectContent: true,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const result = response?.result || response;
+      const suggestedAlt = result?.altTextAr || result?.altText || "";
+      const suggestedCaption = result?.contentDescription || "";
+      if (!suggestedAlt && !suggestedCaption) {
+        toast({
+          title: "لم يصلنا اقتراح",
+          description: "حاول مرة أخرى أو اكتب النص يدوياً.",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Patch the draft so the editor can review before saving. We
+      // ALWAYS open the card after suggesting so the suggestion is
+      // visible — no point filling fields that aren't on screen.
+      setDrafts((prev) => {
+        const current = prev[asset.id] ?? {
+          altText: asset.altText || "",
+          captionPlain: asset.captionPlain || "",
+          sourceName: asset.sourceName || "",
+          sourceUrl: asset.sourceUrl || "",
+          rightsStatement: asset.rightsStatement || "",
+        };
+        return {
+          ...prev,
+          [asset.id]: {
+            ...current,
+            altText: suggestedAlt || current.altText,
+            captionPlain: suggestedCaption || current.captionPlain,
+          },
+        };
+      });
+      setExpandedId(asset.id);
+      toast({ title: "تم اقتراح النص بنجاح" });
+    } catch (err: any) {
+      toast({
+        title: "فشل الاقتراح",
+        description: err?.message || "حاول مرة أخرى لاحقاً.",
+        variant: "destructive",
+      });
+    } finally {
+      setAiSuggestingId(null);
+    }
+  };
+
   const addMutation = useMutation({
     mutationFn: async (mediaFile: MediaFile) => {
       const maxOrder = mediaAssets.reduce(
@@ -181,6 +266,99 @@ export function GalleryManagerDialog({
     onError: () =>
       toast({ title: "فشل إضافة الصورة", variant: "destructive" }),
   });
+
+  /// Multi-file drop handler. Uploads each file sequentially to keep
+  /// the server load predictable + the UI's per-file status readable.
+  /// Each successful upload immediately attaches the new MediaFile to
+  /// the article so the grid grows in real time. Errors fail-soft —
+  /// other files still proceed.
+  const handleFiles = async (filesList: FileList | File[]) => {
+    if (!articleId) {
+      toast({
+        title: "احفظ المقال أولاً",
+        description: "ارفع المرفقات بعد إنشاء المقال.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const files = Array.from(filesList).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+
+    const entries = files.map((file) => ({
+      id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+      name: file.name,
+      status: "pending" as const,
+      file,
+    }));
+    setUploadQueue((prev) => [
+      ...prev,
+      ...entries.map(({ file: _file, ...rest }) => rest),
+    ]);
+
+    for (const entry of entries) {
+      setUploadQueue((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, status: "uploading" } : e)),
+      );
+      try {
+        const formData = new FormData();
+        formData.append("file", entry.file);
+        formData.append("category", "مقالات");
+        formData.append("isFavorite", "false");
+        const uploaded = await apiRequest<MediaFile>("/api/media/upload", {
+          method: "POST",
+          body: formData,
+          isFormData: true,
+        });
+        if (uploaded?.id) {
+          await addMutation.mutateAsync(uploaded);
+        }
+        setUploadQueue((prev) =>
+          prev.map((e) => (e.id === entry.id ? { ...e, status: "done" } : e)),
+        );
+      } catch (err: any) {
+        console.error("[GalleryManager] upload failed:", err);
+        setUploadQueue((prev) =>
+          prev.map((e) => (e.id === entry.id ? { ...e, status: "failed" } : e)),
+        );
+      }
+    }
+
+    // Auto-clear the success entries 2s after the queue settles so the
+    // editor sees the green confirmations briefly without permanent
+    // visual debt. Failures stick so the editor can retry/inspect.
+    setTimeout(() => {
+      setUploadQueue((prev) => prev.filter((e) => e.status === "failed"));
+    }, 2000);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDropzone(false);
+    if (e.dataTransfer.files?.length) {
+      handleFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDropzone(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDropzone(false);
+  };
+
+  const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) {
+      handleFiles(e.target.files);
+      // Reset so the same file can be re-selected if needed.
+      e.target.value = "";
+    }
+  };
 
   // ─── DnD ─────────────────────────────────────────────
 
@@ -362,7 +540,77 @@ export function GalleryManagerDialog({
             )}
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            {/* Drag-drop multi-upload strip — always visible so editors
+             * can drop fresh shots without leaving the modal. Sequential
+             * uploads with per-file progress; failures stay pinned so
+             * they can be retried. */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`rounded-xl border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+                isDragOverDropzone
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/30"
+              }`}
+              data-testid="gallery-dropzone"
+            >
+              <div className="flex items-center justify-center gap-3 text-sm">
+                <UploadCloud className="h-5 w-5 text-muted-foreground" />
+                <span className="text-muted-foreground">
+                  اسحب الصور وأفلتها هنا، أو
+                </span>
+                <span className="font-medium text-primary">انقر لاختيار ملفات</span>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={onFileInputChange}
+                data-testid="gallery-file-input"
+              />
+            </div>
+
+            {uploadQueue.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5 text-sm">
+                {uploadQueue.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3"
+                    data-testid={`gallery-upload-row-${entry.status}`}
+                  >
+                    <span className="truncate flex-1" title={entry.name}>
+                      {entry.name}
+                    </span>
+                    {entry.status === "pending" && (
+                      <span className="text-xs text-muted-foreground">بانتظار…</span>
+                    )}
+                    {entry.status === "uploading" && (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    )}
+                    {entry.status === "done" && (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    )}
+                    {entry.status === "failed" && (
+                      <span className="text-xs text-destructive font-medium">فشل</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {sortedAssets.length === 0 ? (
               <EmptyState onAdd={() => setShowLibrary(true)} />
             ) : (
@@ -402,6 +650,8 @@ export function GalleryManagerDialog({
                         }}
                         onDelete={() => deleteMutation.mutate(asset.id)}
                         onPreview={() => setLightboxAsset(asset)}
+                        onSuggestAi={() => requestAiCaption(asset)}
+                        isSuggestingAi={aiSuggestingId === asset.id}
                         isSaving={updateMutation.isPending}
                         isDeleting={deleteMutation.isPending}
                       />
@@ -501,6 +751,8 @@ interface SortableGalleryCardProps {
   onCancelEdit: () => void;
   onDelete: () => void;
   onPreview: () => void;
+  onSuggestAi: () => void;
+  isSuggestingAi: boolean;
   isSaving: boolean;
   isDeleting: boolean;
 }
@@ -518,6 +770,8 @@ function SortableGalleryCard({
   onCancelEdit,
   onDelete,
   onPreview,
+  onSuggestAi,
+  isSuggestingAi,
   isSaving,
   isDeleting,
 }: SortableGalleryCardProps) {
@@ -666,22 +920,54 @@ function SortableGalleryCard({
                 asset.altText ||
                 "اضغط «تعديل» لإضافة النص البديل والتعريف"}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={onToggleExpand}
-              data-testid={`gallery-edit-${index}`}
-            >
-              تعديل
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggleExpand}
+                data-testid={`gallery-edit-${index}`}
+              >
+                تعديل
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onSuggestAi}
+                disabled={isSuggestingAi}
+                className="gap-1.5"
+                data-testid={`gallery-suggest-ai-${index}`}
+              >
+                {isSuggestingAi ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                اقتراح AI
+              </Button>
+            </div>
           </>
         ) : (
           <div className="space-y-2.5">
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                النص البديل <span className="text-destructive">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-muted-foreground">
+                  النص البديل <span className="text-destructive">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={onSuggestAi}
+                  disabled={isSuggestingAi}
+                  className="text-[11px] font-medium text-primary hover:underline disabled:opacity-50 flex items-center gap-1"
+                  data-testid={`gallery-suggest-ai-inline-${index}`}
+                >
+                  {isSuggestingAi ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  اقتراح AI
+                </button>
+              </div>
               <Input
                 value={draft.altText}
                 onChange={(e) => onChangeDraft({ altText: e.target.value })}
