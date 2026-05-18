@@ -64,6 +64,31 @@ app.get("/api/version", (_req, res) => {
   });
 });
 
+// Diagnostic-only: reports which Apple Wallet env vars are populated.
+// Booleans + lengths only — never the values themselves. Lets us tell
+// at a glance whether a Railway variable got saved empty, has a
+// suspicious size (truncation), or is simply missing. Public on
+// purpose so we don't need a bearer token to triage cert config; the
+// payload contains no secrets.
+app.get("/api/wallet/diag", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  const peek = (name: string) => {
+    const v = process.env[name];
+    return { set: !!v, length: v?.length ?? 0 };
+  };
+  res.json({
+    APPLE_PRESS_PASS_CERT: peek("APPLE_PRESS_PASS_CERT"),
+    APPLE_PRESS_PASS_KEY:  peek("APPLE_PRESS_PASS_KEY"),
+    APPLE_PASS_CERT:       peek("APPLE_PASS_CERT"),
+    APPLE_PASS_KEY:        peek("APPLE_PASS_KEY"),
+    APPLE_WWDR_CERT:       peek("APPLE_WWDR_CERT"),
+    APPLE_PASS_PASSPHRASE: peek("APPLE_PASS_PASSPHRASE"),
+    APPLE_PRESS_PASS_TYPE_ID: peek("APPLE_PRESS_PASS_TYPE_ID"),
+    APPLE_TEAM_ID:         peek("APPLE_TEAM_ID"),
+    bootedAt: serverBootedAt,
+  });
+});
+
 // Serve ads.txt and app-ads.txt BEFORE any SPA/Vite middleware
 app.get('/ads.txt', (_req, res) => {
   const filePath = path.resolve(process.cwd(), 'public', 'ads.txt');
