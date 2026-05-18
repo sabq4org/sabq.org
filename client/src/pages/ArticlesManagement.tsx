@@ -1103,6 +1103,17 @@ export default function ArticlesManagement() {
                                     <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                                   )}
                                   <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
+                                  {article.status === "draft" &&
+                                    (article as any).reviewStatus === "pending_review" &&
+                                    (article as any).reviewedAt && (
+                                      <Badge
+                                        className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 text-xs"
+                                        data-testid={`badge-revised-desktop-${article.id}`}
+                                      >
+                                        <FilePenLine className="h-3 w-3" />
+                                        أُعيد إرساله بعد التعديل
+                                      </Badge>
+                                    )}
                                 </div>
                                 <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                   {article.source === 'email' ? (
@@ -1278,11 +1289,22 @@ export default function ArticlesManagement() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-base break-words leading-snug flex items-center gap-1.5">
+                          <h3 className="font-semibold text-base break-words leading-snug flex items-center gap-1.5 flex-wrap">
                             {((article as any).albumImages?.length > 0 || (article as any).mediaAssetsCount > 0) && (
                               <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                             )}
                             {article.title}
+                            {article.status === "draft" &&
+                              (article as any).reviewStatus === "pending_review" &&
+                              (article as any).reviewedAt && (
+                                <Badge
+                                  className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 text-xs"
+                                  data-testid={`badge-revised-mobile-${article.id}`}
+                                >
+                                  <FilePenLine className="h-3 w-3" />
+                                  أُعيد إرساله بعد التعديل
+                                </Badge>
+                              )}
                           </h3>
                           <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
                             {article.source === 'email' ? (
