@@ -89,11 +89,19 @@ export class PressPassBuilder extends PassBuilder {
   }
   
   private translateRole(role: string): string {
+    // Roles eligible for the Apple Wallet press pass on the v1 mobile
+    // route. Keep this map in sync with the eligibility check there
+    // (server/routes/mobileApiRoutes.ts) so a user who can request a
+    // pass also gets a meaningful Arabic role label on it.
     const roleMap: Record<string, string> = {
       admin: 'مدير',
+      system_admin: 'مدير النظام',
+      chief_editor: 'رئيس التحرير',
       editor: 'محرر',
       journalist: 'صحفي',
       reporter: 'مراسل',
+      opinion_author: 'كاتب رأي',
+      publisher: 'ناشر',
       reader: 'قارئ',
     };
     return roleMap[role] || role;

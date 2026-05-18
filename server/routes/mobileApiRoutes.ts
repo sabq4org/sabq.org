@@ -5079,6 +5079,162 @@ router.put("/notifications/preferences", async (req: Request, res: Response) => 
 });
 
 // ==========================================
+// APPLE WALLET — PRESS CARD (v1 mobile bearer surface)
+// ==========================================
+// The web equivalents at /api/wallet/press/* sit behind Passport
+// sessions, which the iOS app never has. These mirror them under the
+// bearer-authed /api/v1 root so the iOS press-card screen can call
+// them directly. Authorization is unified: a user qualifies if their
+// users.hasPressCard flag is true OR their role belongs to a small
+// editorial set (reporter / opinion_author / editor / chief_editor /
+// admin / system_admin / journalist / publisher) — the same set the
+// PressPassBuilder.translateRole map knows about.
+
+const PRESS_CARD_ELIGIBLE_ROLES = new Set([
+  "reporter",
+  "opinion_author",
+  "editor",
+  "chief_editor",
+  "admin",
+  "system_admin",
+  "journalist",
+  "publisher",
+]);
+
+async function loadPressCardUser(userId: string) {
+  const { users } = await import("@shared/schema");
+  const [row] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      role: users.role,
+      profileImageUrl: users.profileImageUrl,
+      hasPressCard: users.hasPressCard,
+      jobTitle: users.jobTitle,
+      department: users.department,
+      pressIdNumber: users.pressIdNumber,
+      cardValidUntil: users.cardValidUntil,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row;
+}
+
+function isPressCardEligible(row: { role: string | null; hasPressCard: boolean | null }) {
+  if (row.hasPressCard === true) return true;
+  if (row.role && PRESS_CARD_ELIGIBLE_ROLES.has(row.role)) return true;
+  return false;
+}
+
+// GET /api/v1/wallet/press/status
+//   { authorized: boolean, hasPass: boolean, serialNumber?: string, issuedAt?: string }
+router.get("/wallet/press/status", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userRow = await loadPressCardUser(session.userId);
+    if (!userRow) {
+      return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+    }
+    if (!isPressCardEligible(userRow)) {
+      return res.json({ success: true, authorized: false, hasPass: false });
+    }
+    const { storage } = await import("../storage");
+    const pass = await storage.getWalletPassByUserAndType(session.userId, "press");
+    return res.json({
+      success: true,
+      authorized: true,
+      hasPass: !!pass,
+      serialNumber: pass?.serialNumber ?? null,
+      issuedAt: pass?.createdAt ?? null,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /wallet/press/status error:", error);
+    res.status(500).json({ success: false, message: "تعذر فحص حالة البطاقة" });
+  }
+});
+
+// POST /api/v1/wallet/press/issue
+// Returns the .pkpass binary (Content-Type: application/vnd.apple.pkpass)
+// so the iOS client can hand it to PKAddPassesViewController.
+router.post("/wallet/press/issue", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userRow = await loadPressCardUser(session.userId);
+    if (!userRow) {
+      return res.status(404).json({ success: false, message: "المستخدم غير موجود" });
+    }
+    if (!isPressCardEligible(userRow)) {
+      return res.status(403).json({
+        success: false,
+        message: "غير مصرح لك بإصدار بطاقة صحفية. يرجى التواصل مع الإدارة.",
+      });
+    }
+
+    const { storage } = await import("../storage");
+    const { passKitService } = await import("../lib/passkit/PassKitService");
+
+    const existingPass = await storage.getWalletPassByUserAndType(session.userId, "press");
+    const serialNumber = existingPass?.serialNumber ?? passKitService.generateSerialNumber(session.userId, "press");
+    const authToken = existingPass?.authenticationToken ?? passKitService.generateAuthToken();
+
+    const userName = [userRow.firstName, userRow.lastName]
+      .map((s) => (s ?? "").trim())
+      .filter(Boolean)
+      .join(" ") || userRow.email || "";
+
+    const passData = {
+      userId: userRow.id,
+      serialNumber,
+      authToken,
+      userName,
+      userEmail: userRow.email ?? "",
+      userRole: userRow.role ?? "reader",
+      profileImageUrl: userRow.profileImageUrl ?? undefined,
+      jobTitle: userRow.jobTitle ?? undefined,
+      department: userRow.department ?? undefined,
+      pressIdNumber: userRow.pressIdNumber ?? undefined,
+      validUntil: userRow.cardValidUntil ?? undefined,
+    };
+
+    const passBuffer = await passKitService.generatePressPass(passData);
+
+    if (existingPass) {
+      await storage.updateWalletPassTimestamp(existingPass.id);
+    } else {
+      await storage.createWalletPass({
+        userId: userRow.id,
+        passType: "press",
+        passTypeIdentifier: process.env.APPLE_PRESS_PASS_TYPE_ID || "pass.life.sabq.presscard",
+        serialNumber,
+        authenticationToken: authToken,
+      });
+    }
+
+    res.set({
+      "Content-Type": "application/vnd.apple.pkpass",
+      "Content-Disposition": `attachment; filename="sabq-press-card-${serialNumber}.pkpass"`,
+      "Content-Length": passBuffer.length,
+    });
+    return res.send(passBuffer);
+  } catch (error: any) {
+    console.error("[Mobile API] POST /wallet/press/issue error:", error);
+    res.status(400).json({
+      success: false,
+      message: error?.message || "تعذر إنشاء البطاقة.",
+    });
+  }
+});
+
+// ==========================================
 // LOYALTY (Phase 2 / Phase 3 iOS surface)
 // ==========================================
 // All loyalty awarding from iOS funnels through awardPoints() in

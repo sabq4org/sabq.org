@@ -46,6 +46,7 @@ struct SettingsView: View {
                 profileSection
                 if authStore.isLoggedIn {
                     loyaltyEntrySection
+                    pressCardEntrySection
                 }
                 displaySection
                 subscriptionSection
@@ -562,6 +563,49 @@ struct SettingsView: View {
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
                         .foregroundStyle(SabqTheme.ink)
                     Text("تابع مستواك واستبدل نقاطك")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Press card entry
+
+    // Shown to every signed-in user; the row itself is harmless for
+    // non-eligible users — tapping it surfaces the server's "غير مصرّح
+    // لك" message inside PressCardActivationView rather than silently
+    // hiding the feature.
+    private var pressCardEntrySection: some View {
+        NavigationLink(destination: PressCardActivationView().environment(authStore)) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(red: 0.60, green: 0.10, blue: 0.16).opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.60, green: 0.10, blue: 0.16))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("بطاقتي الصحفية")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("أضف بطاقتك إلى Apple Wallet")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }

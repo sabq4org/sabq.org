@@ -1045,6 +1045,47 @@ actor APIClient {
         try await postRaw(path: "/behavior/track", body: body)
     }
 
+    // MARK: - Apple Wallet Press Pass
+
+    // Server contract: server/routes/mobileApiRoutes.ts (status route)
+    // omits serialNumber/issuedAt when the user has no pass yet. Both
+    // are optional to keep the decoder forgiving.
+    nonisolated struct APIPressPassStatus: Decodable {
+        let success: Bool?
+        let authorized: Bool
+        let hasPass: Bool
+        let serialNumber: String?
+        let issuedAt: String?
+    }
+
+
+    func fetchPressPassStatus() async throws -> APIPressPassStatus {
+        try await get(APIPressPassStatus.self, path: "/wallet/press/status")
+    }
+
+    /// Hits `POST /api/v1/wallet/press/issue` and returns the raw
+    /// `.pkpass` bytes (application/vnd.apple.pkpass) the caller hands
+    /// to `PKAddPassesViewController`. Throws apiMessage("…") when the
+    /// server says we're not authorized so the press-card screen can
+    /// surface the Arabic reason directly.
+    func downloadPressPass() async throws -> Data {
+        let url = try buildURL(path: "/wallet/press/issue")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyHeaders(&request)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.noResponse }
+        switch http.statusCode {
+        case 200..<300: return data
+        case 401: throw APIError.unauthorized
+        case 403, 400:
+            let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
+            throw APIError.apiMessage(msg ?? "غير مصرح بإصدار البطاقة")
+        default:
+            throw APIError.serverError(http.statusCode)
+        }
+    }
+
     // MARK: - Loyalty (Phase 3)
     //
     // `/api/v1/loyalty/me` returns the same shape the web profile reads
