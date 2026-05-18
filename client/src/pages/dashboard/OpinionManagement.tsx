@@ -58,7 +58,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
-import { ResubmittedDraftIndicator } from "@/components/admin/ResubmittedDraftIndicator";
+import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
 import { isResubmittedAfterRevision } from "@/lib/articleRevision";
 
 type OpinionArticle = {
@@ -666,15 +666,15 @@ export default function OpinionManagement() {
                               <div className="space-y-1.5 max-w-md">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-medium truncate">{article.title}</span>
-                                  <ResubmittedDraftIndicator
+                                  <EditorialDraftReviewCue
                                     article={article}
-                                    variant="compact"
+                                    layout="inline"
                                     testId={`badge-revised-opinion-${article.id}`}
                                   />
                                 </div>
-                                <ResubmittedDraftIndicator
+                                <EditorialDraftReviewCue
                                   article={article}
-                                  variant="full"
+                                  layout="banner"
                                   testId={`banner-revised-opinion-${article.id}`}
                                 />
                               </div>

@@ -44,8 +44,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
-import { ResubmittedDraftIndicator } from "@/components/admin/ResubmittedDraftIndicator";
-import { isResubmittedAfterRevision } from "@/lib/articleRevision";
+import { EditorialDraftReviewCue } from "@/components/admin/EditorialDraftReviewCue";
+import { isAwaitingContributorRevision, isResubmittedAfterRevision } from "@/lib/articleRevision";
 import {
   DndContext,
   closestCenter,
@@ -122,7 +122,7 @@ function SortableRow({
   article: Article;
   children: React.ReactNode;
   isSaving?: boolean;
-  highlightResubmitted?: boolean;
+  highlightResubmitted?: false | "resubmitted" | "awaiting";
 }) {
   const {
     attributes,
@@ -145,7 +145,7 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted ? 'bg-amber-50/80 dark:bg-amber-500/5 border-r-4 border-r-amber-500' : ''}`}
+      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-amber-500/5 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-orange-500/5 border-r-4 border-r-orange-500' : ''}`}
       data-testid={`row-article-${article.id}`}
     >
       <td 
@@ -1107,7 +1107,13 @@ export default function ArticlesManagement() {
                             key={article.id}
                             article={article}
                             isSaving={updateOrderMutation.isPending}
-                            highlightResubmitted={isResubmittedAfterRevision(article)}
+                            highlightResubmitted={
+                              isResubmittedAfterRevision(article)
+                                ? "resubmitted"
+                                : isAwaitingContributorRevision(article)
+                                  ? "awaiting"
+                                  : false
+                            }
                           >
                             <td className="py-3 px-4 text-center">
                               <Checkbox
@@ -1123,16 +1129,16 @@ export default function ArticlesManagement() {
                                     <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                                   )}
                                   <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
-                                  <ResubmittedDraftIndicator
+                                  <EditorialDraftReviewCue
                                     article={article}
-                                    variant="compact"
-                                    testId={`badge-revised-desktop-${article.id}`}
+                                    layout="inline"
+                                    testId={`badge-review-desktop-${article.id}`}
                                   />
                                 </div>
-                                <ResubmittedDraftIndicator
+                                <EditorialDraftReviewCue
                                   article={article}
-                                  variant="full"
-                                  testId={`banner-revised-desktop-${article.id}`}
+                                  layout="banner"
+                                  testId={`banner-review-desktop-${article.id}`}
                                 />
                                 <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                   {article.source === 'email' ? (
@@ -1170,6 +1176,13 @@ export default function ArticlesManagement() {
                                     <Clock className="h-3 w-3 flex-shrink-0" />
                                     <span>أُرسلت بتاريخ: {formatDraftDate(article.createdAt)}</span>
                                   </div>
+                                )}
+                                {article.status === "draft" && (
+                                  <EditorialDraftReviewCue
+                                    article={article}
+                                    layout="meta"
+                                    testId={`meta-review-desktop-${article.id}`}
+                                  />
                                 )}
                                 {article.status === "published" && article.publishedAt && (
                                   <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid={`published-date-desktop-${article.id}`}>
@@ -1297,7 +1310,9 @@ export default function ArticlesManagement() {
                   className={`border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all ${
                     isResubmittedAfterRevision(article)
                       ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-600"
-                      : "bg-blue-50 dark:bg-blue-950/30"
+                      : isAwaitingContributorRevision(article)
+                        ? "bg-orange-50 dark:bg-orange-500/10 border-orange-300 dark:border-orange-600"
+                        : "bg-blue-50 dark:bg-blue-950/30"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
@@ -1317,16 +1332,16 @@ export default function ArticlesManagement() {
                               <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                             )}
                             {article.title}
-                            <ResubmittedDraftIndicator
+                            <EditorialDraftReviewCue
                               article={article}
-                              variant="compact"
-                              testId={`badge-revised-mobile-${article.id}`}
+                              layout="inline"
+                              testId={`badge-review-mobile-${article.id}`}
                             />
                           </h3>
-                          <ResubmittedDraftIndicator
+                          <EditorialDraftReviewCue
                             article={article}
-                            variant="full"
-                            testId={`banner-revised-mobile-${article.id}`}
+                            layout="banner"
+                            testId={`banner-review-mobile-${article.id}`}
                           />
                           <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
                             {article.source === 'email' ? (
