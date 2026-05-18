@@ -100,6 +100,47 @@ function trunc(s: string | null | undefined, n: number): string {
   return s.length <= n ? s : s.slice(0, n).trimEnd() + "…";
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Mirrors server/seoInjector.ts — sanitize editor HTML before edge injection.
+function stripUnsafeHtml(html: string): string {
+  if (!html) return "";
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/<embed\b[^>]*>/gi, "")
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, "")
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
+    .replace(/(href|src)\s*=\s*"\s*javascript:[^"]*"/gi, '$1="#"')
+    .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
+}
+
+/** Crawler-visible article body (hidden from users; React replaces #root on hydrate). */
+function buildSemanticHtml(opts: {
+  title: string;
+  excerpt: string;
+  content: string;
+  publishedAt?: Date | string | null;
+}): string | undefined {
+  const safeBody = stripUnsafeHtml(opts.content || "");
+  if (!safeBody) return undefined;
+  const safeTitle = escapeHtml(opts.title);
+  const safeExcerpt = escapeHtml(trunc(opts.excerpt, 300));
+  const publishedIso = opts.publishedAt
+    ? new Date(opts.publishedAt).toISOString()
+    : undefined;
+  return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}<p>${safeExcerpt}</p><div>${safeBody}</div></article>`;
+}
+
 function defaultMeta(path: string) {
   return {
     title: "سبق الذكية",
@@ -128,8 +169,10 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           title: articles.title,
           excerpt: articles.excerpt,
           aiSummary: articles.aiSummary,
+          content: articles.content,
           imageUrl: articles.imageUrl,
           englishSlug: articles.englishSlug,
+          publishedAt: articles.publishedAt,
         })
         .from(articles)
         .where(where!)
@@ -138,14 +181,21 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       // Description prefers the AI-generated summary so the crawler unfurl
       // matches what the user picked editorially — same change made in
       // `seoInjector.ts` on 2026-05-15 per user request.
+      const excerpt = row.aiSummary || row.excerpt || row.title || "";
       return {
         title: `${row.title} | سبق`,
-        description: trunc(row.aiSummary || row.excerpt || row.title, 220),
+        description: trunc(excerpt, 220),
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "ar_SA",
+        semanticHtml: buildSemanticHtml({
+          title: row.title || "",
+          excerpt,
+          content: row.content || "",
+          publishedAt: row.publishedAt,
+        }),
       };
     },
   },
@@ -165,21 +215,30 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           title: articles.title,
           excerpt: articles.excerpt,
           aiSummary: articles.aiSummary,
+          content: articles.content,
           imageUrl: articles.imageUrl,
           englishSlug: articles.englishSlug,
+          publishedAt: articles.publishedAt,
         })
         .from(articles)
         .where(where!)
         .limit(1);
       if (!row) return null;
+      const excerpt = row.aiSummary || row.excerpt || row.title || "";
       return {
         title: `${row.title} | سبق`,
-        description: trunc(row.aiSummary || row.excerpt || row.title, 220),
+        description: trunc(excerpt, 220),
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/opinion/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "ar_SA",
+        semanticHtml: buildSemanticHtml({
+          title: row.title || "",
+          excerpt,
+          content: row.content || "",
+          publishedAt: row.publishedAt,
+        }),
       };
     },
   },
@@ -193,21 +252,30 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .select({
           title: enArticles.title,
           excerpt: enArticles.excerpt,
+          content: enArticles.content,
           imageUrl: enArticles.imageUrl,
           englishSlug: enArticles.englishSlug,
+          publishedAt: enArticles.publishedAt,
         })
         .from(enArticles)
         .where(where!)
         .limit(1);
       if (!row) return null;
+      const excerpt = row.excerpt || row.title || "";
       return {
         title: `${row.title} | Sabq`,
-        description: trunc(row.excerpt || row.title, 220),
+        description: trunc(excerpt, 220),
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "en_US",
+        semanticHtml: buildSemanticHtml({
+          title: row.title || "",
+          excerpt,
+          content: row.content || "",
+          publishedAt: row.publishedAt,
+        }),
       };
     },
   },
@@ -221,21 +289,30 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .select({
           title: urArticles.title,
           excerpt: urArticles.excerpt,
+          content: urArticles.content,
           imageUrl: urArticles.imageUrl,
           englishSlug: urArticles.englishSlug,
+          publishedAt: urArticles.publishedAt,
         })
         .from(urArticles)
         .where(where!)
         .limit(1);
       if (!row) return null;
+      const excerpt = row.excerpt || row.title || "";
       return {
         title: `${row.title} | سبق`,
-        description: trunc(row.excerpt || row.title, 220),
+        description: trunc(excerpt, 220),
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/ur/article/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "ur_PK",
+        semanticHtml: buildSemanticHtml({
+          title: row.title || "",
+          excerpt,
+          content: row.content || "",
+          publishedAt: row.publishedAt,
+        }),
       };
     },
   },

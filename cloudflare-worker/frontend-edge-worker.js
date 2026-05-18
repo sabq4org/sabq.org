@@ -10,11 +10,13 @@
  *      the canonical English slug if one is found. Crawlers and humans
  *      both follow these — same as the old Express middleware.
  *
- *   2. SEO META INJECTION: For HTML responses on indexable routes, fetch
- *      the static shell from Vercel AND fetch /api/edge/seo-meta from the
- *      backend in parallel, then inject <title>, meta description,
- *      og/twitter tags, and the canonical link into <head>. Crawlers see
- *      the right meta even though the shell itself is static.
+ *   2. SEO META + BODY INJECTION: For HTML responses on indexable routes,
+ *      fetch the static shell from Vercel AND fetch /api/edge/seo-meta from
+ *      the backend in parallel, then inject <title>, meta description,
+ *      og/twitter tags, and the canonical link into <head>. For articles,
+ *      also inject semanticHtml (full body + outbound links) into #root so
+ *      HTML-only crawlers (Screaming Frog, etc.) see the paid/sponsored links
+ *      without waiting for React hydration.
  *
  *   3. STATIC PASS-THROUGH: Asset and API requests bypass injection.
  *
@@ -203,6 +205,19 @@ class HeadInjector {
   }
 }
 
+// Mirrors server/seoInjector.ts semanticHtml — prepended inside #root.
+class RootInjector {
+  constructor(semanticHtml) {
+    this.semanticHtml = semanticHtml || "";
+    this.injected = false;
+  }
+  element(element) {
+    if (this.injected || !this.semanticHtml) return;
+    element.prepend(this.semanticHtml, { html: true });
+    this.injected = true;
+  }
+}
+
 async function handleHtml(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname;
@@ -239,7 +254,7 @@ async function handleHtml(request, env) {
   // ones. Facebook/WhatsApp/LinkedIn use the *last* occurrence so this also
   // de-duplicates the response for them.
   const remover = new TagRemover();
-  const rewriter = new HTMLRewriter()
+  let rewriter = new HTMLRewriter()
     .on("head > title", remover)
     .on('head > meta[name="description"]', remover)
     .on('head > meta[name="robots"]', remover)
@@ -248,6 +263,9 @@ async function handleHtml(request, env) {
     .on('head > meta[name^="twitter:"]', remover)
     .on('head > meta[property^="twitter:"]', remover)
     .on("head", new HeadInjector(metaBlock));
+  if (meta.semanticHtml) {
+    rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
+  }
   return withHtmlNoStore(rewriter.transform(originRes));
 }
 
