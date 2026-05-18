@@ -10569,15 +10569,15 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "المحتوى قيد المراجعة بالفعل" });
       }
 
-      if (existingArticle.reviewStatus === "needs_changes" && existingArticle.reviewedAt) {
-        const reviewedMs = new Date(existingArticle.reviewedAt).getTime();
-        const updatedMs = new Date(existingArticle.updatedAt || 0).getTime();
-        if (!Number.isNaN(reviewedMs) && !Number.isNaN(updatedMs) && updatedMs <= reviewedMs) {
-          return res.status(400).json({
-            message: "يجب تعديل المقال وحفظه قبل الإرسال — افتح المحرر واضغط حفظ ثم أرسل",
-          });
-        }
-      }
+      // The "must save before resubmit" gate used to live here (compared
+      // updatedAt > reviewedAt). Removed 2026-05-18: in practice the
+      // 400 came back as a fleeting toast the contributor often missed,
+      // so the article quietly stayed in needs_changes while the writer
+      // thought they had resent. Editor manager confirmed the new
+      // policy: any resubmit goes through, even with no edits since the
+      // last review — the editorial team handles the rare unchanged
+      // resubmission directly. Same behaviour now applied at the
+      // `/api/articles/:id/submit-revision` route (~25649).
 
       const [updatedArticle] = await db
         .update(articles)
@@ -25646,15 +25646,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ message: "Article is already pending review" });
       }
 
-      if (existingArticle.reviewStatus === "needs_changes" && existingArticle.reviewedAt) {
-        const reviewedMs = new Date(existingArticle.reviewedAt).getTime();
-        const updatedMs = new Date(existingArticle.updatedAt || 0).getTime();
-        if (!Number.isNaN(reviewedMs) && !Number.isNaN(updatedMs) && updatedMs <= reviewedMs) {
-          return res.status(400).json({
-            message: "يجب تعديل المقال وحفظه قبل الإرسال — افتح المحرر واضغط حفظ ثم أرسل",
-          });
-        }
-      }
+      // The "must save before resubmit" gate was removed 2026-05-18 —
+      // see the sibling `/api/my/articles/:id/submit-review` route for
+      // the full rationale. Letting any resubmit through eliminates the
+      // silent-failure UX where the contributor missed the 400 toast.
 
       const [updatedArticle] = await db
         .update(articles)

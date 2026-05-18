@@ -105,7 +105,6 @@ import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
-import { canSubmitAfterRevision, REVISION_SUBMIT_HINT } from "@/lib/articleRevision";
 import {
   markArticleSubmittedInAnalyticsCache,
   refetchContributorAnalytics,
@@ -497,12 +496,6 @@ export default function ArticleEditor() {
     user?.role === "opinion_author" ||
     (user?.roles?.includes("reporter") ?? false) ||
     (user?.roles?.includes("opinion_author") ?? false);
-
-  const canResubmitAfterEdit = canSubmitAfterRevision({
-    reviewStatus,
-    reviewedAt,
-    updatedAt: articleUpdatedAt,
-  });
 
   const submitReviewMutation = useMutation({
     mutationFn: async () => {
@@ -2673,16 +2666,16 @@ const generateSlug = (text: string) => {
     generateAllInOneMutation.mutate();
   };
 
-  const handleSave = async (publishNow = false) => {
+  const handleSave = async (publishNow = false): Promise<boolean> => {
     console.log('[handleSave] Called with publishNow:', publishNow, 'albumImages:', albumImages?.length, 'isSaving:', isSaving, 'isLockedByOther:', isLockedByOther);
-    
+
     if (isSaving) {
       console.warn('[handleSave] Already saving, ignoring click');
-      return;
+      return false;
     }
-    
+
     const missingFields = [];
-    
+
     if (!title || typeof title !== 'string' || !title.trim()) {
       missingFields.push("العنوان الرئيسي");
     }
@@ -2695,7 +2688,7 @@ const generateSlug = (text: string) => {
     if (!categoryId) {
       missingFields.push("التصنيف");
     }
-    
+
     if (missingFields.length > 0) {
       console.log('[handleSave] Missing fields:', missingFields);
       toast({
@@ -2703,11 +2696,17 @@ const generateSlug = (text: string) => {
         description: `الرجاء ملء: ${missingFields.join(" - ")}`,
         variant: "destructive",
       });
-      return;
+      return false;
     }
-    
-    console.log('[handleSave] Calling saveArticleMutation.mutate');
-    saveArticleMutation.mutate({ publishNow });
+
+    try {
+      console.log('[handleSave] Calling saveArticleMutation.mutateAsync');
+      await saveArticleMutation.mutateAsync({ publishNow });
+      return true;
+    } catch (err) {
+      console.error('[handleSave] Save failed:', err);
+      return false;
+    }
   };
 
   const handleAddLink = (suggestion: { text: string; position: number; length: number }, url: string) => {
@@ -3502,39 +3501,28 @@ const generateSlug = (text: string) => {
                 <span className="xs:hidden">حفظ</span>
               </Button>
               {reviewStatus === "needs_changes" && isContributorRole && !canPublish && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => submitReviewMutation.mutate()}
-                          disabled={
-                            !canResubmitAfterEdit ||
-                            submitReviewMutation.isPending ||
-                            isSaving ||
-                            isLockedByOther
-                          }
-                          className="gap-1.5 sm:gap-2"
-                          data-testid="button-resubmit-review"
-                        >
-                          {submitReviewMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
-                          إرسال بعد التعديل
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    {!canResubmitAfterEdit && (
-                      <TooltipContent side="bottom" className="max-w-xs text-center">
-                        {REVISION_SUBMIT_HINT}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    const ok = await handleSave(false);
+                    if (ok) submitReviewMutation.mutate();
+                  }}
+                  disabled={
+                    submitReviewMutation.isPending ||
+                    isSaving ||
+                    isLockedByOther
+                  }
+                  className="gap-1.5 sm:gap-2"
+                  data-testid="button-resubmit-review"
+                >
+                  {submitReviewMutation.isPending || isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  إرسال بعد التعديل
+                </Button>
               )}
               <Button
                 size="sm"

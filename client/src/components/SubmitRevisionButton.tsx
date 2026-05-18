@@ -1,16 +1,6 @@
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Send, Loader2 } from "lucide-react";
-import {
-  canSubmitAfterRevision,
-  REVISION_SUBMIT_HINT,
-  type RevisionGateArticle,
-} from "@/lib/articleRevision";
+import type { RevisionGateArticle } from "@/lib/articleRevision";
 
 type Props = {
   article: RevisionGateArticle & { id: string };
@@ -22,6 +12,13 @@ type Props = {
   testId?: string;
 };
 
+/// Resubmit-after-revision button. The "must save first" disable rule
+/// was removed 2026-05-18 — the server-side gate that backed it was
+/// dropping resubmits silently (a fleeting 400 toast the contributor
+/// often missed), and editors reported articles stuck in `needs_changes`
+/// even after the writer thought they had resent. Now the button is
+/// always enabled while the row is in needs_changes; the rare
+/// no-edit resubmit is handled by the editorial team directly.
 export function SubmitRevisionButton({
   article,
   onSubmit,
@@ -31,13 +28,11 @@ export function SubmitRevisionButton({
   showLabel = true,
   testId,
 }: Props) {
-  const canSubmit = canSubmitAfterRevision(article);
-
-  const button = (
+  return (
     <Button
       size={size}
       className={className}
-      disabled={!canSubmit || isPending}
+      disabled={isPending}
       onClick={() => onSubmit(article.id)}
       data-testid={testId}
     >
@@ -48,20 +43,5 @@ export function SubmitRevisionButton({
       )}
       {showLabel && "إرسال"}
     </Button>
-  );
-
-  if (canSubmit) return button;
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">{button}</span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs text-center">
-          {REVISION_SUBMIT_HINT}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 }
