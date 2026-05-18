@@ -109,6 +109,7 @@ struct OpinionDetailView: View {
                 scrollProgress = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
+            .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
                 readingProgressBar
             }

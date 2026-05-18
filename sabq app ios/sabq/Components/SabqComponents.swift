@@ -250,6 +250,75 @@ extension View {
     func sabqScrollProgressTracker(_ onChange: @escaping (CGFloat) -> Void) -> some View {
         modifier(ScrollProgressTracker(onChange: onChange))
     }
+
+    /// Auto-hide the floating tab bar when this ScrollView scrolls down,
+    /// re-show it on upward scroll or when the user returns near the top.
+    /// No-op on iOS 17 (the tab bar stays put), so the layout never breaks.
+    func sabqAutoHideTabBar() -> some View {
+        modifier(TabBarAutoHideTracker())
+    }
+}
+
+// MARK: - Tab Bar Visibility
+
+/// Drives the floating tab bar's appear/disappear animation as the
+/// reader scrolls. Singleton because the tab bar lives in ContentView
+/// while the ScrollViews that drive it sit several screens deep — a
+/// shared store keeps the propagation O(1) without an environment dance.
+@MainActor
+@Observable
+final class TabBarVisibility {
+    static let shared = TabBarVisibility()
+    var isVisible: Bool = true
+    /// Last reported offset — we compare against this to detect direction.
+    private var lastY: CGFloat = 0
+    /// Ignore tiny pixel jitter (springy bounce, sub-pixel jumps).
+    private let movementThreshold: CGFloat = 6
+    /// Always show the bar in the top zone — even if the reader scrolls
+    /// down briefly. Below this offset, only direction matters.
+    private let pinnedTopZone: CGFloat = 80
+
+    private init() {}
+
+    func report(_ y: CGFloat) {
+        let delta = y - lastY
+        guard abs(delta) > movementThreshold else { return }
+
+        if y < pinnedTopZone {
+            if !isVisible {
+                withAnimation(.easeOut(duration: 0.22)) { isVisible = true }
+            }
+        } else if delta > 0, isVisible {
+            withAnimation(.easeOut(duration: 0.22)) { isVisible = false }
+        } else if delta < 0, !isVisible {
+            withAnimation(.easeOut(duration: 0.22)) { isVisible = true }
+        }
+
+        lastY = y
+    }
+
+    /// Called when navigation pops (back to a list) so the tab bar
+    /// snaps visible regardless of the last detail-view scroll state.
+    func reset() {
+        lastY = 0
+        if !isVisible {
+            withAnimation(.easeOut(duration: 0.22)) { isVisible = true }
+        }
+    }
+}
+
+private struct TabBarAutoHideTracker: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { _, y in
+                TabBarVisibility.shared.report(y)
+            }
+        } else {
+            content
+        }
+    }
 }
 
 // MARK: - Cached Image

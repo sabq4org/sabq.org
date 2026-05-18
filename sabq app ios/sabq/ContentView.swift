@@ -11,6 +11,10 @@ struct ContentView: View {
     /// (cold start, foreground, or background restore). We watch it via the
     /// onChange handler below and translate it into a NavigationPath entry.
     @State private var notificationsStore = NotificationsStore.shared
+    /// Drives the floating tab bar's auto-hide animation when the
+    /// reader scrolls inside Home/Detail screens. See TabBarVisibility
+    /// in SabqComponents.swift.
+    @State private var tabBarVisibility = TabBarVisibility.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -150,12 +154,26 @@ struct ContentView: View {
                     if tab == .home && selectedTab == .home {
                         NotificationCenter.default.post(name: .sabqHomeScrollToTop, object: nil)
                     }
+                    // Any tab tap snaps the bar back into view — the reader
+                    // is intentionally engaging with it.
+                    tabBarVisibility.reset()
                 }
             )
             .padding(.horizontal, 20)
             .padding(.bottom, 2)
+            // Slide off the bottom edge + fade when the active screen
+            // reports a downward scroll. 120pt is enough to clear the
+            // safe-area inset on every device class we ship to.
+            .offset(y: tabBarVisibility.isVisible ? 0 : 120)
+            .opacity(tabBarVisibility.isVisible ? 1 : 0)
+            .allowsHitTesting(tabBarVisibility.isVisible)
         }
         .sabqRTL()
+        .onChange(of: navigationPath.count) { _, _ in
+            // Whenever the stack pops/pushes, restore the bar so the
+            // reader never lands on a screen with the bar already hidden.
+            tabBarVisibility.reset()
+        }
     }
 
     /// Translate a parsed deep link from a notification tap into a concrete

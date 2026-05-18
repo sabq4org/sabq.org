@@ -128,6 +128,7 @@ struct HomeFeedView: View {
             .sabqScrollOffsetTracker { y in
                 scrollOffsetY = y
             }
+            .sabqAutoHideTabBar()
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
                 guard scrollOffsetY > Self.scrollToTopThreshold else { return }
                 withAnimation(.easeOut(duration: 0.28)) {
