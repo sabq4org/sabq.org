@@ -125,6 +125,7 @@ import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
+import { GalleryManagerDialog } from "@/components/dashboard/GalleryManagerDialog";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
@@ -396,6 +397,7 @@ export default function ArticleEditor() {
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
   const [showAttachmentUploadDialog, setShowAttachmentUploadDialog] = useState(false);
+  const [showGalleryManager, setShowGalleryManager] = useState(false);
   /// The attachment whose caption/source/alt is currently being edited.
   /// Setting this opens the MediaAssetEditDialog; clearing it closes.
   const [editingAttachment, setEditingAttachment] = useState<any | null>(null);
@@ -5251,16 +5253,28 @@ const generateSlug = (text: string) => {
                     );
                   })()}
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2"
-                    onClick={() => setShowAttachmentUploadDialog(true)}
-                    data-testid="button-add-attachment-sidebar"
-                  >
-                    <ImagePlus className="h-4 w-4" />
-                    إضافة مرفق
-                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowAttachmentUploadDialog(true)}
+                      data-testid="button-add-attachment-sidebar"
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                      إضافة
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => setShowGalleryManager(true)}
+                      data-testid="button-open-gallery-manager"
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                      إدارة الألبوم
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -5828,6 +5842,20 @@ const generateSlug = (text: string) => {
         }}
         articleTitle={title}
         articleContent={content?.substring(0, 500)}
+      />
+
+      {/* Full-screen gallery manager — phase 2 of the album overhaul.
+       * Hosts the high-density grid, inline per-image fields, multi-select,
+       * and the internal lightbox. Reuses the same backend endpoints as
+       * the sidebar so both surfaces stay consistent. */}
+      <GalleryManagerDialog
+        isOpen={showGalleryManager}
+        onClose={() => setShowGalleryManager(false)}
+        articleId={article?.id}
+        articleTitle={title}
+        articleContent={content}
+        mediaAssets={mediaAssets}
+        onRefetch={refetchMediaAssets}
       />
 
       {/* Inline editor for an attachment's caption + alt + source.
