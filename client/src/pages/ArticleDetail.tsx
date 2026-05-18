@@ -477,37 +477,9 @@ export default function ArticleDetail() {
     };
   }, [article?.content]);
 
-  useEffect(() => {
-    if (!article) return;
-
-    let tag = document.querySelector('meta[name="googlebot-news"]') as HTMLMetaElement;
-    let created = false;
-
-    if (article.publishedAt) {
-      const pubDate = new Date(article.publishedAt);
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      if (pubDate < thirtyDaysAgo) {
-        if (!tag) {
-          tag = document.createElement('meta');
-          tag.setAttribute('name', 'googlebot-news');
-          document.head.appendChild(tag);
-          created = true;
-        }
-        tag.content = 'noindex';
-      } else {
-        if (tag) {
-          tag.parentNode?.removeChild(tag);
-          tag = null as any;
-        }
-      }
-    }
-
-    return () => {
-      if (created && tag?.parentNode) {
-        tag.parentNode.removeChild(tag);
-      }
-    };
-  }, [article?.id, article?.publishedAt]);
+  // googlebot-news 30-day noindex meta is owned by seoInjector
+  // (server/seoInjector.ts) — duplicated client-side logic was
+  // race-condition-prone with React reconciliation (removeChild error).
 
   // Add ImageObject JSON-LD for image SEO
   useEffect(() => {

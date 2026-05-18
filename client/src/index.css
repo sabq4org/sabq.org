@@ -7,12 +7,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Safari iOS zoom prevention + prevent horizontal overflow on Android Chrome */
+/* Safari iOS zoom prevention + prevent horizontal overflow on Android Chrome.
+ * `overflow-x: clip` instead of `hidden` so `position: sticky` continues to
+ * work on descendants — `hidden` creates a new containing block that
+ * silently breaks sticky headers + ad rails. clip has the same visual
+ * effect (no horizontal scrollbar) without the sticky regression. */
 html {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Prevent Safari from auto-zooming on input focus */
@@ -433,7 +437,11 @@ input, select, textarea {
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    overflow-x: hidden;
+    /* `overflow-x: hidden` here was killing sticky elements (header,
+     * leaderboard ad rail). The html-level `overflow-x: clip` already
+     * suppresses horizontal scrollbars site-wide, so the body doesn't
+     * need its own rule — and explicitly omitting it lets descendants
+     * with `position: sticky` resolve to the viewport correctly. */
     max-width: 100%;
   }
 }

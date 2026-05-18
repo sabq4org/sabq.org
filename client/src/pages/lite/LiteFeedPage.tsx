@@ -162,9 +162,12 @@ export default function LiteFeedPage() {
     
     sortedArticles.forEach((article, index) => {
       items.push({ type: 'article', data: article });
-      
-      // Add DMS ad at every 5th position (index 4, 9, 14, etc.)
-      if ((index + 1) % 5 === 0 && index < sortedArticles.length - 1) {
+
+      // 1 DMS ad after every 10th news card (was every 5th). DMS asked
+      // for a lower frequency on 2026-05-18 — the empty slots between
+      // every 5 cards were hurting UX without improving fill. Still
+      // dense enough that an average session passes ~2-3 ad slots.
+      if ((index + 1) % 10 === 0 && index < sortedArticles.length - 1) {
         items.push({ type: 'dms_ad', data: { index: dmsAdIndex } });
         dmsAdIndex++;
       }
