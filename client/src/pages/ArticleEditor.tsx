@@ -80,6 +80,7 @@ import {
   ExternalLink,
   Play,
   Paperclip,
+  Pencil,
   Star,
   GripVertical,
   Lock,
@@ -160,9 +161,10 @@ interface SortableAttachmentItemProps {
   index: number;
   onDelete: (id: string) => void;
   isDeleting: boolean;
+  onEdit?: (asset: any) => void;
 }
 
-function SortableAttachmentItem({ asset, index, onDelete, isDeleting }: SortableAttachmentItemProps) {
+function SortableAttachmentItem({ asset, index, onDelete, isDeleting, onEdit }: SortableAttachmentItemProps) {
   const {
     attributes,
     listeners,
@@ -231,16 +233,44 @@ function SortableAttachmentItem({ asset, index, onDelete, isDeleting }: Sortable
           <X className="h-4 w-4" />
         )}
       </Button>
+      {/* Edit (caption + alt + source) — opens the asset edit dialog */}
+      {onEdit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute top-2 left-12 h-8 w-8 shadow-lg border border-white/30"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(asset);
+              }}
+              data-testid={`button-edit-attachment-${index}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            تعديل التعريف والمصدر
+          </TooltipContent>
+        </Tooltip>
+      )}
       {/* Image number badge */}
       <div className="absolute top-2 right-2 bg-black/70 text-white text-xs font-medium px-2 py-1 rounded-full shadow-md">
         {index + 1}
       </div>
-      {/* Alt text tooltip */}
-      {asset.altText && (
-        <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-2 truncate rounded-b-lg">
-          {asset.altText}
-        </div>
-      )}
+      {/* Caption / alt overlay — readable preview of what's stored. Falls
+       * back to a "أضف تعريفاً" hint when no caption exists yet so the
+       * editor knows the slot is empty. */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 text-xs p-2 truncate rounded-b-lg ${
+          asset.captionPlain || asset.altText
+            ? 'bg-black/80 text-white'
+            : 'bg-amber-500/85 text-white italic'
+        }`}
+      >
+        {asset.captionPlain || asset.altText || 'بدون تعريف — اضغط ✏️ للإضافة'}
+      </div>
     </div>
   );
 }
@@ -366,6 +396,16 @@ export default function ArticleEditor() {
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
   const [showAttachmentUploadDialog, setShowAttachmentUploadDialog] = useState(false);
+  /// The attachment whose caption/source/alt is currently being edited.
+  /// Setting this opens the MediaAssetEditDialog; clearing it closes.
+  const [editingAttachment, setEditingAttachment] = useState<any | null>(null);
+  const [editingAttachmentDraft, setEditingAttachmentDraft] = useState<{
+    altText: string;
+    captionPlain: string;
+    sourceName: string;
+    sourceUrl: string;
+    rightsStatement: string;
+  }>({ altText: '', captionPlain: '', sourceName: '', sourceUrl: '', rightsStatement: '' });
   const [albumImages, setAlbumImages] = useState<string[]>([]);
   const [isUploadingAlbumImage, setIsUploadingAlbumImage] = useState(false);
   const [uploadingAlbumProgress, setUploadingAlbumProgress] = useState(0);
@@ -2904,6 +2944,20 @@ const generateSlug = (text: string) => {
     },
   });
 
+  /// Opens the attachment edit dialog with the asset's current values
+  /// pre-populated. Called from the Pencil button on every
+  /// SortableAttachmentItem instance.
+  const openAttachmentEditor = (asset: any) => {
+    setEditingAttachmentDraft({
+      altText: asset.altText || '',
+      captionPlain: asset.captionPlain || '',
+      sourceName: asset.sourceName || '',
+      sourceUrl: asset.sourceUrl || '',
+      rightsStatement: asset.rightsStatement || '',
+    });
+    setEditingAttachment(asset);
+  };
+
   // Drag and drop sensors for attachments reordering
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -5136,63 +5190,67 @@ const generateSlug = (text: string) => {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    صور مرفقة من البريد الإلكتروني أو واتساب
+                    صور مرفقة من البريد الإلكتروني أو واتساب — اسحب لإعادة الترتيب، ✏️ للتعريف
                   </p>
-                  
-                  {/* Quick preview of attachments */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 0 ? (
-                    <div className="grid grid-cols-3 gap-2">
-                      {mediaAssets
-                        .filter((asset: any) => asset.mediaFile?.url || asset.url)
-                        .slice(0, 6)
-                        .map((asset: any, index: number) => {
-                          const imageUrl = asset.mediaFile?.url || asset.url;
-                          return (
-                            <div 
-                              key={asset.id} 
-                              className="relative aspect-square rounded-md border bg-muted/30"
+
+                  {/* Sidebar attachments grid — same DnD + edit pipeline as
+                   * the main editor's media panel, just rendered at 2-column
+                   * density to fit the narrow sidebar. SortableAttachmentItem
+                   * is the shared row; passing onEdit wires the Pencil
+                   * button to the asset-edit dialog. */}
+                  {(() => {
+                    const sortedAttachments = mediaAssets
+                      .filter((asset: any) => asset.mediaFile?.url || asset.url)
+                      .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+                    const SIDEBAR_PREVIEW_CAP = 12;
+                    const visible = sortedAttachments.slice(0, SIDEBAR_PREVIEW_CAP);
+                    const overflow = sortedAttachments.length - visible.length;
+
+                    if (sortedAttachments.length === 0) {
+                      return (
+                        <div className="text-center py-4 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/20">
+                          <Paperclip className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                          <p className="text-xs">لا توجد مرفقات</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        <div className="max-h-[420px] overflow-y-auto rounded-lg border bg-muted/10 p-2" dir="rtl">
+                          <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleAttachmentDragEnd}
+                          >
+                            <SortableContext
+                              items={visible.map((a: any) => a.id)}
+                              strategy={rectSortingStrategy}
                             >
-                              <img
-                                src={imageUrl}
-                                alt={asset.altText || `مرفق ${index + 1}`}
-                                className="w-full h-full object-cover rounded-md"
-                                loading="lazy"
-                              />
-                              <Button
-                                variant="destructive"
-                                size="icon"
-                                className="absolute top-1 left-1 h-6 w-6 shadow-lg border border-white/30"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteAttachmentMutation.mutate(asset.id);
-                                }}
-                                disabled={deleteAttachmentMutation.isPending}
-                                data-testid={`button-delete-attachment-sidebar-${index}`}
-                              >
-                                {deleteAttachmentMutation.isPending ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <X className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/20">
-                      <Paperclip className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                      <p className="text-xs">لا توجد مرفقات</p>
-                    </div>
-                  )}
-                  
-                  {/* Show more indicator if there are more than 6 */}
-                  {mediaAssets?.filter((asset: any) => asset.mediaFile?.url || asset.url).length > 6 && (
-                    <p className="text-xs text-center text-muted-foreground">
-                      +{mediaAssets.filter((asset: any) => asset.mediaFile?.url || asset.url).length - 6} مرفق آخر
-                    </p>
-                  )}
-                  
+                              <div className="grid grid-cols-2 gap-2">
+                                {visible.map((asset: any, index: number) => (
+                                  <SortableAttachmentItem
+                                    key={asset.id}
+                                    asset={asset}
+                                    index={index}
+                                    onDelete={(id) => deleteAttachmentMutation.mutate(id)}
+                                    isDeleting={deleteAttachmentMutation.isPending}
+                                    onEdit={openAttachmentEditor}
+                                  />
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        </div>
+                        {overflow > 0 && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            +{overflow} مرفق آخر في لوحة الوسائط الرئيسية
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+
                   <Button
                     variant="outline"
                     size="sm"
@@ -5585,6 +5643,7 @@ const generateSlug = (text: string) => {
                                           index={index}
                                           onDelete={(id) => deleteAttachmentMutation.mutate(id)}
                                           isDeleting={deleteAttachmentMutation.isPending}
+                                          onEdit={openAttachmentEditor}
                                         />
                                       ))}
                                   </div>
@@ -5762,14 +5821,150 @@ const generateSlug = (text: string) => {
         isOpen={showAttachmentUploadDialog}
         onClose={() => setShowAttachmentUploadDialog(false)}
         onSelect={(media: MediaFile) => {
-          addAttachmentMutation.mutate({ 
-            mediaFileId: media.id, 
-            altText: media.altText || media.title || "مرفق جديد" 
+          addAttachmentMutation.mutate({
+            mediaFileId: media.id,
+            altText: media.altText || media.title || "مرفق جديد"
           });
         }}
         articleTitle={title}
         articleContent={content?.substring(0, 500)}
       />
+
+      {/* Inline editor for an attachment's caption + alt + source.
+       * Reuses updateCaptionMutation (PATCH /api/media-assets/:id) which
+       * already exists for the WeeklyPhotos surface. Opens via the Pencil
+       * button rendered inside every SortableAttachmentItem. */}
+      <Dialog
+        open={editingAttachment !== null}
+        onOpenChange={(open) => { if (!open) setEditingAttachment(null); }}
+      >
+        <DialogContent className="max-w-lg" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تعديل بيانات المرفق</DialogTitle>
+            <DialogDescription>
+              النص البديل + التعريف + المصدر تظهر في صفحة المقال على الويب وفي تطبيق iOS.
+            </DialogDescription>
+          </DialogHeader>
+          {editingAttachment && (
+            <div className="space-y-4">
+              {/* Thumbnail preview so the editor knows which image they're labelling */}
+              <div className="aspect-video rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={editingAttachment.mediaFile?.url || editingAttachment.url}
+                  alt={editingAttachmentDraft.altText || 'preview'}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  النص البديل <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  value={editingAttachmentDraft.altText}
+                  onChange={(e) =>
+                    setEditingAttachmentDraft((d) => ({ ...d, altText: e.target.value }))
+                  }
+                  placeholder="وصف موجز للصورة لقارئ الشاشة (SEO + accessibility)"
+                  data-testid="input-edit-attachment-alt"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">تعريف الصورة (Caption)</label>
+                <Textarea
+                  value={editingAttachmentDraft.captionPlain}
+                  onChange={(e) =>
+                    setEditingAttachmentDraft((d) => ({ ...d, captionPlain: e.target.value }))
+                  }
+                  placeholder="تعريف يظهر تحت الصورة عند نشر المقال"
+                  rows={3}
+                  data-testid="textarea-edit-attachment-caption"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">المصدر</label>
+                  <Input
+                    value={editingAttachmentDraft.sourceName}
+                    onChange={(e) =>
+                      setEditingAttachmentDraft((d) => ({ ...d, sourceName: e.target.value }))
+                    }
+                    placeholder="مثلاً: واس"
+                    data-testid="input-edit-attachment-source"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">رابط المصدر</label>
+                  <Input
+                    value={editingAttachmentDraft.sourceUrl}
+                    onChange={(e) =>
+                      setEditingAttachmentDraft((d) => ({ ...d, sourceUrl: e.target.value }))
+                    }
+                    placeholder="https://..."
+                    type="url"
+                    data-testid="input-edit-attachment-source-url"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">حقوق النشر</label>
+                <Input
+                  value={editingAttachmentDraft.rightsStatement}
+                  onChange={(e) =>
+                    setEditingAttachmentDraft((d) => ({ ...d, rightsStatement: e.target.value }))
+                  }
+                  placeholder="© 2026 ..."
+                  data-testid="input-edit-attachment-rights"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEditingAttachment(null)}
+              data-testid="button-edit-attachment-cancel"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editingAttachment) return;
+                if (!editingAttachmentDraft.altText.trim()) {
+                  toast({
+                    title: 'النص البديل مطلوب',
+                    description: 'لا تترك حقل alt فارغاً — يستخدمه قارئ الشاشة ومحركات البحث.',
+                    variant: 'destructive',
+                  });
+                  return;
+                }
+                updateCaptionMutation.mutate(
+                  {
+                    id: editingAttachment.id,
+                    data: {
+                      altText: editingAttachmentDraft.altText.trim(),
+                      captionPlain: editingAttachmentDraft.captionPlain.trim() || null,
+                      sourceName: editingAttachmentDraft.sourceName.trim() || null,
+                      sourceUrl: editingAttachmentDraft.sourceUrl.trim() || null,
+                      rightsStatement: editingAttachmentDraft.rightsStatement.trim() || null,
+                    },
+                  },
+                  {
+                    onSuccess: () => setEditingAttachment(null),
+                  },
+                );
+              }}
+              disabled={updateCaptionMutation.isPending}
+              data-testid="button-edit-attachment-save"
+            >
+              {updateCaptionMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'حفظ'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
