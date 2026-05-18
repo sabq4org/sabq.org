@@ -1516,7 +1516,13 @@ export default function ArticleDetail() {
               >
                 <SocialShareBar
                   title={article.title}
-                  url={shortLink?.shortCode ? `https://sabq.org/s/${shortLink.shortCode}` : `https://sabq.org/article/${slug}`}
+                  // Always share the canonical /article/<slug> URL — the
+                  // /s/<code> shortlink path was hard to read, looked
+                  // like a tracker to recipients, and broke previews on
+                  // WhatsApp because the redirect chain stripped the
+                  // OG meta. The shortLink object stays generated for
+                  // analytics/QR uses elsewhere on the page.
+                  url={`https://sabq.org/article/${slug}`}
                   copyUrl={`https://sabq.org/article/${slug}`}
                   description={article.excerpt || ""}
                   articleId={article.id}
