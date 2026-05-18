@@ -11,13 +11,11 @@ import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { LiveRegionProvider } from "@/contexts/LiveRegionContext";
 import { VoiceAssistantProvider } from "@/contexts/VoiceAssistantContext";
 import { SkipLinks } from "@/components/SkipLinks";
-import { UpdateBanner } from "@/components/UpdateBanner";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
-import { canCacheBust, markCacheBust, cacheBustReload, hardReset, canHardReset, getCacheBustCount, getRecoveryPendingMs } from "@/lib/cacheBust";
 import { useAuth } from "@/hooks/useAuth";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
@@ -76,30 +74,10 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
               .then(resolve)
               .catch(reject);
           }, delay);
-        } else if (isModuleError) {
-          const pendingRecoveryMs = getRecoveryPendingMs();
-          if (pendingRecoveryMs > 0) {
-            console.warn("[LazyLoad] Chunk recovery already in progress - waiting for navigation");
-            setTimeout(() => {
-              reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
-            }, pendingRecoveryMs + 1000);
-            return;
-          }
-
-          // All retries exhausted — JS chunks renamed after deploy.
-          // Cache-bust reload forces browser AND CDN to fetch fresh HTML.
-          if (canCacheBust()) {
-            console.warn(`[LazyLoad] All retries failed — cache-bust reloading (attempt ${getCacheBustCount() + 1})`);
-            markCacheBust();
-            cacheBustReload();
-            // Never resolve/reject — page will reload
-          } else if (canHardReset()) {
-            console.warn(`[LazyLoad] Cache-bust budget exhausted — performing hard reset (clear caches + service workers)`);
-            hardReset();
-            // Never resolve/reject — page will reload
-          } else {
-            reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
-          }
+          return;
+        }
+        if (isModuleError) {
+          reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
         } else {
           reject(error);
         }
@@ -450,21 +428,6 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary] Caught error:", error, errorInfo);
-    // If this looks like a chunk/module error, attempt one last cache-bust reload
-    // before showing the user-facing error screen.
-    if (isChunkErrorMessage(error?.message)) {
-      if (getRecoveryPendingMs() > 0) {
-        return;
-      }
-      if (canCacheBust()) {
-        console.warn("[ErrorBoundary] Chunk error detected — attempting cache-bust reload");
-        markCacheBust();
-        cacheBustReload();
-      } else if (canHardReset()) {
-        console.warn("[ErrorBoundary] Chunk error detected & budget exhausted — performing hard reset");
-        hardReset();
-      }
-    }
   }
 
   render() {
@@ -475,30 +438,23 @@ class ErrorBoundary extends Component<
           <h1 className="text-2xl font-bold mb-4">حدث خطأ</h1>
           <p className="text-muted-foreground mb-4">
             {isChunkError
-              ? "تعذر تحميل الصفحة. جرّب التحديث الكامل."
+              ? "تعذر تحميل الصفحة. حاول تحديث الصفحة من المتصفح (Ctrl+Shift+R)."
               : (this.state.error?.message || "خطأ غير معروف")}
           </p>
           <div className="flex gap-3 flex-wrap justify-center">
-            <button 
-              onClick={() => this.setState({ hasError: false, error: null })} 
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
               className="px-4 py-2 bg-primary text-primary-foreground rounded"
               data-testid="button-error-retry"
             >
               إعادة المحاولة
             </button>
-            <button 
-              onClick={() => cacheBustReload()} 
+            <button
+              onClick={() => window.location.reload()}
               className="px-4 py-2 bg-muted text-muted-foreground rounded"
               data-testid="button-error-reload"
             >
               إعادة تحميل الصفحة
-            </button>
-            <button
-              onClick={() => hardReset()}
-              className="px-4 py-2 bg-destructive text-destructive-foreground rounded"
-              data-testid="button-error-hard-reset"
-            >
-              تحديث كامل
             </button>
           </div>
         </div>
@@ -1122,7 +1078,6 @@ function App() {
                       <Router />
                     </div>
                   </ErrorBoundary>
-                  <UpdateBanner />
                 </TooltipProvider>
               </VoiceAssistantProvider>
             </LiveRegionProvider>

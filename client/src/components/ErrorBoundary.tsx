@@ -2,7 +2,6 @@ import { Component, ReactNode } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { cacheBustReload, canCacheBust, isRecoveryPending, markCacheBust } from "@/lib/cacheBust";
 
 interface Props {
   children: ReactNode;
@@ -12,36 +11,6 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
-}
-
-const RELOAD_KEY = 'sabq_chunk_reload';
-const RELOAD_TIMEOUT = 30000;
-
-function isChunkLoadError(error: Error): boolean {
-  const message = error?.message?.toLowerCase() || '';
-  const errorString = error?.toString()?.toLowerCase() || '';
-  
-  return (
-    message.includes('importing binding name') ||
-    message.includes('failed to fetch dynamically imported module') ||
-    message.includes('loading chunk') ||
-    message.includes('loading css chunk') ||
-    message.includes('dynamically imported module') ||
-    errorString.includes('chunkloaderror') ||
-    message.includes('is not found')
-  );
-}
-
-function shouldAutoReload(): boolean {
-  const lastReload = sessionStorage.getItem(RELOAD_KEY);
-  if (!lastReload) return true;
-  
-  const timeSinceReload = Date.now() - parseInt(lastReload, 10);
-  return timeSinceReload > RELOAD_TIMEOUT;
-}
-
-function markReloadAttempt(): void {
-  sessionStorage.setItem(RELOAD_KEY, Date.now().toString());
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -56,22 +25,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: any) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
-
-    if (isChunkLoadError(error) && shouldAutoReload() && !isRecoveryPending()) {
-      // Use cacheBustReload (not plain window.location.reload) so any
-      // edge/browser cache that's still serving the stale HTML pointing
-      // at the renamed chunks is bypassed. Plain reload reuses the same
-      // URL and can land back on the same poisoned response.
-      markReloadAttempt();
-      if (canCacheBust()) {
-        console.log("[ErrorBoundary] Chunk load error — cache-bust reloading");
-        markCacheBust();
-        cacheBustReload();
-      } else {
-        console.warn("[ErrorBoundary] Cache-bust budget exhausted — falling back to plain reload");
-        window.location.reload();
-      }
-    }
   }
 
   render() {
