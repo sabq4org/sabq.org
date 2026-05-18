@@ -52,6 +52,8 @@ import { notificationBus } from "./notificationBus";
 import { indexArticle, isGoogleIndexingConfigured } from "./services/googleIndexingService";
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
+import { awardPoints } from "./services/loyalty";
+import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
 import { trackUserEvent } from "./eventTrackingService";
@@ -12404,13 +12406,12 @@ Respond in valid JSON format only:
 
       // إضافة نقطة ولاء عند الإعجاب (ليس عند الإلغاء)
       if (result.hasReacted) {
-    try {
-          await storage.recordLoyaltyPoints({
+        try {
+          await awardPoints({
             userId,
-            action: "LIKE",
-            points: 1,
+            action: LOYALTY_ACTIONS.LIKE,
             source: req.params.id,
-            metadata: { articleId: req.params.id }
+            metadata: { articleId: req.params.id },
           });
         } catch (error) {
           console.error("Error recording loyalty points:", error);
@@ -12663,13 +12664,12 @@ Respond in valid JSON format only:
       }
 
       // إضافة نقطة ولاء للتعليق
-    try {
-        await storage.recordLoyaltyPoints({
+      try {
+        await awardPoints({
           userId,
-          action: "COMMENT",
-          points: 1,
+          action: LOYALTY_ACTIONS.COMMENT,
           source: article.id,
-          metadata: { articleId: article.id, commentId: comment.id }
+          metadata: { articleId: article.id, commentId: comment.id },
         });
       } catch (error) {
         console.error("Error recording loyalty points:", error);
@@ -17492,32 +17492,26 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // إضافة نقاط ولاء بناءً على نوع السلوك
-    try {
-        let loyaltyPoints = 0;
-        let action = "";
-        
-        switch(eventType) {
-          case "article_view":
-            loyaltyPoints = 2;
-            action = "READ";
-            break;
-          case "article_read":
-            // قراءة أكثر من 60 ثانية
-            if (meta.duration && typeof meta.duration === 'number' && meta.duration >= 60) {
-              loyaltyPoints = 3;
-              action = "READ_DEEP";
-            }
-            break;
-          // يمكن إضافة المزيد لاحقاً
+      try {
+        let loyaltyAction: typeof LOYALTY_ACTIONS[keyof typeof LOYALTY_ACTIONS] | null = null;
+
+        if (eventType === "article_view") {
+          loyaltyAction = LOYALTY_ACTIONS.READ_OPEN;
+        } else if (
+          eventType === "article_read" &&
+          meta.duration &&
+          typeof meta.duration === "number" &&
+          meta.duration >= 60
+        ) {
+          loyaltyAction = LOYALTY_ACTIONS.READ_DEEP;
         }
-        
-        if (loyaltyPoints > 0 && action) {
-          await storage.recordLoyaltyPoints({
+
+        if (loyaltyAction) {
+          await awardPoints({
             userId,
-            action,
-            points: loyaltyPoints,
+            action: loyaltyAction,
             source: (meta.articleId || meta.slug) as string | undefined,
-            metadata: meta
+            metadata: meta,
           });
         }
       } catch (error) {

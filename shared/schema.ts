@@ -1698,18 +1698,21 @@ export const userLoyaltyEvents = pgTable("user_loyalty_events", {
 ]);
 
 // User Points Total (aggregated points and rank)
+// Tier names + level numbers are the source of truth in shared/loyalty.ts.
+// Level 4 ("القارئ الموثوق") was inserted in Phase 1 (2026-05-18); legacy
+// "سفير سبق" users were grandfathered to level 5 by
+// scripts/migrate-loyalty-tiers.ts.
 export const userPointsTotal = pgTable("user_points_total", {
   userId: varchar("user_id").primaryKey().references(() => users.id),
   totalPoints: integer("total_points").default(0).notNull(),
-  currentRank: text("current_rank").default("القارئ الجديد").notNull(), // القارئ الجديد, المتفاعل, العضو الذهبي, سفير سبق
-  rankLevel: integer("rank_level").default(1).notNull(), // 1=القارئ الجديد, 2=المتفاعل, 3=العضو الذهبي, 4=سفير سبق
-  lifetimePoints: integer("lifetime_points").default(0).notNull(), // لا ينقص أبداً
+  currentRank: text("current_rank").default("القارئ الجديد").notNull(),
+  rankLevel: integer("rank_level").default(1).notNull(),
+  lifetimePoints: integer("lifetime_points").default(0).notNull(),
   lastActivityAt: timestamp("last_activity_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
-  // Check constraint for rank level (1-4)
-  sql`CONSTRAINT rank_level_check CHECK (rank_level BETWEEN 1 AND 4)`,
+  sql`CONSTRAINT rank_level_check CHECK (rank_level BETWEEN 1 AND 5)`,
 ]);
 
 // Loyalty Rewards (available rewards)

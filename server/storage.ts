@@ -455,6 +455,7 @@ import {
   type InsertFocusReadingSession,
   type UpdateFocusReadingSession,
 } from "@shared/schema";
+import { computeTier } from "@shared/loyalty";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -9539,11 +9540,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Loyalty System - Private Helpers
-  private calculateRank(totalPoints: number): string {
-    if (totalPoints >= 2001) return "سفير سبق";
-    if (totalPoints >= 501) return "العضو الذهبي";
-    if (totalPoints >= 101) return "المتفاعل";
-    return "القارئ الجديد";
+  // Rank is computed from lifetimePoints (monotonic) — not totalPoints,
+  // which can decrease when users spend on rewards. Source of truth for
+  // tier thresholds and names lives in shared/loyalty.ts so the frontend
+  // and the migration script see the same buckets.
+  private calculateRankByLifetime(lifetimePoints: number): { name: string; level: number } {
+    const tier = computeTier(lifetimePoints);
+    return { name: tier.nameAr, level: tier.level };
   }
 
   private async getApplicableCampaignInTx(tx: any, action: string, categoryId?: string): Promise<LoyaltyCampaign | undefined> {
@@ -9631,9 +9634,16 @@ export class DatabaseStorage implements IStorage {
         .where(eq(userPointsTotal.userId, params.userId));
 
       const oldRank = existingPoints?.currentRank || "القارئ الجديد";
+      const oldLevel = existingPoints?.rankLevel ?? 1;
       const newTotalPoints = (existingPoints?.totalPoints || 0) + pointsToAward;
       const newLifetimePoints = (existingPoints?.lifetimePoints || 0) + (pointsToAward > 0 ? pointsToAward : 0);
-      const newRank = this.calculateRank(newTotalPoints);
+      const computed = this.calculateRankByLifetime(newLifetimePoints);
+
+      // Grandfather: never demote a level. Migration grandfathered legacy
+      // "سفير سبق" users at level 5; same protection must hold on every
+      // subsequent point award so a rewards spend can't drop someone.
+      const newLevel = Math.max(oldLevel, computed.level);
+      const newRank = newLevel > computed.level ? oldRank : computed.name;
 
       // 5. Update or insert user points
       if (existingPoints) {
@@ -9643,6 +9653,7 @@ export class DatabaseStorage implements IStorage {
             totalPoints: newTotalPoints,
             lifetimePoints: newLifetimePoints,
             currentRank: newRank,
+            rankLevel: newLevel,
             lastActivityAt: now,
             updatedAt: now,
           })
@@ -9653,12 +9664,13 @@ export class DatabaseStorage implements IStorage {
           totalPoints: newTotalPoints,
           lifetimePoints: newLifetimePoints,
           currentRank: newRank,
+          rankLevel: newLevel,
           lastActivityAt: now,
         });
       }
 
       // 6. Check for rank change
-      const rankChanged = oldRank !== newRank;
+      const rankChanged = oldRank !== newRank || oldLevel !== newLevel;
 
       // 7. Return result
       return {
@@ -9961,10 +9973,14 @@ export class DatabaseStorage implements IStorage {
         .from(userPointsTotal)
         .where(eq(userPointsTotal.userId, userId));
 
-      // 3. Calculate new totals and rank
+      // 3. Calculate new totals and rank (rank from lifetimePoints, never demote)
+      const oldLevel = existingPoints?.rankLevel ?? 1;
+      const oldRank = existingPoints?.currentRank || "القارئ الجديد";
       const newTotalPoints = (existingPoints?.totalPoints || 0) + points;
       const newLifetimePoints = (existingPoints?.lifetimePoints || 0) + (points > 0 ? points : 0);
-      const newRank = this.calculateRank(newTotalPoints);
+      const computed = this.calculateRankByLifetime(newLifetimePoints);
+      const newLevel = Math.max(oldLevel, computed.level);
+      const newRank = newLevel > computed.level ? oldRank : computed.name;
 
       // 4. Update or insert user points
       if (existingPoints) {
@@ -9974,6 +9990,7 @@ export class DatabaseStorage implements IStorage {
             totalPoints: newTotalPoints,
             lifetimePoints: newLifetimePoints,
             currentRank: newRank,
+            rankLevel: newLevel,
             lastActivityAt: now,
             updatedAt: now,
           })
@@ -9984,6 +10001,7 @@ export class DatabaseStorage implements IStorage {
           totalPoints: newTotalPoints,
           lifetimePoints: newLifetimePoints,
           currentRank: newRank,
+          rankLevel: newLevel,
           lastActivityAt: now,
         });
       }
