@@ -45,8 +45,8 @@ export function getSession() {
   }
 
   // Cross-subdomain cookie config (when frontend on Vercel and backend on
-  // Railway share a parent domain, e.g. sabq.news + api.sabq.news):
-  //   COOKIE_DOMAIN=.sabq.news  → sets the cookie on the parent domain
+  // Frontend + API share a parent domain, e.g. sabq.org + api.sabq.org):
+  //   COOKIE_DOMAIN=.sabq.org  → sets the cookie on the parent domain
   //   COOKIE_SAMESITE=none      → required for cross-site fetch credentials
   // For same-origin local dev, leave both unset (defaults below).
   // SameSite=None requires Secure=true; we enforce that combo explicitly.

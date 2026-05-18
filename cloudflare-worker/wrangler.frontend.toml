@@ -27,13 +27,3 @@ routes = [
 [env.production.vars]
 API_ORIGIN = "https://api.sabq.org"
 FRONTEND_ORIGIN = "https://sabq.org"
-
-# Staging / experiment: point at a preview Vercel deployment.
-[env.staging]
-routes = [
-  { pattern = "staging.sabq.news/*", zone_name = "sabq.news" }
-]
-
-[env.staging.vars]
-API_ORIGIN = "https://api-staging.sabq.news"
-FRONTEND_ORIGIN = "https://staging.sabq.news"

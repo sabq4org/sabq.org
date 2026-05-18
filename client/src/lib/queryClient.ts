@@ -3,7 +3,7 @@ import { toast } from "@/hooks/use-toast";
 
 // API base URL.
 //
-//   - If VITE_API_URL is set (e.g. "https://api.sabq.news"), API calls are
+//   - If VITE_API_URL is set (e.g. "https://api.sabq.org"), API calls are
 //     rewritten to absolute URLs targeting that origin. Use this when the
 //     frontend (Vercel) and backend (Railway) are on separate origins AND
 //     you want to skip the Vercel rewrite proxy.

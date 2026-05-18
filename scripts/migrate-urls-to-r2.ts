@@ -20,7 +20,7 @@
  *   DATABASE_URL          backup database (REJECTS values containing
  *                         "prod" or "production" unless --i-understand
  *                         is passed)
- *   R2_PUBLIC_URL         e.g. https://cdn.sabq.news (no trailing slash)
+ *   R2_PUBLIC_URL         e.g. https://cdn.sabq.org (no trailing slash)
  *
  * Patterns rewritten (in this order):
  *   /public-objects/uploads/foo.jpg       → ${R2_PUBLIC_URL}/uploads/foo.jpg
@@ -36,7 +36,7 @@ import { sql } from "drizzle-orm";
 
 const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "");
 if (!R2_PUBLIC_URL) {
-  console.error("[migrate] R2_PUBLIC_URL is required (e.g. https://cdn.sabq.news)");
+  console.error("[migrate] R2_PUBLIC_URL is required (e.g. https://cdn.sabq.org)");
   process.exit(1);
 }
 

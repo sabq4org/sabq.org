@@ -3,7 +3,7 @@
  * Optional post-build Cloudflare purge for Vercel deploys.
  *
  * Set on the Vercel project (same secret as Railway DEPLOY_WEBHOOK_SECRET):
- *   DEPLOY_PURGE_URL=https://api.sabq.news/api/webhooks/deploy-cache-purge
+ *   DEPLOY_PURGE_URL=https://api.sabq.org/api/webhooks/deploy-cache-purge
  *   DEPLOY_WEBHOOK_SECRET=<random>
  *
  * Non-fatal: a failed purge never fails the build.
