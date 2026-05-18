@@ -21,8 +21,8 @@
  *   3. STATIC PASS-THROUGH: Asset and API requests bypass injection.
  *
  * Bind these env vars in wrangler.toml:
- *   API_ORIGIN     — e.g. "https://api.sabq.news"
- *   FRONTEND_ORIGIN — e.g. "https://sabq.news" (the Vercel deployment)
+ *   API_ORIGIN     — e.g. "https://api.sabq.org"
+ *   FRONTEND_ORIGIN — e.g. "https://sabq.org" (the Vercel deployment)
  *
  * Cache: meta lookups are cached at the worker for 60s. The worker itself
  * does NOT cache HTML — let Vercel + Cloudflare's normal cache handle that

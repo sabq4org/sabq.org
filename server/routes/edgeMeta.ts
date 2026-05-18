@@ -33,7 +33,8 @@ const router = Router();
 const ARABIC_RE = /[؀-ۿ]/;
 const containsArabic = (s: string) => ARABIC_RE.test(s);
 
-const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.news";
+// Production is sabq.org. Staging (sabq.news) must set PUBLIC_SITE_URL explicitly.
+const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
 
