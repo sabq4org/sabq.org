@@ -37,7 +37,14 @@ struct ContentView: View {
                 }
                 .id(selectedTab)
                 .transition(.opacity.animation(.easeInOut(duration: 0.15)))
-                .padding(.bottom, 80)
+                // Reserve 80pt at the bottom for the floating tab bar
+                // while it's visible. When the bar auto-hides on scroll,
+                // collapse the reserved strip to 0 so the underlying
+                // SabqTheme.background doesn't peek through as a white
+                // stripe. The animation is tied to the same visibility
+                // flag so the strip slides shut in lockstep with the bar.
+                .padding(.bottom, tabBarVisibility.isVisible ? 80 : 0)
+                .animation(.easeOut(duration: 0.22), value: tabBarVisibility.isVisible)
                 .navigationDestination(for: Article.self) { article in
                     ArticleDetailView(article: article)
                 }
