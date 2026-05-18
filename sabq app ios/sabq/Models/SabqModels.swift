@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Shared Formatters
 
-enum SabqFormatters {
+nonisolated enum SabqFormatters {
     /// Arabic locale that ALWAYS uses Latin digits (1234) instead of the
     /// default Eastern Arabic digits (١٢٣٤). The numbering-system override
     /// is a BCP-47 Unicode extension — `nu-latn` forces the formatter
@@ -322,7 +322,7 @@ enum AppAccent: String, CaseIterable, Identifiable {
 /// shipped by the backend). Used by `FocalCachedAsyncImage` to anchor a
 /// fill-mode crop so the key subject (face, ball, logo…) is never cropped
 /// out of the frame — same behaviour as CSS `object-position` on the web.
-struct ImageFocalPoint: Equatable, Hashable {
+nonisolated struct ImageFocalPoint: Equatable, Hashable {
     /// 0–100 from the left edge.
     let x: Double
     /// 0–100 from the top edge.
@@ -553,7 +553,7 @@ struct Article: Identifiable, Equatable, Hashable {
     }
 
     /// Sabq API often returns one continuous string where sentence breaks are glued (e.g. `القطاع.وفي`, `4».وقالت`). The site renders these as new blocks; we insert paragraph breaks the same way.
-    private static let editorialRegexRules: [(regex: NSRegularExpression, template: String)] = {
+    nonisolated private static let editorialRegexRules: [(regex: NSRegularExpression, template: String)] = {
         let patterns: [(String, String)] = [
             (#"([.!?؟])([\u0600-\u06FF]{2,})"#, "$1\n\n$2"),
             (#"(»)([\u0600-\u06FF]{2,})"#, "$1\n\n$2"),

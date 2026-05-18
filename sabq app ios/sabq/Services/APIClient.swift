@@ -3,7 +3,7 @@ import Security
 
 // MARK: - Keychain Helper
 
-private enum KeychainHelper {
+nonisolated private enum KeychainHelper {
     static func save(_ value: String, forKey key: String) {
         guard let data = value.data(using: .utf8) else { return }
         let query: [String: Any] = [
@@ -1194,7 +1194,7 @@ enum ArticleSubmissionKind: String, Codable, Identifiable {
     var id: String { rawValue }
 }
 
-struct ArticleSubmissionResponse: Decodable {
+nonisolated struct ArticleSubmissionResponse: Decodable {
     let success: Bool
     let message: String
     let article: SubmittedArticle?

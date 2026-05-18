@@ -39,7 +39,7 @@ final class AuthStore {
         // Returning session — re-register the APNs token so a stale token
         // gets refreshed lastActiveAt-wise and a new token (if iOS rotated)
         // is linked to the user.
-        if isLoggedIn, let token = await NotificationsStore.shared.deviceToken {
+        if isLoggedIn, let token = NotificationsStore.shared.deviceToken {
             await NotificationsStore.shared.registerWithBackend(token: token)
         }
     }

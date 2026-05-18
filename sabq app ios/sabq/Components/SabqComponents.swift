@@ -419,7 +419,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     }
 }
 
-enum ImageCache {
+nonisolated enum ImageCache {
     nonisolated(unsafe) static let shared: NSCache<NSURL, UIImage> = {
         let c = NSCache<NSURL, UIImage>()
         c.countLimit = 150
@@ -467,7 +467,7 @@ enum ImageCache {
 /// Used by the lightbox flows in ArticleDetail / OpinionDetail /
 /// ArticleContentView so tapping any image in the article body opens the
 /// shared `ImageLightbox` viewer.
-struct IdentifiableURL: Identifiable, Hashable {
+nonisolated struct IdentifiableURL: Identifiable, Hashable {
     let url: URL
     var id: String { url.absoluteString }
 

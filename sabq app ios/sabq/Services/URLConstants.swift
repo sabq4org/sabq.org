@@ -4,7 +4,7 @@ import Foundation
 /// Use these instead of inlining `"https://sabq.org/..."` literals so a
 /// future env switch (staging, preview, locale-specific subdomain) is a
 /// one-file change.
-enum URLConstants {
+nonisolated enum URLConstants {
     /// The bare web origin — used for "open the homepage" links and as
     /// the base for share URLs we hand to the system share sheet.
     static let webOrigin = "https://sabq.org"

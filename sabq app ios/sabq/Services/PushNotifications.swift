@@ -84,8 +84,8 @@ final class NotificationsStore {
                 token: token,
                 provider: "apns",
                 platform: "ios",
-                deviceName: await UIDevice.current.name,
-                osVersion: await UIDevice.current.systemVersion,
+                deviceName: UIDevice.current.name,
+                osVersion: UIDevice.current.systemVersion,
                 appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
                 locale: langCode,
                 timezone: TimeZone.current.identifier

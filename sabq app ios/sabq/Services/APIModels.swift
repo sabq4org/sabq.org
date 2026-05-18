@@ -748,14 +748,14 @@ nonisolated struct APIAvatarUploadResponse: Decodable {
 /// optional with a default), so feeding it an empty container yields a
 /// placeholder with id=UUID(), no email, no roles — discarded immediately
 /// by the caller, which refetches the full profile.
-private struct EmptyUserDecoder {
+nonisolated private struct EmptyUserDecoder {
     func asDecoder() throws -> Decoder {
         let data = "{}".data(using: .utf8)!
         return try JSONDecoder().decode(EmptyDecoderProxy.self, from: data).decoder
     }
 }
 
-private struct EmptyDecoderProxy: Decodable {
+nonisolated private struct EmptyDecoderProxy: Decodable {
     let decoder: Decoder
     init(from decoder: Decoder) throws { self.decoder = decoder }
 }
