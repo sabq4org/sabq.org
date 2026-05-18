@@ -58,6 +58,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
+import { ResubmittedDraftIndicator } from "@/components/admin/ResubmittedDraftIndicator";
+import { isResubmittedAfterRevision } from "@/lib/articleRevision";
 
 type OpinionArticle = {
   id: string;
@@ -66,6 +68,7 @@ type OpinionArticle = {
   excerpt?: string;
   status: string;
   reviewStatus?: string;
+  reviewedAt?: string | null;
   reviewNotes?: string;
   views: number;
   publishedAt?: string;
@@ -428,8 +431,20 @@ export default function OpinionManagement() {
     }
   };
 
-  const getReviewStatusBadge = (reviewStatus?: string) => {
-    switch (reviewStatus) {
+  const getReviewStatusBadge = (article: OpinionArticle) => {
+    if (isResubmittedAfterRevision(article)) {
+      return (
+        <Badge
+          variant="secondary"
+          className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 border-amber-400 dark:border-amber-600"
+        >
+          <PenSquare className="h-3 w-3" />
+          مُعدَّل وفق التوجيه
+        </Badge>
+      );
+    }
+
+    switch (article.reviewStatus) {
       case "pending_review":
         return (
           <Badge variant="secondary" className="gap-1">
@@ -648,9 +663,21 @@ export default function OpinionManagement() {
                               />
                             </td>
                             <td className="py-3 px-4">
-                              <span className="font-medium max-w-md truncate inline-block">
-                                {article.title}
-                              </span>
+                              <div className="space-y-1.5 max-w-md">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium truncate">{article.title}</span>
+                                  <ResubmittedDraftIndicator
+                                    article={article}
+                                    variant="compact"
+                                    testId={`badge-revised-opinion-${article.id}`}
+                                  />
+                                </div>
+                                <ResubmittedDraftIndicator
+                                  article={article}
+                                  variant="full"
+                                  testId={`banner-revised-opinion-${article.id}`}
+                                />
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">
@@ -667,7 +694,7 @@ export default function OpinionManagement() {
                               {getStatusBadge(article.status)}
                             </td>
                             <td className="py-3 px-4">
-                              {getReviewStatusBadge(article.reviewStatus)}
+                              {getReviewStatusBadge(article)}
                             </td>
                             <td className="py-3 px-4">
                               <ViewsCount 
@@ -813,7 +840,7 @@ export default function OpinionManagement() {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {getReviewStatusBadge(article.reviewStatus)}
+                      {getReviewStatusBadge(article)}
                     </div>
                     <ViewsCount
                       views={article.views}

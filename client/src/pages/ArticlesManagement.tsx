@@ -44,6 +44,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
+import { ResubmittedDraftIndicator } from "@/components/admin/ResubmittedDraftIndicator";
+import { isResubmittedAfterRevision } from "@/lib/articleRevision";
 import {
   DndContext,
   closestCenter,
@@ -68,6 +70,9 @@ type Article = {
   slug: string;
   excerpt: string | null;
   status: string;
+  reviewStatus?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
   articleType: string;
   newsType: string;
   isFeatured: boolean;
@@ -108,7 +113,17 @@ type Category = {
   nameEn: string;
 };
 
-function SortableRow({ article, children, isSaving }: { article: Article; children: React.ReactNode; isSaving?: boolean }) {
+function SortableRow({
+  article,
+  children,
+  isSaving,
+  highlightResubmitted,
+}: {
+  article: Article;
+  children: React.ReactNode;
+  isSaving?: boolean;
+  highlightResubmitted?: boolean;
+}) {
   const {
     attributes,
     listeners,
@@ -130,7 +145,7 @@ function SortableRow({ article, children, isSaving }: { article: Article; childr
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''}`}
+      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted ? 'bg-amber-50/80 dark:bg-amber-500/5 border-r-4 border-r-amber-500' : ''}`}
       data-testid={`row-article-${article.id}`}
     >
       <td 
@@ -1088,7 +1103,12 @@ export default function ArticlesManagement() {
                         strategy={verticalListSortingStrategy}
                       >
                         {localArticles.map((article) => (
-                          <SortableRow key={article.id} article={article} isSaving={updateOrderMutation.isPending}>
+                          <SortableRow
+                            key={article.id}
+                            article={article}
+                            isSaving={updateOrderMutation.isPending}
+                            highlightResubmitted={isResubmittedAfterRevision(article)}
+                          >
                             <td className="py-3 px-4 text-center">
                               <Checkbox
                                 checked={selectedArticles.has(article.id)}
@@ -1103,18 +1123,17 @@ export default function ArticlesManagement() {
                                     <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                                   )}
                                   <span className="font-medium max-w-md truncate inline-block">{article.title}</span>
-                                  {article.status === "draft" &&
-                                    (article as any).reviewStatus === "pending_review" &&
-                                    (article as any).reviewedAt && (
-                                      <Badge
-                                        className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 text-xs"
-                                        data-testid={`badge-revised-desktop-${article.id}`}
-                                      >
-                                        <FilePenLine className="h-3 w-3" />
-                                        أُعيد إرساله بعد التعديل
-                                      </Badge>
-                                    )}
+                                  <ResubmittedDraftIndicator
+                                    article={article}
+                                    variant="compact"
+                                    testId={`badge-revised-desktop-${article.id}`}
+                                  />
                                 </div>
+                                <ResubmittedDraftIndicator
+                                  article={article}
+                                  variant="full"
+                                  testId={`banner-revised-desktop-${article.id}`}
+                                />
                                 <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
                                   {article.source === 'email' ? (
                                     <>
@@ -1275,7 +1294,11 @@ export default function ArticlesManagement() {
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className="border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30"
+                  className={`border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all ${
+                    isResubmittedAfterRevision(article)
+                      ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-600"
+                      : "bg-blue-50 dark:bg-blue-950/30"
+                  }`}
                   data-testid={`card-article-${article.id}`}
                 >
                   {/* Header: Checkbox + Title + Status */}
@@ -1294,18 +1317,17 @@ export default function ArticlesManagement() {
                               <Images className="h-4 w-4 text-blue-500 flex-shrink-0" />
                             )}
                             {article.title}
-                            {article.status === "draft" &&
-                              (article as any).reviewStatus === "pending_review" &&
-                              (article as any).reviewedAt && (
-                                <Badge
-                                  className="gap-1 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 text-xs"
-                                  data-testid={`badge-revised-mobile-${article.id}`}
-                                >
-                                  <FilePenLine className="h-3 w-3" />
-                                  أُعيد إرساله بعد التعديل
-                                </Badge>
-                              )}
+                            <ResubmittedDraftIndicator
+                              article={article}
+                              variant="compact"
+                              testId={`badge-revised-mobile-${article.id}`}
+                            />
                           </h3>
+                          <ResubmittedDraftIndicator
+                            article={article}
+                            variant="full"
+                            testId={`banner-revised-mobile-${article.id}`}
+                          />
                           <div className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
                             {article.source === 'email' ? (
                               <>
