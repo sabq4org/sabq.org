@@ -50,6 +50,9 @@ backup_unused_assets
 !android/**/*.png
 !ios/**/*.png
 !attached_assets/**/*.png
+# Apple Wallet pass templates need their icon/logo PNGs committed —
+# the runtime container reads them from disk when generating .pkpass.
+!server/lib/passkit/**/*.png
 # Internal security audit — kept local; contains attack-surface details
 AUDIT_REPORT.md
 
@@ -58,3 +61,5 @@ MIGRATION_RUNBOOK.md
 
 # Auto-generated middleware embed (regenerated each build)
 spa-index-html.generated.ts
+*.p12
+sabq-press.p12

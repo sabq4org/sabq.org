@@ -40,6 +40,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/drizzle.config.ts ./
 
+# Apple Wallet pass templates + WWDR cert. These are runtime assets the
+# PassKit service reads from disk relative to process.cwd() (=/app):
+#   - server/lib/passkit/pass-template.pass/         (press card model)
+#   - server/lib/passkit/loyalty-pass-template.pass/ (loyalty card model)
+#   - certs/wwdr.pem                                 (Apple intermediate)
+# They were missing in the prior image, which is why /api/v1/wallet/press/issue
+# was throwing "Cannot import model: directory /app/server/lib/passkit/
+# pass-template.pass not found" even after env-var creds were configured.
+COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
+COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
+COPY --from=builder /app/certs ./certs
+
 RUN npm ci --omit=dev && npm cache clean --force
 
 RUN addgroup -g 1001 -S nodejs && \
