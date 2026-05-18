@@ -1,29 +1,22 @@
-# Wrangler config for the frontend edge worker (sits in front of Vercel).
-# Deploy with: wrangler deploy --config wrangler.frontend.toml
+# Frontend edge worker (Cloudflare → Vercel + api.sabq.org meta/body injection).
+# Deploy:
+#   cd cloudflare-worker
+#   npx wrangler deploy --config wrangler.frontend.toml
 #
-# This is separate from wrangler.toml (which deploys the legacy seo-404
-# worker that fronts the Replit production deployment). Keep both during
-# the experimental split — the legacy one stays untouched.
+# Do NOT use `--env production` — that creates a separate worker name
+# (sabq-frontend-edge-production) and fails because sabq.org/* routes are
+# already bound to sabq-frontend-edge.
 
 name = "sabq-frontend-edge"
 main = "frontend-edge-worker.js"
 compatibility_date = "2024-09-01"
-# From `wrangler whoami` after login (sabq Cloudflare account).
 account_id = "1ac069d5f5c7a3dd7f4e3c864f51446d"
 
-# These get overridden per-environment.
-[vars]
-API_ORIGIN = "https://api.sabq.org"
-FRONTEND_ORIGIN = "https://sabq.org"
-
-# Production: bind to the Vercel apex domain.
-# Use zone_name (not empty zone_id) — empty zone_id caused API error 10002 on deploy.
-[env.production]
 routes = [
   { pattern = "sabq.org/*", zone_name = "sabq.org" },
   { pattern = "www.sabq.org/*", zone_name = "sabq.org" }
 ]
 
-[env.production.vars]
+[vars]
 API_ORIGIN = "https://api.sabq.org"
 FRONTEND_ORIGIN = "https://sabq.org"
