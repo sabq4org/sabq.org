@@ -33,6 +33,9 @@ struct HomeFeedView: View {
     /// TabView frame, which leaves a visible gap above them on short
     /// cards) and render our own tight against the card bottom.
     @State private var featuredIndex: Int = 0
+    /// Drives the modal push to "حسابي / نقاطي" when the user taps the
+    /// LoyaltyStripView inside the personal-journey block.
+    @State private var showLoyaltyAccount = false
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -177,6 +180,17 @@ struct HomeFeedView: View {
                 if let page = try? await APIClient.shared.fetchEditorialNotifications() {
                     notificationsStore.unreadCount = page.unread
                 }
+            }
+        }
+        .sheet(isPresented: $showLoyaltyAccount) {
+            NavigationStack {
+                LoyaltyAccountView()
+                    .environmentObject(authStore)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("إغلاق") { showLoyaltyAccount = false }
+                        }
+                    }
             }
         }
     }
@@ -868,6 +882,7 @@ struct HomeFeedView: View {
     private var personalJourneyBlock: some View {
         VStack(alignment: .leading, spacing: 14) {
             journeyHeader
+            LoyaltyStripView(onTap: { showLoyaltyAccount = true })
             journeyMetrics
             journeyInterests
         }

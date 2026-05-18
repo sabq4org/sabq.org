@@ -1045,6 +1045,22 @@ actor APIClient {
         try await postRaw(path: "/behavior/track", body: body)
     }
 
+    // MARK: - Loyalty (Phase 3)
+    //
+    // `/api/v1/loyalty/me` returns the same shape the web profile reads
+    // from `/api/loyalty/summary` — tier + week/month points + streak.
+    // `/api/v1/loyalty/events` accepts a batch; server-side daily caps
+    // and dedup make the batch idempotent so the on-device queue can
+    // retry without producing double awards.
+    func fetchLoyaltySummary() async throws -> LoyaltySummary {
+        try await get(LoyaltySummary.self, path: "/loyalty/me")
+    }
+
+    func submitLoyaltyEvents(_ events: [LoyaltyEventPayload]) async throws -> LoyaltyEventBatchResponse {
+        struct Body: Encodable { let events: [LoyaltyEventPayload] }
+        return try await post(LoyaltyEventBatchResponse.self, path: "/loyalty/events", body: Body(events: events))
+    }
+
     func toggleArticleLike(articleId: String) async throws -> APIArticleReactionResponse {
         try await post(APIArticleReactionResponse.self, path: "/articles/\(articleId)/react")
     }

@@ -5,6 +5,7 @@ import AVFoundation
 struct sabqApp: App {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("sabqHasCompletedOnboardingV2") private var hasOnboarded: Bool = false
+    @Environment(\.scenePhase) private var scenePhase
 
     // Bridge UIApplicationDelegate so we can receive APNs callbacks
     // (didRegisterForRemoteNotifications + UNUserNotificationCenter
@@ -46,6 +47,15 @@ struct sabqApp: App {
                         .preferredColorScheme(isDarkMode ? .dark : .light)
                         .interactiveDismissDisabled(true)
                 }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Flush any queued loyalty events when the app backgrounds.
+            // The queue's 30s timer still runs while in foreground, so
+            // this is only the safety net for "app suspended before
+            // next timer fired" cases.
+            if newPhase == .background || newPhase == .inactive {
+                Task { await LoyaltyEventQueue.shared.flushNow() }
+            }
         }
     }
 }

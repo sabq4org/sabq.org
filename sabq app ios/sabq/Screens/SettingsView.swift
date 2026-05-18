@@ -44,6 +44,9 @@ struct SettingsView: View {
                 )
 
                 profileSection
+                if authStore.isLoggedIn {
+                    loyaltyEntrySection
+                }
                 displaySection
                 subscriptionSection
                 aboutSection
@@ -535,6 +538,49 @@ struct SettingsView: View {
         case "contributor": return "person.text.rectangle"
         default: return "person.fill"
         }
+    }
+
+    // MARK: - Loyalty entry
+
+    // Quick-tap row that pushes LoyaltyAccountView. Sits right under
+    // profileSection so signed-in users see their loyalty surface before
+    // the display/subscription rows. Avoids duplicating the full hero
+    // card here — that lives inside LoyaltyAccountView.
+    private var loyaltyEntrySection: some View {
+        NavigationLink(destination: LoyaltyAccountView().environmentObject(authStore)) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.96, green: 0.62, blue: 0.04))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("نقاطي والمكافآت")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("تابع مستواك واستبدل نقاطك")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Display

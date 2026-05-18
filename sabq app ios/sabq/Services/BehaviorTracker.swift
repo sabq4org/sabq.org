@@ -68,6 +68,10 @@ final class BehaviorTracker {
                 // Silent — tracking is best-effort. Don't pollute the
                 // user-facing UI with analytics failures.
             }
+            // Loyalty: enqueue READ_OPEN. The server-side daily cap
+            // (30/day) and 24h dedup-by-source make this idempotent so
+            // re-opening the same article in a single day awards once.
+            await LoyaltyEventQueue.shared.enqueue(action: .readOpen, articleId: articleId)
         }
     }
 
@@ -107,6 +111,14 @@ final class BehaviorTracker {
                 )
             } catch {
                 // Best-effort.
+            }
+            // Loyalty: a "deep read" earns the extra 3 pts on top of
+            // the READ_OPEN already enqueued at start. Match the web's
+            // /api/behavior-log rule: dwell ≥ 60s. Server dedup keeps
+            // multiple bg/fg cycles on the same article from
+            // double-charging.
+            if dwell >= 60 {
+                await LoyaltyEventQueue.shared.enqueue(action: .readDeep, articleId: articleId, duration: dwell)
             }
         }
 
