@@ -35,10 +35,32 @@ app.get("/health", async (_req, res) => {
     const { isDatabaseAvailable } = await import("./db");
     dbReady = isDatabaseAvailable();
   } catch {}
-  res.status(200).json({ 
+  res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbReady ? "connected" : "warming-up",
+  });
+});
+
+const serverBootedAt = new Date().toISOString();
+const deployCommit =
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GIT_COMMIT_SHA ||
+  null;
+const deployBranch =
+  process.env.RAILWAY_GIT_BRANCH ||
+  process.env.VERCEL_GIT_COMMIT_REF ||
+  null;
+
+app.get("/api/version", (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  res.status(200).json({
+    commit: deployCommit,
+    shortCommit: deployCommit ? deployCommit.slice(0, 7) : null,
+    branch: deployBranch,
+    bootedAt: serverBootedAt,
+    now: new Date().toISOString(),
   });
 });
 
