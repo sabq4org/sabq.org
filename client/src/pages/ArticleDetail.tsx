@@ -532,12 +532,8 @@ export default function ArticleDetail() {
     script.id = 'image-structured-data';
     document.head.appendChild(script);
 
-    // Cleanup on unmount
     return () => {
-      const existingScript = document.getElementById('image-structured-data');
-      if (existingScript) {
-        document.head.removeChild(existingScript);
-      }
+      document.getElementById('image-structured-data')?.remove();
     };
   }, [article?.id, article?.imageUrl, mediaAssets]);
 

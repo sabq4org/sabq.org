@@ -123,32 +123,26 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     : { minHeight: '250px', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
   // Ad creatives are served by DMS as cross-origin iframes whose body
-  // background we can't restyle. Most ads ship with a light/white
-  // canvas, which clashes hard against the dark theme. Wrapping the
-  // slot in a `bg-card` rounded container with light padding gives the
-  // creative a subtle "card" frame in dark mode (and is near-invisible
-  // in light mode), so the boundary between page and ad looks
-  // intentional instead of jarring. The wrapper collapses to nothing
-  // when adState is 'empty' so unsold slots don't reserve visual space.
-  if (adState === 'empty') {
-    return (
-      <div
-        ref={containerRef}
-        id={id}
-        style={innerStyle}
-        className={className}
-        data-testid={`dms-ad-slot-${id}`}
-        data-ad-state={adState}
-      />
-    );
-  }
-
+  // background we can't restyle, so we frame the slot in a `bg-card`
+  // rounded container so the light creative reads as an intentional
+  // card in dark mode. CRITICAL: the wrapper/inner tree shape MUST be
+  // constant across renders — an earlier version branched the JSX on
+  // adState (wrapped tree when loading/filled, bare tree when empty)
+  // and the structural flip raced GPT's iframe injection, surfacing as
+  // a NotFoundError ("The object can not be found here.") thrown by
+  // React's commit phase on first load. We instead always render the
+  // wrapper + inner pair, and only toggle classes/styles when the slot
+  // resolves to 'empty' so unsold slots reserve no visual space.
   const wrapperSpacing = type === 'leaderboard' ? 'mb-8' : 'mt-8';
+  const wrapperClass = adState === 'empty'
+    ? (className ?? '').trim()
+    : `rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim();
 
   return (
     <div
-      className={`rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim()}
+      className={wrapperClass}
       data-testid={`dms-ad-slot-wrapper-${id}`}
+      data-ad-state={adState}
     >
       <div
         ref={containerRef}
