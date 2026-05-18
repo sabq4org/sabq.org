@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		BB000016AAAA0001006270F8 /* sabqWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB00000AAAAA0001006270F8 /* sabqWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,34 +24,15 @@
 			remoteGlobalIDString = 3AFE5FD72F60C121006270F8;
 			remoteInfo = sabq;
 		};
-		BB000014AAAA0001006270F8 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 3AFE5FD02F60C121006270F8 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BB00000FAAAA0001006270F8;
-			remoteInfo = sabqWidgetExtension;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		BB000015AAAA0001006270F8 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				BB000016AAAA0001006270F8 /* sabqWidgetExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		3AFE5FD82F60C121006270F8 /* sabq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sabq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FE72F60C123006270F8 /* sabqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000AAAAA0001006270F8 /* sabqWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = sabqWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -69,11 +49,6 @@
 		3AFE5FF42F60C123006270F8 /* sabqUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = sabqUITests;
-			sourceTree = "<group>";
-		};
-		BB00000BAAAA0001006270F8 /* sabqWidget */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = sabqWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -100,13 +75,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BB00000DAAAA0001006270F8 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -114,7 +82,6 @@
 			isa = PBXGroup;
 			children = (
 				3AFE5FDA2F60C121006270F8 /* sabq */,
-				BB00000BAAAA0001006270F8 /* sabqWidget */,
 				3AFE5FEA2F60C123006270F8 /* sabqTests */,
 				3AFE5FF42F60C123006270F8 /* sabqUITests */,
 				3AFE5FD92F60C121006270F8 /* Products */,
@@ -127,7 +94,6 @@
 				3AFE5FD82F60C121006270F8 /* sabq.app */,
 				3AFE5FE72F60C123006270F8 /* sabqTests.xctest */,
 				3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */,
-				BB00000AAAAA0001006270F8 /* sabqWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -142,13 +108,10 @@
 				3AFE5FD42F60C121006270F8 /* Sources */,
 				3AFE5FD52F60C121006270F8 /* Frameworks */,
 				3AFE5FD62F60C121006270F8 /* Resources */,
-				BB000015AAAA0001006270F8 /* Embed Foundation Extensions */,
-				BB000017AAAA0001006270F8 /* Inject NSExtension */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				BB000013AAAA0001006270F8 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				3AFE5FDA2F60C121006270F8 /* sabq */,
@@ -206,28 +169,6 @@
 			productReference = 3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		BB00000FAAAA0001006270F8 /* sabqWidgetExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BB000012AAAA0001006270F8 /* Build configuration list for PBXNativeTarget "sabqWidgetExtension" */;
-			buildPhases = (
-				BB00000CAAAA0001006270F8 /* Sources */,
-				BB00000DAAAA0001006270F8 /* Frameworks */,
-				BB00000EAAAA0001006270F8 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				BB00000BAAAA0001006270F8 /* sabqWidget */,
-			);
-			name = sabqWidgetExtension;
-			packageProductDependencies = (
-			);
-			productName = sabqWidgetExtension;
-			productReference = BB00000AAAAA0001006270F8 /* sabqWidgetExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -248,9 +189,6 @@
 					3AFE5FF02F60C123006270F8 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 3AFE5FD72F60C121006270F8;
-					};
-					BB00000FAAAA0001006270F8 = {
-						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
@@ -274,7 +212,6 @@
 				3AFE5FD72F60C121006270F8 /* sabq */,
 				3AFE5FE62F60C123006270F8 /* sabqTests */,
 				3AFE5FF02F60C123006270F8 /* sabqUITests */,
-				BB00000FAAAA0001006270F8 /* sabqWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -301,33 +238,8 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BB00000EAAAA0001006270F8 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		BB000017AAAA0001006270F8 /* Inject NSExtension */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/PlugIns/sabqWidgetExtension.appex/Info.plist",
-			);
-			name = "Inject NSExtension";
-			outputPaths = (
-				"${DERIVED_FILE_DIR}/InjectNSExtension.stamp",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "WIDGET_PLIST=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/PlugIns/sabqWidgetExtension.appex/Info.plist\"\nif [ -f \"$WIDGET_PLIST\" ]; then\n  /usr/libexec/PlistBuddy -c \"Add :NSExtension dict\" \"$WIDGET_PLIST\" 2>/dev/null || true\n  /usr/libexec/PlistBuddy -c \"Add :NSExtension:NSExtensionPointIdentifier string com.apple.widgetkit-extension\" \"$WIDGET_PLIST\" 2>/dev/null || true\nfi\ntouch \"$SCRIPT_OUTPUT_FILE_0\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		3AFE5FD42F60C121006270F8 /* Sources */ = {
@@ -351,13 +263,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		BB00000CAAAA0001006270F8 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -370,11 +275,6 @@
 			isa = PBXTargetDependency;
 			target = 3AFE5FD72F60C121006270F8 /* sabq */;
 			targetProxy = 3AFE5FF22F60C123006270F8 /* PBXContainerItemProxy */;
-		};
-		BB000013AAAA0001006270F8 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BB00000FAAAA0001006270F8 /* sabqWidgetExtension */;
-			targetProxy = BB000014AAAA0001006270F8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -709,70 +609,6 @@
 			};
 			name = Release;
 		};
-		BB000010AAAA0001006270F8 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051806;
-				DEVELOPMENT_TEAM = CBU7MJEC5R;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 9.0.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		BB000011AAAA0001006270F8 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026051806;
-				DEVELOPMENT_TEAM = CBU7MJEC5R;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "أخبار سبق";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 9.0.6;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.widget;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -808,15 +644,6 @@
 			buildConfigurations = (
 				3AFE60022F60C123006270F8 /* Debug */,
 				3AFE60032F60C123006270F8 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BB000012AAAA0001006270F8 /* Build configuration list for PBXNativeTarget "sabqWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BB000010AAAA0001006270F8 /* Debug */,
-				BB000011AAAA0001006270F8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
