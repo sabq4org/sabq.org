@@ -74,19 +74,55 @@ app.get("/api/wallet/diag", (_req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   const peek = (name: string) => {
     const v = process.env[name];
-    return { set: !!v, length: v?.length ?? 0 };
+    const trimmed = (v ?? "").trim();
+    return {
+      set: !!v,
+      length: v?.length ?? 0,
+      trimmedLength: trimmed.length,
+      firstChars: trimmed.slice(0, 30),
+      lastChars: trimmed.slice(-30),
+    };
   };
   res.json({
     APPLE_PRESS_PASS_CERT: peek("APPLE_PRESS_PASS_CERT"),
     APPLE_PRESS_PASS_KEY:  peek("APPLE_PRESS_PASS_KEY"),
-    APPLE_PASS_CERT:       peek("APPLE_PASS_CERT"),
-    APPLE_PASS_KEY:        peek("APPLE_PASS_KEY"),
     APPLE_WWDR_CERT:       peek("APPLE_WWDR_CERT"),
     APPLE_PASS_PASSPHRASE: peek("APPLE_PASS_PASSPHRASE"),
     APPLE_PRESS_PASS_TYPE_ID: peek("APPLE_PRESS_PASS_TYPE_ID"),
     APPLE_TEAM_ID:         peek("APPLE_TEAM_ID"),
     bootedAt: serverBootedAt,
   });
+});
+
+// Deep diag — actually attempts the cert loading code path with fake
+// pass data and returns the exact error (or success). Lets us see
+// whether the throw in loadCertificates() is firing despite env vars
+// looking populated to the shallow diag above.
+app.get("/api/wallet/diag/deep", async (_req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
+  try {
+    const { passKitService } = await import("./lib/passkit/PassKitService");
+    // We don't actually generate a pass — just exercise loadCertificates
+    // by reflecting in. Call the private method via a small detour:
+    // run generatePressPass with minimal data and let the cert load
+    // throw before any signing happens. Capture the exact error.
+    const fakeData = {
+      userId: "diag-only",
+      serialNumber: "DIAG",
+      authToken: "diag",
+      userName: "diag",
+      userEmail: "diag@diag",
+      userRole: "diag",
+    } as any;
+    await passKitService.generatePressPass(fakeData);
+    res.json({ ok: true, message: "cert load + sign attempted with no throw (unexpected — should have errored at sign stage at minimum)" });
+  } catch (err: any) {
+    res.json({
+      ok: false,
+      message: err?.message ?? String(err),
+      stack: (err?.stack ?? "").split("\n").slice(0, 8).join("\n"),
+    });
+  }
 });
 
 // Serve ads.txt and app-ads.txt BEFORE any SPA/Vite middleware
