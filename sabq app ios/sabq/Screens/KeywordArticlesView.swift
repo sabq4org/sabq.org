@@ -237,7 +237,7 @@ private struct CompactOpinionKeywordRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
+                FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
                     thumbnailPlaceholder
                 }
                 .frame(width: 80, height: 80)

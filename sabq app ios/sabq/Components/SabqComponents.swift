@@ -1061,7 +1061,7 @@ struct FeaturedArticleCard: View {
                 .frame(height: 200)
                 .overlay {
                     if let urlString = article.imageURL, let url = URL(string: urlString) {
-                        CachedAsyncImage(url: url, contentMode: .fill) {
+                        FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
                             articleImagePlaceholder
                                 .overlay {
                                     ProgressView()
@@ -1236,7 +1236,7 @@ struct CompactArticleRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if let urlString = article.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
+                FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
                     thumbnailPlaceholder(size: 84)
                 }
                 .frame(width: 84, height: 84)
@@ -1281,7 +1281,7 @@ struct CompactArticleRow: View {
                 .overlay(
                     Group {
                         if let urlString = article.imageURL, let url = URL(string: urlString) {
-                            CachedAsyncImage(url: url, contentMode: .fill) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
                                 heroPlaceholder
                             }
                         } else {

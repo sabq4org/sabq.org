@@ -166,7 +166,7 @@ struct TrendingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         if let urlStr = article.imageURL, let url = URL(string: urlStr) {
-                            CachedAsyncImage(url: url, contentMode: .fill) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(SabqTheme.paleFill)
                             }

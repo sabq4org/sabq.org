@@ -90,7 +90,7 @@ struct OpinionsView: View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack(alignment: .topLeading) {
                 if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                    CachedAsyncImage(url: url, contentMode: .fill) {
+                    FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
                         mostViewedPlaceholder
                     }
                     .frame(width: 240, height: 140)
@@ -182,7 +182,7 @@ struct OpinionsView: View {
     private func opinionRow(_ opinion: OpinionArticle) -> some View {
         HStack(alignment: .top, spacing: 14) {
             if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                CachedAsyncImage(url: url, contentMode: .fill) {
+                FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
                     rowPlaceholder
                 }
                 .frame(width: 88, height: 88)

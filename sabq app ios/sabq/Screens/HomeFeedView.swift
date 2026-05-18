@@ -559,7 +559,7 @@ struct HomeFeedView: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 if let urlString = opinion.imageURL, let url = URL(string: urlString) {
-                    CachedAsyncImage(url: url, contentMode: .fill) {
+                    FocalCachedAsyncImage(url: url, focalPoint: opinion.imageFocalPoint) {
                         opinionCardPlaceholder
                     }
                     .frame(width: 200, height: 120)
