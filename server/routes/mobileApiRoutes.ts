@@ -5078,4 +5078,123 @@ router.put("/notifications/preferences", async (req: Request, res: Response) => 
   }
 });
 
+// ==========================================
+// LOYALTY (Phase 2 / Phase 3 iOS surface)
+// ==========================================
+// All loyalty awarding from iOS funnels through awardPoints() in
+// server/services/loyalty.ts — the same helper the web routes use,
+// so daily caps, dedup, and rank-level write are uniform across
+// platforms. The iOS bug noted earlier (writers don't earn points
+// on iOS) was a missing endpoint, not a missing service.
+
+// GET /api/v1/loyalty/me
+// Returns the same shape as the web /api/loyalty/summary so the iOS
+// "حسابي" tab can render the same component tree.
+router.get("/loyalty/me", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const { userPointsTotal, userLoyaltyEvents } = await import("@shared/schema");
+    const userId = session.userId;
+
+    const [points] = await db
+      .select()
+      .from(userPointsTotal)
+      .where(eq(userPointsTotal.userId, userId))
+      .limit(1);
+
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [weekRow] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${userLoyaltyEvents.points}), 0)` })
+      .from(userLoyaltyEvents)
+      .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, weekAgo)));
+    const [monthRow] = await db
+      .select({ total: sql<number>`COALESCE(SUM(${userLoyaltyEvents.points}), 0)` })
+      .from(userLoyaltyEvents)
+      .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, monthAgo)));
+
+    const recentDays = await db
+      .select({ day: sql<string>`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')` })
+      .from(userLoyaltyEvents)
+      .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, monthAgo)))
+      .groupBy(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`)
+      .orderBy(desc(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`));
+    const eventDays = new Set(recentDays.map((r) => r.day));
+    let streak = 0;
+    const cursor = new Date(now);
+    while (eventDays.has(cursor.toISOString().slice(0, 10))) {
+      streak++;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+
+    res.json({
+      success: true,
+      points: points ?? null,
+      weekPoints: Number(weekRow?.total ?? 0),
+      monthPoints: Number(monthRow?.total ?? 0),
+      streakDays: streak,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /loyalty/me error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب البيانات" });
+  }
+});
+
+// POST /api/v1/loyalty/events
+// iOS batches loyalty events (READ_OPEN / READ_DEEP / LIKE / SHARE /
+// COMMENT / NOTIFICATION_OPEN) and flushes every ~30s or on app
+// background. The server-side daily cap and dedup in awardPoints()
+// make this idempotent enough that the iOS queue can retry on
+// network failure without producing duplicate points.
+router.post("/loyalty/events", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const events = Array.isArray(req.body?.events) ? req.body.events : [];
+    if (events.length === 0 || events.length > 100) {
+      return res.status(400).json({ success: false, message: "عدد الأحداث غير صالح" });
+    }
+
+    const { awardPoints } = await import("../services/loyalty");
+    const { LOYALTY_ACTIONS, LOYALTY_ACTION_POINTS } = await import("@shared/loyalty");
+    const validActions = new Set(Object.values(LOYALTY_ACTIONS));
+
+    const results = [] as Array<{ action: string; outcome: string; points?: number }>;
+    for (const evt of events) {
+      const action = String(evt?.action ?? "");
+      if (!validActions.has(action as any)) {
+        results.push({ action, outcome: "INVALID_ACTION" });
+        continue;
+      }
+      const out = await awardPoints({
+        userId: session.userId,
+        action: action as any,
+        source: typeof evt?.source === "string" ? evt.source : undefined,
+        metadata: {
+          articleId: typeof evt?.articleId === "string" ? evt.articleId : undefined,
+          duration: typeof evt?.duration === "number" ? evt.duration : undefined,
+          extraInfo: typeof evt?.extraInfo === "string" ? evt.extraInfo : undefined,
+        },
+      });
+      if (out.awarded) {
+        results.push({ action, outcome: "AWARDED", points: out.points });
+      } else {
+        results.push({ action, outcome: out.reason });
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error("[Mobile API] POST /loyalty/events error:", error);
+    res.status(500).json({ success: false, message: "تعذر معالجة الأحداث" });
+  }
+});
+
 export default router;

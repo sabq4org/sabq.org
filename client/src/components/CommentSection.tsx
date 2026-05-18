@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MessageCircle, Send, CornerDownLeft, UserPlus, UserCheck, Sparkles, Clock, TrendingUp } from "lucide-react";
 import type { CommentWithUser } from "@shared/schema";
+import { TierPill } from "@/components/loyalty/LoyaltyBlock";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -180,6 +181,7 @@ export function CommentSection({
                     ? `${comment.user.firstName} ${comment.user.lastName}`
                     : comment.user.email}
                 </span>
+                <TierPill level={(comment.user as any).loyaltyRankLevel ?? 1} />
                 {currentUser && comment.user.id !== currentUser.id && (
                   <Button
                     variant="ghost"

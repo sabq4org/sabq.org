@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
+import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1276,58 +1277,7 @@ export default function Profile() {
               </CardContent>
             </Card>
 
-            {/* Loyalty Points */}
-            <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-amber-200 dark:border-amber-900">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {getRankIcon(loyaltyPoints?.currentRank)}
-                    برنامج الولاء
-                  </CardTitle>
-                  <Badge variant="secondary" className="gap-1">
-                    <Coins className="h-3 w-3" />
-                    {loyaltyPoints?.totalPoints || 0}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">رتبتك الحالية</p>
-                  <p className="font-semibold text-lg" data-testid="text-loyalty-rank">
-                    {loyaltyPoints?.currentRank || "القارئ الجديد"}
-                  </p>
-                </div>
-                
-                <Separator />
-                
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">النقاط الكلية</span>
-                    <span className="font-semibold" data-testid="text-loyalty-lifetime">
-                      {loyaltyPoints?.lifetimePoints || 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">النقاط المتاحة</span>
-                    <span className="font-semibold text-primary" data-testid="text-loyalty-available">
-                      {loyaltyPoints?.totalPoints || 0}
-                    </span>
-                  </div>
-                </div>
-                
-                <Button
-                  variant="default"
-                  className="w-full gap-2"
-                  asChild
-                  data-testid="button-view-rewards"
-                >
-                  <a href="/loyalty">
-                    <Trophy className="h-4 w-4" />
-                    استبدل النقاط
-                  </a>
-                </Button>
-              </CardContent>
-            </Card>
+            <LoyaltyBlock />
           </aside>
         </div>
       </div>

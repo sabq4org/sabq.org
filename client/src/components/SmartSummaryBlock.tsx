@@ -17,6 +17,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LoyaltyStrip } from "@/components/loyalty/LoyaltyStrip";
 
 interface TodayInsightsData {
   greeting: string;
@@ -211,6 +212,8 @@ export function SmartSummaryBlock() {
             </div>
           </div>
         </CollapsibleTrigger>
+
+        <LoyaltyStrip />
 
         <CollapsibleContent>
           {/* Metrics - Mobile: 2x2 Grid */}

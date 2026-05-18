@@ -4864,15 +4864,20 @@ export class DatabaseStorage implements IStorage {
       .select({
         comment: comments,
         user: userPublicSelect,
+        // Loyalty tier is rendered next to the commenter name (Phase 2).
+        // Left-join means users without a row still resolve, just with
+        // null rankLevel that the client treats as tier 1.
+        loyaltyRankLevel: userPointsTotal.rankLevel,
       })
       .from(comments)
       .leftJoin(users, eq(comments.userId, users.id))
+      .leftJoin(userPointsTotal, eq(userPointsTotal.userId, comments.userId))
       .where(and(...conditions))
       .orderBy(comments.createdAt);
 
     const allComments = results.map((r) => ({
       ...r.comment,
-      user: r.user!,
+      user: { ...(r.user as any), loyaltyRankLevel: r.loyaltyRankLevel ?? 1 } as any,
       replies: [] as CommentWithUser[],
     }));
 

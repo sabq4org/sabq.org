@@ -18455,6 +18455,63 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // Phase-2 loyalty UI summary — points total + this-week / this-month
+  // aggregates + current streak (consecutive days with at least one event).
+  // Returns null for unknown users instead of failing so the profile
+  // can render an empty state cleanly.
+  app.get("/api/loyalty/summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const points = (await storage.getUserPoints(userId)) ?? null;
+
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const { userLoyaltyEvents } = await import("@shared/schema");
+      const { sql: drizzleSql, and, eq, gte, desc } = await import("drizzle-orm");
+      const { db } = await import("./db");
+
+      const [weekRow] = await db
+        .select({ total: drizzleSql<number>`COALESCE(SUM(${userLoyaltyEvents.points}), 0)` })
+        .from(userLoyaltyEvents)
+        .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, weekAgo)));
+      const [monthRow] = await db
+        .select({ total: drizzleSql<number>`COALESCE(SUM(${userLoyaltyEvents.points}), 0)` })
+        .from(userLoyaltyEvents)
+        .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, monthAgo)));
+
+      // Streak: consecutive days (ending today) with ≥1 event. Cheap
+      // computation by fetching the last 30 distinct event days then
+      // walking from today backwards.
+      const recentDays = await db
+        .select({ day: drizzleSql<string>`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')` })
+        .from(userLoyaltyEvents)
+        .where(and(eq(userLoyaltyEvents.userId, userId), gte(userLoyaltyEvents.createdAt, monthAgo)))
+        .groupBy(drizzleSql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`)
+        .orderBy(desc(drizzleSql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`));
+      const eventDays = new Set(recentDays.map((r) => r.day));
+      let streak = 0;
+      const cursor = new Date(now);
+      while (true) {
+        const key = cursor.toISOString().slice(0, 10);
+        if (!eventDays.has(key)) break;
+        streak++;
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
+      }
+
+      res.json({
+        points,
+        weekPoints: Number(weekRow?.total ?? 0),
+        monthPoints: Number(monthRow?.total ?? 0),
+        streakDays: streak,
+      });
+    } catch (error) {
+      console.error("Error fetching loyalty summary:", error);
+      res.status(500).json({ message: "Failed to fetch loyalty summary" });
+    }
+  });
+
   // Get user loyalty history
   app.get("/api/loyalty/history", isAuthenticated, async (req: any, res) => {
     try {
@@ -18478,6 +18535,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     } catch (error) {
       console.error("Error fetching rewards:", error);
       res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
+  // Redeem a reward — Phase 2 UI calls this from /dashboard/loyalty.
+  // The storage helper handles the points-debit + history-insert in one
+  // transaction and returns a structured success/failure response so the
+  // route can map insufficient-points to a 400 instead of a 500.
+  app.post("/api/loyalty/rewards/:id/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const result = await storage.redeemReward({
+        userId: req.user.id,
+        rewardId: req.params.id,
+      });
+      if (!result.success) return res.status(400).json({ message: result.message });
+      res.json(result.redemption);
+    } catch (error) {
+      console.error("Error redeeming reward:", error);
+      res.status(500).json({ message: "Failed to redeem reward" });
     }
   });
 

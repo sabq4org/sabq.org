@@ -160,6 +160,7 @@ const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
 const MyKeywords = lazy(() => retryImport(() => import("@/pages/MyKeywords")));
 
 // === LAZY IMPORTS (Themes) ===
+const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAccount")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
 const ThemeSwitcher = lazy(() => retryImport(() => import("@/pages/dashboard/ThemeSwitcher")));
@@ -848,6 +849,7 @@ function Router() {
         <Route path="/dashboard/themes">{() => <LazyRoute component={ThemeManager} />}</Route>
         <Route path="/profile/:userId">{() => <LazyRoute component={PublicProfile} />}</Route>
         <Route path="/profile">{() => <LazyRoute component={Profile} />}</Route>
+        <Route path="/dashboard/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         <Route path="/discover-users">{() => <LazyRoute component={DiscoverUsers} />}</Route>
         <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
