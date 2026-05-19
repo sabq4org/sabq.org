@@ -88,6 +88,12 @@ function fitFontSize(
   return size;
 }
 
+// Arabic glyphs (esp. Cairo Bold) consistently render at ~1.35x
+// the nominal font size when you include ascenders + descenders.
+// Allocating that much vertical space prevents the descenders of
+// the name from clipping the top of the job title underneath.
+const LINE_HEIGHT_MULTIPLIER = 1.35;
+
 export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
   registerFontsOnce();
 
@@ -99,18 +105,18 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   ctx.fillRect(0, 0, W, H);
 
   const padX = 60;
-  const padTop = 18; // raised to push the logo right up against the top edge
+  const padTop = 6;     // editor: "ارفع اللوقو فوق" — hug the top edge
+  const padBottom = 28; // breathing room before the Wallet fields row
 
   try { (ctx as any).direction = "rtl"; } catch {}
 
-  // ── Sabq logo (top-center, pushed as high as the canvas allows).
-  //    Editor: "ارفع اللوقو فوق" + "حبتين أكبر". ─────────────────
+  // ── Sabq logo (top-center, flush with the top edge) ───────────
   let logoBottomY = padTop;
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 170;
+      const logoH = 165;
       const logoW = (logo.width / logo.height) * logoH;
       ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
       logoBottomY = padTop + logoH;
@@ -119,36 +125,39 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     console.warn("[PressCardImageRenderer] logo skipped:", e);
   }
 
-  // ── Tagline "بطاقة صحفية رسمية" directly under the logo, at
-  //    the very top of the card per editor direction ("فوق فوق"). ─
+  // ── Tagline "بطاقة صحفية رسمية" directly under the logo ──────
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  ctx.font = arabicFont(26, false);
+  const taglineSize = 24;
+  const taglineY = logoBottomY + 6;
+  ctx.font = arabicFont(taglineSize, false);
   ctx.fillStyle = INK_SOFT;
-  ctx.fillText("بطاقة صحفية رسمية", W / 2, logoBottomY + 4);
-  const taglineBottomY = logoBottomY + 4 + 26;
+  ctx.fillText("بطاقة صحفية رسمية", W / 2, taglineY);
+  const headerBottomY = taglineY + taglineSize * LINE_HEIGHT_MULTIPLIER;
 
-  // ── Name + jobTitle as a single block, generously spaced and
-  //    vertically centered within the remaining canvas below the
-  //    top header area. ─────────────────────────────────────────
-  ctx.textAlign = "center";
-
+  // ── Name + jobTitle as a single block, line-height aware so the
+  //    name's descenders never collide with the job title's
+  //    ascenders. Restrained sizes leave clear margin above and
+  //    below — fixes rev 7's "المنصب مختفي خلف النصوص" bug. ─────
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 100, 56, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 80, 52, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 40, 24, false) : 0;
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 36, 24, false) : 0;
 
-  // Bigger breathing room between name and job title — editor
-  // asked explicitly for "فراغ بين الاسم والمنصب".
-  const gap = jobTitle ? 44 : 0;
-  const blockH = nameSize + gap + jobSize;
+  // Generous gap between name and job title.
+  const gap = jobTitle ? 40 : 0;
 
-  // Center the block in the lower 60% of the canvas (below the
-  // top header) so it doesn't crowd the tagline or feel bottom-
-  // heavy.
-  const lowerAreaTop = taglineBottomY + 16;
-  const lowerAreaH = H - lowerAreaTop;
-  const blockTop = lowerAreaTop + (lowerAreaH - blockH) / 2;
+  // Actual rendered line heights (include ascender/descender).
+  const nameLineH = nameSize * LINE_HEIGHT_MULTIPLIER;
+  const jobLineH = jobSize * LINE_HEIGHT_MULTIPLIER;
+  const blockH = nameLineH + gap + jobLineH;
+
+  // Center the block within the remaining vertical space below the
+  // top header and above the bottom safe area.
+  const contentTop = headerBottomY + 16;
+  const contentBottom = H - padBottom;
+  const contentH = contentBottom - contentTop;
+  const blockTop = contentTop + Math.max(0, (contentH - blockH) / 2);
 
   ctx.textBaseline = "top";
   ctx.font = arabicFont(nameSize, true);
@@ -158,7 +167,7 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   if (jobTitle) {
     ctx.font = arabicFont(jobSize, false);
     ctx.fillStyle = INK_SOFT;
-    ctx.fillText(jobTitle, W / 2, blockTop + nameSize + gap);
+    ctx.fillText(jobTitle, W / 2, blockTop + nameLineH + gap);
   }
 
   // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ─────
