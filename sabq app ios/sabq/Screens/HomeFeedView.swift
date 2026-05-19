@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Reference wrapper for the live scroll offset. SwiftUI tracks the
+/// reference identity; mutating `.value` doesn't invalidate the view
+/// body. Lives outside the struct so a @State of this type holds a
+/// stable instance for the screen's lifetime.
+private final class ScrollOffsetRef {
+    var value: CGFloat = 0
+}
+
 struct HomeFeedView: View {
     private static let scrollTopID = "home-feed-top"
     /// Ignore scroll-to-top when the reader is already near the header.
@@ -27,7 +35,15 @@ struct HomeFeedView: View {
     /// red unread dot refreshes when push notifications arrive or the
     /// user marks them read.
     @State private var notificationsStore = NotificationsStore.shared
-    @State private var scrollOffsetY: CGFloat = 0
+    /// Non-reactive holder for the current scroll Y. Using @State for
+    /// this value invalidated the entire VStack body on every pixel
+    /// of scroll (the offset is fed by .onScrollGeometryChange, which
+    /// fires continuously), which is what made the home feed feel
+    /// "heavy" near the bottom — confirmed by Instruments. The value
+    /// is only read inside the scroll-to-top guard below, so a class
+    /// wrapper that SwiftUI tracks by reference (and therefore never
+    /// re-renders on mutation) is the right shape.
+    @State private var scrollOffsetRef = ScrollOffsetRef()
     /// Drives the custom page-indicator row under the featured carousel.
     /// We hide TabView's built-in dots (they sit at the bottom of the
     /// TabView frame, which leaves a visible gap above them on short
@@ -134,11 +150,11 @@ struct HomeFeedView: View {
                 }
             }
             .sabqScrollOffsetTracker { y in
-                scrollOffsetY = y
+                scrollOffsetRef.value = y
             }
             .sabqAutoHideTabBar()
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
-                guard scrollOffsetY > Self.scrollToTopThreshold else { return }
+                guard scrollOffsetRef.value > Self.scrollToTopThreshold else { return }
                 withAnimation(.easeOut(duration: 0.28)) {
                     scrollProxy.scrollTo(Self.scrollTopID, anchor: .top)
                 }

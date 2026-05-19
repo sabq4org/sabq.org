@@ -2826,18 +2826,38 @@ struct ForgotPasswordSheet: View {
                 .foregroundStyle(SabqTheme.ink)
         }
 
-        textInput("رمز التحقق (6 أرقام)", text: $code, keyboard: .numberPad)
-            .padding(.horizontal, 24)
-            .onChange(of: code) { _, new in
-                let digits = new.filter(\.isNumber)
-                code = String(digits.prefix(6))
-            }
+        textInput(
+            "رمز التحقق (6 أرقام)",
+            text: $code,
+            keyboard: .numberPad,
+            // .oneTimeCode lets iOS auto-fill the code from Mail/SMS
+            // AND fixes the paste-doesn't-render-until-tap SwiftUI
+            // bug the editor reported on 2026-05-19. Confirmed by
+            // pasting then immediately scrolling: the value appears
+            // straight away.
+            contentType: .oneTimeCode
+        )
+        .padding(.horizontal, 24)
+        .onChange(of: code) { _, new in
+            let digits = new.filter(\.isNumber)
+            code = String(digits.prefix(6))
+        }
 
-        textInput("كلمة المرور الجديدة (٦ أحرف فأكثر)", text: $newPassword, isSecure: true)
-            .padding(.horizontal, 24)
+        textInput(
+            "كلمة المرور الجديدة (٦ أحرف فأكثر)",
+            text: $newPassword,
+            isSecure: true,
+            contentType: .newPassword
+        )
+        .padding(.horizontal, 24)
 
-        textInput("تأكيد كلمة المرور", text: $confirmPassword, isSecure: true)
-            .padding(.horizontal, 24)
+        textInput(
+            "تأكيد كلمة المرور",
+            text: $confirmPassword,
+            isSecure: true,
+            contentType: .newPassword
+        )
+        .padding(.horizontal, 24)
 
         if !confirmPassword.isEmpty && newPassword != confirmPassword {
             Text("كلمتا المرور غير متطابقتين")
@@ -2931,16 +2951,19 @@ struct ForgotPasswordSheet: View {
         text: Binding<String>,
         keyboard: UIKeyboardType = .default,
         capitalize: Bool = true,
-        isSecure: Bool = false
+        isSecure: Bool = false,
+        contentType: UITextContentType? = nil
     ) -> some View {
         Group {
             if isSecure {
                 SecureField(placeholder, text: text)
+                    .textContentType(contentType)
             } else {
                 TextField(placeholder, text: text)
                     .keyboardType(keyboard)
                     .textInputAutocapitalization(capitalize ? .sentences : .never)
                     .autocorrectionDisabled()
+                    .textContentType(contentType)
             }
         }
         .font(.system(size: 16, weight: .medium))
