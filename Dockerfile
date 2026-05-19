@@ -52,6 +52,13 @@ COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
 COPY --from=builder /app/certs ./certs
 
+# Arabic fonts used by the press-card strip renderer
+# (server/lib/passkit/PressCardImageRenderer.ts). Without these the
+# Alpine container falls back to system sans-serif, which has no
+# Arabic glyphs — the strip renders with the headers + logo but every
+# Arabic text run comes out as blank space.
+COPY --from=builder /app/server/fonts ./server/fonts
+
 RUN npm ci --omit=dev && npm cache clean --force
 
 RUN addgroup -g 1001 -S nodejs && \
