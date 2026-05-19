@@ -5508,7 +5508,7 @@ const generateSlug = (text: string) => {
                           </div>
                         </div>
                         
-                        {/* Album Images Grid - 2 columns */}
+                        {/* Album Images Grid - preserve original image proportions */}
                         {albumImages.length > 0 ? (
                           <div className="grid grid-cols-2 gap-3">
                             {albumImages.map((url, index) => (
@@ -5517,14 +5517,12 @@ const generateSlug = (text: string) => {
                                 className="relative group rounded-lg overflow-hidden border bg-muted/30"
                                 data-testid={`album-image-${index}`}
                               >
-                                <div className="aspect-square">
-                                  <img
-                                    src={url}
-                                    alt={`صورة الألبوم ${index + 1}`}
-                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                    loading="lazy"
-                                  />
-                                </div>
+                                <img
+                                  src={url}
+                                  alt={`صورة الألبوم ${index + 1}`}
+                                  className="block w-full max-w-full h-auto transition-transform group-hover:scale-105"
+                                  loading="lazy"
+                                />
                                 {/* Overlay with delete button */}
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                                   <Button

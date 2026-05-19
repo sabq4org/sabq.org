@@ -1968,15 +1968,10 @@ input, select, textarea {
 }
 
 .prose img {
-  aspect-ratio: 16 / 9;
-  height: auto;
+  display: block;
   width: 100%;
-}
-
-.prose img[width][height],
-.prose img[data-legacy-aspect="cached"],
-.prose img[data-legacy-aspect="measured"] {
-  aspect-ratio: auto;
+  max-width: 100%;
+  height: auto;
 }
 
 /*
