@@ -1,5 +1,6 @@
 package com.sabq.smart.nav
 
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -26,9 +29,22 @@ import com.sabq.smart.feature.explore.ExploreScreen
 import com.sabq.smart.feature.home.HomeFeedScreen
 import com.sabq.smart.feature.live.MomentByMomentScreen
 import com.sabq.smart.feature.loyalty.LoyaltyAccountScreen
+import com.sabq.smart.feature.notifications.EditorialNotificationDetailScreen
+import com.sabq.smart.feature.notifications.EditorialNotificationsScreen
+import com.sabq.smart.feature.notifications.NotificationPreferencesScreen
 import com.sabq.smart.feature.opinions.OpinionsListScreen
+import com.sabq.smart.feature.settings.ArticleSubmissionKind
+import com.sabq.smart.feature.settings.ArticleSubmissionScreen
+import com.sabq.smart.feature.settings.ChangePasswordScreen
+import com.sabq.smart.feature.settings.ContactScreen
+import com.sabq.smart.feature.settings.DeleteAccountScreen
+import com.sabq.smart.feature.settings.EditProfileScreen
+import com.sabq.smart.feature.settings.ForgotPasswordScreen
+import com.sabq.smart.feature.settings.NewsletterScreen
+import com.sabq.smart.feature.settings.PrivacyPolicyScreen
 import com.sabq.smart.feature.settings.SettingsScreen
 import com.sabq.smart.feature.settings.SettingsViewModel
+import com.sabq.smart.feature.settings.TermsOfUseScreen
 import com.sabq.smart.ui.components.SabqTabBar
 import com.sabq.smart.ui.theme.SabqTheme
 
@@ -49,6 +65,21 @@ object SabqRoutes {
     const val Loyalty = "loyalty"
     const val Opinions = "opinions"
     const val MomentByMoment = "live/updates"
+    const val Notifications = "notifications"
+    const val NotificationDetail = "notifications/{id}"
+    const val NotificationPreferences = "notifications/preferences"
+    const val EditProfile = "account/edit"
+    const val ChangePassword = "account/change-password"
+    const val ForgotPassword = "account/forgot-password"
+    const val DeleteAccount = "account/delete"
+    const val Contact = "support/contact"
+    const val Newsletter = "support/newsletter"
+    const val PrivacyPolicy = "legal/privacy"
+    const val TermsOfUse = "legal/terms"
+    const val SubmitOpinion = "submit/opinion"
+    const val SubmitNews = "submit/news"
+
+    fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
     val TabRoutes = setOf(Home, Explore, Bookmarks, Profile)
 
@@ -114,6 +145,12 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                        onMomentByMomentClick = {
+                            navController.navigate(SabqRoutes.MomentByMoment)
+                        },
+                        onNotificationsClick = {
+                            navController.navigate(SabqRoutes.Notifications)
+                        },
                     )
                 }
                 composable(SabqRoutes.Explore) {
@@ -137,9 +174,36 @@ fun SabqApp(
                     )
                 }
                 composable(SabqRoutes.Profile) {
+                    val authVm: com.sabq.smart.feature.auth.AuthViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                    val context = LocalContext.current
+                    val openUrl: (String) -> Unit = { url ->
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                },
+                            )
+                        }
+                    }
                     SettingsScreen(
                         onLoginClick = { navController.navigate(SabqRoutes.Login) },
                         onLoyaltyClick = { navController.navigate(SabqRoutes.Loyalty) },
+                        onEditProfileClick = { navController.navigate(SabqRoutes.EditProfile) },
+                        onChangePasswordClick = { navController.navigate(SabqRoutes.ChangePassword) },
+                        onDeleteAccountClick = { navController.navigate(SabqRoutes.DeleteAccount) },
+                        onForgotPasswordClick = { navController.navigate(SabqRoutes.ForgotPassword) },
+                        onNotificationsClick = { navController.navigate(SabqRoutes.Notifications) },
+                        onContactClick = { navController.navigate(SabqRoutes.Contact) },
+                        onNewsletterClick = { navController.navigate(SabqRoutes.Newsletter) },
+                        onPrivacyClick = { navController.navigate(SabqRoutes.PrivacyPolicy) },
+                        onTermsClick = { navController.navigate(SabqRoutes.TermsOfUse) },
+                        onOpenWebsite = { openUrl("https://sabq.org") },
+                        onOpenTwitter = { openUrl("https://x.com/sabqorg") },
+                        onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
+                        onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
+                        onLogout = { coroutineScope.launch { authVm.logout() } },
+                        onClearLocalData = { /* Surfaced via dialog in a future polish pass. */ },
                     )
                 }
                 composable(SabqRoutes.Login) {
@@ -171,6 +235,74 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                    )
+                }
+                composable(SabqRoutes.Notifications) {
+                    EditorialNotificationsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { id ->
+                            navController.navigate(SabqRoutes.notificationDetail(id))
+                        },
+                        onOpenPreferences = {
+                            navController.navigate(SabqRoutes.NotificationPreferences)
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.NotificationDetail,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    EditorialNotificationDetailScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenArticle = { slug ->
+                            navController.navigate(SabqRoutes.articleDetail(slug))
+                        },
+                    )
+                }
+                composable(SabqRoutes.NotificationPreferences) {
+                    NotificationPreferencesScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.EditProfile) {
+                    EditProfileScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.ChangePassword) {
+                    ChangePasswordScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.ForgotPassword) {
+                    ForgotPasswordScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.DeleteAccount) {
+                    DeleteAccountScreen(
+                        onBack = { navController.popBackStack() },
+                        onAccountDeleted = {
+                            navController.popBackStack(SabqRoutes.Profile, inclusive = false)
+                        },
+                    )
+                }
+                composable(SabqRoutes.Contact) {
+                    ContactScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.Newsletter) {
+                    NewsletterScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.PrivacyPolicy) {
+                    PrivacyPolicyScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.TermsOfUse) {
+                    TermsOfUseScreen(onBack = { navController.popBackStack() })
+                }
+                composable(SabqRoutes.SubmitOpinion) {
+                    ArticleSubmissionScreen(
+                        kind = ArticleSubmissionKind.Opinion,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.SubmitNews) {
+                    ArticleSubmissionScreen(
+                        kind = ArticleSubmissionKind.News,
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(

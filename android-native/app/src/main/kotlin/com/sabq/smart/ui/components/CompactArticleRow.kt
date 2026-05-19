@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -143,14 +144,25 @@ private fun metadataRow(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Icon(
-            imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-            contentDescription = null,
-            tint = if (isBookmarked) SabqTheme.colors.primaryEnd else SabqTheme.colors.tertiaryInk,
+        // 32 dp invisible-padding tap target wrapping the 16 dp glyph.
+        // The raw icon was only 16 dp clickable — well below the 48 dp
+        // Material guideline. The wrapper keeps the visual unchanged
+        // while giving thumbs a fair tap zone, and circular-clips the
+        // ripple so feedback hugs the glyph.
+        Box(
             modifier = Modifier
-                .size(16.dp)
+                .size(32.dp)
+                .clip(CircleShape)
                 .clickable { onBookmark() },
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                contentDescription = if (isBookmarked) "إزالة من المحفوظات" else "حفظ المقال",
+                tint = if (isBookmarked) SabqTheme.colors.primaryEnd else SabqTheme.colors.tertiaryInk,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 

@@ -101,12 +101,17 @@ object SabqColorPalette {
  * mirroring iOS @AppStorage("appAccent"). Values ported from
  * [AppAccent] in the iOS Models/.
  */
-enum class SabqAccent(val key: String, val light: Color, val dark: Color) {
-    Blue(   "blue",   Color(0.36f, 0.74f, 0.91f, 1f), Color(0.45f, 0.80f, 0.96f, 1f)),
-    Teal(   "teal",   Color(0.16f, 0.65f, 0.55f, 1f), Color(0.25f, 0.78f, 0.65f, 1f)),
-    Purple( "purple", Color(0.55f, 0.35f, 0.85f, 1f), Color(0.68f, 0.50f, 0.95f, 1f)),
-    Rose(   "rose",   Color(0.88f, 0.34f, 0.46f, 1f), Color(0.95f, 0.48f, 0.58f, 1f)),
-    Orange( "orange", Color(0.95f, 0.55f, 0.20f, 1f), Color(1.00f, 0.65f, 0.30f, 1f)),
+enum class SabqAccent(
+    val key: String,
+    val arabicName: String,
+    val light: Color,
+    val dark: Color,
+) {
+    Blue(   "blue",   "أزرق",    Color(0.36f, 0.74f, 0.91f, 1f), Color(0.45f, 0.80f, 0.96f, 1f)),
+    Teal(   "teal",   "أخضر",    Color(0.16f, 0.65f, 0.55f, 1f), Color(0.25f, 0.78f, 0.65f, 1f)),
+    Purple( "purple", "بنفسجي", Color(0.55f, 0.35f, 0.85f, 1f), Color(0.68f, 0.50f, 0.95f, 1f)),
+    Rose(   "rose",   "وردي",   Color(0.88f, 0.34f, 0.46f, 1f), Color(0.95f, 0.48f, 0.58f, 1f)),
+    Orange( "orange", "برتقالي", Color(0.95f, 0.55f, 0.20f, 1f), Color(1.00f, 0.65f, 0.30f, 1f)),
     ;
 
     companion object {

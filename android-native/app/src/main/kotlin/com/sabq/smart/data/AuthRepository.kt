@@ -50,7 +50,11 @@ class AuthRepository @Inject constructor(
             _user.value = null
             return null
         }
-        return runCatching { api.getProfile().toDomain() }
+        return runCatching {
+            val apiUser = api.getProfileEnvelope().user
+                ?: error("backend returned no user")
+            apiUser.toDomain()
+        }
             .onSuccess { _user.value = it }
             .onFailure { e ->
                 if (e is HttpException && e.code() == 401) {
@@ -107,6 +111,21 @@ class AuthRepository @Inject constructor(
         runCatching { api.logout() }
         tokenStore.clear()
         _user.value = null
+    }
+
+    /** Drop the local session WITHOUT calling the logout endpoint —
+     *  used after a successful `deleteAccount` where the server has
+     *  already nuked the row. */
+    suspend fun clearLocalSession() {
+        tokenStore.clear()
+        _user.value = null
+    }
+
+    /** Replace the cached user with a fresh copy — used after a
+     *  successful profile edit so the Settings card refreshes
+     *  immediately without re-fetching the profile. */
+    fun updateCachedUser(user: User) {
+        _user.value = user
     }
 
     private fun extractErrorMessage(e: HttpException): String? {

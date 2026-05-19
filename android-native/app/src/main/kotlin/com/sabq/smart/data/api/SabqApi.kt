@@ -1,8 +1,10 @@
 package com.sabq.smart.data.api
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -78,9 +80,13 @@ interface SabqApi {
     /**
      * Authenticated user profile. iOS uses `/v1/members/profile`
      * (NOT `/auth/me` — that path 404s on production).
+     *
+     * Response shape: `{ success, user: {...} }` — see
+     * `mobileApiRoutes.ts:1605`. Callers unwrap via [getProfileOrThrow]
+     * below.
      */
     @GET("api/v1/members/profile")
-    suspend fun getProfile(): ApiUser
+    suspend fun getProfileEnvelope(): MemberProfileResponse
 
     // -- loyalty ------------------------------------------------------
 
@@ -127,6 +133,80 @@ interface SabqApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20,
     ): ApiArticlesResponse
+
+    // -- account management ------------------------------------------
+
+    @POST("api/v1/members/change-password")
+    suspend fun changePassword(@Body body: ChangePasswordRequest): retrofit2.Response<Unit>
+
+    @POST("api/v1/auth/forgot-password")
+    suspend fun forgotPassword(@Body body: ForgotPasswordRequest): retrofit2.Response<Unit>
+
+    @POST("api/v1/auth/reset-password")
+    suspend fun resetPassword(@Body body: ResetPasswordRequest): retrofit2.Response<Unit>
+
+    /** Retrofit doesn't ship a `@DELETE` body helper without
+     *  `@HTTP`, so we use the verbose form. iOS sends the password
+     *  in the JSON body — same here. */
+    @retrofit2.http.HTTP(method = "DELETE", path = "api/v1/members/account", hasBody = true)
+    suspend fun deleteAccount(@Body body: DeleteAccountRequest): retrofit2.Response<Unit>
+
+    @PUT("api/v1/members/profile")
+    suspend fun updateProfile(@Body body: UpdateProfileRequest): ApiUpdateProfileResponse
+
+    @POST("api/v1/newsletter/subscribe")
+    suspend fun subscribeNewsletter(@Body body: NewsletterSubscribeRequest): retrofit2.Response<Unit>
+
+    @POST("api/v1/newsletter/unsubscribe")
+    suspend fun unsubscribeNewsletter(@Body body: NewsletterUnsubscribeRequest): retrofit2.Response<Unit>
+
+    @GET("api/v1/newsletter/status")
+    suspend fun newsletterStatus(@Query("email") email: String): NewsletterStatusResponse
+
+    @POST("api/v1/contact")
+    suspend fun sendContactMessage(@Body body: ContactMessageRequest): retrofit2.Response<Unit>
+
+    @POST("api/v1/members/profile/image")
+    suspend fun uploadAvatar(@Body body: AvatarUploadRequest): ApiAvatarUploadResponse
+
+    @retrofit2.http.DELETE("api/v1/members/profile/image")
+    suspend fun deleteAvatar(): retrofit2.Response<Unit>
+
+    /** Writer/reporter article submission. Backend derives the kind
+     *  from RBAC roles; admins can override via `kind`. */
+    @POST("api/v1/articles/submit")
+    suspend fun submitArticle(@Body body: ArticleSubmissionRequest): ApiArticleSubmissionResponse
+
+    // -- editorial notifications -------------------------------------
+
+    /**
+     * Latest 50 editorial notifications for the signed-in author —
+     * scheduled / published / rejected / needs_revision / archived.
+     * Newest first. Bearer-token required. iOS APIClient line 766.
+     * Returns `{ success, items: [...], unread }`.
+     */
+    @GET("api/v1/notifications")
+    suspend fun getEditorialNotifications(): ApiEditorialNotificationsPage
+
+    @POST("api/v1/notifications/{id}/read")
+    suspend fun markEditorialNotificationRead(@Path("id") id: String): retrofit2.Response<Unit>
+
+    @POST("api/v1/notifications/read-all")
+    suspend fun markAllEditorialNotificationsRead(): retrofit2.Response<Unit>
+
+    @DELETE("api/v1/notifications/{id}")
+    suspend fun deleteEditorialNotification(@Path("id") id: String): retrofit2.Response<Unit>
+
+    @DELETE("api/v1/notifications")
+    suspend fun deleteAllEditorialNotifications(): retrofit2.Response<Unit>
+
+    @GET("api/v1/notifications/preferences")
+    suspend fun getNotificationPreferences(): ApiEditorialNotificationPreferencesEnvelope
+
+    @PUT("api/v1/notifications/preferences")
+    suspend fun updateNotificationPreferences(
+        @Body body: ApiEditorialNotificationPreferences,
+    ): retrofit2.Response<Unit>
 
     // -- moment-by-moment --------------------------------------------
 

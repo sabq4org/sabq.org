@@ -1,6 +1,7 @@
 package com.sabq.smart.feature.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -20,19 +22,42 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.ArrowCircleRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Camera
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material.icons.outlined.WorkOutline
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -41,11 +66,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sabq.smart.R
 import com.sabq.smart.data.User
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.ui.components.SurfaceCard
@@ -53,20 +82,22 @@ import com.sabq.smart.ui.theme.SabqAccent
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * "المزيد" tab — Settings + account surface. Ports iOS [SettingsView]
- * order:
+ * "المزيد" tab — full account + app-settings surface. Ports
+ * `Screens/SettingsView.swift` section-by-section.
  *
- *   1. CompactScreenHeader "المزيد" / "إعدادات التطبيق وعن سبق".
- *   2. profileSection (SurfaceCard with primaryEnd accent halo):
- *        - signed-in   → avatar 64 dp + name + role chip + email +
- *                        optional job-title + "تعديل الملف الشخصي"
- *                        capsule + (logout via accountActionsSection).
- *        - signed-out  → avatar placeholder + "تسجيل الدخول" title +
- *                        full-width brand-gradient CTA.
- *   3. loyaltyEntrySection (signed-in only) — trophy row pushing
- *      LoyaltyAccountScreen.
- *   4. displaySection — dark mode + accent picker + font slider.
- *   5. aboutSection.
+ * Section order (1:1 with iOS):
+ *   1. CompactScreenHeader: "المزيد" / "إعدادات التطبيق وعن سبق"
+ *   2. profileSection: avatar + identity + verified seal + role chip +
+ *      email + job/dept + bio + email-not-verified warning + edit
+ *      capsule + role-gated submission cards + change-password row.
+ *   3. loyaltyEntry (signed-in only): "نقاطي والمكافآت"
+ *   4. (press card entry — DEFERRED per editorial direction)
+ *   5. displaySection: dark mode + accent + font slider
+ *   6. subscriptionSection: newsletter
+ *   7. aboutSection: privacy + terms + website + X + contact
+ *   8. accountDangerSection (signed-in only): clear data + delete +
+ *      logout
+ *   9. appInfoSection: logo + version + slogan
  */
 @Composable
 fun SettingsScreen(
@@ -74,6 +105,21 @@ fun SettingsScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     onLoginClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
+    onEditProfileClick: () -> Unit = {},
+    onChangePasswordClick: () -> Unit = {},
+    onDeleteAccountClick: () -> Unit = {},
+    onForgotPasswordClick: () -> Unit = {},
+    onNotificationsClick: () -> Unit = {},
+    onContactClick: () -> Unit = {},
+    onNewsletterClick: () -> Unit = {},
+    onPrivacyClick: () -> Unit = {},
+    onTermsClick: () -> Unit = {},
+    onOpenWebsite: () -> Unit = {},
+    onOpenTwitter: () -> Unit = {},
+    onSubmitOpinionClick: () -> Unit = {},
+    onSubmitNewsClick: () -> Unit = {},
+    onLogout: () -> Unit = {},
+    onClearLocalData: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
@@ -84,45 +130,78 @@ fun SettingsScreen(
             .background(SabqTheme.colors.background)
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(
-                start = SabqTheme.dimens.screenPaddingH,
-                end = SabqTheme.dimens.screenPaddingH,
-                top = 18.dp,
-                bottom = 120.dp,
-            ),
+            .padding(horizontal = 16.dp, vertical = 18.dp)
+            .padding(bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        // 1) Header.
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "المزيد",
-                style = SabqTheme.typography.screenTitle,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
-                text = "إعدادات التطبيق وعن سبق",
-                style = SabqTheme.typography.meta,
-                color = SabqTheme.colors.secondaryInk,
-            )
-        }
+        // 1) Header
+        CompactScreenHeader(
+            title = "المزيد",
+            subtitle = "إعدادات التطبيق وعن سبق",
+        )
 
-        // 2) Profile section.
+        // 2) Profile section
         ProfileSection(
             user = currentUser,
             onLoginClick = onLoginClick,
-            onLogoutClick = { authViewModel.logout() },
+            onEditProfileClick = onEditProfileClick,
+            onChangePasswordClick = onChangePasswordClick,
+            onSubmitOpinionClick = onSubmitOpinionClick,
+            onSubmitNewsClick = onSubmitNewsClick,
+            onNotificationsClick = onNotificationsClick,
         )
 
-        // 3) Loyalty entry — visible only when signed in.
+        // 3) Loyalty entry (signed-in only)
         if (currentUser != null) {
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
 
-        // 4) Display section.
+        // 4) Press card entry — DEFERRED (editorial direction 2026-05-19)
+
+        // 5) Display
         DisplaySection(viewModel = viewModel, settings = settings)
 
-        // 5) About.
-        AboutSection()
+        // 6) Subscription
+        SubscriptionSection(onNewsletterClick = onNewsletterClick)
+
+        // 7) About
+        AboutSection(
+            onPrivacyClick = onPrivacyClick,
+            onTermsClick = onTermsClick,
+            onOpenWebsite = onOpenWebsite,
+            onOpenTwitter = onOpenTwitter,
+            onContactClick = onContactClick,
+        )
+
+        // 8) Account danger (signed-in only)
+        if (currentUser != null) {
+            AccountDangerSection(
+                onClearDataClick = onClearLocalData,
+                onDeleteAccountClick = onDeleteAccountClick,
+                onLogoutClick = onLogout,
+            )
+        }
+
+        // 9) App info
+        AppInfoSection()
+    }
+}
+
+// MARK: - Header
+
+@Composable
+private fun CompactScreenHeader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            style = SabqTheme.typography.screenTitle,
+            color = SabqTheme.colors.ink,
+        )
+        Text(
+            text = subtitle,
+            style = SabqTheme.typography.meta,
+            color = SabqTheme.colors.secondaryInk,
+        )
     }
 }
 
@@ -132,11 +211,22 @@ fun SettingsScreen(
 private fun ProfileSection(
     user: User?,
     onLoginClick: () -> Unit,
-    onLogoutClick: () -> Unit,
+    onEditProfileClick: () -> Unit,
+    onChangePasswordClick: () -> Unit,
+    onSubmitOpinionClick: () -> Unit,
+    onSubmitNewsClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
 ) {
     SurfaceCard(accent = SabqTheme.colors.primaryEnd) {
         if (user != null) {
-            SignedInProfile(user = user, onLogoutClick = onLogoutClick)
+            SignedInProfile(
+                user = user,
+                onEditProfileClick = onEditProfileClick,
+                onChangePasswordClick = onChangePasswordClick,
+                onSubmitOpinionClick = onSubmitOpinionClick,
+                onSubmitNewsClick = onSubmitNewsClick,
+                onNotificationsClick = onNotificationsClick,
+            )
         } else {
             SignedOutPrompt(onLoginClick = onLoginClick)
         }
@@ -144,9 +234,16 @@ private fun ProfileSection(
 }
 
 @Composable
-private fun SignedInProfile(user: User, onLogoutClick: () -> Unit) {
+private fun SignedInProfile(
+    user: User,
+    onEditProfileClick: () -> Unit,
+    onChangePasswordClick: () -> Unit,
+    onSubmitOpinionClick: () -> Unit,
+    onSubmitNewsClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Top row: avatar + (name + verified + role + email).
+        // Identity row: avatar + name + verified + role + email
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -169,45 +266,39 @@ private fun SignedInProfile(user: User, onLogoutClick: () -> Unit) {
                             color = SabqTheme.colors.ink,
                         ),
                     )
-                    // Verified seal — shown for staff roles; v1 just
-                    // shows for any user with a role string. Refine
-                    // once isVerified lands on ApiUser.
-                    if (!user.role.isNullOrBlank()) {
+                    if (user.isVerified) {
                         Icon(
                             imageVector = Icons.Filled.Verified,
-                            contentDescription = null,
+                            contentDescription = "موثّق",
                             tint = SabqTheme.colors.primaryEnd,
                             modifier = Modifier.size(14.dp),
                         )
                     }
                 }
 
-                // Role chip with icon.
-                if (!user.role.isNullOrBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            tint = SabqTheme.colors.primaryEnd,
-                            modifier = Modifier.size(11.dp),
-                        )
-                        Text(
-                            text = localizedRole(user.role),
-                            style = SabqTheme.typography.metaSmall.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SabqTheme.colors.primaryEnd,
-                            ),
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = roleIcon(user.primaryRoleKey),
+                        contentDescription = null,
+                        tint = SabqTheme.colors.primaryEnd,
+                        modifier = Modifier.size(11.dp),
+                    )
+                    Text(
+                        text = user.localizedRole,
+                        style = SabqTheme.typography.metaSmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SabqTheme.colors.primaryEnd,
+                        ),
+                    )
                 }
 
-                user.email?.takeIf { it.isNotBlank() }?.let {
+                user.email?.takeIf { it.isNotBlank() }?.let { email ->
                     Text(
-                        text = it,
+                        text = email,
                         style = SabqTheme.typography.metaSmall.copy(
                             fontSize = 12.sp,
                             color = SabqTheme.colors.secondaryInk,
@@ -218,14 +309,14 @@ private fun SignedInProfile(user: User, onLogoutClick: () -> Unit) {
             }
         }
 
-        // Optional job title row.
-        user.jobTitle?.takeIf { it.isNotBlank() && it != localizedRole(user.role) }?.let { title ->
+        // Job title + department row (when set, and not duplicate of role)
+        user.jobTitle?.takeIf { it.isNotBlank() && it != user.localizedRole }?.let { title ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.WorkOutline,
+                    imageVector = Icons.Filled.Business,
                     contentDescription = null,
                     tint = SabqTheme.colors.tertiaryInk,
                     modifier = Modifier.size(12.dp),
@@ -238,16 +329,51 @@ private fun SignedInProfile(user: User, onLogoutClick: () -> Unit) {
                         color = SabqTheme.colors.secondaryInk,
                     ),
                 )
+                user.department?.takeIf { it.isNotBlank() }?.let { dept ->
+                    Text(
+                        text = "·",
+                        style = SabqTheme.typography.metaSmall.copy(color = SabqTheme.colors.tertiaryInk),
+                    )
+                    Text(
+                        text = dept,
+                        style = SabqTheme.typography.metaSmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = SabqTheme.colors.secondaryInk,
+                        ),
+                    )
+                }
             }
         }
 
-        // "تعديل الملف الشخصي" capsule button + logout in same row.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Bio (3 lines max)
+        user.bio?.takeIf { it.isNotBlank() }?.let { bio ->
+            Text(
+                text = bio,
+                style = SabqTheme.typography.meta.copy(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+                maxLines = 3,
+            )
+        }
+
+        // Email not verified warning (orange)
+        if (user.emailVerified == false) {
+            EmailNotVerifiedWarning()
+        }
+
+        // Edit profile capsule
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Row(
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.10f))
-                    .clickable { /* TODO: EditProfileSheet */ }
+                    .clickable { onEditProfileClick() }
                     .padding(horizontal = 16.dp, vertical = 9.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -267,42 +393,206 @@ private fun SignedInProfile(user: User, onLogoutClick: () -> Unit) {
                     ),
                 )
             }
-
             Spacer(modifier = Modifier.weight(1f))
-
-            // Logout capsule (coral tint).
-            Row(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(SabqTheme.colors.coral.copy(alpha = 0.10f))
-                    .clickable { onLogoutClick() }
-                    .padding(horizontal = 16.dp, vertical = 9.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Logout,
-                    contentDescription = null,
-                    tint = SabqTheme.colors.coral,
-                    modifier = Modifier.size(13.dp),
-                )
-                Text(
-                    text = "تسجيل الخروج",
-                    style = SabqTheme.typography.metaSmall.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SabqTheme.colors.coral,
-                    ),
-                )
-            }
         }
+
+        // Role-gated submission cards
+        SubmissionCards(
+            user = user,
+            onSubmitOpinionClick = onSubmitOpinionClick,
+            onSubmitNewsClick = onSubmitNewsClick,
+            onNotificationsClick = onNotificationsClick,
+        )
+
+        // Change password row (inside profile card per iOS)
+        AccountActionsRow(onChangePasswordClick = onChangePasswordClick)
     }
 }
 
 @Composable
-private fun ProfileAvatar(user: User, size: androidx.compose.ui.unit.Dp) {
-    // V1: initial-letter fallback. CachedAsyncImage-backed real avatar
-    // lands once avatar upload is wired (iOS uses `user.avatar`).
+private fun EmailNotVerifiedWarning() {
+    val orange = Color(red = 0.95f, green = 0.55f, blue = 0.20f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(orange.copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.WarningAmber,
+            contentDescription = null,
+            tint = orange,
+            modifier = Modifier.size(13.dp),
+        )
+        Text(
+            text = "لم يتم تأكيد البريد الإلكتروني بعد",
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = orange,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun AccountActionsRow(onChangePasswordClick: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        HorizontalDivider(
+            color = SabqTheme.colors.outline.copy(alpha = 0.5f),
+            thickness = 0.5.dp,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onChangePasswordClick() }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.LockReset,
+                contentDescription = null,
+                tint = SabqTheme.colors.primaryEnd,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = "تغيير كلمة المرور",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SabqTheme.colors.ink,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = SabqTheme.colors.tertiaryInk,
+                modifier = Modifier.size(12.dp),
+            )
+        }
+    }
+}
+
+// MARK: - Submission cards (role-gated)
+
+@Composable
+private fun SubmissionCards(
+    user: User,
+    onSubmitOpinionClick: () -> Unit,
+    onSubmitNewsClick: () -> Unit,
+    onNotificationsClick: () -> Unit,
+) {
+    val writerVisible = user.isWriter || user.isAdminLike
+    val reporterVisible = user.isReporter || user.isAdminLike
+
+    if (!writerVisible && !reporterVisible) return
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        if (writerVisible) {
+            SubmissionCard(
+                title = "إرسال مقالة للنشر",
+                subtitle = "اكتب رأيك أو مقالتك وسنراجعها للنشر",
+                icon = Icons.Filled.Edit,
+                tint = SabqTheme.colors.primaryEnd,
+                onClick = onSubmitOpinionClick,
+            )
+        }
+        if (reporterVisible) {
+            SubmissionCard(
+                title = "إرسال خبر",
+                subtitle = "أرسل خبرك مع الصور — يصل لغرفة الأخبار",
+                icon = Icons.Outlined.Article,
+                tint = SabqTheme.colors.coral,
+                onClick = onSubmitNewsClick,
+            )
+        }
+        SubmissionCard(
+            title = "إشعاراتي التحريرية",
+            subtitle = "متابعة جدولة ونشر ومراجعة محتواك",
+            icon = Icons.Filled.Notifications,
+            tint = SabqTheme.colors.teal,
+            onClick = onNotificationsClick,
+        )
+    }
+}
+
+@Composable
+private fun SubmissionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(tint.copy(alpha = 0.05f), shape)
+            .border(BorderStroke(0.5.dp, tint.copy(alpha = 0.20f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(tint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = title,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = subtitle,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+                maxLines = 2,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+@Composable
+private fun ProfileAvatar(user: User, size: Dp) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val avatarUrl = user.avatarUrl?.takeIf { it.isNotBlank() }
     Box(
         modifier = Modifier
             .size(size)
@@ -310,15 +600,34 @@ private fun ProfileAvatar(user: User, size: androidx.compose.ui.unit.Dp) {
             .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.15f)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = user.displayName.take(1),
-            style = SabqTheme.typography.cardTitle.copy(
-                fontSize = (size.value * 0.38f).sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.primaryEnd,
-            ),
-        )
+        if (avatarUrl != null) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = user.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size),
+                loading = { AvatarInitial(user = user, size = size) },
+                error = { AvatarInitial(user = user, size = size) },
+            )
+        } else {
+            AvatarInitial(user = user, size = size)
+        }
     }
+}
+
+@Composable
+private fun AvatarInitial(user: User, size: Dp) {
+    Text(
+        text = user.displayName.take(1),
+        style = SabqTheme.typography.cardTitle.copy(
+            fontSize = (size.value * 0.38f).sp,
+            fontWeight = FontWeight.Bold,
+            color = SabqTheme.colors.primaryEnd,
+        ),
+    )
 }
 
 @Composable
@@ -339,7 +648,7 @@ private fun SignedOutPrompt(onLoginClick: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Person,
+                    imageVector = Icons.Filled.PersonOff,
                     contentDescription = null,
                     tint = SabqTheme.colors.primaryEnd,
                     modifier = Modifier.size(22.dp),
@@ -351,7 +660,7 @@ private fun SignedOutPrompt(onLoginClick: () -> Unit) {
             ) {
                 Text(
                     text = "تسجيل الدخول",
-                    style = SabqTheme.typography.compactCardTitle.copy(
+                    style = SabqTheme.typography.cardTitle.copy(
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = SabqTheme.colors.ink,
@@ -367,32 +676,32 @@ private fun SignedOutPrompt(onLoginClick: () -> Unit) {
             }
         }
 
-        // Full-width brand-gradient CTA.
-        val ctaShape = RoundedCornerShape(SabqTheme.dimens.chipRadius)
+        val shape = RoundedCornerShape(SabqTheme.dimens.chipRadius)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(ctaShape)
+                .clip(shape)
                 .background(
                     Brush.linearGradient(
                         listOf(SabqTheme.colors.primaryStart, SabqTheme.colors.primaryEnd),
                     ),
-                    ctaShape,
+                    shape,
                 )
                 .clickable { onLoginClick() }
                 .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = Icons.Filled.ArrowCircleRight,
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(16.dp),
             )
+            Spacer(modifier = Modifier.size(8.dp))
             Text(
                 text = "تسجيل الدخول",
-                style = SabqTheme.typography.ctaButton.copy(
+                style = SabqTheme.typography.cardTitle.copy(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -406,7 +715,6 @@ private fun SignedOutPrompt(onLoginClick: () -> Unit) {
 
 @Composable
 private fun LoyaltyEntryRow(onClick: () -> Unit) {
-    // Trophy gold matches iOS rgb(0.96, 0.62, 0.04).
     val trophyGold = Color(red = 0.96f, green = 0.62f, blue = 0.04f)
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
     Row(
@@ -454,9 +762,6 @@ private fun LoyaltyEntryRow(onClick: () -> Unit) {
                 ),
             )
         }
-        // chevron.backward — points into the row's trailing edge,
-        // which in RTL is the LEFT side. Compose's autoMirrored
-        // ArrowBack handles the flip for us.
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = null,
@@ -466,49 +771,76 @@ private fun LoyaltyEntryRow(onClick: () -> Unit) {
     }
 }
 
-// MARK: - Display section
+// MARK: - Display
 
 @Composable
 private fun DisplaySection(viewModel: SettingsViewModel, settings: com.sabq.smart.data.AppSettings) {
     SurfaceCard {
-        SectionTitle("العرض", "الوضع، الألوان، حجم الخط")
+        SectionHeader(
+            title = "العرض",
+            subtitle = "تخصيص مظهر التطبيق",
+            icon = Icons.Filled.PhotoCamera,
+            tint = SabqTheme.colors.primaryEnd,
+        )
 
-        SettingsRow(
-            title = "الوضع المظلم",
-            subtitle = if (settings.followsSystemDark)
-                "يتبع إعدادات النظام تلقائياً"
-            else if (settings.isDarkMode) "مفعّل" else "متوقّف",
+        // Dark mode toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(
+                    text = "الوضع الداكن",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SabqTheme.colors.ink,
+                    ),
+                )
+                Text(
+                    text = if (settings.followsSystemDark) "يتبع إعدادات النظام تلقائياً"
+                    else "تفعيل المظهر الداكن",
+                    style = SabqTheme.typography.metaSmall.copy(
+                        fontSize = 13.sp,
+                        color = SabqTheme.colors.secondaryInk,
+                    ),
+                )
+            }
             Switch(
                 checked = if (settings.followsSystemDark)
                     androidx.compose.foundation.isSystemInDarkTheme()
                 else settings.isDarkMode,
-                onCheckedChange = { viewModel.setDarkMode(it) },
+                onCheckedChange = {
+                    if (settings.followsSystemDark) viewModel.setFollowsSystem(false)
+                    viewModel.setDarkMode(it)
+                },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = SabqTheme.colors.surface,
+                    checkedThumbColor = Color.White,
                     checkedTrackColor = SabqTheme.colors.primaryEnd,
-                    uncheckedThumbColor = SabqTheme.colors.surface,
+                    uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = SabqTheme.colors.outline,
                 ),
             )
         }
-        SettingsRow(
-            title = "اتباع إعدادات النظام",
-            subtitle = "ينطبق الوضع المظلم عند تفعيله في الجهاز",
-        ) {
-            Switch(
-                checked = settings.followsSystemDark,
-                onCheckedChange = { viewModel.setFollowsSystem(it) },
-            )
-        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Accent colour picker
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
                 text = "لون التطبيق",
-                style = SabqTheme.typography.chipLabel,
-                color = SabqTheme.colors.ink,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SabqTheme.colors.ink,
+                ),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 SabqAccent.entries.forEach { accent ->
                     AccentDot(
                         accent = accent,
@@ -519,101 +851,74 @@ private fun DisplaySection(viewModel: SettingsViewModel, settings: com.sabq.smar
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Font size slider with preview
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = "حجم الخط",
+                        style = SabqTheme.typography.cardTitle.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SabqTheme.colors.ink,
+                        ),
+                    )
+                    Text(
+                        text = "حجم النص: ${settings.articleFontSize.toInt()}",
+                        style = SabqTheme.typography.metaSmall.copy(
+                            fontSize = 13.sp,
+                            color = SabqTheme.colors.secondaryInk,
+                        ),
+                    )
+                }
+                SmallSquareBadge(icon = Icons.Filled.Article, tint = SabqTheme.colors.primaryEnd)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "حجم خط المقال",
-                    style = SabqTheme.typography.chipLabel,
-                    color = SabqTheme.colors.ink,
+                    text = "أ",
+                    style = SabqTheme.typography.metaSmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SabqTheme.colors.tertiaryInk,
+                    ),
+                )
+                Slider(
+                    value = settings.articleFontSize,
+                    onValueChange = { viewModel.setFontSize(it) },
+                    valueRange = 14f..24f,
+                    steps = 9,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = SabqTheme.colors.primaryEnd,
+                        activeTrackColor = SabqTheme.colors.primaryEnd,
+                        inactiveTrackColor = SabqTheme.colors.outline,
+                    ),
                 )
                 Text(
-                    text = "${settings.articleFontSize.toInt()} نقطة",
-                    style = SabqTheme.typography.meta,
-                    color = SabqTheme.colors.secondaryInk,
+                    text = "أ",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SabqTheme.colors.ink,
+                    ),
                 )
             }
-            Slider(
-                value = settings.articleFontSize,
-                onValueChange = { viewModel.setFontSize(it) },
-                valueRange = 14f..24f,
-                steps = 9,
-                colors = SliderDefaults.colors(
-                    thumbColor = SabqTheme.colors.primaryEnd,
-                    activeTrackColor = SabqTheme.colors.primaryEnd,
-                    inactiveTrackColor = SabqTheme.colors.outline,
+            Text(
+                text = "معاينة حجم الخط في المقالات",
+                style = SabqTheme.typography.body.copy(
+                    fontSize = settings.articleFontSize.sp,
+                    color = SabqTheme.colors.secondaryInk,
                 ),
             )
-            Text(
-                text = "معاينة: الصحة تدعو حجاج بيت الله لارتداء السوار التعريفي",
-                style = SabqTheme.typography.body,
-                color = SabqTheme.colors.ink,
-            )
         }
-    }
-}
-
-@Composable
-private fun AboutSection() {
-    SurfaceCard {
-        SectionTitle("عن سبق", "الإصدار الأصلي على Android")
-        Text(
-            "صحيفة إلكترونية سعودية تتميز بالسبق في تقديم الأخبار العاجلة والتحليلات السياسية والاقتصادية والرياضية والتقنية على مدار الساعة.",
-            style = SabqTheme.typography.excerpt,
-            color = SabqTheme.colors.secondaryInk,
-        )
-        Text(
-            "الإصدار 10.0.0-native — قيد التطوير",
-            style = SabqTheme.typography.meta,
-            color = SabqTheme.colors.tertiaryInk,
-        )
-        Text(
-            "صنع بكل حب في السعودية",
-            style = SabqTheme.typography.meta,
-            color = SabqTheme.colors.tertiaryInk,
-        )
-    }
-}
-
-// MARK: - Shared atoms
-
-@Composable
-private fun SectionTitle(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = title,
-            style = SabqTheme.typography.sectionHeader,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = subtitle,
-            style = SabqTheme.typography.meta,
-            color = SabqTheme.colors.tertiaryInk,
-        )
-    }
-}
-
-@Composable
-private fun SettingsRow(
-    title: String,
-    subtitle: String,
-    trailing: @Composable () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(text = title, style = SabqTheme.typography.chipLabel, color = SabqTheme.colors.ink)
-            Text(text = subtitle, style = SabqTheme.typography.metaSmall, color = SabqTheme.colors.tertiaryInk)
-        }
-        trailing()
     }
 }
 
@@ -625,7 +930,10 @@ private fun AccentDot(
 ) {
     val isDark = SabqTheme.colors.isDark
     val color = if (isDark) accent.dark else accent.light
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -633,39 +941,347 @@ private fun AccentDot(
                 .background(color)
                 .border(
                     width = if (selected) 3.dp else 0.dp,
-                    color = SabqTheme.colors.ink.copy(alpha = if (selected) 0.5f else 0f),
+                    color = Color.White,
                     shape = CircleShape,
                 )
                 .clickable { onClick() },
         )
         Text(
             text = accent.arabicName,
-            style = SabqTheme.typography.metaSmall,
-            color = SabqTheme.colors.secondaryInk,
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 11.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) color else SabqTheme.colors.tertiaryInk,
+            ),
         )
     }
 }
 
-private val SabqAccent.arabicName: String
-    get() = when (this) {
-        SabqAccent.Blue -> "أزرق"
-        SabqAccent.Teal -> "أخضر"
-        SabqAccent.Purple -> "بنفسجي"
-        SabqAccent.Rose -> "وردي"
-        SabqAccent.Orange -> "برتقالي"
-    }
+// MARK: - Subscription
 
-/** Localise role keys to Arabic display names. Mirrors
- *  iOS APIUser.localizedRole — the canonical mapping for keys like
- *  "admin" → "مسؤول", "reporter" → "مراسل", etc. */
-private fun localizedRole(roleKey: String?): String = when (roleKey?.lowercase()) {
-    "admin", "system_admin", "superadmin" -> "مسؤول"
-    "editor", "chief_editor" -> "محرر"
-    "reporter", "correspondent", "journalist" -> "مراسل"
-    "writer", "author", "columnist", "opinion_author", "article_author" -> "كاتب"
-    "subscriber", "premium" -> "مشترك"
-    "member" -> "عضو"
-    "reader" -> "قارئ"
-    null, "" -> "قارئ"
-    else -> roleKey
+@Composable
+private fun SubscriptionSection(onNewsletterClick: () -> Unit) {
+    SurfaceCard(accent = SabqTheme.colors.teal) {
+        SectionHeader(
+            title = "اشتراكات",
+            subtitle = "ابقَ على اطلاع دائم",
+            icon = Icons.Filled.Email,
+            tint = SabqTheme.colors.teal,
+        )
+        SettingsRow(
+            title = "النشرة البريدية",
+            subtitle = "اشترك في ملخص الأخبار اليومي",
+            icon = Icons.Filled.Inbox,
+            tint = SabqTheme.colors.teal,
+            onClick = onNewsletterClick,
+        )
+    }
+}
+
+// MARK: - About
+
+@Composable
+private fun AboutSection(
+    onPrivacyClick: () -> Unit,
+    onTermsClick: () -> Unit,
+    onOpenWebsite: () -> Unit,
+    onOpenTwitter: () -> Unit,
+    onContactClick: () -> Unit,
+) {
+    SurfaceCard(accent = SabqTheme.colors.primaryEnd) {
+        SectionHeader(
+            title = "عن سبق",
+            subtitle = "صحيفة إلكترونية سعودية",
+            icon = Icons.Filled.Campaign,
+            tint = SabqTheme.colors.primaryEnd,
+        )
+        Text(
+            text = "سبق.. حيث يلتقي الخبر الموثوق بذكاء المستقبل ✨. تغطية لحظية لا تتوقف، بتقنيات الذكاء الاصطناعي وأقلام محررين من قلب الحدث.",
+            style = SabqTheme.typography.body.copy(
+                fontSize = 15.sp,
+                color = SabqTheme.colors.secondaryInk,
+            ),
+        )
+        SettingsRow(
+            title = "خصوصيتك أولاً",
+            subtitle = "كيف نحمي بياناتك الشخصية؟",
+            icon = Icons.Filled.Security,
+            tint = SabqTheme.colors.leaf,
+            onClick = onPrivacyClick,
+        )
+        SettingsRow(
+            title = "شروط الاستخدام",
+            subtitle = "اعرف حقوقك وحقوقنا",
+            icon = Icons.Filled.Description,
+            tint = SabqTheme.colors.sky,
+            onClick = onTermsClick,
+        )
+        SettingsRow(
+            title = "اقرأ أكثر على موقعنا",
+            subtitle = "sabq.org",
+            icon = Icons.Filled.Language,
+            tint = SabqTheme.colors.primaryEnd,
+            trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+            onClick = onOpenWebsite,
+        )
+        SettingsRow(
+            title = "تابعنا على إكس",
+            subtitle = "@sabqorg آخر الأخبار لحظة بلحظة",
+            icon = Icons.Filled.AlternateEmail,
+            tint = SabqTheme.colors.sky,
+            trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+            onClick = onOpenTwitter,
+        )
+        SettingsRow(
+            title = "راسلنا",
+            subtitle = "آراؤك تهمنا، نرد في أقرب وقت",
+            icon = Icons.Filled.Email,
+            tint = SabqTheme.colors.teal,
+            onClick = onContactClick,
+        )
+    }
+}
+
+// MARK: - Danger
+
+@Composable
+private fun AccountDangerSection(
+    onClearDataClick: () -> Unit,
+    onDeleteAccountClick: () -> Unit,
+    onLogoutClick: () -> Unit,
+) {
+    SurfaceCard(accent = SabqTheme.colors.coral) {
+        SectionHeader(
+            title = "منطقة الخطر",
+            subtitle = "إجراءات تخصّ حسابك وبياناتك",
+            icon = Icons.Filled.WarningAmber,
+            tint = SabqTheme.colors.coral,
+        )
+        DangerRow(
+            title = "مسح البيانات المحلية",
+            subtitle = "إزالة المقالات المحفوظة وعمليات البحث والكلمات المتابعة من هذا الجهاز. لن يتأثر حسابك.",
+            icon = Icons.Filled.Inbox,
+            onClick = onClearDataClick,
+        )
+        DangerRow(
+            title = "حذف الحساب",
+            subtitle = "حذف نهائي لحسابك وكل بياناتك من سبق. لا يمكن التراجع عن هذه الخطوة.",
+            icon = Icons.Filled.PersonOff,
+            onClick = onDeleteAccountClick,
+        )
+        DangerRow(
+            title = "تسجيل الخروج",
+            subtitle = "إنهاء جلستك على هذا الجهاز. يمكنك تسجيل الدخول مجددًا في أي وقت.",
+            icon = Icons.Filled.Logout,
+            onClick = onLogoutClick,
+        )
+    }
+}
+
+@Composable
+private fun DangerRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SmallSquareBadge(icon = icon, tint = SabqTheme.colors.coral)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SabqTheme.colors.coral,
+                ),
+            )
+            Text(
+                text = subtitle,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 13.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+// MARK: - App info
+
+@Composable
+private fun AppInfoSection() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.sabq_logo),
+            contentDescription = "سبق",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.height(56.dp),
+        )
+        Text(
+            text = "الإصدار 10.0.0 (native)",
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = SabqTheme.colors.tertiaryInk,
+            ),
+        )
+        Text(
+            text = "صنع بكل حب في السعودية 🇸🇦",
+            style = SabqTheme.typography.metaSmall.copy(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = SabqTheme.colors.secondaryInk,
+            ),
+        )
+    }
+}
+
+// MARK: - Shared atoms
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    tint: Color,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SmallSquareBadge(icon = icon, tint = tint)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                style = SabqTheme.typography.sectionHeader.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = subtitle,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 13.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    tint: Color,
+    trailingIcon: ImageVector = Icons.AutoMirrored.Filled.ArrowBack,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SmallSquareBadge(icon = icon, tint = tint)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = title,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = subtitle,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 13.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = trailingIcon,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(13.dp),
+        )
+    }
+}
+
+@Composable
+private fun SmallSquareBadge(icon: ImageVector, tint: Color) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(tint.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(15.dp),
+        )
+    }
+}
+
+// MARK: - Role icons
+
+@Composable
+private fun roleIcon(key: String?): ImageVector = when (key?.lowercase()) {
+    "admin", "system_admin", "system-admin" -> Icons.Filled.AdminPanelSettings
+    "editor", "editor_in_chief", "editor-in-chief",
+    "senior_editor", "senior-editor",
+    "managing_editor", "managing-editor",
+    "editorial_manager", "editorial-manager",
+    -> Icons.Filled.Edit
+    "journalist", "reporter", "correspondent",
+    "writer", "author",
+    "article_writer", "article-writer",
+    "article_author", "article-author",
+    "opinion_author", "opinion-author",
+    -> Icons.Outlined.Article
+    "columnist" -> Icons.Filled.FormatQuote
+    "photographer" -> Icons.Filled.Camera
+    "moderator", "comments_moderator", "comments-moderator" -> Icons.Filled.Flag
+    "publisher" -> Icons.Filled.Campaign
+    "contributor" -> Icons.Filled.Send
+    else -> Icons.Filled.CheckCircle
 }
