@@ -574,29 +574,37 @@ export default function Profile() {
         >
           {/* Tier accent stripe at the top */}
           <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${heroTier.color}, transparent)` }} />
-          <CardContent className="p-6 sm:p-8">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-8 items-start">
-              <div className="flex flex-col sm:flex-row gap-6 items-start">
+          <CardContent className="p-5 sm:p-7">
+            {/* 2026-05-19 rev — declutter the hero. The previous layout
+                stacked four chips of different sizes (tier, role, press
+                card) next to the name, with mismatched primary/outline
+                buttons below. The tier chip was redundant with the
+                LoyaltyCard. Now: avatar + name + email + ONE compact
+                meta row (role + press, both same neutral chip style),
+                then two same-size buttons. On mobile everything centers
+                so the wrap doesn't look chaotic. */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-6 lg:gap-8 items-center">
+              <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 items-center sm:items-start text-center sm:text-right">
               {/* Avatar with tier ring */}
               <div className="relative shrink-0">
                 <div
                   className="rounded-full p-1"
                   style={{ background: `linear-gradient(135deg, ${heroTier.color}, ${heroTier.color}66)` }}
                 >
-                  <Avatar className="h-32 w-32 border-4 border-background shadow-xl">
+                  <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-xl">
                     <AvatarImage
                       src={user.profileImageUrl || ""}
                       alt={getUserDisplayName()}
                       className="object-cover"
                       data-testid="img-profile-avatar"
                     />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl sm:text-3xl">
                       {getInitials()}
                     </AvatarFallback>
                   </Avatar>
                 </div>
 
-                <div className="absolute -bottom-2 -right-2">
+                <div className="absolute -bottom-1 -right-1">
                   <input
                     id="avatar-file-input"
                     type="file"
@@ -610,73 +618,73 @@ export default function Profile() {
                     type="button"
                     variant="default"
                     size="icon"
-                    className="h-10 w-10 rounded-full shadow-lg"
+                    className="h-8 w-8 rounded-full shadow-md"
                     disabled={isUploadingAvatar}
                     onClick={() => document.getElementById("avatar-file-input")?.click()}
                     data-testid="button-upload-avatar"
+                    aria-label="تغيير الصورة الشخصية"
                   >
-                    <Upload className="h-4 w-4" />
+                    <Upload className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
 
               {/* Info */}
-              <div className="flex-1 space-y-4">
-                <div className="space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <h1 className="text-3xl font-bold" data-testid="text-profile-name">
-                      {getUserDisplayName()}
-                    </h1>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-                        style={{
-                          backgroundColor: `${heroTier.color}1a`,
-                          color: heroTier.color,
-                          border: `1px solid ${heroTier.color}55`,
-                        }}
-                        data-testid="badge-tier-hero"
-                      >
-                        <Trophy className="h-3 w-3" />
-                        {heroTier.nameAr}
-                      </span>
-                      {getRoleBadge(user.role)}
-                      {user.hasPressCard && (
-                        <Badge variant="outline" className="gap-1" data-testid="badge-press-card">
-                          <IdCard className="h-3 w-3" />
-                          صحفي معتمد
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-muted-foreground" data-testid="text-profile-email">
+              <div className="flex-1 min-w-0 space-y-3">
+                <div className="space-y-1">
+                  <h1
+                    className="text-2xl sm:text-3xl font-bold leading-tight truncate"
+                    data-testid="text-profile-name"
+                  >
+                    {getUserDisplayName()}
+                  </h1>
+                  <p
+                    className="text-sm text-muted-foreground truncate"
+                    data-testid="text-profile-email"
+                  >
                     {user.email}
                   </p>
-                  {user.bio && !isEditingProfile && (
-                    <p className="text-foreground/80 max-w-2xl leading-relaxed">
-                      {user.bio}
-                    </p>
+                </div>
+
+                {/* Compact meta row — role + press credential only. Tier
+                    badge lives on the loyalty card to its left, so we
+                    don't repeat it here. */}
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
+                  {getRoleBadge(user.role)}
+                  {user.hasPressCard && (
+                    <Badge variant="outline" className="gap-1 font-normal" data-testid="badge-press-card">
+                      <IdCard className="h-3 w-3" />
+                      صحفي معتمد
+                    </Badge>
                   )}
                 </div>
 
-                {/* Quick Actions */}
-                <div className="flex flex-wrap gap-2">
+                {user.bio && !isEditingProfile && (
+                  <p className="text-sm text-foreground/80 max-w-2xl leading-relaxed">
+                    {user.bio}
+                  </p>
+                )}
+
+                {/* Quick Actions — same size, same variant family so
+                    they read as a unit. Full width on mobile, inline on
+                    sm+. */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-1 w-full sm:w-auto">
                   <Button
                     variant="default"
                     size="sm"
-                    className="gap-2"
+                    className="gap-2 w-full sm:w-auto"
                     onClick={() => setIsEditingProfile(!isEditingProfile)}
                     data-testid="button-edit-profile"
                   >
                     <Edit className="h-4 w-4" />
-                    {isEditingProfile ? "إلغاء" : "تعديل الملف الشخصي"}
+                    {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
                   </Button>
 
                   {hasRole(user, "editor", "admin", "system_admin") && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2"
+                      className="gap-2 w-full sm:w-auto"
                       asChild
                       data-testid="button-go-to-dashboard"
                     >
