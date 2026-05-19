@@ -91,6 +91,12 @@ struct ContentView: View {
                 .navigationDestination(for: EditorialNotificationsRoute.self) { _ in
                     EditorialNotificationsView()
                 }
+                .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
+                    LoyaltyAccountView()
+                }
+                .navigationDestination(for: PressCardRoute.self) { _ in
+                    PressCardActivationView()
+                }
                 .navigationDestination(for: ArticleSlugRoute.self) { route in
                     // Wraps a slug-based deep link in the existing
                     // article detail view by hydrating a minimal Article

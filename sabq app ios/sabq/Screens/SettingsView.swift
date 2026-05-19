@@ -548,7 +548,7 @@ struct SettingsView: View {
     // the display/subscription rows. Avoids duplicating the full hero
     // card here — that lives inside LoyaltyAccountView.
     private var loyaltyEntrySection: some View {
-        NavigationLink(destination: LoyaltyAccountView().environment(authStore)) {
+        NavigationLink(value: LoyaltyAccountRoute()) {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -591,15 +591,15 @@ struct SettingsView: View {
     // لك" message inside PressCardActivationView rather than silently
     // hiding the feature.
     private var pressCardEntrySection: some View {
-        NavigationLink(destination: PressCardActivationView().environment(authStore)) {
+        NavigationLink(value: PressCardRoute()) {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 0.60, green: 0.10, blue: 0.16).opacity(0.14))
+                        .fill(Color(red: 0.11, green: 0.64, blue: 0.94).opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.60, green: 0.10, blue: 0.16))
+                        .foregroundStyle(Color(red: 0.11, green: 0.64, blue: 0.94))
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("بطاقتي الصحفية")

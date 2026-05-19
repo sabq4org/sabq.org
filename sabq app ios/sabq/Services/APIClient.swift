@@ -1056,6 +1056,12 @@ actor APIClient {
         let hasPass: Bool
         let serialNumber: String?
         let issuedAt: String?
+        /// Localized Arabic role label, computed server-side using the
+        /// SAME map PressPassBuilder will burn onto the .pkpass. The
+        /// activation-screen preview reads this so it never disagrees
+        /// with the printed card.
+        let roleLabel: String?
+        let jobTitle: String?
     }
 
 

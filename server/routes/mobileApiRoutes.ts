@@ -5138,6 +5138,27 @@ function isPressCardEligible(row: { role: string | null; hasPressCard: boolean |
   return false;
 }
 
+// Mirror of PressPassBuilder.translateRole. Kept in sync by hand
+// (the press card route exposes this label to iOS via
+// /wallet/press/status so the activation-screen preview shows the
+// EXACT string that will be printed on the .pkpass).
+const PRESS_CARD_ROLE_LABELS: Record<string, string> = {
+  admin: 'مدير',
+  system_admin: 'مدير النظام',
+  chief_editor: 'رئيس التحرير',
+  editor: 'محرر',
+  journalist: 'صحفي',
+  reporter: 'مراسل',
+  opinion_author: 'كاتب رأي',
+  publisher: 'ناشر',
+  reader: 'قارئ',
+};
+
+function pressCardRoleLabel(role: string | null | undefined): string {
+  if (!role) return 'عضو سبق';
+  return PRESS_CARD_ROLE_LABELS[role] || role;
+}
+
 // GET /api/v1/wallet/press/status
 //   { authorized: boolean, hasPass: boolean, serialNumber?: string, issuedAt?: string }
 router.get("/wallet/press/status", async (req: Request, res: Response) => {
@@ -5161,6 +5182,11 @@ router.get("/wallet/press/status", async (req: Request, res: Response) => {
       hasPass: !!pass,
       serialNumber: pass?.serialNumber ?? null,
       issuedAt: pass?.createdAt ?? null,
+      // Same role label PressPassBuilder will burn onto the .pkpass.
+      // iOS uses this so the activation-screen preview matches the
+      // printed card exactly (no more local switch-statement drift).
+      roleLabel: pressCardRoleLabel(userRow.role),
+      jobTitle: userRow.jobTitle ?? null,
     });
   } catch (error) {
     console.error("[Mobile API] GET /wallet/press/status error:", error);

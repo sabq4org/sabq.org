@@ -17,18 +17,12 @@ struct PressCardActivationView: View {
     @State private var pendingPass: PKPass?
     @State private var showAddSheet = false
 
-    private var roleAr: String {
-        switch authStore.currentUser?.role ?? "" {
-        case "admin", "system_admin": "مدير"
-        case "chief_editor":          "رئيس التحرير"
-        case "editor":                "محرر"
-        case "journalist":            "صحفي"
-        case "reporter":              "مراسل"
-        case "opinion_author":        "كاتب رأي"
-        case "publisher":             "ناشر"
-        default:                      "عضو سبق"
-        }
-    }
+    // No local role mapping — the activation-screen preview reads the
+    // role label straight from /api/v1/wallet/press/status, which
+    // computes it via the same map PressPassBuilder uses to print
+    // the actual .pkpass. That keeps the preview and the printed
+    // card from drifting (the previous local switch said "مدير"
+    // for system_admin while the printed card said "مدير النظام").
 
     private var userName: String {
         let f = authStore.currentUser?.firstName ?? ""
@@ -79,8 +73,8 @@ struct PressCardActivationView: View {
     private func authorizedBody(status: APIClient.APIPressPassStatus) -> some View {
         PressCardView(
             userName: userName,
-            roleAr: roleAr,
-            jobTitle: nil,
+            roleAr: status.roleLabel ?? "عضو سبق",
+            jobTitle: status.jobTitle,
             department: nil,
             pressIdNumber: status.serialNumber,
             validUntil: nil,
@@ -194,7 +188,8 @@ struct PressCardActivationView: View {
             // unauthorized state so the user gets a clear message.
             status = APIClient.APIPressPassStatus(
                 success: false, authorized: false, hasPass: false,
-                serialNumber: nil, issuedAt: nil
+                serialNumber: nil, issuedAt: nil,
+                roleLabel: nil, jobTitle: nil
             )
         }
     }

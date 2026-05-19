@@ -154,6 +154,19 @@ struct LiveCoverageRoute: Hashable {}
 /// live-events table.
 struct MomentByMomentRoute: Hashable {}
 
+/// Push the loyalty account screen ("نقاطي والمكافآت") onto the active
+/// navigation stack. Defined here so SettingsView can use value-based
+/// NavigationLink, which keeps ContentView.navigationPath in sync —
+/// without that, tapping the tab bar's Home icon while inside the
+/// screen used to silently no-op because the pop-to-root logic was
+/// gated on `navigationPath.isEmpty`.
+struct LoyaltyAccountRoute: Hashable {}
+
+/// Push the "بطاقتي الصحفية" Apple Wallet activation screen. Same
+/// rationale as LoyaltyAccountRoute — value-based so the tab bar can
+/// pop us back out cleanly.
+struct PressCardRoute: Hashable {}
+
 // MARK: - Article Category
 
 enum ArticleCategory: String, CaseIterable, Identifiable {

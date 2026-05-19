@@ -425,6 +425,13 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
+            // The whole app runs in RTL (.sabqRTL()), which flips
+            // `.topLeading` alignment to actually anchor at top-RIGHT.
+            // Our offset math assumes top-LEFT origin (x grows to the
+            // right, focal.x = 0 ⇒ left edge), so we force LTR here to
+            // keep the coordinate system consistent. The image content
+            // itself is just pixels — it doesn't get mirrored.
+            .environment(\.layoutDirection, .leftToRight)
         }
         .task(id: url) {
             await loadImage(for: url)
