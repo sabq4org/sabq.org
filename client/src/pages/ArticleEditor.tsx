@@ -1483,6 +1483,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       
       const albumSource = Array.isArray(albumImages) ? albumImages : [];
       const safeAlbumImages = albumSource.filter(url => typeof url === 'string' && url.trim().length > 0);
+      const normalizedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
+      const normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
       console.log('[Save Article] Album images count:', safeAlbumImages.length, 'original:', albumImages?.length);
       
       const articleData: any = {
@@ -1502,8 +1504,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         scheduledAt: publishType === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         hideFromHomepage,
         isVideoTemplate,
-        videoUrl: videoUrl || null,
-        videoThumbnailUrl: videoThumbnailUrl || null,
+        videoUrl: isVideoTemplate && normalizedVideoUrl ? normalizedVideoUrl : null,
+        videoThumbnailUrl: isVideoTemplate && normalizedVideoThumbnailUrl ? normalizedVideoThumbnailUrl : null,
         status: publishNow 
           ? (publishType === "scheduled" ? "scheduled" : "published")
           : "draft",

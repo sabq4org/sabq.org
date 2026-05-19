@@ -300,7 +300,10 @@ async function throwIfResNotOk(res: Response, silent = false) {
     try {
       const data = JSON.parse(text);
       if (data.message) {
-        throw new Error(data.message);
+        if (data.errors) {
+          console.error("[API] Validation errors:", data.errors);
+        }
+        throw new Error(formatApiErrorMessage(data.message, data.errors));
       }
     } catch (e) {
       if (e instanceof Error && e.message !== text) {
@@ -310,6 +313,20 @@ async function throwIfResNotOk(res: Response, silent = false) {
     
     throw new Error(`${res.status}: ${text}`);
   }
+}
+
+function formatApiErrorMessage(message: string, errors: any): string {
+  const fieldErrors = errors?.fieldErrors ?? errors;
+  if (!fieldErrors || typeof fieldErrors !== "object") {
+    return message;
+  }
+
+  const details = Object.entries(fieldErrors)
+    .filter(([, value]) => Array.isArray(value) && value.length > 0)
+    .map(([field, value]) => `${field}: ${(value as string[]).join(", ")}`)
+    .join(" | ");
+
+  return details ? `${message} - ${details}` : message;
 }
 
 export async function apiRequest<T = any>(

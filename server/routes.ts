@@ -433,6 +433,41 @@ function processFocalPointResult(result: FocalPointResult): { data: { x: number;
   return { data, shouldSave: true };
 }
 
+function sanitizeArticleUpdatePayload(body: any) {
+  const sanitizedBody = { ...body };
+  const optionalNullableFields = [
+    'excerpt', 'subtitle', 'slug', 'imageUrl', 'thumbnailUrl',
+    'categoryId', 'reporterId', 'videoUrl', 'videoThumbnailUrl',
+    'aiSummary', 'scheduledAt', 'publishedAt'
+  ];
+
+  for (const field of optionalNullableFields) {
+    if (sanitizedBody[field] === null) {
+      delete sanitizedBody[field];
+    }
+  }
+
+  const isVideoTemplateEnabled = sanitizedBody.isVideoTemplate === true;
+  for (const field of ['videoUrl', 'videoThumbnailUrl']) {
+    if (typeof sanitizedBody[field] === 'string') {
+      sanitizedBody[field] = sanitizedBody[field].trim();
+    }
+    if (!isVideoTemplateEnabled || sanitizedBody[field] === '') {
+      delete sanitizedBody[field];
+    }
+  }
+
+  if (sanitizedBody.categoryId === '') {
+    delete sanitizedBody.categoryId;
+  }
+
+  if (sanitizedBody.content && typeof sanitizedBody.content === "string") {
+    sanitizedBody.content = sanitizeArticleHtml(sanitizedBody.content);
+  }
+
+  return sanitizedBody;
+}
+
 export async function registerRoutes(app: Express, httpServer: Server): Promise<Server> {
   const AI_BULLETS_TTL_MS = 30 * 60 * 1000;
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
@@ -6996,28 +7031,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Preprocess request body: convert null values to undefined for optional fields
-      // This handles cases where the client sends null but schema expects undefined
-      const sanitizedBody = { ...req.body };
-      const optionalNullableFields = [
-        'excerpt', 'subtitle', 'slug', 'imageUrl', 'thumbnailUrl', 
-        'categoryId', 'reporterId', 'videoUrl', 'videoThumbnailUrl',
-        'aiSummary', 'scheduledAt', 'publishedAt'
-      ];
-      for (const field of optionalNullableFields) {
-        if (sanitizedBody[field] === null) {
-          delete sanitizedBody[field];
-        }
-      }
-      // Convert empty string categoryId to undefined
-      if (sanitizedBody.categoryId === '') {
-        delete sanitizedBody.categoryId;
-      }
-
-      // Sanitize HTML content: strip empty spans + default-black color styles (SEO + cleanliness)
-      if (sanitizedBody.content && typeof sanitizedBody.content === "string") {
-        sanitizedBody.content = sanitizeArticleHtml(sanitizedBody.content);
-      }
+      const sanitizedBody = sanitizeArticleUpdatePayload(req.body);
 
       const parsed = updateArticleSchema.safeParse(sanitizedBody);
 
@@ -25640,9 +25654,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(403).json({ message: "You don't have permission to edit this opinion article" });
       }
 
-      const parsed = updateArticleSchema.safeParse(req.body);
+      const sanitizedBody = sanitizeArticleUpdatePayload(req.body);
+      const parsed = updateArticleSchema.safeParse(sanitizedBody);
 
       if (!parsed.success) {
+        console.error("[OPINION ARTICLE UPDATE] Validation failed:", JSON.stringify(parsed.error.flatten(), null, 2));
+        console.error("[OPINION ARTICLE UPDATE] Request body keys:", Object.keys(req.body));
         return res.status(400).json({
           message: "Invalid data",
           errors: parsed.error.flatten(),
