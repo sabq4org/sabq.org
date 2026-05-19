@@ -13,7 +13,7 @@ import { ar } from "date-fns/locale";
 type FilterType = "all" | "passed" | "failed";
 
 export default function QualityChecksTab() {
-  const [selectedCheck, setSelectedCheck] = useState<IfoxQualityCheck | null>(null);
+  const [selectedCheck, setSelectedCheck] = useState<any | null>(null);
   const [filter, setFilter] = useState<FilterType>("all");
 
   const { data: checksRaw, isLoading } = useQuery<IfoxQualityCheck[]>({
@@ -205,13 +205,13 @@ export default function QualityChecksTab() {
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                   <div className="text-sm text-muted-foreground">النتيجة الإجمالية</div>
-                  <div className="text-3xl font-bold">{selectedCheck.overallScore}/100</div>
+                  <div className="text-3xl font-bold">{Number(selectedCheck.overallScore)}/100</div>
                 </div>
                 <Badge
-                  variant={selectedCheck.passed ? "default" : "destructive"}
+                  variant={Boolean(selectedCheck.passed) ? "default" : "destructive"}
                   className="text-lg px-4 py-2"
                 >
-                  {selectedCheck.passed ? "ناجح" : "فاشل"}
+                  {Boolean(selectedCheck.passed) ? "ناجح" : "فاشل"}
                 </Badge>
               </div>
 
@@ -219,52 +219,52 @@ export default function QualityChecksTab() {
               <div className="space-y-4">
                 <h3 className="font-semibold">درجات العناصر المفحوصة</h3>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {selectedCheck.grammarScore !== null && selectedCheck.grammarScore !== undefined && (
+	                  {selectedCheck.grammarScore != null && (
                     <ScoreCard
                       label="النحو والإملاء"
-                      score={selectedCheck.grammarScore}
+                      score={Number(selectedCheck.grammarScore)}
                       testId="score-grammar"
                     />
                   )}
-                  {selectedCheck.readabilityScore !== null && selectedCheck.readabilityScore !== undefined && (
+	                  {selectedCheck.readabilityScore != null && (
                     <ScoreCard
                       label="القابلية للقراءة"
-                      score={selectedCheck.readabilityScore}
+	                      score={Number(selectedCheck.readabilityScore)}
                       testId="score-readability"
                     />
                   )}
-                  {selectedCheck.factualAccuracyScore !== null && selectedCheck.factualAccuracyScore !== undefined && (
+	                  {selectedCheck.factualAccuracyScore != null && (
                     <ScoreCard
                       label="الدقة الواقعية"
-                      score={selectedCheck.factualAccuracyScore}
+	                      score={Number(selectedCheck.factualAccuracyScore)}
                       testId="score-factual"
                     />
                   )}
-                  {selectedCheck.seoScore !== null && selectedCheck.seoScore !== undefined && (
+	                  {selectedCheck.seoScore != null && (
                     <ScoreCard
                       label="تحسين محركات البحث"
-                      score={selectedCheck.seoScore}
+	                      score={Number(selectedCheck.seoScore)}
                       testId="score-seo"
                     />
                   )}
-                  {selectedCheck.biasScore !== null && selectedCheck.biasScore !== undefined && (
+	                  {selectedCheck.biasScore != null && (
                     <ScoreCard
                       label="الحيادية"
-                      score={selectedCheck.biasScore}
+	                      score={Number(selectedCheck.biasScore)}
                       testId="score-bias"
                     />
                   )}
-                  {selectedCheck.originalityScore !== null && selectedCheck.originalityScore !== undefined && (
+	                  {selectedCheck.originalityScore != null && (
                     <ScoreCard
                       label="الأصالة"
-                      score={selectedCheck.originalityScore}
+                      score={Number(selectedCheck.originalityScore)}
                       testId="score-originality"
                     />
                   )}
-                  {selectedCheck.relevanceScore !== null && selectedCheck.relevanceScore !== undefined && (
+	                  {selectedCheck.relevanceScore != null && (
                     <ScoreCard
                       label="مدى الصلة بالموضوع"
-                      score={selectedCheck.relevanceScore}
+                      score={Number(selectedCheck.relevanceScore)}
                       testId="score-relevance"
                     />
                   )}
@@ -272,7 +272,7 @@ export default function QualityChecksTab() {
               </div>
 
               {/* Issues */}
-              {selectedCheck.issues && Array.isArray(selectedCheck.issues) && selectedCheck.issues.length > 0 && (
+              {Array.isArray(selectedCheck.issues) && selectedCheck.issues.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold">المشاكل المكتشفة</h3>
                   <div className="space-y-2" data-testid="issues-list">

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useChatWebSocket } from "@/contexts/ChatWebSocketContext";
 
 interface UseTypingIndicatorOptions {
   channelId?: string;
@@ -10,7 +9,8 @@ export function useTypingIndicator({
   channelId,
   debounceMs = 3000,
 }: UseTypingIndicatorOptions) {
-  const { sendTypingStart, sendTypingStop } = useChatWebSocket();
+  const sendTypingStart = useCallback((_channelId: string) => {}, []);
+  const sendTypingStop = useCallback((_channelId: string) => {}, []);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
   const isTypingRef = useRef(false);
 

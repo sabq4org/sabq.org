@@ -357,7 +357,7 @@ export default function CategoriesManagement() {
       color: category.color || "",
       heroImageUrl: category.heroImageUrl || "",
       displayOrder: category.displayOrder || 0,
-      status: category.status || "active",
+      status: (category.status === "inactive" ? "inactive" : "active") as CategoryFormValues["status"],
     });
   };
 

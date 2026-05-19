@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import type { ComponentType } from "react";
 
 interface TrendChartProps {
   data: Array<{
@@ -73,8 +74,8 @@ export function TrendChart({
     }
   };
 
-  const ChartComponent = type === "area" ? AreaChart : LineChart;
-  const DataComponent = type === "area" ? Area : Line;
+  const ChartComponent = (type === "area" ? AreaChart : LineChart) as ComponentType<any>;
+  const DataComponent = (type === "area" ? Area : Line) as ComponentType<any>;
 
   const chartColors = {
     primary: "hsl(var(--primary))",

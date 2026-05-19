@@ -27,6 +27,7 @@ interface AINewsCardProps {
     title: string;
     summary?: string | null;
     slug: string;
+    englishSlug?: string | null;
     imageUrl?: string | null;
     viewCount?: number | null;
     commentCount?: number | null;

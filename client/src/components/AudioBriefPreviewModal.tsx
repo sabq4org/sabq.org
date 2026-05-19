@@ -87,7 +87,7 @@ export function AudioBriefPreviewModal({
 
           <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
             <div data-testid="text-voice-info">
-              <span className="font-medium">الصوت:</span> {brief.voiceName}
+              <span className="font-medium">الصوت:</span> {brief.voiceId || "غير محدد"}
             </div>
             {brief.createdAt && (
               <div data-testid="text-created-at">

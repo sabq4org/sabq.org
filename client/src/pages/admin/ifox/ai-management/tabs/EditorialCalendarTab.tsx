@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -340,47 +340,40 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
     topicIdea: z.string().min(1, "الموضوع مطلوب"),
   });
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  type EventFormValues = z.infer<typeof formSchema>;
+
+  const getFormDefaults = (): EventFormValues => ({
+    scheduledDate: selectedEvent
+      ? new Date(selectedEvent.scheduledDate).toISOString().split("T")[0]
+      : selectedDate
+      ? selectedDate.toISOString().split("T")[0]
+      : new Date().toISOString().split("T")[0],
+    slot: (selectedEvent?.slot || "morning") as EventFormValues["slot"],
+    topicIdea: selectedEvent?.topicIdea || "",
+    plannedContentType: selectedEvent?.plannedContentType || "",
+    targetAudience: selectedEvent?.targetAudience || "",
+    assignmentType: (selectedEvent?.assignmentType || "ai") as EventFormValues["assignmentType"],
+    status: (selectedEvent?.status || "planned") as EventFormValues["status"],
+    notes: selectedEvent?.notes || "",
+  });
+
+  const form = useForm<EventFormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
-      scheduledDate: selectedEvent
-        ? new Date(selectedEvent.scheduledDate).toISOString().split("T")[0]
-        : selectedDate
-        ? selectedDate.toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
-      slot: selectedEvent?.slot || "morning",
-      topicIdea: selectedEvent?.topicIdea || "",
-      plannedContentType: selectedEvent?.plannedContentType || "",
-      targetAudience: selectedEvent?.targetAudience || "",
-      assignmentType: selectedEvent?.assignmentType || "ai",
-      status: selectedEvent?.status || "planned",
-      notes: selectedEvent?.notes || "",
+      ...getFormDefaults(),
     },
   });
 
   // Reset form when dialog opens
-  useState(() => {
+  useEffect(() => {
     if (open) {
-      form.reset({
-        scheduledDate: selectedEvent
-          ? new Date(selectedEvent.scheduledDate).toISOString().split("T")[0]
-          : selectedDate
-          ? selectedDate.toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
-        slot: selectedEvent?.slot || "morning",
-        topicIdea: selectedEvent?.topicIdea || "",
-        plannedContentType: selectedEvent?.plannedContentType || "",
-        targetAudience: selectedEvent?.targetAudience || "",
-        assignmentType: selectedEvent?.assignmentType || "ai",
-        status: selectedEvent?.status || "planned",
-        notes: selectedEvent?.notes || "",
-      });
+      form.reset(getFormDefaults());
     }
-  });
+  }, [open, selectedDate, selectedEvent]);
 
   // Create mutation
   const createMutation = useMutation({
-    mutationFn: (data: z.infer<typeof formSchema>) =>
+    mutationFn: (data: EventFormValues) =>
       apiRequest("/api/ifox/ai-management/calendar", {
         method: "POST",
         body: JSON.stringify(data),
@@ -403,7 +396,7 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: (data: z.infer<typeof formSchema>) =>
+    mutationFn: (data: EventFormValues) =>
       apiRequest(`/api/ifox/ai-management/calendar/${selectedEvent?.id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -446,7 +439,7 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
     },
   });
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const onSubmit = (data: EventFormValues) => {
     if (isEditMode) {
       updateMutation.mutate(data);
     } else {
@@ -479,7 +472,12 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
                   <FormItem>
                     <FormLabel>التاريخ المجدول</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} data-testid="input-scheduled-date" />
+	                      <Input
+	                        type="date"
+	                        {...field}
+	                        value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : field.value}
+	                        data-testid="input-scheduled-date"
+	                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -492,7 +490,7 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>الفترة الزمنية</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+	                    <Select onValueChange={field.onChange} value={field.value || "morning"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-slot">
                           <SelectValue placeholder="اختر الفترة" />
@@ -573,7 +571,7 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>نوع التكليف</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+	                    <Select onValueChange={field.onChange} value={field.value || "ai"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-assignment-type">
                           <SelectValue placeholder="اختر نوع التكليف" />
@@ -596,7 +594,7 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>الحالة</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+	                    <Select onValueChange={field.onChange} value={field.value || "planned"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-status">
                           <SelectValue placeholder="اختر الحالة" />
@@ -605,8 +603,9 @@ function EventDialog({ open, onOpenChange, selectedDate, selectedEvent, onSucces
                       <SelectContent>
                         <SelectItem value="planned">مخطط</SelectItem>
                         <SelectItem value="in_progress">قيد التنفيذ</SelectItem>
-                        <SelectItem value="completed">مكتمل</SelectItem>
-                        <SelectItem value="cancelled">ملغي</SelectItem>
+	                        <SelectItem value="completed">مكتمل</SelectItem>
+	                        <SelectItem value="cancelled">ملغي</SelectItem>
+	                        <SelectItem value="failed">فشل</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

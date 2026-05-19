@@ -129,12 +129,12 @@ export default function AdvertiserPortalDashboard() {
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   
   // Fetch packages and wallet
-  const { data: packagesData, isLoading: packagesLoading } = useQuery({
+  const { data: packagesData, isLoading: packagesLoading } = useQuery<{ data?: any[] }>({
     queryKey: ["/api/advertiser-payments/packages"],
     enabled: purchaseDialogOpen,
   });
   
-  const { data: walletData, refetch: refetchWallet } = useQuery({
+  const { data: walletData, refetch: refetchWallet } = useQuery<{ data?: { balanceSAR?: number } }>({
     queryKey: ["/api/advertiser-payments/wallet"],
   });
   

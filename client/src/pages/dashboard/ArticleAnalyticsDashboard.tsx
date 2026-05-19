@@ -46,6 +46,7 @@ interface ArticleAnalytics {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   excerpt: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;

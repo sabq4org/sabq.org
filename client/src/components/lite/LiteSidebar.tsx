@@ -23,6 +23,7 @@ interface SearchResult {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   imageUrl?: string;
   publishedAt?: string;
   categoryName?: string;

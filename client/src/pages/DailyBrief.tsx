@@ -76,6 +76,7 @@ interface DailySummary {
       id: string;
       title: string;
       slug: string;
+      englishSlug?: string | null;
       categoryName: string;
     }>;
   };
@@ -120,7 +121,19 @@ export default function DailyBrief() {
 
   // Memoized formatter for engagement score and numerals
   const formattedMetrics = useMemo(() => {
-    if (!summary) return null;
+    if (!summary) {
+      return {
+        articlesRead: "0",
+        readingTime: "0",
+        completionRate: "0",
+        engagementScore: "0",
+        engagementScoreRaw: 0,
+        articlesBookmarked: "0",
+        articlesLiked: "0",
+        commentsPosted: "0",
+        focusScore: "0",
+      };
+    }
     
     const engagementScore = (summary.metrics.articlesLiked || 0) + 
                            (summary.metrics.commentsPosted || 0) + 
@@ -327,7 +340,7 @@ export default function DailyBrief() {
                             {summary.personalizedGreeting.topCategories.map((cat, idx) => (
                               <span key={idx} data-testid={`text-top-category-${idx}`}>
                                 <strong>{cat}</strong>
-                                {idx < summary.personalizedGreeting.topCategories.length - 1 && ' و'}
+                                {idx < (summary.personalizedGreeting?.topCategories.length ?? 0) - 1 && ' و'}
                               </span>
                             ))}
                           </>

@@ -147,11 +147,6 @@ import { Progress } from "@/components/ui/progress";
 import { ArticleTimeline } from "@/components/dashboard/ArticleTimeline";
 import type { Editor } from "@tiptap/react";
 import type { MediaFile } from "@shared/schema";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 // Sortable Attachment Item component for drag-and-drop reordering
 interface SortableAttachmentItemProps {

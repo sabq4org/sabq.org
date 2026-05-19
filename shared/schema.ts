@@ -3149,6 +3149,7 @@ export type ReporterArticle = {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   publishedAt: Date | null;
   category: {
     name: string;

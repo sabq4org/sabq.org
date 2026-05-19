@@ -486,12 +486,12 @@ export async function apiRequest<T = any>(
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn: <T>(options: {
+export function getQueryFn<T = unknown>(options: {
   on401: UnauthorizedBehavior;
   silent?: boolean;
-}) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior, silent = false }) =>
-  async ({ queryKey }) => {
+}): QueryFunction<T> {
+  const { on401: unauthorizedBehavior, silent = false } = options;
+  return async ({ queryKey }) => {
     let url = '';
     const params: Record<string, string> = {};
     
@@ -532,6 +532,7 @@ export const getQueryFn: <T>(options: {
       return null as unknown as T;
     }
   };
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {

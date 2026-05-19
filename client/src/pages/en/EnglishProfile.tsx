@@ -640,7 +640,7 @@ export default function EnglishProfile() {
             </Card>
 
             {/* Dashboard Links - Mobile Collapsible */}
-            {user && hasRole(user, ["admin", "editor"]) && (
+            {user && hasRole(user, "admin", "editor") && (
               <>
                 <Collapsible defaultOpen={false} className="lg:hidden">
                   <Card>

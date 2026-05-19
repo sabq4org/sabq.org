@@ -209,6 +209,7 @@ interface ArticleSearchResult {
   id: number;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   imageUrl?: string;
   categorySlug?: string;
   shortCode?: string;

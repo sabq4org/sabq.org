@@ -430,8 +430,8 @@ export default function AudioNewslettersPublic() {
               >
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-4">
-                    <Badge className={getTemplateColor(newsletter.template)}>
-                      {getTemplateLabel(newsletter.template)}
+                    <Badge className={getTemplateColor(newsletter.template || "")}>
+                      {getTemplateLabel(newsletter.template || "")}
                     </Badge>
                     <Button
                       size="icon"
@@ -457,7 +457,7 @@ export default function AudioNewslettersPublic() {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {formatDuration(newsletter.duration)}
+                      {formatDuration(newsletter.duration ?? undefined)}
                     </span>
                     <span className="flex items-center gap-1">
                       <Eye className="h-3 w-3" />
@@ -525,8 +525,8 @@ export default function AudioNewslettersPublic() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-1">
                         <h3 className="font-semibold line-clamp-1">{newsletter.title}</h3>
-                        <Badge className={cn("ml-2 shrink-0", getTemplateColor(newsletter.template))}>
-                          {getTemplateLabel(newsletter.template)}
+                        <Badge className={cn("ml-2 shrink-0", getTemplateColor(newsletter.template || ""))}>
+                          {getTemplateLabel(newsletter.template || "")}
                         </Badge>
                       </div>
                       
@@ -539,7 +539,7 @@ export default function AudioNewslettersPublic() {
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {formatDuration(newsletter.duration)}
+                          {formatDuration(newsletter.duration ?? undefined)}
                         </span>
                         <span className="flex items-center gap-1">
                           <Eye className="h-3 w-3" />
@@ -597,12 +597,12 @@ export default function AudioNewslettersPublic() {
               )}
               
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <Badge className={getTemplateColor(selectedNewsletter.template)}>
-                  {getTemplateLabel(selectedNewsletter.template)}
+                <Badge className={getTemplateColor(selectedNewsletter.template || "")}>
+                  {getTemplateLabel(selectedNewsletter.template || "")}
                 </Badge>
                 <span className="flex items-center gap-1">
                   <Clock className="h-4 w-4" />
-                  {formatDuration(selectedNewsletter.duration)}
+                  {formatDuration(selectedNewsletter.duration ?? undefined)}
                 </span>
                 <span className="flex items-center gap-1">
                   <Eye className="h-4 w-4" />

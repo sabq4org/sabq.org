@@ -73,7 +73,8 @@ import {
   GraduationCap,
   Quote
 } from "lucide-react";
-import { SiTwitter, SiLinkedin, SiGithub } from "react-icons/si";
+import { SiLinkedin, SiGithub } from "react-icons/si";
+import { FaXTwitter as SiTwitter } from "react-icons/fa6";
 
 const opinionSchema = z.object({
   title: z.string().min(10, "العنوان يجب أن يكون 10 أحرف على الأقل"),

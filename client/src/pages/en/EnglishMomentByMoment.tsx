@@ -38,6 +38,7 @@ interface LiveUpdate {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   imageUrl: string | null;
   publishedAt: string;
   updatedAt: string;

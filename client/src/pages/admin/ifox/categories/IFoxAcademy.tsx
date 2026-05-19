@@ -72,7 +72,10 @@ import {
   ChevronRight,
   ChevronDown,
   Code,
-  Palette
+  Palette,
+  MessageSquare,
+  ImageIcon,
+  X
 } from "lucide-react";
 
 const difficultyLevels = [

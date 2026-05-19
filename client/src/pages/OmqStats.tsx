@@ -269,7 +269,7 @@ export default function OmqStats() {
                         <TableRow key={analysis.id} data-testid={`row-analysis-${analysis.id}`}>
                           <TableCell className="max-w-md">
                             <Button
-                              variant="link"
+                              variant="ghost"
                               onClick={() => navigate(`/omq/${analysis.id}`)}
                               className="p-0 h-auto text-right justify-start font-medium"
                               data-testid={`link-analysis-${analysis.id}`}

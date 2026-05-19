@@ -196,6 +196,7 @@ export default function EmailTemplatesPage() {
       }));
     }
     return Object.entries(TEMPLATE_TYPES).map(([type, nameAr]) => ({
+      id: `default-${type}`,
       type,
       nameAr,
       subject: "",

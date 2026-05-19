@@ -51,6 +51,7 @@ type ArticleFormData = z.infer<typeof articleSchema>;
 interface Category {
   id: string;
   name: string;
+  nameAr?: string | null;
 }
 
 interface Tag {
@@ -450,7 +451,7 @@ export default function PublisherArticleEditor() {
                       <SelectContent>
                         {categories.map((category) => (
                           <SelectItem key={category.id} value={category.id}>
-                            {category.nameAr}
+                            {category.nameAr || category.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

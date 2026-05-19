@@ -5,54 +5,51 @@
  * Enables easy importing: `import { HeroSplit, NewsListBasic } from '@/components/publishing/templates'`
  */
 
-// Hero Templates
-export { default as HeroSplit } from './HeroSplit';
-export { default as HeroOverlay } from './HeroOverlay';
+import HeroSplit from './HeroSplit';
+import HeroOverlay from './HeroOverlay';
+import NewsListBasic from './NewsListBasic';
+import NewsListSummary from './NewsListSummary';
+import NewsGridTwoCol from './NewsGridTwoCol';
+import NewsGridMasonry from './NewsGridMasonry';
+import TickerInline from './TickerInline';
+import TickerMarquee from './TickerMarquee';
+import TimelineVertical from './TimelineVertical';
+import TimelineHorizontal from './TimelineHorizontal';
+import SpotlightCard from './SpotlightCard';
+import SpotlightMedia from './SpotlightMedia';
+import VideoReel from './VideoReel';
+import PodcastRow from './PodcastRow';
+import LiveStream from './LiveStream';
+import InfographicStatBar from './InfographicStatBar';
+import TagStripChips from './TagStripChips';
+import NewsletterBlock from './NewsletterBlock';
+import NativeStory from './NativeStory';
+import OpinionColumn from './OpinionColumn';
+import MosaicMagazine from './MosaicMagazine';
 
-// News List Templates
-export { default as NewsListBasic } from './NewsListBasic';
-export { default as NewsListSummary } from './NewsListSummary';
-
-// News Grid Templates
-export { default as NewsGridTwoCol } from './NewsGridTwoCol';
-export { default as NewsGridMasonry } from './NewsGridMasonry';
-
-// Ticker Templates
-export { default as TickerInline } from './TickerInline';
-export { default as TickerMarquee } from './TickerMarquee';
-
-// Timeline Templates
-export { default as TimelineVertical } from './TimelineVertical';
-export { default as TimelineHorizontal } from './TimelineHorizontal';
-
-// Spotlight Templates
-export { default as SpotlightCard } from './SpotlightCard';
-export { default as SpotlightMedia } from './SpotlightMedia';
-
-// Media Templates
-export { default as VideoReel } from './VideoReel';
-export { default as PodcastRow } from './PodcastRow';
-
-// Live Templates
-export { default as LiveStream } from './LiveStream';
-
-// Infographic Templates
-export { default as InfographicStatBar } from './InfographicStatBar';
-
-// Tag Templates
-export { default as TagStripChips } from './TagStripChips';
-
-// Newsletter Templates
-export { default as NewsletterBlock } from './NewsletterBlock';
-
-// Native Templates
-export { default as NativeStory } from './NativeStory';
-
-// Opinion Templates
-export { default as OpinionColumn } from './OpinionColumn';
-
-// Mosaic Templates
-export { default as MosaicMagazine } from './MosaicMagazine';
+export {
+  HeroSplit,
+  HeroOverlay,
+  NewsListBasic,
+  NewsListSummary,
+  NewsGridTwoCol,
+  NewsGridMasonry,
+  TickerInline,
+  TickerMarquee,
+  TimelineVertical,
+  TimelineHorizontal,
+  SpotlightCard,
+  SpotlightMedia,
+  VideoReel,
+  PodcastRow,
+  LiveStream,
+  InfographicStatBar,
+  TagStripChips,
+  NewsletterBlock,
+  NativeStory,
+  OpinionColumn,
+  MosaicMagazine,
+};
 
 /**
  * Template registry mapping template IDs to components

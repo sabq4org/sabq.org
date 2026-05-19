@@ -73,6 +73,7 @@ interface DailySummary {
       id: string;
       title: string;
       slug: string;
+      englishSlug?: string | null;
       categoryName: string;
     }>;
   };

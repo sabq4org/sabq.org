@@ -216,7 +216,7 @@ export default function AIArticleDetail() {
               <div className="flex items-center gap-3 p-4 bg-gradient-to-br from-slate-900/80 to-slate-900/40 rounded-lg border border-slate-800/50 backdrop-blur-sm">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-purple-500/20">
                   {(() => {
-                    const author = article.author;
+                    const author = article.author as any;
                     if (typeof author === 'string' && author.length > 0) {
                       return author.charAt(0);
                     } else if (author && typeof author === 'object' && 'firstName' in author) {

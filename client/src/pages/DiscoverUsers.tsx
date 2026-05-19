@@ -20,6 +20,7 @@ type LatestArticle = {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   publishedAt: string;
   categoryName: string;
 };

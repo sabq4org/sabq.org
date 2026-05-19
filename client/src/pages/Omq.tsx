@@ -63,6 +63,7 @@ interface StatsResponse {
 interface Category {
   id: string;
   name: string;
+  nameAr?: string | null;
   slug: string;
 }
 
@@ -432,7 +433,7 @@ export default function Omq() {
                             <SelectItem value="all">جميع التصنيفات</SelectItem>
                             {categories.map((cat) => (
                               <SelectItem key={cat.id} value={cat.slug}>
-                                {cat.nameAr}
+                                {cat.nameAr || cat.name}
                               </SelectItem>
                             ))}
                           </SelectContent>

@@ -47,6 +47,7 @@ interface SentimentAnalytics {
     id: string;
     title: string;
     slug: string;
+    englishSlug?: string | null;
     totalComments: number;
     positivePercent: number;
     neutralPercent: number;

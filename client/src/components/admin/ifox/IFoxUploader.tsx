@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
+import type { Accept } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,7 @@ interface IFoxUploaderProps {
   onCancel?: () => void;
   maxFiles?: number;
   maxSize?: number; // in bytes
-  acceptedTypes?: string[];
+  acceptedTypes?: Accept;
 }
 
 const categoryOptions = [
@@ -62,7 +63,7 @@ const categoryOptions = [
   { value: "ai-opinions", label: "AI Opinions", icon: Eye },
 ];
 
-const defaultAcceptedTypes = {
+const defaultAcceptedTypes: Accept = {
   'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'],
   'video/*': ['.mp4', '.webm', '.ogg', '.mov'],
   'audio/*': ['.mp3', '.wav', '.ogg', '.m4a'],

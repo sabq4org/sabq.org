@@ -353,7 +353,7 @@ function RuleDialog({ open, onClose, rule, onSubmit, isPending }: RuleDialogProp
         ruleType: rule.ruleType as any,
         triggerEvent: rule.triggerEvent,
         priority: rule.priority || 5,
-        isActive: rule.isActive,
+        isActive: rule.isActive ?? true,
       });
     } else {
       form.reset({

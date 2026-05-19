@@ -1541,7 +1541,7 @@ export default function ArticleDetail() {
                 publishedAt={article.publishedAt}
                 articleSlug={slug}
                 articleImageUrl={article.imageUrl}
-                categoryName={article.category?.nameAr || article.category?.name || null}
+                categoryName={article.category?.nameAr || article.category?.nameEn || null}
               />
             )}
 

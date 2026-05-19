@@ -28,6 +28,7 @@ interface IFoxArticle {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   excerpt: string | null;
   imageUrl: string | null;
   publishedAt: Date | string | null;
@@ -156,6 +157,7 @@ export default function IFoxArticles() {
       title: article.title,
       summary: article.excerpt,
       slug: article.slug,
+      englishSlug: article.englishSlug,
       imageUrl: article.imageUrl,
       viewCount: article.views,
       commentCount: article.commentsCount,

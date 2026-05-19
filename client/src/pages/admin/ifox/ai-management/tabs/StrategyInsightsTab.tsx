@@ -41,7 +41,7 @@ type StatusFilter = "all" | "active" | "implemented" | "dismissed" | "expired";
 type CategoryFilter = "all" | "trending_topic" | "content_gap" | "timing_optimization" | "audience_preference";
 
 export default function StrategyInsightsTab() {
-  const [selectedInsight, setSelectedInsight] = useState<IfoxStrategyInsight | null>(null);
+  const [selectedInsight, setSelectedInsight] = useState<any | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const { toast } = useToast();
@@ -254,32 +254,32 @@ export default function StrategyInsightsTab() {
                   التوصية
                 </h3>
                 <p className="text-sm" data-testid="dialog-insight-recommendation">
-                  {selectedInsight.recommendation}
+                  {String(selectedInsight.recommendation || "")}
                 </p>
               </div>
 
               {/* Content Gap */}
-              {selectedInsight.contentGap && (
+              {Boolean(selectedInsight.contentGap) && (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 border-r-4 border-yellow-500 rounded-lg">
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     فجوة المحتوى
                   </h3>
                   <p className="text-sm" data-testid="dialog-insight-gap">
-                    {selectedInsight.contentGap}
+                    {String(selectedInsight.contentGap || "")}
                   </p>
                 </div>
               )}
 
               {/* Differentiation Strategy */}
-              {selectedInsight.differentiationStrategy && (
+              {Boolean(selectedInsight.differentiationStrategy) && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border-r-4 border-blue-500 rounded-lg">
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <Zap className="w-4 h-4" />
                     استراتيجية التميز
                   </h3>
                   <p className="text-sm" data-testid="dialog-insight-strategy">
-                    {selectedInsight.differentiationStrategy}
+                    {String(selectedInsight.differentiationStrategy || "")}
                   </p>
                 </div>
               )}

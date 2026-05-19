@@ -22,6 +22,7 @@ interface ArticleResult {
   id: string;
   title: string;
   slug: string;
+  englishSlug?: string | null;
   publishedAt: string | null;
   imageUrl?: string | null;
   excerpt?: string | null;

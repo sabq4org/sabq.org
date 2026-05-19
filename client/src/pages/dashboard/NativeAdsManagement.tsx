@@ -719,7 +719,7 @@ export default function NativeAdsManagement() {
         totalBudget: ad.totalBudget || undefined,
         costPerClick: ad.costPerClick || 100,
         priority: ad.priority,
-        status: ad.status as NativeAdStatus,
+        status: (ad.status === "pending" ? "pending_approval" : ad.status) as FormValues["status"],
       });
     } else {
       setEditingAd(null);

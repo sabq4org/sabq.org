@@ -245,7 +245,7 @@ export function IFoxCalendar({
         ))}
       </div>
 
-      <style jsx global>{`
+      <style>{`
         .ifox-calendar .rbc-calendar {
           background: transparent;
           color: white;

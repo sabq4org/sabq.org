@@ -199,8 +199,8 @@ export default function AudioNewsletterAnalytics() {
         
         <div className="flex flex-col gap-2 sm:flex-row">
           <DatePickerWithRange
-            date={dateRange}
-            onDateChange={(range) => range && setDateRange(range)}
+            date={dateRange as any}
+            onDateChange={(range) => range?.from && range?.to && setDateRange({ from: range.from, to: range.to })}
           />
           
           <div className="flex gap-2">
