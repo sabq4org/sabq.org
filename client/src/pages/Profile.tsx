@@ -7,13 +7,8 @@ import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
 import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
-import { computeTier, LOYALTY_TIERS } from "@shared/loyalty";
-import { Calendar as CalendarIcon } from "lucide-react";
-// CalendarIcon aliased so it doesn't collide with anything else this
-// file might import from lucide. The membership-card visual
-// (LoyaltyCard) used to live inside this hero; it now lives only on
-// the dedicated /dashboard/loyalty page so the profile hero stays a
-// focused identity card.
+import { LoyaltyCard } from "@/components/loyalty/LoyaltyCard";
+import { computeTier } from "@shared/loyalty";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -564,32 +559,31 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Profile Header — 2026-05-19 rev: balanced single-row hero on
-          desktop, vertically-stacked centered card on mobile. Replaces
-          the earlier 2-column grid that left a large empty space on
-          one side when the loyalty data was still loading. */}
+      {/* Modern Profile Header — Phase 2 loyalty redesign */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
         {(() => {
           const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
-          const heroLevel = loyaltyPoints?.rankLevel ?? computeTier(lifetime).level;
-          const heroTier = LOYALTY_TIERS.find((t) => t.level === heroLevel) ?? computeTier(lifetime);
+          const heroTier = computeTier(lifetime);
+          const heroLevel = loyaltyPoints?.rankLevel ?? heroTier.level;
           return (
         <Card
-          className="mb-6 overflow-hidden border-transparent relative shadow-sm"
+          className="mb-6 overflow-hidden border-transparent relative"
           style={{
-            background: `linear-gradient(135deg, ${heroTier.color}14 0%, transparent 50%)`,
+            background: `linear-gradient(135deg, ${heroTier.color}14 0%, transparent 55%)`,
           }}
         >
+          {/* Tier accent stripe at the top */}
           <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${heroTier.color}, transparent)` }} />
-          <CardContent className="p-5 sm:p-7">
-            <div className="flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-right gap-5 sm:gap-7">
+          <CardContent className="p-6 sm:p-8">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-8 items-start">
+              <div className="flex flex-col sm:flex-row gap-6 items-start">
               {/* Avatar with tier ring */}
               <div className="relative shrink-0">
                 <div
                   className="rounded-full p-1"
                   style={{ background: `linear-gradient(135deg, ${heroTier.color}, ${heroTier.color}66)` }}
                 >
-                  <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-lg">
+                  <Avatar className="h-32 w-32 border-4 border-background shadow-xl">
                     <AvatarImage
                       src={user.profileImageUrl || ""}
                       alt={getUserDisplayName()}
@@ -601,7 +595,8 @@ export default function Profile() {
                     </AvatarFallback>
                   </Avatar>
                 </div>
-                <div className="absolute -bottom-1 -right-1">
+
+                <div className="absolute -bottom-2 -right-2">
                   <input
                     id="avatar-file-input"
                     type="file"
@@ -615,81 +610,57 @@ export default function Profile() {
                     type="button"
                     variant="default"
                     size="icon"
-                    className="h-8 w-8 rounded-full shadow-md"
+                    className="h-10 w-10 rounded-full shadow-lg"
                     disabled={isUploadingAvatar}
                     onClick={() => document.getElementById("avatar-file-input")?.click()}
                     data-testid="button-upload-avatar"
                   >
-                    <Upload className="h-3.5 w-3.5" />
+                    <Upload className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
 
-              {/* Identity column */}
-              <div className="flex-1 min-w-0 space-y-3">
-                <div className="space-y-1">
-                  <h1
-                    className="text-2xl sm:text-3xl font-bold leading-tight tracking-tight"
-                    data-testid="text-profile-name"
-                  >
-                    {getUserDisplayName()}
-                  </h1>
-                  <p className="text-sm text-muted-foreground" data-testid="text-profile-email">
+              {/* Info */}
+              <div className="flex-1 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <h1 className="text-3xl font-bold" data-testid="text-profile-name">
+                      {getUserDisplayName()}
+                    </h1>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span
+                        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+                        style={{
+                          backgroundColor: `${heroTier.color}1a`,
+                          color: heroTier.color,
+                          border: `1px solid ${heroTier.color}55`,
+                        }}
+                        data-testid="badge-tier-hero"
+                      >
+                        <Trophy className="h-3 w-3" />
+                        {heroTier.nameAr}
+                      </span>
+                      {getRoleBadge(user.role)}
+                      {user.hasPressCard && (
+                        <Badge variant="outline" className="gap-1" data-testid="badge-press-card">
+                          <IdCard className="h-3 w-3" />
+                          صحفي معتمد
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-muted-foreground" data-testid="text-profile-email">
                     {user.email}
                   </p>
-                </div>
-
-                {/* Badges — single horizontal row with consistent height */}
-                <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
-                  <span
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-                    style={{
-                      backgroundColor: `${heroTier.color}1a`,
-                      color: heroTier.color,
-                      border: `1px solid ${heroTier.color}40`,
-                    }}
-                    data-testid="badge-tier-hero"
-                  >
-                    <Trophy className="h-3 w-3" />
-                    {heroTier.nameAr}
-                  </span>
-                  {getRoleBadge(user.role)}
-                  {user.hasPressCard && (
-                    <Badge variant="outline" className="gap-1" data-testid="badge-press-card">
-                      <IdCard className="h-3 w-3" />
-                      صحفي معتمد
-                    </Badge>
+                  {user.bio && !isEditingProfile && (
+                    <p className="text-foreground/80 max-w-2xl leading-relaxed">
+                      {user.bio}
+                    </p>
                   )}
                 </div>
 
-                {/* Inline stats — only render when we actually have loyalty data */}
-                {loyaltyPoints && (
-                  <div className="flex items-center gap-4 sm:gap-5 text-xs flex-wrap justify-center sm:justify-start pt-1">
-                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                      <Coins className="h-3.5 w-3.5" style={{ color: heroTier.color }} />
-                      <span className="font-semibold text-foreground tabular-nums">
-                        {(loyaltyPoints.lifetimePoints ?? 0).toLocaleString("en-US")}
-                      </span>
-                      نقطة
-                    </span>
-                    {user.createdAt && (
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <CalendarIcon className="h-3.5 w-3.5" />
-                        عضو منذ {new Date(user.createdAt).toLocaleDateString("ar-EG", { month: "long", year: "numeric" })}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {/* (CalendarIcon used inline above) */}
-
-                {user.bio && !isEditingProfile && (
-                  <p className="text-sm text-foreground/80 max-w-2xl leading-relaxed pt-1">
-                    {user.bio}
-                  </p>
-                )}
-
-                {/* Actions — primary on its own visual weight, secondary outline */}
-                <div className="flex flex-wrap gap-2 pt-2 justify-center sm:justify-start">
+                {/* Quick Actions */}
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="default"
                     size="sm"
@@ -700,6 +671,7 @@ export default function Profile() {
                     <Edit className="h-4 w-4" />
                     {isEditingProfile ? "إلغاء" : "تعديل الملف الشخصي"}
                   </Button>
+
                   {hasRole(user, "editor", "admin", "system_admin") && (
                     <Button
                       variant="outline"
@@ -715,6 +687,18 @@ export default function Profile() {
                     </Button>
                   )}
                 </div>
+              </div>
+              </div>
+
+              {/* Loyalty Card — the showpiece. Full-width on mobile, fixed-width on desktop. */}
+              <div className="w-full lg:w-[400px] shrink-0">
+                <LoyaltyCard
+                  userName={getUserDisplayName()}
+                  userId={user.id}
+                  lifetimePoints={lifetime}
+                  memberSince={user.createdAt}
+                  rankLevel={heroLevel}
+                />
               </div>
             </div>
 
