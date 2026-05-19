@@ -2724,97 +2724,45 @@ struct DeleteAccountSheet: View {
 // MARK: - Forgot Password Sheet
 
 struct ForgotPasswordSheet: View {
+    enum Step { case email, code, done }
+
     @Environment(AuthStore.self) private var authStore
     @Environment(\.dismiss) private var dismiss
+    @State private var step: Step = .email
     @State private var email = ""
-    @State private var sent = false
+    @State private var code = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+
+    private var canSendEmail: Bool {
+        !email.trimmingCharacters(in: .whitespaces).isEmpty && !authStore.isLoading
+    }
+
+    private var canSubmitReset: Bool {
+        code.count == 6
+            && newPassword.count >= 6
+            && newPassword == confirmPassword
+            && !authStore.isLoading
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 22) {
                     Spacer().frame(height: 20)
 
-                    Image(systemName: "envelope.badge.shield.half.filled")
+                    Image(systemName: step == .done ? "checkmark.circle.fill" : "envelope.badge.shield.half.filled")
                         .font(.system(size: 48, weight: .light))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(step == .done ? SabqTheme.leaf : SabqTheme.primaryEnd)
 
-                    Text("نسيت كلمة المرور؟")
+                    Text(step == .done ? "تم تغيير كلمة المرور" : "نسيت كلمة المرور؟")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(SabqTheme.ink)
 
-                    if sent {
-                        VStack(spacing: 12) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 40, weight: .light))
-                                .foregroundStyle(SabqTheme.leaf)
-
-                            Text(authStore.successMessage ?? "تم إرسال رابط إعادة تعيين كلمة المرور")
-                                .font(.system(size: 15, weight: .regular))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                                .multilineTextAlignment(.center)
-                                .lineSpacing(5)
-                        }
-                    } else {
-                        Text("أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة تعيين كلمة المرور")
-                            .font(.system(size: 15, weight: .regular))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(5)
-
-                        TextField("البريد الإلكتروني", text: $email)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(SabqTheme.ink)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                    .fill(SabqTheme.paleFill)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                                    .stroke(SabqTheme.outline, lineWidth: 0.5)
-                            )
-                            .padding(.horizontal, 24)
-
-                        if let error = authStore.errorMessage {
-                            HStack(spacing: 8) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 14))
-                                Text(error)
-                                    .font(.system(size: 13, weight: .medium))
-                            }
-                            .foregroundStyle(SabqTheme.coral)
-                            .padding(.horizontal, 36)
-                        }
-
-                        Button {
-                            Task {
-                                await authStore.forgotPassword(email: email)
-                                if authStore.errorMessage == nil {
-                                    withAnimation { sent = true }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 10) {
-                                if authStore.isLoading {
-                                    ProgressView().tint(.white)
-                                }
-                                Text("إرسال")
-                                    .font(.system(size: 16, weight: .bold))
-                            }
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 15)
-                            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(email.isEmpty || authStore.isLoading)
-                        .opacity(email.isEmpty ? 0.5 : 1)
-                        .padding(.horizontal, 24)
+                    switch step {
+                    case .email: emailStep
+                    case .code:  codeStep
+                    case .done:  doneStep
                     }
                 }
                 .padding(20)
@@ -2832,5 +2780,180 @@ struct ForgotPasswordSheet: View {
             }
             .onDisappear { authStore.clearMessages() }
         }
+    }
+
+    // MARK: Step 1 — email
+
+    @ViewBuilder
+    private var emailStep: some View {
+        Text("أدخل بريدك الإلكتروني وسنرسل لك رمز التحقق لإعادة تعيين كلمة المرور")
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .multilineTextAlignment(.center)
+            .lineSpacing(5)
+
+        textInput("البريد الإلكتروني", text: $email, keyboard: .emailAddress, capitalize: false)
+            .padding(.horizontal, 24)
+
+        inlineError
+
+        Button {
+            Task {
+                await authStore.forgotPassword(email: email)
+                if authStore.errorMessage == nil {
+                    withAnimation { step = .code }
+                }
+            }
+        } label: {
+            primaryLabel(text: "إرسال رمز التحقق")
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSendEmail)
+        .opacity(canSendEmail ? 1 : 0.5)
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: Step 2 — code + new password
+
+    @ViewBuilder
+    private var codeStep: some View {
+        VStack(spacing: 4) {
+            Text("أدخل الرمز المرسَل إلى:")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+            Text(email)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(SabqTheme.ink)
+        }
+
+        textInput("رمز التحقق (6 أرقام)", text: $code, keyboard: .numberPad)
+            .padding(.horizontal, 24)
+            .onChange(of: code) { _, new in
+                let digits = new.filter(\.isNumber)
+                code = String(digits.prefix(6))
+            }
+
+        textInput("كلمة المرور الجديدة (٦ أحرف فأكثر)", text: $newPassword, isSecure: true)
+            .padding(.horizontal, 24)
+
+        textInput("تأكيد كلمة المرور", text: $confirmPassword, isSecure: true)
+            .padding(.horizontal, 24)
+
+        if !confirmPassword.isEmpty && newPassword != confirmPassword {
+            Text("كلمتا المرور غير متطابقتين")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(SabqTheme.coral)
+        }
+
+        inlineError
+
+        Button {
+            Task {
+                let ok = await authStore.resetPasswordWithCode(
+                    email: email, code: code, newPassword: newPassword
+                )
+                if ok {
+                    withAnimation { step = .done }
+                }
+            }
+        } label: {
+            primaryLabel(text: "تعيين كلمة المرور")
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSubmitReset)
+        .opacity(canSubmitReset ? 1 : 0.5)
+        .padding(.horizontal, 24)
+
+        Button("إعادة إرسال الرمز") {
+            Task {
+                code = ""
+                await authStore.forgotPassword(email: email)
+            }
+        }
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(SabqTheme.primaryEnd)
+        .padding(.top, 4)
+    }
+
+    // MARK: Step 3 — done
+
+    @ViewBuilder
+    private var doneStep: some View {
+        Text(authStore.successMessage ?? "تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.")
+            .font(.system(size: 15, weight: .regular))
+            .foregroundStyle(SabqTheme.secondaryInk)
+            .multilineTextAlignment(.center)
+            .lineSpacing(5)
+            .padding(.horizontal, 24)
+
+        Button {
+            dismiss()
+        } label: {
+            primaryLabel(text: "حسناً")
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: Shared bits
+
+    @ViewBuilder
+    private var inlineError: some View {
+        if let error = authStore.errorMessage {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14))
+                Text(error)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundStyle(SabqTheme.coral)
+            .padding(.horizontal, 36)
+        }
+    }
+
+    private func primaryLabel(text: String) -> some View {
+        HStack(spacing: 10) {
+            if authStore.isLoading {
+                ProgressView().tint(.white)
+            }
+            Text(text)
+                .font(.system(size: 16, weight: .bold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 15)
+        .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func textInput(
+        _ placeholder: String,
+        text: Binding<String>,
+        keyboard: UIKeyboardType = .default,
+        capitalize: Bool = true,
+        isSecure: Bool = false
+    ) -> some View {
+        Group {
+            if isSecure {
+                SecureField(placeholder, text: text)
+            } else {
+                TextField(placeholder, text: text)
+                    .keyboardType(keyboard)
+                    .textInputAutocapitalization(capitalize ? .sentences : .never)
+                    .autocorrectionDisabled()
+            }
+        }
+        .font(.system(size: 16, weight: .medium))
+        .foregroundStyle(SabqTheme.ink)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                .fill(SabqTheme.paleFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 0.5)
+        )
     }
 }

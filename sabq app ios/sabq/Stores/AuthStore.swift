@@ -232,11 +232,33 @@ final class AuthStore {
         successMessage = nil
         do {
             try await APIClient.shared.forgotPassword(email: email)
-            successMessage = "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني"
+            // Server sends a 6-digit code via email, not a link.
+            // Wording fixed so the iOS sheet stops promising a "رابط".
+            successMessage = "تم إرسال رمز التحقق إلى بريدك الإلكتروني"
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    /// Phase 2 of the iOS forgot-password flow — submits the 6-digit
+    /// code the user just received by email along with the new
+    /// password. Returns true on success so the sheet can swap to the
+    /// "done" state.
+    @MainActor
+    func resetPasswordWithCode(email: String, code: String, newPassword: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        successMessage = nil
+        defer { isLoading = false }
+        do {
+            try await APIClient.shared.resetPassword(email: email, code: code, newPassword: newPassword)
+            successMessage = "تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول."
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
     }
 
     @MainActor
