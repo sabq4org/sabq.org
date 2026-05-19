@@ -151,6 +151,19 @@ fun SabqApp(
                         onNotificationsClick = {
                             navController.navigate(SabqRoutes.Notifications)
                         },
+                        onOpinionsAllClick = {
+                            navController.navigate(SabqRoutes.Opinions)
+                        },
+                        onStoryClick = { story ->
+                            // Stories on Sabq wrap a `rootArticle`.
+                            // Tapping the bubble opens that article in
+                            // ArticleDetail — same UX as the web
+                            // `/story/...` deep link which redirects to
+                            // the article.
+                            story.rootArticleSlug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        },
                     )
                 }
                 composable(SabqRoutes.Explore) {

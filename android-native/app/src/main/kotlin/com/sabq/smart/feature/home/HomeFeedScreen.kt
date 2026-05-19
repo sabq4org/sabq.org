@@ -26,6 +26,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
@@ -95,6 +96,8 @@ fun HomeFeedScreen(
     onArticleClick: (Article) -> Unit = {},
     onMomentByMomentClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
+    onOpinionsAllClick: () -> Unit = {},
+    onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -129,6 +132,8 @@ fun HomeFeedScreen(
                 onArticleClick = onArticleClick,
                 onMomentByMomentClick = onMomentByMomentClick,
                 onNotificationsClick = onNotificationsClick,
+                onOpinionsAllClick = onOpinionsAllClick,
+                onStoryClick = onStoryClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
                     // user's explicit darkMode flag. If the user was in
@@ -154,6 +159,8 @@ private fun LoadedFeed(
     onArticleClick: (Article) -> Unit,
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
+    onOpinionsAllClick: () -> Unit,
+    onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
 ) {
@@ -216,9 +223,10 @@ private fun LoadedFeed(
             }
         }
 
-        // Stories rail — circular bubbles.
+        // Stories rail — circular bubbles. Each bubble opens the
+        // dedicated StoryDetailScreen via the parent's onStoryClick.
         if (state.stories.isNotEmpty()) {
-            item { StoriesRail(stories = state.stories) }
+            item { StoriesRail(stories = state.stories, onStoryClick = onStoryClick) }
         }
 
         // Featured carousel.
@@ -233,12 +241,14 @@ private fun LoadedFeed(
             }
         }
 
-        // Opinions preview — horizontal rail of up to 5 cards.
+        // Opinions preview — horizontal rail of up to 5 cards +
+        // "الكل" link to the full Opinions list.
         if (state.opinions.isNotEmpty()) {
             item {
                 OpinionsPreviewRail(
                     opinions = state.opinions,
                     onArticleClick = onArticleClick,
+                    onSeeAllClick = onOpinionsAllClick,
                 )
             }
         }
@@ -263,14 +273,11 @@ private fun LoadedFeed(
             item { AudioNewsletterCard(newsletter = newsletter) }
         }
 
-        // Dynamic chip strip.
-        item {
-            SectionChips(
-                sections = state.sections,
-                selectedSlug = state.selectedSlug,
-                onSelect = onSectionSelect,
-            )
-        }
+        // Category chips removed from Home per user direction
+        // (2026-05-19) — categories live in the Explore tab. State +
+        // filter logic kept in HomeFeedViewModel so we can re-introduce
+        // them in a sheet later without re-wiring everything. iOS
+        // HomeFeedView.swift line 162-165 mirrors this decision.
 
         // Latest list (inside a SurfaceCard).
         item {
@@ -826,32 +833,65 @@ private fun PulsingDot(color: Color) {
 private fun OpinionsPreviewRail(
     opinions: List<Article>,
     onArticleClick: (Article) -> Unit,
+    onSeeAllClick: () -> Unit = {},
 ) {
     val gold = SabqTheme.colors.gold
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(gold.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
+        // Header row with title on the leading edge (right in RTL) and
+        // an "الكل" link on the trailing edge — same pattern iOS uses
+        // for omqPreviewSection (HomeFeedView.swift line 1232-1239).
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
             ) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.Filled.FormatQuote,
-                    contentDescription = null,
-                    tint = gold,
-                    modifier = Modifier.size(12.dp),
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(gold.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Filled.FormatQuote,
+                        contentDescription = null,
+                        tint = gold,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+                Text(
+                    text = "آراء وأقلام",
+                    style = SabqTheme.typography.cardTitle.copy(
+                        fontSize = 17.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = SabqTheme.colors.ink,
+                    ),
                 )
             }
-            Text(
-                text = "آراء وأقلام",
-                style = SabqTheme.typography.cardTitle.copy(
-                    fontSize = 17.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    color = SabqTheme.colors.ink,
-                ),
-            )
+            Row(
+                modifier = Modifier.clickable { onSeeAllClick() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "الكل",
+                    style = SabqTheme.typography.metaSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                        color = gold,
+                    ),
+                )
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = gold,
+                    modifier = Modifier.size(11.dp),
+                )
+            }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(opinions, key = { it.id }) { opinion ->
@@ -1082,20 +1122,27 @@ private fun TrendingPreviewBlock(
 // MARK: - Stories rail
 
 @Composable
-private fun StoriesRail(stories: List<com.sabq.smart.data.Story>) {
+private fun StoriesRail(
+    stories: List<com.sabq.smart.data.Story>,
+    onStoryClick: (com.sabq.smart.data.Story) -> Unit,
+) {
     LazyRow(
         modifier = Modifier.padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         items(stories, key = { it.id }) { story ->
-            StoryBubble(story = story)
+            StoryBubble(story = story, onClick = { onStoryClick(story) })
         }
     }
 }
 
 @Composable
-private fun StoryBubble(story: com.sabq.smart.data.Story) {
+private fun StoryBubble(
+    story: com.sabq.smart.data.Story,
+    onClick: () -> Unit,
+) {
     Column(
+        modifier = Modifier.clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {

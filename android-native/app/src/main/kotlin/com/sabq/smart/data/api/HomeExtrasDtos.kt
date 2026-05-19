@@ -22,6 +22,20 @@ data class ApiStory(
     val imageUrl: String? = null,
     @JsonNames("articles_count", "count")
     val articlesCount: Int? = null,
+    /** Each Sabq story wraps a `rootArticle` — the bubble tap opens
+     *  that article directly. The `slug` on the nested object is
+     *  what the public ArticleDetail endpoint uses. */
+    @JsonNames("rootArticle", "root_article")
+    val rootArticle: ApiStoryRootArticle? = null,
+    @JsonNames("root_article_slug", "rootArticleSlug")
+    val rootArticleSlug: String? = null,
+)
+
+@Serializable
+data class ApiStoryRootArticle(
+    val id: String = "",
+    val slug: String? = null,
+    val title: String? = null,
 )
 
 @Serializable

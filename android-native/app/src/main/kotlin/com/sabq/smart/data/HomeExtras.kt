@@ -17,6 +17,11 @@ data class Story(
     val id: String,
     val title: String,
     val imageUrl: String?,
+    /** Slug of the underlying article the story wraps. Stories on
+     *  Sabq are curated bundles around a `rootArticleId`; the bubble
+     *  tap should open that article in the standard ArticleDetail
+     *  screen rather than a dedicated story page. */
+    val rootArticleSlug: String?,
 )
 
 data class CalendarEvent(
@@ -50,6 +55,7 @@ private fun ApiStory.toDomain(): Story = Story(
     id = id.takeIf { it.isNotBlank() } ?: title,
     title = title,
     imageUrl = imageUrl?.let { absolutize(it) },
+    rootArticleSlug = rootArticle?.slug ?: rootArticleSlug,
 )
 
 private fun ApiCalendarEvent.toDomain(): CalendarEvent = CalendarEvent(
