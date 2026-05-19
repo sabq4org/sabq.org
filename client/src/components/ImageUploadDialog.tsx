@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Upload, X, Image as ImageIcon, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getCsrfToken } from "@/lib/queryClient";
+import { apiUrl, ensureCsrfToken } from "@/lib/queryClient";
 
 export interface GalleryImage {
   src: string;
@@ -137,6 +137,7 @@ export function ImageUploadDialog({
   const uploadFile = async (file: File, index: number): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
+    const csrfToken = await ensureCsrfToken();
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -195,13 +196,12 @@ export function ImageUploadDialog({
         reject(new Error('فشل الاتصال بالخادم'));
       });
 
-      xhr.open('POST', '/api/media/upload');
+      xhr.open('POST', apiUrl('/api/media/upload'));
       
       // Include credentials (cookies) for authentication
       xhr.withCredentials = true;
       
       // Add CSRF token for security
-      const csrfToken = getCsrfToken();
       if (csrfToken) {
         xhr.setRequestHeader('x-csrf-token', csrfToken);
       }

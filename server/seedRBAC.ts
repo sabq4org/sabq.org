@@ -40,6 +40,12 @@ export async function seedRBAC() {
     { code: "comments.delete", label: "Delete Comments", labelAr: "حذف التعليقات", module: "comments" },
     { code: "comments.restore", label: "Restore Comments", labelAr: "استعادة التعليقات", module: "comments" },
 
+    // Media permissions
+    { code: "media.view", label: "View Media", labelAr: "عرض الوسائط", module: "media" },
+    { code: "media.upload", label: "Upload Media", labelAr: "رفع الوسائط", module: "media" },
+    { code: "media_library.view", label: "View Media Library", labelAr: "عرض مكتبة الوسائط", module: "media_library" },
+    { code: "media_library.upload", label: "Upload Media", labelAr: "رفع ملفات", module: "media_library" },
+
     // Staff permissions
     { code: "staff.view", label: "View Staff", labelAr: "عرض الكادر", module: "staff" },
     { code: "staff.create", label: "Create Staff", labelAr: "إضافة أعضاء الكادر", module: "staff" },
@@ -123,6 +129,12 @@ export async function seedRBAC() {
       isSystem: false,
     },
     {
+      name: "content_manager",
+      nameAr: "مدير محتوى",
+      description: "Manages content and article media",
+      isSystem: false,
+    },
+    {
       name: "reporter",
       nameAr: "مراسل",
       description: "Can create and edit own articles",
@@ -182,6 +194,7 @@ export async function seedRBAC() {
       "articles.view", "articles.create", "articles.edit_any", "articles.publish",
       "articles.unpublish", "articles.archive", "articles.feature",
       "categories.view", "categories.create", "categories.update", "categories.delete",
+      "media.view", "media.upload", "media_library.view", "media_library.upload",
       "users.view",
       "comments.view", "comments.approve", "comments.reject",
       "staff.view",
@@ -191,9 +204,17 @@ export async function seedRBAC() {
       "calendar:view", "calendar:create", "calendar:edit", "calendar:assign_tasks", "calendar:generate_ai",
       "tasks.view_all", "tasks.create", "tasks.edit_any", "tasks.assign", "tasks.view_analytics",
     ],
+
+    content_manager: [
+      "articles.view", "articles.create", "articles.edit_own", "articles.edit_any",
+      "articles.publish", "articles.unpublish", "articles.delete", "articles.archive", "articles.feature",
+      "categories.view",
+      "media.view", "media.upload", "media_library.view", "media_library.upload",
+    ],
     
     reporter: [
       "articles.view", "articles.create", "articles.edit_own",
+      "media.view", "media.upload", "media_library.view", "media_library.upload",
       "tasks.view_own", "tasks.create", "tasks.edit_own",
     ],
     
