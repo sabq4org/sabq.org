@@ -76,8 +76,8 @@ export abstract class PassBuilder {
           authenticationToken: data.authToken,
           webServiceURL: process.env.FRONTEND_URL || 'https://sabq.org',
           backgroundColor: this.getBackgroundColor(),
-          foregroundColor: 'rgb(255, 255, 255)',
-          labelColor: 'rgb(255, 255, 255)',
+          foregroundColor: this.getForegroundColor(),
+          labelColor: this.getLabelColor(),
         }
       );
       
@@ -105,4 +105,15 @@ export abstract class PassBuilder {
   }
   
   protected abstract getBackgroundColor(): string;
+
+  // Default white text on dark cards. Subclasses with a light background
+  // (e.g. PressPassBuilder after the 2026-05-19 redesign) override these
+  // so the field labels and values stay legible.
+  protected getForegroundColor(): string {
+    return 'rgb(255, 255, 255)';
+  }
+
+  protected getLabelColor(): string {
+    return 'rgb(255, 255, 255)';
+  }
 }

@@ -25,8 +25,23 @@ export class PressPassBuilder extends PassBuilder {
     return 'سبق الذكية';
   }
   
+  // 2026-05-19 redesign: white card with Sabq red accents.
+  // - background: pure white (clean, official ID-card feel)
+  // - foreground (field VALUES): deep navy for readability
+  // - labels:   Sabq signature red — gives the brand cue without
+  //              needing a literal stripe across the body
+  // The coupon-style pass.json also pulls in strip.png (a thin red
+  // band) which sits between the header row and the primary field.
   protected getBackgroundColor(): string {
-    return 'rgb(0, 122, 255)';
+    return 'rgb(255, 255, 255)';
+  }
+
+  protected getForegroundColor(): string {
+    return 'rgb(26, 34, 54)';
+  }
+
+  protected getLabelColor(): string {
+    return 'rgb(160, 53, 58)';
   }
   
   configurePassFields(pass: PKPass, data: PressPassData): void {
