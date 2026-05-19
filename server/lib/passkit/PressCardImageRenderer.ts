@@ -17,7 +17,7 @@
 // bottom — branding without competing with the name. The
 // PressPassBuilder drops the headerField entirely.
 
-import { GlobalFonts, createCanvas, loadImage } from "@napi-rs/canvas";
+import { GlobalFonts, createCanvas } from "@napi-rs/canvas";
 import fs from "fs";
 import path from "path";
 
@@ -121,38 +121,28 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   ctx.fillRect(0, 0, W, H);
 
   const padX = 60;
-  const padTop = 6;
+  const padTop = 36;
   const padBottom = 14;
 
   try { (ctx as any).direction = "rtl"; } catch {}
 
-  // ── Sabq logo (top-center). Sits at 156 — the largest size
-  //    that still leaves room for legible name + meta below in
-  //    the fixed 432px canvas. Bumping higher (162+) forces the
-  //    name block to overflow into the meta zone. ───────────────
-  let logoBottomY = padTop;
-  try {
-    const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
-    if (fs.existsSync(logoPath)) {
-      const logo = await loadImage(logoPath);
-      const logoH = 156;
-      const logoW = (logo.width / logo.height) * logoH;
-      ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
-      logoBottomY = padTop + logoH;
-    }
-  } catch (e) {
-    console.warn("[PressCardImageRenderer] logo skipped:", e);
-  }
+  // ── No logo here. The Sabq brand mark now lives in the pass
+  //    HEADER (logo.png slot, injected by PressPassBuilder) so
+  //    it shows in Apple Wallet's stack view. Rendering a second
+  //    logo inside the strip duplicates the brand mark visually
+  //    when the card is open in full view (editor: "ما ينفع
+  //    اثنين لوقو"). The freed 156px of canvas reallocates to
+  //    larger name, title, and metadata typography. ──────────────
 
-  // ── Tagline "بطاقة صحفية رسمية" directly under the logo ──────
+  // ── Tagline "بطاقة صحفية رسمية" anchored at the very top.
+  //    Bigger now that it leads the composition. ────────────────
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const taglineSize = 20;
-  const taglineY = logoBottomY + 3;
+  const taglineSize = 28;
   ctx.font = arabicFont(taglineSize, false);
   ctx.fillStyle = INK_SOFT;
-  ctx.fillText("بطاقة صحفية رسمية", W / 2, taglineY);
-  const headerBottomY = taglineY + taglineSize * LINE_HEIGHT_MULTIPLIER;
+  ctx.fillText("بطاقة صحفية رسمية", W / 2, padTop);
+  const headerBottomY = padTop + taglineSize * LINE_HEIGHT_MULTIPLIER;
 
   // ── Metadata row at the bottom of the strip (الجهة | رقم
   //    البطاقة | تاريخ الانتهاء). Baked into the image because
@@ -168,14 +158,13 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   if (input.pressIdNumber) metaItems.push({ label: "رقم البطاقة", value: input.pressIdNumber });
   if (validUntilStr) metaItems.push({ label: "تاريخ الانتهاء", value: validUntilStr });
 
-  // Bigger than rev 10 — that revision compressed everything past
-  // readability ("ماني قادر اقرأ"). These sizes are the largest
-  // that still fit the name block above + meta block below inside
-  // the 432px canvas:
-  //   label  22px @3x ≈ 7.3pt screen — small but legible
-  //   value  30px @3x ≈ 10pt  screen — clearly readable
-  const metaLabelSize = 22;
-  const metaValueSize = 30;
+  // With the in-strip logo gone, all text grows substantially.
+  // These sizes target the editor's "بس الخط جميل والله" mood at
+  // sizes that are genuinely readable on a phone screen:
+  //   label  26px @3x ≈ 8.7pt screen
+  //   value  36px @3x ≈ 12pt  screen
+  const metaLabelSize = 26;
+  const metaValueSize = 36;
   const metaLabelLineH = metaLabelSize * LINE_HEIGHT_MULTIPLIER;
   const metaValueLineH = metaValueSize * LINE_HEIGHT_MULTIPLIER;
   const metaGapBetweenLabelAndValue = 4;
@@ -184,20 +173,21 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     : 0;
   const metaTop = H - padBottom - metaBlockH;
 
-  // ── Name + jobTitle block — sits between header and metadata.
-  //    Name 60px ≈ 20pt, jobTitle 24px ≈ 8pt — both bumped from
-  //    the rev 10 sizes the editor called illegible. ─────────────
+  // ── Name + jobTitle block — much larger now that the logo
+  //    no longer competes for vertical space. Name targets
+  //    ~28pt on screen so the journalist's identity is the
+  //    visual anchor of the open card. ─────────────────────────
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 60, 42, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 84, 58, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 24, 20, false) : 0;
-  const nameJobGap = jobTitle ? 12 : 0;
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 32, 24, false) : 0;
+  const nameJobGap = jobTitle ? 16 : 0;
   const nameLineH = nameSize * LINE_HEIGHT_MULTIPLIER;
   const jobLineH = jobSize * LINE_HEIGHT_MULTIPLIER;
   const blockH = nameLineH + nameJobGap + jobLineH;
 
-  const nameAreaTop = headerBottomY + 8;
-  const nameAreaBottom = metaTop - 12;
+  const nameAreaTop = headerBottomY + 30;
+  const nameAreaBottom = metaTop - 24;
   const nameAreaH = Math.max(0, nameAreaBottom - nameAreaTop);
   const blockTop = nameAreaTop + Math.max(0, (nameAreaH - blockH) / 2);
 
