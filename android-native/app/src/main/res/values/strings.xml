@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">سبق</string>
+
+    <!-- Tab bar -->
+    <string name="tab_home">الرئيسية</string>
+    <string name="tab_explore">استكشاف</string>
+    <string name="tab_bookmarks">المحفوظات</string>
+    <string name="tab_profile">المزيد</string>
+
+    <!-- Common -->
+    <string name="breaking">عاجل</string>
+    <string name="opinion_pill">مقال رأي</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="error_title">حدث خطأ</string>
+</resources>

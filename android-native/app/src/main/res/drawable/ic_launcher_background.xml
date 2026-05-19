@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sabq sky-blue brand background. Matches the iOS Press Card accent
+     (rgb 28/164/240) so the launcher reads as instantly Sabq. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#1CA4F0" />
+</shape>

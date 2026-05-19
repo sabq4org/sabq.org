@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash background matches the light-mode app background
+         (SabqColors.Light.background). Dark variant lives in values-night/. -->
+    <color name="sabq_splash_bg">#F2F7FC</color>
+</resources>
