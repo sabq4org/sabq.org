@@ -56,6 +56,29 @@ interface SabqApi {
     @GET("api/v1/breaking")
     suspend fun getBreaking(): ApiBreakingTicker
 
+    /** Trending page — top articles + keywords. iOS uses
+     *  `articlesStore.trendingArticles.prefix(3)` on Home. */
+    @GET("api/v1/trending")
+    suspend fun getTrending(): ApiArticlesResponse
+
+    // -- home extras (public namespace, NOT v1) ----------------------
+
+    /** Story rails — circular bubbles at the top of Home. iOS uses
+     *  `/api/stories` (public). Response shape: `{ items: [...] }`. */
+    @GET("api/stories")
+    suspend fun getStories(): ApiStoriesResponse
+
+    /** Today's upcoming calendar events. Public namespace per iOS
+     *  `APIClient.fetchUpcomingCalendarEvents` (line 1140). */
+    @GET("api/calendar/upcoming")
+    suspend fun getCalendarUpcoming(
+        @Query("days") days: Int = 14,
+    ): ApiCalendarEventsResponse
+
+    /** Audio newsletters list. Public namespace per iOS line 1175. */
+    @GET("api/audio-newsletters")
+    suspend fun getAudioNewsletters(): ApiAudioNewslettersResponse
+
     // -- public (article detail / opinions) ---------------------------
 
     /**

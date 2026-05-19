@@ -55,6 +55,32 @@ class ArticleRepository @Inject constructor(
         )
     }
 
+    /** Breaking-news ticker. iOS surfaces the first row as the single
+     *  "عاجل" pill on Home. */
+    suspend fun getBreaking(): List<Article> {
+        val resp = api.getBreaking()
+        return resp.items.map { headline ->
+            Article(
+                id = headline.id,
+                title = headline.title,
+                excerpt = "",
+                category = ArticleCategory.Local,
+                imageUrl = null,
+                focalPoint = null,
+                readingTime = "",
+                dateFormatted = "",
+                isBreaking = true,
+                isFeatured = false,
+                slug = headline.slug,
+            )
+        }
+    }
+
+    /** Trending articles list. Maps the `/api/v1/trending` response
+     *  into the standard [Article] shape. */
+    suspend fun getTrending(): List<Article> =
+        api.getTrending().articles.map { it.toDomain() }
+
     suspend fun getSections(): List<Section> {
         return api.getSections().sections.map { c ->
             Section(
