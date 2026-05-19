@@ -200,10 +200,12 @@ struct AudioNewslettersView: View {
         if playingID == n.id && isPlaying {
             player?.pause()
             isPlaying = false
+            SabqAudioSession.deactivate()
             return
         }
         // Switching to a new newsletter — replace player.
         player?.pause()
+        SabqAudioSession.activate()
         let newPlayer = AVPlayer(url: url)
         player = newPlayer
         playingID = n.id
@@ -216,6 +218,7 @@ struct AudioNewslettersView: View {
         player = nil
         isPlaying = false
         playingID = nil
+        SabqAudioSession.deactivate()
     }
 
     private func formatDuration(_ seconds: Int) -> String {

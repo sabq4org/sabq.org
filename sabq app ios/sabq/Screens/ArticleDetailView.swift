@@ -508,6 +508,9 @@ struct ArticleDetailView: View {
         if isPlayingAudio {
             audioPlayer?.pause()
             isPlayingAudio = false
+            // Hand the audio focus back so CarPlay / Spotify / Podcasts
+            // can resume the music the user was on when they opened sabq.
+            SabqAudioSession.deactivate()
             return
         }
         // The backend's /api/articles/:slug/summary-audio streams
@@ -520,6 +523,7 @@ struct ArticleDetailView: View {
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
         else { return }
         SabqHaptics.medium()
+        SabqAudioSession.activate()
         audioPlayer = AVPlayer(url: url)
         audioPlayer?.play()
         isPlayingAudio = true

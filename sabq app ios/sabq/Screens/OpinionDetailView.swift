@@ -284,6 +284,7 @@ struct OpinionDetailView: View {
         if isPlayingAudio {
             audioPlayer?.pause()
             isPlayingAudio = false
+            SabqAudioSession.deactivate()
             return
         }
         // Same TTS endpoint as articles — backend's
@@ -294,6 +295,7 @@ struct OpinionDetailView: View {
               let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
         else { return }
         SabqHaptics.medium()
+        SabqAudioSession.activate()
         audioPlayer = AVPlayer(url: url)
         audioPlayer?.play()
         isPlayingAudio = true

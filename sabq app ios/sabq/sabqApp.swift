@@ -17,22 +17,26 @@ struct sabqApp: App {
         // tries to look it up via .font(.custom(...)).
         SabqFonts.registerAll()
 
-        // Configure the shared AVAudioSession for spoken-audio playback.
-        // The default category is .soloAmbient, which mutes when the
-        // hardware ring/silent switch is on — readers who keep their
-        // phone on silent (typical default) would hear nothing from the
-        // article summary, opinion-summary, or audio-newsletter players
-        // even though the UI appeared to be "playing". `.playback` with
-        // `.spokenAudio` overrides the silent switch and ducks well with
-        // other apps. Set once at launch; AVPlayer instances created
-        // later inherit it.
+        // Configure (but DO NOT activate) the shared AVAudioSession for
+        // spoken-audio playback. `.playback` with `.spokenAudio` is
+        // what overrides the silent switch and lets article-summary /
+        // newsletter audio play on a muted phone.
+        //
+        // The previous version of this init also called
+        // setActive(true), which interrupted whatever the user was
+        // listening to on CarPlay the moment they opened sabq —
+        // before they even tapped play on anything (bug filed
+        // 2026-05-19). Activation is now delayed to SabqAudioSession
+        // .activate(), invoked by each player right before .play(),
+        // and reversed via SabqAudioSession.deactivate() when audio
+        // stops so other apps (CarPlay) can resume.
         do {
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .spokenAudio,
+                policy: .longFormAudio,
                 options: []
             )
-            try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("[sabq] AVAudioSession setup failed: \(error)")
         }
