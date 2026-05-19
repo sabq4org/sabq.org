@@ -126,16 +126,16 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
 
   try { (ctx as any).direction = "rtl"; } catch {}
 
-  // ── Sabq logo (top-center). Editor: "نكبر اللوقو تكتين بس" —
-  //    a small bump from 150 → 162. Anything larger compresses
-  //    the name+meta blocks past readability inside the 432px
-  //    canvas. ────────────────────────────────────────────────────
+  // ── Sabq logo (top-center). Sits at 156 — the largest size
+  //    that still leaves room for legible name + meta below in
+  //    the fixed 432px canvas. Bumping higher (162+) forces the
+  //    name block to overflow into the meta zone. ───────────────
   let logoBottomY = padTop;
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 162;
+      const logoH = 156;
       const logoW = (logo.width / logo.height) * logoH;
       ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
       logoBottomY = padTop + logoH;
@@ -168,10 +168,14 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   if (input.pressIdNumber) metaItems.push({ label: "رقم البطاقة", value: input.pressIdNumber });
   if (validUntilStr) metaItems.push({ label: "تاريخ الانتهاء", value: validUntilStr });
 
-  // Smaller than the native auxiliaryFields would render — that's
-  // the whole point of moving them into the bitmap.
-  const metaLabelSize = 18;
-  const metaValueSize = 24;
+  // Bigger than rev 10 — that revision compressed everything past
+  // readability ("ماني قادر اقرأ"). These sizes are the largest
+  // that still fit the name block above + meta block below inside
+  // the 432px canvas:
+  //   label  22px @3x ≈ 7.3pt screen — small but legible
+  //   value  30px @3x ≈ 10pt  screen — clearly readable
+  const metaLabelSize = 22;
+  const metaValueSize = 30;
   const metaLabelLineH = metaLabelSize * LINE_HEIGHT_MULTIPLIER;
   const metaValueLineH = metaValueSize * LINE_HEIGHT_MULTIPLIER;
   const metaGapBetweenLabelAndValue = 4;
@@ -180,19 +184,20 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     : 0;
   const metaTop = H - padBottom - metaBlockH;
 
-  // ── Name + jobTitle block — sits between header and metadata
-  //    with explicit padding on both sides. ─────────────────────
+  // ── Name + jobTitle block — sits between header and metadata.
+  //    Name 60px ≈ 20pt, jobTitle 24px ≈ 8pt — both bumped from
+  //    the rev 10 sizes the editor called illegible. ─────────────
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 54, 40, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 60, 42, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 22, 18, false) : 0;
-  const nameJobGap = jobTitle ? 18 : 0;
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 24, 20, false) : 0;
+  const nameJobGap = jobTitle ? 12 : 0;
   const nameLineH = nameSize * LINE_HEIGHT_MULTIPLIER;
   const jobLineH = jobSize * LINE_HEIGHT_MULTIPLIER;
   const blockH = nameLineH + nameJobGap + jobLineH;
 
-  const nameAreaTop = headerBottomY + 14;
-  const nameAreaBottom = metaTop - 16;
+  const nameAreaTop = headerBottomY + 8;
+  const nameAreaBottom = metaTop - 12;
   const nameAreaH = Math.max(0, nameAreaBottom - nameAreaTop);
   const blockTop = nameAreaTop + Math.max(0, (nameAreaH - blockH) / 2);
 
