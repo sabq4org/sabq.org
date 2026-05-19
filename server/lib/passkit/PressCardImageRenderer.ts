@@ -1,20 +1,21 @@
-// Branded-header strip renderer for the Apple Wallet press card.
+// Name-first strip renderer for the Apple Wallet press card.
 //
-// 2026-05-19 rev 4 — fundamental rethink after rev 3 user feedback:
-//   • All user data (name, role, position, ID, expiry) was rendered
-//     INSIDE the strip image at fixed pixel sizes. On the actual
-//     Wallet display the canvas (1125×432 @3x) shrinks to ~375×144
-//     points, so 18–34px source text became 6–11pt on screen — far
-//     too small to read.
-//   • Solution: stop rendering user data inside the strip. The strip
-//     becomes a pure branded header (Sabq logo + "بطاقة صحفية رسمية"
-//     tagline). All user data moves to native Wallet fields in
-//     PressPassBuilder, which Apple sizes with SF Pro at proper
-//     Dynamic Type sizes that the user can scale via Accessibility.
-//   • Bonus: expiry date no longer "silently disappears" when
-//     cardValidUntil is null — it just shows as an empty auxiliary
-//     row that Wallet collapses, instead of being part of a fixed
-//     image layout.
+// 2026-05-19 rev 5 — feedback from rev 4:
+//   • rev 4 moved ALL user data out of the strip and into Wallet
+//     fields. Result on device: the name ended up in a tiny
+//     primaryFields slot (barely visible) while the strip
+//     prominently showed only the tagline "بطاقة صحفية رسمية".
+//     User reaction: "الاسم غير ظاهر … تحت اللوقو عبارة بطاقة
+//     صحفية رسمية!!! مو المفروض الاسم؟" — fair point.
+//   • Additional bug: the headerField (الجهة) rendered as white
+//     text overlaid on the white strip area near the logo,
+//     making it look like a white smear on the logo.
+//
+// Solution: name goes back into the strip as the dominant visual
+// element. Logo moves to the top-right corner (smaller). The
+// "بطاقة صحفية رسمية" tagline becomes a tiny caption at the
+// bottom — branding without competing with the name. The
+// PressPassBuilder drops the headerField entirely.
 
 import { GlobalFonts, createCanvas, loadImage } from "@napi-rs/canvas";
 import fs from "fs";
@@ -49,12 +50,16 @@ function registerFontsOnce() {
   fontsRegistered = true;
 }
 
-const ACCENT = "#1CA4F0"; // Sabq sky-blue (matches web primary)
-const INK = "#0F172A";    // Deep navy for the title
+type RenderInput = {
+  userName: string;
+};
+
+const ACCENT = "#1CA4F0"; // Sabq sky-blue
+const INK = "#0F172A";    // Deep navy for the name
+const INK_SOFT = "#64748B";
 const WHITE = "#FFFFFF";
 
-// Apple Wallet coupon strip dimensions. @3x is the master we draw at;
-// @2x and @1x are derived by downscaling so all densities stay sharp.
+// Apple Wallet coupon strip dimensions (@3x master).
 const W = 1125;
 const H = 432;
 
@@ -63,7 +68,27 @@ function arabicFont(sizePx: number, bold: boolean = false): string {
   return `${weight}${sizePx}px "${arabicFontFamily}", sans-serif`;
 }
 
-export async function renderPressCardStrip(): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
+// Auto-shrink the name to fit within maxWidth without truncation.
+// Long Arabic names ("عبدالرحمن بن عبدالعزيز") would otherwise
+// overflow the canvas and get visually clipped by Wallet.
+function fitFontSize(
+  ctx: any,
+  text: string,
+  maxWidth: number,
+  startSize: number,
+  minSize: number,
+  bold: boolean = true,
+): number {
+  let size = startSize;
+  ctx.font = arabicFont(size, bold);
+  while (ctx.measureText(text).width > maxWidth && size > minSize) {
+    size -= 4;
+    ctx.font = arabicFont(size, bold);
+  }
+  return size;
+}
+
+export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Buffer; x2: Buffer; x3: Buffer }> {
   registerFontsOnce();
 
   const canvas = createCanvas(W, H);
@@ -73,40 +98,49 @@ export async function renderPressCardStrip(): Promise<{ x1: Buffer; x2: Buffer; 
   ctx.fillStyle = WHITE;
   ctx.fillRect(0, 0, W, H);
 
-  // ── Sabq logo (centered horizontally, anchored to the upper third)
-  let logoBottomY = 90;
+  const padX = 60;
+  const padTop = 36;
+
+  // ── Sabq logo (top-right corner, modest size so it brands the
+  //    card without competing with the name) ─────────────────────
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 200;
+      const logoH = 110;
       const logoW = (logo.width / logo.height) * logoH;
-      const logoX = (W - logoW) / 2;
-      const logoY = 50;
-      ctx.drawImage(logo, logoX, logoY, logoW, logoH);
-      logoBottomY = logoY + logoH;
+      ctx.drawImage(logo, W - padX - logoW, padTop, logoW, logoH);
     }
   } catch (e) {
     console.warn("[PressCardImageRenderer] logo skipped:", e);
   }
 
-  // ── Title: "بطاقة صحفية رسمية" — large, bold, centered ──────────
+  // ── User name — dominant visual element, centered on the card ──
   try { (ctx as any).direction = "rtl"; } catch {}
   ctx.textAlign = "center";
-  ctx.textBaseline = "top";
+  ctx.textBaseline = "middle";
 
-  const titleY = logoBottomY + 32;
+  const nameMaxWidth = W - padX * 2;
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 120, 64, true);
+  ctx.font = arabicFont(nameSize, true);
   ctx.fillStyle = INK;
-  ctx.font = arabicFont(68, true);
-  ctx.fillText("بطاقة صحفية رسمية", W / 2, titleY);
+  ctx.fillText(input.userName, W / 2, H / 2 + 18);
 
-  // ── Sky-blue accent underline beneath the title ─────────────────
-  const underlineY = titleY + 92;
-  const underlineW = 240;
+  // ── Tagline (subtle, near bottom) — keeps the official-document
+  //    feeling without stealing focus from the name. ─────────────
+  ctx.textBaseline = "alphabetic";
+  ctx.font = arabicFont(26, false);
+  ctx.fillStyle = INK_SOFT;
+  ctx.fillText("بطاقة صحفية رسمية", W / 2, H - 36);
+
+  // ── Sky-blue accent rule between name and tagline (lightweight
+  //    brand cue, doesn't add chrome). ────────────────────────────
+  const ruleY = H - 78;
+  const ruleW = 120;
   ctx.fillStyle = ACCENT;
-  ctx.fillRect((W - underlineW) / 2, underlineY, underlineW, 6);
+  ctx.fillRect((W - ruleW) / 2, ruleY, ruleW, 4);
 
-  // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ──────
+  // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ─────
   const x3 = canvas.toBuffer("image/png");
   const c2 = createCanvas(Math.round(W * 2 / 3), Math.round(H * 2 / 3));
   c2.getContext("2d").drawImage(canvas, 0, 0, c2.width, c2.height);
