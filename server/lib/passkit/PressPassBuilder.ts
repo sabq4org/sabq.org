@@ -7,6 +7,17 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+/** Arabic Wallet fields: right-aligned for RTL legibility on white generic passes. */
+const RTL_FIELD = { textAlignment: 'PKTextAlignmentRight' as const };
+
+/** Gregorian yyyy/MM/dd with Western (Latin) numerals — editorial preference. */
+function formatValidUntilLatin(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}/${m}/${d}`;
+}
+
 export class PressPassBuilder extends PassBuilder {
   constructor(passTypeId: string, teamId: string) {
     super(passTypeId, teamId);
@@ -51,12 +62,14 @@ export class PressPassBuilder extends PassBuilder {
       key: 'role',
       label: 'الدور',
       value: this.translateRole(data.userRole),
+      ...RTL_FIELD,
     });
     
     pass.primaryFields.push({
       key: 'name',
       label: 'الاسم',
       value: data.userName,
+      ...RTL_FIELD,
     });
     
     if (data.jobTitle) {
@@ -64,6 +77,7 @@ export class PressPassBuilder extends PassBuilder {
         key: 'job_title',
         label: 'المنصب',
         value: data.jobTitle,
+        ...RTL_FIELD,
       });
     }
     
@@ -72,14 +86,18 @@ export class PressPassBuilder extends PassBuilder {
         key: 'department',
         label: 'القسم',
         value: data.department,
+        ...RTL_FIELD,
       });
     }
     
+    // Pair press ID + validity on one auxiliary row (shorter labels, Latin date).
     if (data.pressIdNumber) {
       pass.auxiliaryFields.push({
         key: 'press_id',
-        label: 'رقم البطاقة الصحفية',
+        label: 'رقم البطاقة',
         value: data.pressIdNumber,
+        row: 0,
+        ...RTL_FIELD,
       });
     }
     
@@ -87,7 +105,9 @@ export class PressPassBuilder extends PassBuilder {
       pass.auxiliaryFields.push({
         key: 'valid_until',
         label: 'صالحة حتى',
-        value: data.validUntil.toLocaleDateString('ar-SA-u-ca-gregory'),
+        value: formatValidUntilLatin(data.validUntil),
+        row: 0,
+        ...RTL_FIELD,
       });
     }
     
@@ -96,11 +116,13 @@ export class PressPassBuilder extends PassBuilder {
         key: 'description',
         label: 'عن البطاقة',
         value: 'بطاقة هوية صحفية رسمية صادرة من منصة سبق الذكية',
+        ...RTL_FIELD,
       },
       {
         key: 'website',
         label: 'الموقع الإلكتروني',
         value: 'https://sabq.org',
+        ...RTL_FIELD,
       }
     );
   }
