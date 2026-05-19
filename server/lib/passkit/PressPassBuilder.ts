@@ -66,7 +66,10 @@ export class PressPassBuilder extends PassBuilder {
     // if canvas/font registration fails in a fresh container we
     // still ship a valid pass via the secondary fields below.
     try {
-      const strips = await renderPressCardStrip({ userName: data.userName });
+      const strips = await renderPressCardStrip({
+        userName: data.userName,
+        jobTitle: data.jobTitle,
+      });
       pass.addBuffer('strip.png', strips.x1);
       pass.addBuffer('strip@2x.png', strips.x2);
       pass.addBuffer('strip@3x.png', strips.x3);
@@ -80,23 +83,17 @@ export class PressPassBuilder extends PassBuilder {
     // looked like a smear on the brand mark. Brand attribution
     // lives in the strip's logo + tagline now.
     //
-    // No primaryFields: name is baked into the strip at large
-    // size. A duplicate primaryField just produces a tiny redundant
-    // line under the strip.
+    // No primaryFields: name is baked into the strip at large size.
     //
-    // No "الدور" field: per editor direction, the role
+    // No "الدور" field: per editor direction the role string
     // (opinion_author / chief_editor / …) shouldn't appear on the
-    // public-facing press card. The user's job title is what
-    // matters externally.
+    // public-facing card.
+    //
+    // No "المنصب" secondaryField: per editor direction it now
+    // appears directly under the name inside the strip image
+    // (renderer handles it). Keeping it here too would just
+    // duplicate the same text in two places.
 
-    if (data.jobTitle) {
-      pass.secondaryFields.push({
-        key: 'job_title',
-        label: 'المنصب',
-        value: data.jobTitle,
-        ...RTL_FIELD,
-      });
-    }
     if (data.department) {
       pass.secondaryFields.push({
         key: 'department',

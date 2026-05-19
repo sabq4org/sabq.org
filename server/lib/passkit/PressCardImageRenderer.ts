@@ -52,9 +52,9 @@ function registerFontsOnce() {
 
 type RenderInput = {
   userName: string;
+  jobTitle?: string;
 };
 
-const ACCENT = "#1CA4F0"; // Sabq sky-blue
 const INK = "#0F172A";    // Deep navy for the name
 const INK_SOFT = "#64748B";
 const WHITE = "#FFFFFF";
@@ -99,15 +99,15 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   ctx.fillRect(0, 0, W, H);
 
   const padX = 60;
-  const padTop = 36;
+  const padTop = 30;
 
-  // ── Sabq logo (top-right corner, modest size so it brands the
-  //    card without competing with the name) ─────────────────────
+  // ── Sabq logo (top-right corner, slightly larger — editor
+  //    asked for "حبتين"). Brand presence without dominating. ───
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 110;
+      const logoH = 170;
       const logoW = (logo.width / logo.height) * logoH;
       ctx.drawImage(logo, W - padX - logoW, padTop, logoW, logoH);
     }
@@ -115,30 +115,41 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     console.warn("[PressCardImageRenderer] logo skipped:", e);
   }
 
-  // ── User name — dominant visual element, centered on the card ──
+  // ── Name + (optional) jobTitle — vertically centered as a single
+  //    block so they read as one unit. No divider between them. ──
   try { (ctx as any).direction = "rtl"; } catch {}
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
 
   const nameMaxWidth = W - padX * 2;
   const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 120, 64, true);
+  const jobTitle = (input.jobTitle ?? "").trim();
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 44, 28, false) : 0;
+
+  // Block height = name + small gap + jobTitle (when present).
+  // Center the block on the canvas's vertical midpoint so the
+  // composition stays balanced regardless of whether a job title
+  // exists.
+  const gap = jobTitle ? 22 : 0;
+  const blockH = nameSize + gap + jobSize;
+  const blockTop = (H - blockH) / 2;
+
+  ctx.textBaseline = "top";
   ctx.font = arabicFont(nameSize, true);
   ctx.fillStyle = INK;
-  ctx.fillText(input.userName, W / 2, H / 2 + 18);
+  ctx.fillText(input.userName, W / 2, blockTop);
 
-  // ── Tagline (subtle, near bottom) — keeps the official-document
-  //    feeling without stealing focus from the name. ─────────────
+  if (jobTitle) {
+    ctx.font = arabicFont(jobSize, false);
+    ctx.fillStyle = INK_SOFT;
+    ctx.fillText(jobTitle, W / 2, blockTop + nameSize + gap);
+  }
+
+  // ── Tagline (subtle, near bottom). No divider rule — editor
+  //    explicitly asked for the line to go away. ────────────────
   ctx.textBaseline = "alphabetic";
   ctx.font = arabicFont(26, false);
   ctx.fillStyle = INK_SOFT;
   ctx.fillText("بطاقة صحفية رسمية", W / 2, H - 36);
-
-  // ── Sky-blue accent rule between name and tagline (lightweight
-  //    brand cue, doesn't add chrome). ────────────────────────────
-  const ruleY = H - 78;
-  const ruleW = 120;
-  ctx.fillStyle = ACCENT;
-  ctx.fillRect((W - ruleW) / 2, ruleY, ruleW, 4);
 
   // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ─────
   const x3 = canvas.toBuffer("image/png");
