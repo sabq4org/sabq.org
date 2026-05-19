@@ -1114,6 +1114,19 @@ if (!(globalThis as any).__sabqServer) {
         }
         console.log(`[Server] ✅ Database warmed up, server is now READY`);
 
+        // Keep production RBAC in sync after deploys. Permission rows are
+        // idempotent, and this prevents deploys from shipping code that
+        // expects a permission the database has not received yet.
+        setImmediate(async () => {
+          try {
+            const { seedRBAC } = await import("./seedRBAC");
+            const { allRoles, allPermissions } = await seedRBAC();
+            console.log(`[Server] ✅ RBAC synced (${allRoles.length} roles, ${allPermissions.length} permissions)`);
+          } catch (error) {
+            console.error("[Server] ⚠️ RBAC sync failed:", error);
+          }
+        });
+
         
         // Warm up dashboard stats cache in background (non-blocking)
         setImmediate(async () => {
