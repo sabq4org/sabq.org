@@ -5154,7 +5154,17 @@ const PRESS_CARD_ROLE_LABELS: Record<string, string> = {
   reader: 'قارئ',
 };
 
-function pressCardRoleLabel(role: string | null | undefined): string {
+// Resolves the prominent role label for the press card. We prefer
+// users.jobTitle when it's set because the editor can fill it with a
+// precise, press-card-grade title ("كاتب مقال", "محرر اقتصادي") that
+// always reads better than the system role. Fall through to the
+// translated users.role only when jobTitle is empty. This stops the
+// confusing "قارئ at top + كاتب مقال under the name" pairing the
+// user flagged on 2026-05-19.
+function pressCardRoleLabel(row: { role: string | null | undefined; jobTitle: string | null | undefined }): string {
+  const jt = (row.jobTitle ?? '').trim();
+  if (jt) return jt;
+  const role = row.role;
   if (!role) return 'عضو سبق';
   return PRESS_CARD_ROLE_LABELS[role] || role;
 }
@@ -5185,7 +5195,7 @@ router.get("/wallet/press/status", async (req: Request, res: Response) => {
       // Same role label PressPassBuilder will burn onto the .pkpass.
       // iOS uses this so the activation-screen preview matches the
       // printed card exactly (no more local switch-statement drift).
-      roleLabel: pressCardRoleLabel(userRow.role),
+      roleLabel: pressCardRoleLabel(userRow),
       jobTitle: userRow.jobTitle ?? null,
     });
   } catch (error) {

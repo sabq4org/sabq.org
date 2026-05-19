@@ -112,7 +112,13 @@ struct PressCardView: View {
                                 .foregroundStyle(inkPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
-                            if let jobTitle, !jobTitle.isEmpty {
+                            // jobTitle is also shown as the prominent
+                            // role label at the top when the server
+                            // returns it as roleLabel (see
+                            // pressCardRoleLabel() — jobTitle wins
+                            // over the translated system role). Hide
+                            // the duplicate here when they match.
+                            if let jobTitle, !jobTitle.isEmpty, jobTitle != roleAr {
                                 Text(jobTitle)
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(inkSecondary)
