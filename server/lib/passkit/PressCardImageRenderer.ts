@@ -21,6 +21,12 @@ import { GlobalFonts, createCanvas, loadImage } from "@napi-rs/canvas";
 import fs from "fs";
 import path from "path";
 
+// Unified brand typography: IBM Plex Sans Arabic is what the iOS app
+// (sabq app ios/sabq/Services/FontRegistration.swift) and the web
+// (client/index.html: 400 + 700 weights) both ship. Mirror that on
+// the server so the Apple Wallet press card visually belongs to the
+// same family. Cairo / Noto Arabic stay registered as fallbacks in
+// case the Plex TTFs ever go missing on a fresh container.
 let arabicFontFamily = "sans-serif";
 
 let fontsRegistered = false;
@@ -28,10 +34,16 @@ function registerFontsOnce() {
   if (fontsRegistered) return;
   const fontsDir = path.resolve(process.cwd(), "server/fonts");
 
+  // Order matters: the last successfully registered alias wins as
+  // the default arabicFontFamily, so list the preferred Plex faces
+  // LAST. The two non-Plex entries are belt-and-suspenders fallbacks.
   const candidates = [
-    { file: "Cairo-Bold.ttf",             alias: "Cairo" },
-    { file: "NotoSansArabic-Bold.ttf",    alias: "NotoArabic" },
-    { file: "NotoSansArabic-Regular.ttf", alias: "NotoArabic" },
+    { file: "Cairo-Bold.ttf",                  alias: "Cairo" },
+    { file: "NotoSansArabic-Regular.ttf",      alias: "NotoArabic" },
+    { file: "NotoSansArabic-Bold.ttf",         alias: "NotoArabic" },
+    { file: "IBMPlexSansArabic-Regular.ttf",   alias: "IBMPlexSansArabic" },
+    { file: "IBMPlexSansArabic-SemiBold.ttf",  alias: "IBMPlexSansArabic" },
+    { file: "IBMPlexSansArabic-Bold.ttf",      alias: "IBMPlexSansArabic" },
   ];
 
   for (const { file, alias } of candidates) {
