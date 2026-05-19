@@ -272,8 +272,19 @@ final class TabBarVisibility {
     var isVisible: Bool = true
     /// Last reported offset — we compare against this to detect direction.
     private var lastY: CGFloat = 0
-    /// Ignore tiny pixel jitter (springy bounce, sub-pixel jumps).
-    private let movementThreshold: CGFloat = 6
+    /// Stamps the last `isVisible` mutation so two toggles can't
+    /// overlap inside one 0.22s animation window. Without this, the
+    /// rubber-band bounce at the bottom of a long feed produced
+    /// rapid alternating toggles that visibly jittered the bar (user
+    /// report 2026-05-19: "الشريط العائم يهتز كثيراً").
+    private var lastToggleAt: Date = .distantPast
+    /// Min spacing between toggles in seconds (≥ the animation duration
+    /// below, so the bar finishes one animation before starting another).
+    private let toggleCooldown: TimeInterval = 0.5
+    /// Ignore tiny pixel jitter. 30 is large enough that natural scrolls
+    /// still register but iOS's rubber-band bounce (≈10-20px swings)
+    /// no longer triggers spurious direction flips.
+    private let movementThreshold: CGFloat = 30
     /// Always show the bar in the top zone — even if the reader scrolls
     /// down briefly. Below this offset, only direction matters.
     private let pinnedTopZone: CGFloat = 80
@@ -284,14 +295,20 @@ final class TabBarVisibility {
         let delta = y - lastY
         guard abs(delta) > movementThreshold else { return }
 
+        let now = Date()
+        let coolingDown = now.timeIntervalSince(lastToggleAt) < toggleCooldown
+
         if y < pinnedTopZone {
-            if !isVisible {
+            if !isVisible && !coolingDown {
                 withAnimation(.easeOut(duration: 0.22)) { isVisible = true }
+                lastToggleAt = now
             }
-        } else if delta > 0, isVisible {
+        } else if delta > 0, isVisible, !coolingDown {
             withAnimation(.easeOut(duration: 0.22)) { isVisible = false }
-        } else if delta < 0, !isVisible {
+            lastToggleAt = now
+        } else if delta < 0, !isVisible, !coolingDown {
             withAnimation(.easeOut(duration: 0.22)) { isVisible = true }
+            lastToggleAt = now
         }
 
         lastY = y

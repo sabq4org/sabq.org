@@ -8,6 +8,18 @@ private final class ScrollOffsetRef {
     var value: CGFloat = 0
 }
 
+/// Drives the LoyaltyCelebrationBanner — pairs the active tier with
+/// the reason it's showing so the banner can pick the right copy.
+struct LoyaltyBannerState: Equatable {
+    let tier: LoyaltyTier
+    let mode: BannerMode
+
+    enum BannerMode: Equatable {
+        case tierUp(previousLevel: Int)
+        case nudge
+    }
+}
+
 struct HomeFeedView: View {
     private static let scrollTopID = "home-feed-top"
     /// Ignore scroll-to-top when the reader is already near the header.
@@ -57,6 +69,14 @@ struct HomeFeedView: View {
     /// fetches the same payload on its own; both share Apple's HTTP
     /// cache so the second call is free on warm hits.
     @State private var loyaltySummary: LoyaltySummary?
+    /// Active loyalty banner — set when the user just crossed into a
+    /// new tier (one-shot) or when the periodic nudge is due. Cleared
+    /// on dismiss.
+    @State private var loyaltyBanner: LoyaltyBannerState?
+
+    private static let loyaltyLastSeenLevelKey = "sabq_loyalty_last_seen_level"
+    private static let loyaltyLastNudgeDateKey = "sabq_loyalty_last_nudge_at"
+    private static let nudgeIntervalDays: Int = 5
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -78,6 +98,21 @@ struct HomeFeedView: View {
                             .id(Self.scrollTopID)
 
                         headerSection
+
+                    // Tier-up celebration or periodic engagement nudge.
+                    // Slides in from the top, dismissible, tap routes
+                    // to LoyaltyAccountView.
+                    if let banner = loyaltyBanner {
+                        LoyaltyCelebrationBanner(
+                            tier: banner.tier,
+                            mode: bannerMode(from: banner.mode),
+                            onTap: {
+                                showLoyaltyAccount = true
+                                dismissLoyaltyBanner()
+                            },
+                            onDismiss: { dismissLoyaltyBanner() }
+                        )
+                    }
 
                     NavigationLink(value: DailyBriefRoute()) {
                         greetingBlock
@@ -204,6 +239,9 @@ struct HomeFeedView: View {
                 // Loyalty summary for the journey-metric "نقاط الولاء"
                 // cell. Best-effort: nil → cell shows 0.
                 loyaltySummary = try? await APIClient.shared.fetchLoyaltySummary()
+                if let summary = loyaltySummary {
+                    evaluateLoyaltyBanner(for: summary)
+                }
             }
         }
         .sheet(isPresented: $showLoyaltyAccount) {
@@ -216,6 +254,73 @@ struct HomeFeedView: View {
                         }
                     }
             }
+        }
+    }
+
+    // MARK: - Loyalty banner
+
+    /// Sets `loyaltyBanner` if the user just crossed a tier (one-shot
+    /// per level) or if enough time has elapsed since the last nudge.
+    /// Called once after the loyalty summary lands.
+    private func evaluateLoyaltyBanner(for summary: LoyaltySummary) {
+        let defaults = UserDefaults.standard
+        let currentLevel = summary.points?.rankLevel ?? summary.resolvedTier.level
+        let lastSeenLevel = defaults.integer(forKey: Self.loyaltyLastSeenLevelKey)
+
+        // 1) Tier-up takes priority: if currentLevel > lastSeenLevel,
+        //    show the celebration. lastSeenLevel = 0 the first run,
+        //    so a brand-new user crossing into L2 sees the banner.
+        if currentLevel > lastSeenLevel && currentLevel > 1 {
+            let tier = LoyaltyTiers.tier(forLevel: currentLevel)
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) {
+                loyaltyBanner = LoyaltyBannerState(
+                    tier: tier,
+                    mode: .tierUp(previousLevel: lastSeenLevel)
+                )
+            }
+            return
+        }
+
+        // 2) Periodic nudge: if at least `nudgeIntervalDays` have
+        //    passed since the last one (or no nudge has ever shown).
+        let lastNudge = defaults.object(forKey: Self.loyaltyLastNudgeDateKey) as? Date
+        let nudgeWindow = TimeInterval(Self.nudgeIntervalDays * 24 * 60 * 60)
+        let shouldNudge: Bool = {
+            guard let lastNudge else { return true }
+            return Date().timeIntervalSince(lastNudge) > nudgeWindow
+        }()
+        if shouldNudge {
+            let tier = LoyaltyTiers.tier(forLevel: max(1, currentLevel))
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) {
+                loyaltyBanner = LoyaltyBannerState(tier: tier, mode: .nudge)
+            }
+        }
+    }
+
+    private func bannerMode(from state: LoyaltyBannerState.BannerMode) -> LoyaltyCelebrationBanner.Mode {
+        switch state {
+        case .tierUp(let prev): return .tierUp(previousLevel: prev)
+        case .nudge:            return .nudge
+        }
+    }
+
+    /// Records the dismissal so the same banner doesn't reappear next
+    /// time. Tier-up dismissals advance lastSeenLevel to the current
+    /// tier; nudge dismissals stamp the current date.
+    private func dismissLoyaltyBanner() {
+        guard let banner = loyaltyBanner else { return }
+        let defaults = UserDefaults.standard
+        switch banner.mode {
+        case .tierUp:
+            defaults.set(banner.tier.level, forKey: Self.loyaltyLastSeenLevelKey)
+            // Also stamp the nudge date — we don't want a tier-up
+            // followed by a nudge on the next open.
+            defaults.set(Date(), forKey: Self.loyaltyLastNudgeDateKey)
+        case .nudge:
+            defaults.set(Date(), forKey: Self.loyaltyLastNudgeDateKey)
+        }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            loyaltyBanner = nil
         }
     }
 
