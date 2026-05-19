@@ -118,7 +118,7 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
 
   const padX = 60;
   const padTop = 6;     // editor: "ارفع اللوقو فوق" — hug the top edge
-  const padBottom = 28; // breathing room before the Wallet fields row
+  const padBottom = 20; // breathing room before the Wallet fields row
 
   try { (ctx as any).direction = "rtl"; } catch {}
 
@@ -128,7 +128,7 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 165;
+      const logoH = 150;
       const logoW = (logo.width / logo.height) * logoH;
       ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
       logoBottomY = padTop + logoH;
@@ -140,36 +140,37 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   // ── Tagline "بطاقة صحفية رسمية" directly under the logo ──────
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const taglineSize = 24;
-  const taglineY = logoBottomY + 6;
+  const taglineSize = 22;
+  const taglineY = logoBottomY + 4;
   ctx.font = arabicFont(taglineSize, false);
   ctx.fillStyle = INK_SOFT;
   ctx.fillText("بطاقة صحفية رسمية", W / 2, taglineY);
   const headerBottomY = taglineY + taglineSize * LINE_HEIGHT_MULTIPLIER;
 
-  // ── Name + jobTitle as a single block, line-height aware so the
-  //    name's descenders never collide with the job title's
-  //    ascenders. Restrained sizes leave clear margin above and
-  //    below — fixes rev 7's "المنصب مختفي خلف النصوص" bug. ─────
+  // ── Name + jobTitle as a single block. Anchored at the BOTTOM of
+  //    the safe area (rather than centered in remaining space) so
+  //    a wide explicit gap opens between the header and the name —
+  //    editor: "فراغ مناسب بين اللوقو والاسم". Sizes are calibrated
+  //    so the block + an explicit ~50px breathing gap all fit in
+  //    the 432px canvas without clipping. ─────────────────────────
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 80, 52, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 68, 48, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 36, 24, false) : 0;
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 30, 22, false) : 0;
 
   // Generous gap between name and job title.
-  const gap = jobTitle ? 40 : 0;
+  const gap = jobTitle ? 32 : 0;
 
   // Actual rendered line heights (include ascender/descender).
   const nameLineH = nameSize * LINE_HEIGHT_MULTIPLIER;
   const jobLineH = jobSize * LINE_HEIGHT_MULTIPLIER;
   const blockH = nameLineH + gap + jobLineH;
 
-  // Center the block within the remaining vertical space below the
-  // top header and above the bottom safe area.
-  const contentTop = headerBottomY + 16;
+  // Anchor the block toward the bottom of the safe area. This
+  // pushes everything down and leaves the desired empty band
+  // between the tagline and the name.
   const contentBottom = H - padBottom;
-  const contentH = contentBottom - contentTop;
-  const blockTop = contentTop + Math.max(0, (contentH - blockH) / 2);
+  const blockTop = Math.max(headerBottomY + 40, contentBottom - blockH);
 
   ctx.textBaseline = "top";
   ctx.font = arabicFont(nameSize, true);
