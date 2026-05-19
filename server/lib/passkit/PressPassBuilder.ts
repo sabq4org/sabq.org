@@ -3,6 +3,7 @@ import { PKPass } from 'passkit-generator';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { renderPressCardStrip } from './PressCardImageRenderer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,21 +58,32 @@ export class PressPassBuilder extends PassBuilder {
     return 'rgb(28, 164, 240)';
   }
   
-  configurePassFields(pass: PKPass, data: PressPassData): void {
-    pass.headerFields.push({
-      key: 'role',
-      label: 'الدور',
-      value: this.translateRole(data.userRole),
-      ...RTL_FIELD,
-    });
-    
-    pass.primaryFields.push({
-      key: 'name',
-      label: 'الاسم',
-      value: data.userName,
-      ...RTL_FIELD,
-    });
-    
+  async configurePassFields(pass: PKPass, data: PressPassData): Promise<void> {
+    // Render the custom strip image: logo top, photo center, name +
+    // role below — the editor's preferred vertical composition. Apple
+    // Wallet renders this between the header and primary-field rows.
+    // The standard logo (top-left) and thumbnail (top-right) slots are
+    // empty 1×1 transparencies in the template so the strip dominates.
+    //
+    // Server-side fallback: if rendering or font registration fails
+    // we just skip the strip injection and fall back to plain fields
+    // so the pass still issues.
+    try {
+      const strips = await renderPressCardStrip({
+        userName: data.userName,
+        roleAr: this.translateRole(data.userRole),
+        profileImageUrl: data.profileImageUrl,
+      });
+      pass.addBuffer('strip.png', strips.x1);
+      pass.addBuffer('strip@2x.png', strips.x2);
+      pass.addBuffer('strip@3x.png', strips.x3);
+    } catch (e) {
+      console.warn('[PressPassBuilder] strip render failed, falling back to fields-only:', e);
+    }
+
+    // The strip image carries name + role visually, so we no longer
+    // push them as separate fields. The remaining slots host the
+    // structured details Apple Wallet users still expect to read.
     if (data.jobTitle) {
       pass.secondaryFields.push({
         key: 'job_title',
@@ -80,7 +92,7 @@ export class PressPassBuilder extends PassBuilder {
         ...RTL_FIELD,
       });
     }
-    
+
     if (data.department) {
       pass.secondaryFields.push({
         key: 'department',
@@ -89,8 +101,7 @@ export class PressPassBuilder extends PassBuilder {
         ...RTL_FIELD,
       });
     }
-    
-    // Pair press ID + validity on one auxiliary row (shorter labels, Latin date).
+
     if (data.pressIdNumber) {
       pass.auxiliaryFields.push({
         key: 'press_id',
@@ -100,7 +111,7 @@ export class PressPassBuilder extends PassBuilder {
         ...RTL_FIELD,
       });
     }
-    
+
     if (data.validUntil) {
       pass.auxiliaryFields.push({
         key: 'valid_until',
@@ -110,7 +121,7 @@ export class PressPassBuilder extends PassBuilder {
         ...RTL_FIELD,
       });
     }
-    
+
     pass.backFields.push(
       {
         key: 'description',

@@ -45,7 +45,7 @@ export abstract class PassBuilder {
   abstract getTemplatePath(): string;
   abstract getPassDescription(): string;
   abstract getOrganizationName(): string;
-  abstract configurePassFields(pass: PKPass, data: any): void;
+  abstract configurePassFields(pass: PKPass, data: any): void | Promise<void>;
   
   async generatePass(data: any, certificates: CertificateConfig): Promise<Buffer> {
     try {
@@ -88,8 +88,10 @@ export abstract class PassBuilder {
         messageEncoding: 'iso-8859-1',
       });
       
-      // Configure custom fields
-      this.configurePassFields(pass, data);
+      // Configure custom fields. Subclasses may declare this as
+      // async (PressPassBuilder does, so it can render and embed a
+      // per-user strip image at issue time).
+      await Promise.resolve(this.configurePassFields(pass, data));
       
       console.log('✅ [PassBuilder] Pass configured successfully');
       
