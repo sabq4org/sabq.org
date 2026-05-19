@@ -99,39 +99,56 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   ctx.fillRect(0, 0, W, H);
 
   const padX = 60;
-  const padTop = 30;
+  const padTop = 18; // raised to push the logo right up against the top edge
 
-  // ── Sabq logo (top-right corner, slightly larger — editor
-  //    asked for "حبتين"). Brand presence without dominating. ───
+  try { (ctx as any).direction = "rtl"; } catch {}
+
+  // ── Sabq logo (top-center, pushed as high as the canvas allows).
+  //    Editor: "ارفع اللوقو فوق" + "حبتين أكبر". ─────────────────
+  let logoBottomY = padTop;
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
       const logoH = 170;
       const logoW = (logo.width / logo.height) * logoH;
-      ctx.drawImage(logo, W - padX - logoW, padTop, logoW, logoH);
+      ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
+      logoBottomY = padTop + logoH;
     }
   } catch (e) {
     console.warn("[PressCardImageRenderer] logo skipped:", e);
   }
 
-  // ── Name + (optional) jobTitle — vertically centered as a single
-  //    block so they read as one unit. No divider between them. ──
-  try { (ctx as any).direction = "rtl"; } catch {}
+  // ── Tagline "بطاقة صحفية رسمية" directly under the logo, at
+  //    the very top of the card per editor direction ("فوق فوق"). ─
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.font = arabicFont(26, false);
+  ctx.fillStyle = INK_SOFT;
+  ctx.fillText("بطاقة صحفية رسمية", W / 2, logoBottomY + 4);
+  const taglineBottomY = logoBottomY + 4 + 26;
+
+  // ── Name + jobTitle as a single block, generously spaced and
+  //    vertically centered within the remaining canvas below the
+  //    top header area. ─────────────────────────────────────────
   ctx.textAlign = "center";
 
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 120, 64, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 100, 56, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 44, 28, false) : 0;
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 40, 24, false) : 0;
 
-  // Block height = name + small gap + jobTitle (when present).
-  // Center the block on the canvas's vertical midpoint so the
-  // composition stays balanced regardless of whether a job title
-  // exists.
-  const gap = jobTitle ? 22 : 0;
+  // Bigger breathing room between name and job title — editor
+  // asked explicitly for "فراغ بين الاسم والمنصب".
+  const gap = jobTitle ? 44 : 0;
   const blockH = nameSize + gap + jobSize;
-  const blockTop = (H - blockH) / 2;
+
+  // Center the block in the lower 60% of the canvas (below the
+  // top header) so it doesn't crowd the tagline or feel bottom-
+  // heavy.
+  const lowerAreaTop = taglineBottomY + 16;
+  const lowerAreaH = H - lowerAreaTop;
+  const blockTop = lowerAreaTop + (lowerAreaH - blockH) / 2;
 
   ctx.textBaseline = "top";
   ctx.font = arabicFont(nameSize, true);
@@ -143,13 +160,6 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
     ctx.fillStyle = INK_SOFT;
     ctx.fillText(jobTitle, W / 2, blockTop + nameSize + gap);
   }
-
-  // ── Tagline (subtle, near bottom). No divider rule — editor
-  //    explicitly asked for the line to go away. ────────────────
-  ctx.textBaseline = "alphabetic";
-  ctx.font = arabicFont(26, false);
-  ctx.fillStyle = INK_SOFT;
-  ctx.fillText("بطاقة صحفية رسمية", W / 2, H - 36);
 
   // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ─────
   const x3 = canvas.toBuffer("image/png");

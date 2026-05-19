@@ -93,16 +93,21 @@ export class PressPassBuilder extends PassBuilder {
     // appears directly under the name inside the strip image
     // (renderer handles it). Keeping it here too would just
     // duplicate the same text in two places.
+    //
+    // Metadata (الجهة | رقم البطاقة | تاريخ الانتهاء) all land in
+    // auxiliaryFields as a single three-column row at the bottom
+    // of the card, per editor direction ("تنزل تحت كمان"). Apple
+    // Wallet supports up to 4 auxiliary fields in one row, so all
+    // three fit naturally on every device size.
 
     if (data.department) {
-      pass.secondaryFields.push({
+      pass.auxiliaryFields.push({
         key: 'department',
         label: 'الجهة',
         value: data.department,
         ...RTL_FIELD,
       });
     }
-
     if (data.pressIdNumber) {
       pass.auxiliaryFields.push({
         key: 'press_id',
