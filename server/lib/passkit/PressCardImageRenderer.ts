@@ -65,8 +65,12 @@ function registerFontsOnce() {
 type RenderInput = {
   userName: string;
   jobTitle?: string;
+  department?: string;
+  pressIdNumber?: string;
+  validUntil?: Date;
 };
 
+const ACCENT = "#1CA4F0"; // Sabq sky-blue (used for metadata labels)
 const INK = "#0F172A";    // Deep navy for the name
 const INK_SOFT = "#64748B";
 const WHITE = "#FFFFFF";
@@ -117,18 +121,21 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   ctx.fillRect(0, 0, W, H);
 
   const padX = 60;
-  const padTop = 6;     // editor: "ارفع اللوقو فوق" — hug the top edge
-  const padBottom = 20; // breathing room before the Wallet fields row
+  const padTop = 6;
+  const padBottom = 14;
 
   try { (ctx as any).direction = "rtl"; } catch {}
 
-  // ── Sabq logo (top-center, flush with the top edge) ───────────
+  // ── Sabq logo (top-center). Editor: "نكبر اللوقو تكتين بس" —
+  //    a small bump from 150 → 162. Anything larger compresses
+  //    the name+meta blocks past readability inside the 432px
+  //    canvas. ────────────────────────────────────────────────────
   let logoBottomY = padTop;
   try {
     const logoPath = path.resolve(process.cwd(), "public/branding/sabq-logo.png");
     if (fs.existsSync(logoPath)) {
       const logo = await loadImage(logoPath);
-      const logoH = 150;
+      const logoH = 162;
       const logoW = (logo.width / logo.height) * logoH;
       ctx.drawImage(logo, (W - logoW) / 2, padTop, logoW, logoH);
       logoBottomY = padTop + logoH;
@@ -140,37 +147,54 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   // ── Tagline "بطاقة صحفية رسمية" directly under the logo ──────
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const taglineSize = 22;
-  const taglineY = logoBottomY + 4;
+  const taglineSize = 20;
+  const taglineY = logoBottomY + 3;
   ctx.font = arabicFont(taglineSize, false);
   ctx.fillStyle = INK_SOFT;
   ctx.fillText("بطاقة صحفية رسمية", W / 2, taglineY);
   const headerBottomY = taglineY + taglineSize * LINE_HEIGHT_MULTIPLIER;
 
-  // ── Name + jobTitle as a single block. Anchored at the BOTTOM of
-  //    the safe area (rather than centered in remaining space) so
-  //    a wide explicit gap opens between the header and the name —
-  //    editor: "فراغ مناسب بين اللوقو والاسم". Sizes are calibrated
-  //    so the block + an explicit ~50px breathing gap all fit in
-  //    the 432px canvas without clipping. ─────────────────────────
+  // ── Metadata row at the bottom of the strip (الجهة | رقم
+  //    البطاقة | تاريخ الانتهاء). Baked into the image because
+  //    Apple Wallet won't let us shrink the native auxiliaryFields
+  //    typography (editor: "نصغر الخط شوي"). Labels small in
+  //    Sabq sky-blue, values slightly larger in deep navy. ───────
+  const validUntil = input.validUntil;
+  const validUntilStr = validUntil
+    ? `${validUntil.getFullYear()}/${String(validUntil.getMonth() + 1).padStart(2, "0")}/${String(validUntil.getDate()).padStart(2, "0")}`
+    : "";
+  const metaItems: Array<{ label: string; value: string }> = [];
+  if (input.department) metaItems.push({ label: "الجهة", value: input.department });
+  if (input.pressIdNumber) metaItems.push({ label: "رقم البطاقة", value: input.pressIdNumber });
+  if (validUntilStr) metaItems.push({ label: "تاريخ الانتهاء", value: validUntilStr });
+
+  // Smaller than the native auxiliaryFields would render — that's
+  // the whole point of moving them into the bitmap.
+  const metaLabelSize = 18;
+  const metaValueSize = 24;
+  const metaLabelLineH = metaLabelSize * LINE_HEIGHT_MULTIPLIER;
+  const metaValueLineH = metaValueSize * LINE_HEIGHT_MULTIPLIER;
+  const metaGapBetweenLabelAndValue = 4;
+  const metaBlockH = metaItems.length
+    ? metaLabelLineH + metaGapBetweenLabelAndValue + metaValueLineH
+    : 0;
+  const metaTop = H - padBottom - metaBlockH;
+
+  // ── Name + jobTitle block — sits between header and metadata
+  //    with explicit padding on both sides. ─────────────────────
   const nameMaxWidth = W - padX * 2;
-  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 68, 48, true);
+  const nameSize = fitFontSize(ctx, input.userName, nameMaxWidth, 54, 40, true);
   const jobTitle = (input.jobTitle ?? "").trim();
-  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 30, 22, false) : 0;
-
-  // Generous gap between name and job title.
-  const gap = jobTitle ? 32 : 0;
-
-  // Actual rendered line heights (include ascender/descender).
+  const jobSize = jobTitle ? fitFontSize(ctx, jobTitle, nameMaxWidth, 22, 18, false) : 0;
+  const nameJobGap = jobTitle ? 18 : 0;
   const nameLineH = nameSize * LINE_HEIGHT_MULTIPLIER;
   const jobLineH = jobSize * LINE_HEIGHT_MULTIPLIER;
-  const blockH = nameLineH + gap + jobLineH;
+  const blockH = nameLineH + nameJobGap + jobLineH;
 
-  // Anchor the block toward the bottom of the safe area. This
-  // pushes everything down and leaves the desired empty band
-  // between the tagline and the name.
-  const contentBottom = H - padBottom;
-  const blockTop = Math.max(headerBottomY + 40, contentBottom - blockH);
+  const nameAreaTop = headerBottomY + 14;
+  const nameAreaBottom = metaTop - 16;
+  const nameAreaH = Math.max(0, nameAreaBottom - nameAreaTop);
+  const blockTop = nameAreaTop + Math.max(0, (nameAreaH - blockH) / 2);
 
   ctx.textBaseline = "top";
   ctx.font = arabicFont(nameSize, true);
@@ -180,7 +204,29 @@ export async function renderPressCardStrip(input: RenderInput): Promise<{ x1: Bu
   if (jobTitle) {
     ctx.font = arabicFont(jobSize, false);
     ctx.fillStyle = INK_SOFT;
-    ctx.fillText(jobTitle, W / 2, blockTop + nameLineH + gap);
+    ctx.fillText(jobTitle, W / 2, blockTop + nameLineH + nameJobGap);
+  }
+
+  // ── Draw the metadata row as three centered columns. Labels in
+  //    Sabq sky-blue, values in deep navy directly below. ─────────
+  if (metaItems.length) {
+    const colWidth = (W - padX * 2) / metaItems.length;
+    metaItems.forEach((item, i) => {
+      // Column centers are evenly spaced across the safe area.
+      // i=0 is rightmost in RTL visual flow.
+      const colX = padX + colWidth * (metaItems.length - 0.5 - i);
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      ctx.font = arabicFont(metaLabelSize, false);
+      ctx.fillStyle = ACCENT;
+      ctx.fillText(item.label, colX, metaTop, colWidth - 12);
+
+      ctx.font = arabicFont(metaValueSize, true);
+      ctx.fillStyle = INK;
+      ctx.fillText(item.value, colX, metaTop + metaLabelLineH + metaGapBetweenLabelAndValue, colWidth - 12);
+    });
   }
 
   // ── Export at three densities (Apple Wallet @1x, @2x, @3x) ─────
