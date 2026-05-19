@@ -2516,6 +2516,15 @@ function formatArticleForMobile(row: any, baseUrl: string) {
     published_at: article.publishedAt?.toISOString() || null,
     updated_at: article.updatedAt?.toISOString() || null,
     image_url: article.imageUrl || article.thumbnailUrl || null,
+    // Editorial focal point ({x, y} as percentages 0–100 from top-left)
+    // — drives the .fill-mode crop on iOS so the subject of the hero
+    // stays in frame on featured cards, story rails, and detail. The
+    // articleCardSelect was already including imageFocalPoint in the
+    // SQL projection, but this serializer used to drop it; the iOS
+    // FocalCachedAsyncImage fell back to centre on every card. Pass
+    // it through verbatim — iOS's decodeFocalPoint accepts both
+    // camelCase and snake_case keys.
+    image_focal_point: article.imageFocalPoint || null,
     // True when the hero (or thumbnail, when no hero exists) was
     // produced by the dashboard's AI image generator. iOS uses this
     // to overlay a "مولّدة بالذكاء الاصطناعي" badge on the image —

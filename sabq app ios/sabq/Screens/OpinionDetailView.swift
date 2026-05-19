@@ -20,7 +20,7 @@ struct OpinionDetailView: View {
     /// through the same `inlineLightboxURL` binding.
     @State private var isHeroLightboxPresented = false
     @State private var inlineLightboxURL: URL?
-    @State private var isLiked: Bool = false
+    @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
     @State private var audioPlayer: AVPlayer?
@@ -229,7 +229,8 @@ struct OpinionDetailView: View {
     // MARK: - Like
 
     private var likeButton: some View {
-        Button {
+        let isLiked = likesStore.isLiked(opinion.id)
+        return Button {
             SabqHaptics.medium()
             toggleLike()
         } label: {
@@ -245,12 +246,9 @@ struct OpinionDetailView: View {
 
     @MainActor
     private func refreshLikeStatus() async {
-        do {
-            let status = try await BehaviorTracker.shared.fetchLikeStatus(articleId: opinion.id)
-            isLiked = status.liked
-            likesCount = status.count
-        } catch {
-            // Silent — defaults to unliked.
+        await likesStore.reconcile(opinion.id)
+        if let serverCount = likesStore.count(for: opinion.id) {
+            likesCount = serverCount
         }
     }
 
@@ -305,19 +303,10 @@ struct OpinionDetailView: View {
         guard !isLikeBusy else { return }
         isLikeBusy = true
         let articleId = opinion.id
-        isLiked.toggle()
-        likesCount += isLiked ? 1 : -1
-        if likesCount < 0 { likesCount = 0 }
         Task { @MainActor in
             defer { isLikeBusy = false }
-            do {
-                let result = try await BehaviorTracker.shared.toggleLike(articleId: articleId)
-                isLiked = result.liked
+            if let result = await likesStore.toggle(articleId) {
                 likesCount = result.count
-            } catch {
-                isLiked.toggle()
-                likesCount += isLiked ? 1 : -1
-                if likesCount < 0 { likesCount = 0 }
             }
         }
     }

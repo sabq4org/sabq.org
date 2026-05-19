@@ -36,7 +36,7 @@ struct ArticleDetailView: View {
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
     @State private var scrollProgress: CGFloat = 0
-    @State private var isLiked: Bool = false
+    @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
     @State private var isPassportPresented = false
@@ -320,7 +320,8 @@ struct ArticleDetailView: View {
     // small overlay badge once we know it. Disabled while a toggle is
     // in flight so a rapid double-tap can't create duplicate rows.
     private var likeButton: some View {
-        Button {
+        let isLiked = likesStore.isLiked(article.id)
+        return Button {
             SabqHaptics.medium()
             toggleLike()
         } label: {
@@ -336,13 +337,12 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func refreshLikeStatus() async {
-        do {
-            let status = try await BehaviorTracker.shared.fetchLikeStatus(articleId: article.id)
-            isLiked = status.liked
-            likesCount = status.count
-        } catch {
-            // Silent — the button defaults to unliked and re-tries
-            // on next .task firing.
+        // Hand reconciliation to LikesStore — it knows how to merge
+        // local-cached liked-state with the server's response without
+        // dropping the user's intent if the network blips.
+        await likesStore.reconcile(article.id)
+        if let serverCount = likesStore.count(for: article.id) {
+            likesCount = serverCount
         }
     }
 
@@ -350,21 +350,10 @@ struct ArticleDetailView: View {
         guard !isLikeBusy else { return }
         isLikeBusy = true
         let articleId = article.id
-        // Optimistic flip — server response wins.
-        isLiked.toggle()
-        likesCount += isLiked ? 1 : -1
-        if likesCount < 0 { likesCount = 0 }
         Task { @MainActor in
             defer { isLikeBusy = false }
-            do {
-                let result = try await BehaviorTracker.shared.toggleLike(articleId: articleId)
-                isLiked = result.liked
+            if let result = await likesStore.toggle(articleId) {
                 likesCount = result.count
-            } catch {
-                // Revert optimistic update on failure.
-                isLiked.toggle()
-                likesCount += isLiked ? 1 : -1
-                if likesCount < 0 { likesCount = 0 }
             }
         }
     }

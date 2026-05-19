@@ -36,6 +36,11 @@ struct HomeFeedView: View {
     /// Drives the modal push to "حسابي / نقاطي" when the user taps the
     /// LoyaltyStripView inside the personal-journey block.
     @State private var showLoyaltyAccount = false
+    /// Cached loyalty summary so the journey-block metric row can show
+    /// the user's lifetime points. The neighbouring LoyaltyStripView
+    /// fetches the same payload on its own; both share Apple's HTTP
+    /// cache so the second call is free on warm hits.
+    @State private var loyaltySummary: LoyaltySummary?
 
     private var isContentReady: Bool {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
@@ -180,6 +185,9 @@ struct HomeFeedView: View {
                 if let page = try? await APIClient.shared.fetchEditorialNotifications() {
                     notificationsStore.unreadCount = page.unread
                 }
+                // Loyalty summary for the journey-metric "نقاط الولاء"
+                // cell. Best-effort: nil → cell shows 0.
+                loyaltySummary = try? await APIClient.shared.fetchLoyaltySummary()
             }
         }
         .sheet(isPresented: $showLoyaltyAccount) {
@@ -983,7 +991,15 @@ struct HomeFeedView: View {
             metricDivider
             metricCell(value: "\(richInsights?.metrics.likes ?? 0)", unit: nil, label: "إعجابات")
             metricDivider
-            metricCell(value: "\(richInsights?.metrics.comments ?? 0)", unit: nil, label: "تعليقات")
+            // Loyalty points replaces the comments-count cell (per
+            // 2026-05-19 editorial preference). lifetimePoints stays
+            // monotonic so this number only grows, which reads as
+            // gentler than a comment-count that can hit 0.
+            metricCell(
+                value: "\(loyaltySummary?.points?.lifetimePoints ?? 0)",
+                unit: nil,
+                label: "نقاط الولاء"
+            )
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)

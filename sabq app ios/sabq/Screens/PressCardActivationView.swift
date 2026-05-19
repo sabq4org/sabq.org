@@ -117,10 +117,17 @@ struct PressCardActivationView: View {
     }
 
     private var addToWalletButton: some View {
-        AddPassButtonRepresentable(style: PKAddPassButtonStyle.black, isEnabled: !isIssuing) {
+        // Apple's outlined Wallet button — lighter visual weight than
+        // the solid black variant we shipped first, which the user felt
+        // dominated the screen. .blackOutline renders transparent fill
+        // with a thin border + Apple's own Wallet glyph, which is what
+        // matches sabq's minimalist look. Height clamped to 38pt so it
+        // sits as a button, not a banner.
+        AddPassButtonRepresentable(style: PKAddPassButtonStyle.blackOutline, isEnabled: !isIssuing) {
             Task { await issuePass() }
         }
-        .frame(height: 48)
+        .frame(height: 38)
+        .frame(maxWidth: 260)
     }
 
     // MARK: - Unauthorized

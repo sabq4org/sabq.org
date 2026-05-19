@@ -98,18 +98,29 @@ struct LoyaltyAccountView: View {
         )
     }
 
-    // MARK: Tier ladder
+    // MARK: Tier ladder (vertical timeline)
+    //
+    // Each tier renders as a node on a continuous vertical line, with
+    // its real brand color regardless of locked state — locked tiers
+    // are still shown in their proper hue (outlined, smaller) instead
+    // of being greyed out, per editorial preference: "كل مرحلة بلونها
+    // الحقيقي".
 
     @ViewBuilder
     private var tierLadder: some View {
         let currentLevel = loader.summary?.points?.rankLevel ?? 1
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("المستويات الخمسة")
                 .font(.system(size: 14, weight: .heavy, design: .rounded))
                 .foregroundStyle(SabqTheme.ink)
-            VStack(spacing: 6) {
-                ForEach(LoyaltyTiers.all) { tier in
-                    tierRow(tier: tier, currentLevel: currentLevel)
+            VStack(spacing: 0) {
+                ForEach(Array(LoyaltyTiers.all.enumerated()), id: \.element.id) { idx, tier in
+                    tierTimelineRow(
+                        tier: tier,
+                        currentLevel: currentLevel,
+                        isFirst: idx == 0,
+                        isLast: idx == LoyaltyTiers.all.count - 1
+                    )
                 }
             }
         }
@@ -125,40 +136,84 @@ struct LoyaltyAccountView: View {
         )
     }
 
-    private func tierRow(tier: LoyaltyTier, currentLevel: Int) -> some View {
+    private func tierTimelineRow(tier: LoyaltyTier, currentLevel: Int, isFirst: Bool, isLast: Bool) -> some View {
+        let reached = tier.level <= currentLevel
         let isCurrent = tier.level == currentLevel
-        let locked = tier.level > currentLevel
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(locked ? Color.gray.opacity(0.15) : tier.color.opacity(0.18))
-                    .frame(width: 36, height: 36)
-                Image(systemName: locked ? "lock.fill" : "trophy.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(locked ? Color.gray : tier.color)
+        let nextReached = tier.level < currentLevel  // the connector below is "filled" only if the next tier is also reached
+        let nodeColumnWidth: CGFloat = 36
+
+        return HStack(alignment: .top, spacing: 14) {
+            // ── Timeline column: top connector ─ node ─ bottom connector
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(reached ? tier.color : tier.color.opacity(0.25))
+                    .frame(width: 2, height: 14)
+                    .opacity(isFirst ? 0 : 1)
+
+                node(for: tier, isCurrent: isCurrent, reached: reached)
+
+                Rectangle()
+                    .fill(nextReached ? tier.color : tier.color.opacity(0.25))
+                    .frame(width: 2)
+                    .frame(maxHeight: .infinity)
+                    .opacity(isLast ? 0 : 1)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(tier.nameAr)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(locked ? Color.gray : tier.color)
+            .frame(width: nodeColumnWidth)
+
+            // ── Tier info
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(tier.nameAr)
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(tier.color)
+                    if isCurrent {
+                        Text("مستواك الآن")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(tier.color))
+                    }
+                }
                 Text("يبدأ من \(tier.minLifetimePoints.formatted(.number.locale(Locale(identifier: "ar_SA")))) نقطة")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
+            .padding(.top, 14)   // align text baseline with the node center
+            .padding(.bottom, isLast ? 4 : 18)
+
             Spacer(minLength: 0)
+        }
+    }
+
+    /// The colored circle node on the timeline. Current tier = large
+    /// filled disc with a soft halo; reached-but-past = medium filled
+    /// disc with a small checkmark; locked = outlined ring at full
+    /// tier-color opacity so the brand color remains visible.
+    @ViewBuilder
+    private func node(for tier: LoyaltyTier, isCurrent: Bool, reached: Bool) -> some View {
+        ZStack {
             if isCurrent {
-                Text("مستواك الآن")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(tier.color))
+                Circle()
+                    .fill(tier.color.opacity(0.18))
+                    .frame(width: 32, height: 32)
+            }
+            if reached {
+                Circle()
+                    .fill(tier.color)
+                    .frame(width: isCurrent ? 20 : 14, height: isCurrent ? 20 : 14)
+                if !isCurrent {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+            } else {
+                Circle()
+                    .strokeBorder(tier.color, lineWidth: 2)
+                    .frame(width: 14, height: 14)
+                    .background(Circle().fill(Color.white))
             }
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isCurrent ? tier.color.opacity(0.08) : Color.clear)
-        )
+        .frame(width: 32, height: 32)
     }
 }

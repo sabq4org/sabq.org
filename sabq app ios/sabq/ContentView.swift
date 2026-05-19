@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var articlesStore = ArticlesStore()
     @State private var bookmarksStore = BookmarksStore()
+    @State private var likesStore = LikesStore()
     @State private var authStore = AuthStore()
     @State private var followedKeywords = FollowedKeywordsStore()
     @State private var selectedTab: AppTab = .home
@@ -115,6 +116,7 @@ struct ContentView: View {
             }
             .environment(articlesStore)
             .environment(bookmarksStore)
+            .environment(likesStore)
             .environment(authStore)
             .environment(followedKeywords)
             .onChange(of: notificationsStore.pendingDeepLink) { _, newLink in
