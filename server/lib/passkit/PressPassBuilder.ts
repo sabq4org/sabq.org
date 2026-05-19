@@ -25,13 +25,15 @@ export class PressPassBuilder extends PassBuilder {
     return 'سبق الذكية';
   }
   
-  // 2026-05-19 redesign: white card with Sabq red accents.
-  // - background: pure white (clean, official ID-card feel)
-  // - foreground (field VALUES): deep navy for readability
-  // - labels:   Sabq signature red — gives the brand cue without
-  //              needing a literal stripe across the body
-  // The coupon-style pass.json also pulls in strip.png (a thin red
-  // band) which sits between the header row and the primary field.
+  // 2026-05-19 redesign (revision 2): clean white card, Sabq sky-blue
+  // labels, navy values. Sabq's official brand color isn't red — it's
+  // the azure derived from the web primary HSL(203.89,88.28%,53.14%)
+  // (~#1CA4F0), which is what users see across the app. Apple Wallet
+  // renders generic-style passes without a colored strip area, so the
+  // brand cue here comes from the label color + the Sabq logo
+  // anchored top-right via thumbnail.png. Earlier `coupon`-style
+  // attempt blew the strip image up into a hero band — confirmed
+  // unwanted, reverted to generic.
   protected getBackgroundColor(): string {
     return 'rgb(255, 255, 255)';
   }
@@ -41,7 +43,7 @@ export class PressPassBuilder extends PassBuilder {
   }
 
   protected getLabelColor(): string {
-    return 'rgb(160, 53, 58)';
+    return 'rgb(28, 164, 240)';
   }
   
   configurePassFields(pass: PKPass, data: PressPassData): void {
