@@ -98,6 +98,7 @@ fun HomeFeedScreen(
     onNotificationsClick: () -> Unit = {},
     onOpinionsAllClick: () -> Unit = {},
     onTrendingAllClick: () -> Unit = {},
+    onCalendarAllClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
     onAudioNewslettersClick: () -> Unit = {},
@@ -138,6 +139,7 @@ fun HomeFeedScreen(
                 onNotificationsClick = onNotificationsClick,
                 onOpinionsAllClick = onOpinionsAllClick,
                 onTrendingAllClick = onTrendingAllClick,
+                onCalendarAllClick = onCalendarAllClick,
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onAudioNewslettersClick = onAudioNewslettersClick,
@@ -169,6 +171,7 @@ private fun LoadedFeed(
     onNotificationsClick: () -> Unit,
     onOpinionsAllClick: () -> Unit,
     onTrendingAllClick: () -> Unit,
+    onCalendarAllClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onAudioNewslettersClick: () -> Unit,
@@ -293,7 +296,7 @@ private fun LoadedFeed(
 
         // Today's calendar events.
         if (state.calendar.isNotEmpty()) {
-            item { CalendarTodayCard(events = state.calendar) }
+            item { CalendarTodayCard(events = state.calendar, onSeeAllClick = onCalendarAllClick) }
         }
 
         // Audio newsletter card. Tap navigates to the dedicated
@@ -1285,10 +1288,40 @@ private fun StoryPlaceholder() {
 // MARK: - Calendar today card
 
 @Composable
-private fun CalendarTodayCard(events: List<com.sabq.smart.data.CalendarEvent>) {
+private fun CalendarTodayCard(
+    events: List<com.sabq.smart.data.CalendarEvent>,
+    onSeeAllClick: () -> Unit = {},
+) {
     val gold = SabqTheme.colors.gold
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionRow(title = "أحداث اليوم القادمة", icon = Icons.Filled.CalendarMonth, tint = gold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                SectionRow(title = "أحداث اليوم القادمة", icon = Icons.Filled.CalendarMonth, tint = gold)
+            }
+            Row(
+                modifier = Modifier.clickable { onSeeAllClick() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "الكل",
+                    style = SabqTheme.typography.metaSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                        color = gold,
+                    ),
+                )
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = gold,
+                    modifier = Modifier.size(11.dp),
+                )
+            }
+        }
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.tileRadius)
         Column(
             modifier = Modifier
