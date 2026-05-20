@@ -152,6 +152,20 @@ router.get("/", async (_req: Request, res: Response) => {
       ),
     );
 
+    // Compose the WHERE conditions explicitly. The previous
+    // implementation used a `sql\`true\`` placeholder inside `and(...)`
+    // when there were no pinned ids — Drizzle chokes on that and the
+    // endpoint 500'd with "تعذر جلب بلوك الحج". Build the array and
+    // only push the NOT IN clause when there's actually something to
+    // exclude.
+    const whereConds: any[] = [
+      eq(articles.status, "published"),
+      gte(articles.publishedAt, cutoff),
+      or(...keywordConds),
+    ];
+    if (pinned.length > 0) {
+      whereConds.push(sql`${articles.id} NOT IN (${sql.join(pinned.map((id) => sql`${id}`), sql`, `)})`);
+    }
     const keywordMatched = keywords.length > 0
       ? await db
           .select({
@@ -164,14 +178,7 @@ router.get("/", async (_req: Request, res: Response) => {
             isBreaking: articles.isBreaking,
           })
           .from(articles)
-          .where(
-            and(
-              eq(articles.status, "published"),
-              gte(articles.publishedAt, cutoff),
-              or(...keywordConds),
-              pinned.length > 0 ? sql`${articles.id} NOT IN ${pinned}` : sql`true`,
-            ),
-          )
+          .where(and(...whereConds))
           .orderBy(desc(articles.publishedAt))
           .limit(config.articleLimit ?? 5)
       : [];
