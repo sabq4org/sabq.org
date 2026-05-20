@@ -2,7 +2,7 @@ import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import crypto from 'crypto';
 import { db } from '../db';
 import { emailVerificationTokens, users } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 const MAILERSEND_API_KEY = process.env.MAILERSEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@sabq.sa';
@@ -261,7 +261,32 @@ export async function verifyEmailToken(token: string): Promise<{ success: boolea
       .set({ used: true })
       .where(eq(emailVerificationTokens.token, token));
 
-    // Update user email verification status
+    // Update user email verification status AND flip pending → active.
+    //
+    // Prior to 2026-05-20 this only flipped `emailVerified`, leaving
+    // `status` stuck at "pending". The web pre-auth flow worked fine
+    // (it doesn't check `status`), but iOS Mobile API explicitly
+    // gates login on `status === 'pending'` and produced the
+    // "الحساب غير مفعل" error for users who HAD verified via the web.
+    // Six accounts were stuck in this state when the bug was found —
+    // see the matching backfill in scripts/backfill-verified-pending.ts.
+    //
+    // Only promote `pending → active`; never touch banned/suspended/
+    // deleted statuses (so verification-after-suspension can't be
+    // used as a status-reset trick).
+    await db
+      .update(users)
+      .set({ emailVerified: true, status: "active" })
+      .where(
+        and(
+          eq(users.id, verificationToken.userId),
+          eq(users.status, "pending"),
+        ),
+      );
+
+    // If the row wasn't pending (already active, or in a non-promotable
+    // state), still mark the email as verified — admins may pre-activate
+    // accounts and we don't want this to silently no-op.
     await db
       .update(users)
       .set({ emailVerified: true })
