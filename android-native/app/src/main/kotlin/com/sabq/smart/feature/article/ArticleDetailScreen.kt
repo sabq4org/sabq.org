@@ -108,6 +108,10 @@ import com.sabq.smart.ui.components.BreakingPill
 import com.sabq.smart.ui.components.CommentComposer
 import com.sabq.smart.ui.components.CommentRow
 import com.sabq.smart.ui.components.FocalCachedAsyncImage
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
 import com.sabq.smart.ui.components.SmallActionButton
 import com.sabq.smart.ui.components.StatusChip
 import com.sabq.smart.ui.theme.SabqTheme
@@ -127,7 +131,7 @@ import kotlinx.coroutines.launch
  *
  * Vertical layout order (matches iOS `articleDetailContent`,
  * `HomeFeedView.swift` siblings ignored):
- *   1. Hero (300 dp, no parallax, AI badge overlay)
+ *   1. Hero (natural aspect, no parallax, AI badge overlay)
  *   2. Labels row     (category + breaking + Passport)
  *   3. Title
  *   4. Meta row       (author · readingTime · dateFormatted)
@@ -281,6 +285,7 @@ private fun ArticleBody(
     // for the next article.
     var isFocusMode by remember { mutableStateOf(false) }
     var isReaderSheetOpen by remember { mutableStateOf(false) }
+    var isPassportSheetOpen by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -289,7 +294,11 @@ private fun ArticleBody(
             contentPadding = PaddingValues(bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            // 1. Hero — full-width, 300 dp, focal-point crop, no parallax.
+            // 1. Hero — full-width, NATURAL aspect ratio (no fixed
+            // height, no focal-point crop). Matches the Capacitor web
+            // app the user reads on Play Store today and the iOS
+            // ArticleDetailView. Don't reintroduce a fixed 300dp box
+            // here — portrait photos lose the subject's face.
             item { HeroImage(article = article) }
 
             // Everything else lives in the 20 dp horizontal column.
@@ -299,7 +308,7 @@ private fun ArticleBody(
 
             // 2. Labels row (under the hero, NOT overlaid).
             if (!isFocusMode) {
-                item { LabelsRow(article = article) }
+                item { LabelsRow(article = article, onPassportClick = { isPassportSheetOpen = true }) }
             }
 
             // 3. Title.
@@ -433,6 +442,18 @@ private fun ArticleBody(
                 settingsViewModel = settingsViewModel,
             )
         }
+
+        // Content Passport sheet — opens when the user taps the
+        // "موثَّق" pill in the labels row. iOS counterpart:
+        // `PassportSheetView` opened via `PassportInlineBadge`.
+        if (isPassportSheetOpen) {
+            article.slug?.let { slug ->
+                com.sabq.smart.feature.passport.PassportSheet(
+                    slug = slug,
+                    onDismiss = { isPassportSheetOpen = false },
+                )
+            }
+        }
     }
 }
 
@@ -442,24 +463,50 @@ private fun ArticleBody(
 
 @Composable
 private fun HeroImage(article: Article) {
-    android.util.Log.d("HeroImage", "Rendering HeroImage with URL: ${article.imageUrl}")
+    // Natural aspect ratio: image fills width, height follows the
+    // intrinsic w/h of the photo. No fixed-height crop — matches the
+    // Capacitor web app the user reads on Play Store today and the
+    // iOS ArticleDetailView. Tall portraits keep the face visible.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(300.dp)
             .background(SabqTheme.colors.paleFill),
     ) {
         if (!article.imageUrl.isNullOrBlank()) {
-            FocalCachedAsyncImage(
-                url = article.imageUrl,
-                focalPoint = article.focalPoint,
-                modifier = Modifier.fillMaxSize(),
+            val context = LocalContext.current
+            val request = ImageRequest.Builder(context)
+                .data(article.imageUrl)
+                .crossfade(250)
+                .build()
+            SubcomposeAsyncImage(
+                model = request,
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth(),
+                contentScale = ContentScale.FillWidth,
+                loading = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(SabqTheme.colors.paleFill),
+                    )
+                },
+                error = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(SabqTheme.colors.paleFill),
+                    )
+                },
             )
         } else {
-            // Category-tinted fallback hero.
+            // Category-tinted fallback hero — fixed height because we
+            // have no image to derive an aspect ratio from.
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(220.dp)
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
@@ -524,7 +571,7 @@ private fun AiImageBadge(model: String?, modifier: Modifier = Modifier) {
 // ============================================================
 
 @Composable
-private fun LabelsRow(article: Article) {
+private fun LabelsRow(article: Article, onPassportClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -537,6 +584,11 @@ private fun LabelsRow(article: Article) {
         } else {
             StatusChip(title = article.category.title, tint = article.category.tint())
             if (article.isBreaking) BreakingPill()
+        }
+        // Always-visible "موثَّق" pill — tap opens the Content Passport
+        // sheet. Mirrors iOS `PassportInlineBadge` in `labelsRow`.
+        if (!article.slug.isNullOrBlank()) {
+            com.sabq.smart.ui.components.PassportInlineBadge(onClick = onPassportClick)
         }
     }
 }
