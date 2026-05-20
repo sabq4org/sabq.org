@@ -48,6 +48,12 @@ data class Article(
      *  to sum minutes (e.g. Bookmarks stats) can do so without
      *  parsing Arabic. Null when the backend omits the field. */
     val readingMinutesInt: Int? = null,
+    /** Editorial "صور الأسبوع" gallery. Non-empty only when the
+     *  backend tagged this article as a weekly-photos pack
+     *  (`articleType == "weekly_photos"`, nested at
+     *  `weeklyPhotosData.photos`). Renders as a numbered timeline
+     *  in the article body — iOS `weeklyPhotosGallery`. */
+    val weeklyPhotos: List<WeeklyPhoto> = emptyList(),
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent
@@ -88,3 +94,14 @@ data class Article(
             else -> "بقلم"
         }
 }
+
+/**
+ * One photo inside a `weekly_photos` article — image + Arabic caption +
+ * photographer/source credit. Mirrors iOS `APIWeeklyPhoto`. The
+ * lightbox identifies entries by [imageUrl].
+ */
+data class WeeklyPhoto(
+    val imageUrl: String,
+    val caption: String,
+    val credit: String,
+)

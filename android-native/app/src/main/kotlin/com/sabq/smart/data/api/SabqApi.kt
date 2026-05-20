@@ -315,6 +315,19 @@ interface SabqApi {
         @Body body: ApiBehaviorEventRequest,
     ): retrofit2.Response<Unit>
 
+    /**
+     * AI-derived insights for an article — sentiment, credibility,
+     * engagement metrics. iOS `APIClient.fetchAIInsights` (Services
+     * /APIClient.swift:372). Public, NOT v1. The response is a
+     * flexible key/value map (values may be String OR Number); we
+     * decode as `Map<String, Any>` and the screen reads just the
+     * `sentiment` key for the labels-row pill.
+     */
+    @GET("api/articles/{slug}/ai-insights")
+    suspend fun fetchArticleAiInsights(
+        @Path("slug") slug: String,
+    ): Map<String, Any>
+
     // -- moment-by-moment --------------------------------------------
 
     /**
