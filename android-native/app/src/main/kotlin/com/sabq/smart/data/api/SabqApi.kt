@@ -98,6 +98,16 @@ interface SabqApi {
     @GET("api/articles/{slug}/related")
     suspend fun getRelatedArticles(@Path("slug") slug: String): List<ApiArticle>
 
+    /**
+     * Content Passport ("جواز المحتوى") — the trust + provenance
+     * fingerprint surfaced by the green "موثَّق" badge.
+     * Server: `server/services/articlePassportService.ts`.
+     * iOS counterpart: `APIClient.fetchPassport`
+     * (`Services/APIClient.swift:352`).
+     */
+    @GET("api/articles/{slug}/passport")
+    suspend fun getPassport(@Path("slug") slug: String): ApiPassport
+
     // -- auth ---------------------------------------------------------
 
     @POST("api/v1/auth/login")
