@@ -24,6 +24,22 @@ class LiveRepository @Inject constructor(
             nextCursor = response.nextCursor,
         )
     }
+
+    /** Fetch the topical multi-country live coverage feed — distinct
+     *  from [getMomentByMomentPage] above. Powers the dedicated
+     *  LiveCoverageScreen with timeline + per-country filter + stats.
+     *  iOS counterpart: `APIClient.fetchLive` (line 440). */
+    suspend fun getLiveCoverage(
+        country: String? = null,
+        limit: Int = 50,
+        offset: Int = 0,
+        since: String? = null,
+    ): LiveCoverage = api.getLiveCoverage(
+        country = country,
+        limit = limit,
+        offset = offset,
+        since = since,
+    ).toDomain()
 }
 
 data class MomentByMomentPage(

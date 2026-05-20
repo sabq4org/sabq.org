@@ -33,6 +33,7 @@ import com.sabq.smart.feature.keyword.KeywordArticlesScreen
 import com.sabq.smart.feature.author.AuthorArticlesScreen
 import com.sabq.smart.feature.home.HomeFeedScreen
 import com.sabq.smart.feature.live.MomentByMomentScreen
+import com.sabq.smart.feature.livecoverage.LiveCoverageScreen
 import com.sabq.smart.feature.loyalty.LoyaltyAccountScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationDetailScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationsScreen
@@ -74,6 +75,7 @@ object SabqRoutes {
     const val DailyBrief = "brief"
     const val InterestsPicker = "interests/picker"
     const val MomentByMoment = "live/updates"
+    const val LiveCoverage = "live/coverage"
     const val Calendar = "calendar"
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
@@ -319,6 +321,11 @@ fun SabqApp(
                 }
                 composable(SabqRoutes.Calendar) {
                     CalendarScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.LiveCoverage) {
+                    LiveCoverageScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }
