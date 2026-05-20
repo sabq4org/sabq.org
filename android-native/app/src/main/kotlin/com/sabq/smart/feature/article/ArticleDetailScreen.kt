@@ -961,23 +961,45 @@ private fun BodyBlock(
                 )
             }
             is BlockNode.Image -> {
+                // Inline body images render at their NATURAL aspect
+                // ratio — never force-cropped to 16:10. Portrait shots
+                // (e.g. press-conference vertical photos) used to get
+                // their tops/bottoms chopped off; the user fix on iOS
+                // is `.fill + min-height` which lets the image grow
+                // to its true height. We mirror that here with
+                // `ContentScale.Fit` + `Modifier.fillMaxWidth` (no
+                // fixed aspectRatio). See memory [[ui-design-system]]:
+                // "hero+inline image natural aspect ratios".
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
+                    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+                    SubcomposeAsyncImage(
+                        model = block.url,
+                        contentDescription = block.alt,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .aspectRatio(16f / 10f)
-                            .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
-                            .background(SabqTheme.colors.paleFill),
-                    ) {
-                        FocalCachedAsyncImage(
-                            url = block.url,
-                            focalPoint = null,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+                            .clip(shape)
+                            .background(SabqTheme.colors.paleFill, shape),
+                        loading = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                                    .background(SabqTheme.colors.paleFill),
+                            )
+                        },
+                        error = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                                    .background(SabqTheme.colors.paleFill),
+                            )
+                        },
+                    )
                     if (!block.caption.isNullOrEmpty()) {
                         Text(
                             text = block.caption,
