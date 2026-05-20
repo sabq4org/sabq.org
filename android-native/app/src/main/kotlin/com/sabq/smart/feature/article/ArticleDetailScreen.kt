@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PersonAddAlt1
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -715,11 +716,11 @@ private fun SmartSummaryCard(article: Article) {
                 color = SabqTheme.colors.ink,
             )
             Spacer(modifier = Modifier.weight(1f))
-            // Listen pill — visible whenever there's a slug. Tap is a
-            // no-op until Stage 2 wires the ExoPlayer + /summary-audio
-            // streaming endpoint.
-            if (!article.slug.isNullOrBlank()) {
-                ListenPillStub()
+            // Listen pill — streams the AI-generated MP3 summary via
+            // ExoPlayer (AudioPlayerController). Mirrors iOS
+            // `listenButton` (ArticleDetailView.swift:712-732).
+            article.slug?.takeIf { it.isNotBlank() }?.let { slug ->
+                ListenPill(slug = slug)
             }
         }
 
@@ -757,30 +758,68 @@ private fun SmartSummaryCard(article: Article) {
     }
 }
 
+/**
+ * Listen pill — taps fire the shared [com.sabq.smart.data.audio.AudioPlayerController].
+ * Icon flips Play ↔ Pause based on the live ExoPlayer state for THIS
+ * article's slug. Shows a small spinner while buffering.
+ *
+ * Mirrors iOS `listenButton` (ArticleDetailView.swift:712-732):
+ *   - "استماع" + play.fill when idle
+ *   - "إيقاف" + pause.fill when playing
+ *   - emerald-ish brand pill backdrop + shadow
+ */
 @Composable
-private fun ListenPillStub() {
+private fun ListenPill(slug: String) {
+    val context = LocalContext.current
+    val controller = remember {
+        dagger.hilt.android.EntryPointAccessors
+            .fromApplication(
+                context.applicationContext,
+                AudioPlayerEntryPoint::class.java,
+            )
+            .audioPlayerController()
+    }
+    val playerState by controller.state.collectAsState()
+    val isThisPlaying = playerState.playingSlug == slug && playerState.isPlaying
+    val isThisLoading = playerState.playingSlug == slug && playerState.isLoading
+
     val shape = CircleShape
     Row(
         modifier = Modifier
             .clip(shape)
             .background(SabqTheme.colors.primaryEnd, shape)
+            .clickable(enabled = !isThisLoading) { controller.toggle(slug) }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(11.dp),
-        )
+        if (isThisLoading) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = Color.White,
+                strokeWidth = 1.5.dp,
+                modifier = Modifier.size(11.dp),
+            )
+        } else {
+            Icon(
+                imageVector = if (isThisPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(11.dp),
+            )
+        }
         Text(
-            text = "استماع",
+            text = if (isThisPlaying) "إيقاف" else "استماع",
             fontSize = 11.sp,
             fontWeight = FontWeight.Black,
             color = Color.White,
         )
     }
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface AudioPlayerEntryPoint {
+    fun audioPlayerController(): com.sabq.smart.data.audio.AudioPlayerController
 }
 
 // ============================================================
