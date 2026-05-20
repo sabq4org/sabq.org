@@ -78,6 +78,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         isAiGeneratedImage = isAiGeneratedImage == true,
         aiImageModel = aiImageModel?.takeIf { it.isNotBlank() },
         publishedAtIso = publishedAt?.takeIf { it.isNotBlank() },
+        readingMinutesInt = readingMinutes?.takeIf { it > 0 },
     )
 }
 
