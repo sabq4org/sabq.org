@@ -85,8 +85,18 @@ class AuthorArticlesViewModel @Inject constructor(
                     // crash LazyColumn on duplicate `key = { it.id }`).
                     // We compare by id, drop dupes, and treat "no new
                     // ids arrived" as end-of-list.
+                    // Dedupe by id AND by `title|day` so backend
+                    // cross-id duplicates (same headline saved twice in
+                    // the CMS) don't sneak through `loadMore`. Matches
+                    // the same rule applied in `AuthorPage.toDomain`.
                     val existingIds = existing.mapTo(HashSet()) { it.id }
-                    val freshOnly = newArticles.filterNot { it.id in existingIds }
+                    val existingTitleDay = existing.mapTo(HashSet()) {
+                        "${it.title.trim()}|${it.publishedAtIso?.take(10).orEmpty()}"
+                    }
+                    val freshOnly = newArticles.filterNot { a ->
+                        a.id in existingIds ||
+                            "${a.title.trim()}|${a.publishedAtIso?.take(10).orEmpty()}" in existingTitleDay
+                    }
 
                     if (freshOnly.isEmpty()) {
                         // Backend returned the same page again → we
