@@ -330,6 +330,20 @@ interface SabqApi {
         @Query("limit") limit: Int = 20,
     ): ApiLiveUpdatesResponse
 
+    /**
+     * Full multi-country live coverage feed — distinct from
+     * `/api/live/updates` above. Powers the topical LiveCoverageView
+     * (Gulf attacks etc.) with timeline + countries + stats. iOS
+     * APIClient line 440. Backend route: mobileApiRoutes.ts line 3279.
+     */
+    @GET("api/v1/live")
+    suspend fun getLiveCoverage(
+        @Query("country") country: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("since") since: String? = null,
+    ): ApiLiveResponse
+
     // -- keyword & authors -------------------------------------------
 
     @GET("api/keyword/{keyword}")
