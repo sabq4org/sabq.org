@@ -54,6 +54,7 @@ import {
   RadialBarChart,
   RadialBar
 } from "recharts";
+import { formatNumber } from "@/lib/format";
 
 interface AnalyticsOverview {
   totalViews: number;
@@ -179,7 +180,7 @@ export default function IFoxAnalytics() {
         <div className="min-w-0">
           <p className="text-xs sm:text-sm text-[hsl(var(--ifox-text-secondary))] mb-0.5 sm:mb-1 truncate">{title}</p>
           <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-            {typeof value === 'number' ? value.toLocaleString('ar-SA') : value}
+            {typeof value === 'number' ? formatNumber(value) : value}
             {suffix && <span className="text-sm sm:text-base md:text-lg text-[hsl(var(--ifox-text-secondary))] mr-1">{suffix}</span>}
           </p>
         </div>
@@ -589,7 +590,7 @@ export default function IFoxAnalytics() {
                                 </Badge>
                                 <span className="flex items-center gap-0.5 sm:gap-1">
                                   <Eye className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                  <span className="hidden sm:inline">{article.views.toLocaleString('ar-SA')}</span>
+                                  <span className="hidden sm:inline">{formatNumber(article.views)}</span>
                                   <span className="sm:hidden">{(article.views / 1000).toFixed(1)}K</span>
                                 </span>
                                 <span className="flex items-center gap-0.5 sm:gap-1">
@@ -645,7 +646,7 @@ export default function IFoxAnalytics() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] sm:text-xs text-[hsl(var(--ifox-text-primary))] truncate">الإعجابات</p>
                           <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-                            {engagementMetrics?.likes.toLocaleString('ar-SA') || '0'}
+                            {formatNumber(engagementMetrics?.likes) || '0'}
                           </p>
                         </div>
                       </div>
@@ -659,7 +660,7 @@ export default function IFoxAnalytics() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] sm:text-xs text-[hsl(var(--ifox-text-primary))] truncate">التعليقات</p>
                           <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-                            {engagementMetrics?.comments.toLocaleString('ar-SA') || '0'}
+                            {formatNumber(engagementMetrics?.comments) || '0'}
                           </p>
                         </div>
                       </div>
@@ -673,7 +674,7 @@ export default function IFoxAnalytics() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] sm:text-xs text-[hsl(var(--ifox-text-primary))] truncate">المشاركات</p>
                           <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-                            {engagementMetrics?.shares.toLocaleString('ar-SA') || '0'}
+                            {formatNumber(engagementMetrics?.shares) || '0'}
                           </p>
                         </div>
                       </div>
@@ -687,7 +688,7 @@ export default function IFoxAnalytics() {
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] sm:text-xs text-[hsl(var(--ifox-text-primary))] truncate">الحفظ</p>
                           <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-                            {engagementMetrics?.bookmarks.toLocaleString('ar-SA') || '0'}
+                            {formatNumber(engagementMetrics?.bookmarks) || '0'}
                           </p>
                         </div>
                       </div>

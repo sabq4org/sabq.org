@@ -13,6 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber } from "@/lib/format";
 
 interface CommentSectionProps {
   articleId: string;
@@ -298,7 +299,7 @@ export function CommentSection({
                     data-testid={`button-show-more-replies-${comment.id}`}
                   >
                     <MessageCircle className="h-3 w-3" />
-                    عرض {(comment.replies.length - INITIAL_REPLIES).toLocaleString('ar-SA')} ردود إضافية
+                    عرض {(comment.replies.length - formatNumber(INITIAL_REPLIES))} ردود إضافية
                   </Button>
                 )}
               </div>
@@ -324,7 +325,7 @@ export function CommentSection({
               <p className="text-sm text-muted-foreground">
                 {commentsCount === 0 
                   ? "كن أول من يشارك رأيه في هذا الخبر" 
-                  : `${commentsCount.toLocaleString('ar-SA')} ${commentsCount <= 10 ? 'تعليقات' : 'تعليق'} من القراء`
+                  : `${formatNumber(commentsCount)} ${commentsCount <= 10 ? 'تعليقات' : 'تعليق'} من القراء`
                 }
               </p>
             </div>
@@ -403,7 +404,7 @@ export function CommentSection({
                   data-testid="button-load-more-comments"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  عرض المزيد ({(sortedComments.length - visibleCount).toLocaleString('ar-SA')} تعليق آخر)
+                  عرض المزيد ({(sortedComments.length - formatNumber(visibleCount))} تعليق آخر)
                 </Button>
               </div>
             )}

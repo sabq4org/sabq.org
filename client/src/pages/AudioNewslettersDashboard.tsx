@@ -51,6 +51,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatDistanceToNow, format, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface AudioNewsletter {
   id: string;
@@ -98,21 +99,21 @@ function AnalyticsCards({ analytics }: { analytics: AnalyticsData }) {
   const cards = [
     {
       title: "إجمالي النشرات",
-      value: analytics.totalNewsletters.toLocaleString("ar-EG"),
+      value: formatNumber(analytics.totalNewsletters),
       icon: Radio,
       description: "النشرات المنشورة",
       color: "text-blue-600",
     },
     {
       title: "الاستماعات",
-      value: analytics.totalListens.toLocaleString("ar-EG"),
+      value: formatNumber(analytics.totalListens),
       icon: Headphones,
       description: `معدل الإكمال ${(analytics.averageCompletion || 0).toFixed(1)}%`,
       color: "text-green-600",
     },
     {
       title: "المستمعون النشطون",
-      value: analytics.activeListeners.toLocaleString("ar-EG"),
+      value: formatNumber(analytics.activeListeners),
       icon: TrendingUp,
       description: `نمو أسبوعي ${(analytics.weeklyGrowth || 0).toFixed(1)}%`,
       color: "text-purple-600",
@@ -120,7 +121,7 @@ function AnalyticsCards({ analytics }: { analytics: AnalyticsData }) {
     },
     {
       title: "النشرات المجدولة",
-      value: analytics.scheduledCount.toLocaleString("ar-EG"),
+      value: formatNumber(analytics.scheduledCount),
       icon: CalendarDays,
       description: `${analytics.publishedToday} منشور اليوم`,
       color: "text-orange-600",
@@ -712,7 +713,7 @@ export default function AudioNewslettersDashboard() {
                             {newsletter.articlesCount}
                           </TableCell>
                           <TableCell data-testid={`text-listens-${newsletter.id}`}>
-                            {newsletter.totalListens.toLocaleString("ar-EG")}
+                            {formatNumber(newsletter.totalListens)}
                           </TableCell>
                           <TableCell data-testid={`text-completion-${newsletter.id}`}>
                             {(newsletter.averageCompletion || 0).toFixed(1)}%

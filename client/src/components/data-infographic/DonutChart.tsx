@@ -1,6 +1,7 @@
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface ChartSegment {
   label: string;
@@ -135,7 +136,7 @@ export function DonutChart({
             {centerValue && (
               <span className="text-2xl md:text-3xl font-bold text-foreground">
                 {typeof centerValue === "number" 
-                  ? centerValue.toLocaleString("ar-SA") 
+                  ? formatNumber(centerValue) 
                   : centerValue}
               </span>
             )}

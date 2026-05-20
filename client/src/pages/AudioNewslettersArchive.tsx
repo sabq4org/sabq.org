@@ -13,6 +13,7 @@ import { Footer } from "@/components/Footer";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface AudioNewsletter {
   id: string;
@@ -186,7 +187,7 @@ export default function AudioNewslettersArchive() {
                           )}
                           <div className="flex items-center gap-1" data-testid={`text-listens-${newsletter.id}`}>
                             <Headphones className="h-3 w-3" />
-                            {newsletter.totalListens.toLocaleString("ar-EG")}
+                            {formatNumber(newsletter.totalListens)}
                           </div>
                         </div>
                       </CardContent>

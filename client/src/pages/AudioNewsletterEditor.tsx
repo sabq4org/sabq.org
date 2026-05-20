@@ -69,6 +69,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatDistanceToNow, format } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 // Backend schema matching
 const newsletterSchema = z.object({
@@ -1580,7 +1581,7 @@ export default function AudioNewsletterEditor() {
                               <div className="flex items-center justify-between text-sm text-muted-foreground">
                                 <p>سيتم قراءة هذا النص صوتياً باستخدام الصوت المختار</p>
                                 <p data-testid="text-char-count">
-                                  {charCount.toLocaleString('ar-SA')} حرف
+                                  {formatNumber(charCount)} حرف
                                 </p>
                               </div>
                               <FormMessage />

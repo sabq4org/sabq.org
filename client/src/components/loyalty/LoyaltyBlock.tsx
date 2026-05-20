@@ -9,6 +9,7 @@ import {
   type LoyaltyTier,
   tierProgress,
 } from "@shared/loyalty";
+import { formatNumber } from "@/lib/format";
 
 type Summary = {
   points: {
@@ -67,7 +68,7 @@ export function LoyaltyBlock() {
           {data && data.streakDays >= 3 && (
             <div className="ml-auto flex items-center gap-1 text-xs font-medium text-orange-600 dark:text-orange-400">
               <Flame className="h-3.5 w-3.5" />
-              {data.streakDays.toLocaleString("ar-EG")} يوم متتالٍ
+              {formatNumber(data.streakDays)} يوم متتالٍ
             </div>
           )}
         </div>
@@ -83,7 +84,7 @@ export function LoyaltyBlock() {
             {next ? (
               <>
                 <span className="font-medium text-foreground">
-                  {pointsToNext.toLocaleString("ar-EG")}
+                  {formatNumber(pointsToNext)}
                 </span>{" "}
                 نقطة للوصول إلى{" "}
                 <span className="font-medium" style={{ color: next.color }}>
@@ -137,7 +138,7 @@ function PointsCell({ label, value, accent }: { label: string; value: number; ac
   return (
     <div className="rounded-md bg-background/40 dark:bg-background/20 py-2">
       <div className={`text-base font-bold ${accent ? "text-amber-600 dark:text-amber-400" : ""}`}>
-        {value > 0 ? `+${value.toLocaleString("ar-EG")}` : value.toLocaleString("ar-EG")}
+        {value > 0 ? `+${formatNumber(value)}` : formatNumber(value)}
       </div>
       <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>

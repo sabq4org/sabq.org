@@ -12,6 +12,7 @@ import {
   tierProgress,
   type LoyaltyTier,
 } from "@shared/loyalty";
+import { formatNumber } from "@/lib/format";
 
 type Summary = {
   points: {
@@ -130,7 +131,7 @@ export default function LoyaltyAccount() {
                   <div className="mt-2 text-xs text-muted-foreground">
                     {next ? (
                       <>
-                        {pointsToNext.toLocaleString("ar-EG")} نقطة للوصول إلى{" "}
+                        {formatNumber(pointsToNext)} نقطة للوصول إلى{" "}
                         <span style={{ color: next.color }} className="font-medium">
                           {next.nameAr}
                         </span>
@@ -223,7 +224,7 @@ export default function LoyaltyAccount() {
                       </div>
                       {r.description && <p className="text-xs text-muted-foreground">{r.description}</p>}
                       <div className="mt-auto flex items-center justify-between pt-2">
-                        <Badge variant="secondary">{r.pointsCost.toLocaleString("ar-EG")} نقطة</Badge>
+                        <Badge variant="secondary">{formatNumber(r.pointsCost)} نقطة</Badge>
                         <Button
                           size="sm"
                           variant={canAfford ? "default" : "outline"}
@@ -253,7 +254,7 @@ function StatCell({ icon, label, value, suffix, highlight }: { icon: React.React
         {label}
       </div>
       <div className={`text-xl font-bold mt-1 ${highlight ? "text-amber-600 dark:text-amber-400" : ""}`}>
-        {value.toLocaleString("ar-EG")}
+        {formatNumber(value)}
         {suffix && <span className="text-xs text-muted-foreground mr-1 font-normal">{suffix}</span>}
       </div>
     </div>
@@ -284,7 +285,7 @@ function TierRow({ tier, currentLevel, lifetime }: { tier: LoyaltyTier; currentL
           {tier.nameAr}
         </div>
         <div className="text-[11px] text-muted-foreground">
-          يبدأ من {tier.minLifetimePoints.toLocaleString("ar-EG")} نقطة
+          يبدأ من {formatNumber(tier.minLifetimePoints)} نقطة
         </div>
       </div>
       {isCurrent && (

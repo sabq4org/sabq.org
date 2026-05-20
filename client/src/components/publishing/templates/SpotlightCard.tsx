@@ -4,6 +4,7 @@ import { Clock, MessageSquare, BookOpen, Flame } from "lucide-react";
 import type { SpotlightTemplateProps } from "@/lib/publishing/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -101,7 +102,7 @@ export default function SpotlightCard({
           {typeof item.commentsCount === "number" && (
             <div className="flex items-center gap-2 text-sm">
               <MessageSquare className="w-4 h-4 text-muted-foreground" />
-              <span className="text-foreground font-medium">{item.commentsCount.toLocaleString("ar")}</span>
+              <span className="text-foreground font-medium">{formatNumber(item.commentsCount)}</span>
               <span className="text-muted-foreground text-xs">تعليق</span>
             </div>
           )}

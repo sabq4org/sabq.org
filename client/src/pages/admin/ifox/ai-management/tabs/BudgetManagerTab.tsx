@@ -18,6 +18,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { IfoxBudgetTracking } from "@shared/schema";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 // Form schema for adding expenses
 const addExpenseSchema = z.object({
@@ -352,7 +353,7 @@ export default function BudgetManagerTab() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {(budget.totalTokens || 0).toLocaleString('ar-SA')}
+                        {(budget.totalTokens || formatNumber(0))}
                       </TableCell>
                       <TableCell className="font-semibold text-orange-600">
                         {formatCurrency(budget.totalCost)}

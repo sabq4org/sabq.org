@@ -2,6 +2,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 interface BigNumberProps {
   value: number;
@@ -121,7 +122,7 @@ export function BigNumber({
 
         <div className={cn("font-bold tracking-tight", styles.number)}>
           <span>{prefix}</span>
-          <span>{animate ? displayValue.toLocaleString("ar-SA") : value.toLocaleString("ar-SA")}</span>
+          <span>{animate ? formatNumber(displayValue) : formatNumber(value)}</span>
           <span>{suffix}</span>
         </div>
 

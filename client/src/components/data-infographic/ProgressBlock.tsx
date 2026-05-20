@@ -1,6 +1,7 @@
 import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface ProgressItem {
   label: string;
@@ -61,8 +62,8 @@ function AnimatedBar({
         <span className="text-sm font-medium text-foreground">{item.label}</span>
         {showPercentage && (
           <span className="text-sm font-bold text-muted-foreground">
-            {item.value.toLocaleString("ar-SA")}
-            {item.maxValue ? ` / ${item.maxValue.toLocaleString("ar-SA")}` : "%"}
+            {formatNumber(item.value)}
+            {item.maxValue ? ` / ${formatNumber(item.maxValue)}` : "%"}
           </span>
         )}
       </div>

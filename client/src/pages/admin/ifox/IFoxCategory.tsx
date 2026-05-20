@@ -39,6 +39,7 @@ import {
   ArrowUpRight,
   Activity
 } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 interface IFoxCategory {
   id: string;
@@ -210,7 +211,7 @@ export default function IFoxCategory() {
             <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
               <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
                 <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المقالات</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{category.articlesCount.toLocaleString('ar-SA')}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.articlesCount)}</p>
                 <div className="flex items-center gap-1 mt-1 flex-wrap">
                   <span className="text-xs text-[hsl(var(--ifox-success))] whitespace-nowrap">{category.publishedCount} منشور</span>
                   <span className="text-xs text-[hsl(var(--ifox-text-secondary))]">•</span>
@@ -220,7 +221,7 @@ export default function IFoxCategory() {
 
               <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
                 <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المشاهدات</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{category.totalViews.toLocaleString('ar-SA')}</p>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.totalViews)}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <TrendingUp className="w-3 h-3 text-[hsl(var(--ifox-success))]" />
                   <span className="text-xs text-[hsl(var(--ifox-success))]">+12.5%</span>
@@ -363,7 +364,7 @@ export default function IFoxCategory() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs sm:text-sm font-semibold text-[hsl(var(--ifox-text-primary))] truncate">المقالات الكلية</p>
-                        <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{totalStats.totalArticles.toLocaleString('ar-SA')}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(totalStats.totalArticles)}</p>
                       </div>
                       <FileText className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-[hsl(var(--ifox-info))] flex-shrink-0" />
                     </div>
@@ -375,7 +376,7 @@ export default function IFoxCategory() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <p className="text-xs sm:text-sm font-semibold text-[hsl(var(--ifox-text-primary))] truncate">إجمالي المشاهدات</p>
-                        <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{totalStats.totalViews.toLocaleString('ar-SA')}</p>
+                        <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(totalStats.totalViews)}</p>
                       </div>
                       <Eye className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-[hsl(var(--ifox-warning))] flex-shrink-0" />
                     </div>

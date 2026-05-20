@@ -44,6 +44,7 @@ import {
   Line,
   LineChart,
 } from "recharts";
+import { formatNumber } from "@/lib/format";
 
 interface DashboardStats {
   published: number;
@@ -249,7 +250,7 @@ export default function IFoxDashboard() {
                       <div>
                         <p className="text-xs sm:text-sm font-semibold text-[hsl(var(--ifox-text-primary))]">المشاهدات اليوم</p>
                         <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">
-                          {stats?.todayViews.toLocaleString('ar-SA') || '0'}
+                          {formatNumber(stats?.todayViews) || '0'}
                         </p>
                       </div>
                       <Eye className="w-6 h-6 sm:w-8 sm:h-8 text-[hsl(var(--ifox-accent-primary))]" />
@@ -267,7 +268,7 @@ export default function IFoxDashboard() {
                       <div>
                         <p className="text-xs sm:text-sm font-semibold text-[hsl(var(--ifox-text-primary))]">التفاعل الكلي</p>
                         <p className="text-xl sm:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">
-                          {stats?.totalEngagement.toLocaleString('ar-SA') || '0'}
+                          {formatNumber(stats?.totalEngagement) || '0'}
                         </p>
                       </div>
                       <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-[hsl(var(--ifox-info))]" />
@@ -492,7 +493,7 @@ export default function IFoxDashboard() {
                                 <span className="hidden sm:inline">•</span>
                                 <span className="flex items-center gap-1">
                                   <Eye className="w-3 h-3" />
-                                  {article.views.toLocaleString('ar-SA')}
+                                  {formatNumber(article.views)}
                                 </span>
                               </div>
                             </div>

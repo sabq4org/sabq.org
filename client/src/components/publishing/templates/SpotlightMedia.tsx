@@ -5,6 +5,7 @@ import { Clock, MessageSquare, Play } from "lucide-react";
 import type { SpotlightTemplateProps } from "@/lib/publishing/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 export default function SpotlightMedia({
   item,
@@ -137,7 +138,7 @@ export default function SpotlightMedia({
           {typeof item.commentsCount === "number" && (
             <div className="flex items-center gap-1">
               <MessageSquare className="w-3.5 h-3.5" />
-              <span>{item.commentsCount.toLocaleString("ar")}</span>
+              <span>{formatNumber(item.commentsCount)}</span>
             </div>
           )}
         </div>

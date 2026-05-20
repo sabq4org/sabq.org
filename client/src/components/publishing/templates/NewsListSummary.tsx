@@ -5,6 +5,7 @@ import { Clock, MessageSquare, BookOpen, Flame } from "lucide-react";
 import type { ListTemplateProps } from "@/lib/publishing/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -158,7 +159,7 @@ export default function NewsListSummary({
                     {typeof item.commentsCount === "number" && (
                       <div className="flex items-center gap-1">
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{item.commentsCount.toLocaleString("ar")}</span>
+                        <span>{formatNumber(item.commentsCount)}</span>
                       </div>
                     )}
                   </>

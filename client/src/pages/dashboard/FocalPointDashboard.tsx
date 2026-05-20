@@ -9,6 +9,7 @@ import { Focus, Image, Loader2, CheckCircle, XCircle, Play, AlertTriangle, Eye, 
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatNumber } from "@/lib/format";
 
 interface FocalPointStats {
   total_published: string;
@@ -124,7 +125,7 @@ export default function FocalPointDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-published">
-              {statsLoading ? "..." : totalPublished.toLocaleString("ar-SA")}
+              {statsLoading ? "..." : formatNumber(totalPublished)}
             </div>
           </CardContent>
         </Card>
@@ -136,7 +137,7 @@ export default function FocalPointDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-with-images">
-              {statsLoading ? "..." : withImages.toLocaleString("ar-SA")}
+              {statsLoading ? "..." : formatNumber(withImages)}
             </div>
           </CardContent>
         </Card>
@@ -148,7 +149,7 @@ export default function FocalPointDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600" data-testid="text-with-focal">
-              {statsLoading ? "..." : withFocalPoints.toLocaleString("ar-SA")}
+              {statsLoading ? "..." : formatNumber(withFocalPoints)}
             </div>
           </CardContent>
         </Card>
@@ -160,7 +161,7 @@ export default function FocalPointDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600" data-testid="text-missing-focal">
-              {statsLoading ? "..." : missingFocalPoints.toLocaleString("ar-SA")}
+              {statsLoading ? "..." : formatNumber(missingFocalPoints)}
             </div>
           </CardContent>
         </Card>
@@ -172,7 +173,7 @@ export default function FocalPointDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600" data-testid="text-needs-review">
-              {statsLoading ? "..." : needsReviewCount.toLocaleString("ar-SA")}
+              {statsLoading ? "..." : formatNumber(needsReviewCount)}
             </div>
           </CardContent>
         </Card>

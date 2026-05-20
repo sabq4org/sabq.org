@@ -35,6 +35,7 @@ import { arSA } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { formatNumber } from "@/lib/format";
 
 interface Category {
   id: string;
@@ -159,7 +160,7 @@ function StatCard({
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground truncate">{label}</p>
         <p className="text-lg font-bold" data-testid={`stat-${label}`}>
-          {typeof value === 'number' ? value.toLocaleString('ar-SA') : value}
+          {typeof value === 'number' ? formatNumber(value) : value}
         </p>
         {subValue && (
           <p className="text-xs text-muted-foreground">{subValue}</p>
@@ -219,30 +220,30 @@ function ArticleCard({
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1" data-testid="article-views">
                 <Eye className="h-3 w-3" />
-                {article.views.toLocaleString('ar-SA')}
+                {formatNumber(article.views)}
               </span>
               <span className="flex items-center gap-1" data-testid="article-likes">
                 <Heart className="h-3 w-3" />
-                {article.likesCount.toLocaleString('ar-SA')}
+                {formatNumber(article.likesCount)}
               </span>
               <span className="flex items-center gap-1" data-testid="article-saves">
                 <Bookmark className="h-3 w-3" />
-                {article.savesCount.toLocaleString('ar-SA')}
+                {formatNumber(article.savesCount)}
               </span>
               <span className="flex items-center gap-1" data-testid="article-shares">
                 <Share2 className="h-3 w-3" />
-                {article.sharesCount.toLocaleString('ar-SA')}
+                {formatNumber(article.sharesCount)}
               </span>
               <span className="flex items-center gap-1" data-testid="article-comments">
                 <MessageSquare className="h-3 w-3" />
-                {article.commentsCount.toLocaleString('ar-SA')}
+                {formatNumber(article.commentsCount)}
               </span>
             </div>
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <FileText className="h-3 w-3" />
-                {article.wordCount.toLocaleString('ar-SA')} كلمة
+                {formatNumber(article.wordCount)} كلمة
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -731,7 +732,7 @@ export default function ArticleAnalyticsDashboard() {
                     النتائج
                     {pagination && (
                       <Badge variant="outline" className="mr-2">
-                        {pagination.totalCount.toLocaleString('ar-SA')} مقال
+                        {formatNumber(pagination.totalCount)} مقال
                       </Badge>
                     )}
                   </CardTitle>

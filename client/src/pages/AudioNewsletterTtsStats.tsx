@@ -10,6 +10,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth, hasRole } from "@/hooks/useAuth";
+import { formatNumber } from "@/lib/format";
 
 type Provider = "openai" | "elevenlabs" | "google";
 
@@ -93,7 +94,7 @@ export default function AudioNewsletterTtsStats() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-3xl font-bold">{(data?.totals.count || 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-3xl font-bold">{(data?.totals.count || formatNumber(0))}</p>
                 </CardContent>
               </Card>
               <Card data-testid="card-totals-chars">
@@ -103,7 +104,7 @@ export default function AudioNewsletterTtsStats() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-3xl font-bold">{(data?.totals.totalChars || 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-3xl font-bold">{(data?.totals.totalChars || formatNumber(0))}</p>
                 </CardContent>
               </Card>
               <Card data-testid="card-totals-cost">
@@ -126,7 +127,7 @@ export default function AudioNewsletterTtsStats() {
                     <CardHeader>
                       <CardTitle className="text-lg">{PROVIDER_LABELS[name]}</CardTitle>
                       <CardDescription>
-                        {row ? `${row.count.toLocaleString("ar-SA")} طلب` : "لا يوجد استخدام"}
+                        {row ? `${formatNumber(row.count)} طلب` : "لا يوجد استخدام"}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -151,7 +152,7 @@ export default function AudioNewsletterTtsStats() {
                           <FileText className="h-4 w-4" /> الأحرف
                         </span>
                         <span className="font-medium">
-                          {row ? row.totalChars.toLocaleString("ar-SA") : "—"}
+                          {row ? formatNumber(row.totalChars) : "—"}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-sm">

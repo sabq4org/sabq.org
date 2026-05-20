@@ -4,6 +4,7 @@ import { Clock, MessageSquare, Flame } from "lucide-react";
 import type { HeroTemplateProps } from "@/lib/publishing/types";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -107,7 +108,7 @@ export default function HeroSplit({ item, accent = "hsl(var(--primary))", classN
             {typeof item.commentsCount === "number" && (
               <div className="flex items-center gap-1">
                 <MessageSquare className="w-3 h-3" />
-                <span>{item.commentsCount.toLocaleString("ar")}</span>
+                <span>{formatNumber(item.commentsCount)}</span>
               </div>
             )}
           </div>

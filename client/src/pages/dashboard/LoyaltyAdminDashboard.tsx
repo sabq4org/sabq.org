@@ -25,6 +25,7 @@ import {
   BarChart, Bar,
 } from "recharts";
 import { LOYALTY_TIERS } from "@shared/loyalty";
+import { formatNumber } from "@/lib/format";
 
 // ----------------------------------------------------------------------------
 // Types matching the /api/loyalty-admin/* contract on the backend
@@ -412,7 +413,7 @@ function KpiCard({
           <div className={`p-2 rounded-lg bg-gradient-to-br ${colorMap[color]}`}>{icon}</div>
         </div>
         <div className="text-3xl font-bold tabular-nums" data-testid={`kpi-${label}`}>
-          {loading ? <Skeleton className="h-9 w-24" /> : value?.toLocaleString("ar-SA") ?? "—"}
+          {loading ? <Skeleton className="h-9 w-24" /> : formatNumber(value)}
         </div>
         <div className="mt-2 text-sm text-muted-foreground flex items-center gap-1.5">
           <span className="truncate">{label}</span>
@@ -464,14 +465,14 @@ function TierDistribution({ data, total, loading }: { data: TierBucket[]; total:
             </Pie>
             <Tooltip
               formatter={(value: number, name: string, props: any) => [
-                `${value.toLocaleString("ar-SA")} عضو (${props.payload.percentage.toFixed(1)}%)`,
+                `${formatNumber(value)} عضو (${props.payload.percentage.toFixed(1)}%)`,
                 name,
               ]}
             />
           </PieChart>
         </ResponsiveContainer>
         <div className="text-center text-sm font-medium -mt-3">
-          {total.toLocaleString("ar-SA")} عضو
+          {formatNumber(total)} عضو
         </div>
       </div>
 
@@ -487,7 +488,7 @@ function TierDistribution({ data, total, loading }: { data: TierBucket[]; total:
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium">{tier.nameAr}</span>
                   <span className="text-xs text-muted-foreground">
-                    ≥ {tier.minLifetimePoints.toLocaleString("ar-SA")} نقطة
+                    ≥ {formatNumber(tier.minLifetimePoints)} نقطة
                   </span>
                 </div>
                 {tier.grandfathered > 0 && (
@@ -498,7 +499,7 @@ function TierDistribution({ data, total, loading }: { data: TierBucket[]; total:
               </div>
             </div>
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-sm font-bold tabular-nums">{tier.count.toLocaleString("ar-SA")}</span>
+              <span className="text-sm font-bold tabular-nums">{formatNumber(tier.count)}</span>
               <span className="text-xs text-muted-foreground tabular-nums w-12 text-left">
                 {tier.percentage.toFixed(1)}%
               </span>
@@ -525,11 +526,11 @@ function ActionBreakdown({ data, loading }: { data: ActionRow[]; loading: boolea
               <span>{row.icon}</span>
               <span className="font-medium">{row.labelAr}</span>
               <span className="text-xs text-muted-foreground">
-                · {row.uniqueUsers.toLocaleString("ar-SA")} مستخدم
+                · {formatNumber(row.uniqueUsers)} مستخدم
               </span>
             </div>
             <span className="font-bold tabular-nums text-sm">
-              {row.points.toLocaleString("ar-SA")} نقطة
+              {formatNumber(row.points)} نقطة
             </span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -563,7 +564,7 @@ function TimeSeriesChart({ data, loading }: { data: TimeSeriesPoint[]; loading: 
           <YAxis tick={{ fontSize: 11 }} orientation="right" />
           <Tooltip
             labelFormatter={(label: string) => label}
-            formatter={(value: number) => value.toLocaleString("ar-SA")}
+            formatter={(value: number) => formatNumber(value)}
           />
           <Legend
             wrapperStyle={{ fontSize: 12 }}
@@ -630,13 +631,13 @@ function TopUsersTable({ data, loading }: { data: TopUser[]; loading: boolean })
               </Badge>
             </TableCell>
             <TableCell className="font-bold tabular-nums">
-              {u.pointsInRange.toLocaleString("ar-SA")}
+              {formatNumber(u.pointsInRange)}
             </TableCell>
             <TableCell className="tabular-nums text-muted-foreground">
-              {u.actionsInRange.toLocaleString("ar-SA")}
+              {formatNumber(u.actionsInRange)}
             </TableCell>
             <TableCell className="tabular-nums text-muted-foreground">
-              {u.lifetimePoints.toLocaleString("ar-SA")}
+              {formatNumber(u.lifetimePoints)}
             </TableCell>
           </TableRow>
         ))}
@@ -677,16 +678,16 @@ function RewardsGrid({ data, loading }: { data: RewardPerf[]; loading: boolean }
           <div className="text-xs text-muted-foreground">{r.rewardType}</div>
           <div className="flex items-baseline justify-between pt-2 border-t">
             <span className="text-xs text-muted-foreground">التكلفة</span>
-            <span className="font-bold tabular-nums">{r.pointsCost.toLocaleString("ar-SA")} نقطة</span>
+            <span className="font-bold tabular-nums">{formatNumber(r.pointsCost)} نقطة</span>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-xs text-muted-foreground">استُبدلت</span>
-            <span className="font-bold tabular-nums">{r.redemptions.toLocaleString("ar-SA")} مرة</span>
+            <span className="font-bold tabular-nums">{formatNumber(r.redemptions)} مرة</span>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-xs text-muted-foreground">المتبقي</span>
             <span className="font-medium tabular-nums text-sm">
-              {r.remainingStock === null ? "∞" : r.remainingStock.toLocaleString("ar-SA")}
+              {r.remainingStock === null ? "∞" : formatNumber(r.remainingStock)}
             </span>
           </div>
         </div>

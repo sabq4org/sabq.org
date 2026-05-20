@@ -53,6 +53,7 @@ import {
   Clock,
   BarChart3,
 } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 // iFox Categories
 const IFOX_CATEGORIES = [
@@ -414,7 +415,7 @@ export default function IFoxArticles() {
                             {article.views !== undefined && article.views > 0 && (
                               <div className="text-xs text-[hsl(var(--ifox-text-tertiary))] flex items-center gap-1 mt-2" data-testid={`text-views-${article.id}`}>
                                 <Eye className="w-3 h-3" />
-                                {article.views.toLocaleString('ar-SA')} مشاهدة
+                                {formatNumber(article.views)} مشاهدة
                               </div>
                             )}
                           </CardHeader>

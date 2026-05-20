@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Trophy, Flame, ChevronLeft } from "lucide-react";
 import { tierProgress } from "@shared/loyalty";
 import { useAuth } from "@/hooks/useAuth";
+import { formatNumber } from "@/lib/format";
 
 type Summary = {
   points: { lifetimePoints: number; rankLevel: number; currentRank: string } | null;
@@ -51,7 +52,7 @@ export function LoyaltyStrip() {
           {data.weekPoints > 0 && (
             <span className="text-muted-foreground text-xs">
               <span className="text-amber-600 dark:text-amber-400 font-medium">
-                +{data.weekPoints.toLocaleString("ar-EG")}
+                +{formatNumber(data.weekPoints)}
               </span>{" "}
               هذا الأسبوع
             </span>
@@ -76,8 +77,8 @@ export function LoyaltyStrip() {
         <div className="text-xs text-muted-foreground shrink-0 flex items-center gap-0.5">
           {next ? (
             <>
-              <span className="hidden sm:inline">{pointsToNext.toLocaleString("ar-EG")} لـ {next.nameAr}</span>
-              <span className="sm:hidden">{pointsToNext.toLocaleString("ar-EG")}</span>
+              <span className="hidden sm:inline">{formatNumber(pointsToNext)} لـ {next.nameAr}</span>
+              <span className="sm:hidden">{formatNumber(pointsToNext)}</span>
             </>
           ) : (
             <span>أعلى مستوى</span>

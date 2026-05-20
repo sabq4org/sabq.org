@@ -14,6 +14,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatNumber } from "@/lib/format";
 
 type Provider = "openai" | "elevenlabs" | "google";
 interface Voice { voice_id: string; name: string; description?: string; }
@@ -128,7 +129,7 @@ export default function AudioNewsletterVoiceCompare() {
                 data-testid="input-compare-text"
               />
               <p className="text-xs text-muted-foreground">
-                {text.length.toLocaleString("ar-SA")} حرف
+                {formatNumber(text.length)} حرف
               </p>
             </div>
 

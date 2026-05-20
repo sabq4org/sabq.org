@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { formatNumber } from "@/lib/format";
 
 import { Card } from "@/components/ui/card";
 import {
@@ -80,7 +81,7 @@ function StatCard({ icon, label, value, colorClass, testId }: StatCardProps) {
         className="text-xl sm:text-2xl font-bold tabular-nums"
         data-testid={`${testId}-value`}
       >
-        {displayValue.toLocaleString("ar-SA")}
+        {formatNumber(displayValue)}
       </span>
       <span className="text-[11px] sm:text-xs text-muted-foreground leading-tight">
         {label}

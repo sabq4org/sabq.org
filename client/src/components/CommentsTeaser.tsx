@@ -2,6 +2,7 @@ import { MessageCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { formatNumber } from "@/lib/format";
 
 interface RecentCommenter {
   id: string;
@@ -54,7 +55,7 @@ export function CommentsTeaser({
                 "كن أول من يشارك رأيه"
               ) : (
                 <>
-                  {commentsCount.toLocaleString('ar-SA')} {commentsCount <= 10 ? 'تعليقات' : 'تعليق'}
+                  {formatNumber(commentsCount)} {commentsCount <= 10 ? 'تعليقات' : 'تعليق'}
                   <span className="text-muted-foreground font-normal mr-1">من القراء</span>
                 </>
               )}
@@ -84,7 +85,7 @@ export function CommentsTeaser({
               ))}
               {commentsCount > 3 && (
                 <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center border-2 border-background text-[10px] font-medium z-0 mr-[-12px] rtl:mr-0 rtl:ml-[-12px]">
-                  +{ (commentsCount - 3).toLocaleString('ar-SA') }
+                  +{ (commentsCount - formatNumber(3)) }
                 </div>
               )}
             </div>

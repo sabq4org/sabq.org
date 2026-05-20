@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 interface HeroHeaderProps {
   title: string;
@@ -118,7 +119,7 @@ export function HeroHeader({
             {views !== undefined && (
               <span className="flex items-center gap-1.5">
                 <Eye className="w-4 h-4" />
-                {views.toLocaleString("ar-SA")} مشاهدة
+                {formatNumber(views)} مشاهدة
               </span>
             )}
           </div>

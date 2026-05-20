@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatsCard } from "@/components/en/dashboard/StatsCard";
 import { TrendingUp, FileText, Target, CheckCircle2, Bookmark } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 
@@ -86,7 +87,7 @@ export default function PerformanceAnalyticsTab() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" data-testid="kpi-cards">
                 <StatsCard
                   title="المقالات المُولّدة"
-                  value={metrics.articlesGenerated.toLocaleString('ar-SA')}
+                  value={formatNumber(metrics.articlesGenerated)}
                   icon={FileText}
                   iconColor="text-blue-600 dark:text-blue-400"
                   iconBgColor="bg-blue-500/10"
@@ -113,7 +114,7 @@ export default function PerformanceAnalyticsTab() {
                 
                 <StatsCard
                   title="إجمالي الحفظ"
-                  value={metrics.totalSaves.toLocaleString('ar-SA')}
+                  value={formatNumber(metrics.totalSaves)}
                   icon={Bookmark}
                   iconColor="text-orange-600 dark:text-orange-400"
                   iconBgColor="bg-orange-500/10"

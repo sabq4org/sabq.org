@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { ArticleWithDetails } from "@shared/schema";
+import { formatNumber } from "@/lib/format";
 
 interface InfographicMetaPanelProps {
   article: ArticleWithDetails;
@@ -168,7 +169,7 @@ export function InfographicMetaPanel({ article, className }: InfographicMetaPane
         
         <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-views-count">
           <Eye className="h-4 w-4 text-violet-400" />
-          <span>{(article.views || 0).toLocaleString('ar-SA')} مشاهدة</span>
+          <span>{(article.views || formatNumber(0))} مشاهدة</span>
         </div>
       </motion.div>
 

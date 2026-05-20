@@ -53,6 +53,7 @@ import {
   DollarSign,
   Laptop
 } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 // iFox Category Icons and Colors
 const categoryConfig: Record<string, { icon: any; color: string; bgColor: string; label: string }> = {
@@ -342,7 +343,7 @@ export function IFoxArticlesTable({
                   <TableCell className="hidden lg:table-cell">
                     <div className="flex items-center gap-1">
                       <Eye className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-muted-foreground" />
-                      <span className="text-xs sm:text-sm">{article.views.toLocaleString("ar-SA")}</span>
+                      <span className="text-xs sm:text-sm">{formatNumber(article.views)}</span>
                     </div>
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">

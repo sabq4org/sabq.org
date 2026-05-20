@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 interface DeepAnalysis {
   id: string;
@@ -231,7 +232,7 @@ export default function DeepAnalysisList() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-stat-total">
-                {(statistics?.totalAnalyses ?? 0).toLocaleString('ar-SA')}
+                {(statistics?.totalAnalyses ?? formatNumber(0))}
               </div>
             </CardContent>
           </Card>
@@ -245,7 +246,7 @@ export default function DeepAnalysisList() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600" data-testid="text-stat-views">
-                {(statistics?.totalViews ?? 0).toLocaleString('ar-SA')}
+                {(statistics?.totalViews ?? formatNumber(0))}
               </div>
             </CardContent>
           </Card>
@@ -259,7 +260,7 @@ export default function DeepAnalysisList() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600" data-testid="text-stat-shares">
-                {(statistics?.totalShares ?? 0).toLocaleString('ar-SA')}
+                {(statistics?.totalShares ?? formatNumber(0))}
               </div>
             </CardContent>
           </Card>
@@ -273,7 +274,7 @@ export default function DeepAnalysisList() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600" data-testid="text-stat-downloads">
-                {(statistics?.totalDownloads ?? 0).toLocaleString('ar-SA')}
+                {(statistics?.totalDownloads ?? formatNumber(0))}
               </div>
             </CardContent>
           </Card>
@@ -553,7 +554,7 @@ export default function DeepAnalysisList() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between border-t p-4">
                     <div className="text-sm text-muted-foreground" data-testid="text-pagination-info">
-                      صفحة {page.toLocaleString('ar-SA')} من {totalPages.toLocaleString('ar-SA')}
+                      صفحة {formatNumber(page)} من {formatNumber(totalPages)}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button

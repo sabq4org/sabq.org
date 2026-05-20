@@ -71,6 +71,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { arSA } from "date-fns/locale";
+import { formatNumber } from "@/lib/format";
 
 interface Campaign {
   id: string;
@@ -164,7 +165,7 @@ function StatCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold" data-testid={`stat-${label.replace(/\s/g, "-")}`}>
-          {typeof value === "number" ? value.toLocaleString("ar-SA") : value}
+          {typeof value === "number" ? formatNumber(value) : value}
         </div>
         {subValue && (
           <p className="text-xs text-muted-foreground mt-1">{subValue}</p>
@@ -278,19 +279,19 @@ function CampaignDetailsDialog({
                   <div className="p-3 rounded-lg bg-muted/50">
                     <p className="text-xs text-muted-foreground">المستلمون</p>
                     <p className="text-xl font-bold" data-testid="stat-recipients">
-                      {campaign.recipientCount.toLocaleString("ar-SA")}
+                      {formatNumber(campaign.recipientCount)}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-emerald-500/10">
                     <p className="text-xs text-muted-foreground">مرات الفتح</p>
                     <p className="text-xl font-bold text-emerald-600" data-testid="stat-opens">
-                      {campaign.openCount.toLocaleString("ar-SA")}
+                      {formatNumber(campaign.openCount)}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-blue-500/10">
                     <p className="text-xs text-muted-foreground">النقرات</p>
                     <p className="text-xl font-bold text-blue-600" data-testid="stat-clicks">
-                      {campaign.clickCount.toLocaleString("ar-SA")}
+                      {formatNumber(campaign.clickCount)}
                     </p>
                   </div>
                   <div className="p-3 rounded-lg bg-purple-500/10">
@@ -341,7 +342,7 @@ function CampaignDetailsDialog({
                              type === "bounced" ? "ارتداد" :
                              type === "unsubscribed" ? "إلغاء اشتراك" : type}
                           </span>
-                          <Badge variant="secondary">{count.toLocaleString("ar-SA")}</Badge>
+                          <Badge variant="secondary">{formatNumber(count)}</Badge>
                         </div>
                       ))}
                     </div>
@@ -558,14 +559,14 @@ export default function NewsletterAnalytics() {
     {
       accessorKey: "recipientCount",
       header: "المستلمون",
-      cell: ({ row }) => row.original.recipientCount.toLocaleString("ar-SA"),
+      cell: ({ row }) => formatNumber(row.original.recipientCount),
     },
     {
       accessorKey: "openCount",
       header: "الفتحات",
       cell: ({ row }) => (
         <span className="text-emerald-600 font-medium">
-          {row.original.openCount.toLocaleString("ar-SA")}
+          {formatNumber(row.original.openCount)}
         </span>
       ),
     },
@@ -574,7 +575,7 @@ export default function NewsletterAnalytics() {
       header: "النقرات",
       cell: ({ row }) => (
         <span className="text-blue-600 font-medium">
-          {row.original.clickCount.toLocaleString("ar-SA")}
+          {formatNumber(row.original.clickCount)}
         </span>
       ),
     },
@@ -712,7 +713,7 @@ export default function NewsletterAnalytics() {
                     <YAxis />
                     <Tooltip
                       formatter={(value: number, name: string) => [
-                        value.toLocaleString("ar-SA"),
+                        formatNumber(value),
                         name === "opens" ? "الفتحات" : "النقرات",
                       ]}
                     />
@@ -762,7 +763,7 @@ export default function NewsletterAnalytics() {
                     <YAxis />
                     <Tooltip
                       formatter={(value: number, name: string) => [
-                        value.toLocaleString("ar-SA"),
+                        formatNumber(value),
                         name === "avgOpens" ? "متوسط الفتحات" : "متوسط النقرات",
                       ]}
                     />

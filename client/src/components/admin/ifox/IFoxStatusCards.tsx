@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { Brain, Clock, FileEdit, Archive, TrendingUp, Sparkles, Cpu, Zap } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 type StatusKey = "published" | "scheduled" | "draft" | "archived";
 
@@ -180,7 +181,7 @@ export function IFoxStatusCards({ metrics, activeStatus, onSelect, loading = fal
                       className={`text-3xl font-bold bg-gradient-to-r ${config.gradient} bg-clip-text text-transparent`}
                       data-testid={`ifox-status-count-${status}`}
                     >
-                      {count.toLocaleString('ar-SA')}
+                      {formatNumber(count)}
                     </span>
                   </motion.div>
                 )}

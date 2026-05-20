@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface Article {
   id: string;
@@ -178,7 +179,7 @@ export default function AudioNewsletterDetail() {
               )}
               <div className="flex items-center gap-1" data-testid="text-listens">
                 <Headphones className="h-4 w-4" />
-                استمع إليها {newsletter.totalListens.toLocaleString("ar-EG")} شخص
+                استمع إليها {formatNumber(newsletter.totalListens)} شخص
               </div>
               <div data-testid="text-published">
                 {formatDistanceToNow(new Date(newsletter.publishedAt), {

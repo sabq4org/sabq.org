@@ -2,6 +2,7 @@ import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 
 interface DataCardProps {
   title: string;
@@ -69,7 +70,7 @@ export function DataCard({
           
           {value !== undefined && (
             <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-              {typeof value === "number" ? value.toLocaleString("ar-SA") : value}
+              {typeof value === "number" ? formatNumber(value) : value}
             </p>
           )}
           
