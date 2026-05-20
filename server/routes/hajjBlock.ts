@@ -175,7 +175,10 @@ router.get("/", async (_req: Request, res: Response) => {
             excerpt: articles.excerpt,
             imageUrl: articles.imageUrl,
             publishedAt: articles.publishedAt,
-            isBreaking: articles.isBreaking,
+            // `articles` schema uses `newsType` (string: "breaking"|"featured"|"regular")
+            // not a boolean isBreaking flag — was crashing the endpoint
+            // with `column "is_breaking" does not exist`.
+            newsType: articles.newsType,
           })
           .from(articles)
           .where(and(...whereConds))
@@ -192,7 +195,10 @@ router.get("/", async (_req: Request, res: Response) => {
             excerpt: articles.excerpt,
             imageUrl: articles.imageUrl,
             publishedAt: articles.publishedAt,
-            isBreaking: articles.isBreaking,
+            // `articles` schema uses `newsType` (string: "breaking"|"featured"|"regular")
+            // not a boolean isBreaking flag — was crashing the endpoint
+            // with `column "is_breaking" does not exist`.
+            newsType: articles.newsType,
           })
           .from(articles)
           .where(
@@ -220,7 +226,7 @@ router.get("/", async (_req: Request, res: Response) => {
         excerpt: a.excerpt,
         imageUrl: a.imageUrl,
         publishedAt: a.publishedAt,
-        isBreaking: a.isBreaking,
+        isBreaking: a.newsType === "breaking",
         isPinned: pinned.includes(a.id),
         hajjTag: tagInfo?.tag ?? "في موسم الحج",
         hajjEmoji: tagInfo?.emoji ?? "🕋",
