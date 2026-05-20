@@ -38,6 +38,7 @@ import com.sabq.smart.feature.loyalty.LoyaltyAccountScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationDetailScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationsScreen
 import com.sabq.smart.feature.notifications.NotificationPreferencesScreen
+import com.sabq.smart.feature.onboarding.OnboardingScreen
 import com.sabq.smart.feature.opinions.OpinionsListScreen
 import com.sabq.smart.feature.trending.TrendingScreen
 import com.sabq.smart.feature.settings.ArticleSubmissionKind
@@ -473,6 +474,18 @@ fun SabqApp(
                         },
                     )
                 }
+            }
+
+            // 4-slide welcome flow — gates the app on first launch.
+            // Ports iOS sabqApp.swift's `.fullScreenCover(isPresented:
+            // .constant(!hasOnboarded))` pattern. Sits on top of the
+            // NavHost so the underlying nav stack is preserved while
+            // the cover is visible (matches the iOS UX) and dismisses
+            // the moment `setOnboardingCompleted(true)` flips the flag.
+            if (!settings.hasCompletedOnboardingV2) {
+                OnboardingScreen(
+                    onComplete = { settingsViewModel.completeOnboarding() },
+                )
             }
         }
     }
