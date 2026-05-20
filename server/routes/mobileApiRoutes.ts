@@ -1753,6 +1753,14 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       .where(eq(users.id, session.userId))
       .limit(1);
 
+    // One-time +50 loyalty bonus when the profile becomes complete
+    // (first + last name + bio + city + gender). Fire-and-forget so
+    // a loyalty hiccup never blocks the profile save. The cap+dedup
+    // on PROFILE_COMPLETE prevents re-issuance on subsequent edits.
+    import("../services/loyalty")
+      .then((m) => m.awardProfileCompletionBonus(session.userId))
+      .catch((err) => console.warn("[members/profile] bonus skipped:", err?.message));
+
     res.json({
       success: true,
       message: "تم تحديث الملف الشخصي بنجاح",
@@ -5726,6 +5734,15 @@ router.get("/loyalty/me", async (req: Request, res: Response) => {
       cursor.setUTCDate(cursor.getUTCDate() - 1);
     }
 
+    // Fire-and-forget DAILY_LOGIN award. The cap-of-1 + dedup window
+    // ensures this is a no-op on every call after the first one each
+    // day. Bonuses scale by streak (×1.5 at 7 days, ×1.75 at 14, ×2
+    // at 30). We don't await it so the GET stays fast even if the
+    // loyalty subsystem is briefly slow.
+    import("../services/loyalty")
+      .then((m) => m.awardDailyLogin(userId))
+      .catch((err) => console.warn("[loyalty/me] daily-login skipped:", err?.message));
+
     res.json({
       success: true,
       points: points ?? null,
@@ -5788,6 +5805,361 @@ router.post("/loyalty/events", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] POST /loyalty/events error:", error);
     res.status(500).json({ success: false, message: "تعذر معالجة الأحداث" });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/loyalty/history?page=N&limit=20
+//
+// Paginated event log for the signed-in member — drives a "تاريخ نقاطي"
+// activity feed in the iOS profile and on the web profile page. Each row
+// has the action label, points awarded, optional metadata, and the timestamp
+// so the UI can render a grouped-by-day feed.
+// ============================================================================
+
+router.get("/loyalty/history", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select({
+        id: userLoyaltyEvents.id,
+        action: userLoyaltyEvents.action,
+        points: userLoyaltyEvents.points,
+        source: userLoyaltyEvents.source,
+        metadata: userLoyaltyEvents.metadata,
+        createdAt: userLoyaltyEvents.createdAt,
+      })
+      .from(userLoyaltyEvents)
+      .where(eq(userLoyaltyEvents.userId, session.userId))
+      .orderBy(desc(userLoyaltyEvents.createdAt))
+      .limit(limit + 1)
+      .offset(offset);
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+
+    res.json({
+      success: true,
+      items: items.map((e) => ({
+        id: e.id,
+        action: e.action,
+        points: e.points,
+        source: e.source,
+        metadata: e.metadata,
+        createdAt: e.createdAt,
+      })),
+      page,
+      limit,
+      hasMore,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /loyalty/history error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب السجل" });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/loyalty/monthly
+//
+// Last 6 months of earned points, grouped per UTC month. Powers a small
+// bar/line chart on the iOS LoyaltyAccount screen so the member sees their
+// momentum over time, not just this week + this month totals.
+// ============================================================================
+
+router.get("/loyalty/monthly", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 5);
+    sixMonthsAgo.setUTCDate(1);
+    sixMonthsAgo.setUTCHours(0, 0, 0, 0);
+
+    const rows = await db
+      .select({
+        month: sql<string>`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM')`,
+        total: sql<number>`COALESCE(SUM(${userLoyaltyEvents.points}), 0)::int`,
+        events: sql<number>`COUNT(*)::int`,
+      })
+      .from(userLoyaltyEvents)
+      .where(
+        and(
+          eq(userLoyaltyEvents.userId, session.userId),
+          gte(userLoyaltyEvents.createdAt, sixMonthsAgo),
+        ),
+      )
+      .groupBy(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM')`);
+
+    // Fill in zero-months so the chart has a continuous 6-bucket axis.
+    const months: { month: string; total: number; events: number }[] = [];
+    const cursor = new Date(sixMonthsAgo);
+    for (let i = 0; i < 6; i++) {
+      const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+      const row = rows.find((r) => r.month === key);
+      months.push({
+        month: key,
+        total: Number(row?.total ?? 0),
+        events: Number(row?.events ?? 0),
+      });
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+
+    res.json({ success: true, months });
+  } catch (error) {
+    console.error("[Mobile API] GET /loyalty/monthly error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب البيانات الشهرية" });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/loyalty/rewards
+//
+// Catalog of active rewards a member can redeem. Filters to is_active=true
+// and (remaining_stock IS NULL OR remaining_stock > 0). Each row carries
+// the user's current point balance so the UI can show
+// affordability ("تحتاج XXX نقطة إضافية") without a second round-trip.
+// ============================================================================
+
+router.get("/loyalty/rewards", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+
+    const { loyaltyRewards, userPointsTotal, userRewardsHistory } = await import("@shared/schema");
+
+    const [pointsRow] = await db
+      .select({ totalPoints: userPointsTotal.totalPoints })
+      .from(userPointsTotal)
+      .where(eq(userPointsTotal.userId, session.userId))
+      .limit(1);
+    const balance = Number(pointsRow?.totalPoints ?? 0);
+
+    const rewards = await db
+      .select()
+      .from(loyaltyRewards)
+      .where(eq(loyaltyRewards.isActive, true))
+      .orderBy(loyaltyRewards.pointsCost);
+
+    // How many times this user already redeemed each reward — needed to
+    // enforce `maxRedemptionsPerUser` on the client without a second
+    // network call per row.
+    const myRedemptions = await db
+      .select({
+        rewardId: userRewardsHistory.rewardId,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(userRewardsHistory)
+      .where(eq(userRewardsHistory.userId, session.userId))
+      .groupBy(userRewardsHistory.rewardId);
+    const myCount = new Map(myRedemptions.map((r) => [r.rewardId, Number(r.count)]));
+
+    res.json({
+      success: true,
+      balance,
+      rewards: rewards
+        .filter((r) => r.remainingStock === null || (r.remainingStock ?? 0) > 0)
+        .map((r) => {
+          const myRedeems = myCount.get(r.id) ?? 0;
+          const overLimit = r.maxRedemptionsPerUser !== null
+            && myRedeems >= (r.maxRedemptionsPerUser ?? Infinity);
+          return {
+            id: r.id,
+            nameAr: r.nameAr,
+            nameEn: r.nameEn,
+            description: r.description,
+            imageUrl: r.imageUrl,
+            pointsCost: Number(r.pointsCost),
+            rewardType: r.rewardType,
+            partnerName: r.partnerName,
+            remainingStock: r.remainingStock,
+            expiresAt: r.expiresAt,
+            myRedemptionCount: myRedeems,
+            canRedeem: balance >= Number(r.pointsCost) && !overLimit,
+            pointsShort: Math.max(0, Number(r.pointsCost) - balance),
+            reasonBlocked: overLimit ? "MAX_PER_USER" : balance < Number(r.pointsCost) ? "INSUFFICIENT" : null,
+          };
+        }),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /loyalty/rewards error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب المكافآت" });
+  }
+});
+
+// ============================================================================
+// POST /api/v1/loyalty/rewards/:id/redeem
+//
+// Burn `pointsCost` from the member's totalPoints atomically and create a
+// `user_rewards_history` row with status='pending'. Backend post-processing
+// (or a dashboard action) flips it to 'delivered' once the coupon is sent.
+//
+// Atomicity matters: a naive impl could double-spend if two parallel taps
+// race. We use a transaction with a points-decrement guarded by the current
+// balance, so the second attempt either sees the lower balance or fails.
+// ============================================================================
+
+router.post("/loyalty/rewards/:id/redeem", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const rewardId = req.params.id;
+
+    const { loyaltyRewards, userPointsTotal, userRewardsHistory } = await import("@shared/schema");
+
+    const [reward] = await db
+      .select()
+      .from(loyaltyRewards)
+      .where(eq(loyaltyRewards.id, rewardId))
+      .limit(1);
+    if (!reward || !reward.isActive) {
+      return res.status(404).json({ success: false, message: "المكافأة غير متاحة" });
+    }
+
+    if (reward.remainingStock !== null && (reward.remainingStock ?? 0) <= 0) {
+      return res.status(409).json({ success: false, message: "نفد المخزون" });
+    }
+
+    if (reward.expiresAt && reward.expiresAt < new Date()) {
+      return res.status(410).json({ success: false, message: "انتهت صلاحية المكافأة" });
+    }
+
+    if (reward.maxRedemptionsPerUser !== null) {
+      const [{ count: myCount }] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(userRewardsHistory)
+        .where(
+          and(
+            eq(userRewardsHistory.userId, session.userId),
+            eq(userRewardsHistory.rewardId, rewardId),
+          ),
+        );
+      if (Number(myCount) >= (reward.maxRedemptionsPerUser ?? Infinity)) {
+        return res.status(409).json({ success: false, message: "وصلت الحد الأقصى لاستبدال هذه المكافأة" });
+      }
+    }
+
+    // Atomic balance decrement: UPDATE ... WHERE totalPoints >= cost.
+    // If the WHERE clause prunes the row (insufficient balance), the
+    // update returns 0 rows and we know not to insert a redemption.
+    const cost = Number(reward.pointsCost);
+    const updated = await db
+      .update(userPointsTotal)
+      .set({
+        totalPoints: sql`${userPointsTotal.totalPoints} - ${cost}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(userPointsTotal.userId, session.userId),
+          gte(userPointsTotal.totalPoints, cost),
+        ),
+      )
+      .returning({ totalPoints: userPointsTotal.totalPoints });
+
+    if (updated.length === 0) {
+      return res.status(402).json({ success: false, message: "رصيد النقاط غير كافٍ" });
+    }
+
+    // Decrement the reward's remaining stock when applicable.
+    if (reward.remainingStock !== null) {
+      await db
+        .update(loyaltyRewards)
+        .set({ remainingStock: sql`${loyaltyRewards.remainingStock} - 1` })
+        .where(
+          and(
+            eq(loyaltyRewards.id, rewardId),
+            gte(loyaltyRewards.remainingStock, 1),
+          ),
+        );
+    }
+
+    const [history] = await db
+      .insert(userRewardsHistory)
+      .values({
+        userId: session.userId,
+        rewardId: rewardId,
+        pointsSpent: cost,
+        status: "pending",
+        rewardSnapshot: {
+          nameAr: reward.nameAr,
+          nameEn: reward.nameEn,
+          pointsCost: cost,
+          rewardType: reward.rewardType,
+        },
+      })
+      .returning();
+
+    res.json({
+      success: true,
+      message: "تم استلام طلب الاستبدال بنجاح ✨",
+      remainingBalance: Number(updated[0].totalPoints),
+      redemption: {
+        id: history.id,
+        rewardId,
+        pointsSpent: cost,
+        status: history.status,
+        redeemedAt: history.redeemedAt,
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /loyalty/rewards/:id/redeem error:", error);
+    res.status(500).json({ success: false, message: "تعذر إتمام الاستبدال" });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/loyalty/redemptions/me
+//
+// The member's own redemption history — paired with /loyalty/rewards on
+// the new "مكافآتي" tab in iOS. Status pivots from pending → delivered
+// (admin action) → expired/cancelled.
+// ============================================================================
+
+router.get("/loyalty/redemptions/me", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const { userRewardsHistory } = await import("@shared/schema");
+    const rows = await db
+      .select()
+      .from(userRewardsHistory)
+      .where(eq(userRewardsHistory.userId, session.userId))
+      .orderBy(desc(userRewardsHistory.redeemedAt))
+      .limit(100);
+    res.json({
+      success: true,
+      redemptions: rows.map((r) => ({
+        id: r.id,
+        rewardId: r.rewardId,
+        pointsSpent: r.pointsSpent,
+        status: r.status,
+        rewardSnapshot: r.rewardSnapshot,
+        deliveryData: r.deliveryData,
+        redeemedAt: r.redeemedAt,
+        deliveredAt: r.deliveredAt,
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /loyalty/redemptions/me error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الاستبدالات" });
   }
 });
 

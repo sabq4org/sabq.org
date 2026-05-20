@@ -293,13 +293,20 @@ export async function verifyEmailToken(token: string): Promise<{ success: boolea
       .where(eq(users.id, verificationToken.userId));
 
     console.log(`✅ Email verified for user ${verificationToken.userId}`);
-    
+
+    // One-time +20 loyalty bonus for verifying email. Fire-and-forget —
+    // we don't want a loyalty service hiccup to fail the verify response.
+    // Self-deduplicates via PROFILE_COMPLETE/EMAIL_VERIFIED's cap-of-1.
+    import("./loyalty")
+      .then((m) => m.awardEmailVerificationBonus(verificationToken.userId))
+      .catch((err) => console.warn("[verifyEmailToken] bonus skipped:", err?.message));
+
     return { success: true, userId: verificationToken.userId };
   } catch (error) {
     console.error('❌ Failed to verify email token:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to verify email' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to verify email'
     };
   }
 }

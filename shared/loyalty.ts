@@ -13,6 +13,16 @@ export const LOYALTY_ACTIONS = {
   COMMENT: "COMMENT",
   NOTIFICATION_OPEN: "NOTIFICATION_OPEN",
   DAILY_LOGIN: "DAILY_LOGIN",
+  /** One-time bonus when the user completes their profile (first name +
+   *  last name + bio + city + gender). Awarded by
+   *  `awardProfileCompletionBonus` from the /members/profile update
+   *  route. Daily cap=1 + dedup of 999h ensures it can only fire once
+   *  per user even if the profile is edited repeatedly. */
+  PROFILE_COMPLETE: "PROFILE_COMPLETE",
+  /** One-time bonus when the user verifies their email. Wired into
+   *  `verifyEmailToken` so it fires the same moment status flips
+   *  pending→active. */
+  EMAIL_VERIFIED: "EMAIL_VERIFIED",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -28,6 +38,8 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   COMMENT: 1,
   NOTIFICATION_OPEN: 1,
   DAILY_LOGIN: 5,
+  PROFILE_COMPLETE: 50,
+  EMAIL_VERIFIED: 20,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -41,6 +53,10 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   COMMENT: 10,
   NOTIFICATION_OPEN: 20,
   DAILY_LOGIN: 1,
+  // One-time bonuses cap at 1 — combined with a long dedup window they
+  // can only fire once per user lifetime.
+  PROFILE_COMPLETE: 1,
+  EMAIL_VERIFIED: 1,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -54,7 +70,30 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   COMMENT: null,
   NOTIFICATION_OPEN: 1,
   DAILY_LOGIN: null,
+  // One-time-only — dedup checks fall back to source-keyed lookup; since
+  // we always pass source="lifetime" the existence check effectively
+  // prevents re-issue forever even if the cap were higher.
+  PROFILE_COMPLETE: 100000,
+  EMAIL_VERIFIED: 100000,
 };
+
+// ----------------------------------------------------------------------------
+// Streak bonus multipliers — applied to DAILY_LOGIN points based on the
+// user's current consecutive-day streak. Keeps engagement sticky without
+// being noisy for casual readers.
+// ----------------------------------------------------------------------------
+
+export const STREAK_BONUS_TIERS = [
+  { minDays: 30, multiplier: 2.0, labelAr: "ولاء استثنائي" },
+  { minDays: 14, multiplier: 1.75, labelAr: "متفاني" },
+  { minDays: 7,  multiplier: 1.5, labelAr: "أسبوع متواصل" },
+] as const;
+
+/** Returns the multiplier + label to apply on the next DAILY_LOGIN. */
+export function streakMultiplier(currentStreakDays: number) {
+  const tier = STREAK_BONUS_TIERS.find((t) => currentStreakDays >= t.minDays);
+  return tier ?? { minDays: 0, multiplier: 1, labelAr: "" };
+}
 
 export type LoyaltyTier = {
   level: 1 | 2 | 3 | 4 | 5;

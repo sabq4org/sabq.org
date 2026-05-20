@@ -1,11 +1,13 @@
 import { db } from "../db";
-import { userLoyaltyEvents } from "@shared/schema";
-import { and, count, eq, gte } from "drizzle-orm";
+import { userLoyaltyEvents, users } from "@shared/schema";
+import { and, count, eq, gte, sql, desc } from "drizzle-orm";
 import { storage } from "../storage";
 import {
   LOYALTY_ACTION_POINTS,
+  LOYALTY_ACTIONS,
   LOYALTY_DAILY_CAPS,
   LOYALTY_DEDUP_HOURS,
+  streakMultiplier,
   type LoyaltyAction,
 } from "@shared/loyalty";
 
@@ -89,4 +91,127 @@ export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
     rankChanged: result.rankChanged,
     newRank: result.newRank,
   };
+}
+
+// ----------------------------------------------------------------------------
+// Streak bonus — multiplies DAILY_LOGIN points by the user's current streak
+// tier. Computed against the last 30 days of activity so a single missed
+// day resets the streak.
+//
+// Call this INSTEAD of awardPoints for DAILY_LOGIN — it handles both the
+// streak math and the eventual awardPoints invocation with a bumped point
+// total. Returns the same AwardOutcome plus the multiplier applied so the
+// caller can surface a celebratory toast on iOS / web.
+// ----------------------------------------------------------------------------
+
+export type DailyLoginOutcome = AwardOutcome & {
+  streakDays?: number;
+  multiplier?: number;
+  streakLabel?: string;
+};
+
+export async function awardDailyLogin(userId: string): Promise<DailyLoginOutcome> {
+  // Streak = number of consecutive UTC days up to today where the user
+  // recorded at least one loyalty event. Resets on any missed day.
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentDays = await db
+    .select({ day: sql<string>`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')` })
+    .from(userLoyaltyEvents)
+    .where(
+      and(
+        eq(userLoyaltyEvents.userId, userId),
+        gte(userLoyaltyEvents.createdAt, monthAgo),
+      ),
+    )
+    .groupBy(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`)
+    .orderBy(desc(sql`to_char(${userLoyaltyEvents.createdAt}, 'YYYY-MM-DD')`));
+
+  const eventDays = new Set(recentDays.map((r) => r.day));
+  let streak = 0;
+  const cursor = new Date();
+  // We count today as continuing yesterday's streak — today's login is
+  // what creates today's event, so the streak BEFORE the bonus is
+  // computed from past-day events only.
+  cursor.setUTCDate(cursor.getUTCDate() - 1);
+  while (eventDays.has(cursor.toISOString().slice(0, 10))) {
+    streak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  // Today's login extends the streak by one — the multiplier applies
+  // to the streak the user would have AFTER today's award.
+  const effectiveStreak = streak + 1;
+  const tier = streakMultiplier(effectiveStreak);
+
+  const base = LOYALTY_ACTION_POINTS.DAILY_LOGIN;
+  const points = Math.round(base * tier.multiplier);
+
+  const outcome = await awardPoints({
+    userId,
+    action: LOYALTY_ACTIONS.DAILY_LOGIN,
+    points,
+    metadata: {
+      streakDays: effectiveStreak,
+      multiplier: tier.multiplier,
+      streakLabel: tier.labelAr,
+    },
+  });
+
+  return {
+    ...outcome,
+    streakDays: effectiveStreak,
+    multiplier: tier.multiplier,
+    streakLabel: tier.labelAr,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// One-time profile completion bonus. Wired into the /members/profile update
+// path so the user gets +50 the first time their profile has all the
+// expected fields filled. Safe to call on every profile save — the daily
+// cap + source-dedup on PROFILE_COMPLETE prevent re-issuance.
+//
+// Field set was chosen to match the "profile complete" badge logic on the
+// dashboard side: firstName + lastName + bio + city + gender. If you add
+// a new "required" profile field later, update the check here AND the
+// dashboard's profile-completeness indicator so they stay in sync.
+// ----------------------------------------------------------------------------
+
+export async function awardProfileCompletionBonus(userId: string): Promise<AwardOutcome | null> {
+  const [u] = await db
+    .select({
+      firstName: users.firstName,
+      lastName: users.lastName,
+      bio: users.bio,
+      city: users.city,
+      gender: users.gender,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!u) return null;
+
+  const filled = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  const complete = filled(u.firstName) && filled(u.lastName) && filled(u.bio)
+    && filled(u.city) && filled(u.gender);
+  if (!complete) return null;
+
+  return awardPoints({
+    userId,
+    action: LOYALTY_ACTIONS.PROFILE_COMPLETE,
+    source: "lifetime",
+  });
+}
+
+// ----------------------------------------------------------------------------
+// One-time email verification bonus. Called from verifyEmailToken right
+// after the email_verified+status flip. Self-deduplicates via the same
+// cap-of-1 + source="lifetime" pattern.
+// ----------------------------------------------------------------------------
+
+export async function awardEmailVerificationBonus(userId: string): Promise<AwardOutcome | null> {
+  return awardPoints({
+    userId,
+    action: LOYALTY_ACTIONS.EMAIL_VERIFIED,
+    source: "lifetime",
+  });
 }
