@@ -3,6 +3,8 @@ package com.sabq.smart.data
 import com.sabq.smart.data.api.ApiErrorResponse
 import com.sabq.smart.data.api.LoginRequest
 import com.sabq.smart.data.api.RegisterRequest
+import com.sabq.smart.data.api.ResendActivationRequest
+import com.sabq.smart.data.api.ResendActivationResponse
 import com.sabq.smart.data.api.SabqApi
 import com.sabq.smart.data.auth.AuthTokenStore
 import javax.inject.Inject
@@ -67,14 +69,26 @@ class AuthRepository @Inject constructor(
 
     /**
      * Email/password login. Throws an [AuthException] on failure with
-     * the server-side Arabic message extracted from the 401 body.
+     * the server-side Arabic message extracted from the 401/403 body.
+     *
+     * If the backend signals `requiresActivation: true` (account is
+     * pending email verification), this throws the more specific
+     * [PendingActivationException] so the login screen can offer the
+     * "resend activation email" affordance.
      */
     suspend fun login(email: String, password: String): User {
         val response = try {
             api.login(LoginRequest(email = email.trim(), password = password))
         } catch (e: HttpException) {
-            val msg = extractErrorMessage(e) ?: "تعذّر تسجيل الدخول"
-            throw AuthException(msg)
+            val errorBody = extractErrorBody(e)
+            if (errorBody?.requiresActivation == true) {
+                throw PendingActivationException(
+                    message = errorBody.message ?: "الحساب غير مفعل. يرجى تفعيل الحساب أولاً",
+                    userId = errorBody.userId,
+                    email = email.trim(),
+                )
+            }
+            throw AuthException(errorBody?.message ?: "تعذّر تسجيل الدخول")
         }
         val token = response.token
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
@@ -83,6 +97,25 @@ class AuthRepository @Inject constructor(
             ?: throw AuthException("تم تسجيل الدخول لكن تعذّر تحميل الملف الشخصي")
         _user.value = user
         return user
+    }
+
+    /**
+     * Re-send the activation email for an account whose login failed
+     * with `requiresActivation: true`. Pass the `userId` returned in
+     * [PendingActivationException] when available — falls back to the
+     * email the user typed.
+     */
+    suspend fun resendActivation(userId: String?, email: String?): ResendActivationResponse {
+        if (userId.isNullOrBlank() && email.isNullOrBlank()) {
+            throw AuthException("لا يوجد بريد لإرسال رمز التفعيل إليه")
+        }
+        return try {
+            api.resendActivation(
+                ResendActivationRequest(userId = userId, email = email?.trim()),
+            )
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "تعذّر إعادة إرسال رمز التفعيل")
+        }
     }
 
     suspend fun register(name: String, email: String, password: String): User {
@@ -128,10 +161,18 @@ class AuthRepository @Inject constructor(
         _user.value = user
     }
 
-    private fun extractErrorMessage(e: HttpException): String? {
+    private fun extractErrorMessage(e: HttpException): String? =
+        extractErrorBody(e)?.message
+
+    /**
+     * Decode the full [ApiErrorResponse] (message + `requiresActivation`
+     * flag + `userId`) from the error body so callers can react to the
+     * structured contract instead of just the localised message.
+     */
+    private fun extractErrorBody(e: HttpException): ApiErrorResponse? {
         val raw = e.response()?.errorBody()?.string() ?: return null
         return runCatching {
-            json.decodeFromString(ApiErrorResponse.serializer(), raw).message
+            json.decodeFromString(ApiErrorResponse.serializer(), raw)
         }.getOrNull()
     }
 
@@ -139,4 +180,17 @@ class AuthRepository @Inject constructor(
     private val _markers = listOf<Any>(_user.asStateFlow().map { it?.id })
 }
 
-class AuthException(message: String) : Exception(message)
+open class AuthException(message: String) : Exception(message)
+
+/**
+ * Specialised [AuthException] thrown when the backend signals that
+ * the login failed because the account is still pending email
+ * verification. Carries the [userId] echoed by the server (when
+ * available) plus the [email] the user typed, so the resend-activation
+ * action can target the right account.
+ */
+class PendingActivationException(
+    message: String,
+    val userId: String?,
+    val email: String?,
+) : AuthException(message)

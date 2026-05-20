@@ -46,11 +46,12 @@ struct OpinionDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     // Hero stays STATIC under scroll — matches the
                     // article detail behaviour (no scroll-driven
-                    // zoom/parallax) so the editor-picked focal point
-                    // remains honoured.
+                    // zoom/parallax). Natural aspect ratio, no
+                    // fixed-height crop — same rationale as
+                    // ArticleDetailView.heroImage: show the editor's
+                    // photo whole, no focal-point cropping in the
+                    // detail view.
                     heroImage
-                        .frame(width: proxy.size.width, height: 300)
-                        .clipped()
                         .contentShape(Rectangle())
                         .onTapGesture {
                             guard displayOpinion.imageURL?.isEmpty == false else { return }
@@ -312,22 +313,21 @@ struct OpinionDetailView: View {
     }
 
     // MARK: - Hero (clean, no overlay text — matches ArticleDetailView)
+    //
+    // Natural aspect ratio, no fixed-height crop. See
+    // ArticleDetailView.heroImage for the rationale.
 
     private var heroImage: some View {
         Group {
             if let urlString = displayOpinion.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: displayOpinion.imageFocalPoint) {
+                CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity, maxHeight: 300)
-                .clipped()
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .clipped()
     }
 
     private var heroPlaceholder: some View {
@@ -337,7 +337,7 @@ struct OpinionDetailView: View {
             endPoint: .bottomTrailing
         )
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
+        .frame(height: 220)
         .overlay {
             Image(systemName: "text.quote")
                 .font(.system(size: 100, weight: .ultraLight))

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import PhotosUI
 
 /// Writer / reporter submission flow. Opinion writers send a single hero
@@ -114,7 +115,12 @@ struct ArticleSubmissionView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 60)
             }
-            .scrollDismissesKeyboard(.interactively)
+            // `.interactively` adds a pan-to-dismiss gesture that races
+            // with UITextView's long-press-to-select. Users reported
+            // the magnifier never appearing and copy/paste menu being
+            // unreliable. `.immediately` removes the pan gesture so
+            // selection / edit menu work like the OS Notes app.
+            .scrollDismissesKeyboard(.immediately)
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
@@ -180,6 +186,7 @@ struct ArticleSubmissionView: View {
                     .foregroundStyle(SabqTheme.ink)
                     .focused($focusedField, equals: .title)
                     .submitLabel(.next)
+                    .multilineTextAlignment(.trailing)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .background(
@@ -192,14 +199,30 @@ struct ArticleSubmissionView: View {
                     )
 
                 fieldLabel("النص", required: true)
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $articleContent)
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(SabqTheme.ink)
-                        .focused($focusedField, equals: .body)
-                        .frame(minHeight: 180)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
+                // The body uses a UITextView-backed editor instead of
+                // SwiftUI's `TextEditor`. Reader feedback (2026-05-20):
+                // selection + copy/paste were unreliable on the
+                // built-in editor — magnifier never appeared, edit
+                // menu didn't surface — because the inner UITextView's
+                // long-press gesture lost to the outer ScrollView. The
+                // UITextView wrapper disables its own scroll (so the
+                // outer ScrollView still handles vertical scrolling)
+                // and forces RTL natural alignment so Arabic caret
+                // placement is consistent.
+                ZStack(alignment: .topTrailing) {
+                    SabqRichTextEditor(
+                        text: $articleContent,
+                        minHeight: 180,
+                        isFocused: Binding(
+                            get: { focusedField == .body },
+                            set: { focusedField = $0 ? .body : nil }
+                        ),
+                        font: .systemFont(ofSize: 15, weight: .regular),
+                        textColor: UIColor(SabqTheme.ink),
+                        tintColor: UIColor(pageTint)
+                    )
+                    .padding(8)
+
                     if articleContent.isEmpty {
                         Text(bodyPlaceholder)
                             .font(.system(size: 15, weight: .regular))
@@ -622,5 +645,136 @@ struct ArticleSubmissionView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.08))
         )
+    }
+}
+
+// MARK: - SabqRichTextEditor (UITextView wrapper)
+//
+// SwiftUI's `TextEditor` is backed by a UITextView, but it doesn't
+// expose enough hooks to make selection + copy/paste reliable inside
+// an outer `ScrollView`. The inner editor's `isScrollEnabled` stays
+// `true`, which means its long-press-to-select gesture competes with
+// the outer ScrollView's pan gesture — and the outer one tends to win,
+// so the magnifier never appears and the edit menu is intermittent.
+//
+// This wrapper:
+//   • Turns OFF the inner UITextView scroll (`isScrollEnabled = false`)
+//     and grows the view via `intrinsicContentSize`, so the OUTER
+//     ScrollView handles vertical scrolling and the editor only owns
+//     its own selection gestures.
+//   • Forces RTL natural alignment so Arabic caret placement +
+//     selection handles land where the reader expects.
+//   • Bridges first-responder state with SwiftUI's `@FocusState` via
+//     the `isFocused` binding so the keyboard toolbar's "تم" still
+//     dismisses correctly.
+struct SabqRichTextEditor: UIViewRepresentable {
+    @Binding var text: String
+    var minHeight: CGFloat = 180
+    @Binding var isFocused: Bool
+    var font: UIFont
+    var textColor: UIColor
+    var tintColor: UIColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIView(context: Context) -> SelfSizingTextView {
+        let view = SelfSizingTextView()
+        view.delegate = context.coordinator
+        view.isScrollEnabled = false
+        view.backgroundColor = .clear
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.font = font
+        view.textColor = textColor
+        view.tintColor = tintColor
+        view.adjustsFontForContentSizeCategory = true
+        view.dataDetectorTypes = []
+        view.keyboardDismissMode = .none
+        view.autocorrectionType = .default
+        view.smartDashesType = .default
+        view.smartQuotesType = .default
+        view.spellCheckingType = .default
+        // Natural alignment + RTL: Arabic + numerals + Latin all sit in
+        // the same paragraph and the caret stays correct.
+        view.textAlignment = .natural
+        view.semanticContentAttribute = .forceRightToLeft
+        view.minimumHeight = minHeight
+        view.text = text
+        return view
+    }
+
+    func updateUIView(_ uiView: SelfSizingTextView, context: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+        if uiView.minimumHeight != minHeight {
+            uiView.minimumHeight = minHeight
+            uiView.invalidateIntrinsicContentSize()
+        }
+        if uiView.font != font {
+            uiView.font = font
+        }
+        if uiView.textColor != textColor {
+            uiView.textColor = textColor
+        }
+        if uiView.tintColor != tintColor {
+            uiView.tintColor = tintColor
+        }
+
+        let shouldBeFirstResponder = isFocused
+        let isCurrentlyFirstResponder = uiView.isFirstResponder
+        if shouldBeFirstResponder, !isCurrentlyFirstResponder {
+            DispatchQueue.main.async { uiView.becomeFirstResponder() }
+        } else if !shouldBeFirstResponder, isCurrentlyFirstResponder {
+            DispatchQueue.main.async { uiView.resignFirstResponder() }
+        }
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: SabqRichTextEditor
+
+        init(_ parent: SabqRichTextEditor) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            if parent.text != textView.text {
+                parent.text = textView.text
+            }
+            textView.invalidateIntrinsicContentSize()
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            if !parent.isFocused { parent.isFocused = true }
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            if parent.isFocused { parent.isFocused = false }
+        }
+    }
+
+    /// UITextView that reports its content height as `intrinsicContentSize`
+    /// so SwiftUI's layout can grow vertically as the user types — instead
+    /// of relying on the inner scroll view.
+    final class SelfSizingTextView: UITextView {
+        var minimumHeight: CGFloat = 0 {
+            didSet { invalidateIntrinsicContentSize() }
+        }
+
+        override var intrinsicContentSize: CGSize {
+            let targetWidth = bounds.width > 0 ? bounds.width : UIView.layoutFittingExpandedSize.width
+            let size = sizeThatFits(CGSize(width: targetWidth, height: .greatestFiniteMagnitude))
+            return CGSize(width: UIView.noIntrinsicMetric, height: max(minimumHeight, ceil(size.height)))
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // When the width changes (rotation / split-view), the
+            // intrinsic height must be recomputed against the new
+            // wrap point.
+            invalidateIntrinsicContentSize()
+        }
     }
 }

@@ -6,6 +6,10 @@ struct ContentView: View {
     @State private var likesStore = LikesStore()
     @State private var authStore = AuthStore()
     @State private var followedKeywords = FollowedKeywordsStore()
+    /// Owns the writer's revision-pending article list. Refreshed on
+    /// app foreground + after every successful resubmit so the
+    /// settings card collapses to 0 the moment the queue clears.
+    @State private var revisionsStore = ArticleRevisionsStore()
     @State private var selectedTab: AppTab = .home
     @State private var navigationPath = NavigationPath()
     /// Singleton owns the latest deep link captured from a notification tap
@@ -112,12 +116,14 @@ struct ContentView: View {
                     OpinionDetailView(opinion: OpinionArticle.placeholder(slug: route.slug))
                 }
                 .navigationDestination(for: DraftDeepLinkRoute.self) { route in
-                    // For now, route to the editorial notifications screen
-                    // which is the closest "manage your draft" surface
-                    // we have. When a real draft preview view ships we
-                    // swap this in.
-                    EditorialNotificationsView()
-                        .id(route.articleId)
+                    // Resolves `sabq://draft/<id>` deep links and the
+                    // "open" button on a needs_revision notification.
+                    // Loads the latest draft from the server and
+                    // presents the revision form.
+                    ArticleRevisionView(articleId: route.articleId)
+                }
+                .navigationDestination(for: ArticleRevisionsRoute.self) { _ in
+                    ArticleRevisionsListView()
                 }
             }
             .environment(articlesStore)
@@ -125,6 +131,7 @@ struct ContentView: View {
             .environment(likesStore)
             .environment(authStore)
             .environment(followedKeywords)
+            .environment(revisionsStore)
             .onChange(of: notificationsStore.pendingDeepLink) { _, newLink in
                 guard let link = newLink else { return }
                 handleDeepLink(link)
@@ -144,8 +151,21 @@ struct ContentView: View {
                 // background long enough that push handlers didn't fire),
                 // refresh the unread editorial-notification count so the
                 // header bell's red dot reflects the latest server state.
+                // Also pull the revisions queue — an editor may have
+                // sent something back while the app was suspended.
                 if newPhase == .active && authStore.isLoggedIn {
                     Task { await notificationsStore.refreshUnreadCount() }
+                    Task { await revisionsStore.refresh() }
+                }
+            }
+            .onChange(of: authStore.isLoggedIn) { _, loggedIn in
+                // Pull revisions once on first login of the session; clear
+                // on logout so the next user doesn't see the previous
+                // writer's queue.
+                if loggedIn {
+                    Task { await revisionsStore.refresh() }
+                } else {
+                    revisionsStore.clear()
                 }
             }
 
@@ -207,8 +227,7 @@ struct ContentView: View {
         case .opinion(let slug):
             navigationPath.append(OpinionSlugRoute(slug: slug))
         case .draft(let id):
-            navigationPath.append(EditorialNotificationsRoute())
-            _ = id // reserved for future per-draft preview
+            navigationPath.append(DraftDeepLinkRoute(articleId: id))
         case .feedback(let id):
             navigationPath.append(EditorialNotificationsRoute())
             _ = id
@@ -236,9 +255,13 @@ struct OpinionSlugRoute: Hashable {
     let slug: String
 }
 
-/// Placeholder route for draft/feedback deep links. Currently routes to
-/// the editorial notifications view; future work can swap it for a
-/// dedicated in-app draft preview.
+/// Opens the revision form for a specific article id. Resolves the
+/// `sabq://draft/<id>` deep link and the "افتح للتعديل" action button
+/// on a needs_revision notification.
 struct DraftDeepLinkRoute: Hashable {
     let articleId: String
 }
+
+/// Opens the list of articles the editor sent back for revision. Used
+/// by the "مقالات تنتظر التعديل" card in Settings.
+struct ArticleRevisionsRoute: Hashable {}

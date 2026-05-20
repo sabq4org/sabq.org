@@ -9,6 +9,12 @@ final class AuthStore {
     private(set) var successMessage: String?
     private(set) var unreadNotifications = 0
     private(set) var registrationPending = false
+    /// True when the last login attempt hit a `pending` account — drives
+    /// the "إعادة إرسال رمز التفعيل" affordance on the login sheet so
+    /// users with an unverified email don't reach a dead end.
+    private(set) var pendingActivationUserId: String?
+    private(set) var pendingActivationEmail: String?
+    private(set) var isResendingActivation = false
 
     private var loginAttempts = 0
     private var lastLoginAttempt: Date?
@@ -61,6 +67,8 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        pendingActivationUserId = nil
+        pendingActivationEmail = nil
         loginAttempts += 1
         lastLoginAttempt = Date()
         do {
@@ -83,10 +91,47 @@ final class AuthStore {
             await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
+            // Account exists but is still pending email verification.
+            // Remember the userId + email so the login sheet can show
+            // the "resend activation" affordance and the action knows
+            // which account to target.
+            if case let .accountPendingActivation(_, userId) = apiError {
+                pendingActivationUserId = userId
+                pendingActivationEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
         } catch {
             errorMessage = "حدث خطأ في تسجيل الدخول"
         }
         isLoading = false
+    }
+
+    /// Re-send the activation email for the account whose login attempt
+    /// surfaced `requiresActivation: true`. Uses the saved userId when
+    /// available; falls back to the email the user typed into the
+    /// login form so admins or shared devices still get a useful
+    /// outcome.
+    @MainActor
+    func resendActivation() async {
+        guard pendingActivationUserId != nil || pendingActivationEmail != nil else { return }
+        isResendingActivation = true
+        errorMessage = nil
+        successMessage = nil
+        defer { isResendingActivation = false }
+        do {
+            let response = try await APIClient.shared.resendActivation(
+                userId: pendingActivationUserId,
+                email: pendingActivationEmail
+            )
+            if response.success {
+                successMessage = response.message ?? "تم إرسال رمز التفعيل إلى بريدك الإلكتروني"
+            } else {
+                errorMessage = response.message ?? "تعذر إعادة إرسال رمز التفعيل"
+            }
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription
+        } catch {
+            errorMessage = "تعذر إعادة إرسال رمز التفعيل"
+        }
     }
 
     /// Called after every successful auth (login, register, checkAuth) to
@@ -281,6 +326,8 @@ final class AuthStore {
         errorMessage = nil
         successMessage = nil
         registrationPending = false
+        pendingActivationUserId = nil
+        pendingActivationEmail = nil
     }
 
     @MainActor

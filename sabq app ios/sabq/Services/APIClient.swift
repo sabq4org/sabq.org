@@ -678,6 +678,24 @@ actor APIClient {
         try await postRaw(path: "/auth/forgot-password", body: ["email": email])
     }
 
+    /// Re-trigger the account-activation email for a user whose login
+    /// failed with `requiresActivation: true`. The backend accepts
+    /// either `userId` or `email` and replies 200 with
+    /// `{ success, message, emailSent }`. We pass both when available
+    /// so the server can pick the most reliable lookup. See
+    /// `mobileApiRoutes.ts /auth/resend-activation`.
+    func resendActivation(userId: String?, email: String?) async throws -> ResendActivationResponse {
+        struct Body: Encodable {
+            let userId: String?
+            let email: String?
+        }
+        return try await post(
+            ResendActivationResponse.self,
+            path: "/auth/resend-activation",
+            body: Body(userId: userId, email: email)
+        )
+    }
+
     func resetPassword(email: String, code: String, newPassword: String) async throws {
         try await postRaw(path: "/auth/reset-password", body: [
             "email": email,
@@ -893,6 +911,71 @@ actor APIClient {
         return try await post(
             ArticleSubmissionResponse.self,
             path: "/articles/submit",
+            body: body
+        )
+    }
+
+    // MARK: - Article Revisions
+    //
+    // Editor-requested revisions (review_status='needs_changes') used to
+    // ship the writer back to the dashboard. These three endpoints power
+    // the mobile equivalent — see mobileApiRoutes.ts /articles/my-revisions
+    // for the contract.
+
+    func fetchMyRevisions() async throws -> [ArticleRevisionSummary] {
+        let response = try await get(
+            ArticleRevisionsListResponse.self,
+            path: "/articles/my-revisions"
+        )
+        return response.articles
+    }
+
+    func fetchArticleDraft(id: String) async throws -> ArticleDraftPayload {
+        try await get(ArticleDraftResponse.self, path: "/articles/\(id)/draft").article
+    }
+
+    /// Re-submits a revised article. `heroImageData` is sent as a new
+    /// base64 data URI only when the writer replaced the hero; pass `nil`
+    /// to preserve whatever URL the draft already had. Same semantics
+    /// for `albumImageData`. The backend flips reviewStatus back to
+    /// `pending_review` on success.
+    func resubmitArticle(
+        id: String,
+        title: String,
+        content: String,
+        heroImageData: Data?,
+        albumImageData: [Data]?
+    ) async throws -> ArticleSubmissionResponse {
+        struct Body: Encodable {
+            let title: String
+            let content: String
+            let heroImage: String?
+            let albumImages: [String]?
+        }
+
+        let heroURI: String? = heroImageData.flatMap { data in
+            guard !data.isEmpty else { return nil }
+            let mime = Self.detectImageMimeType(data) ?? "image/jpeg"
+            return "data:\(mime);base64,\(data.base64EncodedString())"
+        }
+        let albumURIs: [String]? = albumImageData.map { batch in
+            batch.compactMap { data in
+                guard !data.isEmpty else { return nil }
+                let mime = Self.detectImageMimeType(data) ?? "image/jpeg"
+                return "data:\(mime);base64,\(data.base64EncodedString())"
+            }
+        }
+
+        let body = Body(
+            title: title,
+            content: content,
+            heroImage: heroURI,
+            albumImages: albumURIs
+        )
+
+        return try await put(
+            ArticleSubmissionResponse.self,
+            path: "/articles/\(id)/resubmit",
             body: body
         )
     }
@@ -1233,9 +1316,20 @@ actor APIClient {
         case 200...299:
             return try decoder.decode(type, from: data)
         default:
-            if let apiErr = try? decoder.decode(APIErrorResponse.self, from: data),
-               let msg = apiErr.message {
-                throw APIError.apiMessage(msg)
+            if let apiErr = try? decoder.decode(APIErrorResponse.self, from: data) {
+                // Surface the pending-activation contract as a structured
+                // case so the login flow can show "resend activation"
+                // instead of a dead-end error banner. The backend sets
+                // `requiresActivation: true` on the 403 from
+                // `/api/v1/auth/login` for users whose status is
+                // `pending` (see mobileApiRoutes.ts:1178-1186).
+                if apiErr.requiresActivation == true {
+                    let msg = apiErr.message ?? "الحساب غير مفعل. يرجى تفعيل الحساب أولاً"
+                    throw APIError.accountPendingActivation(message: msg, userId: apiErr.userId)
+                }
+                if let msg = apiErr.message {
+                    throw APIError.apiMessage(msg)
+                }
             }
             switch http.statusCode {
             case 401: throw APIError.unauthorized
@@ -1270,6 +1364,62 @@ nonisolated struct ArticleSubmissionResponse: Decodable {
         let status: String
         let imagesUploaded: Int?
     }
+}
+
+// MARK: - Article revision types
+//
+// Driven by the three /api/v1/articles/* endpoints that handle editor
+// revision requests. Shape mirrors the backend response exactly so the
+// decoder can stay declarative — no FlexKey acrobatics needed.
+
+nonisolated struct ArticleRevisionSummary: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let imageURL: String?
+    let kind: String
+    let reviewNotes: String
+    /// ISO-8601 timestamp the editor requested the change; nil when the
+    /// backend couldn't determine a meaningful moment (rare).
+    let requestedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case imageURL = "imageUrl"
+        case kind, reviewNotes, requestedAt
+    }
+
+    var isOpinion: Bool { kind == "opinion" }
+}
+
+nonisolated struct ArticleRevisionsListResponse: Decodable {
+    let success: Bool
+    let count: Int
+    let articles: [ArticleRevisionSummary]
+}
+
+nonisolated struct ArticleDraftPayload: Decodable {
+    let id: String
+    let title: String
+    let body: String
+    let excerpt: String
+    let imageURL: String?
+    let albumImages: [String]?
+    let kind: String
+    let reviewNotes: String
+    let requestedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, body, excerpt
+        case imageURL = "imageUrl"
+        case albumImages, kind, reviewNotes, requestedAt
+    }
+
+    var isOpinion: Bool { kind == "opinion" }
+}
+
+nonisolated struct ArticleDraftResponse: Decodable {
+    let success: Bool
+    let article: ArticleDraftPayload
 }
 
 // MARK: - APIUser role helpers
@@ -1342,6 +1492,11 @@ nonisolated enum APIError: LocalizedError {
     case serverError(Int)
     case decodingError
     case apiMessage(String)
+    /// Login failed because the account exists but is still pending
+    /// email activation. Carries the server's localized message and
+    /// the userId so the LoginSheet can offer a "resend activation"
+    /// button targeted at the right account.
+    case accountPendingActivation(message: String, userId: String?)
 
     var errorDescription: String? {
         switch self {
@@ -1354,6 +1509,7 @@ nonisolated enum APIError: LocalizedError {
         case .serverError(let code): "خطأ في الخادم (\(code))"
         case .decodingError:    "خطأ في قراءة البيانات"
         case .apiMessage(let msg): msg
+        case .accountPendingActivation(let msg, _): msg
         }
     }
 }

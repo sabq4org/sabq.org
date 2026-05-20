@@ -43,6 +43,34 @@ data class ApiErrorResponse(
     val success: Boolean? = null,
     val message: String? = null,
     val error: String? = null,
+    /** Set by `/api/v1/auth/login` when the account exists but is still
+     *  in the `pending` activation state. Drives the
+     *  "إعادة إرسال رمز التفعيل" button on the login screen so users
+     *  with an unverified email don't reach a dead end. iOS parity:
+     *  see APIErrorResponse in iOS Services/APIModels.swift. */
+    @JsonNames("requires_activation")
+    val requiresActivation: Boolean? = null,
+    @JsonNames("user_id")
+    val userId: String? = null,
+)
+
+/** Response body of `POST /api/v1/auth/resend-activation`. */
+@Serializable
+data class ResendActivationResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    @JsonNames("email_sent")
+    val emailSent: Boolean? = null,
+)
+
+/** Request body of `POST /api/v1/auth/resend-activation`. The backend
+ *  accepts either `userId` or `email` — pass whichever the login error
+ *  surfaced (we send both when available so the server can pick the
+ *  more reliable lookup). */
+@Serializable
+data class ResendActivationRequest(
+    val userId: String? = null,
+    val email: String? = null,
 )
 
 /** `GET /api/v1/members/profile` envelope. Backend ships

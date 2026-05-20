@@ -16,6 +16,9 @@ struct SettingsView: View {
 
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
+    /// Pending-revision count drives the "مقالات تنتظر التعديل" card
+    /// visibility inside `submissionCards(for:)`.
+    @Environment(ArticleRevisionsStore.self) private var revisionsStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
     @AppStorage("isDarkMode") private var darkModeEnabled = false
     @AppStorage("articleFontSize") private var textSize: Double = 17
@@ -357,6 +360,23 @@ struct SettingsView: View {
                     }
                 }
 
+                // Revision queue — surfaces only when the editor sent
+                // articles back for changes. Tapping opens the list of
+                // pending revisions, each of which leads to the
+                // ArticleRevisionView form.
+                if revisionsStore.count > 0 {
+                    NavigationLink(value: ArticleRevisionsRoute()) {
+                        submissionCardContent(
+                            title: "مقالات تنتظر التعديل",
+                            subtitle: "\(revisionsStore.count) مقال بحاجة لإعادة الإرسال",
+                            icon: "pencil.and.list.clipboard",
+                            tint: RevisionPalette.accent,
+                            badgeCount: revisionsStore.count
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+
                 // Editorial notification center for writers/reporters/admins
                 // — shows scheduled / published / rejected / needs_revision
                 // events on their submissions. Uses the value-based form
@@ -380,11 +400,14 @@ struct SettingsView: View {
 
     /// Visual shell for a submission-style row — reusable inside Button or
     /// NavigationLink wrappers without nesting tap handlers.
+    /// `badgeCount` paints a small numeric chip beside the title for
+    /// queue-style rows (e.g. pending revisions).
     private func submissionCardContent(
         title: String,
         subtitle: String,
         icon: String,
-        tint: Color
+        tint: Color,
+        badgeCount: Int? = nil
     ) -> some View {
         HStack(spacing: 14) {
             ZStack {
@@ -397,9 +420,20 @@ struct SettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SabqTheme.ink)
+                    if let badgeCount, badgeCount > 0 {
+                        Text("\(badgeCount)")
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(tint))
+                    }
+                }
                 Text(subtitle)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
@@ -1052,19 +1086,71 @@ struct LoginSheet: View {
             }
 
             if let error = authStore.errorMessage {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 14))
+                        Text(error)
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(SabqTheme.coral)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Account is pending activation — offer to resend
+                    // the activation email so the user can finish
+                    // verifying without leaving the login sheet.
+                    if authStore.pendingActivationUserId != nil
+                        || authStore.pendingActivationEmail != nil {
+                        Button {
+                            Task { await authStore.resendActivation() }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if authStore.isResendingActivation {
+                                    ProgressView()
+                                        .controlSize(.mini)
+                                        .tint(SabqTheme.coral)
+                                } else {
+                                    Image(systemName: "envelope.arrow.triangle.branch")
+                                        .font(.system(size: 12, weight: .bold))
+                                }
+                                Text("إعادة إرسال رمز التفعيل")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(SabqTheme.coral)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(SabqTheme.coral.opacity(0.35), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(authStore.isResendingActivation)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(SabqTheme.coral.opacity(0.08))
+                )
+            }
+
+            if let success = authStore.successMessage,
+               authStore.pendingActivationEmail != nil || authStore.pendingActivationUserId != nil {
                 HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
-                    Text(error)
+                    Text(success)
                         .font(.system(size: 13, weight: .medium))
                 }
-                .foregroundStyle(SabqTheme.coral)
+                .foregroundStyle(SabqTheme.leaf)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(SabqTheme.coral.opacity(0.08))
+                        .fill(SabqTheme.leaf.opacity(0.10))
                 )
             }
 

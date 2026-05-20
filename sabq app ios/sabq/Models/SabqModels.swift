@@ -346,6 +346,26 @@ nonisolated struct ImageFocalPoint: Equatable, Hashable {
         self.y = Self.clamp(y)
     }
 
+    /// Normalises a raw axis value coming off the wire. The backend
+    /// historically stored focal points as 0–100 percentages, but legacy
+    /// rows and some auto-detection paths shipped 0–1 floats. Android's
+    /// `ImageFocalPoint.normalised()` accepts both; iOS used to assume
+    /// 0–100 only, which silently treated 0.20 (0–1 form) as 0.002
+    /// (near-corner) and produced the body-only crop the reader saw on
+    /// 2026-05-20. This initializer mirrors Android: if the raw value
+    /// exceeds 1, it's a percentage; otherwise it's already in unit
+    /// space — multiply by 100 to live in the same 0–100 storage range
+    /// the rest of the model uses.
+    init?(rawX: Double?, rawY: Double?) {
+        guard let rawX, let rawY else { return nil }
+        func toPercent(_ v: Double) -> Double {
+            let asPercent = v > 1.0 ? v : v * 100.0
+            return min(100, max(0, asPercent))
+        }
+        self.x = toPercent(rawX)
+        self.y = toPercent(rawY)
+    }
+
     static let center = ImageFocalPoint(x: 50, y: 50)
 
     /// Normalised 0–1 coordinates — convenient for layout math that

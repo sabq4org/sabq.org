@@ -108,7 +108,11 @@ import com.sabq.smart.util.VideoProvider
 import com.sabq.smart.ui.components.BreakingPill
 import com.sabq.smart.ui.components.CommentComposer
 import com.sabq.smart.ui.components.CommentRow
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.sabq.smart.ui.components.FocalCachedAsyncImage
+import com.sabq.smart.ui.components.ImageLightbox
+import com.sabq.smart.ui.components.rememberSabqHaptics
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
@@ -228,6 +232,7 @@ private fun ArticleBody(
     val likedIds by likesStore.likedIds.collectAsState(initial = emptySet())
     val isLiked = article.id in likedIds
     var isLikeBusy by remember { mutableStateOf(false) }
+    val haptics = rememberSabqHaptics()
 
     val behaviorTracker = remember { entryPoint.behaviorTracker() }
 
@@ -287,6 +292,12 @@ private fun ArticleBody(
     var isFocusMode by remember { mutableStateOf(false) }
     var isReaderSheetOpen by remember { mutableStateOf(false) }
     var isPassportSheetOpen by remember { mutableStateOf(false) }
+    // Drives the full-screen ImageLightbox. Set by the hero-tap and
+    // body inline-image-tap paths; mirrors iOS
+    // `isHeroLightboxPresented` + `inlineLightboxURL` collapsed into
+    // a single URL slot (Android dialog has no `item:`-style binding,
+    // so we use a nullable URL).
+    var lightboxUrl by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -300,7 +311,17 @@ private fun ArticleBody(
             // app the user reads on Play Store today and the iOS
             // ArticleDetailView. Don't reintroduce a fixed 300dp box
             // here — portrait photos lose the subject's face.
-            item { HeroImage(article = article) }
+            item {
+                HeroImage(
+                    article = article,
+                    onTap = {
+                        if (!article.imageUrl.isNullOrBlank()) {
+                            haptics.light()
+                            lightboxUrl = article.imageUrl
+                        }
+                    },
+                )
+            }
 
             // Everything else lives in the 20 dp horizontal column.
             // We feed each row as its own item so the lazy column can
@@ -338,6 +359,10 @@ private fun ArticleBody(
                     fontSize = fontSize,
                     lineSpacing = lineSpacing,
                     useSerif = useSerif,
+                    onImageTap = { imageUrl ->
+                        haptics.light()
+                        lightboxUrl = imageUrl
+                    },
                 )
             }
             // Empty-body fallback.
@@ -423,6 +448,7 @@ private fun ArticleBody(
             onBack = onBack,
             onLike = {
                 if (!isLikeBusy) {
+                    haptics.medium()
                     isLikeBusy = true
                     scope.launch {
                         likesStore.toggle(article.id)
@@ -455,6 +481,16 @@ private fun ArticleBody(
                 )
             }
         }
+
+        // Full-screen image lightbox — hero + inline body images.
+        // iOS source: ArticleDetailView.swift `.fullScreenCover` for
+        // `isHeroLightboxPresented` and `inlineLightboxURL`.
+        lightboxUrl?.let { url ->
+            ImageLightbox(
+                url = url,
+                onDismiss = { lightboxUrl = null },
+            )
+        }
     }
 }
 
@@ -463,7 +499,7 @@ private fun ArticleBody(
 // ============================================================
 
 @Composable
-private fun HeroImage(article: Article) {
+private fun HeroImage(article: Article, onTap: () -> Unit) {
     // Natural aspect ratio: image fills width, height follows the
     // intrinsic w/h of the photo. No fixed-height crop — matches the
     // Capacitor web app the user reads on Play Store today and the
@@ -471,7 +507,10 @@ private fun HeroImage(article: Article) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(SabqTheme.colors.paleFill),
+            .background(SabqTheme.colors.paleFill)
+            .pointerInput(article.imageUrl) {
+                detectTapGestures(onTap = { onTap() })
+            },
     ) {
         if (!article.imageUrl.isNullOrBlank()) {
             val context = LocalContext.current
@@ -928,6 +967,7 @@ private fun BodyBlock(
     fontSize: Float,
     lineSpacing: Float,
     useSerif: Boolean,
+    onImageTap: (String) -> Unit = {},
 ) {
     Box(
         modifier = Modifier
@@ -1021,7 +1061,10 @@ private fun BodyBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(shape)
-                            .background(SabqTheme.colors.paleFill, shape),
+                            .background(SabqTheme.colors.paleFill, shape)
+                            .pointerInput(block.url) {
+                                detectTapGestures(onTap = { onImageTap(block.url) })
+                            },
                         loading = {
                             Box(
                                 modifier = Modifier

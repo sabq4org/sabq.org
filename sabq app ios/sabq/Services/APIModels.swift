@@ -226,16 +226,21 @@ nonisolated struct APIArticle: Decodable {
     }
 
     /// Pulls `image_focal_point` / `imageFocalPoint` out of the API
-    /// envelope. The backend writes a `{x, y}` JSONB blob (percentages
-    /// 0–100) — older payloads may omit it entirely, in which case we
-    /// fall back to centre at the call site. Numeric, string, and
-    /// integer encodings are all tolerated since the column is jsonb.
+    /// envelope. The backend writes a `{x, y}` JSONB blob — most rows
+    /// carry 0–100 percentages, but a tail of legacy / auto-detected
+    /// rows ship 0–1 floats. The smart `ImageFocalPoint(raw:)`
+    /// initializer auto-detects which encoding it received, mirroring
+    /// Android's `ImageFocalPoint.normalised()`. Without it iOS used
+    /// to treat 0–1 floats as percentages, producing focal points near
+    /// the top-left corner instead of the editor-picked subject.
+    /// Numeric, string, and integer encodings are all tolerated since
+    /// the column is jsonb.
     static func decodeFocalPoint(in c: KeyedDecodingContainer<FlexKey>) -> ImageFocalPoint? {
         for key in ["imageFocalPoint", "image_focal_point", "focalPoint", "focal_point"] {
             if let nested = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey(key)) {
                 let x = decodeFocalAxis(nested, key: "x")
                 let y = decodeFocalAxis(nested, key: "y")
-                if let x, let y { return ImageFocalPoint(x: x, y: y) }
+                if let fp = ImageFocalPoint(rawX: x, rawY: y) { return fp }
             }
         }
         return nil
@@ -777,6 +782,19 @@ nonisolated struct APILoginResponse: Decodable {
     }
 }
 
+nonisolated struct ResendActivationResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let emailSent: Bool?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = (try? c.decode(Bool.self, forKey: FlexKey("success"))) ?? false
+        message = try? c.decode(String.self, forKey: FlexKey("message"))
+        emailSent = try? c.decode(Bool.self, forKey: FlexKey("emailSent"))
+    }
+}
+
 nonisolated struct APIRegisterRequest: Encodable {
     let name: String
     let email: String
@@ -791,14 +809,29 @@ nonisolated struct APIRegisterRequest: Encodable {
 
 nonisolated struct APIErrorResponse: Sendable {
     let message: String?
+    /// Set by `/api/v1/auth/login` when the account exists but is still
+    /// in the `pending` activation state. Drives the "إعادة إرسال رمز
+    /// التفعيل" affordance on the iOS login sheet.
+    let requiresActivation: Bool?
+    /// User id echoed back by the backend so the resend-activation
+    /// endpoint can target the exact account without trusting client
+    /// input. May be nil if the caller went straight to a public
+    /// password-reset endpoint that doesn't disclose the id.
+    let userId: String?
 }
 
 nonisolated extension APIErrorResponse: Decodable {
     nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         message = try? c.decode(String.self, forKey: .message)
+        requiresActivation = try? c.decode(Bool.self, forKey: .requiresActivation)
+        userId = try? c.decode(String.self, forKey: .userId)
     }
-    private enum CodingKeys: String, CodingKey { case message }
+    private enum CodingKeys: String, CodingKey {
+        case message
+        case requiresActivation
+        case userId
+    }
 }
 
 nonisolated private struct APIRoleValue: Decodable {

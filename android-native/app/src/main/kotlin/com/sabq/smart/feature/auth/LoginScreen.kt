@@ -23,8 +23,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -61,6 +64,7 @@ fun LoginScreen(
     onAuthenticated: () -> Unit,
 ) {
     val form by viewModel.form.collectAsStateWithLifecycle()
+    val resend by viewModel.resend.collectAsStateWithLifecycle()
 
     var isRegister by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -157,6 +161,90 @@ fun LoginScreen(
                     style = SabqTheme.typography.meta,
                     color = SabqTheme.colors.coral,
                 )
+            }
+
+            // Account exists but is pending email activation. Surface
+            // a resend button targeted at this account so the user
+            // isn't stranded with a dead-end error.
+            if (form is AuthFormState.PendingActivation) {
+                val pending = form as AuthFormState.PendingActivation
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = pending.message,
+                        style = SabqTheme.typography.meta,
+                        color = SabqTheme.colors.coral,
+                    )
+
+                    val isSending = resend is ResendActivationState.Sending
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                BorderStroke(1.dp, SabqTheme.colors.coral.copy(alpha = 0.35f)),
+                                RoundedCornerShape(8.dp),
+                            )
+                            .clickable(enabled = !isSending) { viewModel.resendActivation() }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (isSending) {
+                            CircularProgressIndicator(
+                                color = SabqTheme.colors.coral,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.MarkEmailRead,
+                                contentDescription = null,
+                                tint = SabqTheme.colors.coral,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        Text(
+                            text = "إعادة إرسال رمز التفعيل",
+                            style = SabqTheme.typography.chipLabel,
+                            color = SabqTheme.colors.coral,
+                        )
+                    }
+
+                    when (val r = resend) {
+                        is ResendActivationState.Sent -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = SabqTheme.colors.leaf,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = r.message,
+                                style = SabqTheme.typography.meta,
+                                color = SabqTheme.colors.leaf,
+                            )
+                        }
+                        is ResendActivationState.Error -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ErrorOutline,
+                                contentDescription = null,
+                                tint = SabqTheme.colors.coral,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = r.message,
+                                style = SabqTheme.typography.meta,
+                                color = SabqTheme.colors.coral,
+                            )
+                        }
+                        else -> Unit
+                    }
+                }
             }
 
             if (form is AuthFormState.Submitting) {

@@ -91,16 +91,19 @@ struct ArticleDetailView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     // Hero is intentionally STATIC under scroll — no
-                    // pull-zoom, no parallax, no scale change. Reader
-                    // feedback (2026-05-17): the scroll-driven zoom
-                    // was distracting and made the editor's focal
-                    // point drift. Now the hero stays fixed and the
-                    // focal point picked in the dashboard is honoured
-                    // via `FocalCachedAsyncImage` — same behaviour as
-                    // the web `object-position` crop.
+                    // pull-zoom, no parallax, no scale change.
+                    //
+                    // The hero image renders at its NATURAL aspect ratio
+                    // (no fixed-height crop) so portraits stay portrait
+                    // and landscapes stay landscape — same as the WEB
+                    // ArticleDetail.tsx hero and the live Capacitor
+                    // Android app the user reads on the Play Store
+                    // build. The focal point is a CARDS-only concern
+                    // (HomeFeed / Trending / lists); in the detail view
+                    // the reader expects to see the WHOLE image the
+                    // editor uploaded, otherwise faces in tall portraits
+                    // get chopped off the top.
                     heroImage
-                        .frame(width: proxy.size.width, height: 300)
-                        .clipped()
                         .contentShape(Rectangle())
                         .onTapGesture {
                             guard displayArticle.imageURL?.isEmpty == false else { return }
@@ -412,27 +415,26 @@ struct ArticleDetailView: View {
     // MARK: - Hero Image
 
     // Hero is intentionally clean — no text/badges overlaid on the image.
-    // Category chip, breaking pill, and publication metadata now live below
-    // the hero between the title and excerpt (calm row, low-emphasis).
+    // Category chip, breaking pill, and publication metadata now live
+    // below the hero between the title and excerpt (calm row,
+    // low-emphasis).
+    //
+    // Natural aspect ratio: the image fills the width and the height
+    // follows the image's intrinsic w/h. No fixed-height crop — matches
+    // the live Capacitor Android (web-in-webview) experience the user
+    // actually reads. The focal point is honoured on CARDS only; in
+    // the detail view we show the editor's photo whole.
     private var heroImage: some View {
         Group {
-            // Prefer the freshly-loaded `displayArticle` so the focal
-            // point picked in the dashboard kicks in once the detail
-            // fetch resolves (list payloads sometimes ship a list-tier
-            // image without the focal-point blob).
             if let urlString = displayArticle.imageURL, let url = URL(string: urlString) {
-                FocalCachedAsyncImage(url: url, focalPoint: displayArticle.imageFocalPoint) {
+                CachedAsyncImage(url: url, contentMode: .fit) {
                     heroPlaceholder
                 }
-                .frame(maxWidth: .infinity, maxHeight: 300)
-                .clipped()
             } else {
                 heroPlaceholder
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .clipped()
     }
 
     private var heroPlaceholder: some View {
@@ -442,7 +444,7 @@ struct ArticleDetailView: View {
             endPoint: .bottomTrailing
         )
         .frame(maxWidth: .infinity)
-        .frame(height: 300)
+        .frame(height: 220)
         .overlay {
             Image(systemName: article.category.icon)
                 .font(.system(size: 100, weight: .ultraLight))
