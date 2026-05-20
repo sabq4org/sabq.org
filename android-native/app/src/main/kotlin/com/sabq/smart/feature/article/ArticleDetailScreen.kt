@@ -34,6 +34,10 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.RemoveCircle
+import androidx.compose.material.icons.outlined.SentimentSatisfied
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
@@ -264,6 +268,21 @@ private fun ArticleBody(
         likesStore.reconcile(article.id)
     }
 
+    // AI insights — sentiment lives here. Best-effort: silent on
+    // failure (matches iOS `try? await fetchAIInsights`). The
+    // server endpoint today omits `sentiment` from most articles,
+    // so the pill stays hidden in that case. iOS source:
+    // ArticleDetailView.swift:378-380.
+    var sentiment by remember(article.slug) { mutableStateOf<String?>(null) }
+    LaunchedEffect(article.slug) {
+        val slug = article.slug ?: return@LaunchedEffect
+        runCatching {
+            entryPoint.sabqApi().fetchArticleAiInsights(slug)
+        }.getOrNull()?.let { insights ->
+            sentiment = (insights["sentiment"] as? String)?.lowercase()
+        }
+    }
+
     val commentsState by commentsViewModel.state.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val errorTint = SabqTheme.colors.coral
@@ -330,7 +349,13 @@ private fun ArticleBody(
 
             // 2. Labels row (under the hero, NOT overlaid).
             if (!isFocusMode) {
-                item { LabelsRow(article = article, onPassportClick = { isPassportSheetOpen = true }) }
+                item {
+                    LabelsRow(
+                        article = article,
+                        sentiment = sentiment,
+                        onPassportClick = { isPassportSheetOpen = true },
+                    )
+                }
             }
 
             // 3. Title.
@@ -610,14 +635,22 @@ private fun AiImageBadge(model: String?, modifier: Modifier = Modifier) {
 // LABELS ROW (below hero, not on it)
 // ============================================================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LabelsRow(article: Article, onPassportClick: () -> Unit) {
-    Row(
+private fun LabelsRow(
+    article: Article,
+    sentiment: String?,
+    onPassportClick: () -> Unit,
+) {
+    // FlowRow so the labels wrap to a second line on narrow screens
+    // instead of clipping. iOS uses `FlowLayout(spacing: 8)` for the
+    // same reason — ArticleDetailView.swift:528.
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (article.isOpinion) {
             OpinionMarkerPill()
@@ -625,11 +658,89 @@ private fun LabelsRow(article: Article, onPassportClick: () -> Unit) {
             StatusChip(title = article.category.title, tint = article.category.tint())
             if (article.isBreaking) BreakingPill()
         }
+
+        // Sentiment pill — only renders when the backend returned a
+        // recognized sentiment value. Mirrors iOS `sentimentPill`
+        // at ArticleDetailView.swift:562.
+        SentimentPill(sentiment = sentiment)
+
         // Always-visible "موثَّق" pill — tap opens the Content Passport
         // sheet. Mirrors iOS `PassportInlineBadge` in `labelsRow`.
         if (!article.slug.isNullOrBlank()) {
             com.sabq.smart.ui.components.PassportInlineBadge(onClick = onPassportClick)
         }
+    }
+}
+
+/**
+ * Sentiment pill — rendered when AI insights returned a sentiment key
+ * for this article. Accepts canonical English keys OR localized
+ * Arabic labels. Mirrors iOS `sentimentMapping` at
+ * ArticleDetailView.swift:585 1:1: same labels, same tints, same icon
+ * family.
+ */
+@Composable
+private fun SentimentPill(sentiment: String?) {
+    val mapped = remember(sentiment) { sentimentMapping(sentiment) } ?: return
+    val (label, icon, tint) = mapped
+    val capsule = CircleShape
+    Row(
+        modifier = Modifier
+            .clip(capsule)
+            .background(tint.copy(alpha = 0.10f), capsule)
+            .border(
+                BorderStroke(width = 0.5.dp, color = tint.copy(alpha = 0.25f)),
+                capsule,
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(11.dp),
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            color = tint,
+        )
+    }
+}
+
+private data class SentimentMapping(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tint: Color,
+)
+
+private fun sentimentMapping(raw: String?): SentimentMapping? {
+    val key = raw?.lowercase()?.trim().orEmpty()
+    return when (key) {
+        "positive", "ايجابي", "إيجابي" -> SentimentMapping(
+            label = "إيجابي",
+            icon = Icons.Outlined.SentimentSatisfied,
+            tint = Color(0xFF29AE66), // iOS RGB(0.16, 0.68, 0.40)
+        )
+        "neutral", "محايد" -> SentimentMapping(
+            label = "محايد",
+            icon = Icons.Outlined.RemoveCircle,
+            tint = Color(0xFF606675), // iOS SabqTheme.secondaryInk (light variant)
+        )
+        "negative", "سلبي" -> SentimentMapping(
+            label = "سلبي",
+            icon = Icons.Filled.Warning,
+            tint = Color(0xFFF24D5C), // iOS SabqTheme.coral
+        )
+        "mixed", "مختلط" -> SentimentMapping(
+            label = "مختلط",
+            icon = Icons.Outlined.Contrast,
+            tint = Color(0xFF9E5CEB), // iOS RGB(0.62, 0.36, 0.92)
+        )
+        else -> null
     }
 }
 
@@ -1167,55 +1278,11 @@ private fun BodyBlock(
                 }
             }
             is BlockNode.TwitterEmbed -> {
-                val context = LocalContext.current
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
-                        .border(
-                            width = 1.dp,
-                            color = SabqTheme.colors.outline.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
-                        )
-                        .clickable {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(block.tweetUrl))
-                                context.startActivity(intent)
-                            } catch (e: Exception) {}
-                        }
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "𝕏",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = SabqTheme.colors.ink
-                        )
-                        Text(
-                            text = "منصة إكس (تويتر سابقاً)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SabqTheme.colors.ink
-                        )
-                    }
-                    Text(
-                        text = block.tweetUrl,
-                        fontSize = 11.sp,
-                        color = Color(0xFF007AFF),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "انقر لعرض التغريدة الكاملة",
-                        fontSize = 11.sp,
-                        color = SabqTheme.colors.tertiaryInk
-                    )
-                }
+                // Inline widgets.js render via WebView — mirrors iOS
+                // `TwitterEmbedView` (Components/TwitterEmbedView.swift)
+                // 1:1. Falls back to an "افتح التغريدة في X" link below
+                // the embed if widgets.js can't render in-process.
+                com.sabq.smart.ui.components.TwitterEmbedView(tweetUrl = block.tweetUrl)
             }
             is BlockNode.VideoEmbed -> {
                 val context = LocalContext.current
@@ -2201,4 +2268,5 @@ interface ArticleDetailEntryPoint {
     fun bookmarksStore(): BookmarksStore
     fun likesStore(): LikesStore
     fun behaviorTracker(): BehaviorTracker
+    fun sabqApi(): com.sabq.smart.data.api.SabqApi
 }
