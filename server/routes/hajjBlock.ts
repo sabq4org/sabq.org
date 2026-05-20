@@ -217,6 +217,13 @@ router.get("/", async (_req: Request, res: Response) => {
     const combined = [...pinnedSorted, ...keywordMatched]
       .slice(0, config.articleLimit ?? 5);
 
+    // Empty result → hide the block entirely rather than render a
+    // header with no cards underneath. Editors can still see the
+    // settings page; readers just see nothing.
+    if (combined.length === 0) {
+      return res.json({ isVisible: false, reason: "no_matching_articles" });
+    }
+
     const articlesOut = combined.map((a) => {
       const tagInfo = deriveHajjTag(`${a.title} ${a.excerpt ?? ""}`);
       return {
