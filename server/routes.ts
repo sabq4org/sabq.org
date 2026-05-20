@@ -4569,7 +4569,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Get all users with filtering (admin only)
   app.get("/api/admin/users", requireAuth, requirePermission("users.view"), async (req: any, res) => {
     try {
-      const { search, query, roleId, role, status, limit = 500, ids } = req.query;
+      const {
+        search, query, roleId, role, status, limit = 500, ids,
+        // Pagination params (added 2026-05-20). Default to page=1 / pageSize=100
+        // so the dashboard can show a /dashboard/users list with 100 rows per
+        // page instead of dumping all ~3K accounts in one DOM tree. Falls
+        // back to the legacy `limit` behavior when `page` is absent so the
+        // older callers (search modals etc.) keep working unchanged.
+        page,
+        pageSize: pageSizeRaw,
+      } = req.query;
+      const isPaginated = page !== undefined;
+      const pageNum = Math.max(1, parseInt(String(page ?? "1"), 10) || 1);
+      const pageSize = Math.min(500, Math.max(1, parseInt(String(pageSizeRaw ?? "100"), 10) || 100));
+      const offset = (pageNum - 1) * pageSize;
 
       // Build conditions for the main user query
       const conditions = [];
@@ -4675,17 +4688,46 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         
         // If no users have this role, return empty array
         if (filteredUserIds.length === 0) {
-          return res.json({ items: [], users: [] });
+          return res.json({
+            items: [],
+            users: [],
+            total: 0,
+            page: isPaginated ? pageNum : undefined,
+            pageSize: isPaginated ? pageSize : undefined,
+            hasMore: false,
+          });
         }
 
         // Add to query conditions
         usersListQuery = usersListQuery.where(inArray(users.id, filteredUserIds)) as any;
       }
 
+      // Total count for pagination — only run when the client asked for
+      // a paged response (the count query is cheap but it's wasted work
+      // for legacy callers that just want the first 500 rows).
+      let totalCount = 0;
+      if (isPaginated) {
+        // Re-apply the same conditions on a COUNT(*) query. We can't
+        // reuse `usersListQuery` directly because Drizzle already locked
+        // its column selection.
+        let countQuery: any = db
+          .select({ value: sql<number>`COUNT(*)::int` })
+          .from(users);
+        if (conditions.length > 0) {
+          countQuery = countQuery.where(and(...conditions));
+        }
+        if (filteredUserIds && filteredUserIds.length > 0) {
+          countQuery = countQuery.where(inArray(users.id, filteredUserIds));
+        }
+        const [{ value }] = await countQuery;
+        totalCount = Number(value ?? 0);
+      }
+
       // Execute main query
       const userList = await usersListQuery
         .orderBy(desc(users.createdAt))
-        .limit(parseInt(limit as string, 10));
+        .limit(isPaginated ? pageSize : parseInt(limit as string, 10))
+        .offset(isPaginated ? offset : 0);
 
       const userIds = userList.map(u => u.id);
 
@@ -4770,9 +4812,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         console.log("[ADMIN USERS API] No banned users found. Sample statuses:", usersWithRoles.slice(0, 3).map((u: any) => ({ id: u.id, status: u.status })));
       }
 
-      // Return in both formats for compatibility
-      res.json({
-        items: usersWithRoles.map(u => ({
+      // Return in both formats for compatibility. `total` + `page` +
+      // `pageSize` + `hasMore` ride along when the request was paged
+      // (`?page=N` was supplied). Legacy callers see only the original
+      // shape so nothing breaks.
+      const itemsMapped = usersWithRoles.map(u => ({
           id: u.id,
           // Prefer staff Arabic name, then full name, then email
           name: u.staffNameAr || u.staffName || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email,
@@ -4794,8 +4838,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           lastLoginAt: u.lastLoginAt,
           lastDeviceInfo: u.lastDeviceInfo,
           loyalty: u.loyalty,
-        })),
+        }));
+      res.json({
+        items: itemsMapped,
         users: usersWithRoles,
+        total: isPaginated ? totalCount : itemsMapped.length,
+        page: isPaginated ? pageNum : undefined,
+        pageSize: isPaginated ? pageSize : undefined,
+        hasMore: isPaginated ? (pageNum * pageSize) < totalCount : false,
       });
     } catch (error) {
       console.error("Error fetching users:", error);

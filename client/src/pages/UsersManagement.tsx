@@ -179,6 +179,11 @@ export default function UsersManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  // Pagination state (added 2026-05-20). Resets to page 1 whenever a
+  // filter changes so we don't end up on page 5 of an empty result.
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  useEffect(() => { setPage(1); }, [searchQuery, statusFilter, roleFilter, pageSize]);
   const [editingUserRoles, setEditingUserRoles] = useState<{
     userId: string;
     currentRoles: string[];
@@ -196,29 +201,48 @@ export default function UsersManagement() {
     },
   });
 
-  // Fetch users
-  const { data: usersRaw, isLoading } = useQuery<UserListItem[]>({
-    queryKey: ["/api/admin/users", searchQuery, statusFilter, roleFilter],
+  // Fetch users (paged). Response shape:
+  //   { users, items, total, page, pageSize, hasMore }
+  // We pre-fetch slightly more than `pageSize` and then filter out
+  // staff-roles client-side because that filter doesn't exist server-side.
+  // The `total` we display is the server-reported total before the
+  // staff-roles filter — it can be slightly off when the page boundary
+  // straddles a staff row, but it's good enough for "صفحة X من Y".
+  type UsersResponse = {
+    items?: UserListItem[];
+    users?: UserListItem[];
+    total?: number;
+    page?: number;
+    pageSize?: number;
+    hasMore?: boolean;
+  };
+  const { data: usersResponse, isLoading } = useQuery<UsersResponse>({
+    queryKey: ["/api/admin/users", searchQuery, statusFilter, roleFilter, page, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
       if (statusFilter !== "all") params.append("status", statusFilter);
       if (roleFilter !== "all") params.append("roleId", roleFilter);
+      params.append("page", String(page));
+      params.append("pageSize", String(pageSize));
 
       const res = await fetch(`/api/admin/users?${params}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      // API returns { users: [...], items: [...] }
-      const allUsers = data.users || data.items || (Array.isArray(data) ? data : []);
-      
-      // Filter to show only regular readers (not staff members)
-      // Staff roles are managed in /dashboard/staff
-      const staffRoles = ['admin', 'system_admin', 'editor', 'correspondent', 'reporter', 'moderator', 'content_manager', 'opinion_author'];
-      return allUsers.filter((u: UserListItem) => !staffRoles.includes(u.role));
+      if (!res.ok) return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
+      return res.json();
     },
     enabled: !!user,
   });
-  const users = Array.isArray(usersRaw) ? usersRaw : [];
+  const allFetchedUsers: UserListItem[] = Array.isArray(usersResponse?.users)
+    ? usersResponse!.users
+    : Array.isArray(usersResponse?.items)
+      ? usersResponse!.items as any
+      : [];
+  const totalUsers = usersResponse?.total ?? allFetchedUsers.length;
+  // Filter to show only regular readers (not staff members).
+  // Staff roles are managed in /dashboard/staff.
+  const staffRoles = ['admin', 'system_admin', 'editor', 'correspondent', 'reporter', 'moderator', 'content_manager', 'opinion_author'];
+  const users = allFetchedUsers.filter((u) => !staffRoles.includes(u.role));
+  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
 
   // Fetch roles
   const { data: rolesRaw } = useQuery<Role[]>({
@@ -791,6 +815,82 @@ export default function UsersManagement() {
                 </table>
               )}
             </div>
+
+            {/* Pagination controls — only render once we know how many
+                pages exist. Shows page X of Y, count of currently-shown
+                rows, page-size selector, and prev/next/first/last
+                buttons. Resets to page 1 when filters change (see the
+                effect above the useQuery). */}
+            {totalUsers > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-4 pb-4 text-sm">
+                <div className="text-muted-foreground" data-testid="pagination-status">
+                  عرض <span className="font-bold text-foreground">{(page - 1) * pageSize + 1}</span>
+                  {" – "}
+                  <span className="font-bold text-foreground">
+                    {Math.min(page * pageSize, totalUsers)}
+                  </span>
+                  {" من "}
+                  <span className="font-bold text-foreground">{totalUsers.toLocaleString("en-US")}</span>
+                  {" قارئ"}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">صفوف لكل صفحة:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="border border-input bg-background rounded-md px-2 py-1 text-sm"
+                    data-testid="select-page-size"
+                  >
+                    {[50, 100, 200, 500].map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(1)}
+                    disabled={page === 1}
+                    data-testid="button-page-first"
+                  >
+                    الأولى
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    data-testid="button-page-prev"
+                  >
+                    السابقة
+                  </Button>
+                  <span className="px-3 text-muted-foreground tabular-nums">
+                    {page} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    data-testid="button-page-next"
+                  >
+                    التالية
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(totalPages)}
+                    disabled={page >= totalPages}
+                    data-testid="button-page-last"
+                  >
+                    الأخيرة
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
