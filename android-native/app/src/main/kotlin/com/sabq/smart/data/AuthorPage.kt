@@ -70,12 +70,24 @@ fun ApiAuthorPage.toDomain(webOrigin: String = "https://sabq.org"): AuthorPage =
     //   - The backend mostly orders by `published_at DESC` but not for
     //     every author (some return undated rows). Sort here so the UI
     //     always reads top-down newest → oldest regardless.
-    //   - The backend also occasionally returns the same id twice
-    //     (writer who has both a published draft and a republication).
-    //     `distinctBy { it.id }` keeps the LazyColumn `key = { it.id }`
-    //     stable so Compose doesn't crash on duplicate keys.
+    //   - The backend returns rows that share the same headline+date
+    //     under DIFFERENT ids (legacy data — same article duplicated
+    //     during a CMS migration). `distinctBy { it.id }` catches the
+    //     accidental same-id duplicates, but for the cross-id case we
+    //     also dedupe by `title-normalised-by-day` so the user sees
+    //     each story once.
+    //   - LazyColumn `key = { it.id }` would crash on duplicate keys
+    //     anyway, so this is also a stability guarantee.
     recentArticles = recentArticles
         .map { it.toDomain(webOrigin) }
         .distinctBy { it.id }
+        .distinctBy {
+            // Same headline on the same day → treat as one article.
+            // Truncating publishedAtIso to the date portion (YYYY-MM-DD)
+            // keeps legitimately-reposted-on-a-different-day items
+            // visible.
+            val day = it.publishedAtIso?.take(10).orEmpty()
+            "${it.title.trim()}|$day"
+        }
         .sortedByDescending { it.publishedAtIso ?: "" },
 )
