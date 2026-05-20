@@ -116,6 +116,14 @@ interface SabqApi {
     @POST("api/v1/auth/register")
     suspend fun register(@Body body: RegisterRequest): ApiLoginResponse
 
+    /**
+     * Re-send the account-activation email when login surfaced
+     * `requiresActivation: true`. Accepts either userId or email —
+     * passing both lets the server pick the more reliable lookup.
+     */
+    @POST("api/v1/auth/resend-activation")
+    suspend fun resendActivation(@Body body: ResendActivationRequest): ResendActivationResponse
+
     @POST("api/v1/auth/logout")
     suspend fun logout(): retrofit2.Response<Unit>
 
@@ -183,10 +191,22 @@ interface SabqApi {
      * `{ articles: [...], total, hasMore }`. Verified live
      * 2026-05-19.
      */
+    /**
+     * Trending search keywords for the Explore screen's "الأكثر بحثاً"
+     * pill flow. Public namespace, NOT v1. iOS counterpart at
+     * `APIClient.fetchTrendingKeywords` (`Services/APIClient.swift:428`).
+     * Response shape: `[{ keyword, count, category }]`.
+     */
+    @GET("api/trending-keywords")
+    suspend fun getTrendingKeywords(): List<ApiTrendingKeyword>
+
     @GET("api/opinion")
     suspend fun getOpinions(
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20,
+        /** Accepts "trending" (last-48h by views) or null (latest by
+         *  publishedAt DESC). iOS counterpart at OpinionsView.swift:304-305. */
+        @Query("sort") sort: String? = null,
     ): ApiArticlesResponse
 
     // -- account management ------------------------------------------

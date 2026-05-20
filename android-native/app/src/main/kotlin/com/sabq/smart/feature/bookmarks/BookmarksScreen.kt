@@ -1,17 +1,25 @@
 package com.sabq.smart.feature.bookmarks
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -20,18 +28,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.data.Article
 import com.sabq.smart.ui.components.CompactArticleRow
+import com.sabq.smart.ui.components.CompactScreenHeader
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqTheme
 
 /**
- * Bookmarks tab — list of saved articles. Mirrors iOS
- * [BookmarksView]'s structure: header + stat tiles + list. v1 skips
- * the stat tiles; lands once the offline cache is in place.
+ * Bookmarks tab — 1:1 port of iOS `BookmarksView`
+ * (`Screens/BookmarksView.swift`).
+ *
+ * Layout:
+ *   - CompactScreenHeader ("المحفوظات" + subtitle)
+ *   - Empty: SurfaceCard with bookmark icon + helper text
+ *   - Loaded:
+ *     - 3 stat tiles row (count / total reading minutes / unique categories)
+ *     - SurfaceCard with the saved-article list
  */
 @Composable
 fun BookmarksScreen(
@@ -47,8 +67,8 @@ fun BookmarksScreen(
     ) {
         when (val s = uiState) {
             BookmarksUiState.Loading -> Loading()
-            BookmarksUiState.Empty -> Empty()
-            is BookmarksUiState.Error -> Error(message = s.message)
+            BookmarksUiState.Empty -> EmptyContent()
+            is BookmarksUiState.Error -> ErrorContent(message = s.message)
             is BookmarksUiState.Loaded -> Loaded(
                 items = s.items,
                 onUnbookmark = viewModel::unbookmark,
@@ -65,29 +85,26 @@ private fun Loaded(
     onArticleClick: (Article) -> Unit,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().statusBarsPadding(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = SabqTheme.dimens.screenPaddingH,
             end = SabqTheme.dimens.screenPaddingH,
-            top = 24.dp,
+            top = 18.dp,
             bottom = 120.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "المحفوظات",
-                    style = SabqTheme.typography.screenTitle,
-                    color = SabqTheme.colors.ink,
-                )
-                Text(
-                    text = "${items.size} مقال محفوظ",
-                    style = SabqTheme.typography.meta,
-                    color = SabqTheme.colors.secondaryInk,
-                )
-            }
+            CompactScreenHeader(
+                title = "المحفوظات",
+                subtitle = "الأخبار التي حفظتها للقراءة لاحقاً",
+            )
         }
+
+        item { StatsRow(items = items) }
+
         item {
             SurfaceCard {
                 items.forEachIndexed { index, article ->
@@ -109,29 +126,133 @@ private fun Loaded(
     }
 }
 
+// ============================================================
+// Stats row — 3 tiles (count / reading minutes / unique categories)
+// ============================================================
+
 @Composable
-private fun Empty() {
-    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+private fun StatsRow(items: List<Article>) {
+    val totalMinutes = items.sumOf { it.readingMinutesInt ?: 0 }
+    val uniqueCategories = items.map { it.category }.toSet().size
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        StatTile(
+            title = "محفوظة",
+            value = items.size.toString(),
+            icon = Icons.Filled.Bookmark,
+            tint = SabqTheme.colors.primaryEnd,
+            modifier = Modifier.weight(1f),
+        )
+        StatTile(
+            title = "وقت القراءة",
+            value = "$totalMinutes د",
+            icon = Icons.Outlined.Schedule,
+            tint = SabqTheme.colors.teal,
+            modifier = Modifier.weight(1f),
+        )
+        StatTile(
+            title = "أقسام",
+            value = uniqueCategories.toString(),
+            icon = Icons.Filled.GridView,
+            tint = SabqTheme.colors.gold,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun StatTile(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .background(tint.copy(alpha = 0.04f), shape)
+            .border(width = 0.5.dp, color = tint.copy(alpha = 0.18f), shape = shape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Outlined.BookmarkBorder,
+                imageVector = icon,
                 contentDescription = null,
-                tint = SabqTheme.colors.tertiaryInk,
-                modifier = Modifier.padding(8.dp),
+                tint = tint,
+                modifier = Modifier.size(14.dp),
             )
-            Text(
-                text = "لا توجد محفوظات بعد",
-                style = SabqTheme.typography.sectionHeader,
-                color = SabqTheme.colors.ink,
-            )
-            Text(
-                text = "اضغط على أيقونة الحفظ في الأخبار لتضيفها هنا",
-                style = SabqTheme.typography.meta,
-                color = SabqTheme.colors.secondaryInk,
-            )
+        }
+        Text(
+            text = value,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = SabqTheme.colors.ink,
+        )
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = SabqTheme.colors.tertiaryInk,
+        )
+    }
+}
+
+// ============================================================
+// States
+// ============================================================
+
+@Composable
+private fun EmptyContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(horizontal = SabqTheme.dimens.screenPaddingH, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        CompactScreenHeader(
+            title = "المحفوظات",
+            subtitle = "الأخبار التي حفظتها للقراءة لاحقاً",
+        )
+        SurfaceCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.BookmarkBorder,
+                    contentDescription = null,
+                    tint = SabqTheme.colors.primaryEnd,
+                    modifier = Modifier.size(40.dp),
+                )
+                Text(
+                    text = "لا توجد محفوظات",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SabqTheme.colors.ink,
+                )
+                Text(
+                    text = "احفظ الأخبار المهمة بالضغط على أيقونة الحفظ لقراءتها لاحقاً",
+                    fontSize = 13.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                )
+            }
         }
     }
 }
@@ -144,17 +265,26 @@ private fun Loading() {
 }
 
 @Composable
-private fun Error(message: String) {
-    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun ErrorContent(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
                 text = "تعذّر تحميل المحفوظات",
-                style = SabqTheme.typography.sectionHeader,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
                 color = SabqTheme.colors.ink,
             )
             Text(
                 text = message,
-                style = SabqTheme.typography.meta,
+                fontSize = 13.sp,
                 color = SabqTheme.colors.secondaryInk,
             )
         }

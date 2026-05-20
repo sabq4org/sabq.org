@@ -43,6 +43,11 @@ data class Article(
      *  so callers can sort by it. Null when the backend omits the
      *  field. */
     val publishedAtIso: String? = null,
+    /** Server-computed reading time in whole minutes. Kept separate
+     *  from the formatted [readingTime] string so screens that need
+     *  to sum minutes (e.g. Bookmarks stats) can do so without
+     *  parsing Arabic. Null when the backend omits the field. */
+    val readingMinutesInt: Int? = null,
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent

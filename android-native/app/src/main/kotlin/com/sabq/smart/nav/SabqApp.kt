@@ -184,8 +184,6 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
-                        onOpinionsClick = { navController.navigate(SabqRoutes.Opinions) },
-                        onMomentByMomentClick = { navController.navigate(SabqRoutes.MomentByMoment) },
                     )
                 }
                 composable(SabqRoutes.Bookmarks) {

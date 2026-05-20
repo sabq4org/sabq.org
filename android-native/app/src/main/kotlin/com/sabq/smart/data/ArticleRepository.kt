@@ -47,8 +47,13 @@ class ArticleRepository @Inject constructor(
      *  endpoint, NOT the same `/articles` feed. Result rows already
      *  carry `articleType = "opinion"` so `Article.isOpinion`
      *  returns true. */
-    suspend fun getOpinions(page: Int = 1, limit: Int = 20): ArticlesPage {
-        val response = api.getOpinions(page = page, limit = limit)
+    /** Trending search keywords for the Explore screen. Returns plain
+     *  strings (drops the count/category metadata the backend ships). */
+    suspend fun getTrendingKeywords(): List<String> =
+        api.getTrendingKeywords().mapNotNull { it.keyword.takeIf { kw -> kw.isNotBlank() } }
+
+    suspend fun getOpinions(page: Int = 1, limit: Int = 20, sort: String? = null): ArticlesPage {
+        val response = api.getOpinions(page = page, limit = limit, sort = sort)
         return ArticlesPage(
             items = response.articles.map { it.toDomain() },
             total = response.total ?: 0,

@@ -230,6 +230,14 @@ data class ApiBreakingHeadline(
     val publishedAt: String? = null,
 )
 
+/** Single entry from `GET /api/trending-keywords`. */
+@Serializable
+data class ApiTrendingKeyword(
+    val keyword: String = "",
+    val count: Int = 0,
+    val category: String? = null,
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ApiArticleReactionResponse(
