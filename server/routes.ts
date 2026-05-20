@@ -715,13 +715,45 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   );
 
   // Register
+  // Reject obviously-malicious payloads at the door. We had 148 sqlmap-probe
+  // accounts pile up in May 2026 because the earlier handler accepted any
+  // truthy string as email/name. Drizzle's parameterized queries meant the
+  // SQL never executed — but the rows persisted and polluted the readers list.
+  // Arabic + Latin letters, digits, spaces, hyphens, apostrophes only for names.
+  const registerSchema = z.object({
+    email: z
+      .string()
+      .trim()
+      .max(254, "البريد الإلكتروني طويل جداً")
+      .email("البريد الإلكتروني غير صحيح"),
+    password: z.string().min(1, "كلمة المرور مطلوبة").max(128, "كلمة المرور طويلة جداً"),
+    firstName: z
+      .string()
+      .trim()
+      .max(60, "الاسم الأول طويل جداً")
+      .regex(/^[؀-ۿa-zA-Z\s'\-]+$/, "الاسم الأول يحتوي على رموز غير صالحة")
+      .optional()
+      .nullable()
+      .or(z.literal("")),
+    lastName: z
+      .string()
+      .trim()
+      .max(60, "اسم العائلة طويل جداً")
+      .regex(/^[؀-ۿa-zA-Z\s'\-]+$/, "اسم العائلة يحتوي على رموز غير صالحة")
+      .optional()
+      .nullable()
+      .or(z.literal("")),
+    role: z.string().max(40).optional(),
+  });
+
   app.post("/api/register", authLimiter, async (req, res) => {
     try {
-      const { email, password, firstName, lastName, role } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
+      const parsed = registerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const firstError = parsed.error.errors[0];
+        return res.status(400).json({ message: firstError?.message || "البيانات غير صحيحة" });
       }
+      const { email, password, firstName, lastName, role } = parsed.data;
 
       const pwCheck = validatePassword(password);
       if (!pwCheck.ok) {
