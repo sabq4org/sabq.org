@@ -51,6 +51,14 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
 
     val resolvedAuthor = authorName?.takeIf { it.isNotBlank() } ?: resolveAuthor(author)
 
+    val resolvedTags: List<String> = (tags ?: emptyList())
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+
+    val resolvedArticleUrl = articleUrl?.takeIf { it.isNotBlank() }
+        ?: slug?.takeIf { it.isNotBlank() }?.let { "$webOrigin/article/$it" }
+
     return Article(
         id = id.ifBlank { slug ?: "anon-${hashCode()}" },
         title = resolvedTitle,
@@ -67,6 +75,11 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         body = body?.takeIf { it.isNotBlank() },
         articleType = articleType,
         authorGender = authorGender,
+        aiSummary = aiSummary?.trim()?.takeIf { it.isNotBlank() },
+        tags = resolvedTags,
+        articleUrl = resolvedArticleUrl,
+        isAiGeneratedImage = isAiGeneratedImage == true,
+        aiImageModel = aiImageModel?.takeIf { it.isNotBlank() },
     )
 }
 

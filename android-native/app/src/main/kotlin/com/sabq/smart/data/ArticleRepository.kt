@@ -97,6 +97,11 @@ class ArticleRepository @Inject constructor(
     suspend fun getArticleBySlug(slug: String): Article =
         api.getArticleBySlug(slug).toDomain()
 
+    /** Related articles for the bottom of the detail screen. iOS shows
+     *  up to 5; we follow the same cap to keep the layout tight. */
+    suspend fun getRelated(slug: String): List<Article> =
+        api.getRelatedArticles(slug).articles.map { it.toDomain() }.take(5)
+
     /** Full-text search over the article corpus. */
     suspend fun search(query: String, page: Int = 1): SearchResult {
         val trimmed = query.trim()

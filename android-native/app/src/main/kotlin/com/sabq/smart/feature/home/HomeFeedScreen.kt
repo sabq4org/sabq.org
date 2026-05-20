@@ -97,6 +97,7 @@ fun HomeFeedScreen(
     onMomentByMomentClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onOpinionsAllClick: () -> Unit = {},
+    onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
@@ -127,12 +128,14 @@ fun HomeFeedScreen(
                 isDarkMode = isDarkMode,
                 showNotificationsBell = isLoggedIn,
                 notificationsUnreadCount = unreadCount,
+                currentUser = currentUser,
                 onSectionSelect = viewModel::selectSection,
                 onBookmark = viewModel::toggleBookmark,
                 onArticleClick = onArticleClick,
                 onMomentByMomentClick = onMomentByMomentClick,
                 onNotificationsClick = onNotificationsClick,
                 onOpinionsAllClick = onOpinionsAllClick,
+                onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
@@ -154,12 +157,14 @@ private fun LoadedFeed(
     isDarkMode: Boolean,
     showNotificationsBell: Boolean,
     notificationsUnreadCount: Int,
+    currentUser: com.sabq.smart.data.User?,
     onSectionSelect: (String?) -> Unit,
     onBookmark: (String) -> Unit,
     onArticleClick: (Article) -> Unit,
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onOpinionsAllClick: () -> Unit,
+    onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
@@ -237,6 +242,22 @@ private fun LoadedFeed(
                     bookmarkedIds = state.bookmarkedIds,
                     onBookmark = onBookmark,
                     onClick = onArticleClick,
+                )
+            }
+        }
+
+        // "رحلتك المعرفية اليوم" — auth-gated personal-journey block.
+        // 1:1 port of iOS HomeFeedView.personalJourneyBlock (lines
+        // 1011-1187). Hidden for signed-out viewers because the
+        // backend's /api/v1/insights/today 401s without a member
+        // session.
+        if (currentUser != null) {
+            item {
+                PersonalJourneyBlock(
+                    insights = state.journeyInsights,
+                    currentUser = currentUser,
+                    loyaltyLifetimePoints = state.loyaltySummary?.lifetimePoints ?: 0,
+                    onLoyaltyTap = onLoyaltyClick,
                 )
             }
         }

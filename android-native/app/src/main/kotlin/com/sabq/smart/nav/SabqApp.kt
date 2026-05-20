@@ -154,6 +154,9 @@ fun SabqApp(
                         onOpinionsAllClick = {
                             navController.navigate(SabqRoutes.Opinions)
                         },
+                        onLoyaltyClick = {
+                            navController.navigate(SabqRoutes.Loyalty)
+                        },
                         onStoryClick = { story ->
                             // Stories on Sabq wrap a `rootArticle`.
                             // Tapping the bubble opens that article in
@@ -327,6 +330,14 @@ fun SabqApp(
                         slug = slug,
                         onBack = { navController.popBackStack() },
                         onLoginRequested = { navController.navigate(SabqRoutes.Login) },
+                        onRelatedClick = { related ->
+                            related.slug?.let { s ->
+                                navController.navigate(SabqRoutes.articleDetail(s))
+                            }
+                        },
+                        // Tag search route lands in a later session.
+                        // For now tag taps no-op — the chip still shows.
+                        onTagClick = { /* TODO: navigate to keyword search */ },
                     )
                 }
             }

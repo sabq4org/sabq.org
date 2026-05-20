@@ -38,4 +38,12 @@ class SettingsViewModel @Inject constructor(
     fun setFontSize(size: Float) {
         viewModelScope.launch { store.setArticleFontSize(size) }
     }
+
+    fun setLineSpacing(value: Float) {
+        viewModelScope.launch { store.setArticleLineSpacing(value) }
+    }
+
+    fun setUseReaderFont(value: Boolean) {
+        viewModelScope.launch { store.setArticleUseReaderFont(value) }
+    }
 }

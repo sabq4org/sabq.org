@@ -129,6 +129,18 @@ data class ApiArticle(
     val readingMinutes: Int? = null,
     @JsonNames("section_id", "sectionId")
     val sectionId: String? = null,
+
+    /** TipTap-stored tag/keyword list. Backend ships either a string
+     *  array OR a list of `{ name }` objects depending on the route; we
+     *  accept the array form here and parse the object form in the
+     *  domain mapper. */
+    val tags: List<String>? = null,
+
+    /** Canonical public article URL — used by the iOS share sheet
+     *  fallback. Backend ships it under `article_url` or `articleUrl`
+     *  depending on the route. */
+    @JsonNames("article_url", "articleUrl", "url", "canonical_url", "canonicalUrl")
+    val articleUrl: String? = null,
 )
 
 @Serializable

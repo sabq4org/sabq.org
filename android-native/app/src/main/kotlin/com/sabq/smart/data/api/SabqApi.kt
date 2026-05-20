@@ -89,6 +89,15 @@ interface SabqApi {
     @GET("api/articles/{slug}")
     suspend fun getArticleBySlug(@Path("slug") slug: String): ApiArticle
 
+    /**
+     * Related-articles list for the bottom of the article detail
+     * screen. Same wrapper shape as `/articles`: `{ articles: [...] }`.
+     * iOS counterpart: `APIClient.fetchRelated` at
+     * `Services/APIClient.swift:327`.
+     */
+    @GET("api/articles/{slug}/related")
+    suspend fun getRelatedArticles(@Path("slug") slug: String): ApiArticlesResponse
+
     // -- auth ---------------------------------------------------------
 
     @POST("api/v1/auth/login")
@@ -119,6 +128,19 @@ interface SabqApi {
      */
     @GET("api/v1/loyalty/me")
     suspend fun getLoyaltyMe(): ApiLoyaltySummary
+
+    // -- insights (personal knowledge journey) -----------------------
+
+    /**
+     * Today's "knowledge journey" payload for the signed-in member —
+     * greeting + reading time + completion rate + likes + comments +
+     * top-3 interest category names. Bearer-token required (401
+     * anonymous). Mirrors iOS `APIClient.fetchTodayInsightsRich`
+     * (`Services/APIClient.swift:1011`). Backend handler is at
+     * `server/routes/mobileApiRoutes.ts:4349`.
+     */
+    @GET("api/v1/insights/today")
+    suspend fun getInsightsToday(): ApiTodayInsights
 
     // -- comments -----------------------------------------------------
 
