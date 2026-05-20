@@ -636,50 +636,50 @@ export default function UsersManagement() {
                   <tbody>
                     {users.map((user) => (
                       <tr key={user.id} className="border-b hover-elevate" data-testid={`row-user-${user.id}`}>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar data-testid={`avatar-${user.id}`}>
+                        <td className="py-3 px-4 align-top">
+                          <div className="flex items-start gap-3">
+                            <Avatar className="shrink-0 mt-0.5" data-testid={`avatar-${user.id}`}>
                               <AvatarImage src={user.profileImageUrl || undefined} />
                               <AvatarFallback>
                                 {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
                               </AvatarFallback>
                             </Avatar>
-                            <div className="min-w-0">
-                              <div className="font-medium flex items-center gap-1" data-testid={`text-name-${user.id}`}>
-                                <span className="truncate">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium flex items-start gap-1 flex-wrap" data-testid={`text-name-${user.id}`}>
+                                <span className="break-words">
                                   {user.firstName || user.lastName
                                     ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
                                     : "بدون اسم"}
                                 </span>
                                 {user.verificationBadge === "gold" && (
-                                  <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0" aria-label="موثق ذهبي" />
+                                  <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0 mt-1" aria-label="موثق ذهبي" />
                                 )}
                                 {user.verificationBadge === "silver" && (
-                                  <BadgeCheck className="h-4 w-4 text-slate-400 shrink-0" aria-label="موثق فضي" />
+                                  <BadgeCheck className="h-4 w-4 text-slate-400 shrink-0 mt-1" aria-label="موثق فضي" />
                                 )}
                               </div>
                               {(user.country || user.city) && (
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                  <MapPin className="h-3 w-3" />
-                                  <span>{[user.city, user.country].filter(Boolean).join("، ")}</span>
+                                <div className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
+                                  <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                                  <span className="break-words">{[user.city, user.country].filter(Boolean).join("، ")}</span>
                                 </div>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4" data-testid={`text-email-${user.id}`}>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm">{user.email}</span>
+                        <td className="py-3 px-4 align-top" data-testid={`text-email-${user.id}`}>
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-sm break-all">{user.email}</span>
                             {user.emailVerified && (
-                              <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0" aria-label="بريد موثق" />
+                              <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-label="بريد موثق" />
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 hidden md:table-cell" data-testid={`text-phone-${user.id}`}>
+                        <td className="py-3 px-4 hidden md:table-cell align-top" data-testid={`text-phone-${user.id}`}>
                           {user.phoneNumber ? (
                             <div className="flex items-center gap-1.5 text-sm" dir="ltr">
-                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span>{user.phoneNumber}</span>
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="break-all">{user.phoneNumber}</span>
                               {user.phoneVerified && (
                                 <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0" aria-label="جوال موثق" />
                               )}
@@ -688,7 +688,7 @@ export default function UsersManagement() {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 hidden lg:table-cell" data-testid={`text-loyalty-${user.id}`}>
+                        <td className="py-3 px-4 hidden lg:table-cell align-top" data-testid={`text-loyalty-${user.id}`}>
                           {user.loyalty ? (
                             <div className="flex flex-col gap-0.5">
                               <Badge variant="outline" className={`gap-1 w-fit ${getRankColor(user.loyalty.rankLevel)}`}>
@@ -703,23 +703,23 @@ export default function UsersManagement() {
                             <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="py-3 px-4">{getStatusBadge(user.status)}</td>
-                        <td className="py-3 px-4 hidden xl:table-cell text-sm text-muted-foreground" data-testid={`text-last-activity-${user.id}`}>
+                        <td className="py-3 px-4 align-top">{getStatusBadge(user.status)}</td>
+                        <td className="py-3 px-4 hidden xl:table-cell text-sm text-muted-foreground align-top" data-testid={`text-last-activity-${user.id}`}>
                           <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
+                            <Clock className="h-3 w-3 shrink-0" />
                             <span>{formatRelative(user.lastActivityAt || user.lastLoginAt)}</span>
                           </div>
                           {getPlatformLabel(user.lastDeviceInfo) && (
                             <div className="text-xs flex items-center gap-1 mt-0.5">
-                              <Smartphone className="h-3 w-3" />
+                              <Smartphone className="h-3 w-3 shrink-0" />
                               <span>{getPlatformLabel(user.lastDeviceInfo)}</span>
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-4 hidden lg:table-cell" data-testid={`text-date-${user.id}`}>
+                        <td className="py-3 px-4 hidden lg:table-cell align-top" data-testid={`text-date-${user.id}`}>
                           {formatDate(user.createdAt)}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 align-top">
                           <div className="flex gap-2">
                             <Button
                               variant="ghost"
