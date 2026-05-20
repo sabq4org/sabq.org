@@ -4395,6 +4395,290 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// Revision-requested articles for the signed-in writer / reporter.
+//
+// When an editor flips `review_status` to `needs_changes` on an article
+// authored by the current user, the dashboard fires an editorial push
+// (`needs_revision` type — see `editorialNotifications.ts`). On the web
+// the author follows the link to the dashboard ArticleEditor to revise
+// & resubmit. The mobile equivalent lives below — three endpoints power
+// a "مقالات تنتظر التعديل" card in Settings + the deep-link
+// `sabq://draft/<id>` handler:
+//
+//   GET  /api/v1/articles/my-revisions    → list with reviewNotes
+//   GET  /api/v1/articles/:id/draft       → full editable payload
+//   PUT  /api/v1/articles/:id/resubmit    → save + flip back to pending
+// ==========================================
+
+router.get("/articles/my-revisions", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مصرح" });
+    }
+
+    // Use both authorId AND reporterId so reporters with a news byline
+    // also see their own pieces — same logic as the dashboard's "my
+    // articles" filter. status='draft' is the resting state for both
+    // first-time submissions AND revision-requested articles, so the
+    // discriminator is reviewStatus='needs_changes'.
+    const rows = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        imageUrl: articles.imageUrl,
+        articleType: articles.articleType,
+        reviewNotes: articles.reviewNotes,
+        reviewedAt: articles.reviewedAt,
+        updatedAt: articles.updatedAt,
+        createdAt: articles.createdAt,
+      })
+      .from(articles)
+      .where(
+        and(
+          eq(articles.reviewStatus, "needs_changes"),
+          or(
+            eq(articles.authorId, session.userId),
+            eq(articles.reporterId, session.userId),
+          ),
+        ),
+      )
+      .orderBy(desc(articles.reviewedAt));
+
+    res.json({
+      success: true,
+      count: rows.length,
+      articles: rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        imageUrl: r.imageUrl,
+        kind: r.articleType === "opinion" ? "opinion" : "news",
+        reviewNotes: r.reviewNotes || "",
+        // Surface the moment the editor asked for changes so the UI can
+        // show "منذ ساعتين" instead of the original draft creation date.
+        requestedAt: (r.reviewedAt ?? r.updatedAt ?? r.createdAt)?.toISOString() ?? null,
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] /articles/my-revisions error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب المقالات" });
+  }
+});
+
+router.get("/articles/:id/draft", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مصرح" });
+    }
+
+    const articleId = req.params.id;
+    const [article] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        content: articles.content,
+        excerpt: articles.excerpt,
+        imageUrl: articles.imageUrl,
+        albumImages: articles.albumImages,
+        articleType: articles.articleType,
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+        reviewNotes: articles.reviewNotes,
+        reviewedAt: articles.reviewedAt,
+        authorId: articles.authorId,
+        reporterId: articles.reporterId,
+        updatedAt: articles.updatedAt,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+
+    if (!article) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
+
+    // Ownership check — only the author or reporter on the byline can
+    // pull the draft. Editors use the dashboard, not this endpoint.
+    if (article.authorId !== session.userId && article.reporterId !== session.userId) {
+      return res.status(403).json({ success: false, message: "ليس لديك صلاحية لتعديل هذا المقال" });
+    }
+
+    res.json({
+      success: true,
+      article: {
+        id: article.id,
+        title: article.title,
+        // Convert stored block HTML back to a plain-text body that
+        // matches the textarea the submission form uses. The
+        // resubmit endpoint will re-wrap it via toMobileArticleHTML.
+        body: (article.content || "")
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>\s*<p>/gi, "\n\n")
+          .replace(/<[^>]+>/g, "")
+          .trim(),
+        excerpt: article.excerpt || "",
+        imageUrl: article.imageUrl,
+        albumImages: article.albumImages || [],
+        kind: article.articleType === "opinion" ? "opinion" : "news",
+        reviewNotes: article.reviewNotes || "",
+        requestedAt: (article.reviewedAt ?? article.updatedAt)?.toISOString() ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] /articles/:id/draft error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب المقال" });
+  }
+});
+
+router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+
+    const articleId = req.params.id;
+
+    const { z } = await import("zod");
+    const schema = z.object({
+      title: z.string().trim().min(3, "العنوان قصير جداً"),
+      content: z.string().trim().min(20, "النص قصير جداً"),
+      // Optional new hero — only sent when the writer replaced the
+      // existing image. If absent the stored imageUrl is preserved.
+      heroImage: z.string().optional(),
+      // Optional new album for news kind. Same semantics: omit to
+      // keep what's already there.
+      albumImages: z.array(z.string()).max(10).optional(),
+    });
+    const data = schema.parse(req.body);
+
+    const [existing] = await db
+      .select({
+        id: articles.id,
+        authorId: articles.authorId,
+        reporterId: articles.reporterId,
+        articleType: articles.articleType,
+        reviewStatus: articles.reviewStatus,
+        imageUrl: articles.imageUrl,
+        albumImages: articles.albumImages,
+      })
+      .from(articles)
+      .where(eq(articles.id, articleId))
+      .limit(1);
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
+    if (existing.authorId !== session.userId && existing.reporterId !== session.userId) {
+      return res.status(403).json({ success: false, message: "ليس لديك صلاحية لتعديل هذا المقال" });
+    }
+    if (existing.reviewStatus !== "needs_changes") {
+      return res.status(409).json({
+        success: false,
+        message: "هذا المقال ليس في حالة \"يحتاج تعديل\"",
+      });
+    }
+
+    // Hero + album handling. New base64 images go to Cloudflare
+    // Images via the same helper /articles/submit uses; existing URLs
+    // (already on imagedelivery.net) pass through.
+    let heroImageUrl = existing.imageUrl;
+    if (data.heroImage !== undefined) {
+      if (data.heroImage.startsWith("data:")) {
+        try {
+          const cf = await cloudflareImagesService.uploadImage(
+            data.heroImage,
+            `mobile-revision-${articleId}-hero-${Date.now()}`,
+          );
+          if (cf.success && cf.url) heroImageUrl = cf.url;
+        } catch (err) {
+          console.error("[Mobile API] /articles/:id/resubmit hero upload failed:", err);
+        }
+      } else if (data.heroImage.startsWith("http")) {
+        heroImageUrl = data.heroImage;
+      }
+    }
+
+    let albumUrls: string[] | null = null;
+    if (data.albumImages !== undefined) {
+      albumUrls = [];
+      for (const img of data.albumImages) {
+        if (img.startsWith("data:")) {
+          try {
+            const cf = await cloudflareImagesService.uploadImage(
+              img,
+              `mobile-revision-${articleId}-album-${Date.now()}-${albumUrls.length}`,
+            );
+            if (cf.success && cf.url) albumUrls.push(cf.url);
+          } catch (err) {
+            console.error("[Mobile API] /articles/:id/resubmit album upload failed:", err);
+          }
+        } else if (img.startsWith("http")) {
+          albumUrls.push(img);
+        }
+      }
+    }
+
+    const htmlContent = toMobileArticleHTML(data.content);
+    const plainExcerpt = data.content
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 220);
+
+    const updates: any = {
+      title: data.title.trim(),
+      content: htmlContent,
+      excerpt: plainExcerpt,
+      imageUrl: heroImageUrl,
+      // Flip the review state so the editor sees this in their queue
+      // again. `pending_review` matches the dashboard's existing filter
+      // (ArticlesManagement.tsx) and triggers the standard editor
+      // alert when the audit pipeline picks it up.
+      reviewStatus: "pending_review",
+      // Clear the prior note so the dashboard doesn't carry forward
+      // stale "needs_changes" copy onto the resubmission.
+      reviewNotes: null,
+      reviewedAt: null,
+      reviewedBy: null,
+      updatedAt: new Date(),
+    };
+    if (albumUrls !== null) updates.albumImages = albumUrls;
+
+    const [updated] = await db
+      .update(articles)
+      .set(updates)
+      .where(eq(articles.id, articleId))
+      .returning({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+      });
+
+    console.log(`[Mobile API] /articles/${articleId}/resubmit by ${session.userId}`);
+
+    res.json({
+      success: true,
+      message: "تم إرسال التعديل بنجاح. سيراجعه فريق التحرير قريباً.",
+      article: updated,
+    });
+  } catch (error: any) {
+    console.error("[Mobile API] /articles/:id/resubmit error:", error);
+    if (error?.name === "ZodError") {
+      return res.status(400).json({
+        success: false,
+        message: "بيانات غير صالحة",
+        errors: error.errors,
+      });
+    }
+    res.status(500).json({ success: false, message: "تعذر إرسال التعديل. حاول لاحقاً." });
+  }
+});
+
+// ==========================================
 // GET /api/v1/insights/today
 // Personal "knowledge journey" payload for the mobile home screen. Mirrors
 // `/api/ai/insights/today` from `routes.ts` exactly (same shape) but
