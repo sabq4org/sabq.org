@@ -3037,15 +3037,19 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
 
     // Find the user whose `first_name + ' ' + last_name` matches the
     // byline. The DB has duplicate user rows for some authors (e.g.
-    // "عبدالرحمن الجاسر" exists twice — one active writer, one dormant
-    // stub) and the previous `LIMIT 1` was picking arbitrarily, often
-    // landing on the empty duplicate which made the iOS author page
-    // look blank. We now rank candidates by published-article count
-    // descending, so the row tied to actual content always wins.
+    // "صحيفة سبق" exists twice — one legacy account with 690K historical
+    // articles that hasn't published since 2026-01, and one active
+    // account that's actually used today). The previous `ORDER BY
+    // published_count DESC` picked the legacy user → author page
+    // showed Jan-2026 articles instead of today's news. We now rank by
+    // `latest_published DESC` so the byline always resolves to the
+    // user who's currently writing under that name. published_count
+    // is the tie-breaker.
     const userRow = await db.execute(sql`
       SELECT u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
              u.job_title, u.department, u.created_at,
-             COUNT(a.id) AS published_count
+             COUNT(a.id) AS published_count,
+             MAX(a.published_at) AS latest_published
       FROM users u
       LEFT JOIN articles a
         ON a.status = 'published'
@@ -3054,7 +3058,9 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
             = LOWER(${rawName})
       GROUP BY u.id, u.first_name, u.last_name, u.profile_image_url, u.bio,
                u.job_title, u.department, u.created_at
-      ORDER BY published_count DESC, u.created_at ASC
+      ORDER BY latest_published DESC NULLS LAST,
+               published_count DESC,
+               u.created_at ASC
       LIMIT 1
     `) as any;
     const author = (userRow?.rows || userRow || [])[0];
