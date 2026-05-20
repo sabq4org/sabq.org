@@ -4664,11 +4664,18 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       // (ArticlesManagement.tsx) and triggers the standard editor
       // alert when the audit pipeline picks it up.
       reviewStatus: "pending_review",
-      // Clear the prior note so the dashboard doesn't carry forward
-      // stale "needs_changes" copy onto the resubmission.
-      reviewNotes: null,
-      reviewedAt: null,
-      reviewedBy: null,
+      // PRESERVE reviewNotes + reviewedAt + reviewedBy — the dashboard
+      // uses these (via `isResubmittedAfterRevision` in
+      // client/src/lib/articleRevision.ts) to paint the amber
+      // "resubmitted" stripe on the row, so editors can tell apart
+      // brand-new drafts from drafts that came back after a revision
+      // request. Wiping them made resubmissions look like first-time
+      // submissions in the dashboard (reported 2026-05-20).
+      //
+      // Safe to keep: /articles/my-revisions filters on
+      // reviewStatus='needs_changes' only, so the writer won't see
+      // the same article in their revision queue twice — they're
+      // out of the queue the moment reviewStatus flips here.
       updatedAt: new Date(),
     };
     if (albumUrls !== null) updates.albumImages = albumUrls;
