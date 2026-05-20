@@ -144,10 +144,40 @@ class HomeFeedViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     _state.value = HomeFeedUiState.Error(
-                        message = e.localizedMessage ?: "تعذّر تحميل الأخبار",
+                        message = friendlyNetworkMessage(e),
                     )
                 }
         }
+    }
+
+    /**
+     * Map a thrown failure to an Arabic, reader-facing message.
+     * The default `e.localizedMessage` surfaces developer-facing
+     * strings ("Parent job is Cancelling", "Unable to resolve host
+     * sabq.org") that confused users on the home-feed error card
+     * (reported 2026-05-20 from an emulator DNS outage). We
+     * collapse the common network/cancellation cases here and keep
+     * the original message for genuinely unknown failures so we
+     * don't hide real bugs.
+     */
+    private fun friendlyNetworkMessage(t: Throwable): String {
+        var c: Throwable? = t
+        while (c != null) {
+            when (c) {
+                is java.net.UnknownHostException,
+                is java.net.ConnectException ->
+                    return "تعذّر الاتصال بالإنترنت. تحقّق من الشبكة وحاول مجدداً."
+                is java.net.SocketTimeoutException ->
+                    return "تعذّر الاتصال بسبب بطء الشبكة. حاول مجدداً."
+                is java.io.IOException ->
+                    return "تعذّر تحميل الأخبار. تحقّق من الشبكة وحاول مجدداً."
+                is kotlinx.coroutines.CancellationException ->
+                    return "تعذّر تحميل الأخبار. حاول مجدداً."
+            }
+            c = c.cause
+        }
+        return t.localizedMessage?.takeIf { it.isNotBlank() }
+            ?: "تعذّر تحميل الأخبار"
     }
 
     /** Fetch the secondary Home blocks (breaking pill, opinions rail,
