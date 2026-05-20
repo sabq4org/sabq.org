@@ -131,12 +131,15 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
   // and the structural flip raced GPT's iframe injection, surfacing as
   // a NotFoundError ("The object can not be found here.") thrown by
   // React's commit phase on first load. We instead always render the
-  // wrapper + inner pair, and only toggle classes/styles when the slot
-  // resolves to 'empty' so unsold slots reserve no visual space.
+  // wrapper + inner pair, and only toggle classes/styles. The chrome
+  // (bg-card/rounded/padding/spacing) is applied ONLY when the slot
+  // actually fills — during the loading window and the eventual empty
+  // state the wrapper stays bare so the slot doesn't render as a
+  // visible empty card (per DMS request 2026-05-20).
   const wrapperSpacing = type === 'leaderboard' ? 'mb-8' : 'mt-8';
-  const wrapperClass = adState === 'empty'
-    ? (className ?? '').trim()
-    : `rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim();
+  const wrapperClass = adState === 'filled'
+    ? `rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim()
+    : (className ?? '').trim();
 
   return (
     <div
