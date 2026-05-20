@@ -128,8 +128,10 @@ object SabqRoutes {
 @Composable
 fun SabqApp(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
+    pushNavViewModel: com.sabq.smart.data.push.PushNavViewModel = hiltViewModel(),
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+    val pendingPush by pushNavViewModel.target.collectAsStateWithLifecycle()
     val isDarkTheme = if (settings.followsSystemDark)
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
@@ -143,6 +145,22 @@ fun SabqApp(
         val currentEntry by navController.currentBackStackEntryAsState()
         val currentRoute = currentEntry?.destination?.route
         val currentTab = SabqRoutes.tabFor(currentRoute)
+
+        // Push-notification deep link. When a notification tap fires
+        // MainActivity → PendingPushDeepLink → this VM, navigate to the
+        // most specific destination (article > notification row) and
+        // mark the target consumed so configuration changes don't
+        // replay the same nav.
+        androidx.compose.runtime.LaunchedEffect(pendingPush) {
+            val target = pendingPush ?: return@LaunchedEffect
+            when {
+                !target.articleSlug.isNullOrBlank() ->
+                    navController.navigate(SabqRoutes.articleDetail(target.articleSlug!!))
+                !target.notificationId.isNullOrBlank() ->
+                    navController.navigate(SabqRoutes.notificationDetail(target.notificationId!!))
+            }
+            pushNavViewModel.consume()
+        }
 
         // Show the floating tab bar only on top-level tab routes; it
         // hides for ArticleDetail so the reader gets the full screen.

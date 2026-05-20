@@ -100,6 +100,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+    // play-services adapter — lets us `await()` Google Play Tasks
+    // (FirebaseMessaging.getInstance().token) from suspend code.
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Hilt
     implementation(libs.hilt.android)

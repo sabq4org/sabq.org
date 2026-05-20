@@ -44,6 +44,34 @@
                 <data android:scheme="https" android:host="sabq.org" />
                 <data android:scheme="https" android:host="www.sabq.org" />
             </intent-filter>
+
+            <!-- Push notification deep link (sabq://push?slug=...&id=...&kind=...) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabq" android:host="push" />
+            </intent-filter>
         </activity>
+
+        <!-- FCM entry point. Receives editorial push messages + token
+             rotations. Routes incoming pushes to the system notification
+             tray (com.sabq.smart.data.push.SabqMessagingService). -->
+        <service
+            android:name="com.sabq.smart.data.push.SabqMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Default notification icon used by FCM when the server sends
+             a notification (vs data) payload without an icon override. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sabq_editorial" />
     </application>
 </manifest>

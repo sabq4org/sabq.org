@@ -129,6 +129,19 @@ interface SabqApi {
     suspend fun logout(): retrofit2.Response<Unit>
 
     /**
+     * Register the device's FCM token with the editorial-push backend.
+     * iOS counterpart: APNs registration. Server upserts on
+     * `deviceToken`, derives `tokenProvider = "fcm"` when `platform =
+     * "android"`. See `mobileApiRoutes.ts:498`.
+     */
+    @POST("api/v1/devices/register")
+    suspend fun registerDevice(@Body body: DeviceRegisterRequest): DeviceRegisterResponse
+
+    /** Drop the device row when the user signs out or revokes pushes. */
+    @POST("api/v1/devices/unregister")
+    suspend fun unregisterDevice(@Body body: DeviceUnregisterRequest): retrofit2.Response<Unit>
+
+    /**
      * Authenticated user profile. iOS uses `/v1/members/profile`
      * (NOT `/auth/me` — that path 404s on production).
      *

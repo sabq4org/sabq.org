@@ -6,8 +6,14 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import com.google.firebase.FirebaseApp
+import com.sabq.smart.data.push.DeviceRegistrationManager
+import com.sabq.smart.data.push.SabqMessagingService
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import java.io.IOException
 
@@ -22,10 +28,35 @@ import java.io.IOException
 class SabqApplication : Application(), ImageLoaderFactory {
 
     @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject lateinit var deviceRegistrationManager: DeviceRegistrationManager
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+        initialiseFirebase()
+        SabqMessagingService.ensureChannel(this)
+        deviceRegistrationManager.start(applicationScope)
+    }
+
+    /**
+     * Firebase needs an explicit init only when `google-services.json`
+     * + the `com.google.gms.google-services` Gradle plugin aren't both
+     * present — when they are, the build-time generated `R.string.*`
+     * defaults wire FirebaseApp automatically before any code runs.
+     *
+     * We attempt it defensively so the build still runs end-to-end in
+     * environments missing the JSON (CI, fresh checkouts) without
+     * crashing the entire app. The FCM features just degrade — the
+     * token fetch in [DeviceRegistrationManager.fetchFcmToken] catches
+     * the "Default FirebaseApp is not initialised" exception and logs.
+     *
+     * See `docs/FCM_SETUP.md` for the one-time setup steps.
+     */
+    private fun initialiseFirebase() {
+        runCatching { FirebaseApp.initializeApp(this) }
+            .onFailure { Log.w("SabqApplication", "FirebaseApp init skipped — google-services.json missing", it) }
     }
 
     /**
