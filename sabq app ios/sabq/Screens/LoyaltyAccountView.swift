@@ -22,6 +22,7 @@ struct LoyaltyAccountView: View {
             VStack(spacing: 20) {
                 heroCard
                 statsTriplet
+                quickActions
                 tierLadder
             }
             .padding(16)
@@ -32,6 +33,64 @@ struct LoyaltyAccountView: View {
         .task { await loader.load() }
         .refreshable { await loader.refresh() }
         .environment(\.layoutDirection, .rightToLeft)
+    }
+
+    // MARK: Quick actions — gateway to the new "rewards store" and
+    // "points history" screens (2026-05-20). Two side-by-side cards
+    // that mirror the loyalty card's gradient so they feel like a
+    // continuation of the hero rather than detached menu items.
+
+    @ViewBuilder
+    private var quickActions: some View {
+        HStack(spacing: 12) {
+            NavigationLink(destination: LoyaltyRewardsView()) {
+                quickActionCard(
+                    title: "متجر المكافآت",
+                    subtitle: "استبدل نقاطك بمكافآت",
+                    icon: "gift.fill",
+                    tint: SabqTheme.primaryEnd
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(destination: LoyaltyHistoryView()) {
+                quickActionCard(
+                    title: "سجل نقاطي",
+                    subtitle: "تتبَّع نشاطك ونقاطك",
+                    icon: "clock.arrow.circlepath",
+                    tint: SabqTheme.coral
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func quickActionCard(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 38, height: 38)
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+            Text(subtitle)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(tint.opacity(0.25), lineWidth: 0.5)
+        )
     }
 
     // MARK: Hero

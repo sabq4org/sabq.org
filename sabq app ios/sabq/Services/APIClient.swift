@@ -1191,6 +1191,40 @@ actor APIClient {
         return try await post(LoyaltyEventBatchResponse.self, path: "/loyalty/events", body: Body(events: events))
     }
 
+    // ---- Loyalty: history + monthly + rewards (added 2026-05-20) ----
+    //
+    // These power the new "تاريخ نقاطي" feed, the 6-month bar chart on
+    // LoyaltyAccountView, and the "مكافآتي" tab where members spend
+    // their points.
+
+    func fetchLoyaltyHistory(page: Int = 1, limit: Int = 20) async throws -> LoyaltyHistoryResponse {
+        try await get(
+            LoyaltyHistoryResponse.self,
+            path: "/loyalty/history?page=\(page)&limit=\(limit)"
+        )
+    }
+
+    func fetchLoyaltyMonthly() async throws -> LoyaltyMonthlyResponse {
+        try await get(LoyaltyMonthlyResponse.self, path: "/loyalty/monthly")
+    }
+
+    func fetchLoyaltyRewards() async throws -> LoyaltyRewardsResponse {
+        try await get(LoyaltyRewardsResponse.self, path: "/loyalty/rewards")
+    }
+
+    func redeemLoyaltyReward(id: String) async throws -> LoyaltyRedeemResponse {
+        struct Body: Encodable {}
+        return try await post(
+            LoyaltyRedeemResponse.self,
+            path: "/loyalty/rewards/\(id)/redeem",
+            body: Body()
+        )
+    }
+
+    func fetchMyRedemptions() async throws -> LoyaltyRedemptionsResponse {
+        try await get(LoyaltyRedemptionsResponse.self, path: "/loyalty/redemptions/me")
+    }
+
     func toggleArticleLike(articleId: String) async throws -> APIArticleReactionResponse {
         try await post(APIArticleReactionResponse.self, path: "/articles/\(articleId)/react")
     }

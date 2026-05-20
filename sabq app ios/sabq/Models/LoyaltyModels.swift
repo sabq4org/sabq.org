@@ -165,3 +165,119 @@ struct LoyaltyEventBatchResponse: Codable, Equatable {
     let success: Bool?
     let results: [LoyaltyEventResult]
 }
+
+// ============================================================================
+// New endpoints (2026-05-20): history / monthly / rewards / redeem
+// ============================================================================
+
+/// Single row in /loyalty/history. `action` matches LoyaltyAction.rawValue
+/// (READ / READ_DEEP / LIKE / ...) plus the new lifetime bonuses
+/// PROFILE_COMPLETE / EMAIL_VERIFIED. `metadata` is intentionally raw so
+/// the UI can introspect on a per-action basis without a parallel schema
+/// here for every shape the backend ships.
+struct LoyaltyHistoryEvent: Codable, Equatable, Identifiable {
+    let id: String
+    let action: String
+    let points: Int
+    let source: String?
+    let createdAt: String
+
+    var date: Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: createdAt) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: createdAt)
+    }
+}
+
+struct LoyaltyHistoryResponse: Codable, Equatable {
+    let success: Bool?
+    let items: [LoyaltyHistoryEvent]
+    let page: Int
+    let limit: Int
+    let hasMore: Bool
+}
+
+struct LoyaltyMonthlyBucket: Codable, Equatable, Identifiable {
+    let month: String   // "YYYY-MM"
+    let total: Int
+    let events: Int
+    var id: String { month }
+}
+
+struct LoyaltyMonthlyResponse: Codable, Equatable {
+    let success: Bool?
+    let months: [LoyaltyMonthlyBucket]
+}
+
+/// Reward row returned by /loyalty/rewards. `canRedeem` is computed
+/// server-side from balance + per-user cap, so the iOS button can
+/// disable instantly without recomputing the rules locally.
+struct LoyaltyReward: Codable, Equatable, Identifiable {
+    let id: String
+    let nameAr: String
+    let nameEn: String?
+    let description: String?
+    let imageUrl: String?
+    let pointsCost: Int
+    let rewardType: String
+    let partnerName: String?
+    let remainingStock: Int?
+    let expiresAt: String?
+    let myRedemptionCount: Int
+    let canRedeem: Bool
+    let pointsShort: Int
+    let reasonBlocked: String?
+}
+
+struct LoyaltyRewardsResponse: Codable, Equatable {
+    let success: Bool?
+    let balance: Int
+    let rewards: [LoyaltyReward]
+}
+
+struct LoyaltyRedeemResponse: Codable, Equatable {
+    let success: Bool
+    let message: String?
+    let remainingBalance: Int?
+    let redemption: Redemption?
+
+    struct Redemption: Codable, Equatable {
+        let id: String
+        let rewardId: String
+        let pointsSpent: Int
+        let status: String
+        let redeemedAt: String?
+    }
+}
+
+/// `/loyalty/redemptions/me` — member's own history. Status semantics
+/// (pending / delivered / expired / cancelled) match the dashboard.
+struct LoyaltyRedemption: Codable, Equatable, Identifiable {
+    let id: String
+    let rewardId: String
+    let pointsSpent: Int
+    let status: String
+    let rewardSnapshot: RewardSnapshot?
+    let deliveryData: DeliveryData?
+    let redeemedAt: String?
+    let deliveredAt: String?
+
+    struct RewardSnapshot: Codable, Equatable {
+        let nameAr: String?
+        let nameEn: String?
+        let pointsCost: Int?
+        let rewardType: String?
+    }
+
+    struct DeliveryData: Codable, Equatable {
+        let couponCode: String?
+        let trackingInfo: String?
+    }
+}
+
+struct LoyaltyRedemptionsResponse: Codable, Equatable {
+    let success: Bool?
+    let redemptions: [LoyaltyRedemption]
+}
