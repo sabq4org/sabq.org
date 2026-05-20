@@ -126,19 +126,37 @@ interface ActivityLogsResponse {
   totalPages: number;
 }
 
+// Full role→Arabic-label map. Mirrors Profile.tsx so writers, editors,
+// and columnists see their canonical title here too. The dashboard
+// also receives `roleLabel` from /api/auth/user (post-2026-05-20) and
+// should prefer it — this map is the cached-session fallback.
 const roleLabels: Record<string, string> = {
   system_admin: "مدير النظام",
+  superadmin: "المدير العام",
   admin: "مسؤول",
   editor: "محرر",
+  editor_in_chief: "رئيس التحرير",
+  chief_editor: "رئيس التحرير",
+  senior_editor: "محرر أول",
+  managing_editor: "مدير تحرير",
+  editorial_manager: "مدير تحرير",
+  content_manager: "مدير محتوى",
   reporter: "مراسل",
-  reader: "قارئ",
+  correspondent: "مراسل",
+  journalist: "صحفي",
+  writer: "كاتب",
+  author: "كاتب",
+  article_writer: "كاتب مقال",
+  article_author: "كاتب مقال",
+  opinion_author: "كاتب مقال رأي",
+  columnist: "كاتب عمود",
   comments_moderator: "مشرف تعليقات",
-  opinion_author: "كاتب رأي",
+  moderator: "مشرف",
   media_manager: "مدير وسائط",
   publisher: "ناشر",
-  superadmin: "المدير العام",
-  content_manager: "مدير محتوى",
-  chief_editor: "رئيس التحرير",
+  photographer: "مصور",
+  contributor: "مساهم",
+  reader: "قارئ",
 };
 
 const roleDescriptions: Record<string, string> = {

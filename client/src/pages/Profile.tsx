@@ -447,23 +447,79 @@ export default function Profile() {
   };
 
   const getRoleBadge = (role?: string) => {
+    // Full role→Arabic-label map. Previously this only covered five
+    // roles which meant writers/columnists/editor-in-chief/etc. fell
+    // through to either the raw English key or — when role was nil —
+    // the "reader" fallback, surfacing as "قارئ" for non-reader users.
+    // The 2026-05-20 fix to /api/auth/user now also ships `roleLabel`
+    // directly from the DB; this client-side map is the fallback for
+    // sessions cached before that backend deploy reached the edge.
     const labels: Record<string, string> = {
       system_admin: "مدير النظام",
-      admin: "مدير",
+      superadmin: "المدير العام",
+      admin: "مسؤول",
       editor: "محرر",
-      reporter: "صحفي",
+      editor_in_chief: "رئيس التحرير",
+      chief_editor: "رئيس التحرير",
+      senior_editor: "محرر أول",
+      managing_editor: "مدير تحرير",
+      editorial_manager: "مدير تحرير",
+      content_manager: "مدير محتوى",
+      reporter: "مراسل",
+      correspondent: "مراسل",
+      journalist: "صحفي",
+      writer: "كاتب",
+      author: "كاتب",
+      article_writer: "كاتب مقال",
+      article_author: "كاتب مقال",
+      opinion_author: "كاتب مقال رأي",
+      columnist: "كاتب عمود",
+      comments_moderator: "مشرف تعليقات",
+      moderator: "مشرف",
+      media_manager: "مدير وسائط",
+      publisher: "ناشر",
+      photographer: "مصور",
+      contributor: "مساهم",
       reader: "قارئ",
     };
     const variants: Record<string, "default" | "secondary" | "outline"> = {
       system_admin: "default",
+      superadmin: "default",
       admin: "default",
       editor: "secondary",
+      editor_in_chief: "default",
+      chief_editor: "default",
+      senior_editor: "secondary",
+      managing_editor: "default",
+      editorial_manager: "default",
+      content_manager: "default",
       reporter: "secondary",
+      correspondent: "secondary",
+      journalist: "secondary",
+      writer: "secondary",
+      author: "secondary",
+      article_writer: "secondary",
+      article_author: "secondary",
+      opinion_author: "secondary",
+      columnist: "secondary",
+      comments_moderator: "secondary",
+      moderator: "secondary",
+      media_manager: "secondary",
+      publisher: "secondary",
+      photographer: "outline",
+      contributor: "outline",
       reader: "outline",
     };
+    // Prefer the server-supplied roleLabel (Arabic, single source of
+    // truth in the DB roles.name_ar column). Fall back to the local
+    // map for sessions cached before the backend update propagated.
+    const label = (user as any)?.roleLabel
+      || labels[role || "reader"]
+      || role
+      || "قارئ";
     return (
       <Badge variant={variants[role || "reader"] || "outline"} data-testid="badge-user-role">
-        {labels[role || "reader"] || role}
+        {label}
       </Badge>
     );
   };

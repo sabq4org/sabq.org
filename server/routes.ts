@@ -1227,21 +1227,40 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Get all user's roles from RBAC system, fallback to user.role from users table
       const userRolesResult = await db
-        .select({ roleName: roles.name })
+        .select({ roleName: roles.name, roleNameAr: roles.nameAr })
         .from(userRoles)
         .innerJoin(roles, eq(userRoles.roleId, roles.id))
         .where(eq(userRoles.userId, userId));
 
       // Get all roles as array
       const rolesArray = userRolesResult.map(r => r.roleName);
-      
+
+      // Prefer the first non-reader RBAC role so writers/reporters/editors
+      // surface their actual title instead of getting overridden by a
+      // stray "reader" assignment (matches Mobile API logic in
+      // mobileApiRoutes.ts:buildUserRolePayload).
+      const nonReaderRole = userRolesResult.find(
+        (r) => r.roleName && r.roleName !== "reader",
+      );
+
       // For backward compatibility, keep 'role' as first role, add 'roles' array
-      const role = rolesArray.length > 0 
-        ? rolesArray[0] 
-        : (user.role || "reader");
-      const allRoles = rolesArray.length > 0 
-        ? rolesArray 
+      const role = nonReaderRole?.roleName
+        || rolesArray[0]
+        || user.role
+        || "reader";
+      const allRoles = rolesArray.length > 0
+        ? rolesArray
         : [user.role || "reader"];
+      // `roleLabel` is the Arabic display name pulled straight from the
+      // `roles` table — single source of truth, no client-side
+      // translation map needed. Falls back to the job title (e.g.
+      // "كاتب رأي في علم النفس والمجتمع") and finally a hard-coded
+      // "قارئ" so writers without an explicit job title still show
+      // something meaningful.
+      const roleLabel = nonReaderRole?.roleNameAr
+        || userRolesResult[0]?.roleNameAr
+        || user.jobTitle
+        || "قارئ";
 
       // Get user permissions from RBAC system (includes permission overrides)
       // استخدام الدالة الموحدة التي تشمل الاستثناءات الشخصية
@@ -1256,7 +1275,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // SECURITY: Never send passwordHash to client
       const { passwordHash, twoFactorSecret, ...safeUser } = user;
-      res.json({ ...safeUser, role, roles: allRoles, permissions: permissionsArray });
+      res.json({
+        ...safeUser,
+        role,
+        roles: allRoles,
+        roleLabel,
+        permissions: permissionsArray,
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
