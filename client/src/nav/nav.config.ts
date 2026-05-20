@@ -58,6 +58,7 @@ import {
   Mic,
   FileAudio,
   Wrench,
+  Trophy,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -692,6 +693,16 @@ export const navConfig: NavItem[] = [
         permissions: ["staff.view_productivity"],
       },
     ],
+  },
+
+  // ===== نظام الولاء / Loyalty Program =====
+  {
+    id: "loyalty_admin",
+    labelKey: "nav.loyalty_admin",
+    labelAr: "نظام الولاء",
+    icon: Trophy,
+    path: "/dashboard/loyalty-admin",
+    roles: ["admin"],
   },
 
   // ===== الناشرون والوكالات / Publishers & Agencies =====

@@ -785,6 +785,10 @@ if (!(globalThis as any).__sabqServer) {
     const autoImageRoutes = (await import("./routes/autoImageRoutes")).default;
     app.use("/api/auto-image", autoImageRoutes);
     console.log("[Server] ✅ Auto Image Generation routes registered");
+
+    const loyaltyAdminRoutes = (await import("./routes/loyaltyAdmin")).default;
+    app.use("/api/loyalty-admin", loyaltyAdminRoutes);
+    console.log("[Server] ✅ Loyalty Admin Dashboard routes registered");
     
     // Register Thumbnail routes
     const thumbnailRoutes = await import("./routes/thumbnailRoutes");
