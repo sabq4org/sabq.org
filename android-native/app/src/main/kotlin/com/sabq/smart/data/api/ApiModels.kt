@@ -162,6 +162,35 @@ data class ApiArticle(
     val articleUrl: String? = null,
 
     val seo: ApiSeo? = null,
+
+    /**
+     * Editorial "صور الأسبوع" pack. Backend nests under
+     * `weeklyPhotosData.photos` (or the snake-case variant). Present
+     * only when `articleType == "weekly_photos"`. Mirrors iOS
+     * `APIArticle.weeklyPhotos` decoder at `Services/APIModels.swift:213`.
+     */
+    @JsonNames("weeklyPhotosData", "weekly_photos_data")
+    val weeklyPhotosContainer: ApiWeeklyPhotosContainer? = null,
+)
+
+@Serializable
+data class ApiWeeklyPhotosContainer(
+    val photos: List<ApiWeeklyPhoto> = emptyList(),
+)
+
+/**
+ * One photo inside a `weekly_photos` article — image + Arabic caption +
+ * photographer/source credit. Permissive defaults so a missing
+ * caption / credit still yields a renderable row. Mirrors iOS
+ * `APIWeeklyPhoto` decoder.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWeeklyPhoto(
+    @JsonNames("imageUrl", "image_url", "image")
+    val imageUrl: String = "",
+    val caption: String = "",
+    val credit: String = "",
 )
 
 @OptIn(ExperimentalSerializationApi::class)

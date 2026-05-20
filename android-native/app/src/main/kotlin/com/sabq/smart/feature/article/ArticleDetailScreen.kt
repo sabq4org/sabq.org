@@ -402,6 +402,20 @@ private fun ArticleBody(
                 }
             }
 
+            // 7.5 — Weekly Photos gallery. Only renders when the
+            // backend tagged this article as a weekly_photos pack and
+            // shipped a non-empty photos array (mapper drops blank
+            // imageUrls). iOS source: ArticleDetailView.swift:150.
+            if (!isFocusMode && article.weeklyPhotos.isNotEmpty()) {
+                item {
+                    com.sabq.smart.ui.components.WeeklyPhotosGallery(
+                        photos = article.weeklyPhotos,
+                        fontSize = fontSize,
+                        lineSpacing = lineSpacing,
+                    )
+                }
+            }
+
             // 8. Action bar (مشاركة / حفظ / Aa / قراءة) — extra top
             // padding per iOS (`.padding(.top, 16)` on top of the
             // 18 spacing).

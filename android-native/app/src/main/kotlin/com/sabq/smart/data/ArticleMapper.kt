@@ -56,6 +56,26 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
     val resolvedArticleUrl = articleUrl?.takeIf { it.isNotBlank() }
         ?: slug?.takeIf { it.isNotBlank() }?.let { "$webOrigin/article/$it" }
 
+    // Weekly-photos pack: prefix relative URLs with the site origin
+    // (iOS does the same — APIWeeklyPhoto.init line 32-38). Drop
+    // entries whose imageUrl is blank so the gallery never renders a
+    // dead row.
+    val resolvedWeeklyPhotos: List<WeeklyPhoto> = weeklyPhotosContainer?.photos
+        .orEmpty()
+        .mapNotNull { raw ->
+            val url = raw.imageUrl.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val absolute = when {
+                url.startsWith("http") -> url
+                url.startsWith("/") -> "$webOrigin$url"
+                else -> "$webOrigin/$url"
+            }
+            WeeklyPhoto(
+                imageUrl = absolute,
+                caption = raw.caption.trim(),
+                credit = raw.credit.trim(),
+            )
+        }
+
     return Article(
         id = id.ifBlank { slug ?: "anon-${hashCode()}" },
         title = resolvedTitle,
@@ -79,6 +99,7 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         aiImageModel = aiImageModel?.takeIf { it.isNotBlank() },
         publishedAtIso = publishedAt?.takeIf { it.isNotBlank() },
         readingMinutesInt = readingMinutes?.takeIf { it > 0 },
+        weeklyPhotos = resolvedWeeklyPhotos,
     )
 }
 
