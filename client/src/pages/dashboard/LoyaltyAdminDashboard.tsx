@@ -81,6 +81,12 @@ type TopUser = {
   pointsInRange: number;
   actionsInRange: number;
   lifetimePoints: number;
+  /** True when the stored rank_level is HIGHER than the tier derived
+   *  from lifetime_points — i.e. a legacy "سفير سبق" account whose
+   *  current points wouldn't qualify under the Phase 1 thresholds.
+   *  Surfaced as a small ✦ next to the badge so editors know the
+   *  badge they're seeing is a legacy grant, not a current earn. */
+  isGrandfathered?: boolean;
   tier: { level: number; nameAr: string; color: string };
 };
 
@@ -619,16 +625,26 @@ function TopUsersTable({ data, loading }: { data: TopUser[]; loading: boolean })
               </div>
             </TableCell>
             <TableCell>
-              <Badge
-                className="text-xs font-medium"
-                style={{
-                  backgroundColor: `${u.tier.color}20`,
-                  color: u.tier.color,
-                  border: `1px solid ${u.tier.color}40`,
-                }}
-              >
-                {u.tier.nameAr}
-              </Badge>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Badge
+                  className="text-xs font-medium"
+                  style={{
+                    backgroundColor: `${u.tier.color}20`,
+                    color: u.tier.color,
+                    border: `1px solid ${u.tier.color}40`,
+                  }}
+                >
+                  {u.tier.nameAr}
+                </Badge>
+                {u.isGrandfathered && (
+                  <span
+                    className="text-[10px] text-amber-700 dark:text-amber-400 font-bold"
+                    title="مُرحَّل من النظام السابق — البدج المخزَّن أعلى من المستوى الفعلي حسب النقاط"
+                  >
+                    ✦ مُرحَّل
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell className="font-bold tabular-nums">
               {formatNumber(u.pointsInRange)}

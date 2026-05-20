@@ -439,8 +439,28 @@ router.get("/top-users", async (req, res) => {
       LIMIT ${limit}
     `).then((r) => r.rows as any[]);
 
+    // Compute each user's tier from `lifetime_points` against the live
+    // LOYALTY_TIERS thresholds — NOT the stored `rank_level` column.
+    // The two diverge for ~10 legacy "سفير سبق" users who were
+    // grandfathered to level 5 by the Phase 1 migration regardless of
+    // their actual points. Showing them as "سفير سبق" on the leader-
+    // board next to a current member with the same points contradicts
+    // the public tier rules, so the admin view sticks to the truth.
+    // The `isGrandfathered` flag preserves the historical fact so the
+    // UI can paint a small ✦ next to the badge.
+    const tierFromPoints = (points: number) => {
+      let current = LOYALTY_TIERS[0];
+      for (const t of LOYALTY_TIERS) {
+        if (points >= t.minLifetimePoints) current = t;
+      }
+      return current;
+    };
+
     const users = rows.map((r, i) => {
-      const tier = LOYALTY_TIERS.find((t) => t.level === Number(r.rank_level)) ?? LOYALTY_TIERS[0];
+      const livePoints = Number(r.lifetime_points ?? 0);
+      const liveTier = tierFromPoints(livePoints);
+      const storedLevel = Number(r.rank_level);
+      const isGrandfathered = storedLevel > liveTier.level;
       const displayName = [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || r.email || "مستخدم";
       return {
         rank: i + 1,
@@ -450,11 +470,12 @@ router.get("/top-users", async (req, res) => {
         avatar: r.profile_image_url,
         pointsInRange: Number(r.points_in_range),
         actionsInRange: Number(r.actions_in_range),
-        lifetimePoints: Number(r.lifetime_points ?? 0),
+        lifetimePoints: livePoints,
+        isGrandfathered,
         tier: {
-          level: tier.level,
-          nameAr: tier.nameAr,
-          color: tier.color,
+          level: liveTier.level,
+          nameAr: liveTier.nameAr,
+          color: liveTier.color,
         },
       };
     });
