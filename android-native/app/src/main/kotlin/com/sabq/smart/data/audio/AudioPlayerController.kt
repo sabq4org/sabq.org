@@ -55,11 +55,23 @@ class AudioPlayerController @Inject constructor(
     fun toggle(slug: String) {
         if (slug.isBlank()) return
         val url = "https://sabq.org/api/articles/$slug/summary-audio"
+        toggleUrl(id = slug, url = url)
+    }
+
+    /**
+     * Toggle play/pause for any arbitrary audio URL. Used by the
+     * Audio Newsletters list where each row carries its own
+     * `audioUrl` rather than deriving from a slug. iOS counterpart:
+     * `AudioNewslettersView.togglePlayback` which builds an
+     * `AVPlayer(url: url)` directly from the newsletter row.
+     */
+    fun toggleUrl(id: String, url: String) {
+        if (id.isBlank() || url.isBlank()) return
         val current = _state.value
 
         val activePlayer = player
-        if (activePlayer != null && current.playingSlug == slug) {
-            // Same article — pause/resume.
+        if (activePlayer != null && current.playingSlug == id) {
+            // Same track — pause/resume.
             if (activePlayer.isPlaying) {
                 activePlayer.pause()
                 _state.value = current.copy(isPlaying = false, isLoading = false)
@@ -70,14 +82,14 @@ class AudioPlayerController @Inject constructor(
             return
         }
 
-        // New article — stop the old one (if any) and start fresh.
+        // New track — stop the old one (if any) and start fresh.
         val freshPlayer = getOrCreatePlayer()
         freshPlayer.stop()
         freshPlayer.clearMediaItems()
         freshPlayer.setMediaItem(MediaItem.fromUri(url))
         freshPlayer.prepare()
         freshPlayer.playWhenReady = true
-        _state.value = State(playingSlug = slug, isPlaying = false, isLoading = true)
+        _state.value = State(playingSlug = id, isPlaying = false, isLoading = true)
     }
 
     /** Stop and release. Called when the app is fully backgrounded or
