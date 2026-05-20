@@ -85,9 +85,21 @@ class ArticleRepository @Inject constructor(
     }
 
     /** Trending articles list. Maps the `/api/v1/trending` response
-     *  into the standard [Article] shape. */
-    suspend fun getTrending(): List<Article> =
-        api.getTrending().articles.map { it.toDomain() }
+     *  into the standard [Article] shape. Convenience wrapper around
+     *  [getTrendingPage] for the Home top-3 preview which doesn't need
+     *  the tags payload. */
+    suspend fun getTrending(): List<Article> = getTrendingPage().articles
+
+    /** Trending page payload — `[Article]` + trending keyword tags.
+     *  Powers the dedicated `TrendingScreen` (B1) which surfaces both
+     *  the ranked article list and a tag rail. */
+    suspend fun getTrendingPage(): TrendingPage {
+        val response = api.getTrending()
+        return TrendingPage(
+            articles = response.articles.map { it.toDomain() },
+            tags = response.tags.map { it.trim() }.filter { it.isNotEmpty() },
+        )
+    }
 
     suspend fun getSections(): List<Section> {
         return api.getSections().sections.map { c ->
@@ -156,4 +168,11 @@ data class ArticlesPage(
     val page: Int,
     val limit: Int,
     val hasMore: Boolean,
+)
+
+/** Trending page payload — ranked articles plus a list of trending tag
+ *  strings. Tags are already trimmed + non-empty in [getTrendingPage]. */
+data class TrendingPage(
+    val articles: List<Article>,
+    val tags: List<String>,
 )

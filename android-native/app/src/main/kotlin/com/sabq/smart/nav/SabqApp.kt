@@ -35,6 +35,7 @@ import com.sabq.smart.feature.notifications.EditorialNotificationDetailScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationsScreen
 import com.sabq.smart.feature.notifications.NotificationPreferencesScreen
 import com.sabq.smart.feature.opinions.OpinionsListScreen
+import com.sabq.smart.feature.trending.TrendingScreen
 import com.sabq.smart.feature.settings.ArticleSubmissionKind
 import com.sabq.smart.feature.settings.ArticleSubmissionScreen
 import com.sabq.smart.feature.settings.ChangePasswordScreen
@@ -66,6 +67,7 @@ object SabqRoutes {
     const val Login = "auth/login"
     const val Loyalty = "loyalty"
     const val Opinions = "opinions"
+    const val Trending = "trending"
     const val MomentByMoment = "live/updates"
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
@@ -162,6 +164,9 @@ fun SabqApp(
                         onOpinionsAllClick = {
                             navController.navigate(SabqRoutes.Opinions)
                         },
+                        onTrendingAllClick = {
+                            navController.navigate(SabqRoutes.Trending)
+                        },
                         onLoyaltyClick = {
                             navController.navigate(SabqRoutes.Loyalty)
                         },
@@ -246,6 +251,19 @@ fun SabqApp(
                             article.slug?.let { slug ->
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
+                        },
+                    )
+                }
+                composable(SabqRoutes.Trending) {
+                    TrendingScreen(
+                        onBack = { navController.popBackStack() },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        },
+                        onTagClick = { tag ->
+                            navController.navigate(SabqRoutes.keywordArticles(tag))
                         },
                     )
                 }

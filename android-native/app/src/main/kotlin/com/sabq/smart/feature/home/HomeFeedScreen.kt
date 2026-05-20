@@ -97,6 +97,7 @@ fun HomeFeedScreen(
     onMomentByMomentClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onOpinionsAllClick: () -> Unit = {},
+    onTrendingAllClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
 ) {
@@ -135,6 +136,7 @@ fun HomeFeedScreen(
                 onMomentByMomentClick = onMomentByMomentClick,
                 onNotificationsClick = onNotificationsClick,
                 onOpinionsAllClick = onOpinionsAllClick,
+                onTrendingAllClick = onTrendingAllClick,
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onToggleDarkMode = {
@@ -164,6 +166,7 @@ private fun LoadedFeed(
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onOpinionsAllClick: () -> Unit,
+    onTrendingAllClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onToggleDarkMode: () -> Unit,
@@ -280,6 +283,7 @@ private fun LoadedFeed(
                 TrendingPreviewBlock(
                     trending = state.trending,
                     onArticleClick = onArticleClick,
+                    onSeeAllClick = onTrendingAllClick,
                 )
             }
         }
@@ -1066,11 +1070,19 @@ private fun OpinionPlaceholder(gold: Color, primary: Color) {
 private fun TrendingPreviewBlock(
     trending: List<Article>,
     onArticleClick: (Article) -> Unit,
+    onSeeAllClick: () -> Unit = {},
 ) {
     val orange = Color(red = 0.98f, green = 0.45f, blue = 0.09f)
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f),
+            ) {
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Filled.LocalFireDepartment,
                     contentDescription = null,
@@ -1097,6 +1109,26 @@ private fun TrendingPreviewBlock(
                         ),
                     )
                 }
+            }
+            Row(
+                modifier = Modifier.clickable { onSeeAllClick() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "الكل",
+                    style = SabqTheme.typography.metaSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                        color = orange,
+                    ),
+                )
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = orange,
+                    modifier = Modifier.size(11.dp),
+                )
             }
         }
         SurfaceCard {

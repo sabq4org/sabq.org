@@ -57,9 +57,10 @@ interface SabqApi {
     suspend fun getBreaking(): ApiBreakingTicker
 
     /** Trending page — top articles + keywords. iOS uses
-     *  `articlesStore.trendingArticles.prefix(3)` on Home. */
+     *  `articlesStore.trendingArticles.prefix(3)` on Home and the full
+     *  list (plus `tags`) on the dedicated `TrendingView`. */
     @GET("api/v1/trending")
-    suspend fun getTrending(): ApiArticlesResponse
+    suspend fun getTrending(): ApiTrendingPageResponse
 
     // -- home extras (public namespace, NOT v1) ----------------------
 
