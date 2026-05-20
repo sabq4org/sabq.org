@@ -4504,6 +4504,37 @@ router.get("/articles/:id/draft", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "ليس لديك صلاحية لتعديل هذا المقال" });
     }
 
+    // Convert stored block HTML back to plain text that matches the
+    // textarea the submission form uses. Strip tags AND decode HTML
+    // entities — without the entity pass the writer sees raw
+    // `&nbsp;` / `&amp;` literals in the form (reported 2026-05-20).
+    const htmlToPlain = (raw: string): string => {
+      const entityMap: Record<string, string> = {
+        "&nbsp;": " ",
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&quot;": '"',
+        "&#39;": "'",
+        "&apos;": "'",
+      };
+      return raw
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>\s*<p>/gi, "\n\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&(nbsp|amp|lt|gt|quot|#39|apos);/g, (m) => entityMap[m] ?? m)
+        // Catch numeric entities (e.g. &#8211; em-dash, &#1611; tatweel)
+        .replace(/&#(\d+);/g, (_m, code: string) => {
+          const n = parseInt(code, 10);
+          return Number.isFinite(n) ? String.fromCharCode(n) : "";
+        })
+        .replace(/&#x([0-9a-fA-F]+);/g, (_m, hex: string) => {
+          const n = parseInt(hex, 16);
+          return Number.isFinite(n) ? String.fromCharCode(n) : "";
+        })
+        .trim();
+    };
+
     res.json({
       success: true,
       article: {
@@ -4512,11 +4543,7 @@ router.get("/articles/:id/draft", async (req: Request, res: Response) => {
         // Convert stored block HTML back to a plain-text body that
         // matches the textarea the submission form uses. The
         // resubmit endpoint will re-wrap it via toMobileArticleHTML.
-        body: (article.content || "")
-          .replace(/<br\s*\/?>/gi, "\n")
-          .replace(/<\/p>\s*<p>/gi, "\n\n")
-          .replace(/<[^>]+>/g, "")
-          .trim(),
+        body: htmlToPlain(article.content || ""),
         excerpt: article.excerpt || "",
         imageUrl: article.imageUrl,
         albumImages: article.albumImages || [],
@@ -4656,14 +4683,27 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
         slug: articles.slug,
         status: articles.status,
         reviewStatus: articles.reviewStatus,
+        articleType: articles.articleType,
       });
 
     console.log(`[Mobile API] /articles/${articleId}/resubmit by ${session.userId}`);
 
+    // Shape the response so the iOS `ArticleSubmissionResponse`
+    // decoder doesn't need any optional gymnastics — `kind` is the
+    // field the decoder requires alongside id/title/status. Without
+    // it, the iOS client treated a successful save as a decode
+    // failure and showed "تعذر إرسال التعديل" even though the row
+    // had already been updated (reported 2026-05-20).
     res.json({
       success: true,
       message: "تم إرسال التعديل بنجاح. سيراجعه فريق التحرير قريباً.",
-      article: updated,
+      article: {
+        id: updated.id,
+        title: updated.title,
+        slug: updated.slug,
+        kind: updated.articleType === "opinion" ? "opinion" : "news",
+        status: updated.status,
+      },
     });
   } catch (error: any) {
     console.error("[Mobile API] /articles/:id/resubmit error:", error);
