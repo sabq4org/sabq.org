@@ -1095,6 +1095,22 @@ actor APIClient {
         try await get(APITodayInsights.self, path: "/insights/today")
     }
 
+    /// "صدى الحج" homepage block (seasonal). The backend at
+    /// `/api/hajj-block` hides itself outside the configured season,
+    /// returning `{ isVisible: false }`. iOS treats that as "render
+    /// nothing" — the block only shows up during the Hajj window
+    /// configured from the dashboard.
+    ///
+    /// Lives on the PUBLIC namespace (not `/api/v1/`) because it's
+    /// reader-facing content that doesn't require a session.
+    func fetchHajjBlock() async throws -> APIHajjBlockResponse {
+        try await get(
+            APIHajjBlockResponse.self,
+            path: "/hajj-block",
+            apiRoot: publicAPIBaseURL,
+        )
+    }
+
     // MARK: - Unified Behavior Tracking (web parity)
 
     /// Send a behavior event to the unified iOS tracking endpoint.

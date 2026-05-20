@@ -143,6 +143,15 @@ struct HomeFeedView: View {
                             .animatedAppear(index: 4)
                     }
 
+                    // "صدى الحج" — seasonal block right below the
+                    // personal journey card. Renders to an EmptyView
+                    // when the dashboard hasn't enabled it / we're
+                    // outside the season window / no matching
+                    // articles, so it leaves zero footprint the rest
+                    // of the year.
+                    HajjBlockView()
+                        .animatedAppear(index: 4)
+
                     if !calendarToday.isEmpty {
                         calendarTodayCard
                             .animatedAppear(index: 5)

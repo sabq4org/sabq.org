@@ -1768,6 +1768,39 @@ nonisolated struct APITodayInsights: Decodable {
     }
 }
 
+// MARK: - Hajj Block (seasonal)
+//
+// Mirrors the GET /api/hajj-block public endpoint. The block hides
+// itself outside the configured Hajj season by returning
+// `isVisible: false` (no other fields). When visible, it ships the
+// article list along with the live Hajj-day metadata so the iOS
+// header can show "اليوم: عرفة" + countdown.
+
+nonisolated struct APIHajjBlockResponse: Decodable {
+    let isVisible: Bool
+    let title: String?
+    let subtitle: String?
+    let articles: [APIHajjArticle]?
+    let hajjDay: Int?
+    let daysToArafat: Int?
+    let hajjPhase: String?           // tarwiyah | arafat | nahr | tashreeq | before | after
+    let lastUpdatedAt: String?
+    let reason: String?              // why hidden (before_season / after_season / no_matching_articles)
+}
+
+nonisolated struct APIHajjArticle: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let slug: String?
+    let excerpt: String?
+    let imageUrl: String?
+    let publishedAt: String?
+    let isBreaking: Bool?
+    let isPinned: Bool?
+    let hajjTag: String              // "من عرفات", "في منى", ...
+    let hajjEmoji: String            // 🏔️, 🪨, ...
+}
+
 // MARK: - Article reactions (like toggle)
 
 /// Mirrors `POST /api/v1/articles/:id/react` and
