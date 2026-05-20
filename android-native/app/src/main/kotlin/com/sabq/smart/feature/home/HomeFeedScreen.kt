@@ -99,6 +99,7 @@ fun HomeFeedScreen(
     onOpinionsAllClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
+    onAudioNewslettersClick: () -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -137,6 +138,7 @@ fun HomeFeedScreen(
                 onOpinionsAllClick = onOpinionsAllClick,
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
+                onAudioNewslettersClick = onAudioNewslettersClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
                     // user's explicit darkMode flag. If the user was in
@@ -166,6 +168,7 @@ private fun LoadedFeed(
     onOpinionsAllClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
+    onAudioNewslettersClick: () -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
 ) {
@@ -289,9 +292,11 @@ private fun LoadedFeed(
             item { CalendarTodayCard(events = state.calendar) }
         }
 
-        // Audio newsletter card.
+        // Audio newsletter card. Tap navigates to the dedicated
+        // "النشرات الصوتية" list. iOS opens the same destination
+        // from ContentView.swift:78 via the navigation stack.
         state.audioNewsletter?.let { newsletter ->
-            item { AudioNewsletterCard(newsletter = newsletter) }
+            item { AudioNewsletterCard(newsletter = newsletter, onClick = onAudioNewslettersClick) }
         }
 
         // Category chips removed from Home per user direction
@@ -1304,7 +1309,10 @@ private fun CalendarTodayCard(events: List<com.sabq.smart.data.CalendarEvent>) {
 // MARK: - Audio newsletter card
 
 @Composable
-private fun AudioNewsletterCard(newsletter: com.sabq.smart.data.AudioNewsletter) {
+private fun AudioNewsletterCard(
+    newsletter: com.sabq.smart.data.AudioNewsletter,
+    onClick: () -> Unit,
+) {
     val coral = SabqTheme.colors.coral
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionRow(title = "النشرات الصوتية", icon = Icons.Filled.GraphicEq, tint = coral)
@@ -1315,6 +1323,7 @@ private fun AudioNewsletterCard(newsletter: com.sabq.smart.data.AudioNewsletter)
                 .clip(shape)
                 .background(SabqTheme.colors.surface, shape)
                 .border(width = 0.5.dp, color = coral.copy(alpha = 0.18f), shape = shape)
+                .clickable { onClick() }
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),

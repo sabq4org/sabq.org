@@ -35,6 +35,20 @@ data class AudioNewsletter(
     val title: String,
     val slug: String,
     val durationSeconds: Int?,
+    /** Short editorial blurb shown under the title in the dedicated
+     *  AudioNewsletters screen. iOS counterpart: `APIAudioNewsletter
+     *  .description`. Null/empty when the editor didn't ship one. */
+    val description: String? = null,
+    /** Cover image URL — absolutized at the boundary. Falls back to
+     *  the gradient placeholder when null. */
+    val coverImageUrl: String? = null,
+    /** MP3 stream URL. Required for playback. Newsletters with a
+     *  null `audioUrl` render the row with a disabled play button —
+     *  matches iOS `.disabled(n.audioUrl == nil)`. */
+    val audioUrl: String? = null,
+    /** Lifetime listen count surfaced as a small headphones badge in
+     *  the row. Only displayed when > 0. */
+    val totalListens: Int? = null,
 )
 
 @Singleton
@@ -49,6 +63,11 @@ class HomeExtrasRepository @Inject constructor(
 
     suspend fun getLatestAudioNewsletter(): AudioNewsletter? =
         api.getAudioNewsletters().newsletters.firstOrNull()?.toDomain()
+
+    /** Full list for the dedicated AudioNewsletters screen. iOS uses
+     *  the same `/api/audio-newsletters` endpoint. */
+    suspend fun getAllAudioNewsletters(): List<AudioNewsletter> =
+        api.getAudioNewsletters().newsletters.map { it.toDomain() }
 }
 
 private fun ApiStory.toDomain(): Story = Story(
@@ -69,6 +88,10 @@ private fun ApiAudioNewsletter.toDomain(): AudioNewsletter = AudioNewsletter(
     title = title,
     slug = slug,
     durationSeconds = duration,
+    description = description?.trim()?.takeIf { it.isNotEmpty() },
+    coverImageUrl = coverImageUrl?.let { absolutize(it) },
+    audioUrl = audioUrl?.let { absolutize(it) },
+    totalListens = totalListens?.takeIf { it > 0 },
 )
 
 /** Absolute-URL guard. iOS prefixes relative paths with the web origin

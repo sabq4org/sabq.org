@@ -82,6 +82,7 @@ object SabqRoutes {
     const val SubmitNews = "submit/news"
     const val KeywordArticles = "keyword/{keyword}"
     const val AuthorArticles = "author/{name}"
+    const val AudioNewsletters = "audio-newsletters"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -175,6 +176,9 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                        onAudioNewslettersClick = {
+                            navController.navigate(SabqRoutes.AudioNewsletters)
+                        },
                     )
                 }
                 composable(SabqRoutes.Explore) {
@@ -257,6 +261,11 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                    )
+                }
+                composable(SabqRoutes.AudioNewsletters) {
+                    com.sabq.smart.feature.audio.AudioNewslettersScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.Notifications) {
