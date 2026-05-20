@@ -131,6 +131,39 @@ data class ApiUser(
     val authProvider: String? = null,
     @JsonNames("created_at")
     val createdAt: String? = null,
+    /** Member interest categories — populated by `/api/v1/members/profile`
+     *  on signed-in users. Empty list when the field is absent. */
+    val interests: List<ApiUserInterest> = emptyList(),
+)
+
+/**
+ * One row of `/api/v1/members/interests`. Mirrors iOS `APIUserInterest`
+ * (`Services/APIModels.swift:876`). Backend joins `userInterests` with
+ * `categories` so we receive the human-readable name + slug + colour.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiUserInterest(
+    val id: String = "",
+    val name: String? = null,
+    val slug: String? = null,
+    val color: String? = null,
+    val weight: Double? = null,
+)
+
+/** Wrapper for `GET /api/v1/members/interests` — backend ships
+ *  `{success, interests: [...]}`. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiMemberInterestsResponse(
+    val success: Boolean? = null,
+    val interests: List<ApiUserInterest> = emptyList(),
+)
+
+/** Body for `POST /api/v1/members/interests` — same shape iOS sends. */
+@Serializable
+data class UpdateMemberInterestsRequest(
+    val interestIds: List<String>,
 )
 
 /** Normalise [ApiUser.roles] into a flat list of role keys regardless

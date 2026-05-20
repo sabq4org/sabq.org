@@ -6,11 +6,13 @@ import com.sabq.smart.data.api.RegisterRequest
 import com.sabq.smart.data.api.ResendActivationRequest
 import com.sabq.smart.data.api.ResendActivationResponse
 import com.sabq.smart.data.api.SabqApi
+import com.sabq.smart.data.api.UpdateMemberInterestsRequest
 import com.sabq.smart.data.auth.AuthTokenStore
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -34,7 +36,7 @@ class AuthRepository @Inject constructor(
 ) {
 
     private val _user = MutableStateFlow<User?>(null)
-    val user: Flow<User?> = _user.asStateFlow()
+    val user: StateFlow<User?> = _user.asStateFlow()
 
     /** True if a bearer token is stored AND we have a resolved user. */
     val isSignedIn: Flow<Boolean> = combine(tokenStore.token, _user) { t, u ->
@@ -65,6 +67,25 @@ class AuthRepository @Inject constructor(
                 }
             }
             .getOrNull()
+    }
+
+    /**
+     * Replace the authenticated member's interest categories. Backend
+     * wipes prior rows + inserts the supplied ids (priority by index).
+     * Refreshes the profile on success so [user] reflects the new list.
+     * Mirrors iOS `AuthStore.updateInterests(categoryIds:)`.
+     */
+    suspend fun updateInterests(categoryIds: List<String>): User? {
+        val token = tokenStore.current()
+        if (token.isNullOrBlank()) {
+            throw AuthException("تسجيل الدخول مطلوب لحفظ الاهتمامات")
+        }
+        try {
+            api.updateMemberInterests(UpdateMemberInterestsRequest(interestIds = categoryIds))
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "تعذّر حفظ الاهتمامات")
+        }
+        return refreshProfile()
     }
 
     /**
