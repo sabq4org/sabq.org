@@ -305,6 +305,7 @@ import {
   socialFollows,
   announcementDismissals,
   articlePolls,
+  userPointsTotal,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -4574,6 +4575,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           verificationBadge: users.verificationBadge,
           lastActivityAt: users.lastActivityAt,
           hasPressCard: users.hasPressCard,
+          phoneNumber: users.phoneNumber,
+          phoneVerified: users.phoneVerified,
+          country: users.country,
+          city: users.city,
+          gender: users.gender,
+          birthDate: users.birthDate,
+          lastLoginAt: users.lastLoginAt,
+          lastDeviceInfo: users.lastDeviceInfo,
+          twoFactorEnabled: users.twoFactorEnabled,
+          suspendedUntil: users.suspendedUntil,
+          bannedUntil: users.bannedUntil,
+          suspensionReason: users.suspensionReason,
+          banReason: users.banReason,
         })
         .from(users);
 
@@ -4618,7 +4632,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const userIds = userList.map(u => u.id);
 
-      const [allRoles, allStaff] = userIds.length > 0 ? await Promise.all([
+      const [allRoles, allStaff, allLoyalty] = userIds.length > 0 ? await Promise.all([
         db
           .select({
             userId: userRoles.userId,
@@ -4638,7 +4652,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           })
           .from(staff)
           .where(inArray(staff.userId, userIds)),
-      ]) : [[], []];
+        db
+          .select({
+            userId: userPointsTotal.userId,
+            totalPoints: userPointsTotal.totalPoints,
+            currentRank: userPointsTotal.currentRank,
+            rankLevel: userPointsTotal.rankLevel,
+            lifetimePoints: userPointsTotal.lifetimePoints,
+          })
+          .from(userPointsTotal)
+          .where(inArray(userPointsTotal.userId, userIds)),
+      ]) : [[], [], []];
 
       const roleMap = new Map<string, { id: string; name: string | null; nameAr: string | null }>();
       for (const r of allRoles) {
@@ -4652,10 +4676,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           staffMap.set(s.userId, { name: s.name, nameAr: s.nameAr, profileImage: s.profileImage });
         }
       }
+      const loyaltyMap = new Map<string, { totalPoints: number; currentRank: string; rankLevel: number; lifetimePoints: number }>();
+      for (const l of allLoyalty) {
+        if (l.userId) {
+          loyaltyMap.set(l.userId, {
+            totalPoints: l.totalPoints,
+            currentRank: l.currentRank,
+            rankLevel: l.rankLevel,
+            lifetimePoints: l.lifetimePoints,
+          });
+        }
+      }
 
       const usersWithRoles = userList.map(user => {
         const role = roleMap.get(user.id);
         const staffInfo = staffMap.get(user.id);
+        const loyalty = loyaltyMap.get(user.id) || null;
         return {
           ...user,
           roleName: role?.name || null,
@@ -4665,6 +4701,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           staffName: staffInfo?.name || null,
           staffNameAr: staffInfo?.nameAr || null,
           staffProfileImage: staffInfo?.profileImage || null,
+          loyalty,
         };
       });
 
@@ -4694,6 +4731,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           verificationBadge: u.verificationBadge,
           lastActivityAt: u.lastActivityAt,
           hasPressCard: u.hasPressCard,
+          phoneNumber: u.phoneNumber,
+          phoneVerified: u.phoneVerified,
+          country: u.country,
+          lastLoginAt: u.lastLoginAt,
+          lastDeviceInfo: u.lastDeviceInfo,
+          loyalty: u.loyalty,
         })),
         users: usersWithRoles,
       });

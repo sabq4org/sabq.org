@@ -18,6 +18,16 @@ import {
   Loader2,
   TrendingUp,
   TrendingDown,
+  Eye,
+  BadgeCheck,
+  Phone,
+  Smartphone,
+  Globe,
+  Award,
+  ShieldCheck,
+  Cake,
+  MapPin,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,8 +74,31 @@ import { AddUserDialog } from "@/components/AddUserDialog";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { RolesPanel } from "@/components/RolesPanel";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 
 // User type from API
+interface UserLoyalty {
+  totalPoints: number;
+  currentRank: string;
+  rankLevel: number;
+  lifetimePoints: number;
+}
+
+interface UserDeviceInfo {
+  platform?: string;
+  osVersion?: string;
+  appVersion?: string;
+  deviceName?: string;
+  deviceId?: string;
+}
+
 interface UserListItem {
   id: string;
   email: string;
@@ -79,6 +112,23 @@ interface UserListItem {
   roleName: string | null;
   roleNameAr: string | null;
   roleId: string | null;
+  emailVerified?: boolean;
+  verificationBadge?: string | null;
+  lastActivityAt?: string | null;
+  phoneNumber?: string | null;
+  phoneVerified?: boolean;
+  country?: string | null;
+  city?: string | null;
+  gender?: string | null;
+  birthDate?: string | null;
+  lastLoginAt?: string | null;
+  lastDeviceInfo?: UserDeviceInfo | null;
+  twoFactorEnabled?: boolean;
+  suspendedUntil?: string | null;
+  bannedUntil?: string | null;
+  suspensionReason?: string | null;
+  banReason?: string | null;
+  loyalty?: UserLoyalty | null;
 }
 
 // Role type
@@ -136,6 +186,7 @@ export default function UsersManagement() {
   const [resettingPassword, setResettingPassword] = useState<UserListItem | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [permanentDeletingUser, setPermanentDeletingUser] = useState<UserListItem | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<UserListItem | null>(null);
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(adminUpdateUserSchema),
@@ -345,6 +396,52 @@ export default function UsersManagement() {
     permanentDeleteMutation.mutate(permanentDeletingUser.id);
   };
 
+  // Formatters & badges
+  const formatDate = (value?: string | null) => {
+    if (!value) return "—";
+    try {
+      return new Date(value).toLocaleDateString("ar-SA-u-ca-gregory");
+    } catch {
+      return "—";
+    }
+  };
+  const formatRelative = (value?: string | null) => {
+    if (!value) return "بدون نشاط";
+    const date = new Date(value);
+    const diffMs = Date.now() - date.getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return "الآن";
+    if (min < 60) return `قبل ${min} د`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `قبل ${hr} س`;
+    const days = Math.floor(hr / 24);
+    if (days < 30) return `قبل ${days} يوم`;
+    return date.toLocaleDateString("ar-SA-u-ca-gregory");
+  };
+  const getPlatformLabel = (info?: UserDeviceInfo | null) => {
+    if (!info?.platform) return null;
+    const p = info.platform.toLowerCase();
+    if (p.includes("ios")) return "iOS";
+    if (p.includes("android")) return "Android";
+    if (p.includes("web")) return "Web";
+    return info.platform;
+  };
+  const getRankColor = (level?: number) => {
+    switch (level) {
+      case 5: return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800";
+      case 4: return "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-200 dark:border-purple-800";
+      case 3: return "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-800";
+      case 2: return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800";
+      default: return "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-900/50 dark:text-slate-200 dark:border-slate-700";
+    }
+  };
+  const getGenderLabel = (g?: string | null) => {
+    if (!g) return "—";
+    if (g === "male") return "ذكر";
+    if (g === "female") return "أنثى";
+    return g;
+  };
+
   // Status badge
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
@@ -528,9 +625,11 @@ export default function UsersManagement() {
                     <tr className="border-b">
                       <th className="text-right py-3 px-4">المستخدم</th>
                       <th className="text-right py-3 px-4">البريد الإلكتروني</th>
-                      <th className="text-right py-3 px-4">الدور</th>
+                      <th className="text-right py-3 px-4 hidden md:table-cell">الجوال</th>
+                      <th className="text-right py-3 px-4 hidden lg:table-cell">العضوية</th>
                       <th className="text-right py-3 px-4">الحالة</th>
-                      <th className="text-right py-3 px-4">تاريخ التسجيل</th>
+                      <th className="text-right py-3 px-4 hidden xl:table-cell">آخر نشاط</th>
+                      <th className="text-right py-3 px-4 hidden lg:table-cell">تاريخ التسجيل</th>
                       <th className="text-right py-3 px-4">الإجراءات</th>
                     </tr>
                   </thead>
@@ -545,27 +644,92 @@ export default function UsersManagement() {
                                 {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <div className="font-medium" data-testid={`text-name-${user.id}`}>
-                                {user.firstName || user.lastName
-                                  ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-                                  : "بدون اسم"}
+                            <div className="min-w-0">
+                              <div className="font-medium flex items-center gap-1" data-testid={`text-name-${user.id}`}>
+                                <span className="truncate">
+                                  {user.firstName || user.lastName
+                                    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                                    : "بدون اسم"}
+                                </span>
+                                {user.verificationBadge === "gold" && (
+                                  <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0" aria-label="موثق ذهبي" />
+                                )}
+                                {user.verificationBadge === "silver" && (
+                                  <BadgeCheck className="h-4 w-4 text-slate-400 shrink-0" aria-label="موثق فضي" />
+                                )}
                               </div>
+                              {(user.country || user.city) && (
+                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                  <MapPin className="h-3 w-3" />
+                                  <span>{[user.city, user.country].filter(Boolean).join("، ")}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
                         <td className="py-3 px-4" data-testid={`text-email-${user.id}`}>
-                          {user.email}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm">{user.email}</span>
+                            {user.emailVerified && (
+                              <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0" aria-label="بريد موثق" />
+                            )}
+                          </div>
                         </td>
-                        <td className="py-3 px-4">
-                          <UserRoles userId={user.id} />
+                        <td className="py-3 px-4 hidden md:table-cell" data-testid={`text-phone-${user.id}`}>
+                          {user.phoneNumber ? (
+                            <div className="flex items-center gap-1.5 text-sm" dir="ltr">
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>{user.phoneNumber}</span>
+                              {user.phoneVerified && (
+                                <BadgeCheck className="h-4 w-4 text-emerald-500 shrink-0" aria-label="جوال موثق" />
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 hidden lg:table-cell" data-testid={`text-loyalty-${user.id}`}>
+                          {user.loyalty ? (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge variant="outline" className={`gap-1 w-fit ${getRankColor(user.loyalty.rankLevel)}`}>
+                                <Award className="h-3 w-3" />
+                                <span className="text-xs">{user.loyalty.currentRank}</span>
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {user.loyalty.totalPoints.toLocaleString("en-US")} نقطة
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">{getStatusBadge(user.status)}</td>
-                        <td className="py-3 px-4" data-testid={`text-date-${user.id}`}>
-                          {new Date(user.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}
+                        <td className="py-3 px-4 hidden xl:table-cell text-sm text-muted-foreground" data-testid={`text-last-activity-${user.id}`}>
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{formatRelative(user.lastActivityAt || user.lastLoginAt)}</span>
+                          </div>
+                          {getPlatformLabel(user.lastDeviceInfo) && (
+                            <div className="text-xs flex items-center gap-1 mt-0.5">
+                              <Smartphone className="h-3 w-3" />
+                              <span>{getPlatformLabel(user.lastDeviceInfo)}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 hidden lg:table-cell" data-testid={`text-date-${user.id}`}>
+                          {formatDate(user.createdAt)}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setViewingDetails(user)}
+                              data-testid={`button-view-details-${user.id}`}
+                              title="عرض التفاصيل"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -736,6 +900,221 @@ export default function UsersManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* User Details Sheet */}
+      <Sheet open={!!viewingDetails} onOpenChange={(open) => !open && setViewingDetails(null)}>
+        <SheetContent side="left" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-user-details">
+          {viewingDetails && (
+            <>
+              <SheetHeader className="text-right">
+                <div className="flex items-center gap-3 mb-2">
+                  <Avatar className="h-14 w-14">
+                    <AvatarImage src={viewingDetails.profileImageUrl || undefined} />
+                    <AvatarFallback className="text-lg">
+                      {(viewingDetails.firstName?.[0] || "") + (viewingDetails.lastName?.[0] || "")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <SheetTitle className="flex items-center gap-1.5 text-base">
+                      <span className="truncate">
+                        {viewingDetails.firstName || viewingDetails.lastName
+                          ? `${viewingDetails.firstName || ""} ${viewingDetails.lastName || ""}`.trim()
+                          : "بدون اسم"}
+                      </span>
+                      {viewingDetails.verificationBadge === "gold" && (
+                        <BadgeCheck className="h-5 w-5 text-amber-500" aria-label="موثق ذهبي" />
+                      )}
+                      {viewingDetails.verificationBadge === "silver" && (
+                        <BadgeCheck className="h-5 w-5 text-slate-400" aria-label="موثق فضي" />
+                      )}
+                    </SheetTitle>
+                    <SheetDescription className="text-xs">
+                      {getStatusBadge(viewingDetails.status)}
+                    </SheetDescription>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              <div className="space-y-4 mt-4 text-sm">
+                {/* Loyalty / Membership */}
+                <section>
+                  <h4 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Award className="h-3.5 w-3.5" /> العضوية والولاء
+                  </h4>
+                  {viewingDetails.loyalty ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">الرتبة</span>
+                        <Badge variant="outline" className={`gap-1 ${getRankColor(viewingDetails.loyalty.rankLevel)}`}>
+                          <Award className="h-3 w-3" />
+                          {viewingDetails.loyalty.currentRank}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">المستوى</span>
+                        <span className="font-medium">{viewingDetails.loyalty.rankLevel} من 5</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">النقاط الحالية</span>
+                        <span className="font-medium">{viewingDetails.loyalty.totalPoints.toLocaleString("en-US")}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">إجمالي النقاط</span>
+                        <span className="font-medium">{viewingDetails.loyalty.lifetimePoints.toLocaleString("en-US")}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">لا توجد بيانات ولاء</p>
+                  )}
+                </section>
+
+                <Separator />
+
+                {/* Contact */}
+                <section>
+                  <h4 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider mb-2">
+                    معلومات الاتصال
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">البريد</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium" dir="ltr">{viewingDetails.email}</span>
+                        {viewingDetails.emailVerified && <BadgeCheck className="h-4 w-4 text-emerald-500" />}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">الجوال</span>
+                      <div className="flex items-center gap-1.5">
+                        {viewingDetails.phoneNumber ? (
+                          <>
+                            <span className="font-medium" dir="ltr">{viewingDetails.phoneNumber}</span>
+                            {viewingDetails.phoneVerified && <BadgeCheck className="h-4 w-4 text-emerald-500" />}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <Separator />
+
+                {/* Personal */}
+                <section>
+                  <h4 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider mb-2">
+                    البيانات الشخصية
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">الجنس</span>
+                      <span className="font-medium">{getGenderLabel(viewingDetails.gender)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Cake className="h-3 w-3" /> تاريخ الميلاد
+                      </span>
+                      <span className="font-medium">{formatDate(viewingDetails.birthDate)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Globe className="h-3 w-3" /> الدولة
+                      </span>
+                      <span className="font-medium">{viewingDetails.country || "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <MapPin className="h-3 w-3" /> المدينة
+                      </span>
+                      <span className="font-medium">{viewingDetails.city || "—"}</span>
+                    </div>
+                  </div>
+                </section>
+
+                <Separator />
+
+                {/* Activity */}
+                <section>
+                  <h4 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider mb-2">
+                    النشاط والأمان
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">تاريخ التسجيل</span>
+                      <span className="font-medium">{formatDate(viewingDetails.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">آخر نشاط</span>
+                      <span className="font-medium">{formatRelative(viewingDetails.lastActivityAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">آخر تسجيل دخول</span>
+                      <span className="font-medium">{formatRelative(viewingDetails.lastLoginAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Smartphone className="h-3 w-3" /> آخر جهاز
+                      </span>
+                      <span className="font-medium">
+                        {getPlatformLabel(viewingDetails.lastDeviceInfo) || "—"}
+                        {viewingDetails.lastDeviceInfo?.appVersion && (
+                          <span className="text-muted-foreground"> · {viewingDetails.lastDeviceInfo.appVersion}</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <ShieldCheck className="h-3 w-3" /> المصادقة الثنائية
+                      </span>
+                      <Badge variant={viewingDetails.twoFactorEnabled ? "default" : "outline"} className="text-xs">
+                        {viewingDetails.twoFactorEnabled ? "مفعّلة" : "غير مفعّلة"}
+                      </Badge>
+                    </div>
+                  </div>
+                </section>
+
+                {(viewingDetails.suspensionReason || viewingDetails.banReason || viewingDetails.suspendedUntil || viewingDetails.bannedUntil) && (
+                  <>
+                    <Separator />
+                    <section>
+                      <h4 className="font-semibold text-destructive text-xs uppercase tracking-wider mb-2">
+                        الحظر/التعليق
+                      </h4>
+                      <div className="space-y-2">
+                        {viewingDetails.suspensionReason && (
+                          <div>
+                            <div className="text-muted-foreground text-xs">سبب التعليق</div>
+                            <div className="font-medium">{viewingDetails.suspensionReason}</div>
+                          </div>
+                        )}
+                        {viewingDetails.suspendedUntil && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">معلّق حتى</span>
+                            <span className="font-medium">{formatDate(viewingDetails.suspendedUntil)}</span>
+                          </div>
+                        )}
+                        {viewingDetails.banReason && (
+                          <div>
+                            <div className="text-muted-foreground text-xs">سبب الحظر</div>
+                            <div className="font-medium">{viewingDetails.banReason}</div>
+                          </div>
+                        )}
+                        {viewingDetails.bannedUntil && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">محظور حتى</span>
+                            <span className="font-medium">{formatDate(viewingDetails.bannedUntil)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Add User Dialog */}
       <AddUserDialog
