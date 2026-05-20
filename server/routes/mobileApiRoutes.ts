@@ -48,6 +48,77 @@ import { cloudflareImagesService } from "../services/cloudflareImagesService";
 const router = Router();
 
 // ==========================================
+// Mobile role payload helper
+// ==========================================
+//
+// Build the role/roles/roleLabel/jobTitle bundle the iOS APIUser
+// decoder expects, so /auth/login, /auth/register, AND /members/profile
+// can ALL return it. Previously only /members/profile returned RBAC
+// roles — the login response shipped a bare user object without `role`,
+// `roles`, `roleLabel`, or `jobTitle`, which meant the freshly-logged-in
+// iOS user saw "قارئ" until the async /members/profile call returned
+// (and "قارئ" stayed permanently if that call ever failed transiently).
+// Surfacing the full role bundle on login + register fixes the
+// "writer shows as reader in the iOS app" bug.
+//
+// Returns the same shape used in the /members/profile response so the
+// three endpoints stay in lockstep.
+const MOBILE_ROLE_LABELS: Record<string, string> = {
+  system_admin: "مدير النظام",
+  admin: "مسؤول",
+  editor: "محرر",
+  editor_in_chief: "رئيس التحرير",
+  senior_editor: "محرر أول",
+  reporter: "مراسل",
+  correspondent: "مراسل",
+  journalist: "صحفي",
+  writer: "كاتب",
+  author: "كاتب",
+  article_writer: "كاتب مقال",
+  article_author: "كاتب مقال",
+  opinion_author: "كاتب مقال رأي",
+  columnist: "كاتب عمود",
+  managing_editor: "مدير تحرير",
+  editorial_manager: "مدير تحرير",
+  content_manager: "مدير محتوى",
+  comments_moderator: "مشرف تعليقات",
+  moderator: "مشرف",
+  media_manager: "مدير وسائط",
+  publisher: "ناشر",
+  photographer: "مصور",
+  contributor: "مساهم",
+  reader: "قارئ",
+};
+
+const normalizeRoleKey = (value?: string | null) =>
+  value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
+
+async function buildUserRolePayload(userId: string, legacyRole?: string | null, jobTitle?: string | null) {
+  const rbacRoles = await db
+    .select({ name: roles.name, nameAr: roles.nameAr })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(userRoles.userId, userId));
+
+  const nonReaderRbacRole = rbacRoles.find((r) => normalizeRoleKey(r.name) !== "reader");
+  const legacyKey = normalizeRoleKey(legacyRole);
+  const effectiveRoleKey = normalizeRoleKey(nonReaderRbacRole?.name) || legacyKey || "reader";
+  const explicitRoleLabel =
+    nonReaderRbacRole?.nameAr ||
+    (jobTitle?.trim() ? jobTitle.trim() : null) ||
+    MOBILE_ROLE_LABELS[effectiveRoleKey] ||
+    legacyRole ||
+    "قارئ";
+
+  return {
+    role: effectiveRoleKey,
+    roleLabel: explicitRoleLabel,
+    membershipLabel: explicitRoleLabel,
+    roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
+  };
+}
+
+// ==========================================
 // Helper: Send Mobile Activation Email
 // ==========================================
 async function sendMobileActivationEmail(email: string, code: string, firstName?: string): Promise<boolean> {
@@ -906,6 +977,13 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
     console.log(`[Mobile API] New user registered + auto-activated: ${userId}, email sent: ${emailSent}`);
 
+    // Mirror the /auth/login response shape so the iOS client sees the
+    // same role bundle on register — fresh signups land on the "reader"
+    // role, but using the helper keeps the contract identical and
+    // future-proofs the response if onboarding ever assigns a writer
+    // role at signup time.
+    const rolePayload = await buildUserRolePayload(userId, "reader", null);
+
     res.status(201).json({
       success: true,
       message: "تم إنشاء الحساب بنجاح",
@@ -927,6 +1005,7 @@ router.post("/auth/register", async (req: Request, res: Response) => {
         locale: locale || "ar",
         emailVerified: false,
         phoneVerified: false,
+        ...rolePayload,
       },
     });
   } catch (error) {
@@ -1225,9 +1304,15 @@ router.post("/auth/login", async (req: Request, res: Response) => {
 
     console.log(`[Mobile API] User logged in: ${user.id}`);
 
-    // Return user data
-    res.json({ 
-      success: true, 
+    // Surface the full role/roles/jobTitle bundle on login (previously
+    // omitted) so the iOS APIUser decoder gets the canonical role on
+    // first paint — no more "قارئ" flicker / stuck-at-reader when the
+    // follow-up /members/profile call fails or is slow. See
+    // buildUserRolePayload() comment for the full rationale.
+    const rolePayload = await buildUserRolePayload(user.id, user.role, user.jobTitle);
+
+    res.json({
+      success: true,
       message: "تم تسجيل الدخول بنجاح",
       token: sessionToken,
       expiresAt: expiresAt.toISOString(),
@@ -1244,7 +1329,13 @@ router.post("/auth/login", async (req: Request, res: Response) => {
         locale: user.locale,
         emailVerified: user.emailVerified,
         phoneVerified: user.phoneVerified,
-      }
+        bio: user.bio,
+        jobTitle: user.jobTitle,
+        department: user.department,
+        verificationBadge: user.verificationBadge,
+        hasPressCard: user.hasPressCard,
+        ...rolePayload,
+      },
     });
   } catch (error) {
     console.error("[Mobile API] auth/login error:", error);
@@ -1539,56 +1630,18 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       });
     }
 
-    // RBAC roles — these are the authoritative roles assigned to the user
-    // via the `user_roles` join table. iOS's `localizedRole` prefers any
-    // non-reader role from this array over the legacy `users.role` column,
-    // so an opinion author with RBAC role `opinion_author` will correctly
-    // surface as "كاتب مقال رأي" instead of falling back to "قارئ".
-    const rbacRoles = await db
-      .select({ name: roles.name, nameAr: roles.nameAr })
-      .from(userRoles)
-      .innerJoin(roles, eq(userRoles.roleId, roles.id))
-      .where(eq(userRoles.userId, session.userId));
+    // Build the canonical role/roles/roleLabel/jobTitle bundle once via
+    // the shared helper — same shape /auth/login and /auth/register now
+    // ship, so the iOS APIUser decoder behaves identically across all
+    // three endpoints.
+    const rolePayload = await buildUserRolePayload(session.userId, user.role, user.jobTitle);
 
-    // Diagnostic: log the role payload we're about to return so we can
-    // verify whether a particular user (e.g. aalhazmi@sabq.org) actually
-    // has the expected RBAC mapping. Safe to keep — emails are already
-    // logged by the existing auth flow, and the payload is small.
+    // Diagnostic: log the resolved role payload so we can confirm a
+    // particular user (e.g. malakalhazmi7@gmail.com) actually has the
+    // expected RBAC mapping arriving from the backend.
     console.log(
-      `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} rbacRoles=${JSON.stringify(rbacRoles)}`
+      `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} resolvedRole=${rolePayload.role} rbacRoles=${JSON.stringify(rolePayload.roles)}`
     );
-
-    const roleLabels: Record<string, string> = {
-      system_admin: "مدير النظام",
-      admin: "مسؤول",
-      editor: "محرر",
-      editor_in_chief: "رئيس التحرير",
-      senior_editor: "محرر أول",
-      reporter: "مراسل",
-      correspondent: "مراسل",
-      journalist: "صحفي",
-      writer: "كاتب",
-      author: "كاتب",
-      article_writer: "كاتب مقال",
-      article_author: "كاتب مقال",
-      opinion_author: "كاتب مقال رأي",
-      columnist: "كاتب عمود",
-      managing_editor: "مدير تحرير",
-      editorial_manager: "مدير تحرير",
-      content_manager: "مدير محتوى",
-      comments_moderator: "مشرف تعليقات",
-      moderator: "مشرف",
-      media_manager: "مدير وسائط",
-      publisher: "ناشر",
-      photographer: "مصور",
-      contributor: "مساهم",
-      reader: "قارئ",
-    };
-    const normalizeRole = (value?: string | null) => value?.trim().toLowerCase().replace(/\s+/g, "_") || "";
-    const nonReaderRbacRole = rbacRoles.find((r) => normalizeRole(r.name) !== "reader");
-    const legacyRole = normalizeRole(user.role);
-    const effectiveRoleKey = normalizeRole(nonReaderRbacRole?.name) || legacyRole || "reader";
-    const explicitRoleLabel = nonReaderRbacRole?.nameAr || user.jobTitle || roleLabels[effectiveRoleKey] || user.role || "قارئ";
 
     // Get user interests
     const interests = await db
@@ -1606,15 +1659,8 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       success: true,
       user: {
         ...user,
-        role: effectiveRoleKey,
-        roleLabel: explicitRoleLabel,
-        membershipLabel: explicitRoleLabel,
+        ...rolePayload,
         phone: user.phoneNumber,
-        // `roles` is the array of role names (e.g. ["opinion_author"]) the
-        // iOS decoder iterates over via `primaryRoleKey`. Including the
-        // Arabic display name lets the decoder skip its own translation
-        // table when the backend already has the canonical label.
-        roles: rbacRoles.map((r) => ({ key: r.name, displayName: r.nameAr })),
         interests: interests.map(i => ({
           id: i.categoryId,
           name: i.categoryName,
