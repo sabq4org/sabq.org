@@ -28,6 +28,15 @@ data class CalendarEvent(
     val id: String,
     val title: String,
     val importance: Int?,
+    /** Optional editorial description shown on the dedicated calendar
+     *  screen. Null when the backend omits it (most rows). */
+    val description: String? = null,
+    /** "GLOBAL" | "NATIONAL" | "INTERNAL" — drives the chip label +
+     *  tint on the calendar screen. Null falls back to "حدث" / grey. */
+    val type: String? = null,
+    /** ISO-8601 start timestamp. Empty string when missing — the date
+     *  grouping logic guards on that. */
+    val dateStart: String = "",
 )
 
 data class AudioNewsletter(
@@ -81,6 +90,9 @@ private fun ApiCalendarEvent.toDomain(): CalendarEvent = CalendarEvent(
     id = id.takeIf { it.isNotBlank() } ?: title,
     title = title,
     importance = importance,
+    description = description?.takeIf { it.isNotBlank() },
+    type = type?.takeIf { it.isNotBlank() },
+    dateStart = dateStart,
 )
 
 private fun ApiAudioNewsletter.toDomain(): AudioNewsletter = AudioNewsletter(

@@ -25,6 +25,7 @@ import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
+import com.sabq.smart.feature.calendar.CalendarScreen
 import com.sabq.smart.feature.explore.ExploreScreen
 import com.sabq.smart.feature.keyword.KeywordArticlesScreen
 import com.sabq.smart.feature.author.AuthorArticlesScreen
@@ -69,6 +70,7 @@ object SabqRoutes {
     const val Opinions = "opinions"
     const val Trending = "trending"
     const val MomentByMoment = "live/updates"
+    const val Calendar = "calendar"
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
     const val NotificationPreferences = "notifications/preferences"
@@ -167,6 +169,9 @@ fun SabqApp(
                         },
                         onTrendingAllClick = {
                             navController.navigate(SabqRoutes.Trending)
+                        },
+                        onCalendarAllClick = {
+                            navController.navigate(SabqRoutes.Calendar)
                         },
                         onLoyaltyClick = {
                             navController.navigate(SabqRoutes.Loyalty)
@@ -283,6 +288,11 @@ fun SabqApp(
                 }
                 composable(SabqRoutes.AudioNewsletters) {
                     com.sabq.smart.feature.audio.AudioNewslettersScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.Calendar) {
+                    CalendarScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }
