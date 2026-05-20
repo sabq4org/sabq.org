@@ -122,24 +122,23 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     ? { minHeight: '90px', width: '100%', textAlign: 'center', overflow: 'hidden' }
     : { minHeight: '250px', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
-  // Ad creatives are served by DMS as cross-origin iframes whose body
-  // background we can't restyle, so we frame the slot in a `bg-card`
-  // rounded container so the light creative reads as an intentional
-  // card in dark mode. CRITICAL: the wrapper/inner tree shape MUST be
-  // constant across renders — an earlier version branched the JSX on
-  // adState (wrapped tree when loading/filled, bare tree when empty)
-  // and the structural flip raced GPT's iframe injection, surfacing as
-  // a NotFoundError ("The object can not be found here.") thrown by
-  // React's commit phase on first load. We instead always render the
-  // wrapper + inner pair, and only toggle classes/styles. The chrome
-  // (bg-card/rounded/padding/spacing) is applied ONLY when the slot
-  // actually fills — during the loading window and the eventual empty
-  // state the wrapper stays bare so the slot doesn't render as a
-  // visible empty card (per DMS request 2026-05-20).
+  // CRITICAL: the wrapper/inner tree shape MUST be constant across
+  // renders — an earlier version branched the JSX on adState (wrapped
+  // tree when loading/filled, bare tree when empty) and the structural
+  // flip raced GPT's iframe injection, surfacing as a NotFoundError
+  // ("The object can not be found here.") thrown by React's commit
+  // phase on first load. We always render the wrapper + inner pair.
+  //
+  // The wrapper carries ONLY layout spacing (mb-8/mt-8) — no bg-card,
+  // no rounded corners, no padding. The ad creative renders directly
+  // against the page background. This was an explicit DMS ask
+  // (2026-05-20): the previous bg-card frame was visible as a white-ish
+  // box around filled creatives in dark mode and as an empty card while
+  // unfilled. Now there is no visible chrome in any state.
   const wrapperSpacing = type === 'leaderboard' ? 'mb-8' : 'mt-8';
-  const wrapperClass = adState === 'filled'
-    ? `rounded-xl bg-card p-2 ${wrapperSpacing} ${className ?? ''}`.trim()
-    : (className ?? '').trim();
+  const wrapperClass = adState === 'empty'
+    ? (className ?? '').trim()
+    : `${wrapperSpacing} ${className ?? ''}`.trim();
 
   return (
     <div

@@ -6,10 +6,7 @@ interface AdSlotProps {
   slotId: string;
   className?: string;
   reservedSize?: "mpu" | "leaderboard";
-  collapseDelayMs?: number;
 }
-
-const DEFAULT_COLLAPSE_DELAY_MS = 6000;
 
 interface AdData {
   creative: {
@@ -46,7 +43,7 @@ function getDeviceType(): "desktop" | "mobile" | "tablet" {
   }
 }
 
-export function AdSlot({ slotId, className = "", reservedSize = "mpu", collapseDelayMs = DEFAULT_COLLAPSE_DELAY_MS }: AdSlotProps) {
+export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotProps) {
   const deviceType = useMemo(() => getDeviceType(), []);
   const reservedMinHeight = reservedSize === "leaderboard" ? 90 : 250;
   const [collapsed, setCollapsed] = useState(false);
@@ -116,33 +113,14 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu", collapseD
       setCollapsed(false);
       return;
     }
-    const node = containerRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      const t = setTimeout(() => setCollapsed(true), collapseDelayMs);
-      return () => clearTimeout(t);
-    }
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) {
-          if (timer === null) {
-            timer = setTimeout(() => setCollapsed(true), collapseDelayMs);
-          }
-        } else if (timer !== null) {
-          clearTimeout(timer);
-          timer = null;
-        }
-      },
-      { rootMargin: "200px 0px" },
-    );
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [isLoading, ad, error, collapseDelayMs]);
+    // API resolved with no ad → collapse the 250px reservation
+    // immediately. The previous IntersectionObserver-based delayed
+    // collapse only fired when the slot was OUT of viewport, so any
+    // empty slot that stayed in the user's viewport (e.g. the
+    // header-banner near the top of Home) lingered as a visible empty
+    // box indefinitely.
+    setCollapsed(true);
+  }, [isLoading, ad]);
 
   const handleClick = () => {
     if (ad?.impressionId) {
