@@ -1407,14 +1407,29 @@ nonisolated struct ArticleDraftPayload: Decodable {
     let kind: String
     let reviewNotes: String
     let requestedAt: String?
+    /// Server-side `review_status`. Values: `needs_changes` |
+    /// `pending_review` | `approved` | `rejected`. The revision form
+    /// only renders when this equals `needs_changes`; any other value
+    /// means the writer already resubmitted (or the editor decided)
+    /// and we surface a "قيد المراجعة" / status banner instead of the
+    /// editable form. Optional for back-compat with older builds of
+    /// the endpoint that pre-date the field.
+    let reviewStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, body, excerpt
         case imageURL = "imageUrl"
-        case albumImages, kind, reviewNotes, requestedAt
+        case albumImages, kind, reviewNotes, requestedAt, reviewStatus
     }
 
     var isOpinion: Bool { kind == "opinion" }
+    /// True when the writer has already resubmitted (or the article
+    /// otherwise moved past the revision stage). When this is true
+    /// `ArticleRevisionView` shows a status panel instead of the form.
+    var isAwaitingReview: Bool {
+        guard let s = reviewStatus else { return false }
+        return s != "needs_changes"
+    }
 }
 
 nonisolated struct ArticleDraftResponse: Decodable {

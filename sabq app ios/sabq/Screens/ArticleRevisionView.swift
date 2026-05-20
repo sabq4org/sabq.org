@@ -44,11 +44,23 @@ struct ArticleRevisionView: View {
 
     @FocusState private var focusedField: Field?
 
-    enum Stage {
+    // Equatable conformance required because the existing submit-button
+    // code compares `screenState == .submitting`. Adding the new
+    // associated-value case below would have removed auto-Equatable
+    // synthesis silently; we keep the conformance explicit so refactors
+    // don't break the comparison sites.
+    enum Stage: Equatable {
         case loading
         case form
         case submitting
         case success
+        /// Writer reopened the same revision notification after they'd
+        /// already resubmitted. The server's `reviewStatus` is
+        /// `pending_review` (or `approved`/`rejected`); we surface a
+        /// status panel instead of the edit form to avoid the reported
+        /// bug of letting the writer "resubmit" what's effectively the
+        /// same revision twice.
+        case alreadyResubmitted(status: String)
     }
 
     enum Field: Hashable { case title, body }
@@ -76,6 +88,17 @@ struct ArticleRevisionView: View {
                     formCard
                 case .success:
                     successHero
+                    Button { dismiss() } label: {
+                        Text("رجوع")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                case .alreadyResubmitted(let status):
+                    alreadyResubmittedHero(status: status)
                     Button { dismiss() } label: {
                         Text("رجوع")
                             .font(.system(size: 16, weight: .bold))
@@ -438,6 +461,95 @@ struct ArticleRevisionView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Status panel for writers who reopen the same notification after
+    /// they'd already resubmitted. Icon + headline + descriptive copy
+    /// vary by `reviewStatus` value so an approved or rejected article
+    /// also has a sensible message — though the common case is the
+    /// `pending_review` one the bug report described.
+    private func alreadyResubmittedHero(status: String) -> some View {
+        let icon: String
+        let tint: Color
+        let headline: String
+        let detail: String
+        switch status {
+        case "pending_review":
+            icon = "hourglass"
+            tint = SabqTheme.teal
+            headline = "تعديلك قيد المراجعة"
+            detail = "تم استلام تعديلك ويفحصه فريق التحرير حالياً. سيصلك إشعار فور صدور القرار."
+        case "approved":
+            icon = "checkmark.seal.fill"
+            tint = SabqTheme.leaf
+            headline = "تم اعتماد التعديل"
+            detail = "اعتمد فريق التحرير تعديلك وسيُنشر قريباً."
+        case "rejected":
+            icon = "xmark.octagon.fill"
+            tint = SabqTheme.coral
+            headline = "تم رفض التعديل"
+            detail = "اعتذر فريق التحرير عن قبول هذا التعديل. راجع إشعارات الرفض لمعرفة التفاصيل."
+        default:
+            icon = "info.circle.fill"
+            tint = SabqTheme.secondaryInk
+            headline = "هذا المقال لم يعد في حالة طلب تعديل"
+            detail = "تغيّرت حالة المقال منذ آخر إشعار وصلك. راجع إشعاراتك لمعرفة آخر تحديث."
+        }
+        return VStack(spacing: 14) {
+            Spacer().frame(height: 30)
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 110, height: 110)
+                Image(systemName: icon)
+                    .font(.system(size: 56, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            Text(headline)
+                .font(SabqFonts.headline(size: 22))
+                .foregroundStyle(SabqTheme.ink)
+                .multilineTextAlignment(.center)
+            Text(detail)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .lineSpacing(5)
+                .padding(.horizontal, 24)
+
+            // If the editor's original note still has content, show it
+            // below so the writer can refresh their memory of what was
+            // asked. Collapsed visual style matches the form's note
+            // banner.
+            if let note = draft?.reviewNotes, !note.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "quote.opening")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(RevisionPalette.accent)
+                        Text("ملاحظة المراجعة السابقة")
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(RevisionPalette.accent)
+                    }
+                    Text(note)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(SabqTheme.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(RevisionPalette.accent.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(RevisionPalette.accent.opacity(0.25), lineWidth: 1)
+                )
+                .padding(.top, 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     // MARK: Networking
 
     @MainActor
@@ -449,7 +561,21 @@ struct ArticleRevisionView: View {
             bodyText = payload.body
             existingHeroURL = payload.imageURL
             existingAlbumURLs = payload.albumImages ?? []
-            withAnimation { screenState = .form }
+            // If the writer reopens this notification after they've
+            // already resubmitted, the server still serves a draft
+            // payload (the row exists) but reviewStatus has flipped
+            // from "needs_changes" to "pending_review" (or further).
+            // Surface the current status instead of letting them
+            // edit the same content again — server would 409 the
+            // PUT anyway with "ليس في حالة يحتاج تعديل" (mobile API
+            // route /articles/:id/resubmit, line ~4603).
+            if payload.isAwaitingReview {
+                withAnimation {
+                    screenState = .alreadyResubmitted(status: payload.reviewStatus ?? "pending_review")
+                }
+            } else {
+                withAnimation { screenState = .form }
+            }
         } catch let apiError as APIError {
             loadingError = apiError.errorDescription
         } catch {

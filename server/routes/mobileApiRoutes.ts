@@ -4550,6 +4550,12 @@ router.get("/articles/:id/draft", async (req: Request, res: Response) => {
         kind: article.articleType === "opinion" ? "opinion" : "news",
         reviewNotes: article.reviewNotes || "",
         requestedAt: (article.reviewedAt ?? article.updatedAt)?.toISOString() ?? null,
+        // Surface current reviewStatus so iOS can show "already
+        // resubmitted, awaiting review" instead of the edit form
+        // again when the writer reopens the same notification after
+        // their first resubmission. Values: needs_changes |
+        // pending_review | approved | rejected.
+        reviewStatus: article.reviewStatus,
       },
     });
   } catch (error) {
