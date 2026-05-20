@@ -186,8 +186,11 @@ async function sumEarned(range: DateRange): Promise<number> {
 }
 
 async function sumSpent(range: DateRange): Promise<number> {
+  // user_rewards_history uses `redeemed_at`, NOT `created_at` — discovered
+  // 2026-05-20 when the admin overview cards came back empty because this
+  // query threw a `column "created_at" does not exist` 500.
   const where = range.from
-    ? sql`AND created_at >= ${range.from} AND created_at <= ${range.to}`
+    ? sql`AND redeemed_at >= ${range.from} AND redeemed_at <= ${range.to}`
     : sql``;
   const [row] = await db.execute<{ total: number }>(sql`
     SELECT COALESCE(SUM(points_spent), 0)::bigint AS total
@@ -204,20 +207,58 @@ async function sumSpent(range: DateRange): Promise<number> {
 
 router.get("/tier-distribution", async (req, res) => {
   try {
-    const result = await db.execute<{ rank_level: number; count: number }>(sql`
-      SELECT rank_level, COUNT(*)::int AS count
+    // Compute the tier from lifetime_points using the live thresholds in
+    // LOYALTY_TIERS, NOT the stored rank_level column. The two diverge
+    // for the legacy users that the Phase 1 migration grandfathered to
+    // tier 5 ("سفير سبق") regardless of points — see the note in
+    // shared/loyalty.ts:67-70. The admin dashboard has to show the
+    // truth (the actual threshold-derived tier) so the numbers match
+    // the legend's "≥ X نقطة" labels.
+    //
+    // `grandfathered` reports how many seats each tier currently holds
+    // (by stored rank_level) that don't match the threshold-derived
+    // tier. We surface it on tier 5 so editors can see the legacy
+    // grant transparently.
+    const result = await db.execute<{
+      live_level: number;
+      count: number;
+    }>(sql`
+      SELECT
+        CASE
+          WHEN lifetime_points >= 10000 THEN 5
+          WHEN lifetime_points >= 2000  THEN 4
+          WHEN lifetime_points >= 500   THEN 3
+          WHEN lifetime_points >= 100   THEN 2
+          ELSE 1
+        END AS live_level,
+        COUNT(*)::int AS count
       FROM user_points_total
+      GROUP BY live_level
+      ORDER BY live_level
+    `).then((r) => r.rows as any[]);
+
+    // Side query: count users whose stored rank_level disagrees with the
+    // threshold-derived level (grandfathered grants). Bucketed by their
+    // stored level so we can annotate the right segment in the UI.
+    const grandfathered = await db.execute<{ stored_level: number; count: number }>(sql`
+      SELECT rank_level AS stored_level, COUNT(*)::int AS count
+      FROM user_points_total
+      WHERE
+        (rank_level = 5 AND lifetime_points < 10000)
+        OR (rank_level = 4 AND lifetime_points < 2000)
+        OR (rank_level = 3 AND lifetime_points < 500)
+        OR (rank_level = 2 AND lifetime_points < 100)
       GROUP BY rank_level
-      ORDER BY rank_level
     `).then((r) => r.rows as any[]);
 
     const total = result.reduce((sum, r) => sum + Number(r.count), 0);
 
-    // Fold in tiers that exist in LOYALTY_TIERS but have 0 users so the
-    // donut always shows the full 5-segment legend.
     const tiers = LOYALTY_TIERS.map((tier) => {
-      const row = result.find((r) => Number(r.rank_level) === tier.level);
+      const row = result.find((r) => Number(r.live_level) === tier.level);
       const count = row ? Number(row.count) : 0;
+      const grandfathered_count = grandfathered.find(
+        (g) => Number(g.stored_level) === tier.level,
+      );
       return {
         level: tier.level,
         nameAr: tier.nameAr,
@@ -226,6 +267,7 @@ router.get("/tier-distribution", async (req, res) => {
         minLifetimePoints: tier.minLifetimePoints,
         count,
         percentage: total > 0 ? (count / total) * 100 : 0,
+        grandfathered: grandfathered_count ? Number(grandfathered_count.count) : 0,
       };
     });
 
@@ -431,9 +473,6 @@ router.get("/top-users", async (req, res) => {
 router.get("/rewards-performance", async (req, res) => {
   try {
     const range = parsePeriod(req);
-    const where = range.from
-      ? sql`AND h.created_at >= ${range.from} AND h.created_at <= ${range.to}`
-      : sql``;
 
     const rows = await db.execute<{
       id: string;
@@ -461,7 +500,7 @@ router.get("/rewards-performance", async (req, res) => {
         SELECT COUNT(*)::int AS count, COALESCE(SUM(points_spent), 0)::int AS total_points
         FROM user_rewards_history h
         WHERE h.reward_id = r.id AND h.status = 'delivered'
-        ${where}
+        ${range.from ? sql`AND h.redeemed_at >= ${range.from} AND h.redeemed_at <= ${range.to}` : sql``}
       ) redemption ON TRUE
       ORDER BY redemptions DESC, r.points_cost DESC
     `).then((r) => r.rows as any[]);

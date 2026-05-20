@@ -51,6 +51,12 @@ type TierBucket = {
   minLifetimePoints: number;
   count: number;
   percentage: number;
+  /** Users whose stored rank_level matches this tier but whose lifetime
+   *  points fall BELOW the threshold (Phase 1 migration grandfathered
+   *  legacy "سفير سبق" / old top-tier holders, e.g. veteran sabq.org
+   *  editors). Surfaced as a sub-label so admins know the count
+   *  visually + can investigate via export. */
+  grandfathered: number;
 };
 
 type TimeSeriesPoint = { day: string; earned: number; spent: number };
@@ -473,16 +479,25 @@ function TierDistribution({ data, total, loading }: { data: TierBucket[]; total:
         {data.map((tier) => (
           <div
             key={tier.level}
-            className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+            className="flex items-start justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tier.color }} />
-              <span className="text-sm font-medium">{tier.nameAr}</span>
-              <span className="text-xs text-muted-foreground">
-                ≥ {tier.minLifetimePoints.toLocaleString("ar-SA")} نقطة
-              </span>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium">{tier.nameAr}</span>
+                  <span className="text-xs text-muted-foreground">
+                    ≥ {tier.minLifetimePoints.toLocaleString("ar-SA")} نقطة
+                  </span>
+                </div>
+                {tier.grandfathered > 0 && (
+                  <span className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                    + {tier.grandfathered} عضواً قديماً (مُرحَّل من النظام السابق)
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <span className="text-sm font-bold tabular-nums">{tier.count.toLocaleString("ar-SA")}</span>
               <span className="text-xs text-muted-foreground tabular-nums w-12 text-left">
                 {tier.percentage.toFixed(1)}%
