@@ -425,6 +425,12 @@ struct EditorialNotificationsView: View {
 struct EditorialNotificationDetailView: View {
     let item: APIEditorialNotification
     @Environment(\.dismiss) private var dismiss
+    /// Used to decide whether a `needs_revision` notification still has
+    /// a usable "open to edit" target — if the article isn't in the
+    /// pending-revisions list anymore, the writer already resubmitted
+    /// and we swap the button for a "تم إرسال التعديل" placeholder
+    /// so they can't accidentally edit twice.
+    @Environment(ArticleRevisionsStore.self) private var revisionsStore
     @State private var marked = false
 
     var body: some View {
@@ -439,6 +445,8 @@ struct EditorialNotificationDetailView: View {
                     metadataRow
                     if let action = actionForType() {
                         actionButton(action)
+                    } else if isResubmittedRevision {
+                        alreadyResubmittedChip
                     }
                 }
                 .padding(.horizontal, 20)
@@ -666,6 +674,20 @@ struct EditorialNotificationDetailView: View {
         let deepLink: NotificationDeepLink
     }
 
+    /// True when this notification is a `needs_revision` event whose
+    /// article is no longer in the pending-revisions list — the writer
+    /// already resubmitted and we shouldn't surface the "افتح للتعديل"
+    /// button anymore. We compare against `revisionsStore.items` rather
+    /// than fetching the article state on the fly so the swap is
+    /// instantaneous after a successful resubmit.
+    private var isResubmittedRevision: Bool {
+        guard item.type == "needs_revision",
+              let id = item.articleId, !id.isEmpty else {
+            return false
+        }
+        return !revisionsStore.items.contains(where: { $0.id == id })
+    }
+
     private func actionForType() -> ActionDescriptor? {
         switch item.type {
         case "published":
@@ -676,7 +698,13 @@ struct EditorialNotificationDetailView: View {
             // Needs the articleId — fall back gracefully if the
             // notification arrived without one (shouldn't happen, but
             // we'd rather surface the note than crash).
+            //
+            // Suppress the action when the writer already resubmitted
+            // (article isn't in revisionsStore anymore) — the chip
+            // below replaces the button so it's clear to the reader
+            // that no further action is needed.
             guard let id = item.articleId, !id.isEmpty else { return nil }
+            if isResubmittedRevision { return nil }
             return ActionDescriptor(title: "افتح للتعديل", icon: "pencil.and.list.clipboard", deepLink: .draft(id: id))
         case "scheduled", "rejected", "archived":
             // No actionable destination: scheduled has no detail page
@@ -687,6 +715,31 @@ struct EditorialNotificationDetailView: View {
         default:
             return nil
         }
+    }
+
+    /// Inline replacement for the action button when the writer already
+    /// resubmitted. Reads as "تم إرسال التعديل سابقاً" with a green
+    /// check, so opening the notification a second time gives clear
+    /// feedback instead of inviting another edit.
+    private var alreadyResubmittedChip: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 16, weight: .heavy))
+            Text("تم إرسال التعديل سابقاً")
+                .font(.system(size: 15, weight: .bold))
+        }
+        .foregroundStyle(SabqTheme.leaf)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(SabqTheme.leaf.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(SabqTheme.leaf.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private func actionButton(_ action: ActionDescriptor) -> some View {

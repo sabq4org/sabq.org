@@ -49,6 +49,10 @@ struct ArticleRevisionView: View {
         case form
         case submitting
         case success
+        /// The article isn't in `needs_changes` anymore. Reached when
+        /// the writer taps the same notification twice — instead of
+        /// the form we show a "you already sent the edit" placeholder.
+        case alreadyResubmitted
     }
 
     enum Field: Hashable { case title, body }
@@ -76,6 +80,17 @@ struct ArticleRevisionView: View {
                     formCard
                 case .success:
                     successHero
+                    Button { dismiss() } label: {
+                        Text("رجوع")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(SabqTheme.brandGradient, in: RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                case .alreadyResubmitted:
+                    alreadyResubmittedView
                     Button { dismiss() } label: {
                         Text("رجوع")
                             .font(.system(size: 16, weight: .bold))
@@ -415,6 +430,33 @@ struct ArticleRevisionView: View {
 
     // MARK: Success
 
+    /// Surface when the writer reopens a `needs_revision` notification
+    /// after already resubmitting. Replaces the form so a double-edit
+    /// can't happen by accident.
+    private var alreadyResubmittedView: some View {
+        VStack(spacing: 16) {
+            Spacer().frame(height: 30)
+            ZStack {
+                Circle()
+                    .fill(RevisionPalette.accent.opacity(0.12))
+                    .frame(width: 110, height: 110)
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(RevisionPalette.accent)
+            }
+            Text("تم إرسال التعديل سابقاً")
+                .font(SabqFonts.headline(size: 22))
+                .foregroundStyle(SabqTheme.ink)
+            Text("هذا المقال قيد المراجعة لدى هيئة التحرير. سيصلك إشعار جديد إذا طُلب تعديل إضافي أو عند النشر.")
+                .font(.system(size: 14))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .lineSpacing(5)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var successHero: some View {
         VStack(spacing: 14) {
             Spacer().frame(height: 30)
@@ -445,6 +487,19 @@ struct ArticleRevisionView: View {
         do {
             let payload = try await APIClient.shared.fetchArticleDraft(id: articleId)
             draft = payload
+            // Short-circuit when the article isn't actively waiting for
+            // edits anymore (already resubmitted, accepted, archived,
+            // or moved to a different review state). Without this gate
+            // a writer could tap the same `needs_revision` notification
+            // twice and edit the article a second time by accident —
+            // reported 2026-05-20.
+            if !payload.awaitingEdits {
+                withAnimation { screenState = .alreadyResubmitted }
+                // Drop the row from the local list too so the settings
+                // card collapses immediately.
+                store.removeOptimistically(id: articleId)
+                return
+            }
             title = payload.title
             bodyText = payload.body
             existingHeroURL = payload.imageURL

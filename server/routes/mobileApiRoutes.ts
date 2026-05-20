@@ -4550,6 +4550,12 @@ router.get("/articles/:id/draft", async (req: Request, res: Response) => {
         kind: article.articleType === "opinion" ? "opinion" : "news",
         reviewNotes: article.reviewNotes || "",
         requestedAt: (article.reviewedAt ?? article.updatedAt)?.toISOString() ?? null,
+        // Surface the current review state so the client can short-circuit
+        // to a "you already resubmitted, awaiting review" screen when the
+        // user taps the same `needs_revision` notification twice. iOS keys
+        // off this to avoid letting the writer submit two edits in a row.
+        reviewStatus: article.reviewStatus,
+        status: article.status,
       },
     });
   } catch (error) {

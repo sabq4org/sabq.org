@@ -1407,14 +1407,28 @@ nonisolated struct ArticleDraftPayload: Decodable {
     let kind: String
     let reviewNotes: String
     let requestedAt: String?
+    /// Current review state on the server. We use this to short-circuit
+    /// the revision form when the writer already resubmitted — without
+    /// it they could open the same `needs_revision` notification a
+    /// second time and accidentally edit the same article twice.
+    let reviewStatus: String?
+    let status: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, body, excerpt
         case imageURL = "imageUrl"
-        case albumImages, kind, reviewNotes, requestedAt
+        case albumImages, kind, reviewNotes, requestedAt, reviewStatus, status
     }
 
     var isOpinion: Bool { kind == "opinion" }
+
+    /// True when the article is still actively waiting for the writer's
+    /// edits. Any other state means the resubmit window has closed —
+    /// editor already accepted, asked again, or someone else changed
+    /// the article on the dashboard.
+    var awaitingEdits: Bool {
+        reviewStatus == "needs_changes" && status == "draft"
+    }
 }
 
 nonisolated struct ArticleDraftResponse: Decodable {
