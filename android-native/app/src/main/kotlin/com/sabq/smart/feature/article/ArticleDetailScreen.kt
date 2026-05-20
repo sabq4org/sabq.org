@@ -622,7 +622,13 @@ private fun MiddleDot() {
 
 @Composable
 private fun SmartSummaryCard(article: Article) {
-    val body = (article.aiSummary?.takeIf { it.isNotBlank() } ?: article.excerpt).trim()
+    val rawBody = (article.aiSummary?.takeIf { it.isNotBlank() } ?: article.excerpt).trim()
+    // Defensive: some editors copy-paste the headline into the
+    // `excerpt` field. iOS hides the smart-summary card in that case
+    // so the reader doesn't see "الموجز الذكي: <title>" right under
+    // the actual title. Mirror that behaviour here.
+    val title = article.title.trim()
+    val body = if (rawBody.isNotEmpty() && rawBody == title) "" else rawBody
     if (body.isEmpty()) return
 
     var isExpanded by remember(article.id) { mutableStateOf(false) }
