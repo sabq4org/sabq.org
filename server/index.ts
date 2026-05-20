@@ -789,6 +789,10 @@ if (!(globalThis as any).__sabqServer) {
     const loyaltyAdminRoutes = (await import("./routes/loyaltyAdmin")).default;
     app.use("/api/loyalty-admin", loyaltyAdminRoutes);
     console.log("[Server] ✅ Loyalty Admin Dashboard routes registered");
+
+    const hajjBlockRoutes = (await import("./routes/hajjBlock")).default;
+    app.use("/api/hajj-block", hajjBlockRoutes);
+    console.log("[Server] ✅ Hajj Block routes registered");
     
     // Register Thumbnail routes
     const thumbnailRoutes = await import("./routes/thumbnailRoutes");

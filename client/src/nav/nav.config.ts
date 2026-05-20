@@ -59,6 +59,7 @@ import {
   FileAudio,
   Wrench,
   Trophy,
+  Moon,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -702,6 +703,16 @@ export const navConfig: NavItem[] = [
     labelAr: "نظام الولاء",
     icon: Trophy,
     path: "/dashboard/loyalty-admin",
+    roles: ["admin"],
+  },
+
+  // ===== بلوك الحج / Hajj Block =====
+  {
+    id: "hajj_block",
+    labelKey: "nav.hajj_block",
+    labelAr: "بلوك الحج",
+    icon: Moon,
+    path: "/dashboard/hajj-block",
     roles: ["admin"],
   },
 

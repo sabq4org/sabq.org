@@ -54,6 +54,7 @@ const QuadCategoriesBlock = lazy(() =>
   import("@/components/QuadCategoriesBlock").then(module => ({ default: module.QuadCategoriesBlock }))
 );
 const GulfLiveBlock = lazy(() => import("@/components/GulfLiveBlock"));
+const HajjBlock = lazy(() => import("@/components/HajjBlock").then(m => ({ default: m.HajjBlock })));
 const NewsMap = lazy(() => import("@/components/NewsMap"));
 
 function SectionSkeleton({ height = 200 }: { height?: number }) {
@@ -296,6 +297,16 @@ export default function Home() {
               <GulfLiveBlock />
             </Suspense>
           </ErrorBoundary> */}
+
+          {/* Hajj Block ("صدى الحج") — only renders during the configured
+              Hajj season; the backend `/api/hajj-block` returns
+              {isVisible:false} outside that window so this Suspense
+              produces no DOM the rest of the year. */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <HajjBlock />
+            </Suspense>
+          </ErrorBoundary>
 
           {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}
           <DmsLeaderboardAd />

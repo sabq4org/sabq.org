@@ -3972,6 +3972,49 @@ export type InsertSmartBlock = z.infer<typeof insertSmartBlockSchema>;
 export type UpdateSmartBlock = Partial<InsertSmartBlock>;
 
 // ============================================
+// Hajj Block — singleton config table (2026-05-20)
+// ============================================
+//
+// Powers the "صدى الحج" homepage block during the Hajj season. Lives
+// as a singleton (id='default') instead of the generic smart_blocks
+// table because it has fields no other block needs: a curated keyword
+// pool, a season-window pair, pinned article IDs, and a few display
+// tunables. The frontend's HajjBlock.tsx reads /api/hajj-block and
+// hides itself when `isActive=false` or we're outside the season
+// window, so editors can enable it weeks ahead without affecting
+// production.
+export const hajjBlockConfig = pgTable("hajj_block_config", {
+  id: varchar("id").primaryKey().default("default"), // enforced singleton via UNIQUE
+  isActive: boolean("is_active").notNull().default(false),
+  // Display copy — kept editable so the dashboard can A/B "مناسك الحج"
+  // vs "صدى الحج" without a code deploy.
+  title: varchar("title", { length: 80 }).notNull().default("صدى الحج"),
+  subtitle: varchar("subtitle", { length: 160 }),
+  // Keywords used to discover Hajj articles. Articles match when their
+  // title / excerpt / tags contain any of these (case-insensitive).
+  keywords: jsonb("keywords").$type<string[]>().notNull()
+    .default(sql`'["الحج","المناسك","عرفات","المزدلفة","منى","الجمرات","ضيوف الرحمن","المشاعر المقدسة"]'::jsonb`),
+  // Max articles to show in the block.
+  articleLimit: integer("article_limit").notNull().default(5),
+  // Only consider articles published within the last N hours so a
+  // dormant article from a previous season doesn't surface.
+  lookbackHours: integer("lookback_hours").notNull().default(48),
+  // Hijri-aware season window — block hides itself outside this range
+  // even when isActive=true. ISO dates (Gregorian) since the backend
+  // already works in that calendar; the UI converts on render.
+  seasonStartDate: timestamp("season_start_date"),
+  seasonEndDate: timestamp("season_end_date"),
+  // Editor-pinned articles always appear at the top of the block,
+  // before the keyword-discovered ones. Order in this array = display
+  // order.
+  pinnedArticleIds: jsonb("pinned_article_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type HajjBlockConfig = typeof hajjBlockConfig.$inferSelect;
+
+// ============================================
 // ENGLISH SMART BLOCKS
 // ============================================
 
