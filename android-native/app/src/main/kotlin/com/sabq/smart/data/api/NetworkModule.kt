@@ -26,7 +26,7 @@ import retrofit2.Retrofit
  * it transparently — keeping the iOS URL contract stable. We follow
  * the same convention here.
  */
-private const val BASE_URL = "https://sabq.org/"
+private const val BASE_URL = "http://10.0.2.2:5001/"
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -61,7 +61,7 @@ object NetworkModule {
             if (BuildConfig.DEBUG) {
                 addInterceptor(
                     HttpLoggingInterceptor().apply {
-                        level = HttpLoggingInterceptor.Level.BASIC
+                        level = HttpLoggingInterceptor.Level.BODY
                     },
                 )
             }

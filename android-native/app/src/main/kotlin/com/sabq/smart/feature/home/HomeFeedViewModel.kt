@@ -4,8 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.ArticleRepository
+import com.sabq.smart.data.AudioNewsletter
 import com.sabq.smart.data.BookmarksStore
+import com.sabq.smart.data.CalendarEvent
+import com.sabq.smart.data.HomeExtrasRepository
+import com.sabq.smart.data.InsightsRepository
+import com.sabq.smart.data.LoyaltyRepository
+import com.sabq.smart.data.LoyaltySummary
 import com.sabq.smart.data.Section
+import com.sabq.smart.data.Story
+import com.sabq.smart.data.TodayInsights
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async
@@ -29,13 +37,38 @@ sealed interface HomeFeedUiState {
         val isRefreshing: Boolean = false,
         val isLoadingMore: Boolean = false,
         val bookmarkedIds: Set<String> = emptySet(),
+        /** Top breaking-news headline — shown as a single coral pill
+         *  between the greeting and the featured carousel. */
+        val breaking: Article? = null,
+        /** Top opinion articles (max 5). Rendered as a horizontal
+         *  rail under the opinionsPreview section. */
+        val opinions: List<Article> = emptyList(),
+        /** Top trending articles (max 3). Rendered as a ranked list
+         *  inside a SurfaceCard. */
+        val trending: List<Article> = emptyList(),
+        /** Featured story rails (circular bubbles). */
+        val stories: List<Story> = emptyList(),
+        /** Today's upcoming calendar events (max 3 shown). */
+        val calendar: List<CalendarEvent> = emptyList(),
+        /** Latest audio newsletter — surfaced as a play card. */
+        val audioNewsletter: AudioNewsletter? = null,
+        /** Personal-journey insights for the signed-in member. Null
+         *  before the fetch completes OR for signed-out viewers. */
+        val journeyInsights: TodayInsights? = null,
+        /** Loyalty summary — used to render the LoyaltyStripView and
+         *  the "نقاط الولاء" metric cell. Null before fetch / signed
+         *  out. */
+        val loyaltySummary: LoyaltySummary? = null,
     ) : HomeFeedUiState
 }
 
 @HiltViewModel
 class HomeFeedViewModel @Inject constructor(
     private val repo: ArticleRepository,
+    private val extrasRepo: HomeExtrasRepository,
     private val bookmarks: BookmarksStore,
+    private val insightsRepo: InsightsRepository,
+    private val loyaltyRepo: LoyaltyRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeFeedUiState>(HomeFeedUiState.Loading)
@@ -106,12 +139,58 @@ class HomeFeedViewModel @Inject constructor(
                         currentPage = articles.page,
                         hasMore = articles.hasMore,
                     )
+                    // Side-fetches: best-effort, populate post-render.
+                    loadExtras()
                 }
                 .onFailure { e ->
                     _state.value = HomeFeedUiState.Error(
                         message = e.localizedMessage ?: "تعذّر تحميل الأخبار",
                     )
                 }
+        }
+    }
+
+    /** Fetch the secondary Home blocks (breaking pill, opinions rail,
+     *  trending top-3, plus the auth-gated personal-journey insights +
+     *  loyalty summary). Each call is best-effort — failures keep the
+     *  section empty rather than crash the screen. */
+    private fun loadExtras() {
+        viewModelScope.launch {
+            val breakingJob = async { runCatching { repo.getBreaking() }.getOrDefault(emptyList()) }
+            val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 5) }.getOrNull()?.items ?: emptyList() }
+            val trendingJob = async { runCatching { repo.getTrending() }.getOrDefault(emptyList()) }
+            val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
+            val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }
+            val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
+            // Auth-required side-fetches. Anonymous users will 401 here;
+            // we swallow that and the personal-journey block stays
+            // hidden because [journeyInsights] remains null.
+            val insightsJob = async { runCatching { insightsRepo.getToday() }.getOrNull() }
+            val loyaltyJob = async { runCatching { loyaltyRepo.getSummary() }.getOrNull() }
+
+            val breaking = breakingJob.await().firstOrNull()
+            val opinions = opinionsJob.await()
+            val trending = trendingJob.await().take(3)
+            val stories = storiesJob.await()
+            val calendar = calendarJob.await().take(3)
+            val audioNewsletter = audioJob.await()
+            val insights = insightsJob.await()
+            val loyalty = loyaltyJob.await()
+
+            _state.update { c ->
+                if (c is HomeFeedUiState.Loaded) {
+                    c.copy(
+                        breaking = breaking,
+                        opinions = opinions,
+                        trending = trending,
+                        stories = stories,
+                        calendar = calendar,
+                        audioNewsletter = audioNewsletter,
+                        journeyInsights = insights,
+                        loyaltySummary = loyalty,
+                    )
+                } else c
+            }
         }
     }
 

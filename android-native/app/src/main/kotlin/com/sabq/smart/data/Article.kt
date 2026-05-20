@@ -23,6 +23,26 @@ data class Article(
     val body: String? = null,
     val articleType: String? = null,
     val authorGender: String? = null,
+    /** AI-generated summary string. Kept separate from [excerpt] so the
+     *  Smart Summary card on the detail screen can prefer the AI text
+     *  over the editor's excerpt — mirrors iOS `displayArticle.aiSummary
+     *  || displayArticle.excerpt` at `ArticleDetailView.swift:614`. */
+    val aiSummary: String? = null,
+    /** Article tags / keywords. Empty when the backend omits them.
+     *  Surfaced as chips under the article body. */
+    val tags: List<String> = emptyList(),
+    /** Canonical public article URL (used by the share sheet). When
+     *  null we fall back to `${webOrigin}/article/${slug}`. */
+    val articleUrl: String? = null,
+    /** When true the hero shows the small "صورة من الذكاء الاصطناعي"
+     *  badge overlay (iOS `aiImageBadgeOverlay`). */
+    val isAiGeneratedImage: Boolean = false,
+    val aiImageModel: String? = null,
+    /** Raw ISO-8601 publish timestamp from the backend. Kept separate
+     *  from [dateFormatted] (which is the human "اليوم 14:32" string)
+     *  so callers can sort by it. Null when the backend omits the
+     *  field. */
+    val publishedAtIso: String? = null,
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent

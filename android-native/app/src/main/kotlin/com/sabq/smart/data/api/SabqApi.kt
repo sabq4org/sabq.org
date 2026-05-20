@@ -56,6 +56,29 @@ interface SabqApi {
     @GET("api/v1/breaking")
     suspend fun getBreaking(): ApiBreakingTicker
 
+    /** Trending page — top articles + keywords. iOS uses
+     *  `articlesStore.trendingArticles.prefix(3)` on Home. */
+    @GET("api/v1/trending")
+    suspend fun getTrending(): ApiArticlesResponse
+
+    // -- home extras (public namespace, NOT v1) ----------------------
+
+    /** Story rails — circular bubbles at the top of Home. iOS uses
+     *  `/api/stories` (public). Response shape: `{ items: [...] }`. */
+    @GET("api/stories")
+    suspend fun getStories(): ApiStoriesResponse
+
+    /** Today's upcoming calendar events. Public namespace per iOS
+     *  `APIClient.fetchUpcomingCalendarEvents` (line 1140). */
+    @GET("api/calendar/upcoming")
+    suspend fun getCalendarUpcoming(
+        @Query("days") days: Int = 14,
+    ): ApiCalendarEventsResponse
+
+    /** Audio newsletters list. Public namespace per iOS line 1175. */
+    @GET("api/audio-newsletters")
+    suspend fun getAudioNewsletters(): ApiAudioNewslettersResponse
+
     // -- public (article detail / opinions) ---------------------------
 
     /**
@@ -65,6 +88,15 @@ interface SabqApi {
      */
     @GET("api/articles/{slug}")
     suspend fun getArticleBySlug(@Path("slug") slug: String): ApiArticle
+
+    /**
+     * Related-articles list for the bottom of the article detail
+     * screen. Same wrapper shape as `/articles`: `{ articles: [...] }`.
+     * iOS counterpart: `APIClient.fetchRelated` at
+     * `Services/APIClient.swift:327`.
+     */
+    @GET("api/articles/{slug}/related")
+    suspend fun getRelatedArticles(@Path("slug") slug: String): List<ApiArticle>
 
     // -- auth ---------------------------------------------------------
 
@@ -96,6 +128,19 @@ interface SabqApi {
      */
     @GET("api/v1/loyalty/me")
     suspend fun getLoyaltyMe(): ApiLoyaltySummary
+
+    // -- insights (personal knowledge journey) -----------------------
+
+    /**
+     * Today's "knowledge journey" payload for the signed-in member —
+     * greeting + reading time + completion rate + likes + comments +
+     * top-3 interest category names. Bearer-token required (401
+     * anonymous). Mirrors iOS `APIClient.fetchTodayInsightsRich`
+     * (`Services/APIClient.swift:1011`). Backend handler is at
+     * `server/routes/mobileApiRoutes.ts:4349`.
+     */
+    @GET("api/v1/insights/today")
+    suspend fun getInsightsToday(): ApiTodayInsights
 
     // -- comments -----------------------------------------------------
 
@@ -208,6 +253,23 @@ interface SabqApi {
         @Body body: ApiEditorialNotificationPreferences,
     ): retrofit2.Response<Unit>
 
+    // -- likes and behavior ------------------------------------------
+
+    @POST("api/v1/articles/{id}/react")
+    suspend fun toggleArticleLike(
+        @Path("id") articleId: String,
+    ): ApiArticleReactionResponse
+
+    @GET("api/v1/articles/{id}/react")
+    suspend fun fetchArticleLikeStatus(
+        @Path("id") articleId: String,
+    ): ApiArticleReactionResponse
+
+    @POST("api/v1/behavior/track")
+    suspend fun trackBehavior(
+        @Body body: ApiBehaviorEventRequest,
+    ): retrofit2.Response<Unit>
+
     // -- moment-by-moment --------------------------------------------
 
     /**
@@ -222,4 +284,16 @@ interface SabqApi {
         @Query("filter") filter: String? = null,
         @Query("limit") limit: Int = 20,
     ): ApiLiveUpdatesResponse
+
+    // -- keyword & authors -------------------------------------------
+
+    @GET("api/keyword/{keyword}")
+    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): List<ApiArticle>
+
+    @GET("api/v1/authors/by-name")
+    suspend fun getAuthorPage(
+        @Query("name") name: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20,
+    ): ApiAuthorPage
 }

@@ -8,11 +8,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
 
 /**
  * Map an [ApiArticle] from the backend to the domain [Article] our
@@ -39,7 +35,8 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         ?: summary
         ?: ""
 
-    val absoluteImageUrl = imageUrl
+    val resolvedImageUrl = imageUrl ?: thumbnailUrl
+    val absoluteImageUrl = resolvedImageUrl
         ?.takeIf { it.isNotBlank() }
         ?.let { if (it.startsWith("http")) it else webOrigin + (if (it.startsWith("/")) it else "/$it") }
 
@@ -50,6 +47,14 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
     val breaking = isBreaking == true || newsType?.equals("breaking", ignoreCase = true) == true
 
     val resolvedAuthor = authorName?.takeIf { it.isNotBlank() } ?: resolveAuthor(author)
+
+    val resolvedTags: List<String> = extractTags(seo, tags)
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+
+    val resolvedArticleUrl = articleUrl?.takeIf { it.isNotBlank() }
+        ?: slug?.takeIf { it.isNotBlank() }?.let { "$webOrigin/article/$it" }
 
     return Article(
         id = id.ifBlank { slug ?: "anon-${hashCode()}" },
@@ -67,6 +72,12 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         body = body?.takeIf { it.isNotBlank() },
         articleType = articleType,
         authorGender = authorGender,
+        aiSummary = aiSummary?.trim()?.takeIf { it.isNotBlank() },
+        tags = resolvedTags,
+        articleUrl = resolvedArticleUrl,
+        isAiGeneratedImage = isAiGeneratedImage == true,
+        aiImageModel = aiImageModel?.takeIf { it.isNotBlank() },
+        publishedAtIso = publishedAt?.takeIf { it.isNotBlank() },
     )
 }
 
@@ -157,4 +168,55 @@ private fun estimateReadingTime(excerpt: String): String {
     val estimatedTotalWords = wordCount * 10
     val minutes = (estimatedTotalWords / 200).coerceIn(2, 8)
     return "$minutes ${if (minutes == 1) "دقيقة" else "دقائق"}"
+}
+
+private fun extractTags(seo: com.sabq.smart.data.api.ApiSeo?, tagsElement: JsonElement?): List<String> {
+    val list = mutableListOf<String>()
+
+    // 1. Check SEO keywords
+    if (seo?.keywords != null) {
+        val keywordsEl = seo.keywords
+        if (keywordsEl is JsonArray) {
+            for (element in keywordsEl) {
+                val content = (element as? JsonPrimitive)?.content
+                if (!content.isNullOrBlank()) {
+                    list.add(content)
+                }
+            }
+        } else if (keywordsEl is JsonPrimitive) {
+            val csv = keywordsEl.content
+            if (csv.isNotBlank()) {
+                list.addAll(csv.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+            }
+        }
+    }
+
+    if (list.isNotEmpty()) return list
+
+    // 2. Check tagsElement
+    if (tagsElement != null) {
+        if (tagsElement is JsonArray) {
+            for (element in tagsElement) {
+                if (element is JsonObject) {
+                    val name = (element["name"] as? JsonPrimitive)?.content
+                        ?: (element["nameAr"] as? JsonPrimitive)?.content
+                    if (!name.isNullOrBlank()) {
+                        list.add(name)
+                    }
+                } else {
+                    val content = (element as? JsonPrimitive)?.content
+                    if (!content.isNullOrBlank()) {
+                        list.add(content)
+                    }
+                }
+            }
+        } else if (tagsElement is JsonPrimitive) {
+            val csv = tagsElement.content
+            if (csv.isNotBlank()) {
+                list.addAll(csv.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+            }
+        }
+    }
+
+    return list
 }

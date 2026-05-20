@@ -92,6 +92,9 @@ fun FocalCachedAsyncImage(
                 modifier = Modifier.fillMaxSize(),
                 alignment = alignment,
                 contentScale = ContentScale.Crop,
+                onError = { errorState ->
+                    android.util.Log.e("FocalImage", "Failed to load image: $url", errorState.result.throwable)
+                },
                 loading = { placeholder() },
                 error = { placeholder() },
             )

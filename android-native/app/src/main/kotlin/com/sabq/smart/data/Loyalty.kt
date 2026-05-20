@@ -133,3 +133,22 @@ data class LoyaltyProgress(
     val pointsToNext: Int,
     val fraction: Float,
 )
+
+enum class LoyaltyAction(val value: String) {
+    READ_OPEN("READ"),
+    READ_DEEP("READ_DEEP"),
+    LIKE("LIKE"),
+    SHARE("SHARE"),
+    COMMENT("COMMENT"),
+    NOTIFICATION_OPEN("NOTIFICATION_OPEN"),
+    DAILY_LOGIN("DAILY_LOGIN")
+}
+
+data class LoyaltyEventPayload(
+    val action: String,
+    val source: String? = null,
+    val articleId: String? = null,
+    val duration: Int? = null,
+    val extraInfo: String? = null,
+)
+

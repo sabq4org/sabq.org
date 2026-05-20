@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2 } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
@@ -83,10 +83,13 @@ type Article = {
   isAiGeneratedThumbnail?: boolean;
   source?: string;
   sourceMetadata?: {
-    type?: 'email' | 'whatsapp' | 'manual';
+    type?: 'email' | 'whatsapp' | 'manual' | 'mobile';
     from?: string;
     senderName?: string;
     senderId?: string;
+    platform?: 'ios' | 'android' | string;
+    firstName?: string;
+    lastName?: string;
   } | null;
   category?: {
     id: string;
@@ -819,9 +822,36 @@ export default function ArticlesManagement() {
           البريد الذكي
         </Badge>
       ),
+      'ios-app': (
+        <Badge variant="outline" className="gap-1 bg-slate-100 dark:bg-slate-900/50 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700" data-testid="badge-source-ios">
+          <Smartphone className="h-3 w-3" />
+          تطبيق iOS
+        </Badge>
+      ),
+      'android-app': (
+        <Badge variant="outline" className="gap-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800" data-testid="badge-source-android">
+          <Smartphone className="h-3 w-3" />
+          تطبيق Android
+        </Badge>
+      ),
     };
     return badges[(source || 'manual') as keyof typeof badges] || badges.manual;
   };
+
+  const isMobileAppSource = (source?: string) => source === 'ios-app' || source === 'android-app';
+  const getMobileSenderName = (article: Article) => {
+    const meta = article.sourceMetadata;
+    if (meta?.firstName || meta?.lastName) {
+      return `${meta.firstName || ''} ${meta.lastName || ''}`.trim();
+    }
+    if (meta?.senderName) return meta.senderName;
+    if (article.author?.firstName && article.author?.lastName) {
+      return `${article.author.firstName} ${article.author.lastName}`;
+    }
+    return article.author?.firstName || article.author?.email || 'مراسل';
+  };
+  const getMobilePlatformLabel = (source?: string) =>
+    source === 'android-app' ? 'تطبيق Android' : 'تطبيق iOS';
 
   return (
     <DashboardLayout>
@@ -1151,6 +1181,11 @@ export default function ArticlesManagement() {
                                       <MessageCircle className="h-3 w-3" />
                                       <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
                                     </>
+                                  ) : isMobileAppSource(article.source) ? (
+                                    <>
+                                      <Smartphone className="h-3 w-3" />
+                                      <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
+                                    </>
                                   ) : (article as any).publisher?.companyName ? (
                                     <>
                                       <Building2 className="h-3 w-3" />
@@ -1353,6 +1388,11 @@ export default function ArticlesManagement() {
                               <>
                                 <MessageCircle className="h-3 w-3" />
                                 <span>أُرسل بواسطة: {article.sourceMetadata?.senderName || article.sourceMetadata?.from || 'واتساب'}</span>
+                              </>
+                            ) : isMobileAppSource(article.source) ? (
+                              <>
+                                <Smartphone className="h-3 w-3" />
+                                <span>أُرسل من {getMobilePlatformLabel(article.source)}: {getMobileSenderName(article)}</span>
                               </>
                             ) : (article as any).publisher?.companyName ? (
                               <>
