@@ -50,6 +50,21 @@ data class ApiArticlesResponse(
     val hasMore: Boolean? = null,
 )
 
+/**
+ * Response shape for `GET /api/v1/trending`. Mirrors iOS
+ * `APITrendingPageResponse` (`Services/APIModels.swift:1379-1392`) —
+ * both `articles`/`data` and `tags`/`keywords` aliases are accepted
+ * because backend revs have shipped each spelling at different times.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiTrendingPageResponse(
+    @JsonNames("articles", "data")
+    val articles: List<ApiArticle> = emptyList(),
+    @JsonNames("tags", "keywords")
+    val tags: List<String> = emptyList(),
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ApiArticle(
