@@ -22,6 +22,12 @@ private val FONT_SIZE_KEY = floatPreferencesKey("article_font_size")
 private val LINE_SPACING_KEY = floatPreferencesKey("article_line_spacing")
 private val READER_SERIF_KEY = booleanPreferencesKey("article_use_reader_font")
 
+/** Onboarding completion flag — kept under the same key name iOS uses
+ *  (`sabqHasCompletedOnboardingV2`) so future cross-platform telemetry
+ *  / debugging stays symmetric. Bump the version suffix when a
+ *  redesigned onboarding ships. */
+private val ONBOARDED_V2_KEY = booleanPreferencesKey("sabqHasCompletedOnboardingV2")
+
 /**
  * User preferences — mirrors iOS @AppStorage keys 1:1:
  *   - `isDarkMode` (Bool, default false)
@@ -45,6 +51,10 @@ data class AppSettings(
     val articleFontSize: Float = 17f,
     val articleLineSpacing: Float = 6f,
     val articleUseReaderFont: Boolean = false,
+    /** True once the user has either finished the 4-slide welcome flow
+     *  or tapped "تخطّي". Default false → onboarding is shown on first
+     *  launch of every fresh install. */
+    val hasCompletedOnboardingV2: Boolean = false,
 )
 
 @Singleton
@@ -59,6 +69,7 @@ class SettingsStore @Inject constructor(
             articleFontSize = prefs[FONT_SIZE_KEY] ?: 17f,
             articleLineSpacing = prefs[LINE_SPACING_KEY] ?: 6f,
             articleUseReaderFont = prefs[READER_SERIF_KEY] ?: false,
+            hasCompletedOnboardingV2 = prefs[ONBOARDED_V2_KEY] ?: false,
         )
     }
 
@@ -93,5 +104,9 @@ class SettingsStore @Inject constructor(
 
     suspend fun setArticleUseReaderFont(value: Boolean) {
         context.settingsDataStore.edit { it[READER_SERIF_KEY] = value }
+    }
+
+    suspend fun setOnboardingCompleted(value: Boolean) {
+        context.settingsDataStore.edit { it[ONBOARDED_V2_KEY] = value }
     }
 }

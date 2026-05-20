@@ -46,4 +46,12 @@ class SettingsViewModel @Inject constructor(
     fun setUseReaderFont(value: Boolean) {
         viewModelScope.launch { store.setArticleUseReaderFont(value) }
     }
+
+    /** Called by the 4-slide welcome flow when the user either taps the
+     *  final CTA ("ابدأ الآن") or "تخطّي" on any earlier slide. Sets
+     *  the persistent flag so the cover never shows again on this
+     *  install. */
+    fun completeOnboarding() {
+        viewModelScope.launch { store.setOnboardingCompleted(true) }
+    }
 }
