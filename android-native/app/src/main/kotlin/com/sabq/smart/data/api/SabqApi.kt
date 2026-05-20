@@ -96,7 +96,7 @@ interface SabqApi {
      * `Services/APIClient.swift:327`.
      */
     @GET("api/articles/{slug}/related")
-    suspend fun getRelatedArticles(@Path("slug") slug: String): ApiArticlesResponse
+    suspend fun getRelatedArticles(@Path("slug") slug: String): List<ApiArticle>
 
     // -- auth ---------------------------------------------------------
 
@@ -253,6 +253,23 @@ interface SabqApi {
         @Body body: ApiEditorialNotificationPreferences,
     ): retrofit2.Response<Unit>
 
+    // -- likes and behavior ------------------------------------------
+
+    @POST("api/v1/articles/{id}/react")
+    suspend fun toggleArticleLike(
+        @Path("id") articleId: String,
+    ): ApiArticleReactionResponse
+
+    @GET("api/v1/articles/{id}/react")
+    suspend fun fetchArticleLikeStatus(
+        @Path("id") articleId: String,
+    ): ApiArticleReactionResponse
+
+    @POST("api/v1/behavior/track")
+    suspend fun trackBehavior(
+        @Body body: ApiBehaviorEventRequest,
+    ): retrofit2.Response<Unit>
+
     // -- moment-by-moment --------------------------------------------
 
     /**
@@ -267,4 +284,16 @@ interface SabqApi {
         @Query("filter") filter: String? = null,
         @Query("limit") limit: Int = 20,
     ): ApiLiveUpdatesResponse
+
+    // -- keyword & authors -------------------------------------------
+
+    @GET("api/keyword/{keyword}")
+    suspend fun getArticlesByKeyword(@Path("keyword") keyword: String): List<ApiArticle>
+
+    @GET("api/v1/authors/by-name")
+    suspend fun getAuthorPage(
+        @Query("name") name: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20,
+    ): ApiAuthorPage
 }

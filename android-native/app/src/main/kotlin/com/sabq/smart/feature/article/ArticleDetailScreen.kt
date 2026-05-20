@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -35,7 +37,8 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PersonAddAlt1
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
@@ -55,12 +58,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -78,10 +83,27 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.BookmarksStore
+import com.sabq.smart.data.LikesStore
+import com.sabq.smart.data.BehaviorTracker
 import com.sabq.smart.data.Comment
 import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.settings.SettingsViewModel
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.Collections
+import android.net.Uri
+import com.sabq.smart.util.InlineRun
+import com.sabq.smart.util.GalleryImage
+import com.sabq.smart.util.VideoProvider
 import com.sabq.smart.ui.components.BreakingPill
 import com.sabq.smart.ui.components.CommentComposer
 import com.sabq.smart.ui.components.CommentRow
@@ -89,6 +111,7 @@ import com.sabq.smart.ui.components.FocalCachedAsyncImage
 import com.sabq.smart.ui.components.SmallActionButton
 import com.sabq.smart.ui.components.StatusChip
 import com.sabq.smart.ui.theme.SabqTheme
+import com.sabq.smart.ui.theme.IbmPlexSansArabic
 import com.sabq.smart.util.BlockNode
 import com.sabq.smart.util.HtmlSimpleParser
 import dagger.hilt.EntryPoint
@@ -126,6 +149,7 @@ fun ArticleDetailScreen(
     onBack: () -> Unit,
     onLoginRequested: () -> Unit = {},
     onTagClick: (String) -> Unit = {},
+    onAuthorClick: (String) -> Unit = {},
     onRelatedClick: (Article) -> Unit = {},
     viewModel: ArticleDetailViewModel = hiltViewModel(),
     commentsViewModel: CommentsViewModel = hiltViewModel(),
@@ -155,6 +179,7 @@ fun ArticleDetailScreen(
                 onLoginRequested = onLoginRequested,
                 onBack = onBack,
                 onTagClick = onTagClick,
+                onAuthorClick = onAuthorClick,
                 onRelatedClick = onRelatedClick,
             )
         }
@@ -174,22 +199,60 @@ private fun ArticleBody(
     onLoginRequested: () -> Unit,
     onBack: () -> Unit,
     onTagClick: (String) -> Unit,
+    onAuthorClick: (String) -> Unit,
     onRelatedClick: (Article) -> Unit,
 ) {
+    android.util.Log.d("ArticleBody", "Article: ${article.title}, tags: ${article.tags}, related size: ${related.size}")
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    // Bookmarks store — provided via Hilt entry point so the screen can
-    // read/toggle without a dedicated VM for v1.
-    val bookmarks = remember {
+    // Resolve dependencies via EntryPoint
+    val entryPoint = remember {
         EntryPointAccessors.fromApplication(
             context.applicationContext,
             ArticleDetailEntryPoint::class.java,
-        ).bookmarksStore()
+        )
     }
+
+    val bookmarks = remember { entryPoint.bookmarksStore() }
     val bookmarkedIds by bookmarks.ids.collectAsState(initial = emptySet())
     val isBookmarked = article.bookmarkKey in bookmarkedIds
+
+    val likesStore = remember { entryPoint.likesStore() }
+    val likedIds by likesStore.likedIds.collectAsState(initial = emptySet())
+    val isLiked = article.id in likedIds
+    var isLikeBusy by remember { mutableStateOf(false) }
+
+    val behaviorTracker = remember { entryPoint.behaviorTracker() }
+
+    // Behavior tracking session lifecycle
+    DisposableEffect(article.id) {
+        behaviorTracker.startSession(article.id)
+        onDispose {
+            behaviorTracker.endSession()
+        }
+    }
+
+    // Scroll progress collection to track max scroll percentage
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val total = info.totalItemsCount
+            if (total <= 0) 0f
+            else {
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                (last.toFloat() / (total - 1).coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+            }
+        }.collect { progress ->
+            behaviorTracker.updateScroll(progress.toDouble())
+        }
+    }
+
+    // Reconcile likes on entry/id change
+    LaunchedEffect(article.id) {
+        likesStore.reconcile(article.id)
+    }
 
     val commentsState by commentsViewModel.state.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
@@ -243,7 +306,7 @@ private fun ArticleBody(
             item { ArticleTitle(article = article, fontSize = fontSize, useSerif = useSerif) }
 
             // 4. Meta row (author · reading time · date).
-            item { MetaRow(article = article) }
+            item { MetaRow(article = article, onAuthorClick = onAuthorClick) }
 
             // 5. Smart Summary Card.
             if (!isFocusMode) {
@@ -342,10 +405,21 @@ private fun ArticleBody(
         // we haven't scrolled. iOS at `ArticleDetailView.swift:302`.
         ReadingProgressBar(state = listState)
 
-        // Top toolbar: back (top-end / RTL right) + bookmark + share.
+        // Top toolbar: back (top-end / RTL right) + bookmark + share + like.
         TopToolbar(
+            isLiked = isLiked,
             isBookmarked = isBookmarked,
+            isLikeBusy = isLikeBusy,
             onBack = onBack,
+            onLike = {
+                if (!isLikeBusy) {
+                    isLikeBusy = true
+                    scope.launch {
+                        likesStore.toggle(article.id)
+                        isLikeBusy = false
+                    }
+                }
+            },
             onBookmark = { scope.launch { bookmarks.toggle(article.bookmarkKey) } },
             onShare = { shareArticle(context, article) },
         )
@@ -368,6 +442,7 @@ private fun ArticleBody(
 
 @Composable
 private fun HeroImage(article: Article) {
+    android.util.Log.d("HeroImage", "Rendering HeroImage with URL: ${article.imageUrl}")
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -477,7 +552,8 @@ private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
         fontSize = (fontSize + 8).sp,
         fontWeight = FontWeight.Black,
         color = SabqTheme.colors.ink,
-        fontFamily = if (useSerif) FontFamily.Serif else FontFamily.Default,
+        fontFamily = if (useSerif) FontFamily.Serif else IbmPlexSansArabic,
+        lineHeight = (fontSize + 8 + 4).sp,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
@@ -489,9 +565,9 @@ private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
 // ============================================================
 
 @Composable
-private fun MetaRow(article: Article) {
+private fun MetaRow(article: Article, onAuthorClick: (String) -> Unit) {
     if (article.isOpinion) {
-        OpinionMetaRow(article = article)
+        OpinionMetaRow(article = article, onAuthorClick = onAuthorClick)
     } else {
         Row(
             modifier = Modifier
@@ -508,6 +584,7 @@ private fun MetaRow(article: Article) {
                     color = SabqTheme.colors.primaryEnd,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { onAuthorClick(name) }
                 )
                 MiddleDot()
             }
@@ -653,60 +730,417 @@ private fun ListenPillStub() {
 // ============================================================
 
 @Composable
+fun rememberAnnotatedString(
+    runs: List<InlineRun>,
+    fontSize: Float,
+    lineSpacing: Float,
+    useSerif: Boolean,
+): AnnotatedString {
+    val linkColor = SabqTheme.colors.primaryEnd
+    return remember(runs, fontSize, lineSpacing, useSerif, linkColor) {
+        buildAnnotatedString {
+            runs.forEach { run ->
+                val start = length
+                append(run.text)
+                val end = length
+
+                var style = SpanStyle()
+                if (run.bold) {
+                    style = style.copy(fontWeight = FontWeight.Bold)
+                }
+                if (run.italic) {
+                    style = style.copy(fontStyle = FontStyle.Italic)
+                }
+                if (run.underline || run.strikethrough) {
+                    style = style.copy(
+                        textDecoration = TextDecoration.combine(
+                            listOfNotNull(
+                                if (run.underline) TextDecoration.Underline else null,
+                                if (run.strikethrough) TextDecoration.LineThrough else null
+                            )
+                        )
+                    )
+                }
+                if (run.colorHex != null) {
+                    try {
+                        val color = Color(android.graphics.Color.parseColor(if (run.colorHex!!.startsWith("#")) run.colorHex else "#${run.colorHex}"))
+                        style = style.copy(color = color)
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                } else if (run.link != null) {
+                    style = style.copy(color = linkColor)
+                    addStringAnnotation(
+                        tag = "URL",
+                        annotation = run.link!!,
+                        start = start,
+                        end = end
+                    )
+                }
+
+                addStyle(style, start, end)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RichText(
+    runs: List<InlineRun>,
+    fontSize: Float,
+    lineSpacing: Float,
+    useSerif: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = SabqTheme.colors.ink.copy(alpha = 0.92f),
+    fontWeight: FontWeight = FontWeight.Normal,
+    fontStyle: FontStyle = FontStyle.Normal,
+    textAlign: TextAlign = TextAlign.Start,
+) {
+    val context = LocalContext.current
+    val annotatedString = rememberAnnotatedString(runs, fontSize, lineSpacing, useSerif)
+
+    ClickableText(
+        text = annotatedString,
+        modifier = modifier,
+        style = TextStyle(
+            fontSize = fontSize.sp,
+            lineHeight = (fontSize + lineSpacing + 3).sp,
+            color = color,
+            fontFamily = if (useSerif) FontFamily.Serif else FontFamily.Default,
+            fontWeight = fontWeight,
+            fontStyle = fontStyle,
+            textAlign = textAlign,
+        ),
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                }
+        }
+    )
+}
+
+@Composable
 private fun BodyBlock(
     block: BlockNode,
     fontSize: Float,
     lineSpacing: Float,
     useSerif: Boolean,
 ) {
-    val family = if (useSerif) FontFamily.Serif else FontFamily.Default
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
     ) {
         when (block) {
-            is BlockNode.Paragraph -> Text(
-                text = block.text,
-                fontSize = fontSize.sp,
-                lineHeight = (fontSize + lineSpacing + 3).sp,
-                color = SabqTheme.colors.ink.copy(alpha = 0.92f),
-                fontFamily = family,
-            )
-            is BlockNode.Heading -> Text(
-                text = block.text,
-                fontSize = (fontSize + 4).sp,
-                fontWeight = FontWeight.Black,
-                color = SabqTheme.colors.ink,
-                fontFamily = family,
-                lineHeight = (fontSize + lineSpacing + 5).sp,
-            )
-            is BlockNode.Image -> Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 10f)
-                    .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
-                    .background(SabqTheme.colors.paleFill),
-            ) {
-                FocalCachedAsyncImage(
-                    url = block.src,
-                    focalPoint = null,
-                    modifier = Modifier.fillMaxSize(),
+            is BlockNode.Heading -> {
+                val size = when (block.level) {
+                    1 -> fontSize + 9
+                    2 -> fontSize + 6
+                    3 -> fontSize + 4
+                    4 -> fontSize + 2
+                    else -> fontSize + 1
+                }
+                RichText(
+                    runs = block.runs,
+                    fontSize = size,
+                    lineSpacing = lineSpacing,
+                    useSerif = useSerif,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                    modifier = Modifier.padding(top = 6.dp)
                 )
             }
-            is BlockNode.Quote -> QuoteBlock(
-                text = block.text,
-                fontSize = fontSize,
-                lineSpacing = lineSpacing,
-                useSerif = useSerif,
-            )
+            is BlockNode.Paragraph -> {
+                RichText(
+                    runs = block.runs,
+                    fontSize = fontSize,
+                    lineSpacing = lineSpacing,
+                    useSerif = useSerif,
+                    color = SabqTheme.colors.ink.copy(alpha = 0.92f)
+                )
+            }
+            is BlockNode.ListBlock -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    block.items.forEachIndexed { idx, runs ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = if (block.ordered) "${idx + 1}." else "•",
+                                fontSize = fontSize.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SabqTheme.colors.primaryEnd,
+                                modifier = Modifier.width(18.dp),
+                                textAlign = TextAlign.End,
+                            )
+                            RichText(
+                                runs = runs,
+                                fontSize = fontSize,
+                                lineSpacing = lineSpacing,
+                                useSerif = useSerif,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+            is BlockNode.Blockquote -> {
+                QuoteBlock(
+                    runs = block.runs,
+                    fontSize = fontSize,
+                    lineSpacing = lineSpacing,
+                    useSerif = useSerif,
+                )
+            }
+            is BlockNode.Image -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 10f)
+                            .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
+                            .background(SabqTheme.colors.paleFill),
+                    ) {
+                        FocalCachedAsyncImage(
+                            url = block.url,
+                            focalPoint = null,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    if (!block.caption.isNullOrEmpty()) {
+                        Text(
+                            text = block.caption,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = SabqTheme.colors.tertiaryInk,
+                            lineHeight = 16.sp,
+                        )
+                    }
+                }
+            }
+            is BlockNode.ImageGallery -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Collections,
+                                contentDescription = null,
+                                tint = SabqTheme.colors.primaryEnd,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "ألبوم صور",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = SabqTheme.colors.primaryEnd
+                            )
+                        }
+                        Text(
+                            text = "${block.images.size} صورة",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SabqTheme.colors.tertiaryInk
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        block.images.forEach { img ->
+                            Column(
+                                modifier = Modifier.width(260.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(260.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(SabqTheme.colors.paleFill)
+                                ) {
+                                    FocalCachedAsyncImage(
+                                        url = img.url,
+                                        focalPoint = null,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                if (!img.caption.isNullOrEmpty()) {
+                                    Text(
+                                        text = img.caption,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SabqTheme.colors.tertiaryInk,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            is BlockNode.TwitterEmbed -> {
+                val context = LocalContext.current
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
+                        .border(
+                            width = 1.dp,
+                            color = SabqTheme.colors.outline.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
+                        )
+                        .clickable {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(block.tweetUrl))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {}
+                        }
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "𝕏",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = SabqTheme.colors.ink
+                        )
+                        Text(
+                            text = "منصة إكس (تويتر سابقاً)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SabqTheme.colors.ink
+                        )
+                    }
+                    Text(
+                        text = block.tweetUrl,
+                        fontSize = 11.sp,
+                        color = Color(0xFF007AFF),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "انقر لعرض التغريدة الكاملة",
+                        fontSize = 11.sp,
+                        color = SabqTheme.colors.tertiaryInk
+                    )
+                }
+            }
+            is BlockNode.VideoEmbed -> {
+                val context = LocalContext.current
+                val openUrl = block.sourceUrl ?: block.embedUrl
+                val providerColor = when (block.provider) {
+                    VideoProvider.YOUTUBE -> Color(0xFFEC3333)
+                    VideoProvider.DAILYMOTION -> Color(0xFF00ADEE)
+                    VideoProvider.OTHER -> SabqTheme.colors.secondaryInk
+                }
+                val providerName = when (block.provider) {
+                    VideoProvider.YOUTUBE -> "يوتيوب"
+                    VideoProvider.DAILYMOTION -> "Dailymotion"
+                    VideoProvider.OTHER -> "فيديو"
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    providerColor.copy(alpha = 0.20f),
+                                    providerColor.copy(alpha = 0.05f)
+                                )
+                            )
+                        )
+                        .border(
+                            width = 0.5.dp,
+                            color = providerColor.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(18.dp)
+                        )
+                        .clickable {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(openUrl))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {}
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = providerColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(providerColor)
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = providerName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+            is BlockNode.Divider -> {
+                HorizontalDivider(
+                    color = SabqTheme.colors.outline.copy(alpha = 0.5f)
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun QuoteBlock(
-    text: String,
+    runs: List<InlineRun>,
     fontSize: Float,
     lineSpacing: Float,
     useSerif: Boolean,
@@ -740,13 +1174,14 @@ private fun QuoteBlock(
                 tint = SabqTheme.colors.primaryEnd.copy(alpha = 0.55f),
                 modifier = Modifier.size(18.dp),
             )
-            Text(
-                text = text,
-                fontSize = (fontSize + 1).sp,
+            RichText(
+                runs = runs,
+                fontSize = fontSize + 1,
+                lineSpacing = lineSpacing + 1,
+                useSerif = useSerif,
                 fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.ink.copy(alpha = 0.88f),
-                lineHeight = (fontSize + lineSpacing + 4).sp,
-                fontFamily = if (useSerif) FontFamily.Serif else FontFamily.Default,
+                fontStyle = FontStyle.Italic,
+                color = SabqTheme.colors.ink.copy(alpha = 0.88f)
             )
         }
     }
@@ -874,19 +1309,17 @@ private fun TagsSection(tags: List<String>, onTagClick: (String) -> Unit) {
     }
 }
 
-/** Very simple flowing chip layout — wraps to a new row when the
- *  current one runs out of width. Compose Foundation 1.6+ ships
- *  `FlowRow`; we use a hand-rolled loop here to stay 1.5-compatible. */
+/** Flowing chip layout using FlowRow to handle dynamic wrapping
+ *  and match iOS tags section appearance. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowChips(items: List<String>, onClick: (String) -> Unit) {
-    val chunked = remember(items) { items.chunked(3) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        chunked.forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { tag ->
-                    TagChip(tag = tag, onClick = { onClick(tag) })
-                }
-            }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items.forEach { tag ->
+            TagChip(tag = tag, onClick = { onClick(tag) })
         }
     }
 }
@@ -1081,8 +1514,11 @@ private fun ReadingProgressBar(state: LazyListState) {
 
 @Composable
 private fun TopToolbar(
+    isLiked: Boolean,
     isBookmarked: Boolean,
+    isLikeBusy: Boolean,
     onBack: () -> Unit,
+    onLike: () -> Unit,
     onBookmark: () -> Unit,
     onShare: () -> Unit,
 ) {
@@ -1094,19 +1530,26 @@ private fun TopToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Trailing buttons cluster (visual LEFT in RTL by Compose
-        // default) — share + bookmark.
+        // default) — share + bookmark + like.
+        // Code order is Like -> Bookmark -> Share to match iOS visual order (Like on the right of the actions group).
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToolbarIcon(
-                icon = Icons.Filled.Share,
-                contentDescription = "مشاركة",
-                tint = SabqTheme.colors.secondaryInk,
-                onClick = onShare,
+                icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = if (isLiked) "إلغاء الإعجاب" else "إعجاب",
+                tint = if (isLiked) Color(0xFFF24D5C) else SabqTheme.colors.secondaryInk,
+                onClick = if (isLikeBusy) ({}) else onLike,
             )
             ToolbarIcon(
                 icon = if (isBookmarked) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
                 contentDescription = if (isBookmarked) "إزالة الحفظ" else "حفظ",
                 tint = if (isBookmarked) SabqTheme.colors.primaryEnd else SabqTheme.colors.secondaryInk,
                 onClick = onBookmark,
+            )
+            ToolbarIcon(
+                icon = Icons.Filled.Share,
+                contentDescription = "مشاركة",
+                tint = SabqTheme.colors.secondaryInk,
+                onClick = onShare,
             )
         }
 
@@ -1202,7 +1645,7 @@ private fun OpinionMarkerPill() {
 }
 
 @Composable
-private fun OpinionMetaRow(article: Article) {
+private fun OpinionMetaRow(article: Article, onAuthorClick: (String) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1214,6 +1657,7 @@ private fun OpinionMetaRow(article: Article) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
+                modifier = Modifier.clickable { onAuthorClick(name) }
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Edit,
@@ -1593,4 +2037,6 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
 @InstallIn(SingletonComponent::class)
 interface ArticleDetailEntryPoint {
     fun bookmarksStore(): BookmarksStore
+    fun likesStore(): LikesStore
+    fun behaviorTracker(): BehaviorTracker
 }

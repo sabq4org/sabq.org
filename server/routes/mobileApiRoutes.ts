@@ -3027,7 +3027,11 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       });
     }
 
-    const cacheKey = `mobile:author:${rawName.toLowerCase()}`;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const offset = (page - 1) * limit;
+
+    const cacheKey = `mobile:author:${rawName.toLowerCase()}:p${page}:l${limit}`;
     const cached = getCached(cacheKey);
     if (cached) return res.json(cached);
 
@@ -3108,12 +3112,12 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       .where(
         and(
           eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
           or(eq(articles.reporterId, author.id), eq(articles.authorId, author.id)),
         )
       )
       .orderBy(desc(articles.publishedAt))
-      .limit(30);
+      .limit(limit)
+      .offset(offset);
 
     const role = author.job_title || author.department || "كاتب في سبق";
     const fullName = [author.first_name, author.last_name].filter(Boolean).join(" ").trim();

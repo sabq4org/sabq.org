@@ -70,6 +70,9 @@ class ArticleDetailViewModel @Inject constructor(
                         if (c is ArticleDetailUiState.Loaded) c.copy(related = related) else c
                     }
                 }
+                .onFailure { e ->
+                    android.util.Log.e("ArticleDetailVM", "Failed to load related articles", e)
+                }
         }
     }
 }

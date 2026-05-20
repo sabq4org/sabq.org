@@ -26,6 +26,8 @@ import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
 import com.sabq.smart.feature.explore.ExploreScreen
+import com.sabq.smart.feature.keyword.KeywordArticlesScreen
+import com.sabq.smart.feature.author.AuthorArticlesScreen
 import com.sabq.smart.feature.home.HomeFeedScreen
 import com.sabq.smart.feature.live.MomentByMomentScreen
 import com.sabq.smart.feature.loyalty.LoyaltyAccountScreen
@@ -78,12 +80,18 @@ object SabqRoutes {
     const val TermsOfUse = "legal/terms"
     const val SubmitOpinion = "submit/opinion"
     const val SubmitNews = "submit/news"
+    const val KeywordArticles = "keyword/{keyword}"
+    const val AuthorArticles = "author/{name}"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
     val TabRoutes = setOf(Home, Explore, Bookmarks, Profile)
 
     fun articleDetail(slug: String): String = "article/${Uri.encode(slug)}"
+
+    fun keywordArticles(keyword: String): String = "keyword/${Uri.encode(keyword)}"
+
+    fun authorArticles(name: String): String = "author/${Uri.encode(name)}"
 
     fun routeFor(tab: AppTab): String = when (tab) {
         AppTab.Home -> Home
@@ -335,9 +343,38 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(s))
                             }
                         },
-                        // Tag search route lands in a later session.
-                        // For now tag taps no-op — the chip still shows.
-                        onTagClick = { /* TODO: navigate to keyword search */ },
+                        onTagClick = { tag ->
+                            navController.navigate(SabqRoutes.keywordArticles(tag))
+                        },
+                        onAuthorClick = { name ->
+                            navController.navigate(SabqRoutes.authorArticles(name))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.KeywordArticles,
+                    arguments = listOf(navArgument("keyword") { type = NavType.StringType }),
+                ) { entry ->
+                    KeywordArticlesScreen(
+                        onBack = { navController.popBackStack() },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        }
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AuthorArticles,
+                    arguments = listOf(navArgument("name") { type = NavType.StringType }),
+                ) { entry ->
+                    AuthorArticlesScreen(
+                        onBack = { navController.popBackStack() },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        }
                     )
                 }
             }

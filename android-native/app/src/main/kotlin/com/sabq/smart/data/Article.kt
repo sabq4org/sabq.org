@@ -38,6 +38,11 @@ data class Article(
      *  badge overlay (iOS `aiImageBadgeOverlay`). */
     val isAiGeneratedImage: Boolean = false,
     val aiImageModel: String? = null,
+    /** Raw ISO-8601 publish timestamp from the backend. Kept separate
+     *  from [dateFormatted] (which is the human "اليوم 14:32" string)
+     *  so callers can sort by it. Null when the backend omits the
+     *  field. */
+    val publishedAtIso: String? = null,
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent

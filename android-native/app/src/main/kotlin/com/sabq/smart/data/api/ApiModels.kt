@@ -101,8 +101,11 @@ data class ApiArticle(
     @JsonNames("is_breaking", "isBreaking")
     val isBreaking: Boolean? = null,
 
-    @JsonNames("image_url", "imageUrl", "image", "thumbnailUrl", "thumbnail_url")
+    @JsonNames("image_url", "imageUrl", "image")
     val imageUrl: String? = null,
+
+    @JsonNames("thumbnail_url", "thumbnailUrl")
+    val thumbnailUrl: String? = null,
 
     @JsonNames("image_focal_point", "imageFocalPoint", "focal_point", "focalPoint")
     val imageFocalPoint: ApiFocalPoint? = null,
@@ -134,13 +137,23 @@ data class ApiArticle(
      *  array OR a list of `{ name }` objects depending on the route; we
      *  accept the array form here and parse the object form in the
      *  domain mapper. */
-    val tags: List<String>? = null,
+    @JsonNames("tags", "keywords")
+    val tags: kotlinx.serialization.json.JsonElement? = null,
 
     /** Canonical public article URL — used by the iOS share sheet
      *  fallback. Backend ships it under `article_url` or `articleUrl`
      *  depending on the route. */
     @JsonNames("article_url", "articleUrl", "url", "canonical_url", "canonicalUrl")
     val articleUrl: String? = null,
+
+    val seo: ApiSeo? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiSeo(
+    @JsonNames("keywords", "tags")
+    val keywords: kotlinx.serialization.json.JsonElement? = null,
 )
 
 @Serializable
@@ -216,3 +229,68 @@ data class ApiBreakingHeadline(
     @JsonNames("published_at", "publishedAt")
     val publishedAt: String? = null,
 )
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiArticleReactionResponse(
+    val liked: Boolean,
+    @JsonNames("likesCount", "likes_count")
+    val likesCount: Int,
+)
+
+@Serializable
+data class ApiBehaviorEventRequest(
+    val articleId: String,
+    val eventType: String,
+    val dwellSeconds: Int? = null,
+    val scrollDepth: Int? = null,
+    val completionRate: Int? = null,
+    val platform: String = "android",
+)
+
+@Serializable
+data class ApiAuthorPage(
+    val author: ApiAuthorProfile,
+    val stats: ApiAuthorStats? = null,
+    val topCategories: List<ApiAuthorCategory> = emptyList(),
+    val recentArticles: List<ApiArticle> = emptyList(),
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiAuthorProfile(
+    val id: String = "",
+    val name: String = "",
+    val role: String = "",
+    @JsonNames("avatarUrl", "avatar_url")
+    val avatarUrl: String? = null,
+    val bio: String? = null,
+    @JsonNames("jobTitle", "job_title")
+    val jobTitle: String? = null,
+    val department: String? = null,
+    @JsonNames("joinedAt", "joined_at")
+    val joinedAt: String? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiAuthorStats(
+    @JsonNames("articleCount", "article_count")
+    val articleCount: Int = 0,
+    @JsonNames("totalViews", "total_reads", "total_views")
+    val totalViews: Int = 0,
+    @JsonNames("earliestPublish", "earliest_publish")
+    val earliestPublish: String? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiAuthorCategory(
+    val id: String = "",
+    @JsonNames("nameAr", "name_ar", "name")
+    val nameAr: String = "",
+    val color: String? = null,
+    val icon: String? = null,
+    val count: Int = 0,
+)
+

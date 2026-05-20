@@ -31,6 +31,9 @@ class ArticleRepository @Inject constructor(
             section = section,
             featured = if (featuredOnly) true else null,
         )
+        response.articles.forEach { 
+            android.util.Log.d("ArticleRepoList", "id=${it.id}, title=${it.title}, imageUrl=${it.imageUrl}") 
+        }
         return ArticlesPage(
             items = response.articles.map { it.toDomain() },
             total = response.total ?: 0,
@@ -94,13 +97,28 @@ class ArticleRepository @Inject constructor(
         }.sortedBy { it.displayOrder }
     }
 
-    suspend fun getArticleBySlug(slug: String): Article =
-        api.getArticleBySlug(slug).toDomain()
+    suspend fun getArticleBySlug(slug: String): Article {
+        val apiArticle = api.getArticleBySlug(slug)
+        android.util.Log.d("ArticleRepo", "API Article ID: ${apiArticle.id}")
+        android.util.Log.d("ArticleRepo", "API Article Title: ${apiArticle.title}")
+        android.util.Log.d("ArticleRepo", "API Article Slug: ${apiArticle.slug}")
+        android.util.Log.d("ArticleRepo", "API Article ImageUrl: ${apiArticle.imageUrl}")
+        android.util.Log.d("ArticleRepo", "API Article ImageFocalPoint: ${apiArticle.imageFocalPoint}")
+        val domainArticle = apiArticle.toDomain()
+        android.util.Log.d("ArticleRepo", "Domain Article mapped: imageUrl=${domainArticle.imageUrl}")
+        return domainArticle
+    }
 
     /** Related articles for the bottom of the detail screen. iOS shows
      *  up to 5; we follow the same cap to keep the layout tight. */
     suspend fun getRelated(slug: String): List<Article> =
-        api.getRelatedArticles(slug).articles.map { it.toDomain() }.take(5)
+        api.getRelatedArticles(slug).map { it.toDomain() }.take(5)
+
+    suspend fun getArticlesByKeyword(keyword: String): List<Article> =
+        api.getArticlesByKeyword(keyword).map { it.toDomain() }
+
+    suspend fun getAuthorPage(name: String, page: Int = 1, limit: Int = 20): AuthorPage =
+        api.getAuthorPage(name, page, limit).toDomain()
 
     /** Full-text search over the article corpus. */
     suspend fun search(query: String, page: Int = 1): SearchResult {
