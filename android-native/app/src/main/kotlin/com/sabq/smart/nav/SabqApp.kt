@@ -25,6 +25,8 @@ import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
+import com.sabq.smart.feature.brief.DailyBriefScreen
+import com.sabq.smart.feature.brief.InterestsPickerScreen
 import com.sabq.smart.feature.calendar.CalendarScreen
 import com.sabq.smart.feature.explore.ExploreScreen
 import com.sabq.smart.feature.keyword.KeywordArticlesScreen
@@ -69,6 +71,8 @@ object SabqRoutes {
     const val Loyalty = "loyalty"
     const val Opinions = "opinions"
     const val Trending = "trending"
+    const val DailyBrief = "brief"
+    const val InterestsPicker = "interests/picker"
     const val MomentByMoment = "live/updates"
     const val Calendar = "calendar"
     const val Notifications = "notifications"
@@ -173,6 +177,9 @@ fun SabqApp(
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
                         },
+                        onGreetingClick = {
+                            navController.navigate(SabqRoutes.DailyBrief)
+                        },
                         onLoyaltyClick = {
                             navController.navigate(SabqRoutes.Loyalty)
                         },
@@ -274,6 +281,25 @@ fun SabqApp(
                         onTagClick = { tag ->
                             navController.navigate(SabqRoutes.keywordArticles(tag))
                         },
+                    )
+                }
+                composable(SabqRoutes.DailyBrief) {
+                    DailyBriefScreen(
+                        onBack = { navController.popBackStack() },
+                        onLogin = { navController.navigate(SabqRoutes.Login) },
+                        onPickInterests = {
+                            navController.navigate(SabqRoutes.InterestsPicker)
+                        },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        },
+                    )
+                }
+                composable(SabqRoutes.InterestsPicker) {
+                    InterestsPickerScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.MomentByMoment) {

@@ -1,8 +1,27 @@
 package com.sabq.smart.data
 
 import com.sabq.smart.data.api.ApiUser
+import com.sabq.smart.data.api.ApiUserInterest
 import com.sabq.smart.data.api.roleDisplayName
 import com.sabq.smart.data.api.rolesList
+
+/** Domain representation of a member's interest category. Mirrors iOS
+ *  `APIUserInterest` (`Services/APIModels.swift:876`) with the same
+ *  optional name/slug/color triple — the chip grid + suggestions filter
+ *  consume these. */
+data class MemberInterest(
+    val id: String,
+    val name: String?,
+    val slug: String?,
+    val color: String?,
+)
+
+fun ApiUserInterest.toDomain(): MemberInterest = MemberInterest(
+    id = id,
+    name = name?.takeIf { it.isNotBlank() },
+    slug = slug?.takeIf { it.isNotBlank() },
+    color = color?.takeIf { it.isNotBlank() },
+)
 
 /**
  * Domain user model. Mirrors the subset of iOS `APIUser`
@@ -31,6 +50,10 @@ data class User(
     val verificationBadge: String?,
     val hasPressCard: Boolean?,
     val createdAt: String?,
+    /** Member's chosen interest categories. Empty when the user hasn't
+     *  picked any yet — the DailyBrief screen surfaces an onboarding
+     *  card in that case. */
+    val interests: List<MemberInterest> = emptyList(),
 ) {
     /** Mirrors iOS `APIUser.isVerified`: any non-"none" badge counts. */
     val isVerified: Boolean
@@ -155,5 +178,6 @@ fun ApiUser.toDomain(): User {
         verificationBadge = verificationBadge,
         hasPressCard = hasPressCard,
         createdAt = createdAt,
+        interests = interests.map { it.toDomain() },
     )
 }

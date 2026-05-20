@@ -230,6 +230,20 @@ interface SabqApi {
     @PUT("api/v1/members/profile")
     suspend fun updateProfile(@Body body: UpdateProfileRequest): ApiUpdateProfileResponse
 
+    /** Fetch the member's interest category list — joined with the
+     *  `categories` table so we receive name/slug/colour per row. iOS
+     *  also pulls this from `/v1/members/profile` (interests array on
+     *  the user); we keep a dedicated call too for the DailyBrief +
+     *  InterestsPicker fresh-fetch path. */
+    @GET("api/v1/members/interests")
+    suspend fun getMemberInterests(): ApiMemberInterestsResponse
+
+    /** Replace the authenticated member's interest list. Backend wipes
+     *  prior rows + inserts new ones (mobileApiRoutes.ts:2079). iOS
+     *  refreshes the profile after this returns; we do the same. */
+    @POST("api/v1/members/interests")
+    suspend fun updateMemberInterests(@Body body: UpdateMemberInterestsRequest): retrofit2.Response<Unit>
+
     @POST("api/v1/newsletter/subscribe")
     suspend fun subscribeNewsletter(@Body body: NewsletterSubscribeRequest): retrofit2.Response<Unit>
 

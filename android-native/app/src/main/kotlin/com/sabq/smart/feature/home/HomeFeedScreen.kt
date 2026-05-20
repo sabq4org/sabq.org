@@ -99,6 +99,7 @@ fun HomeFeedScreen(
     onOpinionsAllClick: () -> Unit = {},
     onTrendingAllClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
+    onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
     onAudioNewslettersClick: () -> Unit = {},
@@ -140,6 +141,7 @@ fun HomeFeedScreen(
                 onOpinionsAllClick = onOpinionsAllClick,
                 onTrendingAllClick = onTrendingAllClick,
                 onCalendarAllClick = onCalendarAllClick,
+                onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onAudioNewslettersClick = onAudioNewslettersClick,
@@ -172,6 +174,7 @@ private fun LoadedFeed(
     onOpinionsAllClick: () -> Unit,
     onTrendingAllClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
+    onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onAudioNewslettersClick: () -> Unit,
@@ -225,7 +228,7 @@ private fun LoadedFeed(
 
         // Time-aware Arabic greeting block — ports iOS
         // `HomeFeedView.greetingBlock` (lines 878-1001).
-        item { GreetingBlock() }
+        item { GreetingBlock(onClick = onGreetingClick) }
 
         // Breaking news pill — single coral row.
         state.breaking?.let { breaking ->
@@ -605,7 +608,7 @@ private fun HeaderIcon(
  * `fetchTodayInsights`.
  */
 @Composable
-private fun GreetingBlock() {
+private fun GreetingBlock(onClick: () -> Unit = {}) {
     val now = remember { java.time.LocalDateTime.now() }
     val slot = remember(now) { greetingSlot(now.hour) }
     val dayOfYear = remember(now) { now.dayOfYear }
@@ -633,6 +636,7 @@ private fun GreetingBlock() {
             .background(SabqTheme.colors.surface.copy(alpha = 0.6f), shape)
             .background(tint.copy(alpha = 0.05f), shape)
             .border(width = 0.5.dp, color = tint.copy(alpha = 0.18f), shape = shape)
+            .clickable { onClick() }
             .padding(18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
