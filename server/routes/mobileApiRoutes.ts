@@ -5846,20 +5846,31 @@ router.get("/loyalty/history", async (req: Request, res: Response) => {
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
 
-    // Hydrate article titles + slugs for events whose metadata or source
-    // points at an article. The iOS history list now shows the actual
-    // headline next to "قراءة مقال" / "إعجاب بمقال" instead of just the
-    // generic action label.
-    const articleIds = Array.from(new Set(items
-      .map((e) => (e.metadata?.articleId ?? (e.source && /^[0-9a-f-]{36}$/i.test(e.source) ? e.source : null)))
-      .filter((id): id is string => typeof id === "string")));
-    const articleMeta = articleIds.length > 0
-      ? await db
+    // Hydrate article titles + slugs. Wrapped in its own try/catch so
+    // a runtime hiccup (Drizzle inArray edge case, unexpected metadata
+    // shape, secondary query latency) degrades to "history without
+    // titles" instead of 500ing the whole endpoint. iOS still renders
+    // the row's action + points + date when articleTitle is null.
+    let articleById = new Map<string, { id: string; title: string; slug: string | null }>();
+    try {
+      const articleIds = Array.from(new Set(items
+        .map((e) => {
+          const metaId = (e.metadata as any)?.articleId;
+          if (typeof metaId === "string" && metaId.length > 0) return metaId;
+          if (typeof e.source === "string" && /^[0-9a-f-]{36}$/i.test(e.source)) return e.source;
+          return null;
+        })
+        .filter((id): id is string => typeof id === "string")));
+      if (articleIds.length > 0) {
+        const articleMeta = await db
           .select({ id: articles.id, title: articles.title, slug: articles.slug })
           .from(articles)
-          .where(inArray(articles.id, articleIds))
-      : [];
-    const articleById = new Map(articleMeta.map((a) => [a.id, a]));
+          .where(inArray(articles.id, articleIds));
+        articleById = new Map(articleMeta.map((a) => [a.id, a]));
+      }
+    } catch (hydrateErr) {
+      console.error("[Mobile API] /loyalty/history article hydration failed:", hydrateErr);
+    }
 
     res.json({
       success: true,
