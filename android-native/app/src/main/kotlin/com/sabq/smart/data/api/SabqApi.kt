@@ -161,6 +161,21 @@ interface SabqApi {
     @GET("api/v1/loyalty/me")
     suspend fun getLoyaltyMe(): ApiLoyaltySummary
 
+    /**
+     * Submit a batch of loyalty events (read / read-deep / like / share /
+     * comment / notification-open / daily-login). Powers the on-device
+     * [com.sabq.smart.data.LoyaltyEventQueue] flush. Bearer-token
+     * required — anonymous calls 401 and the queue retries with backoff
+     * until the user signs in.
+     *
+     * Backend caps batch size at 100 events (mobileApiRoutes.ts:5772);
+     * the queue itself slices to 50 to keep request size bounded. The
+     * server applies daily caps + dedup in `awardPoints()` so retries
+     * after a network failure don't produce duplicate points.
+     */
+    @POST("api/v1/loyalty/events")
+    suspend fun submitLoyaltyEvents(@Body body: LoyaltyEventBatchRequest): LoyaltyEventBatchResponse
+
     // -- insights (personal knowledge journey) -----------------------
 
     /**

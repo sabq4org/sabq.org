@@ -33,3 +33,43 @@ data class ApiLoyaltySummary(
     @JsonNames("streakDays", "streak_days")
     val streakDays: Int = 0,
 )
+
+/**
+ * Request body for `POST /api/v1/loyalty/events`. iOS sends the same
+ * shape via `APIClient.submitLoyaltyEvents`. The server caps the array
+ * at 100; the on-device queue slices to 50 per flush for safety.
+ */
+@Serializable
+data class LoyaltyEventBatchRequest(
+    val events: List<LoyaltyEventDto>,
+)
+
+@Serializable
+data class LoyaltyEventDto(
+    val action: String,
+    val source: String? = null,
+    val articleId: String? = null,
+    val duration: Int? = null,
+    val extraInfo: String? = null,
+)
+
+/**
+ * Response from `POST /api/v1/loyalty/events`. Per-event outcomes
+ * include AWARDED (with points), CAPPED, DEDUP, INVALID_ACTION, etc.
+ * The queue doesn't act on individual outcomes — the server is the
+ * source of truth for what was credited. A 2xx response means the
+ * batch was processed; we drop those events from the pending list.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class LoyaltyEventBatchResponse(
+    val success: Boolean = false,
+    val results: List<LoyaltyEventResult> = emptyList(),
+)
+
+@Serializable
+data class LoyaltyEventResult(
+    val action: String,
+    val outcome: String,
+    val points: Int? = null,
+)

@@ -2,11 +2,15 @@ package com.sabq.smart
 
 import android.app.Application
 import android.util.Log
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.google.firebase.FirebaseApp
+import com.sabq.smart.data.LoyaltyEventQueue
 import com.sabq.smart.data.push.DeviceRegistrationManager
 import com.sabq.smart.data.push.SabqMessagingService
 import dagger.hilt.android.HiltAndroidApp
@@ -14,6 +18,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.IOException
 
@@ -29,15 +34,38 @@ class SabqApplication : Application(), ImageLoaderFactory {
 
     @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var deviceRegistrationManager: DeviceRegistrationManager
+    @Inject lateinit var loyaltyEventQueue: LoyaltyEventQueue
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+
+        // Push (FCM).
         initialiseFirebase()
         SabqMessagingService.ensureChannel(this)
         deviceRegistrationManager.start(applicationScope)
+
+        // Loyalty event queue — restore pending events from disk + start
+        // the 30s flush loop. Fire-and-forget caller sites
+        // (BehaviorTracker, like/share/comment toggles) depend on this
+        // being resident from app launch so events buffer correctly
+        // before the user signs in. Mirrors iOS
+        // `LoyaltyEventQueue.shared`.
+        loyaltyEventQueue.start(applicationScope)
+
+        // Flush pending loyalty events when the user backgrounds the
+        // app. iOS does the same in `sabqApp.swift` via the
+        // `.onChange(of: scenePhase)` hook. Best-effort — failures
+        // stay queued.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onStop(owner: LifecycleOwner) {
+                applicationScope.launch {
+                    runCatching { loyaltyEventQueue.flushNow() }
+                }
+            }
+        })
     }
 
     /**
