@@ -176,6 +176,18 @@ interface SabqApi {
     @POST("api/v1/loyalty/events")
     suspend fun submitLoyaltyEvents(@Body body: LoyaltyEventBatchRequest): LoyaltyEventBatchResponse
 
+    /**
+     * Paginated activity log for the signed-in member — drives the
+     * "سجل نقاطي" screen. Page size capped server-side at 50; we
+     * default to 20 to match iOS. Bearer-token required (401 anonymous).
+     * Backend handler: `mobileApiRoutes.ts:5820`.
+     */
+    @GET("api/v1/loyalty/history")
+    suspend fun getLoyaltyHistory(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 20,
+    ): ApiLoyaltyHistoryResponse
+
     // -- insights (personal knowledge journey) -----------------------
 
     /**

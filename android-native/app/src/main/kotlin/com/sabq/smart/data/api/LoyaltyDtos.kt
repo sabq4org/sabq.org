@@ -73,3 +73,32 @@ data class LoyaltyEventResult(
     val outcome: String,
     val points: Int? = null,
 )
+
+/**
+ * Paginated activity log for the signed-in member. Returned by
+ * `GET /api/v1/loyalty/history?page=N&limit=20`. Each row carries the
+ * action key (READ / READ_DEEP / LIKE / ...), the awarded points, an
+ * optional source (e.g. `article:<id>`), and the server timestamp.
+ * Drives the "سجل نقاطي" screen.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiLoyaltyHistoryResponse(
+    val success: Boolean? = null,
+    val items: List<ApiLoyaltyHistoryEvent> = emptyList(),
+    val page: Int = 1,
+    val limit: Int = 20,
+    @JsonNames("hasMore", "has_more")
+    val hasMore: Boolean = false,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiLoyaltyHistoryEvent(
+    val id: String = "",
+    val action: String = "",
+    val points: Int = 0,
+    val source: String? = null,
+    @JsonNames("createdAt", "created_at")
+    val createdAt: String? = null,
+)
