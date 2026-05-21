@@ -1801,9 +1801,23 @@ private fun TopToolbar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Trailing buttons cluster (visual LEFT in RTL by Compose
-        // default) — share + bookmark + like.
-        // Code order is Like -> Bookmark -> Share to match iOS visual order (Like on the right of the actions group).
+        // Back chevron FIRST in the Row — in RTL (Compose mirrors
+        // child order) this lands on the visual RIGHT, matching the
+        // Arabic convention where "back" sits near the reader's right
+        // thumb. ArrowForward auto-mirrors to a right-pointing chevron
+        // in RTL.
+        ToolbarIcon(
+            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "رجوع",
+            tint = SabqTheme.colors.ink,
+            onClick = onBack,
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Action cluster LAST in the Row — in RTL this lands on the
+        // visual LEFT. Code order Like → Bookmark → Share so the
+        // visual RTL order is Share → Bookmark → Like (matches iOS).
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToolbarIcon(
                 icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -1824,17 +1838,6 @@ private fun TopToolbar(
                 onClick = onShare,
             )
         }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Back chevron (visual RIGHT in RTL). Uses arrow-forward icon
-        // so RTL flips it to a right-pointing chevron.
-        ToolbarIcon(
-            icon = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "رجوع",
-            tint = SabqTheme.colors.ink,
-            onClick = onBack,
-        )
     }
 }
 
