@@ -1,6 +1,6 @@
 package com.sabq.smart.feature.live
 
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -229,7 +229,7 @@ private fun PulsingLiveDot() {
         initialValue = 1f,
         targetValue = 1.6f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            animation = tween(durationMillis = 1400, easing = EaseInOut),
             repeatMode = RepeatMode.Restart,
         ),
         label = "scale",
@@ -238,7 +238,7 @@ private fun PulsingLiveDot() {
         initialValue = 0.8f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            animation = tween(durationMillis = 1400, easing = EaseInOut),
             repeatMode = RepeatMode.Restart,
         ),
         label = "alpha",
