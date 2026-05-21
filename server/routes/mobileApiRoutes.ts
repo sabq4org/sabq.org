@@ -4353,15 +4353,28 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       status: "draft",
       imageUrl: heroImage,
       albumImages,
-      source: "ios-app",
+      source: (() => {
+        // Best-effort platform attribution from the User-Agent.
+        const ua = (req.headers["user-agent"] || "").toString().toLowerCase();
+        if (ua.includes("android") || ua.includes("okhttp") || ua.includes("retrofit")) return "android-app";
+        return "ios-app";
+      })(),
       sourceInfo: {
         channel: "mobile-app",
-        platform: "ios",
+        platform: (() => {
+          const ua = (req.headers["user-agent"] || "").toString().toLowerCase();
+          if (ua.includes("android") || ua.includes("okhttp") || ua.includes("retrofit")) return "android";
+          return "ios";
+        })(),
         submittedBy: user.email || user.id,
       },
       sourceMetadata: {
         type: "mobile",
-        platform: "ios",
+        platform: (() => {
+          const ua = (req.headers["user-agent"] || "").toString().toLowerCase();
+          if (ua.includes("android") || ua.includes("okhttp") || ua.includes("retrofit")) return "android";
+          return "ios";
+        })(),
         firstName: user.firstName || "",
         lastName: user.lastName || "",
       },
@@ -4376,6 +4389,19 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       `[Mobile API] /articles/submit — ${kind} draft created by ${user.email || session.userId} ` +
       `(id=${created?.id}, images=${uploadedUrls.length})`
     );
+
+    // Fire-and-forget AI enrichment: summary, bullets, SEO meta,
+    // keywords, newsletter fields, suggested category, quality check.
+    // Title + content are preserved verbatim. The route returns 201 to
+    // the mobile client immediately; enrichment fills in the rest within
+    // ~10-30 seconds and the dashboard reviewer sees the polished draft.
+    if (created?.id) {
+      void import("../services/mobileArticleEnrichment")
+        .then(({ enrichArticleAsync }) => enrichArticleAsync(created.id))
+        .catch((err) => {
+          console.error(`[Mobile API] enrichment hook crashed for ${created.id}:`, err?.message || err);
+        });
+    }
 
     res.status(201).json({
       success: true,
