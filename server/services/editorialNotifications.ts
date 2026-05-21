@@ -189,7 +189,7 @@ function buildCopy(args: NotifyEditorialArgs): { title: string; body: string } {
     }
     case "published":
       return {
-        title: `✅ نُشرت ${labels.my}`,
+        title: `✅ تم نشر ${labels.my}`,
         body: `«${title}» — اضغط للاطلاع على الإخراج النهائي.`,
       };
     case "rejected": {
