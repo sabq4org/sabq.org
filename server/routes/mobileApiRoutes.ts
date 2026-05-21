@@ -5853,11 +5853,16 @@ router.get("/loyalty/history", async (req: Request, res: Response) => {
     // the row's action + points + date when articleTitle is null.
     let articleById = new Map<string, { id: string; title: string; slug: string | null }>();
     try {
+      // Only consider IDs shaped like a UUID or a short nanoid — the
+      // articles.id column never holds anything else, and Arabic slugs
+      // showing up here from older event payloads would be wasted in
+      // the SELECT (no match) plus a risk of driver-encoding surprises.
+      const idPattern = /^[A-Za-z0-9_-]{1,50}$/;
       const articleIds = Array.from(new Set(items
         .map((e) => {
           const metaId = (e.metadata as any)?.articleId;
-          if (typeof metaId === "string" && metaId.length > 0) return metaId;
-          if (typeof e.source === "string" && /^[0-9a-f-]{36}$/i.test(e.source)) return e.source;
+          if (typeof metaId === "string" && idPattern.test(metaId)) return metaId;
+          if (typeof e.source === "string" && idPattern.test(e.source)) return e.source;
           return null;
         })
         .filter((id): id is string => typeof id === "string")));
