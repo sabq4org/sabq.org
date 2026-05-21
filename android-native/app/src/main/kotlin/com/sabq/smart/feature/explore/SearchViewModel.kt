@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.ArticleRepository
+import com.sabq.smart.data.analytics.SabqAnalytics
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.FlowPreview
@@ -49,6 +50,7 @@ class SearchViewModel @Inject constructor(
             } else {
                 flow<SearchUiState> {
                     emit(SearchUiState.Searching(trimmed))
+                    SabqAnalytics.search(trimmed)
                     runCatching { repo.search(trimmed) }
                         .onSuccess {
                             emit(

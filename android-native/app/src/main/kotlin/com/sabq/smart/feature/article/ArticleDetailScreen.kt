@@ -243,6 +243,23 @@ private fun ArticleBody(
     // Behavior tracking session lifecycle
     DisposableEffect(article.id) {
         behaviorTracker.startSession(article.id)
+        // Analytics event — mirrors iOS `SabqAnalytics.articleView(...)`
+        // / `.opinionView(...)`. No-op today (provider TBD); call-site
+        // stays stable so a future analytics provider lands without
+        // touching every screen.
+        if (article.isOpinion) {
+            com.sabq.smart.data.analytics.SabqAnalytics.opinionView(
+                id = article.id,
+                title = article.title,
+                authorName = article.authorName ?: "",
+            )
+        } else {
+            com.sabq.smart.data.analytics.SabqAnalytics.articleView(
+                id = article.id,
+                title = article.title,
+                category = article.category.title,
+            )
+        }
         onDispose {
             behaviorTracker.endSession()
         }
