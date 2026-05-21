@@ -82,6 +82,8 @@ final class AuthStore {
             if let loginUser = response.user {
                 currentUser = loginUser
                 isLoggedIn = true
+                SabqAnalytics.setUserId(loginUser.id)
+                SabqAnalytics.login(method: "email")
             }
             await fetchFullProfile()
             // Request push permission + register the device token. Permission
@@ -168,6 +170,8 @@ final class AuthStore {
                 UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
                 currentUser = loginUser
                 isLoggedIn = true
+                SabqAnalytics.setUserId(loginUser.id)
+                SabqAnalytics.login(method: "register")
                 successMessage = response.message ?? "تم إنشاء الحساب بنجاح"
                 // Pull the full profile so role/interests populate ASAP.
                 await fetchFullProfile()
@@ -316,6 +320,7 @@ final class AuthStore {
         try? await APIClient.shared.logout()
         currentUser = nil
         isLoggedIn = false
+        SabqAnalytics.setUserId(nil)
         unreadNotifications = 0
         successMessage = nil
         errorMessage = nil
@@ -341,6 +346,7 @@ final class AuthStore {
             await MainActor.run {
                 currentUser = user
                 isLoggedIn = true
+                SabqAnalytics.setUserId(user.id)
             }
             await refreshUnreadCount()
         } catch {

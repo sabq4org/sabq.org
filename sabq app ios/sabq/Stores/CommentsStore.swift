@@ -89,6 +89,7 @@ final class CommentsStore {
 
         do {
             let saved = try await APIClient.shared.postComment(slug: slug, content: trimmed, parentId: parentId)
+            SabqAnalytics.articleComment(slug: slug, parentId: parentId)
             let outcome = Self.outcome(for: saved)
             lastSubmitOutcome = outcome
             lastError = nil

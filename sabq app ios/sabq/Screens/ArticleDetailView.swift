@@ -358,6 +358,7 @@ struct ArticleDetailView: View {
             defer { isLikeBusy = false }
             if let result = await likesStore.toggle(articleId) {
                 likesCount = result.count
+                SabqAnalytics.articleLike(id: articleId, liked: result.liked)
             }
         }
     }

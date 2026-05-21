@@ -223,14 +223,17 @@ struct ContentView: View {
         }
         switch link {
         case .article(let slug):
+            SabqAnalytics.notificationOpen(type: "article", articleId: nil)
             navigationPath.append(ArticleSlugRoute(slug: slug))
         case .opinion(let slug):
+            SabqAnalytics.notificationOpen(type: "opinion", articleId: nil)
             navigationPath.append(OpinionSlugRoute(slug: slug))
         case .draft(let id):
+            SabqAnalytics.notificationOpen(type: "draft", articleId: id)
             navigationPath.append(DraftDeepLinkRoute(articleId: id))
         case .feedback(let id):
+            SabqAnalytics.notificationOpen(type: "feedback", articleId: id)
             navigationPath.append(EditorialNotificationsRoute())
-            _ = id
         }
     }
 }
