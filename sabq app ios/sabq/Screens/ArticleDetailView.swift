@@ -18,7 +18,10 @@ final class ArticleScrollProgress: ObservableObject {
 /// graph remains stable during scroll. SwiftUI re-renders this overlay
 /// at high frequency (every scroll tick), which is fine because it's a
 /// single ProgressView with no expensive children.
-private struct ReadingProgressOverlay: View {
+///
+/// Internal (not private) so OpinionDetailView can reuse the exact
+/// same overlay — both reader screens share the same progress UI.
+struct ReadingProgressOverlay: View {
     @ObservedObject var model: ArticleScrollProgress
 
     var body: some View {
