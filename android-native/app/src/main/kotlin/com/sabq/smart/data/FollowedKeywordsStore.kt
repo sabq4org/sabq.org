@@ -32,4 +32,8 @@ class FollowedKeywordsStore @Inject constructor(
             prefs[KEYWORDS_KEY] = if (keyword in existing) existing - keyword else existing + keyword
         }
     }
+
+    suspend fun clearAll() {
+        context.followedKeywordsDataStore.edit { it.remove(KEYWORDS_KEY) }
+    }
 }

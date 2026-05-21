@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -56,10 +57,14 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,10 +124,11 @@ fun SettingsScreen(
     onSubmitOpinionClick: () -> Unit = {},
     onSubmitNewsClick: () -> Unit = {},
     onLogout: () -> Unit = {},
-    onClearLocalData: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
+    val clearState by viewModel.clearLocalDataState.collectAsStateWithLifecycle()
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -176,7 +182,7 @@ fun SettingsScreen(
         // 8) Account danger (signed-in only)
         if (currentUser != null) {
             AccountDangerSection(
-                onClearDataClick = onClearLocalData,
+                onClearDataClick = { showClearConfirm = true },
                 onDeleteAccountClick = onDeleteAccountClick,
                 onLogoutClick = onLogout,
             )
@@ -185,6 +191,83 @@ fun SettingsScreen(
         // 9) App info
         AppInfoSection()
     }
+
+    // Confirm + result dialogs for "مسح البيانات المحلية" — mirrors the
+    // two .alert() blocks at SettingsView.swift:102-112.
+    if (showClearConfirm) {
+        ClearLocalDataConfirmDialog(
+            onCancel = { showClearConfirm = false },
+            onConfirm = {
+                showClearConfirm = false
+                viewModel.clearLocalData()
+            },
+        )
+    }
+
+    when (clearState) {
+        SettingsViewModel.ClearLocalDataState.Cleared -> ClearLocalDataResultDialog(
+            title = "تم المسح",
+            message = "تم مسح البيانات المحلية بنجاح.",
+            tint = SabqTheme.colors.leaf,
+            onDismiss = viewModel::acknowledgeClearLocalData,
+        )
+        SettingsViewModel.ClearLocalDataState.Error -> ClearLocalDataResultDialog(
+            title = "تعذّر المسح",
+            message = "حدث خطأ أثناء مسح البيانات. حاول مرة أخرى.",
+            tint = SabqTheme.colors.coral,
+            onDismiss = viewModel::acknowledgeClearLocalData,
+        )
+        SettingsViewModel.ClearLocalDataState.Idle -> Unit
+    }
+}
+
+@Composable
+private fun ClearLocalDataConfirmDialog(onCancel: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        containerColor = SabqTheme.colors.surface,
+        titleContentColor = SabqTheme.colors.ink,
+        textContentColor = SabqTheme.colors.secondaryInk,
+        title = { Text("مسح البيانات المحلية؟", fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "سيتم حذف المقالات المحفوظة، عمليات البحث الأخيرة، والكلمات المتابعة من هذا الجهاز. " +
+                    "لن يتأثر حسابك ولن يتم تسجيل خروجك.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("مسح", color = SabqTheme.colors.coral, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("إلغاء", color = SabqTheme.colors.secondaryInk)
+            }
+        },
+    )
+}
+
+@Composable
+private fun ClearLocalDataResultDialog(
+    title: String,
+    message: String,
+    tint: Color,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SabqTheme.colors.surface,
+        titleContentColor = SabqTheme.colors.ink,
+        textContentColor = SabqTheme.colors.secondaryInk,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("حسناً", color = tint, fontWeight = FontWeight.Bold)
+            }
+        },
+    )
 }
 
 // MARK: - Header

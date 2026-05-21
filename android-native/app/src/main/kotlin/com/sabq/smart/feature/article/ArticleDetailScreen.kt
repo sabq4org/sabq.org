@@ -98,9 +98,11 @@ import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.settings.SettingsViewModel
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
@@ -976,9 +978,18 @@ private fun ListenPill(slug: String) {
         }
         Text(
             text = if (isThisPlaying) "إيقاف" else "استماع",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
             color = Color.White,
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = 11.sp,
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both,
+                ),
+            ),
         )
     }
 }

@@ -1149,42 +1149,54 @@ private fun TrendingPreviewBlock(
             }
         }
         SurfaceCard {
-            trending.forEachIndexed { idx, article ->
-                if (idx > 0) {
-                    HorizontalDivider(
-                        color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                        thickness = 0.5.dp,
-                    )
+            // iOS emits one ForEach iteration per item — SwiftUI then applies
+            // its VStack spacing between iteration boundaries, not between the
+            // `(Divider, Row)` pair *inside* one iteration. Compose's
+            // `forEachIndexed` would otherwise hand SurfaceCard's inner
+            // `spacedBy(18.dp)` Column FIVE children (Row, Divider, Row,
+            // Divider, Row) and add 4×18dp gaps. Wrapping each iteration in
+            // its own Column collapses it back to 3 children = 2×18dp gaps,
+            // matching iOS.
+            trending
+                .filter { it.title.isNotBlank() }
+                .forEachIndexed { idx, article ->
+                    Column {
+                        if (idx > 0) {
+                            HorizontalDivider(
+                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
+                                thickness = 0.5.dp,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onArticleClick(article) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = "${idx + 1}",
+                                style = SabqTheme.typography.cardTitle.copy(
+                                    fontSize = 18.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                                    color = if (idx < 3) orange else SabqTheme.colors.tertiaryInk,
+                                ),
+                                modifier = Modifier.width(28.dp),
+                            )
+                            Text(
+                                text = article.title,
+                                style = SabqTheme.typography.cardTitle.copy(
+                                    fontSize = 14.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    color = SabqTheme.colors.ink,
+                                ),
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onArticleClick(article) }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "${idx + 1}",
-                        style = SabqTheme.typography.cardTitle.copy(
-                            fontSize = 18.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                            color = if (idx < 3) orange else SabqTheme.colors.tertiaryInk,
-                        ),
-                        modifier = Modifier.size(28.dp),
-                    )
-                    Text(
-                        text = article.title,
-                        style = SabqTheme.typography.cardTitle.copy(
-                            fontSize = 14.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            color = SabqTheme.colors.ink,
-                        ),
-                        maxLines = 2,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
         }
     }
 }

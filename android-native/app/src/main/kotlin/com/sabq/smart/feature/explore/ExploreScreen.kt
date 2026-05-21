@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -104,6 +105,7 @@ fun ExploreScreen(
     searchViewModel: SearchViewModel = hiltViewModel(),
     recentSearchesViewModel: RecentSearchesViewModel = hiltViewModel(),
     onArticleClick: (Article) -> Unit = {},
+    onKeywordClick: (String) -> Unit = {},
 ) {
     val sections by sectionsViewModel.sections.collectAsStateWithLifecycle()
     val trending by sectionsViewModel.trendingKeywords.collectAsStateWithLifecycle()
@@ -151,7 +153,12 @@ fun ExploreScreen(
             }
         } else {
             if (trending.isNotEmpty()) {
-                item { TrendingPillsSection(keywords = trending) }
+                item {
+                    TrendingPillsSection(
+                        keywords = trending,
+                        onKeywordClick = onKeywordClick,
+                    )
+                }
             }
             item { SectionsGridSection(sections = sections) }
             if (recentSearches.isNotEmpty()) {
@@ -172,7 +179,10 @@ fun ExploreScreen(
 // ============================================================
 
 @Composable
-private fun TrendingPillsSection(keywords: List<String>) {
+private fun TrendingPillsSection(
+    keywords: List<String>,
+    onKeywordClick: (String) -> Unit,
+) {
     val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
     Column(
         modifier = Modifier
@@ -189,22 +199,20 @@ private fun TrendingPillsSection(keywords: List<String>) {
             tint = SabqTheme.colors.coral,
         )
         FlowChips(items = keywords.take(14)) { keyword ->
-            // No-op for now — keyword nav lands via KeywordArticlesScreen
-            // in a follow-up wire (the screen already exists; explore is
-            // missing the link). Until then the pills are read-only.
-            KeywordPill(keyword = keyword)
+            KeywordPill(keyword = keyword, onClick = { onKeywordClick(keyword) })
         }
     }
 }
 
 @Composable
-private fun KeywordPill(keyword: String) {
+private fun KeywordPill(keyword: String, onClick: () -> Unit) {
     val shape = CircleShape
     Box(
         modifier = Modifier
             .clip(shape)
             .background(SabqTheme.colors.paleFill, shape)
             .border(width = 0.5.dp, color = SabqTheme.colors.outline.copy(alpha = 0.35f), shape = shape)
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
         Text(
@@ -512,15 +520,14 @@ private fun SectionTitle(
     }
 }
 
-/** Simple flow layout via chunked Rows — Compose Foundation 1.6+
- *  ships a real FlowRow but we stay 1.5-compatible by chunking. */
+/** Wrap-by-width chip cloud — mirrors iOS `FlowLayout` (8pt spacing). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun <T> FlowChips(items: List<T>, content: @Composable (T) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { content(it) }
-            }
-        }
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items.forEach { content(it) }
     }
 }
