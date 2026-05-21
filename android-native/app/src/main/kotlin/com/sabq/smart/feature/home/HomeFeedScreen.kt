@@ -205,9 +205,9 @@ private fun LoadedFeed(
             start = SabqTheme.dimens.screenPaddingH,
             end = SabqTheme.dimens.screenPaddingH,
             top = 16.dp,
-            bottom = 120.dp,
+            bottom = SabqTheme.dimens.tabBarSafeArea,
         ),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(SabqTheme.dimens.sectionGap),
     ) {
         item {
             HomeHeaderBar(
@@ -367,7 +367,7 @@ private fun FeaturedCarousel(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HorizontalPager(
             state = pagerState,
-            pageSpacing = 12.dp,
+            pageSpacing = SabqTheme.dimens.pageSpacing,
         ) { page ->
             val article = articles[page]
             FeaturedArticleCard(
@@ -626,7 +626,12 @@ private fun GreetingBlock(onClick: () -> Unit = {}) {
     val tip = remember(dayOfYear) {
         SabqTips[dayOfYear % SabqTips.size]
     }
-    val tint = slot.tint
+    val tint = when (slot) {
+        GreetingSlot.Morning   -> SabqTheme.colors.dawnTint
+        GreetingSlot.Afternoon -> SabqTheme.colors.noonTint
+        GreetingSlot.Evening   -> SabqTheme.colors.duskTint
+        GreetingSlot.Night     -> SabqTheme.colors.nightTint
+    }
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.cardRadius)
 
     Row(
@@ -725,28 +730,11 @@ private fun GreetingBlock(onClick: () -> Unit = {}) {
 private enum class GreetingSlot(
     val greeting: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val tint: Color,
 ) {
-    Morning(
-        greeting = "صباح الخير",
-        icon = Icons.Filled.WbSunny,
-        tint = Color(red = 0.96f, green = 0.72f, blue = 0.18f),
-    ),
-    Afternoon(
-        greeting = "نهارك سعيد",
-        icon = Icons.Filled.WbSunny,
-        tint = Color(red = 0.93f, green = 0.58f, blue = 0.22f),
-    ),
-    Evening(
-        greeting = "مساء الخير",
-        icon = Icons.Filled.WbSunny,
-        tint = Color(red = 0.95f, green = 0.45f, blue = 0.20f),
-    ),
-    Night(
-        greeting = "ليلة هادئة",
-        icon = Icons.Filled.Bedtime,
-        tint = Color(red = 0.46f, green = 0.52f, blue = 0.95f),
-    ),
+    Morning(greeting = "صباح الخير", icon = Icons.Filled.WbSunny),
+    Afternoon(greeting = "نهارك سعيد", icon = Icons.Filled.WbSunny),
+    Evening(greeting = "مساء الخير", icon = Icons.Filled.WbSunny),
+    Night(greeting = "ليلة هادئة", icon = Icons.Filled.Bedtime),
 }
 
 private fun greetingSlot(hour: Int): GreetingSlot = when (hour) {
@@ -930,7 +918,7 @@ private fun OpinionsPreviewRail(
                 )
             }
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(SabqTheme.dimens.railGap)) {
             items(opinions, key = { it.id }) { opinion ->
                 OpinionCard(opinion = opinion, onClick = { onArticleClick(opinion) })
             }
@@ -942,7 +930,7 @@ private fun OpinionsPreviewRail(
 private fun OpinionCard(opinion: Article, onClick: () -> Unit) {
     val gold = SabqTheme.colors.gold
     val primary = SabqTheme.colors.primaryEnd
-    val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    val cardShape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.mediaCardRadius)
     Column(
         modifier = Modifier
             .width(200.dp)
@@ -972,7 +960,7 @@ private fun OpinionCard(opinion: Article, onClick: () -> Unit) {
                     .fillMaxSize()
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
+                            listOf(Color.Transparent, SabqTheme.colors.mediaScrim),
                         ),
                     ),
             )
@@ -1084,7 +1072,7 @@ private fun TrendingPreviewBlock(
     onArticleClick: (Article) -> Unit,
     onSeeAllClick: () -> Unit = {},
 ) {
-    val orange = Color(red = 0.98f, green = 0.45f, blue = 0.09f)
+    val orange = SabqTheme.colors.trendingAccent
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1193,7 +1181,7 @@ private fun StoriesRail(
 ) {
     LazyRow(
         modifier = Modifier.padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(SabqTheme.dimens.railGap),
     ) {
         items(stories, key = { it.id }) { story ->
             StoryBubble(story = story, onClick = { onStoryClick(story) })

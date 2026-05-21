@@ -18,11 +18,22 @@ data class SabqDimens(
     val tileRadius: Dp = 22.dp,
     val chipRadius: Dp = 14.dp,
     val buttonRadius: Dp = 20.dp,
+    // Compact media-bearing cards (opinion thumbnails, journey metric tiles).
+    // iOS uses 12pt on OpinionCard (HomeFeedView.swift:777). Sits below
+    // chipRadius (14) and above pure-pill shapes.
+    val mediaCardRadius: Dp = 12.dp,
 
-    // Layout — extracted from per-screen padding rules in DESIGN_SPEC.
+    // Layout — matched 1:1 to iOS HomeFeedView spacing (VStack 26pt at
+    // HomeFeedView.swift:95, 16pt horizontal padding at line 179).
     val screenPaddingH: Dp = 16.dp,
-    val sectionGap: Dp = 20.dp,
+    val sectionGap: Dp = 26.dp,
     val cardPadding: Dp = 20.dp,
+    // Horizontal rails (opinions, stories): iOS uses 14pt gaps.
+    val railGap: Dp = 14.dp,
+    // HorizontalPager spacing for the featured carousel.
+    val pageSpacing: Dp = 12.dp,
+    // List bottom inset reserving room for the floating tab bar.
+    val tabBarSafeArea: Dp = 120.dp,
 
     // Component-internal — drawn from FeaturedArticleCard / CompactArticleRow.
     val heroImageHeight: Dp = 200.dp,

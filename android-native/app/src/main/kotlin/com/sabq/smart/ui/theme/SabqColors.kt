@@ -34,6 +34,23 @@ data class SabqColors(
     val coral: Color,
     val leaf: Color,
 
+    // Time-of-day tints for the greeting block (HomeFeedView.swift:887-1010
+    // greetingTintFor). Same hues for light + dark so the warm-cold scale
+    // reads identically on both schemes.
+    val dawnTint: Color,
+    val noonTint: Color,
+    val duskTint: Color,
+    val nightTint: Color,
+
+    // Trending preview accent — saturated orange, distinct from `gold`.
+    // iOS uses this hue for the flame icon + "الكل" link tint.
+    val trendingAccent: Color,
+
+    // Overlay scrim drawn over media (opinion card bottom gradient, etc.).
+    // Slightly cooler + softer than pure-black 70%, which felt harsh under
+    // the IBM Plex weight. iOS uses a similar near-black gradient.
+    val mediaScrim: Color,
+
     // Resolved accent for the user's appAccent preference.
     val primaryStart: Color,
     val primaryEnd: Color,
@@ -68,6 +85,12 @@ object SabqColorPalette {
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
         coral       = Color(0.90f, 0.35f, 0.32f, 1f),
         leaf        = Color(0.40f, 0.73f, 0.22f, 1f),
+        dawnTint    = Color(0.96f, 0.72f, 0.18f, 1f),
+        noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
+        duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
+        nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
+        trendingAccent = Color(0.98f, 0.45f, 0.09f, 1f),
+        mediaScrim  = Color(0.04f, 0.04f, 0.06f, 0.55f),
         primaryStart = accent.light,
         primaryEnd   = accent.light,
         isDark      = false,
@@ -90,6 +113,12 @@ object SabqColorPalette {
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
         coral       = Color(0.90f, 0.35f, 0.32f, 1f),
         leaf        = Color(0.40f, 0.73f, 0.22f, 1f),
+        dawnTint    = Color(0.96f, 0.72f, 0.18f, 1f),
+        noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
+        duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
+        nightTint   = Color(0.55f, 0.62f, 1.00f, 1f),
+        trendingAccent = Color(1.00f, 0.55f, 0.20f, 1f),
+        mediaScrim  = Color(0.00f, 0.00f, 0.02f, 0.65f),
         primaryStart = accent.dark,
         primaryEnd   = accent.dark,
         isDark      = true,

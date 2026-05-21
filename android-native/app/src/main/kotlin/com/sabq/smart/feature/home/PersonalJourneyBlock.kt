@@ -176,7 +176,7 @@ private fun journeyGreeting(backendGreeting: String?, firstNameFallback: String?
 
 @Composable
 private fun JourneyMetrics(insights: TodayInsights?, lifetimePoints: Int) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(SabqTheme.dimens.mediaCardRadius)
     Row(
         modifier = Modifier
             .fillMaxWidth()

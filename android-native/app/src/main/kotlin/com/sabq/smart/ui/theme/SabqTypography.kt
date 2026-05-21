@@ -83,34 +83,41 @@ data class SabqTypography(
                 alignment = LineHeightStyle.Alignment.Center,
                 trim = LineHeightStyle.Trim.None,
             )
+            // Letter-spacing tracking: heavy Arabic glyphs ride too close
+            // together at default `0.sp` and lose the premium-editorial
+            // feel iOS gets for free from SF Pro's optical kerning. Slight
+            // positive tracking on titles + headings restores the breath.
+            // Body/meta stay at 0 so reading rhythm is untouched.
             fun base(
                 weight: FontWeight,
                 size: Float,
                 lh: Float = size * 1.35f,
+                tracking: Float = 0f,
             ) = TextStyle(
                 fontFamily = IbmPlexSansArabic,
                 fontWeight = weight,
                 fontSize = size.sp,
                 lineHeight = lh.sp,
                 lineHeightStyle = lineHeight,
+                letterSpacing = tracking.sp,
                 textAlign = TextAlign.Start,
             )
             return SabqTypography(
-                screenTitle        = base(FontWeight.Bold, 30f),
-                sectionHeader      = base(FontWeight.Bold, 19f),
-                cardTitle          = base(FontWeight.Bold, 20f),
-                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f),
-                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f),
-                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f),
+                screenTitle        = base(FontWeight.Bold, 30f, tracking = 0.3f),
+                sectionHeader      = base(FontWeight.Bold, 19f, tracking = 0.3f),
+                cardTitle          = base(FontWeight.Bold, 20f, tracking = 0.2f),
+                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f, tracking = 0.2f),
+                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f, tracking = 0.2f),
+                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f, tracking = 0.2f),
                 excerpt            = base(FontWeight.Normal, 15f, lh = 22f),
                 body               = base(FontWeight.Normal, articleFontSize, lh = articleFontSize + 8f),
                 chipLabel          = base(FontWeight.SemiBold, 14f),
                 statusChip         = base(FontWeight.SemiBold, 12f),
                 meta               = base(FontWeight.Medium, 13f),
                 metaSmall          = base(FontWeight.Medium, 11f),
-                breakingPill       = base(FontWeight.Bold, 11f),
-                ctaButton          = base(FontWeight.Bold, 17f),
-                tabLabel           = base(FontWeight.Bold, 12.5f),
+                breakingPill       = base(FontWeight.Bold, 11f, tracking = 0.3f),
+                ctaButton          = base(FontWeight.Bold, 17f, tracking = 0.2f),
+                tabLabel           = base(FontWeight.Bold, 12.5f, tracking = 0.2f),
             )
         }
     }
