@@ -209,10 +209,13 @@ private fun StatTile(
         }
         Text(
             text = value,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
+            style = SabqTheme.typography.statValue,
             color = SabqTheme.colors.ink,
         )
+        // iOS uses `.system(size: 12, weight: .medium)` for the label
+        // (BookmarksView.swift:96-97). Closest existing token is `meta`
+        // (13/Medium) but the 1-sp shrink matters here — keeping it
+        // inline rather than nudging the token's global size.
         Text(
             text = title,
             fontSize = 12.sp,

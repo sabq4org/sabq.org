@@ -380,8 +380,7 @@ private fun MostViewedCard(rank: Int, article: Article, onClick: () -> Unit) {
 
         Text(
             text = article.title,
-            fontSize = 14.5.sp,
-            fontWeight = FontWeight.Bold,
+            style = SabqTheme.typography.mostViewedCardTitle,
             color = SabqTheme.colors.ink,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,

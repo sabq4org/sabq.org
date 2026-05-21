@@ -718,11 +718,8 @@ private fun GreetingBlock(onClick: () -> Unit = {}) {
             }
             Text(
                 text = headline,
-                style = SabqTheme.typography.cardTitle.copy(
-                    fontSize = 16.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                    color = SabqTheme.colors.ink,
-                ),
+                style = SabqTheme.typography.greetingHeadline,
+                color = SabqTheme.colors.ink,
                 maxLines = 3,
             )
             Text(

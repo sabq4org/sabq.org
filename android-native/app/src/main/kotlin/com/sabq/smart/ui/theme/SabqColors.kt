@@ -51,6 +51,13 @@ data class SabqColors(
     // the IBM Plex weight. iOS uses a similar near-black gradient.
     val mediaScrim: Color,
 
+    // Purple anchor for the personal-journey gradient badge (the 40 dp
+    // sparkles circle in PersonalJourneyBlock). iOS literal:
+    // `Color(red: 0.55, green: 0.36, blue: 0.92)` at HomeFeedView.swift:1048
+    // and SabqComponents.swift:1242. Theme-independent (same hue both
+    // schemes) per iOS.
+    val journeyGradientStart: Color,
+
     // Resolved accent for the user's appAccent preference.
     val primaryStart: Color,
     val primaryEnd: Color,
@@ -91,6 +98,7 @@ object SabqColorPalette {
         nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
         trendingAccent = Color(0.98f, 0.45f, 0.09f, 1f),
         mediaScrim  = Color(0.04f, 0.04f, 0.06f, 0.55f),
+        journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         primaryStart = accent.light,
         primaryEnd   = accent.light,
         isDark      = false,
@@ -119,6 +127,7 @@ object SabqColorPalette {
         nightTint   = Color(0.55f, 0.62f, 1.00f, 1f),
         trendingAccent = Color(1.00f, 0.55f, 0.20f, 1f),
         mediaScrim  = Color(0.00f, 0.00f, 0.02f, 0.65f),
+        journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         primaryStart = accent.dark,
         primaryEnd   = accent.dark,
         isDark      = true,

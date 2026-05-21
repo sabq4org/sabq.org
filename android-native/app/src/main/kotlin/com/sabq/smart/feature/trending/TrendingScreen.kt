@@ -157,8 +157,7 @@ private fun HeroSection() {
         ) {
             Text(
                 text = "الأكثر تداولاً",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
+                style = SabqTheme.typography.statValue,
                 color = SabqTheme.colors.ink,
             )
             Text(

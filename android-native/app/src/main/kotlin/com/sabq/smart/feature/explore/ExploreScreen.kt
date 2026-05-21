@@ -330,8 +330,7 @@ private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = section.name,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                style = SabqTheme.typography.tileTitle,
                 color = SabqTheme.colors.ink,
             )
             Text(

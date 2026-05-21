@@ -102,7 +102,7 @@ private fun JourneyHeader(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(red = 0.55f, green = 0.36f, blue = 0.92f, alpha = 1f),
+                            SabqTheme.colors.journeyGradientStart,
                             SabqTheme.colors.primaryEnd,
                         ),
                     ),
@@ -245,8 +245,7 @@ private fun androidx.compose.foundation.layout.RowScope.MetricCell(
         }
         Text(
             text = label,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
+            style = SabqTheme.typography.microMeta,
             color = SabqTheme.colors.tertiaryInk,
             maxLines = 1,
         )

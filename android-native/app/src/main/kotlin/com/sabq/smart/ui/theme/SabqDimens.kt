@@ -45,4 +45,11 @@ data class SabqDimens(
     val tabBarHeight: Dp = 54.dp,
     val badgeSmall: Dp = 44.dp,
     val badgeLarge: Dp = 72.dp,
+
+    // Icon-badge corner radii (SmallSquareBadge / SquareIconBadge in iOS).
+    // 13 pt = SabqComponents.swift:941, 18 pt = SabqComponents.swift:963.
+    // Used as the rounded-rect fill behind a single SF Symbol / Material
+    // Icon, e.g. the section-icon chip on screen headers.
+    val badgeIconRadius: Dp = 13.dp,
+    val badgeIconRadiusLarge: Dp = 18.dp,
 )
