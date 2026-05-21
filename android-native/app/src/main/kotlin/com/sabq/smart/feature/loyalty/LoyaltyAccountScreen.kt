@@ -22,9 +22,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +70,7 @@ import com.sabq.smart.ui.theme.SabqTheme
 @Composable
 fun LoyaltyAccountScreen(
     onBack: () -> Unit,
+    onHistoryClick: () -> Unit = {},
     viewModel: LoyaltyAccountViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
@@ -90,7 +93,7 @@ fun LoyaltyAccountScreen(
                 LoyaltyUiState.Loading -> CenterSpinner()
                 LoyaltyUiState.Anonymous -> AnonymousHint()
                 is LoyaltyUiState.Error -> ErrorHint(message = s.message, onRetry = viewModel::refresh)
-                is LoyaltyUiState.Loaded -> Content(summary = s.summary, user = user)
+                is LoyaltyUiState.Loaded -> Content(summary = s.summary, user = user, onHistoryClick = onHistoryClick)
             }
         }
     }
@@ -132,7 +135,7 @@ private fun TopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun Content(summary: LoyaltySummary, user: User?) {
+private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -154,6 +157,66 @@ private fun Content(summary: LoyaltySummary, user: User?) {
 
         // 3) Tier ladder.
         TierLadder(currentLevel = summary.resolvedTier.level)
+
+        // 4) Quick actions — only "سجل نقاطي" today (iOS also ships a
+        //    rewards card, deferred until LoyaltyRewardsView ports).
+        HistoryActionCard(onClick = onHistoryClick)
+    }
+}
+
+@Composable
+private fun HistoryActionCard(onClick: () -> Unit) {
+    val coral = SabqTheme.colors.coral
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(SabqTheme.dimens.tileRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(
+                width = 0.5.dp,
+                color = SabqTheme.colors.outline.copy(alpha = 0.35f),
+                shape = shape,
+            )
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(coral.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.History,
+                contentDescription = null,
+                tint = coral,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "سجل نقاطي",
+                fontSize = 14.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = SabqTheme.colors.ink,
+            )
+            Text(
+                text = "تتبَّع نشاطك ونقاطك",
+                fontSize = 11.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                color = SabqTheme.colors.secondaryInk,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(14.dp),
+        )
     }
 }
 
