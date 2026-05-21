@@ -1216,7 +1216,8 @@ actor APIClient {
     func fetchLoyaltyHistory(page: Int = 1, limit: Int = 20) async throws -> LoyaltyHistoryResponse {
         try await get(
             LoyaltyHistoryResponse.self,
-            path: "/loyalty/history?page=\(page)&limit=\(limit)"
+            path: "/loyalty/history",
+            query: ["page": "\(page)", "limit": "\(limit)"]
         )
     }
 
