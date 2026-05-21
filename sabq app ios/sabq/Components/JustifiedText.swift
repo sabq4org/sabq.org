@@ -7,6 +7,15 @@ import UIKit
 ///
 /// Used inside the article + opinion detail readers; not appropriate
 /// for headings (which want leading alignment) or short labels.
+///
+/// **Performance note:** the body of an article detail view re-renders
+/// continuously while the reader scrolls (because the reading-progress
+/// bar tracks scroll Y), so SwiftUI calls `updateUIView()` on every
+/// paragraph for every scroll tick. Building an `NSAttributedString` +
+/// font descriptor every time costs ~0.5ms per paragraph, which
+/// multiplied by 20 paragraphs × 60fps is the entire frame budget gone.
+/// We cache the last build inside the Coordinator keyed by a cheap
+/// fingerprint of the inputs, and no-op when nothing changed.
 struct JustifiedText: UIViewRepresentable {
     let text: String
     let fontSize: CGFloat
@@ -37,7 +46,21 @@ struct JustifiedText: UIViewRepresentable {
         return tv
     }
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var fingerprint: String = ""
+    }
+
     func updateUIView(_ uiView: UITextView, context: Context) {
+        // Fingerprint covers every input that affects layout. If unchanged,
+        // the UITextView's existing attributedText is still correct and we
+        // skip the (expensive) rebuild + assignment.
+        let fp = "\(text.count)|\(text.hashValue)|\(fontSize)|\(weight.rawValue)|\(useSerifReader ? 1 : 0)|\(lineSpacing)|\(textColor.hashValue)"
+        if fp == context.coordinator.fingerprint && uiView.attributedText.length > 0 {
+            return
+        }
+        context.coordinator.fingerprint = fp
         uiView.attributedText = buildAttributed()
     }
 
@@ -73,6 +96,13 @@ struct JustifiedText: UIViewRepresentable {
 /// Same UITextView wrapper but takes an `NSAttributedString` directly so
 /// the rich-HTML pipeline (ArticleContentView) can preserve inline
 /// bold/italic/link runs while still justifying the paragraph.
+///
+/// Performance: same coordinator-memoization trick as `JustifiedText`.
+/// The attributed input is identified by length + lineSpacing + a hash
+/// of its raw string content — cheap to compute, sufficient to detect a
+/// real edit. Without this, every scroll tick paid for a full
+/// NSMutableAttributedString copy + paragraph style application on
+/// every paragraph in the body.
 struct JustifiedAttributedText: UIViewRepresentable {
     let attributed: NSAttributedString
     let lineSpacing: CGFloat
@@ -96,6 +126,14 @@ struct JustifiedAttributedText: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UITextView, context: Context) {
+        let fp = "\(attributed.length)|\(attributed.string.hashValue)|\(lineSpacing)"
+        if fp == context.coordinator.fingerprint && uiView.attributedText.length > 0 {
+            // Still refresh the link handler — cheap and might have changed.
+            context.coordinator.onLinkTap = onLinkTap
+            return
+        }
+        context.coordinator.fingerprint = fp
+
         let m = NSMutableAttributedString(attributedString: attributed)
         // Apply justified paragraph style across the whole string
         // without clobbering the inline font/colour runs.
@@ -119,6 +157,7 @@ struct JustifiedAttributedText: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var onLinkTap: ((URL) -> Void)?
+        var fingerprint: String = ""
         func textView(_ textView: UITextView, shouldInteractWith URL: URL,
                       in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
             if let handler = onLinkTap {

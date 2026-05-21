@@ -11,7 +11,11 @@ struct OpinionDetailView: View {
     @State private var isSummaryExpanded = false
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
-    @State private var scrollProgress: CGFloat = 0
+    /// Same reference-type pattern as `ArticleDetailView` — mutations to
+    /// `.value` only invalidate `ReadingProgressOverlay`, never this view's
+    /// body. Without this, every scroll tick re-rendered the entire
+    /// opinion reader (including its JustifiedText paragraphs).
+    @State private var scrollProgress = ArticleScrollProgress()
     @State private var showReaderControls = false
     @State private var isFocusMode = false
     /// Drives the hero `ImageLightbox` fullScreenCover when the reader
@@ -107,12 +111,12 @@ struct OpinionDetailView: View {
                 .frame(width: proxy.size.width, alignment: .leading)
             }
             .sabqScrollProgressTracker { progress in
-                scrollProgress = progress
+                scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
-                readingProgressBar
+                ReadingProgressOverlay(model: scrollProgress)
             }
         }
         .background(focusBackground)
@@ -345,16 +349,10 @@ struct OpinionDetailView: View {
         }
     }
 
-    // MARK: - Reading Progress Bar
-
-    private var readingProgressBar: some View {
-        ProgressView(value: scrollProgress)
-            .progressViewStyle(ReadingProgressStyle())
-            .frame(height: 4)
-            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: scrollProgress)
-            .opacity(scrollProgress > 0.001 ? 1 : 0)
-            .animation(.easeOut(duration: 0.25), value: scrollProgress > 0.001)
-    }
+    // MARK: - Reading Progress Bar — see `ReadingProgressOverlay` at top
+    // of ArticleDetailView.swift. The previous inline version drove its
+    // own @State CGFloat and was the dominant source of scroll jank in
+    // the opinion reader, same as the article reader.
 
     // MARK: - Labels (opinion marker pill)
 

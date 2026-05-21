@@ -1,6 +1,35 @@
 import SwiftUI
 import AVFoundation
 
+/// Holds the live scroll progress (0…1) as an `@Published` value behind a
+/// reference type. Stored on the article detail view via `@State`, so
+/// SwiftUI tracks reference identity for the parent — mutations to
+/// `.value` do NOT invalidate the parent body. Only the
+/// `ReadingProgressOverlay` subview observes the model via
+/// `@ObservedObject`, so only that overlay re-renders on each scroll
+/// tick. Mirrors the `ScrollOffsetRef` pattern already in HomeFeedView.
+final class ArticleScrollProgress: ObservableObject {
+    @Published var value: CGFloat = 0
+}
+
+/// Tiny subview that owns the observation of `ArticleScrollProgress`. We
+/// keep this OUT of the parent's view tree so the parent body's view
+/// graph remains stable during scroll. SwiftUI re-renders this overlay
+/// at high frequency (every scroll tick), which is fine because it's a
+/// single ProgressView with no expensive children.
+private struct ReadingProgressOverlay: View {
+    @ObservedObject var model: ArticleScrollProgress
+
+    var body: some View {
+        ProgressView(value: model.value)
+            .progressViewStyle(ReadingProgressStyle())
+            .frame(height: 4)
+            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: model.value)
+            .opacity(model.value > 0.001 ? 1 : 0)
+            .animation(.easeOut(duration: 0.25), value: model.value > 0.001)
+    }
+}
+
 struct ArticleDetailView: View {
     let article: Article
     @Environment(BookmarksStore.self) private var bookmarksStore
@@ -35,7 +64,12 @@ struct ArticleDetailView: View {
     @State private var shortlinkTask: Task<URL?, Never>?
     @State private var isCopyFeedbackVisible = false
     @State private var copyFeedbackTask: Task<Void, Never>?
-    @State private var scrollProgress: CGFloat = 0
+    /// Live scroll progress (0…1), driven by `.sabqScrollProgressTracker`.
+    /// Held as a class so mutations don't invalidate this view's body —
+    /// only `ReadingProgressOverlay` subscribes via `@ObservedObject`. See
+    /// the type-level doc comment for the rationale (same root cause as
+    /// the home-feed perf fix logged in `ScrollOffsetRef`).
+    @State private var scrollProgress = ArticleScrollProgress()
     @Environment(LikesStore.self) private var likesStore
     @State private var likesCount: Int = 0
     @State private var isLikeBusy: Bool = false
@@ -184,13 +218,16 @@ struct ArticleDetailView: View {
                 .frame(width: proxy.size.width, alignment: .leading)
             }
             .sabqScrollProgressTracker { progress in
-                scrollProgress = progress
+                // Update through the class — does NOT invalidate this view
+                // body, only the `ReadingProgressOverlay` subview observes
+                // via @ObservedObject so the bar still animates smoothly.
+                scrollProgress.value = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
 
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
-                readingProgressBar
+                ReadingProgressOverlay(model: scrollProgress)
             }
         }
         .background(focusBackground)
@@ -302,15 +339,11 @@ struct ArticleDetailView: View {
     }
 
     // MARK: - Reading Progress Bar
-
-    private var readingProgressBar: some View {
-        ProgressView(value: scrollProgress)
-            .progressViewStyle(ReadingProgressStyle())
-            .frame(height: 4)
-            .animation(.spring(response: 0.35, dampingFraction: 0.88), value: scrollProgress)
-            .opacity(scrollProgress > 0.001 ? 1 : 0)
-            .animation(.easeOut(duration: 0.25), value: scrollProgress > 0.001)
-    }
+    // The overlay is rendered by `ReadingProgressOverlay` (see top of
+    // file). The previous `readingProgressBar` computed property bound
+    // directly to a `@State CGFloat`, which forced the entire view body
+    // to re-evaluate on every scroll tick — the dominant source of
+    // scroll jank in the article reader.
 
     private var fallbackShareURL: URL {
         if let urlStr = displayArticle.articleURL, let url = URL(string: urlStr) {
