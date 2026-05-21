@@ -202,21 +202,38 @@ struct EditorialNotificationsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Spacer()
-            Image(systemName: "bell")
-                .font(.system(size: 50, weight: .light))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+            ZStack {
+                Circle()
+                    .fill(SabqTheme.primaryEnd.opacity(0.10))
+                    .frame(width: 96, height: 96)
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 38, weight: .light))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 10, weight: .heavy))
+                Text("أنت محدّث")
+                    .font(.system(size: 11, weight: .black))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(SabqTheme.primaryEnd, in: Capsule())
             Text("لا توجد إشعارات بعد")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Text("سيصلك هنا كل ما يخص مقالاتك وأخبارك من جدولة ونشر ومراجعة.")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .lineSpacing(4)
+                .padding(.horizontal, 28)
             Spacer()
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var markAllReadButton: some View {
