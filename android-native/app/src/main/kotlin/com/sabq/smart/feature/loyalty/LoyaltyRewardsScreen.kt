@@ -93,16 +93,20 @@ fun LoyaltyRewardsScreen(
             when {
                 state.isLoading && state.rewards.isEmpty() ->
                     item {
-                        Box(
+                        // Skeleton matches the rewards-card layout (large
+                        // image-ish block + title + value chips).
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 40.dp),
-                            contentAlignment = Alignment.Center,
+                                .padding(top = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            CircularProgressIndicator(
-                                color = SabqTheme.colors.primaryEnd,
-                                strokeWidth = 2.5.dp,
-                            )
+                            repeat(4) {
+                                com.sabq.smart.ui.components.SkeletonBox(
+                                    height = 120.dp,
+                                    radius = SabqTheme.dimens.cardRadius,
+                                )
+                            }
                         }
                     }
 

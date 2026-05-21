@@ -317,36 +317,18 @@ private fun LoadingSkeleton() {
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(SabqTheme.colors.paleFill),
-                )
+                com.sabq.smart.ui.components.SkeletonCircle(diameter = 36.dp)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(14.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
+                    com.sabq.smart.ui.components.SkeletonBox(height = 14.dp, radius = 4.dp)
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        width = 120.dp, height = 10.dp, radius = 4.dp,
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(SabqTheme.colors.paleFill),
+                com.sabq.smart.ui.components.SkeletonBox(
+                    width = 64.dp, height = 64.dp, radius = 8.dp,
                 )
             }
         }

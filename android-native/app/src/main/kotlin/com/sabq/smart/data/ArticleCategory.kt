@@ -10,11 +10,8 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.outlined.Flag
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.sabq.smart.ui.theme.SabqTheme
 
 /**
  * Ports iOS [ArticleCategory] (sabq/Models/ArticleCategory.swift).
@@ -41,17 +38,25 @@ enum class ArticleCategory(
     Life(       "life",       "حياتنا",  "صحة وأسرة وأسلوب حياة",            Icons.Outlined.Flag),
     ;
 
-    @Composable
-    @ReadOnlyComposable
+    /**
+     * Category tints — exact hex literals from iOS
+     * [ArticleCategory.tint] in `Models/SabqModels.swift:241-256`.
+     *
+     * We deliberately do NOT route through [SabqTheme] tokens because
+     * iOS encodes these as fixed hex values; theme tokens (primaryEnd,
+     * leaf, gold, teal, coral, sky) carry different hues and previously
+     * caused visible drift (e.g. World rendered blue instead of red,
+     * Technology turquoise instead of indigo). Keep these 1:1 with iOS.
+     */
     fun tint(): Color = when (this) {
-        Local -> SabqTheme.colors.primaryEnd
-        Sports -> SabqTheme.colors.leaf
-        Business -> SabqTheme.colors.gold
-        Technology -> SabqTheme.colors.teal
-        Culture -> Color(0xFFD946EF)   // iOS SabqModels.swift:245 hex d946ef
-        Community -> SabqTheme.colors.coral
-        World -> SabqTheme.colors.sky
-        Life -> Color(0xFFF472B6)      // iOS SabqModels.swift:251 hex F472B6
+        Local -> Color(0xFF3498DB)      // iOS hex 3498db
+        Sports -> Color(0xFF2ECC71)     // iOS hex 2ecc71
+        Business -> Color(0xFFCA8A04)   // iOS hex ca8a04
+        Technology -> Color(0xFF6366F1) // iOS hex 6366f1
+        Culture -> Color(0xFFD946EF)    // iOS hex d946ef
+        Community -> Color(0xFFF97316)  // iOS hex f97316
+        World -> Color(0xFFE74C3C)      // iOS hex e74c3c
+        Life -> Color(0xFFF472B6)       // iOS hex F472B6
     }
 
     companion object {

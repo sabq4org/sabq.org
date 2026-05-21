@@ -99,10 +99,32 @@ fun LoyaltyHistoryScreen(
         TopBar(onBack = onBack)
 
         when {
-            state.isRefreshing && state.items.isEmpty() ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
+            state.isRefreshing && state.items.isEmpty() -> {
+                // Skeleton: totals strip + 6 history rows.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                com.sabq.smart.ui.components.SkeletonBox(
+                                    height = 76.dp,
+                                    radius = 14.dp,
+                                )
+                            }
+                        }
+                    }
+                    repeat(6) {
+                        com.sabq.smart.ui.components.SkeletonBox(
+                            height = 60.dp,
+                            radius = SabqTheme.dimens.tileRadius,
+                        )
+                    }
                 }
+            }
             state.items.isEmpty() && state.loadError != null ->
                 ErrorState(message = state.loadError!!, onRetry = viewModel::reload)
             state.items.isEmpty() ->

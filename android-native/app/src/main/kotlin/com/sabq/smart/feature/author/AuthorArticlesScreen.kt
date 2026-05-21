@@ -86,9 +86,10 @@ fun AuthorArticlesScreen(
         Box(modifier = Modifier.fillMaxSize()) {
             when (val s = uiState) {
                 AuthorProfileUiState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
-                    }
+                    com.sabq.smart.ui.components.ArticleListSkeleton(
+                        rows = 8,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
                 }
                 is AuthorProfileUiState.Error -> {
                     Column(

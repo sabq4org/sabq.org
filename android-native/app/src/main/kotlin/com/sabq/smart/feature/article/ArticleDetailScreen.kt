@@ -2121,34 +2121,17 @@ private fun CommentSkeletonList() {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         repeat(3) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(SabqTheme.colors.paleFill),
-                )
+                com.sabq.smart.ui.components.SkeletonCircle(diameter = 32.dp)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 110.dp, height = 12.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        width = 110.dp, height = 12.dp, radius = 4.dp,
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(width = 220.dp, height = 10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
+                    com.sabq.smart.ui.components.SkeletonBox(height = 10.dp, radius = 4.dp)
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        width = 220.dp, height = 10.dp, radius = 4.dp,
                     )
                 }
             }
