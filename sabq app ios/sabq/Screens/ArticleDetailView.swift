@@ -144,12 +144,13 @@ struct ArticleDetailView: View {
                             SabqHaptics.light()
                             isHeroLightboxPresented = true
                         }
-                        .aiImageBadgeOverlay(
-                            isVisible: displayArticle.isAiGeneratedImage,
-                            model: displayArticle.aiImageModel,
-                            inset: 12,
-                            corner: .topLeading
-                        )
+                        // Intentional: the AI-image disclosure pill is shown
+                        // in lists (HomeFeed / Trending / DailyBrief) where
+                        // there's no other entry point. Inside the article
+                        // detail, "جواز المحتوى" (PassportSheetView) is the
+                        // single source of truth for AI/source/people
+                        // transparency, so the duplicate badge on the hero
+                        // was just noise — removed per editorial direction.
 
                     VStack(alignment: .leading, spacing: 18) {
                         // Editorial column order (per user 2026-05-14):
