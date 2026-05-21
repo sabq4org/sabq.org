@@ -187,6 +187,7 @@ struct ArticleDetailView: View {
                 scrollProgress = progress
                 BehaviorTracker.shared.updateScroll(percent: Double(progress))
             }
+
             .sabqAutoHideTabBar()
             .overlay(alignment: .top) {
                 readingProgressBar
@@ -1224,18 +1225,15 @@ struct ArticleDetailView: View {
                 }()
                 VStack(alignment: .leading, spacing: 18) {
                     ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                        Text(paragraph)
-                            .font(.system(
-                                size: CGFloat(index == 0 ? fontSize + 1 : fontSize),
-                                weight: index == 0 ? .medium : .regular,
-                                design: useReaderFont ? .serif : .default
-                            ))
-                            .foregroundStyle(SabqTheme.ink.opacity(0.92))
-                            .multilineTextAlignment(.leading)
-                            .lineSpacing(CGFloat(lineSpacing) + (index == 0 ? 4 : 3))
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        JustifiedText(
+                            text: paragraph,
+                            fontSize: CGFloat(index == 0 ? fontSize + 1 : fontSize),
+                            weight: index == 0 ? .medium : .regular,
+                            useSerifReader: useReaderFont,
+                            lineSpacing: CGFloat(lineSpacing) + (index == 0 ? 4 : 3),
+                            textColor: UIColor(SabqTheme.ink.opacity(0.92))
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(.horizontal, 6)
