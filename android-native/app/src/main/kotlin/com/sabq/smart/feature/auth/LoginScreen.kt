@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,7 +28,6 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -52,27 +53,21 @@ import com.sabq.smart.ui.components.PrimaryCTAButton
 import com.sabq.smart.ui.components.SurfaceCard
 import com.sabq.smart.ui.theme.SabqTheme
 
-/**
- * Login screen — email + password + "إنشاء حساب" toggle to register
- * mode. Stays minimal: no Google sign-in, no 2FA, no forgot-password
- * sub-flow. Those land once the basic auth path is solid.
- */
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel = hiltViewModel(),
     onBack: () -> Unit,
     onAuthenticated: () -> Unit,
+    onForgotPasswordClick: () -> Unit = {},
+    onSmartSignUpClick: () -> Unit = {},
 ) {
     val form by viewModel.form.collectAsStateWithLifecycle()
     val resend by viewModel.resend.collectAsStateWithLifecycle()
 
-    var isRegister by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // Reset the form when toggling between login/register.
-    LaunchedEffect(isRegister) { viewModel.resetForm() }
+    LaunchedEffect(Unit) { viewModel.resetForm() }
 
     LaunchedEffect(form) {
         if (form is AuthFormState.Success) onAuthenticated()
@@ -83,6 +78,7 @@ fun LoginScreen(
             .fillMaxSize()
             .background(SabqTheme.colors.background)
             .statusBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(
                 start = SabqTheme.dimens.screenPaddingH,
@@ -110,29 +106,17 @@ fun LoginScreen(
         }
 
         Text(
-            text = if (isRegister) "أنشئ حسابك" else "أهلاً بعودتك",
+            text = "أهلاً بعودتك",
             style = SabqTheme.typography.screenTitle,
             color = SabqTheme.colors.ink,
         )
         Text(
-            text = if (isRegister)
-                "انضم إلى مجتمع سبق لمتابعة أخبارك المفضلة وحفظها"
-            else "سجّل دخولك للوصول إلى محفوظاتك وتفضيلاتك",
+            text = "سجّل دخولك للوصول إلى محفوظاتك وتفضيلاتك",
             style = SabqTheme.typography.excerpt,
             color = SabqTheme.colors.secondaryInk,
         )
 
         SurfaceCard {
-            if (isRegister) {
-                FormField(
-                    icon = Icons.Filled.PersonOutline,
-                    placeholder = "الاسم الكامل",
-                    value = name,
-                    onValueChange = { name = it },
-                    keyboardType = KeyboardType.Text,
-                    imeAction = ImeAction.Next,
-                )
-            }
             FormField(
                 icon = Icons.Filled.AlternateEmail,
                 placeholder = "البريد الإلكتروني",
@@ -149,10 +133,7 @@ fun LoginScreen(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
                 isPassword = true,
-                onSubmit = {
-                    if (isRegister) viewModel.register(name, email, password)
-                    else viewModel.login(email, password)
-                },
+                onSubmit = { viewModel.login(email, password) },
             )
 
             if (form is AuthFormState.Error) {
@@ -260,28 +241,40 @@ fun LoginScreen(
                 }
             } else {
                 PrimaryCTAButton(
-                    title = if (isRegister) "إنشاء الحساب" else "تسجيل الدخول",
+                    title = "تسجيل الدخول",
                     icon = Icons.AutoMirrored.Filled.ArrowForward,
-                    onClick = {
-                        if (isRegister) viewModel.register(name, email, password)
-                        else viewModel.login(email, password)
-                    },
+                    onClick = { viewModel.login(email, password) },
                 )
             }
         }
 
-        // Toggle login/register.
+        // Smart-signup CTA — replaces the old inline register toggle.
+        // Matches the iOS pattern where "إنشاء حساب جديد" opens the
+        // conversational SABQ-AI flow (SignUpFlowView.swift).
         Text(
-            text = if (isRegister)
-                "لديك حساب بالفعل؟ تسجيل الدخول"
-            else "ليس لديك حساب؟ إنشاء حساب جديد",
+            text = "ليس لديك حساب؟ إنشاء حساب جديد",
             style = SabqTheme.typography.chipLabel,
             color = SabqTheme.colors.primaryEnd,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)
-                .clickable { isRegister = !isRegister },
+                .clickable { onSmartSignUpClick() },
         )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onForgotPasswordClick() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "نسيت كلمة المرور؟",
+                style = SabqTheme.typography.meta,
+                color = SabqTheme.colors.secondaryInk,
+            )
+        }
     }
 }
 

@@ -71,9 +71,15 @@ data class User(
 
     val localizedRole: String
         get() {
-            // Server-rendered label wins — backend already resolves the
-            // canonical Arabic name from the RBAC `roleAr` column.
-            roleLabel?.takeIf { it.isNotBlank() }?.let { return it }
+            // Mirrors iOS `APIUser.localizedRole` (`APIModels.swift:968-987`):
+            //   1. preferredRoleLabel — server label OR translation of the
+            //      primary non-reader role key (skips stale "قارئ"/"reader"
+            //      labels so a writer with a stale roleLabel still resolves
+            //      to "كاتب").
+            //   2. jobTitle (membership label skipped — not yet decoded).
+            //   3. translation of any role key, even reader.
+            //   4. "قارئ".
+            preferredRoleLabel()?.let { return it }
             jobTitle?.takeIf { it.isNotBlank() }?.let { return it }
             primaryRoleKey?.let { key ->
                 roleTranslations[key.lowercase()]?.let { return it }
@@ -81,6 +87,16 @@ data class User(
             }
             return "قارئ"
         }
+
+    private fun preferredRoleLabel(): String? {
+        val sanitizedLabel = roleLabel?.trim()?.takeIf { it.isNotEmpty() }
+        if (sanitizedLabel != null && isNonReaderRoleLabel(sanitizedLabel)) {
+            return sanitizedLabel
+        }
+        val key = primaryRoleKey ?: return null
+        if (!isNonReaderRole(key)) return null
+        return roleTranslations[key.lowercase()] ?: sanitizedLabel
+    }
 
     val isWriter: Boolean
         get() = roles.plus(role).filterNotNull().any { it.lowercase() in WRITER_KEYS }
@@ -101,11 +117,12 @@ data class User(
             "reporter", "correspondent", "journalist",
         )
         private val ADMIN_LIKE_KEYS = setOf(
-            "admin", "system_admin", "system-admin",
+            "admin", "system_admin", "system-admin", "superadmin",
             "editor", "editor_in_chief", "editor-in-chief",
             "senior_editor", "senior-editor",
             "managing_editor", "managing-editor",
             "editorial_manager", "editorial-manager",
+            "content_manager", "content-manager",
         )
 
         /** Subset of iOS `APIUser.roleTranslations`. */
@@ -129,6 +146,7 @@ data class User(
             "content_manager" to "مدير محتوى",
             "comments_moderator" to "مشرف تعليقات",
             "moderator" to "مشرف",
+            "media_manager" to "مدير وسائط",
             "publisher" to "ناشر",
             "photographer" to "مصور",
             "contributor" to "مساهم",
@@ -144,6 +162,14 @@ data class User(
 
         private fun isNonReaderRole(key: String): Boolean =
             key.lowercase() !in setOf("reader", "")
+
+        /** Mirrors iOS `isNonReaderRoleLabel` (`APIModels.swift:1202`).
+         *  Filters out stale Arabic "reader" labels so a writer with a
+         *  bad server label still resolves to the correct role. */
+        private fun isNonReaderRoleLabel(label: String): Boolean {
+            val n = label.trim().lowercase()
+            return n != "reader" && n != "قارئ" && n != "قاريء"
+        }
     }
 }
 

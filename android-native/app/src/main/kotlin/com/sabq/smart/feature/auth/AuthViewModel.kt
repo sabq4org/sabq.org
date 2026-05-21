@@ -122,27 +122,6 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun register(name: String, email: String, password: String) {
-        if (name.isBlank() || email.isBlank() || password.isBlank()) {
-            _form.value = AuthFormState.Error("الرجاء تعبئة جميع الحقول")
-            return
-        }
-        if (password.length < 8) {
-            _form.value = AuthFormState.Error("يجب أن تكون كلمة المرور 8 خانات على الأقل")
-            return
-        }
-        viewModelScope.launch {
-            _form.value = AuthFormState.Submitting
-            runCatching { repo.register(name, email, password) }
-                .onSuccess { _form.value = AuthFormState.Success(it) }
-                .onFailure { e ->
-                    val msg = if (e is AuthException) e.message ?: "تعذّر إنشاء الحساب"
-                    else e.localizedMessage ?: "حدث خطأ، حاول مجدداً"
-                    _form.value = AuthFormState.Error(msg)
-                }
-        }
-    }
-
     fun logout() {
         viewModelScope.launch {
             repo.logout()

@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
+import com.sabq.smart.feature.auth.SmartSignUpScreen
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
 import com.sabq.smart.feature.brief.DailyBriefScreen
 import com.sabq.smart.feature.brief.InterestsPickerScreen
@@ -72,6 +73,7 @@ object SabqRoutes {
     const val Profile = "profile"
     const val ArticleDetail = "article/{slug}"
     const val Login = "auth/login"
+    const val SmartSignUp = "auth/signup-smart"
     const val Loyalty = "loyalty"
     const val LoyaltyHistory = "loyalty/history"
     const val LoyaltyRewards = "loyalty/rewards"
@@ -243,6 +245,9 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                        onKeywordClick = { keyword ->
+                            navController.navigate(SabqRoutes.keywordArticles(keyword))
+                        },
                     )
                 }
                 composable(SabqRoutes.Search) {
@@ -310,13 +315,25 @@ fun SabqApp(
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
                         onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
-                        onClearLocalData = { /* Surfaced via dialog in a future polish pass. */ },
                     )
                 }
                 composable(SabqRoutes.Login) {
                     LoginScreen(
                         onBack = { navController.popBackStack() },
                         onAuthenticated = { navController.popBackStack() },
+                        onForgotPasswordClick = { navController.navigate(SabqRoutes.ForgotPassword) },
+                        onSmartSignUpClick = { navController.navigate(SabqRoutes.SmartSignUp) },
+                    )
+                }
+                composable(SabqRoutes.SmartSignUp) {
+                    SmartSignUpScreen(
+                        onClose = { navController.popBackStack() },
+                        onDone = {
+                            // Pop the smart signup AND the underlying login
+                            // screen so the user lands back at the surface
+                            // that requested authentication.
+                            navController.popBackStack(SabqRoutes.Login, inclusive = true)
+                        },
                     )
                 }
                 composable(SabqRoutes.Loyalty) {

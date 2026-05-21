@@ -109,6 +109,18 @@ fun CompactArticleRow(
                         .align(Alignment.Center),
                 )
             }
+
+            // AI-generated image disclosure — small inset, 65 % size to
+            // fit the 84 dp thumbnail. Mirrors iOS line 1337-1342.
+            if (article.isAiGeneratedImage) {
+                AIImageBadge(
+                    model = article.aiImageModel,
+                    sizeScale = 0.65f,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                )
+            }
         }
     }
 }
