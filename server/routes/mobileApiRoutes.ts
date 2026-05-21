@@ -32,6 +32,8 @@ import {
   userRoles,
   readingHistory,
   reactions,
+  userLoyaltyEvents,
+  userPointsTotal,
 } from "@shared/schema";
 import { eq, sql, and, gt, gte, desc, or, ne, ilike, aliasedTable, inArray } from "drizzle-orm";
 

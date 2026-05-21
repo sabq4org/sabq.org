@@ -18,6 +18,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.FlowRow
@@ -335,11 +338,20 @@ private fun ArticleBody(
     // so we use a nullable URL).
     var lightboxUrl by remember { mutableStateOf<String?>(null) }
 
+    // Top inset: status bar + toolbar height so the hero image starts
+    // BELOW the floating TopToolbar instead of running under it. iOS
+    // gets this behaviour for free from the native opaque nav bar
+    // (`navigationBarTitleDisplayMode(.inline)`); on Android our custom
+    // toolbar is overlay-positioned, so we have to reserve the space
+    // explicitly. 56 dp covers the 40 dp icon button + 8 dp top + 8 dp
+    // bottom padding configured on TopToolbar.
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 60.dp),
+            contentPadding = PaddingValues(top = topInset, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             // 1. Hero — full-width, NATURAL aspect ratio (no fixed
