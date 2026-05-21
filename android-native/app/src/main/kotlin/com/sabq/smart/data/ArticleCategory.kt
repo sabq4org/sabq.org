@@ -48,10 +48,10 @@ enum class ArticleCategory(
         Sports -> SabqTheme.colors.leaf
         Business -> SabqTheme.colors.gold
         Technology -> SabqTheme.colors.teal
-        Culture -> Color(0xFFA666CC)   // iOS purple (0.65, 0.40, 0.80)
+        Culture -> Color(0xFFD946EF)   // iOS SabqModels.swift:245 hex d946ef
         Community -> SabqTheme.colors.coral
         World -> SabqTheme.colors.sky
-        Life -> Color(0xFFE57788) // soft rose
+        Life -> Color(0xFFF472B6)      // iOS SabqModels.swift:251 hex F472B6
     }
 
     companion object {
