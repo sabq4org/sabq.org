@@ -100,6 +100,12 @@ object SabqRoutes {
     // weren't previously reachable from Android nav.
     const val Search = "search"
     const val Sections = "sections"
+    // Phase 6 — niche / seasonal destinations. UI lives now; the
+    // backend data wires for OMQ + Loyalty rewards + Hajj block
+    // follow in their own PRs.
+    const val LoyaltyRewards = "loyalty/rewards"
+    const val Omq = "omq"
+    const val Hajj = "hajj"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -258,6 +264,24 @@ fun SabqApp(
                         onTagClick = { tag ->
                             navController.navigate(SabqRoutes.keywordArticles(tag))
                         },
+                    )
+                }
+                // Phase 6 niche destinations. UI in place; data layer
+                // wires (`/api/loyalty/rewards`, `/api/omq`,
+                // `/api/hajj-block`) follow in their own PRs.
+                composable(SabqRoutes.LoyaltyRewards) {
+                    com.sabq.smart.feature.loyalty.LoyaltyRewardsScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.Omq) {
+                    com.sabq.smart.feature.omq.OmqListScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.Hajj) {
+                    com.sabq.smart.feature.hajj.HajjBlockScreen(
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.Bookmarks) {
