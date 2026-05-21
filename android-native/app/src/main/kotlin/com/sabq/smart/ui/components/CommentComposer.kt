@@ -198,8 +198,10 @@ private fun CounterRow(currentLength: Int, maxLength: Int) {
                 fontWeight = FontWeight.Medium,
                 fontFamily = FontFamily.Default,
                 color = when {
-                    currentLength > maxLength -> Color(0xFFE53935)
-                    currentLength > (maxLength * 0.9).toInt() -> Color(0xFFFF9800)
+                    // SwiftUI .red / .orange — exact hex from iOS
+                    // CommentComposer.swift:137-141 (.red, .orange).
+                    currentLength > maxLength -> Color(0xFFFF3B30)
+                    currentLength > (maxLength * 0.9).toInt() -> Color(0xFFFF9500)
                     else -> SabqTheme.colors.tertiaryInk
                 },
             ),
