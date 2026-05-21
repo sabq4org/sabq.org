@@ -206,7 +206,7 @@ private fun OpinionsContent(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                horizontal = 16.dp,
+                horizontal = SabqTheme.dimens.screenPaddingH,
                 vertical = 18.dp,
             ),
             verticalArrangement = Arrangement.spacedBy(22.dp),

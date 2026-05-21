@@ -193,8 +193,8 @@ private fun NotificationsList(
 ) {
     LazyColumn(
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
+            start = SabqTheme.dimens.screenPaddingH,
+            end = SabqTheme.dimens.screenPaddingH,
             top = 4.dp,
             bottom = 40.dp,
         ),

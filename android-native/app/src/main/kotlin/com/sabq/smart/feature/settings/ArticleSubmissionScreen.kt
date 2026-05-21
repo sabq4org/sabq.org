@@ -521,7 +521,7 @@ private fun ImageTile(
                 .padding(6.dp)
                 .size(22.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(SabqTheme.colors.mediaScrim)
                 .clickable { onRemove() },
             contentAlignment = Alignment.Center,
         ) {

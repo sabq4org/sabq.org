@@ -140,7 +140,12 @@ private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> 
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 32.dp),
+            .padding(
+                top = 16.dp,
+                start = SabqTheme.dimens.screenPaddingH,
+                end = SabqTheme.dimens.screenPaddingH,
+                bottom = 32.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // 1) Hero card — full credit-card render.
