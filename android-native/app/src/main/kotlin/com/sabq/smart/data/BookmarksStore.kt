@@ -41,10 +41,14 @@ class BookmarksStore @Inject constructor(
     suspend fun isBookmarked(id: String): Boolean = current().contains(id)
 
     suspend fun toggle(id: String) {
+        var resultIsBookmarked = false
         context.bookmarksDataStore.edit { prefs ->
             val existing = prefs[IDS_KEY] ?: emptySet()
-            prefs[IDS_KEY] = if (id in existing) existing - id else existing + id
+            val next = if (id in existing) existing - id else existing + id
+            resultIsBookmarked = id in next
+            prefs[IDS_KEY] = next
         }
+        com.sabq.smart.data.analytics.SabqAnalytics.bookmarkToggle(id, resultIsBookmarked)
     }
 
     suspend fun setBookmarked(id: String, bookmarked: Boolean) {
@@ -52,6 +56,7 @@ class BookmarksStore @Inject constructor(
             val existing = prefs[IDS_KEY] ?: emptySet()
             prefs[IDS_KEY] = if (bookmarked) existing + id else existing - id
         }
+        com.sabq.smart.data.analytics.SabqAnalytics.bookmarkToggle(id, bookmarked)
     }
 
     suspend fun clearAll() {
