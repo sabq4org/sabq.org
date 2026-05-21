@@ -634,43 +634,17 @@ private fun HeroImage(article: Article, onTap: () -> Unit) {
             }
         }
 
-        // AI image badge — top-leading corner (visual top-right in RTL).
+        // AI image badge — physical top-end corner. Shared component
+        // matches iOS AIImageBadge (accent fill + sparkles trailing).
         if (article.isAiGeneratedImage) {
-            AiImageBadge(
+            com.sabq.smart.ui.components.AIImageBadge(
                 model = article.aiImageModel,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(12.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun AiImageBadge(model: String?, modifier: Modifier = Modifier) {
-    val shape = CircleShape
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(SabqTheme.colors.mediaScrim, shape)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.AutoAwesome,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(11.dp),
-        )
-        Text(
-            text = if (model.isNullOrBlank()) "صورة AI" else "صورة AI · $model",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-            maxLines = 1,
-        )
     }
 }
 
