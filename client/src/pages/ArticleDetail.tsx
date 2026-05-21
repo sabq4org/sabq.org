@@ -1071,12 +1071,17 @@ export default function ArticleDetail() {
                     مؤرشف
                   </Badge>
                 )}
-                {article.aiGenerated && (
-                  <Badge variant="secondary" className="gap-1" data-testid="badge-article-ai">
-                    <Sparkles className="h-3 w-3" />
-                    محتوى مُنشأ بالذكاء الاصطناعي
-                  </Badge>
-                )}
+                {/*
+                  The "محتوى مُنشأ بالذكاء الاصطناعي" pill used to appear
+                  here. Removed per editorial direction: the Content
+                  Passport ("جواز المحتوى") right next to this row carries
+                  the granular AI footprint (percentage + provenance), so
+                  the standalone pill was both redundant and misleading
+                  for articles where only the metadata was AI-enriched
+                  while the prose itself was written by a human reporter.
+                  The card-level badge in lists (ArticleCard.tsx) is kept
+                  — lists don't have a passport entry point.
+                */}
               </div>
 
               {/* Subtitle above main title */}

@@ -254,7 +254,13 @@ export async function enrichArticleAsync(articleId: string): Promise<void> {
       aiSummary: parsed.summary || null,
       aiBullets: parsed.bullets && parsed.bullets.length > 0 ? parsed.bullets.slice(0, 3) : null,
       aiBulletsGeneratedAt: new Date(),
-      aiGenerated: true,
+      // Intentionally NOT setting aiGenerated=true here. The article's
+      // body was written by a human reporter; only the metadata around
+      // it (summary, keywords, SEO, newsletter copy, suggested category)
+      // was AI-generated. Flipping aiGenerated on would surface the
+      // "محتوى مُنشأ بالذكاء الاصطناعي" disclosure on every mobile-
+      // submitted article, which is misleading and was the reason the
+      // pill kept appearing on article-detail pages it didn't belong on.
       newsletterSubtitle: parsed.newsletterSubtitle || null,
       newsletterExcerpt: parsed.newsletterExcerpt || null,
       seo: newSeo,
