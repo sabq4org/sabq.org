@@ -13,4 +13,8 @@
     <string name="opinion_pill">مقال رأي</string>
     <string name="retry">إعادة المحاولة</string>
     <string name="error_title">حدث خطأ</string>
+
+    <!-- Push notifications -->
+    <string name="push_channel_editorial_name">إشعارات التحرير</string>
+    <string name="push_channel_editorial_description">تنبيهات الكتّاب والمراسلين حول حالات المقالات (جدولة / نشر / يحتاج تعديل / رفض / أرشفة).</string>
 </resources>
