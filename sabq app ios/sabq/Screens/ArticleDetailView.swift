@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Combine // needed for ObservableObject + @Published on ArticleScrollProgress
 
 /// Holds the live scroll progress (0…1) as an `@Published` value behind a
 /// reference type. Stored on the article detail view via `@State`, so
