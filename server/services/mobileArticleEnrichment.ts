@@ -97,6 +97,9 @@ interface SimpleCategory {
 }
 
 async function loadActiveCategories(): Promise<SimpleCategory[]> {
+  // Only consider categories that are currently visible to readers — hidden
+  // / deprecated buckets (e.g. the AI-content sections) must never be
+  // surfaced as suggestions to a human-submitted article.
   const rows = await db
     .select({
       id: categories.id,
@@ -105,6 +108,7 @@ async function loadActiveCategories(): Promise<SimpleCategory[]> {
       nameEn: categories.nameEn,
     })
     .from(categories)
+    .where(eq(categories.status, "visible"))
     .limit(200);
   return rows.map((r) => ({
     id: r.id,
