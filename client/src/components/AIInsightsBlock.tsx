@@ -109,7 +109,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
     {
       icon: Flame,
       iconColor: "text-orange-600 dark:text-orange-400",
-      bgColor: "bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800",
+      bgColor: "bg-orange-50 dark:bg-gray-900/40 border border-orange-200 dark:border-orange-900/50",
       chartColor: "#f97316",
       title: "الأكثر تداولاً",
       subtitle: `${(insights.mostViewed?.count ?? 0).toLocaleString('en-US')} قراءة`,
@@ -120,7 +120,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
     {
       icon: MessageSquare,
       iconColor: "text-blue-600 dark:text-blue-400",
-      bgColor: "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800",
+      bgColor: "bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-blue-900/50",
       chartColor: "#3b82f6",
       title: "الأكثر تعليقاً",
       subtitle: `${(insights.mostCommented?.count ?? 0).toLocaleString('en-US')} تعليق`,
@@ -131,7 +131,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
     {
       icon: Zap,
       iconColor: "text-yellow-600 dark:text-yellow-400",
-      bgColor: "bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800",
+      bgColor: "bg-yellow-50 dark:bg-gray-900/40 border border-yellow-200 dark:border-yellow-900/50",
       chartColor: "#eab308",
       title: "يثير الجدل",
       subtitle: insights.mostControversial?.aiAnalysis || "",
@@ -142,7 +142,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
     {
       icon: Heart,
       iconColor: "text-pink-600 dark:text-pink-400",
-      bgColor: "bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800",
+      bgColor: "bg-pink-50 dark:bg-gray-900/40 border border-pink-200 dark:border-pink-900/50",
       chartColor: "#ec4899",
       title: "الأكثر إعجاباً",
       subtitle: `${insights.mostPositive?.positiveRate || "0%"} تفاعل إيجابي`,
@@ -153,7 +153,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
     {
       icon: Brain,
       iconColor: "text-purple-600 dark:text-purple-400",
-      bgColor: "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800",
+      bgColor: "bg-purple-50 dark:bg-gray-900/40 border border-purple-200 dark:border-purple-900/50",
       chartColor: "#a855f7",
       title: "اختيار الذكاء الاصطناعي",
       subtitle: insights.aiPick?.forecast || "",

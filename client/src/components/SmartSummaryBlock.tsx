@@ -42,10 +42,10 @@ interface MetricCardProps {
 
 function MetricCard({ icon, label, value, color }: MetricCardProps) {
   const colorClasses: Record<string, string> = {
-    blue: "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800",
-    green: "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800",
-    pink: "bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800",
-    purple: "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800",
+    blue: "bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-blue-900/50",
+    green: "bg-green-50 dark:bg-gray-900/40 border border-green-200 dark:border-green-900/50",
+    pink: "bg-pink-50 dark:bg-gray-900/40 border border-pink-200 dark:border-pink-900/50",
+    purple: "bg-purple-50 dark:bg-gray-900/40 border border-purple-200 dark:border-purple-900/50",
   };
 
   const iconClasses: Record<string, string> = {
@@ -218,7 +218,7 @@ export function SmartSummaryBlock() {
         <CollapsibleContent>
           {/* Metrics - Mobile: 2x2 Grid */}
           <div className="grid grid-cols-2 gap-2 lg:hidden mb-4">
-            <div className="rounded-lg p-2.5 space-y-1.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid="metric-وقت القراءة-mobile">
+            <div className="rounded-lg p-2.5 space-y-1.5 bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-blue-900/50" data-testid="metric-وقت القراءة-mobile">
               <div className="flex items-center justify-between">
                 <div className="text-blue-600 dark:text-blue-400">
                   <BookOpen className="h-4 w-4" />
@@ -231,7 +231,7 @@ export function SmartSummaryBlock() {
               </div>
             </div>
             
-            <div className="rounded-lg p-2.5 space-y-1.5 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800" data-testid="metric-معدل الإكمال-mobile">
+            <div className="rounded-lg p-2.5 space-y-1.5 bg-green-50 dark:bg-gray-900/40 border border-green-200 dark:border-green-900/50" data-testid="metric-معدل الإكمال-mobile">
               <div className="flex items-center justify-between">
                 <div className="text-green-600 dark:text-green-400">
                   <Percent className="h-4 w-4" />
@@ -244,7 +244,7 @@ export function SmartSummaryBlock() {
               </div>
             </div>
             
-            <div className="rounded-lg p-2.5 space-y-1.5 bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800" data-testid="metric-الإعجابات-mobile">
+            <div className="rounded-lg p-2.5 space-y-1.5 bg-pink-50 dark:bg-gray-900/40 border border-pink-200 dark:border-pink-900/50" data-testid="metric-الإعجابات-mobile">
               <div className="flex items-center justify-between">
                 <div className="text-pink-600 dark:text-pink-400">
                   <Heart className="h-4 w-4" />
@@ -257,7 +257,7 @@ export function SmartSummaryBlock() {
               </div>
             </div>
             
-            <div className="rounded-lg p-2.5 space-y-1.5 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800" data-testid="metric-التعليقات-mobile">
+            <div className="rounded-lg p-2.5 space-y-1.5 bg-purple-50 dark:bg-gray-900/40 border border-purple-200 dark:border-purple-900/50" data-testid="metric-التعليقات-mobile">
               <div className="flex items-center justify-between">
                 <div className="text-purple-600 dark:text-purple-400">
                   <MessageSquare className="h-4 w-4" />
