@@ -2,6 +2,7 @@ package com.sabq.smart.data
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 
 /**
  * Android mirror of iOS `Models/LoyaltyModels.swift` — single source
@@ -144,6 +145,9 @@ enum class LoyaltyAction(val value: String) {
     DAILY_LOGIN("DAILY_LOGIN")
 }
 
+/** Payload persisted to disk by [LoyaltyEventQueue]. Serializable so
+ *  pending events survive process death. */
+@Serializable
 data class LoyaltyEventPayload(
     val action: String,
     val source: String? = null,
