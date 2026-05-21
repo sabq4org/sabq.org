@@ -166,10 +166,11 @@ fun OpinionsListScreen(
                 CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
             }
             is OpinionsUiState.Error -> CenterContent {
-                Text(
-                    text = s.message,
-                    fontSize = 13.sp,
-                    color = SabqTheme.colors.secondaryInk,
+                // iOS wraps the error EmptyStateView in a SurfaceCard
+                // with coral accent (OpinionsView.swift:277-287).
+                com.sabq.smart.ui.components.ErrorStateView(
+                    message = s.message,
+                    onRetry = { viewModel.load() },
                 )
             }
             is OpinionsUiState.Loaded -> OpinionsContent(

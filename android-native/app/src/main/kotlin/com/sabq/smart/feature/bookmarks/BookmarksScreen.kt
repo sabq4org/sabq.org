@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -174,6 +175,17 @@ private fun StatTile(
     val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
     Column(
         modifier = modifier
+            // Tint-aware glow — iOS `shadow(tint.opacity(0.08), radius:12, y:4)`.
+            // Each tile picks up a tiny halo in its own tint (primaryEnd
+            // for count, teal for reading-time, gold for categories) which
+            // is the visual move that makes the three tiles read as a
+            // colour-coded set instead of three flat boxes.
+            .shadow(
+                elevation = 6.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
+                spotColor = tint.copy(alpha = 0.08f),
+            )
             .clip(shape)
             .background(SabqTheme.colors.surface, shape)
             .background(tint.copy(alpha = 0.04f), shape)
@@ -227,32 +239,16 @@ private fun EmptyContent() {
             title = "المحفوظات",
             subtitle = "الأخبار التي حفظتها للقراءة لاحقاً",
         )
+        // iOS wraps EmptyStateView in a SurfaceCard
+        // (BookmarksView.swift:40-48). Match exactly — including
+        // the bookmark icon + primaryEnd tint + iOS copy.
         SurfaceCard {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.BookmarkBorder,
-                    contentDescription = null,
-                    tint = SabqTheme.colors.primaryEnd,
-                    modifier = Modifier.size(40.dp),
-                )
-                Text(
-                    text = "لا توجد محفوظات",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SabqTheme.colors.ink,
-                )
-                Text(
-                    text = "احفظ الأخبار المهمة بالضغط على أيقونة الحفظ لقراءتها لاحقاً",
-                    fontSize = 13.sp,
-                    color = SabqTheme.colors.secondaryInk,
-                )
-            }
+            com.sabq.smart.ui.components.EmptyStateView(
+                icon = Icons.Outlined.BookmarkBorder,
+                tint = SabqTheme.colors.primaryEnd,
+                title = "لا توجد محفوظات",
+                subtitle = "احفظ الأخبار المهمة بالضغط على أيقونة الحفظ لقراءتها لاحقاً",
+            )
         }
     }
 }

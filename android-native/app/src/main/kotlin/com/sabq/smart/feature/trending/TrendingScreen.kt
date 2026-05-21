@@ -79,7 +79,10 @@ fun TrendingScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(
+                horizontal = SabqTheme.dimens.screenPaddingH,
+                vertical = 8.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item { HeroSection() }
@@ -145,7 +148,7 @@ private fun HeroSection() {
         Icon(
             imageVector = Icons.Filled.LocalFireDepartment,
             contentDescription = null,
-            tint = TrendingOrange,
+            tint = SabqTheme.colors.trendingAccent,
             modifier = Modifier.size(28.dp),
         )
         Column(
@@ -293,7 +296,7 @@ private fun TrendingRow(index: Int, article: Article, onClick: () -> Unit) {
 
 @Composable
 private fun rankColor(index: Int): Color = when (index) {
-    0 -> TrendingOrange
+    0 -> SabqTheme.colors.trendingAccent
     1 -> SabqTheme.colors.primaryEnd
     2 -> SabqTheme.colors.teal
     else -> SabqTheme.colors.tertiaryInk
@@ -353,60 +356,20 @@ private fun LoadingSkeleton() {
 
 @Composable
 private fun TrendingEmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.LocalFireDepartment,
-            contentDescription = null,
-            tint = TrendingOrange,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(
-            text = "لا توجد أخبار رائجة",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = "تابعنا لاحقاً لمعرفة الأكثر تداولاً",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = SabqTheme.colors.secondaryInk,
-        )
-    }
+    // iOS uses shared EmptyStateView with flame icon + orange tint
+    // (TrendingView.swift:21-26).
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Filled.LocalFireDepartment,
+        tint = SabqTheme.colors.trendingAccent,
+        title = "لا توجد أخبار رائجة",
+        subtitle = "تابعنا لاحقاً لمعرفة الأكثر تداولاً",
+    )
 }
 
 @Composable
 private fun ErrorState(message: String, onRetry: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = message,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = SabqTheme.colors.secondaryInk,
-        )
-        Text(
-            text = "إعادة المحاولة",
-            modifier = Modifier.clickable { onRetry() },
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.primaryEnd,
-        )
-    }
+    com.sabq.smart.ui.components.ErrorStateView(
+        message = message,
+        onRetry = onRetry,
+    )
 }
-
-/** iOS `.orange` system colour matched to the same value used by the
- *  Home trending preview. Kept screen-local so we don't pollute the
- *  global palette — coral is the only red-ish brand token. */
-private val TrendingOrange = Color(red = 0.98f, green = 0.45f, blue = 0.09f)
