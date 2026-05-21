@@ -179,7 +179,14 @@ private fun MemberHero(user: User) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(SabqTheme.colors.surface, shape)
+            // iOS uses `.fill(.ultraThinMaterial)` here
+            // (DailyBriefView.swift:291) — true blurred frosted glass.
+            // Compose has no native blur prior to API 31 + Material 3
+            // BlurEffect; the closest approximation is a translucent
+            // surface that lets the background tint bleed through.
+            // 0.85 alpha sits between fully opaque and fully see-through,
+            // matching the visual weight iOS lands on.
+            .background(SabqTheme.colors.surface.copy(alpha = 0.85f), shape)
             .background(
                 Brush.linearGradient(
                     listOf(

@@ -5846,16 +5846,37 @@ router.get("/loyalty/history", async (req: Request, res: Response) => {
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
 
+    // Hydrate article titles + slugs for events whose metadata or source
+    // points at an article. The iOS history list now shows the actual
+    // headline next to "قراءة مقال" / "إعجاب بمقال" instead of just the
+    // generic action label.
+    const articleIds = Array.from(new Set(items
+      .map((e) => (e.metadata?.articleId ?? (e.source && /^[0-9a-f-]{36}$/i.test(e.source) ? e.source : null)))
+      .filter((id): id is string => typeof id === "string")));
+    const articleMeta = articleIds.length > 0
+      ? await db
+          .select({ id: articles.id, title: articles.title, slug: articles.slug })
+          .from(articles)
+          .where(inArray(articles.id, articleIds))
+      : [];
+    const articleById = new Map(articleMeta.map((a) => [a.id, a]));
+
     res.json({
       success: true,
-      items: items.map((e) => ({
-        id: e.id,
-        action: e.action,
-        points: e.points,
-        source: e.source,
-        metadata: e.metadata,
-        createdAt: e.createdAt,
-      })),
+      items: items.map((e) => {
+        const articleId = e.metadata?.articleId ?? (e.source && /^[0-9a-f-]{36}$/i.test(e.source) ? e.source : null);
+        const article = articleId ? articleById.get(articleId) : null;
+        return {
+          id: e.id,
+          action: e.action,
+          points: e.points,
+          source: e.source,
+          metadata: e.metadata,
+          createdAt: e.createdAt,
+          articleTitle: article?.title ?? null,
+          articleSlug: article?.slug ?? null,
+        };
+      }),
       page,
       limit,
       hasMore,

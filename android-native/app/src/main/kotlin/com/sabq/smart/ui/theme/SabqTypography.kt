@@ -44,6 +44,11 @@ val IbmPlexSansArabic: FontFamily = FontFamily(
     Font(googleFont = IbmPlexSansArabicGoogle, fontProvider = GoogleFontsProvider, weight = FontWeight.Medium, style = FontStyle.Normal),
     Font(googleFont = IbmPlexSansArabicGoogle, fontProvider = GoogleFontsProvider, weight = FontWeight.SemiBold, style = FontStyle.Normal),
     Font(googleFont = IbmPlexSansArabicGoogle, fontProvider = GoogleFontsProvider, weight = FontWeight.Bold, style = FontStyle.Normal),
+    // Black (900) registers IBM Plex's heaviest weight so styles tagged
+    // `FontWeight.Black` resolve correctly instead of falling back to Bold.
+    // iOS uses `.heavy` (800) on the greeting headline (HomeFeedView.swift:980)
+    // and a few other UI accents; this gives us the closest match.
+    Font(googleFont = IbmPlexSansArabicGoogle, fontProvider = GoogleFontsProvider, weight = FontWeight.Black, style = FontStyle.Normal),
 )
 
 /**
@@ -75,6 +80,34 @@ data class SabqTypography(
     val breakingPill: TextStyle,
     val ctaButton: TextStyle,
     val tabLabel: TextStyle,
+    // ── Phase 2: ported from inline iOS usages flagged in the
+    //   strict-parity audit. Each one had been baked into a single call
+    //   site as a literal fontSize/fontWeight pair; centralising means
+    //   adjustments propagate everywhere automatically.
+    /** 22 sp Bold — used in StatTile values (Bookmarks count, reading
+     *  time) and TrendingView hero "الأكثر تداولاً".
+     *  iOS: BookmarksView.swift:91, TrendingView.swift:71. */
+    val statValue: TextStyle,
+    /** 17 sp Bold — used in CategoryTile title in the Explore grid.
+     *  iOS: SabqComponents.swift:1516. */
+    val tileTitle: TextStyle,
+    /** 15 sp Black (heavy) — greeting block headline ("صباح الخير").
+     *  iOS: HomeFeedView.swift:980 (size:15, weight:.heavy, design:.rounded). */
+    val greetingHeadline: TextStyle,
+    /** 14.5 sp Bold — Opinion most-viewed carousel card title.
+     *  iOS: OpinionsView.swift:124. */
+    val mostViewedCardTitle: TextStyle,
+    /** 10 sp Medium — micro-metadata captions like the journey-metric
+     *  labels under each cell.
+     *  iOS: HomeFeedView.swift:1159. */
+    val microMeta: TextStyle,
+    /** 13 sp SemiBold — used in the small action button (e.g. "عرض الكل")
+     *  on screen headers.
+     *  iOS: SabqComponents.swift:992. */
+    val smallActionButton: TextStyle,
+    /** 16 sp Medium — search-bar text-field input.
+     *  iOS: SabqComponents.swift:1791. */
+    val searchBarText: TextStyle,
 ) {
     companion object {
         /** Build typography keyed off the user's articleFontSize preference. */
@@ -83,34 +116,49 @@ data class SabqTypography(
                 alignment = LineHeightStyle.Alignment.Center,
                 trim = LineHeightStyle.Trim.None,
             )
+            // Letter-spacing tracking: heavy Arabic glyphs ride too close
+            // together at default `0.sp` and lose the premium-editorial
+            // feel iOS gets for free from SF Pro's optical kerning. Slight
+            // positive tracking on titles + headings restores the breath.
+            // Body/meta stay at 0 so reading rhythm is untouched.
             fun base(
                 weight: FontWeight,
                 size: Float,
                 lh: Float = size * 1.35f,
+                tracking: Float = 0f,
             ) = TextStyle(
                 fontFamily = IbmPlexSansArabic,
                 fontWeight = weight,
                 fontSize = size.sp,
                 lineHeight = lh.sp,
                 lineHeightStyle = lineHeight,
+                letterSpacing = tracking.sp,
                 textAlign = TextAlign.Start,
             )
             return SabqTypography(
-                screenTitle        = base(FontWeight.Bold, 30f),
-                sectionHeader      = base(FontWeight.Bold, 19f),
-                cardTitle          = base(FontWeight.Bold, 20f),
-                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f),
-                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f),
-                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f),
+                screenTitle        = base(FontWeight.Bold, 30f, tracking = 0.3f),
+                sectionHeader      = base(FontWeight.Bold, 19f, tracking = 0.3f),
+                cardTitle          = base(FontWeight.Bold, 20f, tracking = 0.2f),
+                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f, tracking = 0.2f),
+                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f, tracking = 0.2f),
+                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f, tracking = 0.2f),
                 excerpt            = base(FontWeight.Normal, 15f, lh = 22f),
                 body               = base(FontWeight.Normal, articleFontSize, lh = articleFontSize + 8f),
                 chipLabel          = base(FontWeight.SemiBold, 14f),
                 statusChip         = base(FontWeight.SemiBold, 12f),
                 meta               = base(FontWeight.Medium, 13f),
                 metaSmall          = base(FontWeight.Medium, 11f),
-                breakingPill       = base(FontWeight.Bold, 11f),
-                ctaButton          = base(FontWeight.Bold, 17f),
-                tabLabel           = base(FontWeight.Bold, 12.5f),
+                breakingPill       = base(FontWeight.Bold, 11f, tracking = 0.3f),
+                ctaButton          = base(FontWeight.Bold, 17f, tracking = 0.2f),
+                tabLabel           = base(FontWeight.Bold, 12.5f, tracking = 0.2f),
+                // Phase 2 — strict-parity audit additions:
+                statValue          = base(FontWeight.Bold, 22f, tracking = 0.2f),
+                tileTitle          = base(FontWeight.Bold, 17f, tracking = 0.2f),
+                greetingHeadline   = base(FontWeight.Black, 15f, tracking = 0.2f),
+                mostViewedCardTitle = base(FontWeight.Bold, 14.5f, lh = 20f, tracking = 0.1f),
+                microMeta          = base(FontWeight.Medium, 10f),
+                smallActionButton  = base(FontWeight.SemiBold, 13f, tracking = 0.1f),
+                searchBarText      = base(FontWeight.Medium, 16f),
             )
         }
     }

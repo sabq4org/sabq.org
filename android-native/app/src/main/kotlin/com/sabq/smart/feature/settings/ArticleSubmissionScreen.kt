@@ -252,11 +252,11 @@ private fun HeroHeader(
         }
         Text(
             text = title,
-            style = SabqTheme.typography.cardTitle.copy(
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-            ),
+            // iOS `SabqFonts.headline(size: 22)` (ArticleSubmissionView.swift:162).
+            // Use the strict-audit `statValue` token (22 sp Bold) instead of
+            // an inline copy on `cardTitle`.
+            style = SabqTheme.typography.statValue,
+            color = SabqTheme.colors.ink,
         )
         Text(
             text = subtitle,
@@ -521,7 +521,7 @@ private fun ImageTile(
                 .padding(6.dp)
                 .size(22.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(SabqTheme.colors.mediaScrim)
                 .clickable { onRemove() },
             contentAlignment = Alignment.Center,
         ) {

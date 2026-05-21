@@ -193,8 +193,8 @@ private fun NotificationsList(
 ) {
     LazyColumn(
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
+            start = SabqTheme.dimens.screenPaddingH,
+            end = SabqTheme.dimens.screenPaddingH,
             top = 4.dp,
             bottom = 40.dp,
         ),
@@ -536,36 +536,12 @@ private fun FailedState(message: String, onRetry: () -> Unit) {
 
 @Composable
 private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Notifications,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(50.dp),
-        )
-        Text(
-            text = "لا توجد إشعارات بعد",
-            style = SabqTheme.typography.cardTitle.copy(
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = SabqTheme.colors.ink,
-            ),
-        )
-        Text(
-            text = "سيصلك هنا كل ما يخص مقالاتك وأخبارك من جدولة ونشر ومراجعة.",
-            style = SabqTheme.typography.metaSmall.copy(
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = SabqTheme.colors.secondaryInk,
-            ),
-        )
-    }
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Outlined.Notifications,
+        tint = SabqTheme.colors.primaryEnd,
+        title = "لا توجد إشعارات بعد",
+        subtitle = "سيصلك هنا كل ما يخص مقالاتك وأخبارك من جدولة ونشر ومراجعة.",
+    )
 }
 
 @Composable

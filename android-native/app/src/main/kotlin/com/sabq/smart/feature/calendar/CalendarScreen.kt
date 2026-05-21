@@ -295,31 +295,12 @@ private fun SkeletonList() {
 
 @Composable
 private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.CalendarMonth,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(
-            text = "لا توجد أحداث",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = "لا توجد فعاليات أو أيام عالمية مسجّلة للفترة القادمة.",
-            fontSize = 13.sp,
-            color = SabqTheme.colors.secondaryInk,
-        )
-    }
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Filled.CalendarMonth,
+        tint = SabqTheme.colors.gold,
+        title = "لا توجد أحداث",
+        subtitle = "لا توجد فعاليات أو أيام عالمية مسجّلة للفترة القادمة.",
+    )
 }
 
 @Composable

@@ -124,15 +124,18 @@ struct ArticleContentView: View {
     }
 
     private func paragraph(_ runs: [InlineRun]) -> some View {
-        renderText(runs: runs, baseSize: CGFloat(fontSize))
-            .foregroundStyle(SabqTheme.ink.opacity(0.92))
-            .multilineTextAlignment(.leading)
-            .lineSpacing(CGFloat(lineSpacing) + 3)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .environment(\.openURL, OpenURLAction { url in
-                .systemAction(url)
-            })
+        let attributed = InlineRunAttributing.attributedString(
+            runs: runs,
+            baseSize: CGFloat(fontSize),
+            baseWeight: .regular,
+            useSerifReader: useReaderFont,
+            textColor: UIColor(SabqTheme.ink.opacity(0.92))
+        )
+        return JustifiedAttributedText(
+            attributed: attributed,
+            lineSpacing: CGFloat(lineSpacing) + 3
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func listView(ordered: Bool, items: [[InlineRun]]) -> some View {

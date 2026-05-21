@@ -130,8 +130,8 @@ fun SettingsScreen(
             .background(SabqTheme.colors.background)
             .statusBarsPadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 18.dp)
-            .padding(bottom = 120.dp),
+            .padding(horizontal = SabqTheme.dimens.screenPaddingH, vertical = 18.dp)
+            .padding(bottom = SabqTheme.dimens.tabBarSafeArea),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // 1) Header

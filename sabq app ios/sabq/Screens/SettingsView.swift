@@ -20,7 +20,7 @@ struct SettingsView: View {
     /// visibility inside `submissionCards(for:)`.
     @Environment(ArticleRevisionsStore.self) private var revisionsStore
     @Environment(FollowedKeywordsStore.self) private var followedKeywords
-    @AppStorage("isDarkMode") private var darkModeEnabled = false
+    @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @AppStorage("articleFontSize") private var textSize: Double = 17
     @AppStorage("appAccent") private var accentRaw: String = AppAccent.blue.rawValue
     @AppStorage("homeCardStyle") private var cardStyleRaw: String = "classic"
@@ -672,13 +672,27 @@ struct SettingsView: View {
                 tint: SabqTheme.primaryEnd
             )
 
-            settingsToggle(
-                title: "الوضع الداكن",
-                subtitle: "تفعيل المظهر الداكن",
-                icon: "moon.fill",
-                tint: SabqTheme.primaryEnd,
-                isOn: $darkModeEnabled
-            )
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("المظهر")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(SabqTheme.ink)
+                        Text("اختر مظهر التطبيق أو اتبع إعداد الجهاز")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                    }
+                    Spacer(minLength: 0)
+                    SmallSquareBadge(systemImage: "moon.fill", tint: SabqTheme.primaryEnd)
+                }
+
+                Picker("المظهر", selection: $appearanceRaw) {
+                    ForEach(AppAppearance.allCases) { mode in
+                        Text(mode.arabicLabel).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {

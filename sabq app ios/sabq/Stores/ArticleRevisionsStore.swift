@@ -14,6 +14,12 @@ final class ArticleRevisionsStore {
     private(set) var items: [ArticleRevisionSummary] = []
     private(set) var isLoading = false
     private(set) var lastError: String?
+    /// Flips to true on first successful refresh. Lets UI distinguish
+    /// "store empty because not loaded yet" from "store loaded and the
+    /// item really isn't there." The default-empty `items: []` made
+    /// every needs_revision notification look already-resubmitted on
+    /// first paint (reported 2026-05-21).
+    private(set) var hasLoaded = false
 
     /// Convenience for the settings card. Zero hides the row, ≥1 shows
     /// the "X مقال ينتظر التعديل" affordance.
@@ -29,6 +35,7 @@ final class ArticleRevisionsStore {
         defer { isLoading = false }
         do {
             items = try await APIClient.shared.fetchMyRevisions()
+            hasLoaded = true
         } catch let error as APIError {
             // Surface unauthorized as a silent reset — the user
             // signed out elsewhere; AuthStore will clean up.
@@ -55,5 +62,6 @@ final class ArticleRevisionsStore {
     func clear() {
         items = []
         lastError = nil
+        hasLoaded = false
     }
 }

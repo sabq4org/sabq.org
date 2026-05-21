@@ -18,11 +18,25 @@ data class SabqDimens(
     val tileRadius: Dp = 22.dp,
     val chipRadius: Dp = 14.dp,
     val buttonRadius: Dp = 20.dp,
+    // Compact media-bearing cards (opinion thumbnails, journey metric tiles).
+    // iOS uses 12pt on OpinionCard (HomeFeedView.swift:777). Sits below
+    // chipRadius (14) and above pure-pill shapes.
+    val mediaCardRadius: Dp = 12.dp,
 
-    // Layout — extracted from per-screen padding rules in DESIGN_SPEC.
-    val screenPaddingH: Dp = 16.dp,
-    val sectionGap: Dp = 20.dp,
+    // Vertical spacing matches iOS HomeFeedView 1:1 (VStack 26pt at
+    // HomeFeedView.swift:95). Horizontal padding intentionally tighter
+    // than iOS's 16pt: at Pixel-class density 16dp reads looser than the
+    // iOS visual, so we sit at 12dp for a closer feel. Affects every
+    // screen consuming this token.
+    val screenPaddingH: Dp = 12.dp,
+    val sectionGap: Dp = 26.dp,
     val cardPadding: Dp = 20.dp,
+    // Horizontal rails (opinions, stories): iOS uses 14pt gaps.
+    val railGap: Dp = 14.dp,
+    // HorizontalPager spacing for the featured carousel.
+    val pageSpacing: Dp = 12.dp,
+    // List bottom inset reserving room for the floating tab bar.
+    val tabBarSafeArea: Dp = 120.dp,
 
     // Component-internal — drawn from FeaturedArticleCard / CompactArticleRow.
     val heroImageHeight: Dp = 200.dp,
@@ -31,4 +45,11 @@ data class SabqDimens(
     val tabBarHeight: Dp = 54.dp,
     val badgeSmall: Dp = 44.dp,
     val badgeLarge: Dp = 72.dp,
+
+    // Icon-badge corner radii (SmallSquareBadge / SquareIconBadge in iOS).
+    // 13 pt = SabqComponents.swift:941, 18 pt = SabqComponents.swift:963.
+    // Used as the rounded-rect fill behind a single SF Symbol / Material
+    // Icon, e.g. the section-icon chip on screen headers.
+    val badgeIconRadius: Dp = 13.dp,
+    val badgeIconRadiusLarge: Dp = 18.dp,
 )

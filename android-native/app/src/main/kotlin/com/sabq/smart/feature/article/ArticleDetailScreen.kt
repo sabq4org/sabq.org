@@ -641,7 +641,7 @@ private fun AiImageBadge(model: String?, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .clip(shape)
-            .background(Color.Black.copy(alpha = 0.55f), shape)
+            .background(SabqTheme.colors.mediaScrim, shape)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),

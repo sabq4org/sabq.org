@@ -34,10 +34,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.SensorsOff
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.FormatQuote
-import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -244,7 +245,9 @@ private fun PulsingAntenna() {
                 .background(SabqTheme.colors.coral.copy(alpha = 0.2f)),
         )
         Icon(
-            imageVector = Icons.Outlined.Podcasts,
+            // iOS uses `antenna.radiowaves.left.and.right`
+            // (LiveCoverageView.swift:105). Material equivalent is `Sensors`.
+            imageVector = Icons.Filled.Sensors,
             contentDescription = null,
             tint = SabqTheme.colors.coral,
             modifier = Modifier.size(16.dp),
@@ -582,31 +585,15 @@ private fun LoadingSection() {
 
 @Composable
 private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Podcasts,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(
-            text = "لا يوجد بث حي حالياً",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = "تابعنا لاحقاً للتغطيات المباشرة",
-            fontSize = 13.sp,
-            color = SabqTheme.colors.secondaryInk,
-        )
-    }
+    // iOS uses `antenna.radiowaves.left.and.right.slash`
+    // (LiveCoverageView.swift:20). Material `SensorsOff` matches the
+    // intent (radio waves with a slash through them).
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Filled.SensorsOff,
+        tint = SabqTheme.colors.coral,
+        title = "لا يوجد بث حي حالياً",
+        subtitle = "تابعنا لاحقاً للتغطيات المباشرة",
+    )
 }
 
 @Composable

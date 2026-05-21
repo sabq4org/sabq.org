@@ -1,8 +1,12 @@
 import SwiftUI
 
 /// "سجل النقاط" — paginated activity feed for the signed-in member.
-/// Each row shows the action with its Arabic label, the awarded points,
-/// and a relative timestamp. Pull-to-refresh + infinite scroll.
+///
+/// The list groups events into Today / Yesterday / This week / This
+/// month / Older buckets, prepends a totals strip summarising the
+/// points visible on screen, and surfaces the source article's
+/// headline next to READ / LIKE / SHARE / COMMENT actions so the
+/// reader can pinpoint exactly which piece earned them what.
 struct LoyaltyHistoryView: View {
     @State private var items: [LoyaltyHistoryEvent] = []
     @State private var page = 1
@@ -12,7 +16,7 @@ struct LoyaltyHistoryView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: 14, pinnedViews: []) {
                 if items.isEmpty && isLoading {
                     ProgressView().padding(.top, 60)
                 } else if items.isEmpty, let err = loadError {
@@ -23,8 +27,9 @@ struct LoyaltyHistoryView: View {
                 } else if items.isEmpty {
                     emptyState
                 } else {
-                    ForEach(items) { event in
-                        eventRow(event)
+                    totalsStrip
+                    ForEach(groupedBuckets, id: \.label) { bucket in
+                        bucketSection(bucket)
                     }
                     if hasMore {
                         ProgressView()
@@ -43,6 +48,106 @@ struct LoyaltyHistoryView: View {
         .sabqRTL()
     }
 
+    // MARK: Totals strip — total / earned today / earned this week
+
+    private var totalsStrip: some View {
+        let total = items.reduce(0) { $0 + $1.points }
+        let today = items.filter { isToday($0.date) }.reduce(0) { $0 + $1.points }
+        let week = items.filter { isInThisWeek($0.date) }.reduce(0) { $0 + $1.points }
+        return HStack(spacing: 10) {
+            totalsCell(value: total, label: "إجمالي السجل", tint: SabqTheme.primaryEnd)
+            totalsCell(value: today, label: "اليوم", tint: SabqTheme.leaf)
+            totalsCell(value: week, label: "هذا الأسبوع", tint: Color.orange)
+        }
+    }
+
+    private func totalsCell(value: Int, label: String, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Text("+\(value)")
+                    .font(.system(size: 19, weight: .black, design: .rounded))
+                    .foregroundStyle(tint)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(tint.opacity(0.75))
+            }
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(SabqTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(tint.opacity(0.18), lineWidth: 0.5)
+        )
+    }
+
+    // MARK: Grouping
+
+    private struct Bucket {
+        let label: String
+        let events: [LoyaltyHistoryEvent]
+        var subtotal: Int { events.reduce(0) { $0 + $1.points } }
+    }
+
+    private var groupedBuckets: [Bucket] {
+        let calendar = Calendar(identifier: .gregorian)
+        var today: [LoyaltyHistoryEvent] = []
+        var yesterday: [LoyaltyHistoryEvent] = []
+        var thisWeek: [LoyaltyHistoryEvent] = []
+        var thisMonth: [LoyaltyHistoryEvent] = []
+        var older: [LoyaltyHistoryEvent] = []
+        for event in items {
+            guard let date = event.date else { older.append(event); continue }
+            if calendar.isDateInToday(date) {
+                today.append(event)
+            } else if calendar.isDateInYesterday(date) {
+                yesterday.append(event)
+            } else if calendar.isDate(date, equalTo: Date(), toGranularity: .weekOfYear) {
+                thisWeek.append(event)
+            } else if calendar.isDate(date, equalTo: Date(), toGranularity: .month) {
+                thisMonth.append(event)
+            } else {
+                older.append(event)
+            }
+        }
+        var out: [Bucket] = []
+        if !today.isEmpty { out.append(Bucket(label: "اليوم", events: today)) }
+        if !yesterday.isEmpty { out.append(Bucket(label: "أمس", events: yesterday)) }
+        if !thisWeek.isEmpty { out.append(Bucket(label: "هذا الأسبوع", events: thisWeek)) }
+        if !thisMonth.isEmpty { out.append(Bucket(label: "هذا الشهر", events: thisMonth)) }
+        if !older.isEmpty { out.append(Bucket(label: "أقدم", events: older)) }
+        return out
+    }
+
+    private func bucketSection(_ bucket: Bucket) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(bucket.label)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                Spacer(minLength: 0)
+                HStack(spacing: 3) {
+                    Text("+\(bucket.subtotal)")
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                    Image(systemName: "sparkles").font(.system(size: 9, weight: .heavy))
+                }
+                .foregroundStyle(SabqTheme.leaf)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(SabqTheme.leaf.opacity(0.10), in: Capsule())
+            }
+            .padding(.horizontal, 4)
+            VStack(spacing: 6) {
+                ForEach(bucket.events) { event in
+                    eventRow(event)
+                }
+            }
+        }
+    }
+
     // MARK: Row
 
     private func eventRow(_ event: LoyaltyHistoryEvent) -> some View {
@@ -50,14 +155,20 @@ struct LoyaltyHistoryView: View {
             ZStack {
                 Circle()
                     .fill(actionColor(for: event.action).opacity(0.12))
-                    .frame(width: 38, height: 38)
+                    .frame(width: 40, height: 40)
                 Text(actionIcon(for: event.action))
-                    .font(.system(size: 18))
+                    .font(.system(size: 19))
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(actionLabel(for: event.action))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
+                if let title = event.articleTitle, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .lineLimit(2)
+                }
                 if let date = event.date {
                     Text(relativeTime(date))
                         .font(.system(size: 11, weight: .medium))
@@ -135,6 +246,18 @@ struct LoyaltyHistoryView: View {
         } catch {
             // silent fail on pagination — the next scroll will retry
         }
+    }
+
+    // MARK: Date helpers
+
+    private func isToday(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        return Calendar.current.isDateInToday(date)
+    }
+
+    private func isInThisWeek(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        return Calendar.current.isDate(date, equalTo: Date(), toGranularity: .weekOfYear)
     }
 
     // MARK: Action metadata

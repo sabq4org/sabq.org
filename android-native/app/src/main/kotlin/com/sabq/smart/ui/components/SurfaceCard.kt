@@ -27,11 +27,14 @@ import com.sabq.smart.ui.theme.SabqTheme
  * outline stroke, and an optional accent-tinted decorative circle
  * peeking from the top-right corner.
  *
- * Compose can't emit *two* shadows on the same path the way SwiftUI's
- * `.shadow(...).shadow(...)` stacking does. We approximate by stacking
- * a "soft" blur via `Modifier.shadow(elevation=10, ambientColor=…)` and
- * a tighter outline. The visual delta vs. iOS is within a few
- * sub-pixel rows; if it ever feels off, switch to two-layer Box.
+ * iOS stacks two shadows on the same path:
+ *   `.shadow(SabqTheme.shadow, radius: 16, y: 6)`  — soft halo
+ *   `.shadow(SabqTheme.deepShadow, radius: 1, y: 1)` — tight rim
+ *
+ * Compose's `Modifier.shadow` chains the same way — the first call
+ * renders the wide soft glow, the second adds the tight under-rim.
+ * Earlier this file approximated both with a single `elevation=10dp`
+ * which the user flagged as "ظلال ثقيلة"; this is the corrected pass.
  */
 @Composable
 fun SurfaceCard(
@@ -45,10 +48,19 @@ fun SurfaceCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            // Soft outer halo — iOS `radius: 16, y: 6`. Spot-only so the
+            // shadow sits below the card, ambient is transparent.
             .shadow(
-                elevation = 10.dp,
+                elevation = 8.dp,
                 shape = shape,
-                ambientColor = SabqTheme.colors.shadow,
+                ambientColor = Color.Transparent,
+                spotColor = SabqTheme.colors.shadow,
+            )
+            // Tight under-rim — iOS `radius: 1, y: 1`.
+            .shadow(
+                elevation = 1.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.deepShadow,
             )
             .clip(shape)

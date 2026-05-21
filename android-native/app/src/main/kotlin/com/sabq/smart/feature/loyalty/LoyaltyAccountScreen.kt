@@ -140,7 +140,12 @@ private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> 
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 32.dp),
+            .padding(
+                top = 16.dp,
+                start = SabqTheme.dimens.screenPaddingH,
+                end = SabqTheme.dimens.screenPaddingH,
+                bottom = 32.dp,
+            ),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // 1) Hero card — full credit-card render.
@@ -285,8 +290,11 @@ private fun StatTile(
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = value.toString(),
-                style = SabqTheme.typography.screenTitle.copy(
-                    fontSize = 22.sp,
+                // iOS uses `.system(size: 22, weight: .heavy, design: .rounded)`
+                // (LoyaltyAccountView.swift). The strict-audit `statValue`
+                // token (22 sp Bold) is the centralised home for this.
+                // Keeping the override-with-Black to honour iOS's `.heavy`.
+                style = SabqTheme.typography.statValue.copy(
                     fontWeight = FontWeight.Black,
                     color = valueColor,
                 ),

@@ -96,6 +96,10 @@ object SabqRoutes {
     const val KeywordArticles = "keyword/{keyword}"
     const val AuthorArticles = "author/{name}"
     const val AudioNewsletters = "audio-newsletters"
+    // Phase 5 routes — dedicated iOS-equivalent destinations that
+    // weren't previously reachable from Android nav.
+    const val Search = "search"
+    const val Sections = "sections"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -227,6 +231,32 @@ fun SabqApp(
                             article.slug?.let { slug ->
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
+                        },
+                    )
+                }
+                composable(SabqRoutes.Search) {
+                    com.sabq.smart.feature.search.SearchScreen(
+                        onBack = { navController.popBackStack() },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        },
+                        onTagClick = { tag ->
+                            navController.navigate(SabqRoutes.keywordArticles(tag))
+                        },
+                    )
+                }
+                composable(SabqRoutes.Sections) {
+                    com.sabq.smart.feature.sections.SectionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onCategoryClick = { _ ->
+                            // TODO: route to a category-filtered article list.
+                            // iOS opens `CategoryArticlesSheet`; Android currently
+                            // has no equivalent route — wiring deferred.
+                        },
+                        onTagClick = { tag ->
+                            navController.navigate(SabqRoutes.keywordArticles(tag))
                         },
                     )
                 }

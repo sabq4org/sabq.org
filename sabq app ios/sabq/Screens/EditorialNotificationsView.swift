@@ -681,8 +681,14 @@ struct EditorialNotificationDetailView: View {
     /// than fetching the article state on the fly so the swap is
     /// instantaneous after a successful resubmit.
     private var isResubmittedRevision: Bool {
+        // Only treat a needs_revision notification as "already resubmitted"
+        // once the store has actually loaded — before the first refresh
+        // completes the empty `items` array would mis-flag every fresh
+        // notification (the bug reported 2026-05-21 where a brand-new
+        // revision request showed "تم إرسال التعديل سابقاً" on first open).
         guard item.type == "needs_revision",
-              let id = item.articleId, !id.isEmpty else {
+              let id = item.articleId, !id.isEmpty,
+              revisionsStore.hasLoaded else {
             return false
         }
         return !revisionsStore.items.contains(where: { $0.id == id })

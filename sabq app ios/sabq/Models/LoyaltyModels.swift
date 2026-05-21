@@ -181,6 +181,11 @@ struct LoyaltyHistoryEvent: Codable, Equatable, Identifiable {
     let points: Int
     let source: String?
     let createdAt: String
+    /// Backend hydrates this when the event's metadata or source points
+    /// at an article — surfaces the actual headline next to the action
+    /// label instead of the generic "قراءة مقال".
+    let articleTitle: String?
+    let articleSlug: String?
 
     var date: Date? {
         let f = ISO8601DateFormatter()

@@ -216,10 +216,15 @@ private fun KeywordFeed(
                         ) {
                             StatusChip(title = "${state.articles.size} مادة", tint = SabqTheme.colors.primaryEnd)
                             if (state.newsCount > 0) {
-                                StatusChip(title = "${state.newsCount} خبر", tint = Color(0xFF3584F4))
+                                // iOS uses `SabqTheme.sky` here (KeywordArticlesView.swift:134).
+                                StatusChip(title = "${state.newsCount} خبر", tint = SabqTheme.colors.sky)
                             }
                             if (state.opinionsCount > 0) {
-                                StatusChip(title = "${state.opinionsCount} رأي", tint = Color(0xFFEAB308))
+                                // iOS uses `SabqTheme.gold` for opinion-count chip
+                                // (KeywordArticlesView.swift:137). Was hard-coded as
+                                // `Color(0xFFEAB308)` (#EAB308) which is close to but
+                                // not exactly the gold token (#EBAD33).
+                                StatusChip(title = "${state.opinionsCount} رأي", tint = SabqTheme.colors.gold)
                             }
                         }
                     }

@@ -95,7 +95,10 @@ fun LoyaltyHistoryScreen(
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(
+                    horizontal = SabqTheme.dimens.screenPaddingH,
+                    vertical = 16.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.items)
@@ -227,31 +230,12 @@ private fun EventRow(event: LoyaltyHistoryEvent) {
 
 @Composable
 private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.History,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(44.dp),
-        )
-        Text(
-            text = "لا يوجد نشاط بعد",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = "ابدأ بالقراءة والتفاعل لكسب نقاطك الأولى ⭐",
-            fontSize = 12.sp,
-            color = SabqTheme.colors.secondaryInk,
-        )
-    }
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Filled.History,
+        tint = SabqTheme.colors.primaryEnd,
+        title = "لا يوجد نشاط بعد",
+        subtitle = "ابدأ بالقراءة والتفاعل لكسب نقاطك الأولى ⭐",
+    )
 }
 
 @Composable

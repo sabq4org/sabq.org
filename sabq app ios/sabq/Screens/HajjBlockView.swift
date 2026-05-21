@@ -15,11 +15,15 @@ struct HajjBlockView: View {
     @State private var loader = HajjBlockLoader()
 
     var body: some View {
-        Group {
+        // A zero-size Color.clear keeps the view present in the layout
+        // tree even when the block is hidden — without it SwiftUI elides
+        // the EmptyView branch and the .task below never fires, so the
+        // loader never runs and the block can never become visible.
+        ZStack {
             if let block = loader.block, block.isVisible {
                 content(block: block)
             } else {
-                EmptyView()
+                Color.clear.frame(width: 0, height: 0)
             }
         }
         .task { await loader.load() }
