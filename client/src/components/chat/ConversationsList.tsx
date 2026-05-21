@@ -1,5 +1,8 @@
+import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessagesSquare, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { PresenceDot } from "./StatusPicker";
 import type { ChatConversationSummary } from "./types";
 
 interface ConversationsListProps {
@@ -30,6 +33,42 @@ export function ConversationsList({
   loading,
   onSelect,
 }: ConversationsListProps) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) =>
+      (c.otherUser.name || "").toLowerCase().includes(q)
+      || (c.lastMessagePreview || "").toLowerCase().includes(q),
+    );
+  }, [query, conversations]);
+
+  const searchBar = conversations.length > 0 && (
+    <div className="px-3 py-2 border-b shrink-0">
+      <div className="relative">
+        <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="ابحث في المحادثات…"
+          className="h-8 pr-7 pl-7 text-xs"
+          data-testid="chat-conversations-search"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="مسح البحث"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   if (loading && conversations.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -48,9 +87,22 @@ export function ConversationsList({
     );
   }
 
+  if (filtered.length === 0) {
+    return (
+      <>
+        {searchBar}
+        <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground p-4">
+          لا توجد نتائج تطابق "{query}"
+        </div>
+      </>
+    );
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto" data-testid="chat-conversations-list">
-      {conversations.map((c) => {
+    <>
+      {searchBar}
+      <div className="flex-1 overflow-y-auto" data-testid="chat-conversations-list">
+        {filtered.map((c) => {
         const isActive = c.id === activeId;
         return (
           <button
@@ -71,9 +123,7 @@ export function ConversationsList({
                 <AvatarImage src={c.otherUser.avatarUrl ?? undefined} alt={c.otherUser.name} />
                 <AvatarFallback className="text-xs">{initials(c.otherUser.name)}</AvatarFallback>
               </Avatar>
-              {c.otherUser.online && (
-                <span className="absolute bottom-0 left-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
-              )}
+              <PresenceDot online={c.otherUser.online} status={c.otherUser.status} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline justify-between gap-2">
@@ -101,9 +151,10 @@ export function ConversationsList({
                 )}
               </div>
             </div>
-          </button>
-        );
-      })}
-    </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

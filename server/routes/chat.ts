@@ -23,6 +23,7 @@ import {
   chatConversations,
   chatMessages,
   chatMessageAttachments,
+  chatPresence,
   roles,
   userRoles,
   users,
@@ -98,6 +99,33 @@ function formatUserName(u: { firstName: string | null; lastName: string | null; 
   return composed || u.email || "مستخدم";
 }
 
+const VALID_PRESENCE_STATUSES = ["available", "busy", "away", "invisible"] as const;
+type PresenceStatus = (typeof VALID_PRESENCE_STATUSES)[number];
+
+async function loadPresenceMap(userIds: string[]): Promise<Map<string, PresenceStatus>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select()
+    .from(chatPresence)
+    .where(inArray(chatPresence.userId, userIds));
+  const map = new Map<string, PresenceStatus>();
+  for (const r of rows) {
+    if ((VALID_PRESENCE_STATUSES as readonly string[]).includes(r.status)) {
+      map.set(r.userId, r.status as PresenceStatus);
+    }
+  }
+  return map;
+}
+
+// "invisible" appears offline to OTHER users (own UI still shows reality).
+// effectiveOnline = WS connected AND not invisible.
+function effectivePresence(userId: string, status: PresenceStatus | undefined) {
+  const status_ = status ?? "available";
+  const onlineReal = isUserOnline(userId);
+  const onlinePublic = onlineReal && status_ !== "invisible";
+  return { status: status_, online: onlinePublic };
+}
+
 // ============================================================================
 // GET /api/chat/conversations — my conversations, ordered by lastMessageAt
 // ============================================================================
@@ -143,15 +171,18 @@ router.get("/api/chat/conversations", requireAuth, async (req: any, res) => {
           .where(inArray(users.id, otherIds))
       : [];
     const usersById = new Map(otherUsers.map((u) => [u.id, u]));
+    const presenceByUserId = await loadPresenceMap(otherIds);
 
     const shaped = convs.map((c) => {
       const isInitiator = c.initiatorId === me;
       const otherId = isInitiator ? c.participantId : c.initiatorId;
       const other = usersById.get(otherId);
       const myLastReadAt = isInitiator ? c.initiatorLastReadAt : c.participantLastReadAt;
+      const partnerLastReadAt = isInitiator ? c.participantLastReadAt : c.initiatorLastReadAt;
       const hasUnread =
         !!c.lastMessageAt &&
         (!myLastReadAt || c.lastMessageAt > myLastReadAt);
+      const presence = effectivePresence(otherId, presenceByUserId.get(otherId));
       return {
         id: c.id,
         otherUser: other
@@ -160,12 +191,14 @@ router.get("/api/chat/conversations", requireAuth, async (req: any, res) => {
               name: formatUserName(other),
               avatarUrl: other.profileImageUrl,
               role: other.role,
-              online: isUserOnline(other.id),
+              online: presence.online,
+              status: presence.status,
             }
-          : { id: otherId, name: "مستخدم", avatarUrl: null, role: null, online: false },
+          : { id: otherId, name: "مستخدم", avatarUrl: null, role: null, online: false, status: "available" as PresenceStatus },
         lastMessagePreview: c.lastMessagePreview,
         lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
         hasUnread,
+        partnerLastReadAt: partnerLastReadAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
       };
     });
@@ -278,6 +311,8 @@ router.post("/api/chat/conversations", requireAuth, async (req: any, res) => {
       });
     }
 
+    const presenceMap = await loadPresenceMap([target.id]);
+    const presence = effectivePresence(target.id, presenceMap.get(target.id));
     res.json({
       id: conversationId,
       otherUser: {
@@ -285,7 +320,8 @@ router.post("/api/chat/conversations", requireAuth, async (req: any, res) => {
         name: formatUserName(target),
         avatarUrl: target.profileImageUrl,
         role: target.role,
-        online: isUserOnline(target.id),
+        online: presence.online,
+        status: presence.status,
       },
     });
   } catch (err) {
@@ -685,7 +721,6 @@ router.get("/api/chat/staff", requireAuth, async (req: any, res) => {
         name: formatUserName(u),
         avatarUrl: u.profileImageUrl,
         role: u.role,
-        online: isUserOnline(u.id),
       });
     }
     for (const u of byRbac) {
@@ -696,11 +731,17 @@ router.get("/api/chat/staff", requireAuth, async (req: any, res) => {
         name: formatUserName(u),
         avatarUrl: u.profileImageUrl,
         role: displayRole,
-        online: isUserOnline(u.id),
       });
     }
 
-    const staff = Array.from(byId.values())
+    const merged = Array.from(byId.values());
+    const presenceMap = await loadPresenceMap(merged.map((u) => u.id));
+
+    const staff = merged
+      .map((u) => {
+        const p = effectivePresence(u.id, presenceMap.get(u.id));
+        return { ...u, online: p.online, status: p.status };
+      })
       .sort((a, b) => (a.name || "").localeCompare(b.name || "", "ar"))
       .slice(0, 50);
 
@@ -708,6 +749,123 @@ router.get("/api/chat/staff", requireAuth, async (req: any, res) => {
   } catch (err: any) {
     console.error("[chat] GET staff error:", err?.message || err);
     res.status(500).json({ message: "Failed to load staff list" });
+  }
+});
+
+// ============================================================================
+// GET /api/chat/me/presence — my current presence
+// PUT /api/chat/me/presence — set my presence (broadcasts to all my partners)
+// ============================================================================
+router.get("/api/chat/me/presence", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await requirePerm(req, res, PERMISSION_CODES.CHAT_USE))) return;
+    const me = req.user.id;
+    const [row] = await db
+      .select()
+      .from(chatPresence)
+      .where(eq(chatPresence.userId, me))
+      .limit(1);
+    res.json({
+      status: (row?.status as PresenceStatus) ?? "available",
+      statusMessage: row?.statusMessage ?? null,
+      online: isUserOnline(me),
+    });
+  } catch (err) {
+    console.error("[chat] GET presence error:", err);
+    res.status(500).json({ message: "Failed to load presence" });
+  }
+});
+
+const updatePresenceSchema = z.object({
+  status: z.enum(["available", "busy", "away", "invisible"]),
+  statusMessage: z.string().max(160).optional().nullable(),
+});
+
+router.put("/api/chat/me/presence", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await requirePerm(req, res, PERMISSION_CODES.CHAT_USE))) return;
+    const me = req.user.id;
+    const parsed = updatePresenceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "حالة غير صحيحة" });
+    const { status, statusMessage } = parsed.data;
+
+    await db
+      .insert(chatPresence)
+      .values({ userId: me, status, statusMessage: statusMessage ?? null, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: chatPresence.userId,
+        set: { status, statusMessage: statusMessage ?? null, updatedAt: new Date() },
+      });
+
+    // Find all my conversation partners and broadcast the new status.
+    const myConvs = await db
+      .select({ initiatorId: chatConversations.initiatorId, participantId: chatConversations.participantId })
+      .from(chatConversations)
+      .where(
+        or(
+          eq(chatConversations.initiatorId, me),
+          eq(chatConversations.participantId, me),
+        ),
+      );
+    const partnerIds = Array.from(
+      new Set(myConvs.map((c) => (c.initiatorId === me ? c.participantId : c.initiatorId))),
+    );
+
+    // "invisible" means partners see me as offline regardless of WS state.
+    const onlinePublic = status !== "invisible" && isUserOnline(me);
+
+    if (partnerIds.length > 0) {
+      chatBus.publish({
+        type: "presence:update",
+        conversationId: "",
+        recipientIds: partnerIds,
+        payload: { userId: me, status, online: onlinePublic },
+      });
+    }
+
+    res.json({ status, statusMessage: statusMessage ?? null, online: onlinePublic });
+  } catch (err) {
+    console.error("[chat] PUT presence error:", err);
+    res.status(500).json({ message: "Failed to update presence" });
+  }
+});
+
+// ============================================================================
+// POST /api/chat/conversations/:id/typing — broadcast "is typing" to partner
+// Body: { isTyping: boolean }
+// ============================================================================
+const typingSchema = z.object({ isTyping: z.boolean() });
+
+router.post("/api/chat/conversations/:id/typing", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await requirePerm(req, res, PERMISSION_CODES.CHAT_USE))) return;
+    const me = req.user.id;
+    const conversationId = req.params.id;
+    const parsed = typingSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "بيانات غير صحيحة" });
+
+    const [conv] = await db
+      .select()
+      .from(chatConversations)
+      .where(eq(chatConversations.id, conversationId))
+      .limit(1);
+    if (!conv) return res.status(404).json({ message: "المحادثة غير موجودة" });
+    if (conv.initiatorId !== me && conv.participantId !== me) {
+      return res.status(403).json({ message: "ليس لديك صلاحية" });
+    }
+
+    const partnerId = conv.initiatorId === me ? conv.participantId : conv.initiatorId;
+    chatBus.publish({
+      type: "typing",
+      conversationId,
+      recipientIds: [partnerId],
+      payload: { conversationId, userId: me, isTyping: parsed.data.isTyping },
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[chat] POST typing error:", err);
+    res.status(500).json({ message: "Failed" });
   }
 });
 

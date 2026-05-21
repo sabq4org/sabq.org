@@ -12052,6 +12052,22 @@ export const chatMessageAttachmentsRelations = relations(chatMessageAttachments,
   }),
 }));
 
+// User-chosen presence status (independent of "is the WS connected").
+// status: available | busy | away | invisible
+//   - available: green dot
+//   - busy: red dot
+//   - away: yellow dot
+//   - invisible: appears offline to others (own UI still shows reality)
+export const chatPresence = pgTable("chat_presence", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 20 }).notNull().default("available"),
+  statusMessage: text("status_message"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ChatPresence = typeof chatPresence.$inferSelect;
+export type InsertChatPresence = typeof chatPresence.$inferInsert;
+
 export type ChatConversation = typeof chatConversations.$inferSelect;
 export type InsertChatConversation = typeof chatConversations.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;

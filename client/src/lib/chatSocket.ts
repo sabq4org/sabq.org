@@ -46,11 +46,25 @@ export type ChatNewConversationPayload = {
   otherUserId: string;
 };
 
+export type ChatPresencePayload = {
+  userId: string;
+  status: "available" | "busy" | "away" | "invisible";
+  online: boolean;
+};
+
+export type ChatTypingPayload = {
+  conversationId: string;
+  userId: string;
+  isTyping: boolean;
+};
+
 export type ChatSocketEvent =
   | { type: "ready"; userId: string; serverTime: string }
   | { type: "message:new"; conversationId: string; payload: ChatMessagePayload }
   | { type: "message:read"; conversationId: string; payload: ChatReadPayload }
   | { type: "conversation:new"; conversationId: string; payload: ChatNewConversationPayload }
+  | { type: "presence:update"; conversationId: string; payload: ChatPresencePayload }
+  | { type: "typing"; conversationId: string; payload: ChatTypingPayload }
   | { type: "pong" };
 
 type Listener = (event: ChatSocketEvent) => void;

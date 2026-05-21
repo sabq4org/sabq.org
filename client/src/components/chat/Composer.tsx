@@ -9,6 +9,7 @@ import {
   appendOptimisticMessage,
   chatConversationsQueryKey,
   chatMessagesQueryKey,
+  useTypingEmitter,
 } from "./hooks";
 import type { ChatMessage } from "./types";
 
@@ -43,6 +44,7 @@ export function Composer({ conversationId, currentUserId }: ComposerProps) {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const typing = useTypingEmitter(conversationId);
 
   const insertAtCursor = useCallback((insertion: string) => {
     const el = textareaRef.current;
@@ -142,6 +144,7 @@ export function Composer({ conversationId, currentUserId }: ComposerProps) {
     setText("");
     setPendingImages([]);
     setSending(true);
+    typing.stop();
 
     try {
       const response = await apiRequest<{ message: ChatMessage }>(
@@ -256,7 +259,11 @@ export function Composer({ conversationId, currentUserId }: ComposerProps) {
         <Textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim().length > 0) typing.emit();
+            else typing.stop();
+          }}
           onKeyDown={handleKeyDown}
           placeholder="اكتب رسالتك… (Enter للإرسال، Shift+Enter لسطر جديد)"
           rows={1}

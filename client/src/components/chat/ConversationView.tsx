@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
-import { useChatMessages } from "./hooks";
+import { PresenceDot, STATUS_META } from "./StatusPicker";
+import { useChatMessages, useTypingIndicator } from "./hooks";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { chatConversationsQueryKey } from "./hooks";
 import type { ChatConversationSummary } from "./types";
@@ -38,7 +39,18 @@ export function ConversationView({
   compact = false,
 }: ConversationViewProps) {
   const { data, isLoading } = useChatMessages(conversation.id);
-  const messages = Array.isArray(data?.messages) ? data!.messages : [];
+  const messagesRaw = Array.isArray(data?.messages) ? data!.messages : [];
+  const partnerLastRead = conversation.partnerLastReadAt
+    ? new Date(conversation.partnerLastReadAt)
+    : null;
+  // Decorate my outgoing messages with readByOther so MessageBubble can render
+  // the blue double-check for messages the partner has already seen.
+  const messages = messagesRaw.map((m) =>
+    m.senderId === currentUserId && partnerLastRead && new Date(m.createdAt) <= partnerLastRead
+      ? { ...m, readByOther: true }
+      : m,
+  );
+  const partnerTyping = useTypingIndicator(conversation.id, conversation.otherUser.id);
 
   // Mark as read when we open the conversation OR when a new message arrives.
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
@@ -85,14 +97,25 @@ export function ConversationView({
             <AvatarImage src={conversation.otherUser.avatarUrl ?? undefined} alt={conversation.otherUser.name} />
             <AvatarFallback className="text-xs">{initials(conversation.otherUser.name)}</AvatarFallback>
           </Avatar>
-          {conversation.otherUser.online && (
-            <span className="absolute bottom-0 left-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background" />
-          )}
+          <PresenceDot online={conversation.otherUser.online} status={conversation.otherUser.status} size="sm" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-medium truncate">{conversation.otherUser.name}</div>
           <div className="text-[11px] text-muted-foreground">
-            {conversation.otherUser.online ? "متصل الآن" : "غير متصل"}
+            {partnerTyping ? (
+              <span className="text-primary inline-flex items-center gap-1">
+                يكتب
+                <span className="inline-flex gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
+              </span>
+            ) : conversation.otherUser.online ? (
+              <span>{STATUS_META[conversation.otherUser.status]?.label || "متصل الآن"}</span>
+            ) : (
+              <span>غير متصل</span>
+            )}
             {conversation.otherUser.role
               ? ` · ${ROLE_LABELS[conversation.otherUser.role] || conversation.otherUser.role}`
               : ""}

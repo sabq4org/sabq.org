@@ -5,11 +5,11 @@
  * the same cache keys. No polling, no manual refetch — components just
  * useChatConversations() / useChatMessages() and get realtime updates.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { chatSocket } from "@/lib/chatSocket";
-import type { ChatConversationSummary, ChatMessage, ChatStaffUser } from "./types";
+import type { ChatConversationSummary, ChatMessage, ChatStaffUser, PresenceStatus } from "./types";
 
 const CONVERSATIONS_KEY = ["/api/chat/conversations"] as const;
 const MESSAGES_KEY = (conversationId: string) => [
@@ -117,15 +117,35 @@ export function useChatRealtimeBridge(currentUserId: string | undefined) {
           },
         );
       } else if (event.type === "message:read") {
+        // The OTHER party just read up to event.payload.readAt — update their
+        // last-read marker on the matching conversation so my bubbles can
+        // render ✓✓ blue.
         qc.setQueryData<{ conversations: ChatConversationSummary[] } | undefined>(
           CONVERSATIONS_KEY,
           (old) => {
             if (!old) return old;
             const idx = old.conversations.findIndex((c) => c.id === event.conversationId);
             if (idx === -1) return old;
-            // For the *other* party, their read doesn't change my unread flag.
-            // Phase 2 will surface ✓✓ here.
-            return old;
+            const next = old.conversations.slice();
+            next[idx] = { ...next[idx], partnerLastReadAt: event.payload.readAt };
+            return { conversations: next };
+          },
+        );
+      } else if (event.type === "presence:update") {
+        // The other party changed their status — refresh every conversation
+        // summary that references this user.
+        const { userId, status, online } = event.payload;
+        qc.setQueryData<{ conversations: ChatConversationSummary[] } | undefined>(
+          CONVERSATIONS_KEY,
+          (old) => {
+            if (!old) return old;
+            let mutated = false;
+            const next = old.conversations.map((c) => {
+              if (c.otherUser.id !== userId) return c;
+              mutated = true;
+              return { ...c, otherUser: { ...c.otherUser, status, online } };
+            });
+            return mutated ? { conversations: next } : old;
           },
         );
       } else if (event.type === "conversation:new") {
@@ -182,4 +202,92 @@ export function useChatUnreadCount(enabled: boolean = true) {
     const list = Array.isArray(data?.conversations) ? data!.conversations : [];
     return list.filter((c) => c.hasUnread).length;
   }, [data]);
+}
+
+/**
+ * Listen for the partner's "is typing" WebSocket events and return a boolean
+ * that auto-clears 4 seconds after the last `typing:true` event (in case the
+ * partner closes their tab without ever sending `typing:false`).
+ */
+export function useTypingIndicator(conversationId: string, partnerId: string): boolean {
+  const [isTyping, setIsTyping] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    setIsTyping(false);
+    const unsubscribe = chatSocket.subscribe((event) => {
+      if (event.type !== "typing") return;
+      if (event.conversationId !== conversationId) return;
+      if (event.payload.userId !== partnerId) return;
+      if (event.payload.isTyping) {
+        setIsTyping(true);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => setIsTyping(false), 4000);
+      } else {
+        setIsTyping(false);
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [conversationId, partnerId]);
+  return isTyping;
+}
+
+/**
+ * Emit "I'm typing" pulses to the server. Use it from Composer: call
+ * `emit()` on every keystroke; the emitter throttles to at most one
+ * `typing:true` every ~2 seconds, and a single `typing:false` 3 seconds
+ * after the last keystroke (or immediately on send / unmount).
+ */
+export function useTypingEmitter(conversationId: string) {
+  const lastSentTrueAt = useRef<number>(0);
+  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const send = useCallback(
+    (isTyping: boolean) => {
+      apiRequest(`/api/chat/conversations/${encodeURIComponent(conversationId)}/typing`, {
+        method: "POST",
+        body: JSON.stringify({ isTyping }),
+        silent: true,
+      }).catch(() => { /* best-effort */ });
+    },
+    [conversationId],
+  );
+
+  const emit = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSentTrueAt.current > 2000) {
+      lastSentTrueAt.current = now;
+      send(true);
+    }
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    stopTimerRef.current = setTimeout(() => {
+      lastSentTrueAt.current = 0;
+      send(false);
+    }, 3000);
+  }, [send]);
+
+  const stop = useCallback(() => {
+    if (stopTimerRef.current) {
+      clearTimeout(stopTimerRef.current);
+      stopTimerRef.current = null;
+    }
+    if (lastSentTrueAt.current > 0) {
+      lastSentTrueAt.current = 0;
+      send(false);
+    }
+  }, [send]);
+
+  useEffect(() => {
+    return () => {
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+    };
+  }, []);
+
+  return { emit, stop };
 }

@@ -49,6 +49,26 @@ export type ChatEvent =
         readerId: string;
         readAt: string;
       };
+    }
+  | {
+      type: "presence:update";
+      conversationId: string; // unused for presence — present for type uniformity
+      recipientIds: string[];
+      payload: {
+        userId: string;
+        status: "available" | "busy" | "away" | "invisible";
+        online: boolean;
+      };
+    }
+  | {
+      type: "typing";
+      conversationId: string;
+      recipientIds: string[];
+      payload: {
+        conversationId: string;
+        userId: string;
+        isTyping: boolean;
+      };
     };
 
 class ChatBus extends EventEmitter {

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ConversationsList } from "./ConversationsList";
 import { ConversationView } from "./ConversationView";
 import { UserPicker } from "./UserPicker";
+import { StatusPicker } from "./StatusPicker";
 import { useChatConversations, useChatRealtimeBridge } from "./hooks";
 import { hasPermission, useAuth } from "@/hooks/useAuth";
 import type { ChatConversationSummary } from "./types";
@@ -63,24 +64,27 @@ export function ChatLayout({ compact = false, initialConversationId = null }: Ch
     }
     return (
       <div className="flex flex-col h-full bg-background">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <MessagesSquare className="h-4 w-4 text-primary" />
+        <div className="flex items-center justify-between border-b px-4 py-3 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <MessagesSquare className="h-4 w-4 text-primary shrink-0" />
             <span className="font-medium text-sm">الدردشة</span>
           </div>
-          {canStartNew && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1"
-              onClick={() => setPickerOpen(true)}
-              data-testid="chat-new-button-compact"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              جديدة
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            <StatusPicker compact />
+            {canStartNew && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 px-2"
+                onClick={() => setPickerOpen(true)}
+                data-testid="chat-new-button-compact"
+                aria-label="محادثة جديدة"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
         <ConversationsList
           conversations={conversations}
@@ -101,20 +105,23 @@ export function ChatLayout({ compact = false, initialConversationId = null }: Ch
   return (
     <div className="grid grid-cols-[320px_1fr] h-full border rounded-lg overflow-hidden bg-background">
       <div className="flex flex-col border-l">
-        <div className="flex items-center justify-between border-b px-3 py-3">
+        <div className="flex items-center justify-between border-b px-3 py-3 gap-2">
           <div className="font-medium">المحادثات</div>
-          {canStartNew && (
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 gap-1"
-              onClick={() => setPickerOpen(true)}
-              data-testid="chat-new-button"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              محادثة جديدة
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <StatusPicker />
+            {canStartNew && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => setPickerOpen(true)}
+                data-testid="chat-new-button"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                محادثة جديدة
+              </Button>
+            )}
+          </div>
         </div>
         <ConversationsList
           conversations={conversations}
