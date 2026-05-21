@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,10 +66,19 @@ fun FeaturedArticleCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            // Soft outer halo — iOS `radius: 16, y: 6`. Two stacked
+            // shadows give the iOS "floating card" look that the user
+            // asked for; a single elevation=10 reads flat by comparison.
             .shadow(
-                elevation = 10.dp,
+                elevation = 8.dp,
                 shape = shape,
-                ambientColor = SabqTheme.colors.shadow,
+                ambientColor = Color.Transparent,
+                spotColor = SabqTheme.colors.shadow,
+            )
+            .shadow(
+                elevation = 1.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.deepShadow,
             )
             .clip(shape)

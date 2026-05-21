@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -637,6 +638,16 @@ private fun GreetingBlock(onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Tint-aware warm halo — iOS `shadow(tint.opacity(0.08),
+            // radius: 14, y: 6)`. Gives the greeting card a soft glow
+            // that matches the time-of-day icon (dawn yellow, dusk
+            // orange, night indigo…).
+            .shadow(
+                elevation = 7.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
+                spotColor = tint.copy(alpha = 0.08f),
+            )
             .clip(shape)
             .background(SabqTheme.colors.surface.copy(alpha = 0.6f), shape)
             .background(tint.copy(alpha = 0.05f), shape)
@@ -934,6 +945,15 @@ private fun OpinionCard(opinion: Article, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .width(200.dp)
+            // Subtle elevation per iOS — `shadow(.black.opacity(0.06),
+            // radius: 8, y: 2)`. Keeps each opinion card "popping"
+            // out of the rail.
+            .shadow(
+                elevation = 4.dp,
+                shape = cardShape,
+                ambientColor = Color.Transparent,
+                spotColor = Color.Black.copy(alpha = 0.06f),
+            )
             .clip(cardShape)
             .background(SabqTheme.colors.surface, cardShape)
             .clickable { onClick() },
@@ -1203,7 +1223,12 @@ private fun StoryBubble(
             modifier = Modifier.size(68.dp),
             contentAlignment = Alignment.Center,
         ) {
-            // Brand-gradient ring
+            // Brand-gradient ring — iOS uses `Circle().stroke(brand
+            // gradient, lineWidth: 2.5)`. Compose can't paint a gradient
+            // stroke directly, so we fake it: full 68dp gradient disc
+            // with a 63dp surface disc on top, leaving exactly 2.5dp
+            // of gradient visible at the edge. Previously the inner
+            // disc was 60dp → a 4dp ring, which read as too thick.
             Box(
                 modifier = Modifier
                     .size(68.dp)
@@ -1214,14 +1239,17 @@ private fun StoryBubble(
                         ),
                     ),
             )
-            // Inner image
+            // Inner surface disc (63dp) — punches a hole through the
+            // gradient so only the 2.5dp ring at the edge stays brand.
             Box(
                 modifier = Modifier
-                    .size(60.dp)
+                    .size(63.dp)
                     .clip(CircleShape)
                     .background(SabqTheme.colors.surface),
                 contentAlignment = Alignment.Center,
             ) {
+                // 60dp image — iOS exact. Sits inside the 63dp surface
+                // disc with 1.5dp of surface visible around it.
                 if (!story.imageUrl.isNullOrBlank()) {
                     coil.compose.SubcomposeAsyncImage(
                         model = story.imageUrl,
