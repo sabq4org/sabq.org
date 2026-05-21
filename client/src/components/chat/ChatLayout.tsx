@@ -5,9 +5,21 @@ import { ConversationsList } from "./ConversationsList";
 import { ConversationView } from "./ConversationView";
 import { UserPicker } from "./UserPicker";
 import { StatusPicker } from "./StatusPicker";
-import { useChatConversations, useChatRealtimeBridge } from "./hooks";
+import { useChatConversations, useChatRealtimeBridge, useChatSocketConnected } from "./hooks";
 import { hasPermission, useAuth } from "@/hooks/useAuth";
 import type { ChatConversationSummary } from "./types";
+
+function SocketStatusDot({ connected }: { connected: boolean }) {
+  return (
+    <span
+      title={connected ? "متصل لحظياً" : "منقطع — جاري إعادة الاتصال"}
+      className={`inline-block h-1.5 w-1.5 rounded-full ${
+        connected ? "bg-green-500" : "bg-amber-500 animate-pulse"
+      }`}
+      aria-label={connected ? "متصل" : "منقطع"}
+    />
+  );
+}
 
 interface ChatLayoutProps {
   /** When true, render in compact (popup widget) mode — single column. */
@@ -21,6 +33,7 @@ export function ChatLayout({ compact = false, initialConversationId = null }: Ch
   const userId = user?.id;
 
   useChatRealtimeBridge(userId);
+  const wsConnected = useChatSocketConnected();
 
   const { data, isLoading } = useChatConversations({ enabled: !!userId });
   const conversations: ChatConversationSummary[] = Array.isArray(data?.conversations)
@@ -68,6 +81,7 @@ export function ChatLayout({ compact = false, initialConversationId = null }: Ch
           <div className="flex items-center gap-2 min-w-0">
             <MessagesSquare className="h-4 w-4 text-primary shrink-0" />
             <span className="font-medium text-sm">الدردشة</span>
+            <SocketStatusDot connected={wsConnected} />
           </div>
           <div className="flex items-center gap-1">
             <StatusPicker compact />
@@ -106,7 +120,10 @@ export function ChatLayout({ compact = false, initialConversationId = null }: Ch
     <div className="grid grid-cols-[320px_1fr] h-full border rounded-lg overflow-hidden bg-background">
       <div className="flex flex-col border-l">
         <div className="flex items-center justify-between border-b px-3 py-3 gap-2">
-          <div className="font-medium">المحادثات</div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-medium">المحادثات</span>
+            <SocketStatusDot connected={wsConnected} />
+          </div>
           <div className="flex items-center gap-2">
             <StatusPicker />
             {canStartNew && (

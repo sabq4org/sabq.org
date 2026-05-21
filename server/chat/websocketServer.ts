@@ -126,8 +126,13 @@ export function attachChatWebSocketServer(server: HttpServer) {
       return;
     }
 
+    const origin = req.headers.origin || "(no-origin)";
+    const hasCookie = !!req.headers.cookie;
+    console.log(`[chat-ws] upgrade attempt origin=${origin} hasCookie=${hasCookie}`);
+
     const auth = await authenticateUpgrade(req);
     if (!auth) {
+      console.warn(`[chat-ws] upgrade REJECTED (no auth) origin=${origin} hasCookie=${hasCookie}`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -139,6 +144,7 @@ export function attachChatWebSocketServer(server: HttpServer) {
       aws.isAlive = true;
       aws.lastSeenAt = Date.now();
       addConnection(aws);
+      console.log(`[chat-ws] connected userId=${auth.userId} total=${connectionsByUser.size}`);
 
       aws.send(
         JSON.stringify({
@@ -170,9 +176,11 @@ export function attachChatWebSocketServer(server: HttpServer) {
 
       aws.on("close", () => {
         removeConnection(aws);
+        console.log(`[chat-ws] disconnected userId=${aws.userId} remaining=${connectionsByUser.size}`);
       });
 
-      aws.on("error", () => {
+      aws.on("error", (err) => {
+        console.warn(`[chat-ws] socket error userId=${aws.userId} err=${(err as any)?.message || err}`);
         try { aws.terminate(); } catch {}
         removeConnection(aws);
       });

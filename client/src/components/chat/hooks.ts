@@ -51,6 +51,31 @@ export function useChatStaffSearch(query: string, options: { enabled?: boolean }
 }
 
 /**
+ * Track whether the WebSocket is currently connected. Exposed so the UI can
+ * show a small "متصل / منقطع" indicator — invaluable when debugging realtime
+ * issues, and reassures the user that pushes will arrive.
+ */
+export function useChatSocketConnected(): boolean {
+  const [connected, setConnected] = useState<boolean>(() => chatSocket.isConnected());
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      setConnected(chatSocket.isConnected());
+    };
+    const id = setInterval(tick, 1500);
+    // Also flip immediately on any inbound event.
+    const unsub = chatSocket.subscribe(tick);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      unsub();
+    };
+  }, []);
+  return connected;
+}
+
+/**
  * Sit on the WebSocket once and reflect every event into TanStack caches.
  * Mount this exactly ONCE per page (we do it in the chat page + floating
  * widget guards itself with the same trick).

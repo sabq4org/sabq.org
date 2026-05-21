@@ -13,8 +13,6 @@
  *   to wss://api.sabq.org/ws/chat).
  */
 
-import { apiUrl } from "./queryClient";
-
 export type ChatMessageAttachmentPayload = {
   id: string;
   kind: string;
@@ -111,15 +109,36 @@ class ChatSocketClient {
   }
 
   private buildUrl(): string {
-    // Prefer apiUrl() so that DIRECT mode (VITE_API_URL set) targets the
-    // Railway API origin's WebSocket directly. Otherwise stay same-origin.
-    const baseHttp = apiUrl("/ws/chat");
-    if (/^https?:\/\//i.test(baseHttp)) {
-      return baseHttp.replace(/^http/, "ws");
+    // Vercel does NOT proxy WebSocket through rewrites — even though
+    // vercel.json forwards /api/* to api.sabq.org, /ws/chat would 404 on
+    // a same-origin connect attempt. So we always target the API origin
+    // directly. Priority order:
+    //   1. Explicit VITE_WS_URL (best — operator overrides everything)
+    //   2. VITE_API_URL converted to wss://
+    //   3. Hardcoded fallback for the two known production hosts
+    //   4. Same-origin (works in local dev where Express serves both)
+    const explicitWs = (import.meta.env.VITE_WS_URL || "").trim();
+    if (explicitWs) {
+      return explicitWs.replace(/\/+$/, "") + "/ws/chat";
     }
-    // Same-origin: derive ws[s] from current page protocol.
+
+    const apiBase = (import.meta.env.VITE_API_URL || "").trim();
+    if (apiBase) {
+      return apiBase.replace(/^http/, "ws").replace(/\/+$/, "") + "/ws/chat";
+    }
+
+    if (typeof window !== "undefined") {
+      const host = window.location.host;
+      if (host === "sabq.org" || host === "www.sabq.org") {
+        return "wss://api.sabq.org/ws/chat";
+      }
+      if (host === "sabq.news" || host === "www.sabq.news") {
+        return "wss://api.sabq.news/ws/chat";
+      }
+    }
+
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${window.location.host}${baseHttp.startsWith("/") ? "" : "/"}${baseHttp}`;
+    return `${proto}//${window.location.host}/ws/chat`;
   }
 
   private connect() {
