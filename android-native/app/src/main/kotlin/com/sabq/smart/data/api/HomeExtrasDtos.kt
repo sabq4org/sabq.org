@@ -84,3 +84,39 @@ data class ApiAudioNewsletter(
 data class ApiAudioNewslettersResponse(
     val newsletters: List<ApiAudioNewsletter> = emptyList(),
 )
+
+// Hajj block — seasonal "صدى الحج" homepage rail. Mirrors the iOS
+// `APIHajjBlockResponse` shape in `Services/APIModels.swift:1779`.
+// Lives on the PUBLIC namespace (NOT `/api/v1/`) — the backend gates
+// visibility via `isVisible`, so signed-out clients can read it.
+
+@Serializable
+data class ApiHajjBlockResponse(
+    val isVisible: Boolean = false,
+    val title: String? = null,
+    val subtitle: String? = null,
+    val articles: List<ApiHajjArticle> = emptyList(),
+    val hajjDay: Int? = null,
+    val daysToArafat: Int? = null,
+    /** tarwiyah | arafat | nahr | tashreeq | before | after */
+    val hajjPhase: String? = null,
+    val lastUpdatedAt: String? = null,
+    /** why hidden — `before_season` / `after_season` / `no_matching_articles` */
+    val reason: String? = null,
+)
+
+@Serializable
+data class ApiHajjArticle(
+    val id: String = "",
+    val title: String = "",
+    val slug: String? = null,
+    val excerpt: String? = null,
+    val imageUrl: String? = null,
+    val publishedAt: String? = null,
+    val isBreaking: Boolean? = null,
+    val isPinned: Boolean? = null,
+    /** Arabic tag derived server-side — "من عرفات", "في منى", ... */
+    val hajjTag: String = "",
+    /** Emoji glyph paired with the tag — 🏔️, 🪨, ... */
+    val hajjEmoji: String = "🕋",
+)

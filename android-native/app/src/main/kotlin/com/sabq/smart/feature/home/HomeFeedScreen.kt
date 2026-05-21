@@ -104,6 +104,7 @@ fun HomeFeedScreen(
     onLoyaltyClick: () -> Unit = {},
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
     onAudioNewslettersClick: () -> Unit = {},
+    onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -146,6 +147,7 @@ fun HomeFeedScreen(
                 onLoyaltyClick = onLoyaltyClick,
                 onStoryClick = onStoryClick,
                 onAudioNewslettersClick = onAudioNewslettersClick,
+                onHajjArticleClick = onHajjArticleClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
                     // user's explicit darkMode flag. If the user was in
@@ -179,6 +181,7 @@ private fun LoadedFeed(
     onLoyaltyClick: () -> Unit,
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onAudioNewslettersClick: () -> Unit,
+    onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
 ) {
@@ -271,6 +274,18 @@ private fun LoadedFeed(
                     currentUser = currentUser,
                     loyaltyLifetimePoints = state.loyaltySummary?.lifetimePoints ?: 0,
                     onLoyaltyTap = onLoyaltyClick,
+                )
+            }
+        }
+
+        // "صدى الحج" — seasonal block, hidden when out of season /
+        // disabled / no articles (the repo returns null in those cases,
+        // matching iOS `HajjBlockView` parity).
+        state.hajjBlock?.let { hajj ->
+            item {
+                HajjBlockSection(
+                    block = hajj,
+                    onArticleClick = onHajjArticleClick,
                 )
             }
         }

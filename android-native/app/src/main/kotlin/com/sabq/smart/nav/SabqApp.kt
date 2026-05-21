@@ -225,6 +225,15 @@ fun SabqApp(
                         onAudioNewslettersClick = {
                             navController.navigate(SabqRoutes.AudioNewsletters)
                         },
+                        onHajjArticleClick = { hArticle ->
+                            // Hajj articles only carry the slug, not a
+                            // full Article payload — open the standard
+                            // article detail by slug. The detail screen
+                            // re-fetches the full row.
+                            hArticle.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
+                        },
                     )
                 }
                 composable(SabqRoutes.Explore) {

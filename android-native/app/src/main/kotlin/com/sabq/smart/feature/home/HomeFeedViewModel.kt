@@ -7,6 +7,7 @@ import com.sabq.smart.data.ArticleRepository
 import com.sabq.smart.data.AudioNewsletter
 import com.sabq.smart.data.BookmarksStore
 import com.sabq.smart.data.CalendarEvent
+import com.sabq.smart.data.HajjBlock
 import com.sabq.smart.data.HomeExtrasRepository
 import com.sabq.smart.data.InsightsRepository
 import com.sabq.smart.data.LoyaltyRepository
@@ -59,6 +60,10 @@ sealed interface HomeFeedUiState {
          *  the "نقاط الولاء" metric cell. Null before fetch / signed
          *  out. */
         val loyaltySummary: LoyaltySummary? = null,
+        /** Seasonal Hajj block. Null when the backend hides it (out
+         *  of season / no articles) — Home then renders nothing in
+         *  this slot. */
+        val hajjBlock: HajjBlock? = null,
     ) : HomeFeedUiState
 }
 
@@ -192,6 +197,7 @@ class HomeFeedViewModel @Inject constructor(
             val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
             val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }
             val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
+            val hajjJob = async { runCatching { extrasRepo.getHajjBlock() }.getOrNull() }
             // Auth-required side-fetches. Anonymous users will 401 here;
             // we swallow that and the personal-journey block stays
             // hidden because [journeyInsights] remains null.
@@ -204,6 +210,7 @@ class HomeFeedViewModel @Inject constructor(
             val stories = storiesJob.await()
             val calendar = calendarJob.await().take(3)
             val audioNewsletter = audioJob.await()
+            val hajjBlock = hajjJob.await()
             val insights = insightsJob.await()
             val loyalty = loyaltyJob.await()
 
@@ -216,6 +223,7 @@ class HomeFeedViewModel @Inject constructor(
                         stories = stories,
                         calendar = calendar,
                         audioNewsletter = audioNewsletter,
+                        hajjBlock = hajjBlock,
                         journeyInsights = insights,
                         loyaltySummary = loyalty,
                     )

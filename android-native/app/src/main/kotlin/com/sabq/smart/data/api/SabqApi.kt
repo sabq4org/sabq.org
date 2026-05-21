@@ -80,6 +80,16 @@ interface SabqApi {
     @GET("api/audio-newsletters")
     suspend fun getAudioNewsletters(): ApiAudioNewslettersResponse
 
+    /**
+     * Seasonal "صدى الحج" homepage block. Backend gates visibility on
+     * a dashboard toggle + season window, so the response can come back
+     * with `isVisible: false` and no other fields. iOS counterpart:
+     * `APIClient.fetchHajjBlock` (`Services/APIClient.swift:1106`).
+     * Public namespace (NOT `/api/v1/`).
+     */
+    @GET("api/hajj-block")
+    suspend fun getHajjBlock(): ApiHajjBlockResponse
+
     // -- public (article detail / opinions) ---------------------------
 
     /**

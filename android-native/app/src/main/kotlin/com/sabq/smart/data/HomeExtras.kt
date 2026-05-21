@@ -2,6 +2,8 @@ package com.sabq.smart.data
 
 import com.sabq.smart.data.api.ApiAudioNewsletter
 import com.sabq.smart.data.api.ApiCalendarEvent
+import com.sabq.smart.data.api.ApiHajjArticle
+import com.sabq.smart.data.api.ApiHajjBlockResponse
 import com.sabq.smart.data.api.ApiStory
 import com.sabq.smart.data.api.SabqApi
 import javax.inject.Inject
@@ -37,6 +39,32 @@ data class CalendarEvent(
     /** ISO-8601 start timestamp. Empty string when missing — the date
      *  grouping logic guards on that. */
     val dateStart: String = "",
+)
+
+/** Domain model for the seasonal "صدى الحج" block. Mirrors iOS
+ *  `APIHajjBlockResponse` + `APIHajjArticle` collapsed into a single
+ *  "visible" struct — repos return `null` for "hidden" instead of
+ *  shipping an isVisible flag downstream. */
+data class HajjBlock(
+    val title: String,
+    val subtitle: String?,
+    val articles: List<HajjArticle>,
+    val hajjDay: Int?,
+    val daysToArafat: Int?,
+    /** tarwiyah | arafat | nahr | tashreeq | before | after */
+    val hajjPhase: String?,
+    val lastUpdatedAt: String?,
+)
+
+data class HajjArticle(
+    val id: String,
+    val title: String,
+    val slug: String?,
+    val imageUrl: String?,
+    val publishedAt: String?,
+    val isPinned: Boolean,
+    val hajjTag: String,
+    val hajjEmoji: String,
 )
 
 data class AudioNewsletter(
@@ -77,6 +105,13 @@ class HomeExtrasRepository @Inject constructor(
      *  the same `/api/audio-newsletters` endpoint. */
     suspend fun getAllAudioNewsletters(): List<AudioNewsletter> =
         api.getAudioNewsletters().newsletters.map { it.toDomain() }
+
+    /** Seasonal Hajj block. Returns `null` when the backend hides the
+     *  block (out of season / disabled / no matching articles) or when
+     *  the response carries no articles — both cases should render
+     *  nothing on Home, same as iOS [[HajjBlockView]]. */
+    suspend fun getHajjBlock(): HajjBlock? =
+        api.getHajjBlock().toDomainOrNull()
 }
 
 private fun ApiStory.toDomain(): Story = Story(
@@ -104,6 +139,31 @@ private fun ApiAudioNewsletter.toDomain(): AudioNewsletter = AudioNewsletter(
     coverImageUrl = coverImageUrl?.let { absolutize(it) },
     audioUrl = audioUrl?.let { absolutize(it) },
     totalListens = totalListens?.takeIf { it > 0 },
+)
+
+private fun ApiHajjBlockResponse.toDomainOrNull(): HajjBlock? {
+    if (!isVisible) return null
+    if (articles.isEmpty()) return null
+    return HajjBlock(
+        title = title?.takeIf { it.isNotBlank() } ?: "صدى الحج",
+        subtitle = subtitle?.takeIf { it.isNotBlank() },
+        articles = articles.map { it.toDomain() },
+        hajjDay = hajjDay,
+        daysToArafat = daysToArafat,
+        hajjPhase = hajjPhase?.takeIf { it.isNotBlank() },
+        lastUpdatedAt = lastUpdatedAt,
+    )
+}
+
+private fun ApiHajjArticle.toDomain(): HajjArticle = HajjArticle(
+    id = id.takeIf { it.isNotBlank() } ?: (slug ?: title),
+    title = title,
+    slug = slug?.takeIf { it.isNotBlank() },
+    imageUrl = imageUrl?.let { absolutize(it) },
+    publishedAt = publishedAt?.takeIf { it.isNotBlank() },
+    isPinned = isPinned == true,
+    hajjTag = hajjTag,
+    hajjEmoji = hajjEmoji.takeIf { it.isNotBlank() } ?: "🕋",
 )
 
 /** Absolute-URL guard. iOS prefixes relative paths with the web origin
