@@ -102,19 +102,35 @@ function formatUserName(u: { firstName: string | null; lastName: string | null; 
 const VALID_PRESENCE_STATUSES = ["available", "busy", "away", "invisible"] as const;
 type PresenceStatus = (typeof VALID_PRESENCE_STATUSES)[number];
 
+// Don't let an unmigrated chat_presence table kill the chat. If the table is
+// missing OR the query errors for any other reason, fall back to "everyone is
+// available" — the rest of the chat keeps working, status picker just won't
+// have a value to display until the migration is applied.
+let _presenceTableWarnedOnce = false;
 async function loadPresenceMap(userIds: string[]): Promise<Map<string, PresenceStatus>> {
   if (userIds.length === 0) return new Map();
-  const rows = await db
-    .select()
-    .from(chatPresence)
-    .where(inArray(chatPresence.userId, userIds));
-  const map = new Map<string, PresenceStatus>();
-  for (const r of rows) {
-    if ((VALID_PRESENCE_STATUSES as readonly string[]).includes(r.status)) {
-      map.set(r.userId, r.status as PresenceStatus);
+  try {
+    const rows = await db
+      .select()
+      .from(chatPresence)
+      .where(inArray(chatPresence.userId, userIds));
+    const map = new Map<string, PresenceStatus>();
+    for (const r of rows) {
+      if ((VALID_PRESENCE_STATUSES as readonly string[]).includes(r.status)) {
+        map.set(r.userId, r.status as PresenceStatus);
+      }
     }
+    return map;
+  } catch (err: any) {
+    if (!_presenceTableWarnedOnce) {
+      _presenceTableWarnedOnce = true;
+      console.warn(
+        `[chat] presence lookup failed (continuing with defaults): ${err?.message || err}. ` +
+        `If you see "relation chat_presence does not exist", run the migration SQL.`,
+      );
+    }
+    return new Map();
   }
-  return map;
 }
 
 // "invisible" appears offline to OTHER users (own UI still shows reality).
@@ -760,18 +776,27 @@ router.get("/api/chat/me/presence", requireAuth, async (req: any, res) => {
   try {
     if (!(await requirePerm(req, res, PERMISSION_CODES.CHAT_USE))) return;
     const me = req.user.id;
-    const [row] = await db
-      .select()
-      .from(chatPresence)
-      .where(eq(chatPresence.userId, me))
-      .limit(1);
-    res.json({
-      status: (row?.status as PresenceStatus) ?? "available",
-      statusMessage: row?.statusMessage ?? null,
-      online: isUserOnline(me),
-    });
-  } catch (err) {
-    console.error("[chat] GET presence error:", err);
+    try {
+      const [row] = await db
+        .select()
+        .from(chatPresence)
+        .where(eq(chatPresence.userId, me))
+        .limit(1);
+      return res.json({
+        status: (row?.status as PresenceStatus) ?? "available",
+        statusMessage: row?.statusMessage ?? null,
+        online: isUserOnline(me),
+      });
+    } catch (innerErr: any) {
+      // Table likely missing — degrade gracefully so the picker still loads.
+      const msg = innerErr?.message || String(innerErr);
+      if (msg.includes("chat_presence") && msg.includes("does not exist")) {
+        return res.json({ status: "available", statusMessage: null, online: isUserOnline(me) });
+      }
+      throw innerErr;
+    }
+  } catch (err: any) {
+    console.error("[chat] GET presence error:", err?.message || err);
     res.status(500).json({ message: "Failed to load presence" });
   }
 });
@@ -789,13 +814,23 @@ router.put("/api/chat/me/presence", requireAuth, async (req: any, res) => {
     if (!parsed.success) return res.status(400).json({ message: "حالة غير صحيحة" });
     const { status, statusMessage } = parsed.data;
 
-    await db
-      .insert(chatPresence)
-      .values({ userId: me, status, statusMessage: statusMessage ?? null, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: chatPresence.userId,
-        set: { status, statusMessage: statusMessage ?? null, updatedAt: new Date() },
-      });
+    try {
+      await db
+        .insert(chatPresence)
+        .values({ userId: me, status, statusMessage: statusMessage ?? null, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: chatPresence.userId,
+          set: { status, statusMessage: statusMessage ?? null, updatedAt: new Date() },
+        });
+    } catch (innerErr: any) {
+      const msg = innerErr?.message || String(innerErr);
+      if (msg.includes("chat_presence") && msg.includes("does not exist")) {
+        return res.status(503).json({
+          message: "جدول chat_presence غير موجود — شغّل SQL الهجرة على Neon أولاً",
+        });
+      }
+      throw innerErr;
+    }
 
     // Find all my conversation partners and broadcast the new status.
     const myConvs = await db
