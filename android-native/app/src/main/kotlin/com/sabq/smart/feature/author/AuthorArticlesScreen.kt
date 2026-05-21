@@ -1,6 +1,7 @@
 package com.sabq.smart.feature.author
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -393,59 +394,96 @@ private fun AuthorStatsStrip(authorPage: AuthorPage) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // iOS tints each StatBox in its own brand colour
+        // (AuthorArticlesView.swift:183/189/195): primaryEnd, teal, gold.
         StatBox(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.Article,
             value = formatStatsNumber(stats.articleCount),
-            label = "المقالات"
+            label = "مقال",
+            tint = SabqTheme.colors.primaryEnd,
         )
         StatBox(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.TrendingUp,
             value = formatViews(stats.totalViews),
-            label = "القراءات"
+            label = "قراءة",
+            tint = SabqTheme.colors.teal,
         )
         StatBox(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.CalendarMonth,
             value = earliest,
-            label = "عضو منذ"
+            label = "مع سبق",
+            tint = SabqTheme.colors.gold,
         )
     }
 }
 
+/**
+ * 1:1 port of iOS `statTile` (AuthorArticlesView.swift:200-228).
+ *
+ *  iOS layout:
+ *    VStack(spacing: 6) {
+ *      HStack(spacing: 4) { icon10pt + label10pt }.foregroundStyle(tint)
+ *      Text(value).font(.system(size: 19, weight: .heavy, design: .rounded))
+ *    }
+ *    .padding(.vertical, 12)
+ *    .background(surface, cornerRadius: 14, shadow: shadow×6:y2)
+ *    .overlay(stroke: tint.opacity(0.18), 0.5pt)
+ *
+ *  Previously the Android version was structurally different: a bigger
+ *  18 dp icon at the top, then value 15 sp, then label 11 sp — no tint
+ *  param at all, no shadow, no stroke. Brought back in line.
+ */
 @Composable
 private fun StatBox(
     modifier: Modifier = Modifier,
     icon: ImageVector,
     value: String,
-    label: String
+    label: String,
+    tint: Color,
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(SabqTheme.colors.surface)
-            .padding(12.dp),
+            .shadow(
+                elevation = 4.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
+                spotColor = SabqTheme.colors.shadow,
+            )
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(width = 0.5.dp, color = tint.copy(alpha = 0.18f), shape = shape)
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = SabqTheme.colors.primaryEnd.copy(alpha = 0.7f),
-            modifier = Modifier.size(18.dp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(10.dp),
+            )
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                color = tint,
+                letterSpacing = 0.2.sp,
+            )
+        }
         Text(
             text = value,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = SabqTheme.colors.ink
-        )
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = SabqTheme.colors.tertiaryInk
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Black,
+            color = SabqTheme.colors.ink,
+            maxLines = 1,
         )
     }
 }
