@@ -206,19 +206,36 @@ struct LoyaltyRewardsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "gift")
-                .font(.system(size: 44, weight: .ultraLight))
-                .foregroundStyle(SabqTheme.tertiaryInk)
-            Text("لا توجد مكافآت متاحة حالياً")
-                .font(.system(size: 14, weight: .semibold))
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(SabqTheme.primaryEnd.opacity(0.10))
+                    .frame(width: 96, height: 96)
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 38, weight: .light))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .heavy))
+                Text("قريباً")
+                    .font(.system(size: 11, weight: .black))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(SabqTheme.primaryEnd, in: Capsule())
+            Text("سيتم إتاحة المكافآت قريباً")
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
-            Text("تابع تفاعلك واكسب النقاط — ستظهر مكافآت قريباً.")
-                .font(.system(size: 12))
+            Text("نقاطك محفوظة ✨ نعمل على إطلاق متجر المكافآت قريباً — تابع تفاعلك واستمر في كسب النقاط.")
+                .font(.system(size: 13))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, 24)
         }
-        .padding(.vertical, 40)
+        .padding(.vertical, 36)
         .frame(maxWidth: .infinity)
     }
 
