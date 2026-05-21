@@ -9,7 +9,50 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { chatSocket } from "@/lib/chatSocket";
+import { toast } from "@/hooks/use-toast";
 import type { ChatConversationSummary, ChatMessage, ChatStaffUser, PresenceStatus } from "./types";
+
+/**
+ * Track which conversation (if any) the user is currently looking at. Used
+ * by the realtime bridge to decide whether to surface a toast: if the user
+ * is already viewing the message, no need to notify them on top of it.
+ */
+const activeConversationRef = { current: null as string | null };
+export function setActiveConversationId(id: string | null) {
+  activeConversationRef.current = id;
+}
+
+/**
+ * Play a short, subtle chime via the Web Audio API. No asset files needed.
+ * Wrapped in try/catch because some browsers gate audio behind a user
+ * gesture — we just swallow the failure silently.
+ */
+let _audioCtx: AudioContext | null = null;
+function playIncomingChime() {
+  try {
+    if (!_audioCtx) {
+      const Ctor = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+      if (!Ctor) return;
+      _audioCtx = new Ctor();
+    }
+    const ctx = _audioCtx;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, now); // A5
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.1); // E6
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  } catch {
+    /* audio is best-effort */
+  }
+}
 
 const CONVERSATIONS_KEY = ["/api/chat/conversations"] as const;
 const MESSAGES_KEY = (conversationId: string) => [
@@ -93,6 +136,8 @@ export function useChatRealtimeBridge(currentUserId: string | undefined) {
       if (event.type === "message:new") {
         const incoming = event.payload;
         const conversationId = event.conversationId;
+        const me = userRef.current;
+        const isMine = incoming.senderId === me;
 
         // 1) Splice into messages cache (dedupe by id AND clientId — the
         //    sender already has an optimistic copy with the same clientId).
@@ -111,6 +156,28 @@ export function useChatRealtimeBridge(currentUserId: string | undefined) {
             return { ...old, messages: [...old.messages, { ...incoming, pending: false }] };
           },
         );
+
+        // Notify the user when an incoming message arrives — but only when
+        // they aren't already looking at that conversation (otherwise it's
+        // redundant noise on top of the bubble appearing in-place).
+        if (!isMine && activeConversationRef.current !== conversationId) {
+          const existingList = qc.getQueryData<{ conversations: ChatConversationSummary[] }>(
+            CONVERSATIONS_KEY,
+          );
+          const senderName =
+            existingList?.conversations.find((c) => c.id === conversationId)?.otherUser.name
+            ?? "زميل";
+          const preview =
+            incoming.body
+              || (incoming.attachments.length === 1 ? "📷 صورة" : incoming.attachments.length > 1 ? `📷 ${incoming.attachments.length} صور` : "رسالة جديدة");
+
+          toast({
+            title: `💬 رسالة من ${senderName}`,
+            description: preview.length > 80 ? preview.slice(0, 80) + "…" : preview,
+            duration: 5000,
+          });
+          playIncomingChime();
+        }
 
         // 2) Update conversation summary (preview + unread).
         qc.setQueryData<{ conversations: ChatConversationSummary[] } | undefined>(

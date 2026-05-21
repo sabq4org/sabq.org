@@ -207,7 +207,7 @@ export function Composer({ conversationId, currentUserId }: ComposerProps) {
   };
 
   return (
-    <div className="border-t bg-background">
+    <div className="border-t bg-background shrink-0">
       {pendingImages.length > 0 && (
         <div className="flex gap-2 p-3 flex-wrap border-b bg-muted/30">
           {pendingImages.map((p) => (

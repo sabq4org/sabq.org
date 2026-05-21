@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { PresenceDot, STATUS_META } from "./StatusPicker";
-import { useChatMessages, useTypingIndicator } from "./hooks";
+import { setActiveConversationId, useChatMessages, useTypingIndicator } from "./hooks";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { chatConversationsQueryKey } from "./hooks";
 import type { ChatConversationSummary } from "./types";
@@ -52,6 +52,14 @@ export function ConversationView({
   );
   const partnerTyping = useTypingIndicator(conversation.id, conversation.otherUser.id);
 
+  // Tell the realtime bridge which conversation is currently open so toast
+  // notifications are suppressed for the visible one (the bubble already
+  // appears in-place — a toast on top would be noisy).
+  useEffect(() => {
+    setActiveConversationId(conversation.id);
+    return () => setActiveConversationId(null);
+  }, [conversation.id]);
+
   // Mark as read when we open the conversation OR when a new message arrives.
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
   useEffect(() => {
@@ -77,8 +85,8 @@ export function ConversationView({
   }, [conversation.id, lastMessageId]);
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="flex items-center gap-3 px-4 py-3 border-b">
+    <div className="flex flex-col h-full min-h-0 bg-background">
+      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
         {onBack && (
           <Button
             type="button"
