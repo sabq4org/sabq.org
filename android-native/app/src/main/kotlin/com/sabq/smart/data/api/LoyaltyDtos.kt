@@ -101,4 +101,68 @@ data class ApiLoyaltyHistoryEvent(
     val source: String? = null,
     @JsonNames("createdAt", "created_at")
     val createdAt: String? = null,
+    @JsonNames("articleTitle", "article_title")
+    val articleTitle: String? = null,
+    @JsonNames("articleSlug", "article_slug")
+    val articleSlug: String? = null,
+)
+
+
+/**
+ * Reward listing from `GET /api/v1/loyalty/rewards`. Drives the
+ * "متجر المكافآت" screen — same shape as the iOS
+ * `LoyaltyRewardsResponse` decoder.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiLoyaltyRewardsResponse(
+    val success: Boolean? = null,
+    val balance: Int = 0,
+    val rewards: List<ApiLoyaltyReward> = emptyList(),
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiLoyaltyReward(
+    val id: String = "",
+    @JsonNames("nameAr", "name_ar")
+    val nameAr: String = "",
+    @JsonNames("nameEn", "name_en")
+    val nameEn: String? = null,
+    val description: String? = null,
+    @JsonNames("imageUrl", "image_url")
+    val imageUrl: String? = null,
+    @JsonNames("pointsCost", "points_cost")
+    val pointsCost: Int = 0,
+    @JsonNames("rewardType", "reward_type")
+    val rewardType: String? = null,
+    @JsonNames("partnerName", "partner_name")
+    val partnerName: String? = null,
+    @JsonNames("remainingStock", "remaining_stock")
+    val remainingStock: Int? = null,
+    @JsonNames("expiresAt", "expires_at")
+    val expiresAt: String? = null,
+    @JsonNames("myRedemptionCount", "my_redemption_count")
+    val myRedemptionCount: Int = 0,
+    @JsonNames("canRedeem", "can_redeem")
+    val canRedeem: Boolean = false,
+    @JsonNames("pointsShort", "points_short")
+    val pointsShort: Int = 0,
+    @JsonNames("reasonBlocked", "reason_blocked")
+    val reasonBlocked: String? = null,
+)
+
+/**
+ * Response from `POST /api/v1/loyalty/rewards/{id}/redeem`. Server
+ * may return success=false with a human message (e.g. out of stock,
+ * insufficient points after race) — the UI surfaces it as an error
+ * banner instead of throwing.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiLoyaltyRedeemResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+    @JsonNames("remainingBalance", "remaining_balance")
+    val remainingBalance: Int? = null,
 )

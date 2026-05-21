@@ -188,6 +188,23 @@ interface SabqApi {
         @Query("limit") limit: Int = 20,
     ): ApiLoyaltyHistoryResponse
 
+    /**
+     * Catalog of redeemable rewards + the caller's point balance. iOS
+     * mirror: `APIClient.fetchLoyaltyRewards` (`Services/APIClient.swift`).
+     * Backend route: `mobileApiRoutes.ts` — `/loyalty/rewards`.
+     */
+    @GET("api/v1/loyalty/rewards")
+    suspend fun getLoyaltyRewards(): ApiLoyaltyRewardsResponse
+
+    /**
+     * Redeem a specific reward. Server may reject with success=false +
+     * a human message if stock ran out, per-user cap hit, or balance
+     * drifted below the cost between catalog load and tap. UI surfaces
+     * the message as an error banner instead of throwing.
+     */
+    @POST("api/v1/loyalty/rewards/{id}/redeem")
+    suspend fun redeemLoyaltyReward(@Path("id") id: String): ApiLoyaltyRedeemResponse
+
     // -- insights (personal knowledge journey) -----------------------
 
     /**

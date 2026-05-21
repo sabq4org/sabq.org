@@ -36,6 +36,7 @@ import com.sabq.smart.feature.live.MomentByMomentScreen
 import com.sabq.smart.feature.livecoverage.LiveCoverageScreen
 import com.sabq.smart.feature.loyalty.LoyaltyAccountScreen
 import com.sabq.smart.feature.loyalty.LoyaltyHistoryScreen
+import com.sabq.smart.feature.loyalty.LoyaltyRewardsScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationDetailScreen
 import com.sabq.smart.feature.notifications.EditorialNotificationsScreen
 import com.sabq.smart.feature.notifications.NotificationPreferencesScreen
@@ -73,6 +74,7 @@ object SabqRoutes {
     const val Login = "auth/login"
     const val Loyalty = "loyalty"
     const val LoyaltyHistory = "loyalty/history"
+    const val LoyaltyRewards = "loyalty/rewards"
     const val Opinions = "opinions"
     const val Trending = "trending"
     const val DailyBrief = "brief"
@@ -312,10 +314,16 @@ fun SabqApp(
                     LoyaltyAccountScreen(
                         onBack = { navController.popBackStack() },
                         onHistoryClick = { navController.navigate(SabqRoutes.LoyaltyHistory) },
+                        onRewardsClick = { navController.navigate(SabqRoutes.LoyaltyRewards) },
                     )
                 }
                 composable(SabqRoutes.LoyaltyHistory) {
                     LoyaltyHistoryScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.LoyaltyRewards) {
+                    LoyaltyRewardsScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

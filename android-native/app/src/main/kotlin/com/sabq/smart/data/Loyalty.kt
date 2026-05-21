@@ -156,3 +156,33 @@ data class LoyaltyEventPayload(
     val extraInfo: String? = null,
 )
 
+
+
+/** UI-shaped reward — pruned/typed copy of [ApiLoyaltyReward]. */
+data class LoyaltyReward(
+    val id: String,
+    val nameAr: String,
+    val nameEn: String?,
+    val description: String?,
+    val imageUrl: String?,
+    val pointsCost: Int,
+    val rewardType: String?,
+    val partnerName: String?,
+    val remainingStock: Int?,
+    val expiresAt: String?,
+    val myRedemptionCount: Int,
+    val canRedeem: Boolean,
+    val pointsShort: Int,
+    val reasonBlocked: String?,
+)
+
+data class LoyaltyRewardsPage(
+    val balance: Int,
+    val rewards: List<LoyaltyReward>,
+)
+
+data class LoyaltyRedeemResult(
+    val success: Boolean,
+    val message: String?,
+    val remainingBalance: Int?,
+)

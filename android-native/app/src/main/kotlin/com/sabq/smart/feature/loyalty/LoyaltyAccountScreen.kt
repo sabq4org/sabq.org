@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Star
@@ -71,6 +72,7 @@ import com.sabq.smart.ui.theme.SabqTheme
 fun LoyaltyAccountScreen(
     onBack: () -> Unit,
     onHistoryClick: () -> Unit = {},
+    onRewardsClick: () -> Unit = {},
     viewModel: LoyaltyAccountViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
@@ -93,7 +95,9 @@ fun LoyaltyAccountScreen(
                 LoyaltyUiState.Loading -> CenterSpinner()
                 LoyaltyUiState.Anonymous -> AnonymousHint()
                 is LoyaltyUiState.Error -> ErrorHint(message = s.message, onRetry = viewModel::refresh)
-                is LoyaltyUiState.Loaded -> Content(summary = s.summary, user = user, onHistoryClick = onHistoryClick)
+                is LoyaltyUiState.Loaded -> Content(summary = s.summary, user = user, onHistoryClick = onHistoryClick,
+            onRewardsClick = onRewardsClick,
+        )
             }
         }
     }
@@ -135,7 +139,7 @@ private fun TopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> Unit) {
+private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> Unit, onRewardsClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -163,9 +167,12 @@ private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> 
         // 3) Tier ladder.
         TierLadder(currentLevel = summary.resolvedTier.level)
 
-        // 4) Quick actions — only "سجل نقاطي" today (iOS also ships a
-        //    rewards card, deferred until LoyaltyRewardsView ports).
-        HistoryActionCard(onClick = onHistoryClick)
+        // 4) Quick actions — two side-by-side cards mirroring iOS
+        //    `quickActions`: "متجر المكافآت" + "سجل نقاطي".
+        QuickActionsRow(
+            onRewardsClick = onRewardsClick,
+            onHistoryClick = onHistoryClick,
+        )
     }
 }
 
@@ -544,3 +551,93 @@ private fun ErrorHint(message: String, onRetry: () -> Unit) {
         }
     }
 }
+
+
+// ============================================================
+// Quick actions — two side-by-side cards (Rewards + History).
+// Mirrors iOS LoyaltyAccountView `quickActions` exactly: 14 dp
+// padding, 38 dp tinted circle icon, 14 sp bold title, 11 sp
+// medium subtitle, 16 dp corner radius, 0.5 dp tinted border.
+// ============================================================
+
+@Composable
+private fun QuickActionsRow(
+    onRewardsClick: () -> Unit,
+    onHistoryClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        QuickActionCard(
+            title = "متجر المكافآت",
+            subtitle = "استبدل نقاطك بمكافآت",
+            icon = Icons.Filled.CardGiftcard,
+            tint = SabqTheme.colors.primaryEnd,
+            modifier = Modifier.weight(1f),
+            onClick = onRewardsClick,
+        )
+        QuickActionCard(
+            title = "سجل نقاطي",
+            subtitle = "تتبَّع نشاطك ونقاطك",
+            icon = Icons.Filled.History,
+            tint = SabqTheme.colors.coral,
+            modifier = Modifier.weight(1f),
+            onClick = onHistoryClick,
+        )
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(
+                width = 0.5.dp,
+                color = tint.copy(alpha = 0.25f),
+                shape = shape,
+            )
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(tint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            color = SabqTheme.colors.ink,
+        )
+        Text(
+            text = subtitle,
+            fontSize = 11.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            color = SabqTheme.colors.secondaryInk,
+            maxLines = 2,
+        )
+    }
+}
+
