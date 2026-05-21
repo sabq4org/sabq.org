@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.GridView
@@ -117,8 +118,10 @@ fun ExploreScreen(
             .background(SabqTheme.colors.background)
             .statusBarsPadding(),
         contentPadding = PaddingValues(
-            horizontal = 18.dp,
-            vertical = 18.dp,
+            start = SabqTheme.dimens.screenPaddingH,
+            end = SabqTheme.dimens.screenPaddingH,
+            top = 18.dp,
+            bottom = SabqTheme.dimens.tabBarSafeArea,
         ),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
@@ -257,6 +260,25 @@ private fun SectionsGridSection(sections: List<Section>) {
     }
 }
 
+/**
+ * 1:1 port of iOS `CategoryTile`
+ * (`Components/SabqComponents.swift:1483-1550`).
+ *
+ * Key visual notes the user called out:
+ *   - **No heavy shadow** — iOS uses `shadow(SabqTheme.shadow, radius:8, y:3)`
+ *     which is 0.05 opacity. Compose equivalent: tiny elevation 1.dp with
+ *     spotColor = SabqTheme.colors.shadow. Ambient color is transparent
+ *     so the shadow only sits *below* the tile, matching iOS y:3.
+ *   - **Gradient background** — `tint.opacity(0.08) → surface`, top-leading
+ *     to bottom-trailing.
+ *   - **Tint stroke** — `tint.opacity(0.18), 0.6dp`.
+ *   - **Chevron** — `chevron.left` at top-trailing, font 11pt heavy,
+ *     `tint.opacity(0.6)`.
+ *   - **No article count** — iOS removed it because it dominated the
+ *     tile; we follow.
+ *   - Title: 17sp Bold (matches iOS `system(size:17, weight: .bold, design: .rounded)`).
+ *   - Subtitle: 12sp Medium tertiaryInk, max 2 lines.
+ */
 @Composable
 private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
     val visual = ArticleCategory.fromSlug(section.slug)
@@ -265,24 +287,60 @@ private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(6.dp, shape)
+            .shadow(
+                elevation = 1.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
+                spotColor = SabqTheme.colors.shadow,
+            )
             .clip(shape)
-            .background(SabqTheme.colors.surface, shape)
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = listOf(
+                        tint.copy(alpha = 0.08f),
+                        SabqTheme.colors.surface,
+                    ),
+                ),
+                shape = shape,
+            )
+            .border(width = 0.6.dp, color = tint.copy(alpha = 0.18f), shape = shape)
             .clickable { /* TODO: navigate to a category-filtered list */ }
-            .padding(14.dp),
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SmallSquareBadge(icon = visual.icon, tint = tint)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            SmallSquareBadge(icon = visual.icon, tint = tint)
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+            // iOS uses `chevron.left` because content is always RTL.
+            // Compose's AutoMirrored.KeyboardArrowLeft flips with layout
+            // direction — in RTL it visually becomes a left chevron,
+            // matching iOS exactly.
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = null,
+                tint = tint.copy(alpha = 0.6f),
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .size(14.dp),
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = section.name,
-                style = SabqTheme.typography.compactCardTitle,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
                 color = SabqTheme.colors.ink,
             )
             Text(
-                text = "${section.articlesCount} مقال",
-                style = SabqTheme.typography.metaSmall,
+                text = visual.subtitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
                 color = SabqTheme.colors.tertiaryInk,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }
