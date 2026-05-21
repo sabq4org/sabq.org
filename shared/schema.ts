@@ -11959,6 +11959,107 @@ export type LegacyRedirect = typeof legacyRedirects.$inferSelect;
 export type InsertLegacyRedirect = z.infer<typeof insertLegacyRedirectSchema>;
 
 // ============================================================================
+// Realtime Chat - الدردشة اللحظية بين فريق التحرير
+// 1-to-1 conversations initiated by admins/managers (chat.manage) with any
+// staff member who has chat.use. Realtime delivery via WebSocket; messages
+// + attachments persist for history. Attachments use Cloudflare Images.
+// ============================================================================
+
+export const chatConversations = pgTable("chat_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  initiatorId: varchar("initiator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  participantId: varchar("participant_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  lastMessagePreview: text("last_message_preview"),
+  initiatorLastReadAt: timestamp("initiator_last_read_at"),
+  participantLastReadAt: timestamp("participant_last_read_at"),
+}, (table) => [
+  uniqueIndex("uq_chat_conversations_pair").on(table.initiatorId, table.participantId),
+  index("idx_chat_conversations_initiator").on(table.initiatorId, table.lastMessageAt),
+  index("idx_chat_conversations_participant").on(table.participantId, table.lastMessageAt),
+]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id")
+    .notNull()
+    .references(() => chatConversations.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull().default(""),
+  hasAttachment: boolean("has_attachment").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  editedAt: timestamp("edited_at"),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_chat_messages_conversation").on(table.conversationId, table.createdAt),
+  index("idx_chat_messages_sender").on(table.senderId),
+]);
+
+export const chatMessageAttachments = pgTable("chat_message_attachments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id")
+    .notNull()
+    .references(() => chatMessages.id, { onDelete: "cascade" }),
+  kind: varchar("kind", { length: 20 }).default("image").notNull(), // image (Phase 2 may add: file, audio)
+  url: text("url").notNull(),
+  thumbnailUrl: text("thumbnail_url"),
+  width: integer("width"),
+  height: integer("height"),
+  sizeBytes: integer("size_bytes"),
+  mimeType: varchar("mime_type", { length: 80 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_chat_attachments_message").on(table.messageId),
+]);
+
+export const chatConversationsRelations = relations(chatConversations, ({ one, many }) => ({
+  initiator: one(users, {
+    fields: [chatConversations.initiatorId],
+    references: [users.id],
+    relationName: "chat_initiator",
+  }),
+  participant: one(users, {
+    fields: [chatConversations.participantId],
+    references: [users.id],
+    relationName: "chat_participant",
+  }),
+  messages: many(chatMessages),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one, many }) => ({
+  conversation: one(chatConversations, {
+    fields: [chatMessages.conversationId],
+    references: [chatConversations.id],
+  }),
+  sender: one(users, {
+    fields: [chatMessages.senderId],
+    references: [users.id],
+  }),
+  attachments: many(chatMessageAttachments),
+}));
+
+export const chatMessageAttachmentsRelations = relations(chatMessageAttachments, ({ one }) => ({
+  message: one(chatMessages, {
+    fields: [chatMessageAttachments.messageId],
+    references: [chatMessages.id],
+  }),
+}));
+
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type InsertChatConversation = typeof chatConversations.$inferInsert;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = typeof chatMessages.$inferInsert;
+export type ChatMessageAttachment = typeof chatMessageAttachments.$inferSelect;
+export type InsertChatMessageAttachment = typeof chatMessageAttachments.$inferInsert;
+
+// ============================================================================
 // iOS Push Notification System - نظام إشعارات iOS
 // ============================================================================
 

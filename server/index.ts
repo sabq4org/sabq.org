@@ -719,6 +719,21 @@ const isProduction = process.env.NODE_ENV === "production";
 const port = (globalThis as any).__sabqPort || parseInt(process.env.PORT || '5000', 10);
 const server = (globalThis as any).__sabqServer || createServer(app);
 
+// Realtime chat WebSocket — attaches to /ws/chat on the same HTTP server.
+// Idempotent: only attach once even if this module reloads during HMR.
+if (!(globalThis as any).__sabqChatWsAttached) {
+  (globalThis as any).__sabqChatWsAttached = true;
+  // Lazy import to keep the cold path light; the file only matters once
+  // a request actually upgrades to a WebSocket.
+  import("./chat/websocketServer").then(({ attachChatWebSocketServer }) => {
+    try {
+      attachChatWebSocketServer(server);
+    } catch (e) {
+      console.error("[chat-ws] Failed to attach:", e);
+    }
+  });
+}
+
 if (!(globalThis as any).__sabqServer) {
   // reusePort is unsupported on macOS/Darwin; only enable on Linux
   const listenOpts: { port: number; host: string; reusePort?: boolean } =
