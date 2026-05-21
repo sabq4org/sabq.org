@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,17 +46,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sabq.smart.data.LoyaltyHistoryEvent
 import com.sabq.smart.ui.theme.SabqTheme
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import androidx.compose.foundation.lazy.rememberLazyListState
+import java.time.temporal.WeekFields
+import java.util.Locale
 
 /**
- * "سجل نقاطي" — paginated activity feed. Ports iOS
- * `Screens/LoyaltyHistoryView.swift` 1:1. Each row: 38 dp tinted
- * circle with action emoji + Arabic action label + relative time +
- * "+points" with sparkles. Infinite scroll near tail, empty / error
- * states match iOS copy.
+ * "سجل نقاطي" — 1:1 with iOS LoyaltyHistoryView.swift (today's
+ * rewrite). Layout when loaded:
+ *
+ *   1) Totals strip — three pills at the top: إجمالي السجل / اليوم /
+ *      هذا الأسبوع, summing visible events.
+ *   2) Grouped buckets — اليوم / أمس / هذا الأسبوع / هذا الشهر / أقدم,
+ *      each with a section header showing the bucket subtotal as a
+ *      leaf-tinted pill, then the event rows.
+ *   3) Each row shows the action icon + Arabic label + article title
+ *      (when the event was earned for an article) + relative time +
+ *      "+points ✨". Article title comes from the backend's hydration
+ *      added 2026-05-21.
+ *
+ *   When the list is empty it shows EmptyStateView, on transient
+ *   errors ErrorState, and at the tail a spinner triggers loadMore().
  */
 @Composable
 fun LoyaltyHistoryScreen(
@@ -62,8 +79,6 @@ fun LoyaltyHistoryScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    // Auto-load next page when within 3 items of the end. Matches the
-    // iOS `task { await loadMore() }` ProgressView trigger.
     val nearEnd by remember {
         derivedStateOf {
             val info = listState.layoutInfo
@@ -95,15 +110,15 @@ fun LoyaltyHistoryScreen(
             else -> LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    horizontal = SabqTheme.dimens.screenPaddingH,
-                    vertical = 16.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(state.items)
+                item("totals") { TotalsStrip(items = state.items) }
+
+                buckets(events = state.items)
+
                 if (state.hasMore) {
-                    item {
+                    item("more") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -118,17 +133,185 @@ fun LoyaltyHistoryScreen(
                         }
                     }
                 }
-                item { Spacer(modifier = Modifier.height(28.dp)) }
+                item("tail-spacer") { Spacer(modifier = Modifier.height(28.dp)) }
             }
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.items(items: List<LoyaltyHistoryEvent>) {
-    items.forEach { item ->
-        item(key = item.id) { EventRow(event = item) }
+// ============================================================
+// Totals strip — three pills summing visible events
+// ============================================================
+
+@Composable
+private fun TotalsStrip(items: List<LoyaltyHistoryEvent>) {
+    val total = remember(items) { items.sumOf { it.points } }
+    val today = remember(items) {
+        items.filter { isToday(it.createdAt) }.sumOf { it.points }
+    }
+    val week = remember(items) {
+        items.filter { isInThisWeek(it.createdAt) }.sumOf { it.points }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        TotalsCell(value = total, label = "إجمالي السجل", tint = SabqTheme.colors.primaryEnd, modifier = Modifier.weight(1f))
+        TotalsCell(value = today, label = "اليوم", tint = SabqTheme.colors.leaf, modifier = Modifier.weight(1f))
+        TotalsCell(value = week, label = "هذا الأسبوع", tint = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
     }
 }
+
+@Composable
+private fun TotalsCell(value: Int, label: String, tint: Color, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(0.5.dp, tint.copy(alpha = 0.18f), shape)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "+$value",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Black,
+                color = tint,
+            )
+            Icon(
+                imageVector = Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                tint = tint.copy(alpha = 0.75f),
+                modifier = Modifier.size(10.dp),
+            )
+        }
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = SabqTheme.colors.secondaryInk,
+        )
+    }
+}
+
+// ============================================================
+// Day-grouped buckets
+// ============================================================
+
+private data class Bucket(
+    val label: String,
+    val events: List<LoyaltyHistoryEvent>,
+) {
+    val subtotal: Int get() = events.sumOf { it.points }
+}
+
+private fun groupBuckets(events: List<LoyaltyHistoryEvent>): List<Bucket> {
+    val today = mutableListOf<LoyaltyHistoryEvent>()
+    val yesterday = mutableListOf<LoyaltyHistoryEvent>()
+    val thisWeek = mutableListOf<LoyaltyHistoryEvent>()
+    val thisMonth = mutableListOf<LoyaltyHistoryEvent>()
+    val older = mutableListOf<LoyaltyHistoryEvent>()
+
+    val now = LocalDate.now()
+    val todayDate = now
+    val yesterdayDate = now.minusDays(1)
+    val weekFields = WeekFields.of(Locale.getDefault())
+    val nowWeek = now.get(weekFields.weekOfWeekBasedYear())
+    val nowWeekYear = now.get(weekFields.weekBasedYear())
+
+    for (event in events) {
+        val date = event.localDate()
+        if (date == null) { older.add(event); continue }
+        when {
+            date == todayDate -> today.add(event)
+            date == yesterdayDate -> yesterday.add(event)
+            date.year == now.year && date.monthValue == now.monthValue
+                && date.get(weekFields.weekOfWeekBasedYear()) == nowWeek
+                && date.get(weekFields.weekBasedYear()) == nowWeekYear -> thisWeek.add(event)
+            date.year == now.year && date.monthValue == now.monthValue -> thisMonth.add(event)
+            else -> older.add(event)
+        }
+    }
+
+    val out = mutableListOf<Bucket>()
+    if (today.isNotEmpty()) out += Bucket("اليوم", today)
+    if (yesterday.isNotEmpty()) out += Bucket("أمس", yesterday)
+    if (thisWeek.isNotEmpty()) out += Bucket("هذا الأسبوع", thisWeek)
+    if (thisMonth.isNotEmpty()) out += Bucket("هذا الشهر", thisMonth)
+    if (older.isNotEmpty()) out += Bucket("أقدم", older)
+    return out
+}
+
+private fun LoyaltyHistoryEvent.localDate(): LocalDate? {
+    val iso = createdAt?.takeIf { it.isNotBlank() } ?: return null
+    return runCatching {
+        OffsetDateTime.parse(iso, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            .toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+    }.getOrElse {
+        runCatching { Instant.parse(iso).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
+    }
+}
+
+private fun LazyListScope.buckets(events: List<LoyaltyHistoryEvent>) {
+    val buckets = groupBuckets(events)
+    for (bucket in buckets) {
+        item("section-${bucket.label}") {
+            SectionHeader(label = bucket.label, subtotal = bucket.subtotal)
+        }
+        for (event in bucket.events) {
+            item(event.id) { EventRow(event = event) }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(label: String, subtotal: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Black,
+            color = SabqTheme.colors.ink,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(SabqTheme.colors.leaf.copy(alpha = 0.10f))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = "+$subtotal",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                color = SabqTheme.colors.leaf,
+            )
+            Icon(
+                imageVector = Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                tint = SabqTheme.colors.leaf,
+                modifier = Modifier.size(9.dp),
+            )
+        }
+    }
+}
+
+// ============================================================
+// Top bar + Event row
+// ============================================================
 
 @Composable
 private fun TopBar(onBack: () -> Unit) {
@@ -162,7 +345,7 @@ private fun TopBar(onBack: () -> Unit) {
             color = SabqTheme.colors.ink,
         )
         Spacer(modifier = Modifier.weight(1f))
-        Spacer(modifier = Modifier.size(40.dp))
+        Spacer(modifier = Modifier.width(40.dp))
     }
 }
 
@@ -175,23 +358,23 @@ private fun EventRow(event: LoyaltyHistoryEvent) {
             .fillMaxWidth()
             .clip(shape)
             .background(SabqTheme.colors.surface, shape)
-            .border(width = 0.5.dp, color = SabqTheme.colors.outline.copy(alpha = 0.35f), shape = shape)
+            .border(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.35f), shape)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(40.dp)
                 .clip(CircleShape)
                 .background(tint.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = actionEmoji(event.action), fontSize = 18.sp)
+            Text(text = actionEmoji(event.action), fontSize = 19.sp)
         }
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Text(
                 text = actionLabel(event.action),
@@ -199,6 +382,16 @@ private fun EventRow(event: LoyaltyHistoryEvent) {
                 fontWeight = FontWeight.SemiBold,
                 color = SabqTheme.colors.ink,
             )
+            event.articleTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SabqTheme.colors.secondaryInk,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             event.createdAt?.let { iso ->
                 Text(
                     text = relativeTime(iso),
@@ -318,5 +511,28 @@ private fun relativeTime(iso: String): String {
         seconds < 86400 -> "قبل ${seconds / 3600} س"
         seconds < 604800 -> "قبل ${seconds / 86400} يوم"
         else -> "قبل ${seconds / 604800} أسبوع"
+    }
+}
+
+private fun isToday(iso: String?): Boolean {
+    val date = isoToLocalDate(iso) ?: return false
+    return date == LocalDate.now()
+}
+
+private fun isInThisWeek(iso: String?): Boolean {
+    val date = isoToLocalDate(iso) ?: return false
+    val now = LocalDate.now()
+    val fields = WeekFields.of(Locale.getDefault())
+    return date.get(fields.weekOfWeekBasedYear()) == now.get(fields.weekOfWeekBasedYear())
+        && date.get(fields.weekBasedYear()) == now.get(fields.weekBasedYear())
+}
+
+private fun isoToLocalDate(iso: String?): LocalDate? {
+    val src = iso?.takeIf { it.isNotBlank() } ?: return null
+    return runCatching {
+        OffsetDateTime.parse(src, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            .toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+    }.getOrElse {
+        runCatching { Instant.parse(src).atZone(ZoneId.systemDefault()).toLocalDate() }.getOrNull()
     }
 }

@@ -164,15 +164,17 @@ private fun Content(summary: LoyaltySummary, user: User?, onHistoryClick: () -> 
         // 2) Stats triplet — week (orange accent) + month + streak.
         StatsTriplet(summary = summary)
 
-        // 3) Tier ladder.
-        TierLadder(currentLevel = summary.resolvedTier.level)
-
-        // 4) Quick actions — two side-by-side cards mirroring iOS
+        // 3) Quick actions — two side-by-side cards mirroring iOS
         //    `quickActions`: "متجر المكافآت" + "سجل نقاطي".
+        //    Order matches iOS LoyaltyAccountView.body: stats → quick
+        //    actions → tier ladder (the ladder closes the screen).
         QuickActionsRow(
             onRewardsClick = onRewardsClick,
             onHistoryClick = onHistoryClick,
         )
+
+        // 4) Tier ladder — closes the screen, same as iOS.
+        TierLadder(currentLevel = summary.resolvedTier.level)
     }
 }
 
