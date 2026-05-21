@@ -310,11 +310,9 @@ private fun SkeletonGrid(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(count = 10) { _ ->
-            Box(
-                modifier = Modifier
-                    .height(72.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SabqTheme.colors.paleFill),
+            com.sabq.smart.ui.components.SkeletonBox(
+                height = 72.dp,
+                radius = 16.dp,
             )
         }
     }

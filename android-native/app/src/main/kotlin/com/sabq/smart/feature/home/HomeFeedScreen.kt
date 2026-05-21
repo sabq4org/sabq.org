@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -458,15 +460,14 @@ private fun CenteredSpinner() {
 
 @Composable
 private fun LoadingState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
-            Text(
-                text = "جاري تحميل الأخبار",
-                style = SabqTheme.typography.meta,
-                color = SabqTheme.colors.secondaryInk,
-            )
-        }
+    // Ports iOS HomeFeedSkeleton (SabqComponents.swift:126-176).
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SabqTheme.colors.background)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        com.sabq.smart.ui.components.HomeFeedSkeleton()
     }
 }
 

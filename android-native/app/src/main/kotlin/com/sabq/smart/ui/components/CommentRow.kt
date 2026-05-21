@@ -282,6 +282,7 @@ private fun ThreadLineOverlay(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val strokeColor = SabqTheme.colors.outline.copy(alpha = 0.55f)
     Canvas(modifier = modifier) {
         if (replyTopYs.isEmpty()) return@Canvas
 
@@ -301,7 +302,6 @@ private fun ThreadLineOverlay(
         val centreYs = replyTopYs.map { it + avatarCenterYOffset }
         val lastY = centreYs.lastOrNull() ?: return@Canvas
 
-        val strokeColor = Color(0xFF7E8995).copy(alpha = 0.55f)
         val stroke = Stroke(width = with(density) { 1.5.dp.toPx() })
 
         // Trunk — single vertical line from below parent avatar down

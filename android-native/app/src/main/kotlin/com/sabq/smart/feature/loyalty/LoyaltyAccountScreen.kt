@@ -506,8 +506,34 @@ private fun TierNode(tier: LoyaltyTier, isCurrent: Boolean, reached: Boolean) {
 
 @Composable
 private fun CenterSpinner() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
+    // Skeleton for the loaded layout: loyalty card + tier strip + a
+    // small action grid. Mirrors the placement of the actual
+    // LoyaltyAccount content so the layout doesn't reflow on load.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = SabqTheme.dimens.screenPaddingH, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        com.sabq.smart.ui.components.SkeletonBox(
+            height = 180.dp,
+            radius = SabqTheme.dimens.cardRadius,
+        )
+        com.sabq.smart.ui.components.SkeletonBox(height = 60.dp, radius = SabqTheme.dimens.tileRadius)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            repeat(2) {
+                Box(modifier = Modifier.weight(1f)) {
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        height = 88.dp,
+                        radius = SabqTheme.dimens.tileRadius,
+                    )
+                }
+            }
+        }
+        com.sabq.smart.ui.components.SkeletonBox(
+            height = 140.dp,
+            radius = SabqTheme.dimens.cardRadius,
+        )
     }
 }
 
