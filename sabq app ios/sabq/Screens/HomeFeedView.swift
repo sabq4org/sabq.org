@@ -31,7 +31,7 @@ struct HomeFeedView: View {
     /// Mirror of the dark-mode flag in `sabqApp` so the header toggle flips
     /// the scene-level `.preferredColorScheme`. The setting also lives in the
     /// in-app preferences screen; both write to the same UserDefaults key.
-    @AppStorage("isDarkMode") private var isDarkMode = false
+    @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @State private var isFirstLoad = true
     /// Drives the slowly-pulsing "live" ring around the new live-coverage
     /// entry point in the header. Animated on appear; idle otherwise.
@@ -414,16 +414,19 @@ struct HomeFeedView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Dark-mode toggle — mirrors the in-app setting. Tap flips
-                // `isDarkMode` AppStorage which `sabqApp` reads to drive
-                // `.preferredColorScheme(...)` for the whole scene.
+                // Appearance cycle — taps walk system → light → dark →
+                // system. The full 3-state picker lives in Settings; this
+                // button is the quick-access affordance and shows the
+                // current mode's icon.
                 Button {
                     SabqHaptics.light()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                        isDarkMode.toggle()
+                        let current = AppAppearance(rawValue: appearanceRaw) ?? .system
+                        appearanceRaw = current.next.rawValue
                     }
                 } label: {
-                    headerIcon(isDarkMode ? "sun.max.fill" : "moon.fill")
+                    let mode = AppAppearance(rawValue: appearanceRaw) ?? .system
+                    headerIcon(mode.iconName)
                 }
                 .buttonStyle(.plain)
             }

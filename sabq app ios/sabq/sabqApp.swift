@@ -3,7 +3,7 @@ import AVFoundation
 
 @main
 struct sabqApp: App {
-    @AppStorage("isDarkMode") private var isDarkMode = false
+    @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @AppStorage("sabqHasCompletedOnboardingV2") private var hasOnboarded: Bool = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -16,6 +16,11 @@ struct sabqApp: App {
         // Register bundled IBM Plex Sans Arabic before any SwiftUI view
         // tries to look it up via .font(.custom(...)).
         SabqFonts.registerAll()
+
+        // Migrate `isDarkMode` Bool to `appAppearance` enum (3-state)
+        // so users who set light/dark before the picker landed keep their
+        // choice instead of being silently flipped onto "system".
+        AppAppearance.migrateLegacyIfNeeded()
 
         // Configure (but DO NOT activate) the shared AVAudioSession for
         // spoken-audio playback. `.playback` with `.spokenAudio` is
@@ -45,10 +50,10 @@ struct sabqApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .preferredColorScheme(isDarkMode ? .dark : .light)
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .fullScreenCover(isPresented: .constant(!hasOnboarded)) {
                     OnboardingView()
-                        .preferredColorScheme(isDarkMode ? .dark : .light)
+                        .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                         .interactiveDismissDisabled(true)
                 }
         }
