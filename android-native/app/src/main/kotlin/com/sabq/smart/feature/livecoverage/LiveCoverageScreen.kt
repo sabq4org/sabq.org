@@ -582,31 +582,12 @@ private fun LoadingSection() {
 
 @Composable
 private fun EmptyState() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Podcasts,
-            contentDescription = null,
-            tint = SabqTheme.colors.tertiaryInk,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(
-            text = "لا يوجد بث حي حالياً",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SabqTheme.colors.ink,
-        )
-        Text(
-            text = "تابعنا لاحقاً للتغطيات المباشرة",
-            fontSize = 13.sp,
-            color = SabqTheme.colors.secondaryInk,
-        )
-    }
+    com.sabq.smart.ui.components.EmptyStateView(
+        icon = Icons.Outlined.Podcasts,
+        tint = SabqTheme.colors.coral,
+        title = "لا يوجد بث حي حالياً",
+        subtitle = "تابعنا لاحقاً للتغطيات المباشرة",
+    )
 }
 
 @Composable
