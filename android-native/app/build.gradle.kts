@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,15 +10,22 @@ plugins {
 }
 
 android {
+    // Kotlin namespace stays at com.sabq.smart (where all the .kt
+    // files live + the R class). The Play Store applicationId
+    // (com.sabqorg.sabq) is independent — Android Gradle Plugin
+    // supports this split without renaming source folders.
     namespace = "com.sabq.smart"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sabq.smart"
+        // Play Store published bundle is com.sabqorg.sabq (versionCode
+        // 120 at 9.0.1). Native 10.0 ships as 121 over the SAME id so
+        // it counts as an update, not a new app install.
+        applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "10.0.0-native"
+        versionCode = 121
+        versionName = "10.0.0"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced
@@ -27,12 +36,42 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Production signing config reads from local.properties (gitignored)
+    // or environment variables — never commit keystore credentials.
+    //   release.storeFile     = absolute path to release.keystore
+    //   release.storePassword = keystore password
+    //   release.keyAlias      = upload key alias
+    //   release.keyPassword   = key password
+    // If any are missing, the release build falls back to the debug
+    // signing config (safe — won't accidentally ship a wrong-keyed AAB).
+    val keystoreProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { stream -> load(stream) }
+    }
+    fun prop(name: String): String? =
+        keystoreProps.getProperty(name) ?: System.getenv(name.uppercase().replace('.', '_'))
+
+    val releaseStoreFile = prop("release.storeFile")?.let { rootProject.file(it) }
+    val hasReleaseSigning = releaseStoreFile?.exists() == true &&
+        prop("release.storePassword") != null &&
+        prop("release.keyAlias") != null &&
+        prop("release.keyPassword") != null
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = prop("release.storePassword")
+                keyAlias = prop("release.keyAlias")
+                keyPassword = prop("release.keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            // Coexist with the published Capacitor app
-            // (com.sabq.smart) and the eventual native release on the
-            // same device. Drop the suffix when native is ready to
-            // replace the Capacitor build on Play Store.
+            // Coexist with the published app on the same device while
+            // testing. Drop the suffix when shipping to Play Store.
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
             isMinifyEnabled = false
@@ -44,7 +83,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("debug") // TODO: production signing
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                // Fail-safe: a release build without prod keys uses
+                // the debug key, which Play Store will REJECT — that's
+                // exactly what we want until the keys are wired in.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
