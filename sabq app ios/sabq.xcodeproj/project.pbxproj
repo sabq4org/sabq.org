@@ -6,9 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		3AFE5FE82F60C123006270F8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -26,18 +23,28 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
 		3AFE5FD82F60C121006270F8 /* sabq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = sabq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FE72F60C123006270F8 /* sabqTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3AFE5FF12F60C123006270F8 /* sabqUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = sabqUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		3AA6BC192FBEF10C0002375D /* Exceptions for "sabq" folder in "sabq" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 3AFE5FD72F60C121006270F8 /* sabq */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		3AFE5FDA2F60C121006270F8 /* sabq */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				3AA6BC192FBEF10C0002375D /* Exceptions for "sabq" folder in "sabq" target */,
+			);
 			path = sabq;
 			sourceTree = "<group>";
 		};
@@ -240,7 +247,6 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-
 /* Begin PBXSourcesBuildPhase section */
 		3AFE5FD42F60C121006270F8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -403,7 +409,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -411,6 +417,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = sabq/Info.plist;
 				INFOPLIST_KEY_CFBundleDevelopmentRegion = ar;
 				INFOPLIST_KEY_CFBundleDisplayName = "سبق";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -418,18 +425,18 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
-				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -459,7 +466,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -467,6 +474,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = sabq/Info.plist;
 				INFOPLIST_KEY_CFBundleDevelopmentRegion = ar;
 				INFOPLIST_KEY_CFBundleDisplayName = "سبق";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -474,18 +482,18 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "نحتاج إذن الكاميرا لالتقاط صورة شخصية أو صورة عن المقال";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "نحتاج الإذن لحفظ الصور في معرض جهازك";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "نحتاج الوصول لمكتبة الصور لاختيار صورتك الشخصية أو صورة عن المقال";
-				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
-				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIBackgroundModes = "remote-notification";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -512,7 +520,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -538,7 +546,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -563,7 +571,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -588,7 +596,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026052105;
+				CURRENT_PROJECT_VERSION = 2026052106;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -649,7 +657,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = 3AFE5FD02F60C121006270F8 /* Project object */;
 }
