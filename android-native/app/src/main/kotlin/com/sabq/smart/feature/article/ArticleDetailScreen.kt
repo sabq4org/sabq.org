@@ -518,14 +518,19 @@ private fun ArticleBody(
                 if (!isLikeBusy) {
                     haptics.medium()
                     isLikeBusy = true
+                    val newLiked = !isLiked
                     scope.launch {
                         likesStore.toggle(article.id)
+                        com.sabq.smart.data.analytics.SabqAnalytics.articleLike(article.id, newLiked)
                         isLikeBusy = false
                     }
                 }
             },
             onBookmark = { scope.launch { bookmarks.toggle(article.bookmarkKey) } },
-            onShare = { shareArticle(context, article) },
+            onShare = {
+                shareArticle(context, article)
+                com.sabq.smart.data.analytics.SabqAnalytics.articleShare(article.id, "system_share")
+            },
         )
 
         // Bottom sheet for reader prefs (Aa). The sheet itself reads

@@ -25,6 +25,14 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // GA4 Measurement Protocol credentials — Sabq Android App (MP) stream
+        // in the Sabq GA3 - GA4 property. Shared with web (gtag.js) and iOS
+        // (MP) so events unify in Reports → Engagement → Events.
+        // These values are also visible in the on-the-wire HTTPS POST, so
+        // committing them is no different from shipping them inside the APK.
+        buildConfigField("String", "GA4_MEASUREMENT_ID", "\"G-XPS0W1N9CQ\"")
+        buildConfigField("String", "GA4_API_SECRET", "\"8rfI2G7RTxW7IZ4iIM-D-A\"")
     }
 
     buildTypes {

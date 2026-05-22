@@ -10,7 +10,9 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.google.firebase.FirebaseApp
+import com.sabq.smart.data.AuthRepository
 import com.sabq.smart.data.LoyaltyEventQueue
+import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.data.push.DeviceRegistrationManager
 import com.sabq.smart.data.push.SabqMessagingService
 import dagger.hilt.android.HiltAndroidApp
@@ -35,12 +37,19 @@ class SabqApplication : Application(), ImageLoaderFactory {
     @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var deviceRegistrationManager: DeviceRegistrationManager
     @Inject lateinit var loyaltyEventQueue: LoyaltyEventQueue
+    @Inject lateinit var authRepository: AuthRepository
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+
+        // GA4 Measurement Protocol — Sabq Android App (MP) stream in the
+        // Sabq GA3 - GA4 property (shared with web + iOS). Initialised
+        // before any feature code so the first events from app boot get
+        // captured. Auto-tracks user_id changes from AuthRepository.
+        SabqAnalytics.start(this, okHttpClient, authRepository, applicationScope)
 
         // Push (FCM).
         initialiseFirebase()

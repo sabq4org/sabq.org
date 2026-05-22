@@ -109,6 +109,7 @@ class CommentsViewModel @Inject constructor(
         val parent = _state.value.replyingTo
         try {
             val saved = repo.submit(slug = slug, content = trimmed, parentId = parent?.id)
+            com.sabq.smart.data.analytics.SabqAnalytics.articleComment(slug, parent?.id)
             val outcome = outcomeFor(saved)
             _state.update { current ->
                 val updated = if (outcome == SubmitOutcome.PUBLISHED) {
