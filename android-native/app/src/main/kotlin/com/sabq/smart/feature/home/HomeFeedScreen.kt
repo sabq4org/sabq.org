@@ -159,11 +159,13 @@ fun HomeFeedScreen(
                     settingsViewModel.setDarkMode(!isDarkMode)
                 },
                 onEndReached = viewModel::loadMore,
+                onRefresh = viewModel::refresh,
             )
         }
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LoadedFeed(
     state: HomeFeedUiState.Loaded,
@@ -186,6 +188,7 @@ private fun LoadedFeed(
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val listState = rememberLazyListState()
 
@@ -202,11 +205,27 @@ private fun LoadedFeed(
         if (endReached) onEndReached()
     }
 
-    LazyColumn(
-        state = listState,
+    // Re-tap on the bottom Home tab → smooth-scroll to top + refresh.
+    // Wired via [TabReselectBus] which fires only when the user taps
+    // the already-active Home tab (mirrors iOS SabqTabBar.onSelect).
+    LaunchedEffect(Unit) {
+        com.sabq.smart.nav.TabReselectBus.home.collect {
+            listState.animateScrollToItem(0)
+            onRefresh()
+        }
+    }
+
+    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+        isRefreshing = state.isRefreshing,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
+    ) {
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize(),
         contentPadding = PaddingValues(
             start = SabqTheme.dimens.screenPaddingH,
             end = SabqTheme.dimens.screenPaddingH,
@@ -372,6 +391,7 @@ private fun LoadedFeed(
             }
         }
     }
+    }  // close PullToRefreshBox
 }
 
 @Composable

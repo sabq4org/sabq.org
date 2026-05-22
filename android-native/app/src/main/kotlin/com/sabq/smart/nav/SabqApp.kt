@@ -560,6 +560,11 @@ fun SabqApp(
                                     launchSingleTop = true
                                     restoreState = true
                                 }
+                            } else if (tab == AppTab.Home) {
+                                // Re-tap on the already-active Home tab:
+                                // scroll the feed back to the top + pull
+                                // a fresh refresh. Mirrors iOS behaviour.
+                                TabReselectBus.emitHome()
                             }
                         },
                     )
