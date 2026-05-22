@@ -1,1113 +1,564 @@
-<div dir="rtl">
-
-# 📰 سبق الذكية | Sabq Smart
-
-## منصة إخبارية ذكية ثلاثية اللغات مدعومة بالذكاء الاصطناعي
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║                                                                  ║
+  ║   سَبق · Sabq Smart                                              ║
+  ║   The first AI-native Arabic newsroom                            ║
+  ║   منصّة إخبارية ثلاثية اللغات مدفوعة بالذكاء الاصطناعي           ║
+  ║                                                                  ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/الإصدار-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/الترخيص-MIT-green.svg)
-![Platform](https://img.shields.io/badge/المنصة-Web%20%7C%20iOS%20%7C%20Android-orange.svg)
+<br/>
+
+```
+ ███████╗ █████╗ ██████╗  ██████╗
+ ██╔════╝██╔══██╗██╔══██╗██╔═══██╗
+ ███████╗███████║██████╔╝██║   ██║
+ ╚════██║██╔══██║██╔══██╗██║▄▄ ██║
+ ███████║██║  ██║██████╔╝╚██████╔╝
+ ╚══════╝╚═╝  ╚═╝╚═════╝  ╚══▀▀═╝
+```
+
+# سَبق الذكية · Sabq Smart
+
+**منصّة إخبارية ثلاثية اللغات مدفوعة بالذكاء الاصطناعي**
+*The first AI-native Arabic newsroom — trilingual, multi-platform, production at scale.*
+
+<br/>
+
+[![Release](https://img.shields.io/github/v/release/sabq4org/sabq.org?style=flat-square&color=e11d48&logo=github)](https://github.com/sabq4org/sabq.org/releases)
+[![Last commit](https://img.shields.io/github/last-commit/sabq4org/sabq.org?style=flat-square&color=8b5cf6)](https://github.com/sabq4org/sabq.org/commits)
+[![Contributors](https://img.shields.io/github/contributors/sabq4org/sabq.org?style=flat-square&color=10b981)](https://github.com/sabq4org/sabq.org/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/sabq4org/sabq.org?style=flat-square&color=f59e0b)](https://github.com/sabq4org/sabq.org/stargazers)
+[![Issues](https://img.shields.io/github/issues/sabq4org/sabq.org?style=flat-square&color=3b82f6)](https://github.com/sabq4org/sabq.org/issues)
+[![License](https://img.shields.io/github/license/sabq4org/sabq.org?style=flat-square&color=64748b)](LICENSE)
+
+<br/>
+
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=white)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Node.js](https://img.shields.io/badge/Node-22_LTS-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
+[![PostgreSQL](https://img.shields.io/badge/Postgres-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Drizzle](https://img.shields.io/badge/Drizzle-ORM-C5F74F?style=for-the-badge&logo=drizzle&logoColor=black)](https://orm.drizzle.team)
+
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev)
+[![Tailwind](https://img.shields.io/badge/Tailwind-3-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-iOS_17+-FA7343?style=for-the-badge&logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui)
+[![Compose](https://img.shields.io/badge/Compose-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com)
+[![Railway](https://img.shields.io/badge/Railway-API-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app)
+
+<br/>
+
+[![Typing](https://readme-typing-svg.demolab.com?font=Cairo&weight=600&size=22&pause=1500&center=true&vCenter=true&width=720&lines=251+%D8%AC%D8%AF%D9%88%D9%84%D8%A7%D9%8B+%D9%81%D9%8A+Drizzle;9+%D8%A3%D8%AF%D9%88%D8%A7%D8%B1+RBAC+%D9%85%D8%B9+164+%D8%B5%D9%84%D8%A7%D8%AD%D9%8A%D8%A9;3+%D9%84%D8%BA%D8%A7%D8%AA+(%D8%B9%D8%B1%D8%A8%D9%8A+%2F+English+%2F+%D8%A7%D8%B1%D8%AF%D9%88);5+%D9%85%D8%B2%D9%88%D9%91%D8%AF%D9%8A+%D8%B0%D9%83%D8%A7%D8%A1+%D8%A7%D8%B5%D8%B7%D9%86%D8%A7%D8%B9%D9%8A;14+%D9%85%D9%87%D9%85%D8%A9+%D8%AE%D9%84%D9%81%D9%8A%D8%A9+(cron)" alt="Live stats" />](#-glance--%D9%84%D9%85%D8%AD%D8%A9)
+
+<br/>
+
+**[🌐 Live · sabq.org](https://sabq.org)** ·
+**[📱 iOS](https://apps.apple.com/sa/app/sabq)** ·
+**[🤖 Android](https://play.google.com/store/apps/details?id=com.sabqorg.sabq)** ·
+**[📖 Docs](docs/)** ·
+**[🐛 Report bug](https://github.com/sabq4org/sabq.org/issues/new)**
 
 </div>
 
 ---
 
-## 📋 جدول المحتويات
-
-- [نظرة عامة](#-نظرة-عامة)
-- [المميزات الرئيسية](#-المميزات-الرئيسية)
-- [التقنيات المستخدمة](#-التقنيات-المستخدمة)
-- [متطلبات النظام](#-متطلبات-النظام)
-- [التثبيت والتشغيل](#-التثبيت-والتشغيل)
-- [البنية المعمارية](#-البنية-المعمارية)
-- [دليل الاستخدام](#-دليل-الاستخدام)
-- [إدارة قاعدة البيانات](#-إدارة-قاعدة-البيانات)
-- [المتغيرات البيئية](#-المتغيرات-البيئية)
-- [الخدمات الخارجية](#-الخدمات-الخارجية)
-- [الخطط المستقبلية](#-الخطط-المستقبلية)
-- [المساهمة](#-المساهمة)
-- [الدعم والتواصل](#-الدعم-والتواصل)
-- [الترخيص](#-الترخيص)
+<!-- LANGUAGE TOGGLE -->
+<p align="center">
+  <a href="#-overview--نظرة-عامة"><b>🇸🇦 العربية</b></a>
+  ·
+  <a href="#-overview--نظرة-عامة"><b>🇬🇧 English</b></a>
+</p>
 
 ---
 
-## 🌟 نظرة عامة
+## 🌟 Overview · نظرة عامة
 
-**سبق الذكية** (Sabq Smart) هي منصة إخبارية متقدمة تُعيد تعريف استهلاك الأخبار من خلال دمج تقنيات الذكاء الاصطناعي الحديثة. تدعم المنصة **ثلاث لغات** (العربية، الإنجليزية، والأردية) وتقدم تجربة إخبارية شاملة تجمع بين:
+<table>
+<tr>
+<td width="50%" valign="top">
 
-- ✨ **الذكاء الاصطناعي المتقدم**: ملخصات ذكية، توصيات مخصصة، وتحليل محتوى
-- 🌐 **دعم ثلاثي اللغات**: واجهات مستقلة لكل لغة مع إدارة محتوى منفصلة
-- 📱 **تصميم متجاوب**: تجربة سلسة على جميع الأجهزة (الويب، iOS، Android)
-- 🎯 **تخصيص ذكي**: محتوى مخصص لكل مستخدم بناءً على اهتماماته
-- 🚀 **أداء عالي**: تحسينات متقدمة للسرعة وتجربة المستخدم
+### 🇬🇧 English
 
-### الرؤية
+**Sabq** is a production-grade trilingual news platform that integrates AI deeply into every editorial surface — not as a chat widget, but woven into authoring, moderation, summarization, recommendation, and voice synthesis.
 
-تهدف **سبق الذكية** إلى أن تكون المنصة الإخبارية الرائدة في العالم العربي من خلال الاستفادة من قوة الذكاء الاصطناعي لتقديم محتوى إخباري عالي الجودة، سهل الاستهلاك، وذو صلة شخصية بكل قارئ.
+It powers a real newsroom: writers compose with an AI co-pilot, editors approve through gated workflows, articles flow into web + iOS + Android with localized SEO, and millions of readers consume them across three languages.
 
----
+</td>
+<td width="50%" valign="top">
 
-## ✨ المميزات الرئيسية
+### 🇸🇦 العربية
 
-### 🤖 قدرات الذكاء الاصطناعي
+**سَبق** منصّة إخبارية إنتاجية ثلاثية اللغات تُدمج الذكاء الاصطناعي بعمق في كل سطح تحريري — ليس كَمحادثة مرفقة، بل منسوجاً في الكتابة والإشراف والتلخيص والتوصية وتحويل النص إلى صوت.
 
-#### 1. **تحليل المحتوى الذكي**
-- 📝 تصنيف تلقائي للمقالات باستخدام Claude Sonnet 3.5
-- 🔍 استخراج الكلمات المفتاحية بالذكاء الاصطناعي
-- 🎯 تحليل المشاعر للتعليقات
-- 🔗 التعرف الذكي على الكيانات والمصطلحات (Smart Links)
+تشغّل غرفة تحرير حقيقية: الكُتّاب يكتبون مع مساعد ذكي، والمحرّرون يوافقون عبر مسارات محكومة، والمقالات تنساب إلى الويب وiOS وأندرويد بـ SEO مَحلَّن، ويستهلكها ملايين القرّاء بثلاث لغات.
 
-#### 2. **التوصيات الشخصية**
-- 🎨 توصيات مقالات مخصصة بناءً على سجل القراءة
-- 📊 تحليل اهتمامات المستخدم
-- 🌟 اكتشاف محتوى جديد ومناسب
-
-#### 3. **توليد المحتوى بالذكاء الاصطناعي**
-- ✍️ **مساعد الصحفي الذكي**: مساعدة في كتابة المقالات
-- 📰 توليد العناوين والملخصات بنقرة واحدة
-- 🌍 توليد SEO متعدد اللغات
-- 🎙️ ملخصات صوتية (ElevenLabs)
-- 💬 روبوت محادثة ذكي للدعم
-
-#### 4. **الملخص اليومي الذكي (Daily Brief)**
-- 📅 تقرير يومي مخصص لكل مستخدم
-- 📈 إحصائيات القراءة والتفاعل
-- 🎯 اهتمامات اليوم
-- 💡 رؤى ذكية مدعومة بالتحليل
-
-### 📱 التجربة المتعددة المنصات
-
-#### تطبيقات الموبايل الأصلية
-- 📲 **iOS**: تطبيق أصلي كامل
-- 🤖 **Android**: تطبيق أصلي كامل
-- ⚡ بنية على Capacitor 7.4.4
-- 🔄 مزامنة فورية مع الويب
-
-#### تصميم متجاوب احترافي
-- 💻 تصميم سطح المكتب الكامل
-- 📱 تجربة موبايل محسّنة
-- 🎨 تصميم RTL-first للعربية
-- 🌓 وضع داكن/فاتح متقدم
-
-### 🗂️ إدارة المحتوى الشاملة
-
-#### محرر نصوص متقدم
-- ✏️ محرر WYSIWYG قوي بتقنية TipTap
-- 🖼️ إدارة الصور والوسائط المتقدمة
-- 🎨 قوالب نشر مرنة
-- 📋 نظام كتل ذكي (Smart Blocks)
-
-#### مكتبة الوسائط الذكية
-- 📚 إدارة مركزية للأصول
-- 🔍 بحث ذكي بالكلمات المفتاحية
-- 🏷️ استخراج تلقائي للكلمات المفتاحية بالذكاء الاصطناعي
-- ☁️ تخزين سحابي (Google Cloud Storage)
-
-### 👥 الميزات الاجتماعية
-
-#### نظام المتابعة الذكي
-- 🤝 متابعة المستخدمين والصحفيين
-- 📊 تحليلات المتابعين في الوقت الفعلي
-- 🔔 إشعارات ذكية
-- 🌟 اكتشاف مستخدمين جدد
-
-#### التفاعل والمشاركة
-- 💬 نظام تعليقات متداخل مع إشراف فوري
-- ❤️ ردود فعل وتفاعلات متنوعة
-- 🔖 نظام حفظ وإشارات مرجعية
-- 📤 مشاركة اجتماعية متقدمة مع تتبع النقرات
-
-### 📊 لوحات التحكم والتحليلات
-
-#### لوحة تحليلات ذكية
-- 📈 مؤشرات الأداء الرئيسية (KPIs)
-- 📊 تحليلات التفاعل والمشاهدات
-- 🎯 تحليلات الفئات
-- 📉 تصورات زمنية متقدمة
-
-#### تصميم TailAdmin Pro 2.2
-- 💎 تصميم احترافي مستوحى من TailAdmin
-- 📱 استجابة كاملة للموبايل
-- 🎨 بطاقات KPI محسّنة (MobileOptimizedKpiCard)
-- 🌈 نظام ألوان موحد
-
-### 🔐 الأمان والمصادقة
-
-#### نظام مصادقة هجين
-- 🔑 مصادقة محلية (Local Auth)
-- 🌐 تسجيل دخول Google OAuth
-- 🍎 تسجيل دخول Apple OAuth
-- 👮 نظام RBAC مع 8 أدوار
-
-#### إدارة الصلاحيات
-- 📋 صلاحيات دقيقة لكل دور
-- 🛡️ حماية متعددة الطبقات
-- 🔒 جلسات آمنة (Express Session)
-
-### ⚡ القدرات الفورية
-
-#### نظام الأخبار الحية "لحظة بلحظة"
-- 🔴 أخبار عاجلة فورية
-- 📡 Server-Sent Events (SSE)
-- 🎯 شريط الأخبار العاجلة
-- 🔔 نظام إشعارات ذكي
-
-### 🎫 بطاقات Apple Wallet الرقمية
-
-#### نظام البطاقات المزدوج
-- 🆔 **بطاقة صحفية**: للصحفيين والمراسلين
-- 🎁 **بطاقة ولاء**: لبرنامج الولاء للقراء
-- 📲 تكامل كامل مع PassKit
-- 🔄 تحديثات تلقائية
-
-### 🌐 نظام إعلانات ذكي
-
-- 📢 نظام إعلانات متقدم (عربي)
-- 🎯 تحسين بالذكاء الاصطناعي
-- 📊 تحليلات شاملة
-- 💰 إدارة الحملات الإعلانية
-
-### 🔌 واجهات برمجية (APIs)
-
-#### REST API v1
-- 🤖 محسّنة لنماذج اللغة الكبيرة (LLMs)
-- 📖 توثيق شامل
-- 🔒 مصادقة آمنة
-- ⚡ أداء عالي
-
-### 📱 دعم متعدد اللغات المتقدم
-
-- 🌍 **3 لغات**: العربية، الإنجليزية، الأردية
-- 🔄 تبديل سلس بين اللغات
-- 📋 صفحات مستخدم معزولة حسب اللغة
-- 👨‍💼 ملفات صحفية ثلاثية اللغات
-- 🔗 مقالات ذات صلة متعددة اللغات
+</td>
+</tr>
+</table>
 
 ---
 
-## 🛠️ التقنيات المستخدمة
+## 🔎 Glance · لمحة
 
-### Frontend (الواجهة الأمامية)
+<div align="center">
 
-```json
-{
-  "framework": "React 18.3.1",
-  "bundler": "Vite 5.4.20",
-  "routing": "Wouter 3.3.5",
-  "language": "TypeScript 5.6.3",
-  "stateManagement": "TanStack Query 5.60.5",
-  "styling": "Tailwind CSS 3.4.17",
-  "ui": "Radix UI + Shadcn/ui",
-  "animations": "Framer Motion 11.13.1",
-  "editor": "TipTap 3.x",
-  "forms": "React Hook Form 7.55.0"
-}
-```
+| | 🇬🇧 | 🇸🇦 |
+|---|---|---|
+| 📊 Database tables | **251** (Drizzle ORM) | **251** جدول |
+| 🛡️ RBAC | **9** roles · **164** permissions · **344** mappings | **9** أدوار · **164** صلاحية · **344** ربط |
+| 🌍 Languages | **3** (Arabic · English · Urdu) | **3** لغات |
+| 🤖 AI providers | **5** (OpenAI · Anthropic · Gemini · ElevenLabs · Google TTS) | **5** مزوّدات |
+| ⏰ Background jobs | **14** node-cron jobs with leader election | **14** مهمة خلفية |
+| 📱 Native apps | **iOS** SwiftUI · **Android** Compose · **Web** Vite SPA | **iOS** و**أندرويد** نيتيف |
+| 🚀 Deploy topology | Cloudflare → Vercel + Railway → Neon + Upstash | منصّة هجينة |
 
-**مكتبات رئيسية:**
-- 🎨 **TailwindCSS**: تصميم utility-first
-- 🧩 **Radix UI**: مكونات UI بدون تصميم
-- ✨ **Framer Motion**: رسوم متحركة سلسة
-- 📝 **TipTap**: محرر نصوص غني
-- 📊 **Recharts / ApexCharts**: مخططات تفاعلية
-- 🖼️ **Uppy**: رفع ملفات متقدم
-
-### Backend (الخلفية)
-
-```json
-{
-  "runtime": "Node.js",
-  "framework": "Express 4.21.2",
-  "language": "TypeScript 5.6.3",
-  "database": "PostgreSQL (Neon Serverless)",
-  "orm": "Drizzle ORM 0.39.1",
-  "auth": "Passport.js",
-  "storage": "Google Cloud Storage",
-  "cache": "MemoryStore",
-  "session": "Express Session + Connect PG Simple"
-}
-```
-
-**خدمات رئيسية:**
-- 🗄️ **PostgreSQL**: قاعدة بيانات serverless (Neon)
-- 🔐 **Passport.js**: مصادقة متعددة (Local, Google, Apple)
-- ☁️ **Google Cloud Storage**: تخزين الملفات
-- 📧 **SendGrid**: خدمة البريد الإلكتروني
-- 🎙️ **ElevenLabs**: تحويل النص إلى كلام
-
-### الذكاء الاصطناعي (AI/ML)
-
-```json
-{
-  "llm": "OpenAI GPT-5",
-  "claude": "Anthropic Claude Sonnet 3.5",
-  "gemini": "Google Gemini",
-  "tts": "ElevenLabs"
-}
-```
-
-### Mobile (الموبايل)
-
-```json
-{
-  "framework": "Capacitor 7.4.4",
-  "platforms": ["iOS", "Android"],
-  "plugins": [
-    "@capacitor/app",
-    "@capacitor/keyboard",
-    "@capacitor/splash-screen",
-    "@capacitor/status-bar"
-  ]
-}
-```
-
-### DevOps & Tools
-
-- 📦 **npm**: إدارة الحزم
-- 🔧 **Drizzle Kit**: إدارة قاعدة البيانات
-- ⚡ **esbuild**: بناء سريع
-- 🔍 **TypeScript**: type safety
+</div>
 
 ---
 
-## 💻 متطلبات النظام
+## 🏗️ Architecture · المعمارية
 
-### الحد الأدنى من المتطلبات
+```mermaid
+flowchart LR
+    Reader([👤 Reader<br/>القارئ])
+    
+    subgraph Edge["☁️ Edge · الحافة"]
+        CF[Cloudflare<br/>Worker + Cache]
+    end
+    
+    subgraph Frontend["🎨 Frontend · الواجهة"]
+        V[Vercel SPA<br/>sabq.org]
+    end
+    
+    subgraph Backend["⚙️ Backend · الخلفية"]
+        R[Railway · Node 22<br/>api.sabq.org]
+        Jobs[14 Cron Jobs<br/>Leader-Elected]
+    end
+    
+    subgraph Data["💾 Data · البيانات"]
+        N[(Neon Postgres<br/>251 tables)]
+        U[(Upstash Redis<br/>sessions + cache)]
+        S3[(R2 / S3<br/>media)]
+        CFI[(CF Images<br/>primary)]
+    end
+    
+    subgraph AI["🤖 AI Mesh · شبكة الذكاء"]
+        O[OpenAI]
+        A[Anthropic]
+        G[Gemini]
+        E[ElevenLabs]
+        T[Google TTS]
+    end
+    
+    subgraph Mobile["📱 Native Apps"]
+        iOS[iOS · SwiftUI]
+        Android[Android · Compose]
+    end
+    
+    Reader -->|HTTPS| CF
+    CF -->|html| V
+    CF -.SEO meta.-> R
+    V -.proxy /api/*.-> R
+    iOS -.bearer token.-> R
+    Android -.bearer token.-> R
+    
+    R --> N & U & S3 & CFI
+    R --> O & A & G & E & T
+    R --- Jobs
+    Jobs --> N
 
-```yaml
-Node.js: >=18.0.0
-npm: >=9.0.0
-PostgreSQL: >=14.0
-RAM: >=4GB
-Storage: >=10GB
+    classDef edge fill:#f38020,color:#fff,stroke:#000
+    classDef front fill:#000,color:#fff,stroke:#000
+    classDef back fill:#5e3ec5,color:#fff,stroke:#000
+    classDef data fill:#10b981,color:#fff,stroke:#000
+    classDef ai fill:#e11d48,color:#fff,stroke:#000
+    classDef mobile fill:#3b82f6,color:#fff,stroke:#000
+    
+    class CF edge
+    class V front
+    class R,Jobs back
+    class N,U,S3,CFI data
+    class O,A,G,E,T ai
+    class iOS,Android mobile
 ```
 
-### متطلبات إضافية للتطوير
-
-```yaml
-Git: >=2.30.0
-TypeScript: >=5.6.0
-المعالج: متعدد النوى (موصى به)
-نظام التشغيل: Windows 10+, macOS 11+, Linux (Ubuntu 20.04+)
-```
-
-### الخدمات الخارجية المطلوبة
-
-يجب الحصول على مفاتيح API من الخدمات التالية:
-
-- ✅ **OpenAI**: للذكاء الاصطناعي ([platform.openai.com](https://platform.openai.com))
-- ✅ **Anthropic**: لـ Claude ([console.anthropic.com](https://console.anthropic.com))
-- ✅ **Google Cloud**: للتخزين السحابي ([console.cloud.google.com](https://console.cloud.google.com))
-- ✅ **SendGrid**: للبريد الإلكتروني ([sendgrid.com](https://sendgrid.com))
-- ✅ **ElevenLabs**: للملخصات الصوتية ([elevenlabs.io](https://elevenlabs.io))
-- ✅ **Google OAuth**: للمصادقة ([console.developers.google.com](https://console.developers.google.com))
-- ✅ **Apple Developer**: لـ Apple Sign In ([developer.apple.com](https://developer.apple.com))
+> **Note:** The diagram shows the experimental split topology (sabq.news). Production at **sabq.org** still runs as a single-process Replit deployment (Express serving API + SPA on one port). See [`replit.md`](replit.md) for the canonical architecture note.
 
 ---
 
-## 🚀 التثبيت والتشغيل
-
-### 1. استنساخ المشروع
+## 🚀 Quickstart · البدء السريع
 
 ```bash
-# استنساخ المستودع
-git clone https://github.com/your-username/sabq-smart.git
+# 1. Clone · استنساخ
+git clone https://github.com/sabq4org/sabq.org.git && cd sabq.org
 
-# الانتقال إلى مجلد المشروع
-cd sabq-smart
-```
-
-### 2. تثبيت التبعيات
-
-```bash
-# تثبيت جميع التبعيات
+# 2. Install · تثبيت
 npm install
-```
 
-### 3. إعداد قاعدة البيانات
+# 3. Configure · تكوين
+cp .env.example .env   # then fill in API keys
 
-```bash
-# إنشاء قاعدة بيانات PostgreSQL جديدة
-# (تأكد من تشغيل PostgreSQL على جهازك)
-
-# تحديث schema.ts وتطبيق التغييرات
+# 4. Sync schema · مزامنة المخطط
 npm run db:push
 
-# في حالة تحذير فقدان البيانات، استخدم:
-npm run db:push --force
+# 5. Run · تشغيل
+npm run dev            # API + SPA on http://localhost:5000
 ```
 
-### 4. إعداد المتغيرات البيئية
+<table>
+<tr>
+<td>
 
-قم بإنشاء ملف `.env` في المجلد الرئيسي:
+**🇬🇧** Open `http://localhost:5000` — Express serves the API **and** the Vite SPA on the same port. No second dev server needed.
 
-```env
-# قاعدة البيانات
-DATABASE_URL=postgresql://user:password@localhost:5432/sabq_smart
+</td>
+<td>
 
-# الخادم
-PORT=5000
-NODE_ENV=development
-FRONTEND_URL=http://localhost:5000
+**🇸🇦** افتح `http://localhost:5000` — Express يخدم الـ API و SPA على نفس المنفذ. لا حاجة لتشغيل خادم Vite منفصل.
 
-# OpenAI
-OPENAI_API_KEY=your_openai_api_key
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-
-# Apple OAuth
-APPLE_CLIENT_ID=your_apple_client_id
-APPLE_TEAM_ID=your_apple_team_id
-APPLE_KEY_ID=your_apple_key_id
-APPLE_PRIVATE_KEY=your_apple_private_key
-
-# SendGrid
-SENDGRID_API_KEY=your_sendgrid_api_key
-FROM_EMAIL=noreply@sabq.life
-
-# ElevenLabs
-ELEVENLABS_API_KEY=your_elevenlabs_api_key
-
-# Google Cloud Storage
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
-
-# Apple Wallet
-APPLE_PASS_CERT=your_pass_cert
-APPLE_PASS_KEY=your_pass_key
-APPLE_WWDR_CERT=your_wwdr_cert
-APPLE_PRESS_PASS_TYPE_ID=your_press_pass_type_id
-APPLE_LOYALTY_PASS_TYPE_ID=your_loyalty_pass_type_id
-APPLE_LOYALTY_PASS_CERT=your_loyalty_pass_cert
-APPLE_LOYALTY_PASS_KEY=your_loyalty_pass_key
-
-# Session Secret
-SESSION_SECRET=your_random_secure_session_secret
-```
-
-### 5. تشغيل المشروع
-
-#### بيئة التطوير
-
-```bash
-# تشغيل الخادم في وضع التطوير (مع Hot Reload)
-npm run dev
-```
-
-سيتم تشغيل:
-- ✅ خادم Express على المنفذ 5000
-- ✅ خادم Vite للواجهة الأمامية
-- ✅ Hot Module Replacement (HMR)
-
-افتح المتصفح على: `http://localhost:5000`
-
-#### بيئة الإنتاج
-
-```bash
-# بناء المشروع للإنتاج
-npm run build
-
-# تشغيل الخادم في وضع الإنتاج
-npm start
-```
-
-### 6. التحقق من TypeScript
-
-```bash
-# فحص أخطاء TypeScript
-npm run check
-```
+</td>
+</tr>
+</table>
 
 ---
 
-## 🏗️ البنية المعمارية
+## 📦 Tech Stack · المُكدَّس التقني
 
-### هيكل المجلدات
+<table>
+<tr>
+<th width="20%">Layer</th>
+<th width="80%">Technologies</th>
+</tr>
+
+<tr>
+<td><b>🎨 Frontend</b><br/>الواجهة</td>
+<td>
+
+React 18 · Vite 5 · TypeScript 5 · Wouter (routing) · TanStack Query · Tailwind 3 · Radix UI · shadcn/ui · TipTap 3 · Framer Motion · React Hook Form
+
+</td>
+</tr>
+
+<tr>
+<td><b>⚙️ Backend</b><br/>الخلفية</td>
+<td>
+
+Node.js 22 · Express 4 · TypeScript 5 · Passport (Local + Google + Apple) · Drizzle ORM · node-cron · esbuild (production bundle)
+
+</td>
+</tr>
+
+<tr>
+<td><b>💾 Data</b><br/>البيانات</td>
+<td>
+
+PostgreSQL (Neon Serverless · 251 tables) · Upstash Redis (sessions, hot cache) · Cloudflare Images (primary image store) · Cloudflare R2 / S3 (PDFs, audio, presigned uploads)
+
+</td>
+</tr>
+
+<tr>
+<td><b>🤖 AI</b><br/>الذكاء</td>
+<td>
+
+OpenAI · Anthropic Claude · Google Gemini · ElevenLabs (multi-voice TTS) · Google Cloud TTS · OpenAI embeddings · Custom recommendation engine
+
+</td>
+</tr>
+
+<tr>
+<td><b>📱 Mobile</b><br/>الموبايل</td>
+<td>
+
+<b>iOS</b>: native SwiftUI app, deployment target 17.0 · <b>Android</b>: native Jetpack Compose (in development) · Legacy Capacitor 7.4.4 wrapper still maintained
+
+</td>
+</tr>
+
+<tr>
+<td><b>☁️ Platform</b><br/>المنصّة</td>
+<td>
+
+Cloudflare (Workers, DNS, Images, R2) · Vercel (Vite SPA) · Railway (Node API) · Replit (legacy production) · Neon (managed Postgres) · Upstash (managed Redis)
+
+</td>
+</tr>
+
+</table>
+
+---
+
+## 🤖 AI Capabilities · القدرات الذكية
+
+<details open>
+<summary><b>Click to expand · اضغط للتوسيع</b></summary>
+
+<br/>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### 🇬🇧 English
+
+1. **Smart bullets** — 3-sentence article summary, gpt-4o-mini, 8s timeout, persisted to DB
+2. **iFox content generation** — full editorial assistant: titles, drafts, fact-checks, paraphrasing
+3. **Daily Brief** — personalized daily report (top stories, your interests, reading streak)
+4. **Smart Links** — entity recognition: people, places, events auto-linked inline
+5. **Recommendation engine** — collaborative + content filtering, embeddings backed
+6. **Comment moderation** — gpt-4o-mini for sentiment + safety + Arabic dialect understanding
+7. **Voice summaries** — ElevenLabs multi-voice library, Arabic-native, per-article audio
+8. **Trilingual SEO** — per-route OG / Twitter / JSON-LD / hreflang automatic injection
+9. **Deep analysis engine** — long-form generated insights (`/omq`)
+10. **Email-to-article agent** — editors send an email → article + image extraction + draft
+
+</td>
+<td width="50%" valign="top">
+
+#### 🇸🇦 العربية
+
+1. **النقاط الذكية** — تلخيص ٣ نقاط لكل مقال، gpt-4o-mini، مهلة ٨ ثوانٍ
+2. **توليد iFox** — مساعد تحريري كامل: عناوين، مسوّدات، تحقّق، إعادة صياغة
+3. **الموجز اليومي** — تقرير مخصّص (أهم القصص، اهتماماتك، تَتابعك في القراءة)
+4. **الروابط الذكية** — تعرّف الكيانات: أشخاص، أماكن، أحداث تُربط تلقائياً
+5. **محرك التوصيات** — تصفية تعاونية + محتوى مدعومة بـ embeddings
+6. **إشراف التعليقات** — gpt-4o-mini لِفهم المشاعر + السلامة + اللهجات العربية
+7. **الملخّصات الصوتية** — مكتبة ElevenLabs متعددة الأصوات، عربية أصيلة
+8. **SEO ثلاثي اللغات** — حقن OG / Twitter / JSON-LD / hreflang تلقائياً
+9. **محرك التحليل العميق** — رؤى مولّدة موسّعة (`/omq`)
+10. **وكيل البريد إلى مقال** — يُرسل المحرّر بريداً → مقال + استخراج صور + مسوّدة
+
+</td>
+</tr>
+</table>
+
+</details>
+
+---
+
+## 📁 Project Structure · بنية المشروع
 
 ```
-sabq-smart/
-├── 📁 client/                    # الواجهة الأمامية (React)
-│   ├── 📁 src/
-│   │   ├── 📁 components/       # المكونات القابلة لإعادة الاستخدام
-│   │   ├── 📁 pages/           # صفحات التطبيق
-│   │   ├── 📁 lib/             # مكتبات مساعدة
-│   │   ├── 📁 hooks/           # Custom React Hooks
-│   │   ├── 📁 contexts/        # React Contexts
-│   │   └── App.tsx             # نقطة الدخول الرئيسية
-│   └── index.html              # HTML Template
+sabq.org/
+├── 🎨 client/                 React + Vite SPA
+│   ├── src/components/        UI primitives (shadcn) + feature components
+│   ├── src/pages/             Wouter route-level views
+│   ├── src/lib/               apiClient, queryClient, utilities
+│   └── src/nav/               Trilingual navigation (ar/en/ur)
 │
-├── 📁 server/                   # الخلفية (Express)
-│   ├── index.ts               # نقطة الدخول للخادم
-│   ├── routes.ts              # API Routes
-│   ├── storage.ts             # طبقة قاعدة البيانات
-│   ├── vite.ts                # إعداد Vite
-│   └── 📁 middleware/         # Express Middleware
+├── ⚙️ server/                  Express monolith
+│   ├── routes.ts              ~37k-line historical monolith
+│   ├── routes/                Newer modular routers
+│   ├── services/              Domain services (AI, images, push, ifox)
+│   ├── jobs/                  14 cron jobs (node-cron) + leader election
+│   ├── ai/                    AI provider abstractions
+│   ├── auth.ts                Passport + sessions + cross-domain cookies
+│   └── seoInjector.ts         Per-route head rewriting (OG/JSON-LD/hreflang)
 │
-├── 📁 shared/                   # الكود المشترك
-│   └── schema.ts              # Drizzle Schema & Types
+├── 💾 shared/
+│   └── schema.ts              Drizzle schema — 251 tables, ~12k lines
 │
-├── 📁 android/                  # تطبيق Android
-├── 📁 ios/                      # تطبيق iOS
-├── 📁 migrations/               # ترحيل قاعدة البيانات
-├── 📁 public/                   # الملفات الثابتة
-├── 📁 scripts/                  # نصوص مساعدة
-├── 📁 certs/                    # شهادات Apple Wallet
+├── 📱 sabq app ios/            Native SwiftUI app (iOS 17+)
+├── 🤖 android-native/          Native Jetpack Compose (in development)
+├── 📦 android/ + ios/          Legacy Capacitor wrappers
 │
-├── package.json               # تبعيات npm
-├── tsconfig.json             # إعدادات TypeScript
-├── vite.config.ts            # إعدادات Vite
-├── tailwind.config.ts        # إعدادات Tailwind
-├── drizzle.config.ts         # إعدادات Drizzle ORM
-├── capacitor.config.ts       # إعدادات Capacitor
-└── README.md                 # هذا الملف
-```
-
-### المعمارية الفنية
-
-#### نمط معماري
-
-```
-┌─────────────────────────────────────────┐
-│         Frontend (React + Vite)         │
-│  ┌────────────────────────────────┐    │
-│  │  Components / Pages / Hooks    │    │
-│  └────────────────────────────────┘    │
-│               ↓ TanStack Query          │
-└─────────────────────────────────────────┘
-                    ↓ HTTP/SSE
-┌─────────────────────────────────────────┐
-│       Backend (Express + TypeScript)    │
-│  ┌────────────────────────────────┐    │
-│  │    Routes / Middleware         │    │
-│  └────────────────────────────────┘    │
-│               ↓                         │
-│  ┌────────────────────────────────┐    │
-│  │    Storage Interface (IStorage)│    │
-│  └────────────────────────────────┘    │
-└─────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────┐
-│   Database (PostgreSQL + Drizzle ORM)   │
-│  ┌────────────────────────────────┐    │
-│  │  Users, Articles, Categories,  │    │
-│  │  Comments, Media, etc.         │    │
-│  └────────────────────────────────┘    │
-└─────────────────────────────────────────┘
-```
-
-#### تدفق البيانات
-
-1. **Frontend → Backend**: طلبات HTTP عبر TanStack Query
-2. **Backend → Database**: استعلامات عبر Drizzle ORM
-3. **Backend → Frontend**: استجابات JSON أو SSE
-4. **AI Services**: استدعاءات API منفصلة للذكاء الاصطناعي
-
-### نماذج البيانات الأساسية
-
-```typescript
-// المستخدمون
-Users {
-  id, username, email, password, role, language, 
-  bio, avatar, followers, following, createdAt
-}
-
-// المقالات
-Articles {
-  id, title, content, summary, category, author,
-  language, status, views, aiGenerated, seoData,
-  publishedAt, createdAt
-}
-
-// الفئات
-Categories {
-  id, name, slug, description, language,
-  icon, color, parentId, order
-}
-
-// التعليقات
-Comments {
-  id, articleId, userId, content, parentId,
-  sentiment, status, createdAt
-}
-
-// التفاعلات
-Reactions {
-  id, userId, articleId, type, createdAt
-}
-
-// الإشارات المرجعية
-Bookmarks {
-  id, userId, articleId, createdAt
-}
-
-// سجل القراءة
-ReadingHistory {
-  id, userId, articleId, duration, createdAt
-}
-
-// مكتبة الوسائط
-MediaLibrary {
-  id, filename, url, type, keywords,
-  uploadedBy, createdAt
-}
+├── ☁️ cloudflare-worker/       Edge Worker (SEO meta, image transforms)
+├── 🐳 Dockerfile               Railway build source
+├── 🚂 railway.json             Railway config-as-code
+└── ▲ vercel.json               Vercel build + rewrite config
 ```
 
 ---
 
-## 📖 دليل الاستخدام
+## 🚀 Topologies · هيكل النشر
 
-### للمستخدمين
+The same codebase supports two deployment modes via env flags — no code branches.
 
-#### 1. إنشاء حساب
+<table>
+<tr>
+<th>Mode</th>
+<th>Domain</th>
+<th>Status</th>
+<th>Stack</th>
+</tr>
+<tr>
+<td><b>🟢 Replit (legacy)</b></td>
+<td><code>sabq.org</code></td>
+<td><b>Production</b><br/>الإنتاج</td>
+<td>Single Express process serves API + SPA on one port. Original topology, still production.</td>
+</tr>
+<tr>
+<td><b>🟡 Vercel + Railway + CF</b></td>
+<td><code>sabq.news</code></td>
+<td>Experimental<br/>تجريبي</td>
+<td>Frontend on Vercel, backend on Railway, Cloudflare in front. Split via env flags <code>SERVE_SPA=false</code>, <code>COOKIE_DOMAIN</code>, <code>VITE_API_URL</code>.</td>
+</tr>
+</table>
 
-```
-1. انقر على "تسجيل" من الصفحة الرئيسية
-2. اختر طريقة التسجيل:
-   - البريد الإلكتروني وكلمة المرور
-   - تسجيل دخول Google
-   - تسجيل دخول Apple
-3. أكمل بيانات التسجيل
-4. فعّل حسابك عبر البريد الإلكتروني
-```
-
-#### 2. تصفح الأخبار
-
-```
-- الصفحة الرئيسية: آخر الأخبار من جميع الفئات
-- الفئات: تصفح حسب التصنيف (سياسة، اقتصاد، رياضة، إلخ)
-- البحث: ابحث عن مقالات محددة
-- لحظة بلحظة: تابع الأخبار العاجلة
-```
-
-#### 3. التفاعل مع المحتوى
-
-```
-❤️ إضافة رد فعل على المقال
-💬 كتابة تعليق
-🔖 حفظ المقال للقراءة لاحقاً
-📤 مشاركة المقال على وسائل التواصل
-```
-
-#### 4. الملخص اليومي
-
-```
-1. افتح صفحة "ملخصك اليومي"
-2. شاهد:
-   - إحصائيات القراءة الخاصة بك
-   - اهتماماتك اليومية
-   - توصيات مخصصة
-   - رؤى ذكية
-```
-
-#### 5. متابعة الصحفيين
-
-```
-1. افتح ملف الصحفي
-2. انقر على "متابعة"
-3. استقبل إشعارات عند نشر محتوى جديد
-```
-
-### للصحفيين والمحررين
-
-#### 1. إنشاء مقال جديد
-
-```
-1. افتح لوحة التحكم
-2. انقر على "مقال جديد"
-3. استخدم محرر TipTap:
-   - اكتب المحتوى
-   - أضف الصور والوسائط
-   - نسّق النص (عناوين، قوائم، روابط)
-4. استخدم أدوات الذكاء الاصطناعي:
-   - توليد عنوان تلقائي
-   - إنشاء ملخص
-   - توليد SEO
-   - تصنيف تلقائي
-5. اختر الحالة: مسودة / منشور / مجدول
-6. انقر "حفظ" أو "نشر"
-```
-
-#### 2. مساعد الصحفي الذكي
-
-```
-1. داخل المحرر، انقر على "مساعد الصحفي"
-2. أدخل موضوع المقال أو الفكرة
-3. اختر:
-   - كتابة مقال كامل
-   - توسيع فقرة
-   - إعادة صياغة نص
-   - اقتراح عناوين
-4. راجع المحتوى المولّد وعدّله
-```
-
-#### 3. إدارة الوسائط
-
-```
-1. افتح "مكتبة الوسائط"
-2. ارفع صور/فيديوهات جديدة
-3. اختر الصور من المكتبة أثناء التحرير
-4. البحث بالكلمات المفتاحية
-```
-
-### للمديرين
-
-#### 1. إدارة المستخدمين
-
-```
-1. افتح "إدارة المستخدمين"
-2. شاهد قائمة المستخدمين
-3. قم بـ:
-   - تغيير الأدوار
-   - تفعيل/تعطيل الحسابات
-   - عرض إحصائيات المستخدم
-```
-
-#### 2. إدارة الفئات
-
-```
-1. افتح "إدارة الفئات"
-2. أضف/عدّل/احذف فئات
-3. رتب الفئات (Drag & Drop)
-4. حدد اللغة والأيقونة واللون
-```
-
-#### 3. التحليلات
-
-```
-1. افتح لوحة التحكم الرئيسية
-2. شاهد:
-   - عدد المقالات والمشاهدات
-   - أكثر المقالات قراءة
-   - إحصائيات المستخدمين
-   - تحليلات الفئات
-```
+> 📘 Full architecture note: [`replit.md`](replit.md) · Deployment details: [`CLAUDE.md`](CLAUDE.md)
 
 ---
 
-## 🗄️ إدارة قاعدة البيانات
+## 📱 Mobile · تطبيقات الموبايل
 
-### باستخدام Drizzle ORM
+<table>
+<tr>
+<td width="50%" align="center">
 
-#### 1. تعديل Schema
+### 🍎 iOS
 
-قم بتحرير الملف `shared/schema.ts`:
+<a href="https://apps.apple.com/sa/app/sabq">
+  <img src="https://img.shields.io/badge/Download-App%20Store-0D96F6?style=for-the-badge&logo=apple&logoColor=white" />
+</a>
 
-```typescript
-import { pgTable, serial, varchar, text, timestamp } from "drizzle-orm/pg-core";
+<br/><br/>
 
-export const myNewTable = pgTable("my_new_table", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-```
+**Native SwiftUI** · iOS 17+
+TestFlight: `9.0.7+`
+Bearer-token auth via `/api/v1`
 
-#### 2. تطبيق التغييرات
+Content Passport · Loyalty system · Audio newsletters · Push notifications (APNs)
 
-```bash
-# تطبيق التغييرات مباشرة على قاعدة البيانات
-npm run db:push
+</td>
+<td width="50%" align="center">
 
-# في حال تحذير بفقدان البيانات
-npm run db:push --force
-```
+### 🤖 Android
 
-#### 3. أنواع TypeScript
+<a href="https://play.google.com/store/apps/details?id=com.sabqorg.sabq">
+  <img src="https://img.shields.io/badge/Download-Play%20Store-414141?style=for-the-badge&logo=googleplay&logoColor=white" />
+</a>
 
-سيتم إنشاء الأنواع تلقائياً من Schema:
+<br/><br/>
 
-```typescript
-import { myNewTable } from "@shared/schema";
+**Native Jetpack Compose** · in dev
+Legacy Capacitor build available
+Targeting full iOS parity
 
-type MyNewTableSelect = typeof myNewTable.$inferSelect;
-type MyNewTableInsert = typeof myNewTable.$inferInsert;
-```
+Article detail · Audio newsletters · Trending · Rewards · Search
 
-### قواعد مهمة
-
-⚠️ **تحذير مهم**: لا تقم بتعديل نوع أعمدة ID الأساسية!
-
-```typescript
-// ✅ صحيح - الحفاظ على النوع الحالي
-id: serial("id").primaryKey()  // إذا كان serial
-id: varchar("id").primaryKey() // إذا كان varchar
-
-// ❌ خطأ - تغيير النوع يكسر البيانات الحالية
-// من serial إلى varchar أو العكس
-```
+</td>
+</tr>
+</table>
 
 ---
 
-## 🔐 المتغيرات البيئية
+## 🔌 API · واجهات برمجية
 
-### متغيرات إلزامية
+<details>
+<summary><b>Public endpoints (excerpt) · واجهات عامة (مختارة)</b></summary>
 
-| المتغير | الوصف | مثال |
-|---------|--------|------|
-| `DATABASE_URL` | رابط قاعدة البيانات | `postgresql://user:pass@localhost:5432/sabq` |
-| `OPENAI_API_KEY` | مفتاح OpenAI API | `sk-...` |
-| `SESSION_SECRET` | سر الجلسة | `random_secure_string` |
-| `FRONTEND_URL` | رابط الواجهة الأمامية | `https://sabq.life` |
+<br/>
 
-### متغيرات اختيارية
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET`  | `/api/articles` | Paginated article list (ar/en/ur via locale) |
+| `GET`  | `/api/articles/:slug` | Single article |
+| `GET`  | `/api/articles/:slug/ai-bullets` | 3-bullet AI summary |
+| `GET`  | `/api/categories` | Category tree |
+| `POST` | `/api/auth/login` | Local auth (Passport) |
+| `POST` | `/api/auth/google` | Google OAuth |
+| `POST` | `/api/auth/apple` | Apple OAuth |
+| `GET`  | `/api/auth/user` | Current session info |
+| `POST` | `/api/media/upload` | Multipart upload → CF Images / GCS |
+| `GET`  | `/api/edge/seo-meta` | Edge-side SEO data (Cloudflare Worker) |
+| `GET`  | `/api/edge/slug-redirect` | 301 redirects (Arabic slugs → English) |
+| `*`    | `/api/v1/*` | Mobile-specific endpoints (bearer token) |
 
-| المتغير | الوصف | القيمة الافتراضية |
-|---------|--------|-------------------|
-| `PORT` | منفذ الخادم | `5000` |
-| `NODE_ENV` | بيئة التشغيل | `development` |
-| `ENABLE_BACKGROUND_WORKERS` | تفعيل المهام الخلفية | `false` |
+Full OpenAPI/Swagger docs available at `/api/docs` in development.
 
-### متغيرات الذكاء الاصطناعي
-
-| المتغير | الخدمة | الوصف |
-|---------|--------|--------|
-| `OPENAI_API_KEY` | OpenAI | للذكاء الاصطناعي العام |
-| `ANTHROPIC_API_KEY` | Anthropic | لـ Claude |
-| `GOOGLE_AI_API_KEY` | Google | لـ Gemini |
-| `ELEVENLABS_API_KEY` | ElevenLabs | للملخصات الصوتية |
-
-### متغيرات المصادقة
-
-| المتغير | الوصف |
-|---------|--------|
-| `GOOGLE_CLIENT_ID` | معرف عميل Google |
-| `GOOGLE_CLIENT_SECRET` | سر عميل Google |
-| `APPLE_CLIENT_ID` | معرف عميل Apple |
-| `APPLE_TEAM_ID` | معرف فريق Apple |
-| `APPLE_KEY_ID` | معرف مفتاح Apple |
-| `APPLE_PRIVATE_KEY` | المفتاح الخاص Apple |
+</details>
 
 ---
 
-## 🌐 الخدمات الخارجية
+## 🛡️ Security · الأمان
 
-### 1. قاعدة البيانات - Neon PostgreSQL
-
-```yaml
-الخدمة: Neon Serverless PostgreSQL
-الموقع: https://neon.tech
-الاستخدام: قاعدة البيانات الرئيسية
-التكلفة: Free tier متاح
-```
-
-### 2. الذكاء الاصطناعي
-
-#### OpenAI GPT
-```yaml
-الخدمة: OpenAI GPT-5
-الموقع: https://platform.openai.com
-الاستخدام: توليد المحتوى، الملخصات، التوصيات
-```
-
-#### Anthropic Claude
-```yaml
-الخدمة: Claude Sonnet 3.5
-الموقع: https://console.anthropic.com
-الاستخدام: تصنيف المقالات، تحليل المحتوى
-```
-
-### 3. التخزين السحابي
-
-```yaml
-الخدمة: Google Cloud Storage
-الموقع: https://console.cloud.google.com
-الاستخدام: تخزين الصور والوسائط
-التكامل: عبر Replit Object Storage
-```
-
-### 4. البريد الإلكتروني
-
-```yaml
-الخدمة: SendGrid
-الموقع: https://sendgrid.com
-الاستخدام: إرسال رسائل البريد (تفعيل، إشعارات)
-```
-
-### 5. الصوت
-
-```yaml
-الخدمة: ElevenLabs
-الموقع: https://elevenlabs.io
-الاستخدام: تحويل الملخصات إلى صوت
-```
+- 🔒 **Multi-layer auth** — Passport sessions (web) + bearer tokens (mobile) + RBAC (9 roles, 164 permissions)
+- 🍪 **Cross-subdomain cookies** — `SameSite=None` + `Secure` + `Domain=.sabq.org`
+- 🛡️ **CSRF protection** — Lazy token fetch for state-changing requests
+- 🔑 **2FA** — TOTP via `otplib` for admin accounts
+- 🚦 **Rate limiting** — `cf-connecting-ip` keyed, anonymous writes throttled
+- 🔍 **Magic-byte verification** — Uploaded images verified against claimed MIME (sharp)
+- 🔐 **Cookie hardening** — `httpOnly`, `Secure` in production, rolling sessions
 
 ---
 
-## 🚀 الخطط المستقبلية
+## 🤝 Contributors · المساهمون
 
-### المرحلة القادمة (Q1 2026)
-
-- [ ] 🌍 إضافة لغات جديدة (الفرنسية، الإسبانية)
-- [ ] 📱 تحسينات تطبيق الموبايل (Push Notifications)
-- [ ] 🎙️ بث مباشر (Live Streaming)
-- [ ] 💰 نظام اشتراكات Premium
-- [ ] 🤖 روبوت محادثة أكثر ذكاءً (GPT-5)
-
-### الميزات المخطط لها
-
-- [ ] 🎯 توصيات فيديو ذكية
-- [ ] 📊 تحليلات متقدمة للمحررين
-- [ ] 🌐 PWA (Progressive Web App)
-- [ ] 🔔 إشعارات ذكية متقدمة
-- [ ] 📰 نشرة إخبارية مخصصة عبر البريد
-- [ ] 🎨 محرر تصميم Canva-style
-- [ ] 🗣️ تعليقات صوتية
-- [ ] 🎮 مسابقات وألعاب إخبارية
-
-### تحسينات الأداء
-
-- [ ] ⚡ تحسين الـ Caching
-- [ ] 🔄 CDN Integration
-- [ ] 📦 Code Splitting متقدم
-- [ ] 🚀 Lazy Loading للصور
-- [ ] 💾 Service Workers للعمل Offline
+<a href="https://github.com/sabq4org/sabq.org/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=sabq4org/sabq.org" />
+</a>
 
 ---
 
-## 🤝 المساهمة
-
-نرحب بمساهماتكم في تطوير المشروع!
-
-### كيفية المساهمة
-
-#### 1. Fork المشروع
-
-```bash
-# انقر على Fork في GitHub
-# ثم استنسخ نسختك
-git clone https://github.com/your-username/sabq-smart.git
-```
-
-#### 2. إنشاء Branch جديد
-
-```bash
-# أنشئ branch للميزة الجديدة
-git checkout -b feature/amazing-feature
-
-# أو لإصلاح خطأ
-git checkout -b fix/bug-description
-```
-
-#### 3. قم بالتعديلات
-
-```bash
-# اكتب الكود
-# تأكد من:
-# - اتباع معايير الكود
-# - إضافة tests إذا لزم الأمر
-# - تحديث التوثيق
-```
-
-#### 4. Commit التغييرات
-
-```bash
-git add .
-git commit -m "Add: وصف واضح للتغيير"
-
-# أمثلة على رسائل الـ commit:
-# Add: ميزة البحث المتقدم
-# Fix: خطأ في عرض التعليقات
-# Update: تحسين أداء الصفحة الرئيسية
-# Docs: تحديث README
-```
-
-#### 5. Push والـ Pull Request
-
-```bash
-# ارفع التغييرات
-git push origin feature/amazing-feature
-
-# افتح Pull Request في GitHub
-# واكتب وصف تفصيلي للتغييرات
-```
-
-### معايير الكود
-
-#### TypeScript
-
-```typescript
-// ✅ استخدم أنواع واضحة
-interface User {
-  id: number;
-  name: string;
-  email: string;
-}
-
-// ✅ استخدم async/await
-async function fetchData(): Promise<User[]> {
-  const response = await fetch('/api/users');
-  return response.json();
-}
-
-// ❌ تجنب any
-function badFunction(data: any) { // تجنب!
-  return data.something;
-}
-```
-
-#### React Components
-
-```tsx
-// ✅ استخدم Functional Components
-export function MyComponent({ title, onClick }: Props) {
-  return (
-    <button 
-      onClick={onClick}
-      data-testid="button-submit"
-    >
-      {title}
-    </button>
-  );
-}
-
-// ✅ أضف data-testid لجميع العناصر التفاعلية
-// ✅ استخدم TypeScript Props
-```
-
-#### Styling
-
-```tsx
-// ✅ استخدم Tailwind classes
-<div className="flex items-center gap-4 p-4">
-  <Button variant="default" size="sm">
-    انقر هنا
-  </Button>
-</div>
-
-// ✅ استخدم مكونات Shadcn/ui الموجودة
-// ❌ لا تعيد كتابة مكونات موجودة
-```
-
-### مجالات المساهمة
-
-- 🐛 **إصلاح الأخطاء**: ابحث عن Issues بعلامة `bug`
-- ✨ **ميزات جديدة**: Issues بعلامة `enhancement`
-- 📖 **التوثيق**: تحسين README والتوثيق
-- 🌍 **الترجمة**: إضافة لغات جديدة
-- 🎨 **التصميم**: تحسينات UI/UX
-- ⚡ **الأداء**: تحسينات السرعة
-
----
-
-## 📞 الدعم والتواصل
-
-### طرق التواصل
-
-#### للدعم الفني
-
-```
-📧 البريد الإلكتروني: support@sabq.life
-💬 Discord: [رابط الديسكورد]
-📱 Twitter: @SabqSmart
-```
-
-#### للإبلاغ عن الأخطاء
-
-```
-🐛 GitHub Issues: https://github.com/your-username/sabq-smart/issues
-
-عند الإبلاغ عن خطأ، يرجى تضمين:
-- وصف المشكلة
-- خطوات إعادة إنتاج الخطأ
-- لقطات الشاشة (إن وجدت)
-- نسخة المتصفح/النظام
-```
-
-#### للأسئلة والاستفسارات
-
-```
-💬 Discussions: https://github.com/your-username/sabq-smart/discussions
-📚 الوثائق: https://docs.sabq.life
-❓ FAQ: https://sabq.life/faq
-```
-
-### المجتمع
-
-انضم إلى مجتمع **سبق الذكية**:
-
-- 👥 **Discord**: للنقاشات المباشرة
-- 🐦 **Twitter**: للتحديثات والإعلانات
-- 📺 **YouTube**: دروس وشروحات
-- 📝 **المدونة**: مقالات تقنية
-
----
-
-## 📄 الترخيص
-
-```
-MIT License
-
-Copyright (c) 2025 Sabq Smart
-
-يُسمح بإعادة استخدام، تعديل، ونشر هذا البرنامج
-وفقاً لشروط رخصة MIT.
-
-للمزيد من التفاصيل، راجع ملف LICENSE
-```
-
-### الملخص
-
-✅ **يمكنك:**
-- استخدام المشروع تجارياً
-- التعديل على الكود
-- التوزيع
-- الاستخدام الخاص
-
-⚠️ **بشرط:**
-- الإبقاء على إشعار حقوق النشر
-- تضمين نسخة من الرخصة
-
----
-
-## 🙏 شكر وتقدير
-
-### الفريق
-
-- 👨‍💻 **المطورون**: فريق تطوير سبق الذكية
-- 🎨 **المصممون**: فريق التصميم
-- ✍️ **الكتّاب**: فريق المحتوى
-
-### المكتبات مفتوحة المصدر
-
-شكر خاص لـ:
-- ⚛️ React Team
-- ⚡ Vite Team
-- 🎨 Tailwind CSS
-- 🧩 Radix UI & Shadcn
-- 🗄️ Drizzle ORM
-- وجميع المساهمين في المكتبات المستخدمة
-
----
-
-## 📊 الإحصائيات
+## 📊 Activity · النشاط
 
 <div align="center">
 
-![GitHub Stars](https://img.shields.io/github/stars/your-username/sabq-smart?style=social)
-![GitHub Forks](https://img.shields.io/github/forks/your-username/sabq-smart?style=social)
-![GitHub Issues](https://img.shields.io/github/issues/your-username/sabq-smart)
-![GitHub Pull Requests](https://img.shields.io/github/issues-pr/your-username/sabq-smart)
+[![Stats](https://github-readme-stats.vercel.app/api/pin/?username=sabq4org&repo=sabq.org&theme=transparent&show_owner=true)](https://github.com/sabq4org/sabq.org)
+
+[![Star History Chart](https://api.star-history.com/svg?repos=sabq4org/sabq.org&type=Date)](https://star-history.com/#sabq4org/sabq.org&Date)
 
 </div>
+
+---
+
+## 📚 Documentation · التوثيق
+
+- 📐 **Architecture** → [`replit.md`](replit.md), [`CLAUDE.md`](CLAUDE.md)
+- 🐛 **Feature deep-dives** → [`docs/`](docs/)
+- 🚀 **Releases** → [`docs/RELEASES.md`](docs/RELEASES.md)
+- 🔐 **Auth & sessions** → [`docs/APPLE_PUSH_SETUP.md`](docs/APPLE_PUSH_SETUP.md)
+- 📈 **SEO recovery plan** → [`docs/SEO_RECOVERY_PLAN.md`](docs/SEO_RECOVERY_PLAN.md)
+
+---
+
+## 🤝 Contributing · المساهمة
+
+```bash
+# Fork, branch, code, push, open PR
+git checkout -b feat/your-feature
+git commit -m "feat: ..."
+git push origin feat/your-feature
+```
+
+Open a [Pull Request](https://github.com/sabq4org/sabq.org/pulls) against `main`. Production deploys auto-trigger on merge.
+
+---
+
+## 📄 License · الترخيص
+
+<table>
+<tr>
+<td width="50%">
+
+**MIT** © [Sabq Organization](https://sabq.org)
+
+You are free to use, modify, and distribute this software with attribution.
+
+</td>
+<td width="50%">
+
+**رخصة MIT** © [مؤسسة سبق](https://sabq.org)
+
+يُسمح بالاستخدام والتعديل وإعادة التوزيع مع الإشارة إلى المصدر.
+
+</td>
+</tr>
+</table>
 
 ---
 
 <div align="center">
 
-### صُنع بـ ❤️ في العالم العربي
+**Built with ☕ in Riyadh · صُنع بِشغف في الرياض**
 
-**سبق الذكية** - إعادة تعريف استهلاك الأخبار
+<sub>If this project helps you, consider giving it a ⭐ — it really helps us reach more contributors.</sub>
 
-[الموقع الرسمي](https://sabq.life) · [التوثيق](https://docs.sabq.life) · [المدونة](https://blog.sabq.life)
-
----
-
-© 2025 Sabq Smart. جميع الحقوق محفوظة.
-
-</div>
+<sub>إذا أفادك هذا المشروع، فكِّر في إعطائه ⭐ — يساعدنا في الوصول لمزيد من المساهمين.</sub>
 
 </div>
