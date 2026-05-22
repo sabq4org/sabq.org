@@ -20,6 +20,12 @@ import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import {
+  trackOpinionView,
+  trackArticleLike,
+  trackBookmarkToggle,
+  trackArticleComment,
+} from "@/lib/analytics";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking, updateSignalDataLayer, triggerAdsWhenReady, resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { 
   ArrowRight, 
@@ -115,12 +121,17 @@ export default function OpinionDetailPage() {
   // Track article view via POST request on every page load (works for all visitors, not just logged in)
   useEffect(() => {
     if (!article?.id) return;
-    
+
     fetch(`/api/articles/${article.id}/view`, { method: 'POST' })
       .then(r => r.json())
       .then(data => console.log('[OpinionView] Tracked:', data))
       .catch(err => console.error('[OpinionView] Error:', err));
-  }, [article?.id]);
+
+    const author = article.author
+      ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim()
+      : "";
+    trackOpinionView(article.id, article.title || "", author);
+  }, [article?.id, article?.title, article?.author?.firstName, article?.author?.lastName]);
 
   // DMS Ad tracking for opinion article page
   useEffect(() => {
@@ -161,6 +172,7 @@ export default function OpinionDetailPage() {
     onSuccess: () => {
       if (article) {
         logBehavior("reaction_add", { articleId: article.id });
+        trackArticleLike(article.id, true);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion", slug] });
     },
@@ -194,6 +206,7 @@ export default function OpinionDetailPage() {
           result?.isBookmarked ? "bookmark_add" : "bookmark_remove",
           { articleId: article.id }
         );
+        trackBookmarkToggle(article.id, Boolean(result?.isBookmarked));
       }
       queryClient.invalidateQueries({ queryKey: ["/api/opinion", slug] });
       toast({
@@ -226,10 +239,11 @@ export default function OpinionDetailPage() {
         body: JSON.stringify(data),
       });
     },
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       if (article) {
         logBehavior("comment_create", { articleId: article.id });
       }
+      trackArticleComment(slug ?? "", variables?.parentId);
       queryClient.invalidateQueries({ queryKey: ["/api/opinion", slug, "comments"] });
       toast({
         title: "شكراً لمشاركتك",

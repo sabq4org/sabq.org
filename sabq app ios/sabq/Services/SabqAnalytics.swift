@@ -99,10 +99,16 @@ enum SabqAnalytics {
         guard let measurementId, let apiSecret else { return }
         let cid = clientId
         let uid = userId
-        let event: [String: Any] = [
-            "name": name,
-            "params": sanitizedParams(parameters),
-        ]
+        let (sid, engagementMsec) = sessionInfo()
+
+        var params = sanitizedParams(parameters)
+        params["session_id"] = sid
+        params["engagement_time_msec"] = String(engagementMsec)
+        #if DEBUG
+        params["debug_mode"] = 1
+        #endif
+
+        let event: [String: Any] = ["name": name, "params": params]
         var payload: [String: Any] = [
             "client_id": cid,
             "events": [event],
@@ -111,6 +117,35 @@ enum SabqAnalytics {
         ]
         if let uid { payload["user_id"] = uid }
         send(payload: payload, measurementId: measurementId, apiSecret: apiSecret)
+    }
+
+    // ---------- Session management ----------
+
+    private static let sessionLock = NSLock()
+    private static var _sessionId: String?
+    private static var _lastEventDate: Date?
+    /// 30 min of inactivity rolls a new session — same default as GA4.
+    private static let sessionTimeout: TimeInterval = 30 * 60
+    /// Cap engagement_time_msec at 30s — a longer gap means the app was
+    /// backgrounded, not the user actively reading.
+    private static let maxEngagementMsec = 30_000
+
+    private static func sessionInfo() -> (sessionId: String, engagementMsec: Int) {
+        sessionLock.lock()
+        defer { sessionLock.unlock() }
+        let now = Date()
+        let lastDate = _lastEventDate
+        let idle = lastDate.map { now.timeIntervalSince($0) } ?? .infinity
+        if _sessionId == nil || idle > sessionTimeout {
+            _sessionId = String(Int(now.timeIntervalSince1970))
+        }
+        let engagement: Int = {
+            guard let last = lastDate else { return 1 }
+            let ms = Int(now.timeIntervalSince(last) * 1000)
+            return max(1, min(ms, maxEngagementMsec))
+        }()
+        _lastEventDate = now
+        return (_sessionId!, engagement)
     }
 
     // ---------- Config helpers ----------

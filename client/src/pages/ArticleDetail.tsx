@@ -39,6 +39,12 @@ import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
+  trackArticleView,
+  trackArticleLike,
+  trackBookmarkToggle,
+  trackArticleComment,
+} from "@/lib/analytics";
+import {
   Heart,
   Bookmark,
   Share2,
@@ -357,6 +363,12 @@ export default function ArticleDetail() {
     enabled: !!article && !!user,
   });
 
+  useEffect(() => {
+    if (!article?.id) return;
+    const categoryName = article.category?.nameAr ?? article.category?.nameEn;
+    trackArticleView(article.id, article.title || "", categoryName);
+  }, [article?.id, article?.title, article?.category?.nameAr, article?.category?.nameEn]);
+
   // Focus mode (Task #80)
   const [focusOpen, setFocusOpen] = useState(false);
 
@@ -662,6 +674,7 @@ export default function ArticleDetail() {
     onSuccess: () => {
       if (article) {
         logBehavior("reaction_add", { articleId: article.id });
+        trackArticleLike(article.id, true);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/articles", slug] });
     },
@@ -696,6 +709,7 @@ export default function ArticleDetail() {
           result?.isBookmarked ? "bookmark_add" : "bookmark_remove",
           { articleId: article.id }
         );
+        trackBookmarkToggle(article.id, Boolean(result?.isBookmarked));
       }
       queryClient.invalidateQueries({ queryKey: ["/api/articles", slug] });
       toast({
@@ -728,10 +742,11 @@ export default function ArticleDetail() {
         body: JSON.stringify(data),
       });
     },
-    onSuccess: () => {
+    onSuccess: (_result, variables) => {
       if (article) {
         logBehavior("comment_create", { articleId: article.id });
       }
+      trackArticleComment(slug ?? "", variables?.parentId);
       queryClient.invalidateQueries({ queryKey: ["/api/articles", slug, "comments"] });
       toast({
         title: "شكراً لمشاركتك",
