@@ -153,27 +153,32 @@ class CloudflareImagesService {
         // metadata log removed for bulk migration
       }
 
-      // Make API request to Cloudflare
+      // 25s upload timeout — Railway's edge proxy gives up well before
+      // CF Images would return a 5xx of its own, so we surface a clean
+      // 503 (with CORS headers) instead of a bare 502.
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiToken}`,
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
         },
-        body: body
+        body: body,
+        signal: AbortSignal.timeout(25_000),
       });
 
-      // Handle rate limiting with exponential backoff
+      // Handle rate limiting with bounded backoff. Capped at 15s so
+      // the retry still fits inside the edge timeout budget.
       if (response.status === 429) {
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-        const waitMs = Math.max(retryAfter * 1000, 10000);
+        const retryAfter = parseInt(response.headers.get('Retry-After') || '15', 10);
+        const waitMs = Math.min(Math.max(retryAfter * 1000, 5_000), 15_000);
         console.warn(`[Cloudflare Images] Rate limited (429). Waiting ${waitMs/1000}s before retry...`);
         await new Promise(r => setTimeout(r, waitMs));
         // Retry once after waiting
         const retryResp = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-          body: body
+          body: body,
+          signal: AbortSignal.timeout(20_000),
         });
         if (!retryResp.ok) {
           const errText = await retryResp.text();

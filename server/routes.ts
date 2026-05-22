@@ -12307,22 +12307,27 @@ Respond in valid JSON format only:
       const generationPromise: Promise<string[]> = inflight ?? (async () => {
         const OpenAIMod = (await import("openai")).default;
         const openai = new OpenAIMod({ apiKey: process.env.OPENAI_API_KEY });
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          temperature: 0.3,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
-            },
-            {
-              role: "user",
-              content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
-            },
-          ],
-        });
+        // 8s ceiling — past this we bail out to a clean 503 instead of
+        // burning the request slot waiting on a slow OpenAI response.
+        const completion = await openai.chat.completions.create(
+          {
+            model: "gpt-4o-mini",
+            temperature: 0.3,
+            response_format: { type: "json_object" },
+            messages: [
+              {
+                role: "system",
+                content:
+                  "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
+              },
+              {
+                role: "user",
+                content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
+              },
+            ],
+          },
+          { signal: AbortSignal.timeout(8_000) }
+        );
         const raw = completion.choices?.[0]?.message?.content || "{}";
         let bullets: string[] = [];
         try {
