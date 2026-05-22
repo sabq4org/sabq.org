@@ -77,7 +77,10 @@ class AuthViewModel @Inject constructor(
             _form.value = AuthFormState.Submitting
             _resend.value = ResendActivationState.Idle
             runCatching { repo.login(email, password) }
-                .onSuccess { _form.value = AuthFormState.Success(it) }
+                .onSuccess {
+                    com.sabq.smart.data.analytics.SabqAnalytics.login("email")
+                    _form.value = AuthFormState.Success(it)
+                }
                 .onFailure { e ->
                     _form.value = when (e) {
                         is PendingActivationException -> AuthFormState.PendingActivation(
