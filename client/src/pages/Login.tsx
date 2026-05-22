@@ -13,6 +13,7 @@ import { SiApple } from "react-icons/si";
 import { ChevronLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { GoogleIcon } from "@/components/GoogleIcon";
+import { trackLogin } from "@/lib/analytics";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -74,6 +75,7 @@ export default function Login() {
         title: "مرحباً بك!",
         description: "تم تسجيل الدخول بنجاح",
       });
+      trackLogin("email");
 
       // Smart redirect based on user role
       const redirectPath = getDefaultRedirectPath(userData);
@@ -117,7 +119,10 @@ export default function Login() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => window.location.href = '/api/auth/google'}
+                onClick={() => {
+                  trackLogin("google");
+                  window.location.href = '/api/auth/google';
+                }}
                 className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                 data-testid="button-google-login"
               >
@@ -127,7 +132,10 @@ export default function Login() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => window.location.href = '/api/auth/apple'}
+                onClick={() => {
+                  trackLogin("apple");
+                  window.location.href = '/api/auth/apple';
+                }}
                 className="w-full inline-flex items-center justify-center gap-2 sm:gap-3"
                 data-testid="button-apple-login"
               >

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { trackSearch } from "@/lib/analytics";
 
 interface SearchResult {
   id: string;
@@ -75,6 +76,10 @@ export function SearchDialog({ buttonClassName, buttonVariant = "ghost", iconCla
     queryKey: ["/api/search", { q: debouncedQuery }],
     enabled: debouncedQuery.length >= 2,
   });
+
+  useEffect(() => {
+    if (debouncedQuery.length >= 2) trackSearch(debouncedQuery);
+  }, [debouncedQuery]);
 
   const handleResultClick = useCallback(() => {
     setOpen(false);
