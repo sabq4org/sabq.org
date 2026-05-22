@@ -196,7 +196,10 @@ struct ArticleContentView: View {
 
     private func imageBlock(url: URL, alt: String?, caption: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            CachedAsyncImage(url: url, contentMode: .fill) {
+            // Inline body image — the column is narrower than the hero,
+            // so a 1600px decode is more than enough for retina and
+            // halves the decode time + memory cost vs. the default 2400.
+            CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 1600) {
                 placeholder
             }
             .frame(maxWidth: .infinity)
@@ -254,7 +257,9 @@ struct ArticleContentView: View {
                 LazyHStack(spacing: 12) {
                     ForEach(Array(images.enumerated()), id: \.offset) { _, img in
                         VStack(alignment: .leading, spacing: 6) {
-                            CachedAsyncImage(url: img.url, contentMode: .fill) {
+                            // 260×260 thumbnail — 1200px decode is plenty
+                            // for retina without paying for full 2400px.
+                            CachedAsyncImage(url: img.url, contentMode: .fill, maxPixelSize: 1200) {
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .fill(SabqTheme.paleFill)
                             }

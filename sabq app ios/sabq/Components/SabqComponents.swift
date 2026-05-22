@@ -343,9 +343,27 @@ private struct TabBarAutoHideTracker: ViewModifier {
 struct CachedAsyncImage<Placeholder: View>: View {
     let url: URL?
     let contentMode: ContentMode
+    /// Max thumbnail edge size in pixels for the on-device decode. Big
+    /// hero shots can sit at 2400. Inline body images rarely render
+    /// wider than ~1200pt × 2x = 2400, but the body column is narrower
+    /// than the hero so we let callers pass a tighter budget to save
+    /// memory + decode time. Default keeps the old behaviour.
+    let maxPixelSize: CGFloat
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
+
+    init(
+        url: URL?,
+        contentMode: ContentMode,
+        maxPixelSize: CGFloat = 2400,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
+    ) {
+        self.url = url
+        self.contentMode = contentMode
+        self.maxPixelSize = maxPixelSize
+        self.placeholder = placeholder
+    }
 
     var body: some View {
         Group {
@@ -374,21 +392,39 @@ struct CachedAsyncImage<Placeholder: View>: View {
             return
         }
 
-        let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let (data, _) = try? await URLSession.shared.data(from: requestedURL) else {
-                return nil
+        let maxPx = self.maxPixelSize
+        // Two attempts with short backoff. CF Images sometimes returns
+        // a transient error on the first connect; without retry, the
+        // image slot stays empty for the rest of the session because
+        // .task(id:) doesn't auto-retry.
+        var loaded: UIImage? = nil
+        for attempt in 0..<2 {
+            if Task.isCancelled { return }
+            loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let (data, _) = try? await ImageCache.imageSession.data(from: requestedURL) else {
+                    return nil
+                }
+                return ImageCache.decodedImage(data: data, maxPixelSize: maxPx)
+            }.value
+            if loaded != nil { break }
+            if attempt == 0 && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
             }
-            return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
-        }.value
+        }
 
-        guard !Task.isCancelled, url == requestedURL else { return }
-
+        // After the await we may have been cancelled (user scrolled past, etc)
+        // or the URL we were asked to load has changed. Cache regardless so
+        // the next mount is instant, but only update UI when we're still the
+        // current request.
         if let loaded {
             ImageCache.shared.setObject(
                 loaded,
                 forKey: requestedURL as NSURL,
                 cost: ImageCache.byteCost(of: loaded)
             )
+        }
+        guard !Task.isCancelled, url == requestedURL else { return }
+        if let loaded {
             withAnimation(.easeOut(duration: 0.25)) {
                 image = loaded
             }
@@ -488,14 +524,25 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             return
         }
 
-        let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let (data, _) = try? await URLSession.shared.data(from: requestedURL) else {
-                return nil
+        // Same hardening as CachedAsyncImage: dedicated image session
+        // (12 parallel connections/host) + one retry after 0.5s. Without
+        // these, articles with 10+ inline images stalled half-loaded
+        // because URLSession.shared caps at 4 concurrent + .task(id:)
+        // does not auto-retry on transient failures.
+        var loaded: UIImage? = nil
+        for attempt in 0..<2 {
+            if Task.isCancelled { return }
+            loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let (data, _) = try? await ImageCache.imageSession.data(from: requestedURL) else {
+                    return nil
+                }
+                return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
+            }.value
+            if loaded != nil { break }
+            if attempt == 0 && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
             }
-            return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
-        }.value
-
-        guard !Task.isCancelled, url == requestedURL else { return }
+        }
 
         if let loaded {
             ImageCache.shared.setObject(
@@ -503,6 +550,9 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
                 forKey: requestedURL as NSURL,
                 cost: ImageCache.byteCost(of: loaded)
             )
+        }
+        guard !Task.isCancelled, url == requestedURL else { return }
+        if let loaded {
             withAnimation(.easeOut(duration: 0.25)) {
                 image = loaded
             }
@@ -518,6 +568,28 @@ nonisolated enum ImageCache {
         c.countLimit = 150
         c.totalCostLimit = 100 * 1024 * 1024
         return c
+    }()
+
+    /// Dedicated URLSession for image downloads. The default
+    /// `URLSession.shared` caps `httpMaximumConnectionsPerHost` at 4 —
+    /// which is the wrong tradeoff for articles whose body contains
+    /// 10+ CF Images on the same host. With the default cap, only 4
+    /// download in parallel, the rest queue, and the user perceives the
+    /// reader as "slow to load images". Bumping this to 12 keeps every
+    /// inline image saturating its own connection. We also set a
+    /// generous per-resource timeout (45s) so slow-but-not-dead
+    /// connections don't get cut and re-queued.
+    nonisolated(unsafe) static let imageSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.httpMaximumConnectionsPerHost = 12
+        cfg.timeoutIntervalForRequest = 45
+        cfg.timeoutIntervalForResource = 60
+        cfg.requestCachePolicy = .returnCacheDataElseLoad
+        cfg.urlCache = URLCache(
+            memoryCapacity: 32 * 1024 * 1024,
+            diskCapacity: 256 * 1024 * 1024
+        )
+        return URLSession(configuration: cfg)
     }()
 
     static func clear() {
@@ -705,7 +777,7 @@ struct ImageLightbox: View {
         }
 
         let loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else {
+            guard let (data, _) = try? await ImageCache.imageSession.data(from: url) else {
                 return nil
             }
             return ImageCache.decodedImage(data: data, maxPixelSize: 4096)
