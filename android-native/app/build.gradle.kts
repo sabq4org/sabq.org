@@ -18,14 +18,16 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        // Play Store published bundle is com.sabqorg.sabq (versionCode
-        // 120 at 9.0.1). Native 10.0 ships as 121 over the SAME id so
-        // it counts as an update, not a new app install.
+        // Play Store published bundles for com.sabqorg.sabq:
+        //   • 9.0.1 (120) — legacy Capacitor build
+        //   • 10.0.0 (121) — first native release (2026-05-21)
+        //   • 10.0.1 (122) — launcher icon update (this build)
+        // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 121
-        versionName = "10.0.0"
+        versionCode = 122
+        versionName = "10.0.1"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced
