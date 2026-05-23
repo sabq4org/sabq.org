@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 
 const DISMISS_KEY = "sabq:hajj-greeting-dismissed:2026";
 const DHU_AL_HIJJAH = 12;
-const HAJJ_START_DAY = 5;
-const HAJJ_END_DAY = 15;
+// 9 = يوم عرفة، 10 = العيد، 11–13 = أيام التشريق
+const HAJJ_START_DAY = 9;
+const HAJJ_END_DAY = 13;
 
 type HijriParts = { day: number; month: number; year: number };
 
