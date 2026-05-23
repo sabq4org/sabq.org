@@ -34,7 +34,14 @@ export async function checkTextForSuspiciousWords(text: string): Promise<CheckRe
 
       switch (wordEntry.matchType) {
         case "exact":
-          const exactRegex = new RegExp(`\\b${escapeRegex(lowerWord)}\\b`, "i");
+          // Unicode-aware word boundary: JS \b only works with ASCII \w
+          // (latin letters + digits + underscore), so Arabic text never
+          // matches with \b. Use lookbehind/lookahead on \p{L}/\p{N} so the
+          // word must be bounded by non-letter, non-digit chars.
+          const exactRegex = new RegExp(
+            `(?<![\\p{L}\\p{N}_])${escapeRegex(lowerWord)}(?![\\p{L}\\p{N}_])`,
+            "iu"
+          );
           matched = exactRegex.test(lowerText);
           break;
         case "contains":
