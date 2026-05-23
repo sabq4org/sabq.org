@@ -253,12 +253,30 @@ router.post("/bulk", requireModeratorAuth, async (req: Request, res: Response) =
       return res.status(400).json({ error: "يجب توفير قائمة التعليقات" });
     }
 
-    if (!["approve", "reject"].includes(action)) {
+    if (!["approve", "reject", "delete"].includes(action)) {
       return res.status(400).json({ error: "إجراء غير صالح" });
     }
 
+    if (action === "delete") {
+      let deleted = 0;
+      const failed: Array<{ id: string; error: string }> = [];
+      for (const commentId of commentIds) {
+        try {
+          await storage.deleteCommentWithLog(commentId, userId, reason || "حذف جماعي من البحث");
+          deleted++;
+        } catch (err: any) {
+          failed.push({ id: commentId, error: err?.message || String(err) });
+        }
+      }
+      return res.json({
+        success: true,
+        count: deleted,
+        failed: failed.length > 0 ? failed : undefined,
+      });
+    }
+
     const status = action === "approve" ? "approved" : "rejected";
-    
+
     for (const commentId of commentIds) {
       await storage.updateCommentStatus(commentId, {
         status,
@@ -269,9 +287,12 @@ router.post("/bulk", requireModeratorAuth, async (req: Request, res: Response) =
     }
 
     res.json({ success: true, count: commentIds.length });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Moderation API] Bulk error:", error);
-    res.status(500).json({ error: "حدث خطأ أثناء تنفيذ الإجراء" });
+    res.status(500).json({
+      error: "حدث خطأ أثناء تنفيذ الإجراء",
+      detail: error?.message || String(error),
+    });
   }
 });
 
