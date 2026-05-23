@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,18 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.painterResource
-import com.sabq.smart.R
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,28 +40,29 @@ import kotlin.math.sin
 import kotlinx.coroutines.launch
 
 /**
- * Apple + Google sign-in buttons that drive [AuthViewModel.loginWithGoogle]
- * / [loginWithApple]. Surfaces errors back through the same form-state
- * flow as the email path so the existing error banner just works.
+ * Google sign-in button + matching divider. Drives
+ * [AuthViewModel.loginWithGoogle] via the Credential Manager wrapper
+ * in [GoogleSignInHelper]; errors surface through
+ * `setExternalAuthError` so the existing form-state banner just works.
  *
- * Layout matches iOS PR #57: localised text first, brand glyph at the
- * end of the label so the icon sits in the natural RTL "trailing"
- * position. The Apple button uses the system Apple logo; the Google
- * button renders a Canvas-drawn G with the official four brand colors
- * so we don't have to ship an asset.
+ * **No Apple button on Android.** Apple has no native Android SDK; the
+ * only sanctioned path is a Chrome Custom Tab against
+ * `appleid.apple.com/auth/authorize` which forces a full Apple ID
+ * password + 2-factor flow from a paired Apple device on every login.
+ * The friction is comparable to a banking app sign-in, and the same
+ * UX hits every Android app that ships Apple Sign-In (Spotify,
+ * Discord, etc.). User feedback was unambiguous — we'd rather offer
+ * Google + email/password and let Apple-ID-only users sign in once
+ * via the web to set a password. iOS still ships the native
+ * [SignInWithAppleButton] where the experience is genuinely smooth.
  *
- * Apple Sign-In on Android uses a Chrome Custom Tab against
- * `appleid.apple.com/auth/authorize`. The backend's
- * `/api/auth/apple/mobile-callback` receives Apple's `form_post`
- * response and bounces it back to the app via the
- * `sabq://auth/apple-callback?...` deep link. [AppleSignInHelper]
- * launches the tab; [PendingAppleSignIn] (collected here) carries the
- * result back from the MainActivity intent filter to this composable.
+ * The repository-level Apple methods (`AuthRepository.loginWithApple`,
+ * `AuthViewModel.loginWithApple`) are intentionally kept so we can
+ * revisit the decision without re-implementing the wire format.
  */
 @Composable
 fun SocialAuthButtons(
     viewModel: AuthViewModel,
-    pendingApple: PendingAppleSignIn,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -75,53 +70,10 @@ fun SocialAuthButtons(
     val helper = remember { GoogleSignInHelper() }
     var googleInFlight by remember { mutableStateOf(false) }
 
-    // The CSRF state we sent to Apple. Stored across the Custom-Tab
-    // round trip so we can verify Apple echoed the same value back.
-    var pendingAppleState by remember { mutableStateOf<String?>(null) }
-    val appleResult by pendingApple.result.collectAsStateWithLifecycle()
-
-    // React to the deep-link result whenever it lands.
-    androidx.compose.runtime.LaunchedEffect(appleResult) {
-        val r = appleResult ?: return@LaunchedEffect
-        // CSRF: drop the callback if state doesn't match the one we
-        // generated. Prevents a malicious deep link from completing
-        // someone else's half-finished sign-in.
-        val expected = pendingAppleState
-        when {
-            r.error != null -> {
-                viewModel.setExternalAuthError("تعذّر تسجيل الدخول عبر Apple (${r.error})")
-            }
-            r.idToken == null -> {
-                viewModel.setExternalAuthError("لم نتلقَّ رمز Apple")
-            }
-            expected != null && r.state != expected -> {
-                viewModel.setExternalAuthError("فشلت مطابقة الجلسة مع Apple — حاول مرة أخرى")
-            }
-            else -> {
-                val parsed = AppleSignInHelper.parseUserJson(r.userJson)
-                viewModel.loginWithApple(
-                    identityToken = r.idToken,
-                    firstName = parsed.firstName,
-                    lastName = parsed.lastName,
-                    email = parsed.email,
-                )
-            }
-        }
-        pendingAppleState = null
-        pendingApple.consume()
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        AppleSignInButton(
-            onClick = {
-                val state = AppleSignInHelper.generateState()
-                pendingAppleState = state
-                AppleSignInHelper.launchSignIn(context, state)
-            },
-        )
         GoogleSignInButton(
             isLoading = googleInFlight,
             onClick = {
@@ -147,36 +99,6 @@ fun SocialAuthButtons(
             },
         )
         DividerOr()
-    }
-}
-
-@Composable
-private fun AppleSignInButton(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(SabqTheme.dimens.buttonRadius)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp)
-            .clip(shape)
-            .background(Color.Black, shape)
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = "تسجيل الدخول بـ Apple",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Box(modifier = Modifier.size(width = 10.dp, height = 1.dp))
-        Icon(
-            painter = painterResource(id = R.drawable.ic_apple_logo),
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 
