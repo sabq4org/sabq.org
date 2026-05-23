@@ -297,6 +297,7 @@ import {
   publisherCredits,
   publisherCreditLogs,
   suspiciousWords,
+  insertSuspiciousWordSchema,
   flaggedCommentsLog,
   contactMessages,
   contactMessageReplies,
@@ -12815,21 +12816,26 @@ Respond in valid JSON format only:
       }
       console.log(`[Comments] Cache invalidated for article: ${articleSlug}`);
 
-      // معالجة الكلمات المشبوهة - تعليق التعليق للمراجعة فوراً
+      // معالجة الكلمات المشبوهة - رفض تلقائي أو تعليق للمراجعة حسب إعداد كل كلمة
       if (blockedBySuspiciousWords && suspiciousCheck.foundWords.length > 0) {
         const foundWordsStr = suspiciousCheck.foundWords.map(w => w.word).join(", ");
         const wordIds = suspiciousCheck.foundWords.map(w => w.wordId);
-        
-        // تعليق التعليق للمراجعة اليدوية
+        const autoReject = suspiciousCheck.shouldAutoReject;
+        const rejectingWords = suspiciousCheck.foundWords.filter(w => w.action === "reject").map(w => w.word);
+
         await storage.updateCommentStatus(comment.id, {
-          status: "pending",
-          moderationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
+          status: autoReject ? "rejected" : "pending",
+          moderatedAt: autoReject ? new Date() : undefined,
+          moderationReason: autoReject
+            ? `رُفض تلقائياً - كلمات محظورة: ${rejectingWords.join(", ")}`
+            : `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
         });
-        
-        // زيادة عداد الإبلاغ للكلمات المشبوهة
+
         await incrementSuspiciousWordFlagCount(wordIds);
-        
-        console.log(`[Comments] Comment ${comment.id} held for review due to suspicious words: ${foundWordsStr}`);
+
+        console.log(
+          `[Comments] Comment ${comment.id} ${autoReject ? "auto-rejected" : "held for review"} due to suspicious words: ${foundWordsStr}`
+        );
       }
 
       // إضافة نقطة ولاء للتعليق
@@ -12866,10 +12872,12 @@ Respond in valid JSON format only:
           });
           
           // Update comment status based on AI classification
-          // إذا كان التعليق يحتوي على كلمات مشبوهة، يبقى معلقاً للمراجعة
+          // إذا كان التعليق يحتوي على كلمات محظورة (action=reject) فهو مرفوض بالفعل ولا يُعاد لـ pending
+          // وإذا كان يحتوي على كلمات مشبوهة (action=review) يبقى معلقاً للمراجعة
           const aiStatus = getStatusFromClassification(moderationResult.classification);
-          const newStatus = suspiciousWordsData ? "pending" : aiStatus;
-          if (newStatus !== "pending") {
+          const wasAutoRejected = suspiciousWordsData?.shouldAutoReject;
+          const newStatus = wasAutoRejected ? "rejected" : (suspiciousWordsData ? "pending" : aiStatus);
+          if (newStatus !== "pending" && !wasAutoRejected) {
             await storage.updateCommentStatus(commentId, {
               status: newStatus,
               moderatedAt: new Date(),
@@ -15350,33 +15358,88 @@ Respond in valid JSON format only:
   // الحصول على قائمة الكلمات المشبوهة
   app.get("/api/admin/suspicious-words", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
-      const { category, isActive, search } = req.query;
+      const { category, severity, isActive, search } = req.query;
 
-      let query = db
-        .select()
-        .from(suspiciousWords)
-        .orderBy(desc(suspiciousWords.createdAt));
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const offset = (page - 1) * limit;
 
-      const conditions = [];
-      if (category) {
-        conditions.push(eq(suspiciousWords.category, category));
+      const conditions: any[] = [];
+      if (category && category !== "all") {
+        conditions.push(eq(suspiciousWords.category, category as string));
       }
-      if (isActive !== undefined) {
+      if (severity && severity !== "all") {
+        conditions.push(eq(suspiciousWords.severity, severity as string));
+      }
+      if (isActive !== undefined && isActive !== "all") {
         conditions.push(eq(suspiciousWords.isActive, isActive === "true"));
       }
       if (search) {
         conditions.push(ilike(suspiciousWords.word, `%${search}%`));
       }
 
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions));
-      }
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      const words = await query;
-      res.json(words);
+      const [words, totalRow] = await Promise.all([
+        db
+          .select()
+          .from(suspiciousWords)
+          .where(whereClause)
+          .orderBy(desc(suspiciousWords.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(suspiciousWords)
+          .where(whereClause),
+      ]);
+
+      const total = Number(totalRow[0]?.count ?? 0);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+
+      res.json({ words, total, page, limit, totalPages });
     } catch (error) {
       console.error("Error fetching suspicious words:", error);
       res.status(500).json({ message: "فشل في جلب الكلمات المشبوهة" });
+    }
+  });
+
+  // إحصائيات الكلمات المشبوهة (للوحة العلوية)
+  app.get("/api/admin/suspicious-words/stats", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
+    try {
+      const [overall] = await db
+        .select({
+          total: sql<number>`count(*)`,
+          active: sql<number>`count(*) filter (where ${suspiciousWords.isActive} = true)`,
+          inactive: sql<number>`count(*) filter (where ${suspiciousWords.isActive} = false)`,
+          totalFlags: sql<number>`coalesce(sum(${suspiciousWords.flagCount}), 0)`,
+          critical: sql<number>`count(*) filter (where ${suspiciousWords.severity} = 'critical' and ${suspiciousWords.isActive} = true)`,
+        })
+        .from(suspiciousWords);
+
+      const topFlagged = await db
+        .select({
+          id: suspiciousWords.id,
+          word: suspiciousWords.word,
+          category: suspiciousWords.category,
+          severity: suspiciousWords.severity,
+          flagCount: suspiciousWords.flagCount,
+        })
+        .from(suspiciousWords)
+        .orderBy(desc(suspiciousWords.flagCount))
+        .limit(5);
+
+      res.json({
+        total: Number(overall?.total ?? 0),
+        active: Number(overall?.active ?? 0),
+        inactive: Number(overall?.inactive ?? 0),
+        totalFlags: Number(overall?.totalFlags ?? 0),
+        critical: Number(overall?.critical ?? 0),
+        topFlagged: topFlagged.filter(w => Number(w.flagCount) > 0),
+      });
+    } catch (error) {
+      console.error("Error fetching suspicious words stats:", error);
+      res.status(500).json({ message: "فشل في جلب الإحصائيات" });
     }
   });
 
@@ -15423,7 +15486,7 @@ Respond in valid JSON format only:
   app.patch("/api/admin/suspicious-words/:id", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { word, category, severity, isActive, matchType, notes } = req.body;
+      const { word, category, severity, isActive, matchType, action, notes } = req.body;
 
       const updateData: any = { updatedAt: new Date() };
       if (word !== undefined) updateData.word = word.trim();
@@ -15431,6 +15494,7 @@ Respond in valid JSON format only:
       if (severity !== undefined) updateData.severity = severity;
       if (isActive !== undefined) updateData.isActive = isActive;
       if (matchType !== undefined) updateData.matchType = matchType;
+      if (action !== undefined) updateData.action = action;
       if (notes !== undefined) updateData.notes = notes;
 
       const [updated] = await db
@@ -15478,41 +15542,67 @@ Respond in valid JSON format only:
   // إضافة كلمات متعددة دفعة واحدة
   app.post("/api/admin/suspicious-words/bulk", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
-      const { words, category = "general", severity = "medium" } = req.body;
+      const {
+        words,
+        category = "general",
+        severity = "medium",
+        matchType = "exact",
+        action = "review",
+        notes,
+      } = req.body;
 
       if (!Array.isArray(words) || words.length === 0) {
         return res.status(400).json({ message: "يجب تقديم قائمة كلمات" });
       }
 
-      const uniqueWords = [...new Set(words.map((w: string) => w.trim().toLowerCase()))].filter(w => w.length >= 2);
+      const uniqueWords = Array.from(
+        new Set(
+          words
+            .map((w: unknown) => (typeof w === "string" ? w.trim() : ""))
+            .filter((w) => w.length >= 2 && w.length <= 100)
+        )
+      );
 
-      // Get existing words to avoid duplicates
+      if (uniqueWords.length === 0) {
+        return res.status(400).json({ message: "لا توجد كلمات صالحة (يجب أن تكون بطول 2-100 حرف)" });
+      }
+
       const existingWords = await db
         .select({ word: suspiciousWords.word })
         .from(suspiciousWords)
         .where(inArray(suspiciousWords.word, uniqueWords));
 
-      const existingSet = new Set(existingWords.map(e => e.word));
-      const newWords = uniqueWords.filter(w => !existingSet.has(w));
+      const existingSet = new Set(existingWords.map((e) => e.word));
+      const newWords = uniqueWords.filter((w) => !existingSet.has(w));
+      const duplicates = uniqueWords.length - newWords.length;
 
       if (newWords.length === 0) {
-        return res.status(409).json({ message: "جميع الكلمات موجودة بالفعل" });
+        return res.status(409).json({
+          message: "جميع الكلمات موجودة بالفعل",
+          added: 0,
+          duplicates,
+        });
       }
 
       const inserted = await db
         .insert(suspiciousWords)
-        .values(newWords.map(word => ({
-          word,
-          category,
-          severity,
-          addedBy: req.user.id,
-        })))
+        .values(
+          newWords.map((word) => ({
+            word,
+            category,
+            severity,
+            matchType,
+            action,
+            notes: notes || null,
+            addedBy: req.user.id,
+          }))
+        )
         .returning();
 
       res.status(201).json({
         message: `تمت إضافة ${inserted.length} كلمة بنجاح`,
         added: inserted.length,
-        skipped: uniqueWords.length - newWords.length,
+        duplicates,
         words: inserted,
       });
     } catch (error) {
