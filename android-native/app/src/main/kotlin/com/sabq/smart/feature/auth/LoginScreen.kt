@@ -56,7 +56,6 @@ import com.sabq.smart.ui.theme.SabqTheme
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel = hiltViewModel(),
-    pendingApple: PendingAppleSignIn,
     onBack: () -> Unit,
     onAuthenticated: () -> Unit,
     onForgotPasswordClick: () -> Unit = {},
@@ -123,10 +122,7 @@ fun LoginScreen(
         // (e.g. cancelled Google picker, missing Play Services) flow
         // through `AuthViewModel.setExternalAuthError` and render via
         // the existing form-state error banner.
-        SocialAuthButtons(
-            viewModel = viewModel,
-            pendingApple = pendingApple,
-        )
+        SocialAuthButtons(viewModel = viewModel)
 
         SurfaceCard {
             FormField(
