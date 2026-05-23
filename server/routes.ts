@@ -15474,9 +15474,15 @@ Respond in valid JSON format only:
         .returning();
 
       res.status(201).json({ message: "تمت إضافة الكلمة بنجاح", word: created });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding suspicious word:", error);
-      res.status(500).json({ message: "فشل في إضافة الكلمة" });
+      const dbMsg = error?.message || error?.detail || String(error);
+      res.status(500).json({
+        message: `فشل في إضافة الكلمة: ${dbMsg}`,
+        error: dbMsg,
+        code: error?.code,
+        detail: error?.detail,
+      });
     }
   });
 
@@ -15508,9 +15514,15 @@ Respond in valid JSON format only:
       }
 
       res.json({ message: "تم تعديل الكلمة بنجاح", word: updated });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating suspicious word:", error);
-      res.status(500).json({ message: "فشل في تعديل الكلمة" });
+      const dbMsg = error?.message || error?.detail || String(error);
+      res.status(500).json({
+        message: `فشل في تعديل الكلمة: ${dbMsg}`,
+        error: dbMsg,
+        code: error?.code,
+        detail: error?.detail,
+      });
     }
   });
 
@@ -15531,9 +15543,15 @@ Respond in valid JSON format only:
       }
 
       res.json({ message: "تم حذف الكلمة بنجاح" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting suspicious word:", error);
-      res.status(500).json({ message: "فشل في حذف الكلمة" });
+      const dbMsg = error?.message || error?.detail || String(error);
+      res.status(500).json({
+        message: `فشل في حذف الكلمة: ${dbMsg}`,
+        error: dbMsg,
+        code: error?.code,
+        detail: error?.detail,
+      });
     }
   });
 
@@ -15605,9 +15623,15 @@ Respond in valid JSON format only:
         duplicates,
         words: inserted,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding bulk suspicious words:", error);
-      res.status(500).json({ message: "فشل في إضافة الكلمات" });
+      const dbMsg = error?.message || error?.detail || String(error);
+      res.status(500).json({
+        message: `فشل في إضافة الكلمات: ${dbMsg}`,
+        error: dbMsg,
+        code: error?.code,
+        detail: error?.detail,
+      });
     }
   });
 
