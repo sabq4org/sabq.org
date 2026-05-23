@@ -37,6 +37,11 @@ firebase-bom = "33.7.0"
 # Media (audio)
 media3 = "1.5.0"
 
+# OAuth — Sign in with Google via Credential Manager + Apple via Custom Tab
+credentials = "1.3.0"
+googleid = "1.1.1"
+browser = "1.8.0"
+
 [libraries]
 # Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
@@ -95,6 +100,12 @@ firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+
+# OAuth — Google Sign-In via Credential Manager + Apple via Custom Tab
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+google-id = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

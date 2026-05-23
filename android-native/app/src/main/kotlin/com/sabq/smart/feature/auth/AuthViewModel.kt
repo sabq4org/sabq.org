@@ -125,6 +125,77 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sign in with Google via Credential Manager. The screen runs the
+     * Credential Manager request, extracts the `idToken` from the
+     * returned `GoogleIdTokenCredential`, and passes it here. The VM
+     * forwards to the backend and propagates the same form-state
+     * transitions as the email/password path.
+     */
+    fun loginWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            _form.value = AuthFormState.Submitting
+            _resend.value = ResendActivationState.Idle
+            runCatching { repo.loginWithGoogle(idToken) }
+                .onSuccess {
+                    com.sabq.smart.data.analytics.SabqAnalytics.login("google")
+                    _form.value = AuthFormState.Success(it)
+                }
+                .onFailure { e ->
+                    _form.value = AuthFormState.Error(
+                        (e as? AuthException)?.message
+                            ?: e.localizedMessage
+                            ?: "تعذّر تسجيل الدخول عبر Google",
+                    )
+                }
+        }
+    }
+
+    /**
+     * Sign in with Apple via the Custom-Tab OAuth flow. The screen
+     * orchestrates the Apple authorize URL + redirect intercept, then
+     * passes the resulting `identityToken` here. `firstName` / `lastName`
+     * / `email` come from Apple's `user` JSON ON FIRST AUTH ONLY — pass
+     * null on subsequent attempts.
+     */
+    fun loginWithApple(
+        identityToken: String,
+        firstName: String?,
+        lastName: String?,
+        email: String?,
+    ) {
+        viewModelScope.launch {
+            _form.value = AuthFormState.Submitting
+            _resend.value = ResendActivationState.Idle
+            runCatching {
+                repo.loginWithApple(
+                    identityToken = identityToken,
+                    firstName = firstName,
+                    lastName = lastName,
+                    email = email,
+                )
+            }
+                .onSuccess {
+                    com.sabq.smart.data.analytics.SabqAnalytics.login("apple")
+                    _form.value = AuthFormState.Success(it)
+                }
+                .onFailure { e ->
+                    _form.value = AuthFormState.Error(
+                        (e as? AuthException)?.message
+                            ?: e.localizedMessage
+                            ?: "تعذّر تسجيل الدخول عبر Apple",
+                    )
+                }
+        }
+    }
+
+    /** Set a user-facing error from the OAuth UI BEFORE the network
+     *  call (cancelled flow, missing Play Services, blocked Custom Tab,
+     *  etc.). Mirrors iOS `AuthStore.setExternalAuthError`. */
+    fun setExternalAuthError(message: String) {
+        _form.value = AuthFormState.Error(message)
+    }
+
     fun logout() {
         viewModelScope.launch {
             repo.logout()

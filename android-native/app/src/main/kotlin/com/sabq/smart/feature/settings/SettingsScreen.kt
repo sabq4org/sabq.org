@@ -26,6 +26,9 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Camera
@@ -123,6 +126,7 @@ fun SettingsScreen(
     onOpenTwitter: () -> Unit = {},
     onSubmitOpinionClick: () -> Unit = {},
     onSubmitNewsClick: () -> Unit = {},
+    onPickInterestsClick: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -156,6 +160,19 @@ fun SettingsScreen(
             onSubmitNewsClick = onSubmitNewsClick,
             onNotificationsClick = onNotificationsClick,
         )
+
+        // 2.5) Profile-completion nudge — mirrors iOS PR #58. Shown only
+        // when at least one of {city/gender, interests} is missing. Each
+        // CTA is gated independently; the whole banner collapses once
+        // both are filled in.
+        currentUser?.let { u ->
+            ProfileCompletionBanner(
+                needsBasics = !u.hasMinimumBasicProfile,
+                needsInterests = !u.hasAtLeastOneInterest,
+                onEditProfileClick = onEditProfileClick,
+                onPickInterestsClick = onPickInterestsClick,
+            )
+        }
 
         // 3) Loyalty entry (signed-in only)
         if (currentUser != null) {
@@ -791,6 +808,138 @@ private fun SignedOutPrompt(onLoginClick: () -> Unit) {
                 ),
             )
         }
+    }
+}
+
+// MARK: - Profile completion banner
+
+/** "أكمل بياناتك" banner — mirrors iOS PR #58. The two CTAs are gated
+ *  independently so the whole thing collapses gracefully as the user
+ *  fills in pieces. */
+@Composable
+private fun ProfileCompletionBanner(
+    needsBasics: Boolean,
+    needsInterests: Boolean,
+    onEditProfileClick: () -> Unit,
+    onPickInterestsClick: () -> Unit,
+) {
+    if (!needsBasics && !needsInterests) return
+
+    val outerShape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(outerShape)
+            .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.06f), outerShape)
+            .border(BorderStroke(1.dp, SabqTheme.colors.primaryEnd.copy(alpha = 0.18f)), outerShape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = SabqTheme.colors.primaryEnd,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "أكمل بياناتك",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SabqTheme.colors.ink,
+                )
+                val hint = when {
+                    needsBasics && needsInterests -> "ساعدنا نقدّم لك تجربة شخصية أذكى"
+                    needsBasics -> "أكمل بياناتك الشخصية لتجربة أدق"
+                    else -> "اختر اهتماماتك لنرشّح لك ما يهمّك"
+                }
+                Text(
+                    text = hint,
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                    maxLines = 2,
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (needsBasics) {
+                ProfileCompletionCTA(
+                    label = "البيانات الشخصية",
+                    icon = Icons.Filled.PersonOutline,
+                    isPrimary = true,
+                    onClick = onEditProfileClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (needsInterests) {
+                ProfileCompletionCTA(
+                    label = "اهتماماتك",
+                    icon = Icons.Filled.Tune,
+                    isPrimary = !needsBasics, // standalone interest CTA becomes the filled primary
+                    onClick = onPickInterestsClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileCompletionCTA(
+    label: String,
+    icon: ImageVector,
+    isPrimary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(9.dp)
+    val bg = if (isPrimary) SabqTheme.colors.primaryEnd else SabqTheme.colors.primaryEnd.copy(alpha = 0.10f)
+    val fg = if (isPrimary) Color.White else SabqTheme.colors.primaryEnd
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(bg, shape)
+            .border(
+                BorderStroke(
+                    width = if (isPrimary) 0.dp else 1.dp,
+                    color = if (isPrimary) Color.Transparent else SabqTheme.colors.primaryEnd.copy(alpha = 0.35f),
+                ),
+                shape,
+            )
+            .clickable { onClick() }
+            .padding(vertical = 9.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = fg,
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = fg,
+            modifier = Modifier.weight(1f, fill = false),
+        )
     }
 }
 

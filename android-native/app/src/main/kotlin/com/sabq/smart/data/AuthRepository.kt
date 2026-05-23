@@ -1,7 +1,11 @@
 package com.sabq.smart.data
 
 import com.sabq.smart.data.api.ApiErrorResponse
+import com.sabq.smart.data.api.AppleFullName
+import com.sabq.smart.data.api.AppleOAuthRequest
+import com.sabq.smart.data.api.GoogleOAuthRequest
 import com.sabq.smart.data.api.LoginRequest
+import com.sabq.smart.data.api.OAuthDeviceInfo
 import com.sabq.smart.data.api.RegisterRequest
 import com.sabq.smart.data.api.ResendActivationRequest
 import com.sabq.smart.data.api.ResendActivationResponse
@@ -137,6 +141,68 @@ class AuthRepository @Inject constructor(
         } catch (e: HttpException) {
             throw AuthException(extractErrorMessage(e) ?: "تعذّر إعادة إرسال رمز التفعيل")
         }
+    }
+
+    /**
+     * Native Google Sign-In. The `idToken` comes from Credential Manager
+     * after the user picks an account. Backend verifies the JWT and
+     * returns either a brand-new account or a re-authenticated existing
+     * one — same envelope as `/auth/login` so we reuse the same handling.
+     */
+    suspend fun loginWithGoogle(idToken: String, deviceInfo: OAuthDeviceInfo? = null): User {
+        val response = try {
+            api.loginWithGoogle(GoogleOAuthRequest(idToken = idToken, deviceInfo = deviceInfo))
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "تعذّر تسجيل الدخول عبر Google")
+        }
+        return finishOAuthLogin(response, providerLabel = "Google")
+    }
+
+    /**
+     * Native Apple Sign-In. The `identityToken` is the JWT from the
+     * Apple authorization-code exchange (Custom Tab webview flow on
+     * Android). `firstName` / `lastName` / `email` are only present on
+     * the FIRST authorization for a given Apple ID — pass null on
+     * subsequent attempts; backend matches by Apple `sub`.
+     */
+    suspend fun loginWithApple(
+        identityToken: String,
+        firstName: String? = null,
+        lastName: String? = null,
+        email: String? = null,
+        deviceInfo: OAuthDeviceInfo? = null,
+    ): User {
+        val response = try {
+            api.loginWithApple(
+                AppleOAuthRequest(
+                    identityToken = identityToken,
+                    fullName = if (firstName != null || lastName != null) {
+                        AppleFullName(firstName = firstName, lastName = lastName)
+                    } else null,
+                    email = email?.takeIf { it.isNotBlank() },
+                    deviceInfo = deviceInfo,
+                ),
+            )
+        } catch (e: HttpException) {
+            throw AuthException(extractErrorMessage(e) ?: "تعذّر تسجيل الدخول عبر Apple")
+        }
+        return finishOAuthLogin(response, providerLabel = "Apple")
+    }
+
+    /** Shared OAuth login completion — persist the token, hydrate
+     *  [_user], surface a friendly error if the server omitted the token
+     *  (shouldn't happen but the type signature allows it). */
+    private suspend fun finishOAuthLogin(
+        response: com.sabq.smart.data.api.ApiLoginResponse,
+        providerLabel: String,
+    ): User {
+        val token = response.token
+            ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول من $providerLabel")
+        tokenStore.set(token)
+        val user = response.user?.toDomain() ?: refreshProfile()
+            ?: throw AuthException("تم تسجيل الدخول لكن تعذّر تحميل الملف الشخصي")
+        _user.value = user
+        return user
     }
 
     suspend fun register(name: String, email: String, password: String): RegisterOutcome {

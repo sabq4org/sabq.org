@@ -44,6 +44,19 @@ android {
         // committing them is no different from shipping them inside the APK.
         buildConfigField("String", "GA4_MEASUREMENT_ID", "\"G-XPS0W1N9CQ\"")
         buildConfigField("String", "GA4_API_SECRET", "\"8rfI2G7RTxW7IZ4iIM-D-A\"")
+
+        // OAuth — Google Web Client ID is what Credential Manager uses to
+        // sign Google ID tokens that our backend can verify (the backend
+        // checks the audience against `GOOGLE_CLIENT_ID`, the Web client).
+        // The Android-package-bound client ID still has to exist + carry
+        // the right SHA-1, but THAT client's value isn't passed at
+        // runtime — Google figures out which Android client this APK is
+        // by matching the package name + signing certificate.
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"664097075837-63pb4ja61jjo6fnikljvmkude964451a.apps.googleusercontent.com\"",
+        )
     }
 
     // Production signing config reads from local.properties (gitignored)
@@ -189,4 +202,13 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.ui)
+
+    // OAuth — Google Sign-In via Credential Manager + Apple via Custom Tab.
+    // androidx.credentials is the modern Sign-In API (replaces GoogleSignInClient).
+    // androidx.browser provides CustomTabsIntent which we use for the Apple
+    // authorize flow since Apple has no native Android SDK.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.google.id)
+    implementation(libs.androidx.browser)
 }
