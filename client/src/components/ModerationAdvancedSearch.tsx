@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +15,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormControl,
@@ -60,6 +73,7 @@ import {
   SortAsc,
   SortDesc,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -173,6 +187,7 @@ interface ModerationAdvancedSearchProps {
 }
 
 export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: ModerationAdvancedSearchProps) {
+  const { toast } = useToast();
   const [activeSearchTab, setActiveSearchTab] = useState<"comments" | "articles">("comments");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [commentsPage, setCommentsPage] = useState(1);
@@ -180,6 +195,8 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
   const [expandedArticles, setExpandedArticles] = useState<Set<string>>(new Set());
   const [searchParams, setSearchParams] = useState<SearchFormData>({});
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Handle tab switching - reset sortBy to compatible value
   const handleTabChange = (tab: "comments" | "articles") => {
@@ -271,6 +288,7 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
     setIsSearching(true);
     setCommentsPage(1);
     setArticlesPage(1);
+    setSelectedIds(new Set());
   };
 
   const resetSearch = () => {
@@ -279,7 +297,72 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
     setIsSearching(false);
     setCommentsPage(1);
     setArticlesPage(1);
+    setSelectedIds(new Set());
   };
+
+  const currentResultIds = useMemo(
+    () => commentsResult?.comments?.map((c) => c.id) ?? [],
+    [commentsResult]
+  );
+  const allOnPageSelected =
+    currentResultIds.length > 0 && currentResultIds.every((id) => selectedIds.has(id));
+  const someOnPageSelected = currentResultIds.some((id) => selectedIds.has(id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        currentResultIds.forEach((id) => next.delete(id));
+      } else {
+        currentResultIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("/api/moderation/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          commentIds: Array.from(selectedIds),
+          action: "delete",
+          reason: "حذف جماعي من البحث",
+        }),
+      });
+    },
+    onSuccess: (data: { success: boolean; count: number; failed?: any[] }) => {
+      const failedCount = data.failed?.length ?? 0;
+      toast({
+        title: "تم الحذف الجماعي",
+        description: failedCount > 0
+          ? `حُذف ${data.count} تعليق، فشل ${failedCount}`
+          : `حُذف ${data.count} تعليق`,
+      });
+      setConfirmDeleteOpen(false);
+      clearSelection();
+      queryClient.invalidateQueries({ queryKey: ["/api/moderation/search/comments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/moderation/stats"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل الحذف الجماعي",
+        variant: "destructive",
+      });
+    },
+  });
 
   const toggleArticleExpanded = (articleId: string) => {
     setExpandedArticles(prev => {
@@ -603,24 +686,85 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                     <p>لم يتم العثور على تعليقات مطابقة</p>
                   </div>
                 ) : (
-                  <ScrollArea className="h-[400px]">
-                    <div className="space-y-3 pl-4">
-                      <AnimatePresence>
-                        {commentsResult?.comments.map((comment, index) => (
-                          <motion.div
-                            key={comment.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
+                  <>
+                    {/* Bulk selection toolbar */}
+                    <div className="flex items-center justify-between gap-2 mb-3 p-2 rounded-md border bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={allOnPageSelected ? true : someOnPageSelected ? "indeterminate" : false}
+                          onCheckedChange={toggleSelectAllOnPage}
+                          data-testid="checkbox-select-all"
+                        />
+                        <span className="text-sm">
+                          {selectedIds.size > 0
+                            ? `محدد: ${selectedIds.size}`
+                            : `تحديد الكل (${currentResultIds.length})`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {selectedIds.size > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearSelection}
+                            data-testid="button-clear-selection"
                           >
-                            <Card 
-                              className="hover-elevate cursor-pointer transition-all"
-                              onClick={() => onSelectComment?.(comment.id)}
-                              data-testid={`card-comment-${comment.id}`}
+                            <X className="h-4 w-4 ml-1" />
+                            إلغاء التحديد
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          disabled={selectedIds.size === 0 || bulkDeleteMutation.isPending}
+                          onClick={() => setConfirmDeleteOpen(true)}
+                          data-testid="button-bulk-delete"
+                        >
+                          {bulkDeleteMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4 ml-1" />
+                          )}
+                          حذف المحدد ({selectedIds.size})
+                        </Button>
+                      </div>
+                    </div>
+
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-3 pl-4">
+                        <AnimatePresence>
+                          {commentsResult?.comments.map((comment, index) => (
+                            <motion.div
+                              key={comment.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.05 }}
                             >
-                              <CardContent className="p-4">
-                                <div className="flex gap-3">
-                                  <Avatar className="h-10 w-10 flex-shrink-0">
+                              <Card
+                                className={`hover-elevate transition-all ${
+                                  selectedIds.has(comment.id) ? "ring-2 ring-primary" : ""
+                                }`}
+                                data-testid={`card-comment-${comment.id}`}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex gap-3">
+                                    <div
+                                      className="flex items-start pt-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Checkbox
+                                        checked={selectedIds.has(comment.id)}
+                                        onCheckedChange={() => toggleSelect(comment.id)}
+                                        data-testid={`checkbox-comment-${comment.id}`}
+                                      />
+                                    </div>
+                                    <div
+                                      className="flex gap-3 flex-1 cursor-pointer"
+                                      onClick={() => onSelectComment?.(comment.id)}
+                                    >
+                                      <Avatar className="h-10 w-10 flex-shrink-0">
                                     <AvatarImage src={comment.user.profileImage || undefined} />
                                     <AvatarFallback>
                                       {comment.user.firstName?.[0] || comment?.user?.email?.[0]}
@@ -668,13 +812,15 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
                                     </div>
                                   </div>
                                 </div>
-                              </CardContent>
-                            </Card>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  </ScrollArea>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              </>
                 )}
 
                 {/* Comments Pagination */}
@@ -891,6 +1037,34 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
             <p className="text-sm">أدخل كلمات البحث أو استخدم الفلاتر للعثور على المحتوى</p>
           </div>
         )}
+
+        {/* Bulk delete confirmation */}
+        <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle>تأكيد الحذف الجماعي</AlertDialogTitle>
+              <AlertDialogDescription>
+                سيتم حذف {selectedIds.size} تعليق نهائياً. لا يمكن التراجع عن هذا الإجراء.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={bulkDeleteMutation.isPending}>
+                إلغاء
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => bulkDeleteMutation.mutate()}
+                disabled={bulkDeleteMutation.isPending}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-bulk-delete"
+              >
+                {bulkDeleteMutation.isPending && (
+                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                )}
+                حذف نهائي
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

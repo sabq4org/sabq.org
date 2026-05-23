@@ -5351,13 +5351,32 @@ export class DatabaseStorage implements IStorage {
       return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     };
 
-    // Text search with Arabic optimization - using ILIKE only (safer than regex)
+    // Text search with Arabic optimization.
+    // The query is normalized in JS (ة→ه, أ/إ/آ→ا, ى→ي, diacritics stripped).
+    // We must apply the *same* normalization to the column on the DB side
+    // before comparing — otherwise a query like "تجاره" never matches
+    // content stored as "تجارة". REGEXP_REPLACE chained server-side.
     if (params.query && params.query.trim()) {
-      const normalizedQuery = normalizeArabic(params.query.trim());
-      
+      const trimmedQuery = params.query.trim();
+      const normalizedQuery = normalizeArabic(trimmedQuery);
+
       if (normalizedQuery.length > 0) {
-        // Use parameterized ILIKE for safe text search
-        conditions.push(sql`${comments.content} ILIKE ${`%${normalizedQuery}%`}`);
+        const normalizedColumn = sql`
+          regexp_replace(
+            regexp_replace(
+              regexp_replace(
+                regexp_replace(${comments.content}, '[ً-ٰٟ]', '', 'g'),
+                '[أإآ]', 'ا', 'g'),
+              'ى', 'ي', 'g'),
+            'ة', 'ه', 'g')
+        `;
+        // Match against normalized column AND raw column (in case the user
+        // happened to query the un-normalized form, or content already
+        // matches verbatim).
+        conditions.push(sql`(
+          ${normalizedColumn} ILIKE ${`%${normalizedQuery}%`}
+          OR ${comments.content} ILIKE ${`%${trimmedQuery}%`}
+        )`);
       }
     }
 
