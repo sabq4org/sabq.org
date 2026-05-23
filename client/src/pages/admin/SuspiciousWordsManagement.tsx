@@ -56,6 +56,10 @@ import {
   XCircle,
   AlertTriangle,
   Loader2,
+  Flame,
+  ListChecks,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -67,6 +71,7 @@ interface SuspiciousWord {
   category: string;
   severity: string;
   matchType: string;
+  action: string;
   isActive: boolean;
   notes?: string;
   flagCount: number;
@@ -83,10 +88,27 @@ interface SuspiciousWordsResponse {
   totalPages: number;
 }
 
+interface SuspiciousWordsStats {
+  total: number;
+  active: number;
+  inactive: number;
+  totalFlags: number;
+  critical: number;
+  topFlagged: Array<{
+    id: string;
+    word: string;
+    category: string;
+    severity: string;
+    flagCount: number;
+  }>;
+}
+
 const CATEGORIES = [
   { value: "general", label: "عام", color: "bg-gray-500" },
   { value: "profanity", label: "ألفاظ نابية", color: "bg-red-500" },
+  { value: "offensive", label: "مسيء", color: "bg-rose-500" },
   { value: "spam", label: "سبام", color: "bg-orange-500" },
+  { value: "advertising", label: "إعلانات", color: "bg-amber-500" },
   { value: "political", label: "سياسي", color: "bg-blue-500" },
   { value: "religious", label: "ديني", color: "bg-purple-500" },
   { value: "personal_attack", label: "هجوم شخصي", color: "bg-pink-500" },
@@ -104,6 +126,19 @@ const MATCH_TYPES = [
   { value: "contains", label: "يحتوي على" },
   { value: "starts_with", label: "يبدأ بـ" },
   { value: "ends_with", label: "ينتهي بـ" },
+];
+
+const ACTIONS = [
+  {
+    value: "review",
+    label: "مراجعة يدوية",
+    description: "التعليق يُحجز للمراجعة قبل النشر",
+  },
+  {
+    value: "reject",
+    label: "رفض تلقائي (لا يُنشر)",
+    description: "التعليق يُرفض فوراً ولا يظهر للعموم",
+  },
 ];
 
 export default function SuspiciousWordsManagement() {
@@ -125,6 +160,7 @@ export default function SuspiciousWordsManagement() {
     category: "general",
     severity: "medium",
     matchType: "exact",
+    action: "review",
     notes: "",
   });
 
@@ -132,6 +168,7 @@ export default function SuspiciousWordsManagement() {
   const [bulkCategory, setBulkCategory] = useState("general");
   const [bulkSeverity, setBulkSeverity] = useState("medium");
   const [bulkMatchType, setBulkMatchType] = useState("exact");
+  const [bulkAction, setBulkAction] = useState("review");
 
   const { data: wordsData, isLoading } = useQuery<SuspiciousWordsResponse>({
     queryKey: ["/api/admin/suspicious-words", page, searchQuery, categoryFilter, severityFilter, activeFilter],
@@ -150,6 +187,14 @@ export default function SuspiciousWordsManagement() {
     },
   });
 
+  const words = Array.isArray(wordsData?.words) ? wordsData!.words : [];
+  const totalPages = wordsData?.totalPages ?? 1;
+  const total = wordsData?.total ?? 0;
+
+  const { data: stats } = useQuery<SuspiciousWordsStats>({
+    queryKey: ["/api/admin/suspicious-words/stats"],
+  });
+
   const addMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       return await apiRequest("/api/admin/suspicious-words", {
@@ -162,6 +207,7 @@ export default function SuspiciousWordsManagement() {
       setAddDialogOpen(false);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words/stats"] });
     },
     onError: (error: Error) => {
       toast({ title: "خطأ", description: error.message || "فشل في إضافة الكلمة", variant: "destructive" });
@@ -169,7 +215,7 @@ export default function SuspiciousWordsManagement() {
   });
 
   const bulkAddMutation = useMutation({
-    mutationFn: async (data: { words: string[]; category: string; severity: string; matchType: string }) => {
+    mutationFn: async (data: { words: string[]; category: string; severity: string; matchType: string; action: string }) => {
       return await apiRequest("/api/admin/suspicious-words/bulk", {
         method: "POST",
         body: JSON.stringify(data),
@@ -183,6 +229,7 @@ export default function SuspiciousWordsManagement() {
       setBulkDialogOpen(false);
       setBulkText("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words/stats"] });
     },
     onError: (error: Error) => {
       toast({ title: "خطأ", description: error.message || "فشل في الإضافة الجماعية", variant: "destructive" });
@@ -202,6 +249,7 @@ export default function SuspiciousWordsManagement() {
       setSelectedWord(null);
       resetForm();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words/stats"] });
     },
     onError: (error: Error) => {
       toast({ title: "خطأ", description: error.message || "فشل في تحديث الكلمة", variant: "destructive" });
@@ -219,6 +267,7 @@ export default function SuspiciousWordsManagement() {
       setDeleteDialogOpen(false);
       setSelectedWord(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words/stats"] });
     },
     onError: (error: Error) => {
       toast({ title: "خطأ", description: error.message || "فشل في حذف الكلمة", variant: "destructive" });
@@ -234,6 +283,7 @@ export default function SuspiciousWordsManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/suspicious-words/stats"] });
     },
     onError: (error: Error) => {
       toast({ title: "خطأ", description: error.message || "فشل في تغيير الحالة", variant: "destructive" });
@@ -246,6 +296,7 @@ export default function SuspiciousWordsManagement() {
       category: "general",
       severity: "medium",
       matchType: "exact",
+      action: "review",
       notes: "",
     });
   };
@@ -257,6 +308,7 @@ export default function SuspiciousWordsManagement() {
       category: word.category,
       severity: word.severity,
       matchType: word.matchType,
+      action: word.action || "review",
       notes: word.notes || "",
     });
     setEditDialogOpen(true);
@@ -283,7 +335,25 @@ export default function SuspiciousWordsManagement() {
       category: bulkCategory,
       severity: bulkSeverity,
       matchType: bulkMatchType,
+      action: bulkAction,
     });
+  };
+
+  const getActionBadge = (action: string) => {
+    if (action === "reject") {
+      return (
+        <Badge className="bg-red-600 hover:bg-red-700 gap-1" data-testid="badge-action-reject">
+          <XCircle className="h-3 w-3" />
+          رفض تلقائي
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-amber-700 border-amber-500 gap-1" data-testid="badge-action-review">
+        <AlertTriangle className="h-3 w-3" />
+        مراجعة
+      </Badge>
+    );
   };
 
   const getCategoryBadge = (category: string) => {
@@ -338,6 +408,82 @@ export default function SuspiciousWordsManagement() {
             </Button>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card data-testid="stat-total">
+            <CardContent className="p-4 flex items-center gap-3">
+              <ListChecks className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <div className="text-xs text-muted-foreground">الإجمالي</div>
+                <div className="text-xl font-bold">{stats?.total ?? "—"}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card data-testid="stat-active">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Power className="h-5 w-5 text-emerald-600" />
+              <div>
+                <div className="text-xs text-muted-foreground">مفعّل</div>
+                <div className="text-xl font-bold text-emerald-600">{stats?.active ?? "—"}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card data-testid="stat-inactive">
+            <CardContent className="p-4 flex items-center gap-3">
+              <PowerOff className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <div className="text-xs text-muted-foreground">معطّل</div>
+                <div className="text-xl font-bold">{stats?.inactive ?? "—"}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card data-testid="stat-critical">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              <div>
+                <div className="text-xs text-muted-foreground">حرج</div>
+                <div className="text-xl font-bold text-red-600">{stats?.critical ?? "—"}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card data-testid="stat-flags">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Flame className="h-5 w-5 text-orange-500" />
+              <div>
+                <div className="text-xs text-muted-foreground">مرات الإبلاغ</div>
+                <div className="text-xl font-bold">{stats?.totalFlags ?? "—"}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {stats?.topFlagged && stats.topFlagged.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Flame className="h-4 w-4 text-orange-500" />
+                الأكثر إبلاغاً
+              </CardTitle>
+              <CardDescription>الكلمات التي تم رصدها أكثر من غيرها في تعليقات المستخدمين</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 flex-wrap" dir="rtl">
+                {stats.topFlagged.map((w) => (
+                  <Badge
+                    key={w.id}
+                    variant="outline"
+                    className="text-sm py-1.5 px-3 gap-2"
+                    data-testid={`top-flagged-${w.id}`}
+                  >
+                    <span className="font-medium">{w.word}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-orange-600 font-semibold">{w.flagCount}</span>
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -403,7 +549,7 @@ export default function SuspiciousWordsManagement() {
               <span>قائمة الكلمات</span>
               {wordsData && (
                 <span className="text-sm font-normal text-muted-foreground">
-                  {wordsData.total} كلمة
+                  {total} كلمة
                 </span>
               )}
             </CardTitle>
@@ -415,7 +561,7 @@ export default function SuspiciousWordsManagement() {
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : wordsData?.words.length === 0 ? (
+            ) : words.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>لا توجد كلمات مطابقة</p>
@@ -430,19 +576,21 @@ export default function SuspiciousWordsManagement() {
                         <TableHead className="text-right">التصنيف</TableHead>
                         <TableHead className="text-right">الشدة</TableHead>
                         <TableHead className="text-right">نوع المطابقة</TableHead>
+                        <TableHead className="text-right">الإجراء عند المطابقة</TableHead>
                         <TableHead className="text-right">الحالة</TableHead>
                         <TableHead className="text-right">مرات الإبلاغ</TableHead>
                         <TableHead className="text-right">ملاحظات</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
+                        <TableHead className="text-right">العمليات</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {wordsData?.words.map((word) => (
+                      {words.map((word) => (
                         <TableRow key={word.id} data-testid={`row-word-${word.id}`}>
                           <TableCell className="font-medium">{word.word}</TableCell>
                           <TableCell>{getCategoryBadge(word.category)}</TableCell>
                           <TableCell>{getSeverityBadge(word.severity)}</TableCell>
                           <TableCell>{getMatchTypeBadge(word.matchType)}</TableCell>
+                          <TableCell>{getActionBadge(word.action)}</TableCell>
                           <TableCell>
                             <Switch
                               checked={word.isActive}
@@ -485,7 +633,7 @@ export default function SuspiciousWordsManagement() {
                   </Table>
                 </div>
 
-                {wordsData && wordsData.totalPages > 1 && (
+                {totalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 mt-4">
                     <Button
                       variant="outline"
@@ -496,13 +644,13 @@ export default function SuspiciousWordsManagement() {
                       السابق
                     </Button>
                     <span className="text-sm text-muted-foreground">
-                      صفحة {page} من {wordsData.totalPages}
+                      صفحة {page} من {totalPages}
                     </span>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPage((p) => Math.min(wordsData.totalPages, p + 1))}
-                      disabled={page === wordsData.totalPages}
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
                     >
                       التالي
                     </Button>
@@ -560,18 +708,36 @@ export default function SuspiciousWordsManagement() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>نوع المطابقة</Label>
-                <Select value={formData.matchType} onValueChange={(v) => setFormData({ ...formData, matchType: v })}>
-                  <SelectTrigger data-testid="select-match-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MATCH_TYPES.map((mt) => (
-                      <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>نوع المطابقة</Label>
+                  <Select value={formData.matchType} onValueChange={(v) => setFormData({ ...formData, matchType: v })}>
+                    <SelectTrigger data-testid="select-match-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MATCH_TYPES.map((mt) => (
+                        <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>الإجراء عند المطابقة</Label>
+                  <Select value={formData.action} onValueChange={(v) => setFormData({ ...formData, action: v })}>
+                    <SelectTrigger data-testid="select-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTIONS.map((a) => (
+                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {ACTIONS.find((a) => a.value === formData.action)?.description}
+                  </p>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="notes">ملاحظات</Label>
@@ -619,7 +785,7 @@ export default function SuspiciousWordsManagement() {
                   data-testid="input-bulk-words"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label>التصنيف</Label>
                   <Select value={bulkCategory} onValueChange={setBulkCategory}>
@@ -659,7 +825,23 @@ export default function SuspiciousWordsManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>الإجراء</Label>
+                  <Select value={bulkAction} onValueChange={setBulkAction}>
+                    <SelectTrigger data-testid="select-bulk-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTIONS.map((a) => (
+                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground -mt-2">
+                {ACTIONS.find((a) => a.value === bulkAction)?.description}
+              </p>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { setBulkDialogOpen(false); setBulkText(""); }}>
@@ -723,18 +905,36 @@ export default function SuspiciousWordsManagement() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>نوع المطابقة</Label>
-                <Select value={formData.matchType} onValueChange={(v) => setFormData({ ...formData, matchType: v })}>
-                  <SelectTrigger data-testid="select-edit-match-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MATCH_TYPES.map((mt) => (
-                      <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>نوع المطابقة</Label>
+                  <Select value={formData.matchType} onValueChange={(v) => setFormData({ ...formData, matchType: v })}>
+                    <SelectTrigger data-testid="select-edit-match-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MATCH_TYPES.map((mt) => (
+                        <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>الإجراء عند المطابقة</Label>
+                  <Select value={formData.action} onValueChange={(v) => setFormData({ ...formData, action: v })}>
+                    <SelectTrigger data-testid="select-edit-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTIONS.map((a) => (
+                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {ACTIONS.find((a) => a.value === formData.action)?.description}
+                  </p>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-notes">ملاحظات</Label>

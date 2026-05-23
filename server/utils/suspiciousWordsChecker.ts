@@ -6,6 +6,7 @@ export interface SuspiciousWordMatch {
   word: string;
   category: string;
   severity: string;
+  action: string;
   wordId: string;
 }
 
@@ -14,6 +15,7 @@ export interface CheckResult {
   foundWords: SuspiciousWordMatch[];
   highestSeverity: string | null;
   shouldHoldForReview: boolean;
+  shouldAutoReject: boolean;
 }
 
 export async function checkTextForSuspiciousWords(text: string): Promise<CheckResult> {
@@ -63,6 +65,7 @@ export async function checkTextForSuspiciousWords(text: string): Promise<CheckRe
           word: wordEntry.word,
           category: wordEntry.category,
           severity: wordEntry.severity,
+          action: wordEntry.action ?? "review",
           wordId: wordEntry.id,
         });
       }
@@ -70,20 +73,22 @@ export async function checkTextForSuspiciousWords(text: string): Promise<CheckRe
 
     const severityOrder = ["low", "medium", "high", "critical"];
     let highestSeverity: string | null = null;
-    
+
     for (const word of foundWords) {
       if (!highestSeverity || severityOrder.indexOf(word.severity) > severityOrder.indexOf(highestSeverity)) {
         highestSeverity = word.severity;
       }
     }
 
-    const shouldHoldForReview = foundWords.length > 0;
+    const shouldAutoReject = foundWords.some(w => w.action === "reject");
+    const shouldHoldForReview = foundWords.length > 0 && !shouldAutoReject;
 
     return {
       hasSuspiciousWords: foundWords.length > 0,
       foundWords,
       highestSeverity,
       shouldHoldForReview,
+      shouldAutoReject,
     };
   } catch (error) {
     console.error("[SuspiciousWords] Error checking text:", error);
@@ -92,6 +97,7 @@ export async function checkTextForSuspiciousWords(text: string): Promise<CheckRe
       foundWords: [],
       highestSeverity: null,
       shouldHoldForReview: false,
+      shouldAutoReject: false,
     };
   }
 }

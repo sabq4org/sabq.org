@@ -10000,7 +10000,8 @@ export const suspiciousWords = pgTable("suspicious_words", {
   category: text("category").default("general").notNull(), // spam, offensive, political, religious, advertising
   severity: text("severity").default("medium").notNull(), // low, medium, high, critical
   isActive: boolean("is_active").default(true).notNull(),
-  matchType: text("match_type").default("exact").notNull(), // exact, contains, regex
+  matchType: text("match_type").default("exact").notNull(), // exact, contains, starts_with, ends_with, regex
+  action: text("action").default("review").notNull(), // review = hold for moderation, reject = auto-reject (never publish)
   addedBy: varchar("added_by").references(() => users.id),
   notes: text("notes"),
   flagCount: integer("flag_count").default(0).notNull(), // عدد مرات الإبلاغ
@@ -10069,9 +10070,19 @@ export const insertSuspiciousWordSchema = createInsertSchema(suspiciousWords).om
   flagCount: true,
 }).extend({
   word: z.string().min(2).max(100),
-  category: z.enum(["spam", "offensive", "political", "religious", "advertising", "general"]).optional(),
+  category: z.enum([
+    "general",
+    "spam",
+    "offensive",
+    "profanity",
+    "political",
+    "religious",
+    "advertising",
+    "personal_attack",
+  ]).optional(),
   severity: z.enum(["low", "medium", "high", "critical"]).optional(),
-  matchType: z.enum(["exact", "contains", "regex"]).optional(),
+  matchType: z.enum(["exact", "contains", "starts_with", "ends_with", "regex"]).optional(),
+  action: z.enum(["review", "reject"]).optional(),
 });
 
 export const insertFlaggedCommentLogSchema = createInsertSchema(flaggedCommentsLog).omit({
