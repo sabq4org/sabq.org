@@ -407,7 +407,7 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
   };
 
   return (
-    <Card className="border-0 shadow-none bg-transparent">
+    <Card className="border-0 shadow-none bg-transparent" dir="rtl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
