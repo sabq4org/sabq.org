@@ -118,10 +118,18 @@ class AuthRepository @Inject constructor(
         val token = response.token
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
         tokenStore.set(token)
-        val user = response.user?.toDomain() ?: refreshProfile()
+        // Seed `_user` from the login response so the UI has *something*
+        // to render immediately, then ALWAYS refresh from `/members/profile`
+        // — the login envelope doesn't carry `interests` or the resolved
+        // RBAC role payload, so without this the user lands signed-in but
+        // with an empty interests picker. iOS does the same via
+        // `AuthStore.fetchFullProfile()` after every login response.
+        val seedUser = response.user?.toDomain()
+        if (seedUser != null) _user.value = seedUser
+        val fullUser = refreshProfile()
+            ?: seedUser
             ?: throw AuthException("تم تسجيل الدخول لكن تعذّر تحميل الملف الشخصي")
-        _user.value = user
-        return user
+        return fullUser
     }
 
     /**
@@ -199,10 +207,14 @@ class AuthRepository @Inject constructor(
         val token = response.token
             ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول من $providerLabel")
         tokenStore.set(token)
-        val user = response.user?.toDomain() ?: refreshProfile()
+        // See login(): the OAuth login envelope also omits `interests`,
+        // so we seed from the response then always refresh from
+        // `/members/profile` to populate the full user object.
+        val seedUser = response.user?.toDomain()
+        if (seedUser != null) _user.value = seedUser
+        return refreshProfile()
+            ?: seedUser
             ?: throw AuthException("تم تسجيل الدخول لكن تعذّر تحميل الملف الشخصي")
-        _user.value = user
-        return user
     }
 
     suspend fun register(name: String, email: String, password: String): RegisterOutcome {
@@ -226,10 +238,15 @@ class AuthRepository @Inject constructor(
         val token = response.token
         if (!token.isNullOrBlank()) {
             tokenStore.set(token)
-            val user = response.user?.toDomain() ?: refreshProfile()
+            // Same pattern as login(): seed from the register response,
+            // then refresh from /members/profile so interests + RBAC
+            // role payload land on the cached User.
+            val seedUser = response.user?.toDomain()
+            if (seedUser != null) _user.value = seedUser
+            val fullUser = refreshProfile()
+                ?: seedUser
                 ?: throw AuthException("تم إنشاء الحساب لكن تعذّر تحميل الملف الشخصي")
-            _user.value = user
-            return RegisterOutcome.Authenticated(user)
+            return RegisterOutcome.Authenticated(fullUser)
         }
         // No token — pending email activation. Use the user id from the
         // response if present so resend-activation can target by id.
