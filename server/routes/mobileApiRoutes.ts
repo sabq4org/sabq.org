@@ -46,8 +46,12 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import oauthMobileRouter from "./v1/oauthMobile";
 
 const router = Router();
+
+// Mount OAuth mobile endpoints (POST /auth/google, /auth/apple)
+router.use(oauthMobileRouter);
 
 // ==========================================
 // Mobile role payload helper
