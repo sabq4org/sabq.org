@@ -160,47 +160,69 @@ export default function CompleteProfile() {
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          الاسم الأول <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="أدخل الاسم الأول" 
-                            {...field} 
-                            data-testid="input-firstName"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                {/* Names are write-once for comment integrity. Even on the
+                   onboarding screen, if the OAuth provider already supplied
+                   the name we lock it down so the user can't swap identity. */}
+                {(() => {
+                  const firstNameLocked = !!user?.firstName?.trim();
+                  const lastNameLocked = !!user?.lastName?.trim();
+                  return (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                الاسم الأول <span className="text-destructive">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="أدخل الاسم الأول"
+                                  {...field}
+                                  readOnly={firstNameLocked}
+                                  disabled={firstNameLocked}
+                                  className={firstNameLocked ? "opacity-70 cursor-not-allowed" : ""}
+                                  data-testid="input-firstName"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
-                  <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          اسم العائلة <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="أدخل اسم العائلة" 
-                            {...field}
-                            data-testid="input-lastName"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                        <FormField
+                          control={form.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                اسم العائلة <span className="text-destructive">*</span>
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="أدخل اسم العائلة"
+                                  {...field}
+                                  readOnly={lastNameLocked}
+                                  disabled={lastNameLocked}
+                                  className={lastNameLocked ? "opacity-70 cursor-not-allowed" : ""}
+                                  data-testid="input-lastName"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      {(firstNameLocked || lastNameLocked) && (
+                        <p className="text-xs text-muted-foreground">
+                          لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">البريد الإلكتروني</label>

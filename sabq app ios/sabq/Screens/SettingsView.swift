@@ -246,20 +246,16 @@ struct SettingsView: View {
                         )
                     }
 
-                    // Profile-completion nudge — surfaces for accounts
-                    // that signed in via Apple/Google (or any flow where
-                    // backend returned `isProfileComplete = false`) so the
-                    // reader is invited to fill in the bits the OAuth
-                    // provider didn't share (city, bio, gender, interests)
-                    // and unlock more personalized recommendations.
-                    //
-                    // Driven off `authStore.needsProfileCompletion` rather
-                    // than `user.isProfileComplete == false` because the
-                    // legacy `/members/profile` payload doesn't ship the
-                    // column, so the OAuth login signal would otherwise be
-                    // overwritten with `nil` by the follow-up profile
-                    // refresh.
-                    if authStore.needsProfileCompletion {
+                    // Profile-completion nudge — computed live from the
+                    // user's actual fields so the banner stays accurate
+                    // even for legacy accounts whose stale
+                    // `isProfileComplete` flag was wrong. Each CTA is
+                    // gated independently: missing city/gender shows
+                    // البيانات الشخصية, empty interests shows اهتماماتك,
+                    // and the whole banner collapses once both are done.
+                    let needsBasics = !user.hasMinimumBasicProfile
+                    let needsInterests = !user.hasAtLeastOneInterest
+                    if needsBasics || needsInterests {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 12) {
                                 Image(systemName: "sparkles")
@@ -275,7 +271,7 @@ struct SettingsView: View {
                                     Text("أكمل بياناتك")
                                         .font(.system(size: 14, weight: .bold))
                                         .foregroundStyle(SabqTheme.ink)
-                                    Text("ساعدنا نقدّم لك تجربة شخصية أذكى")
+                                    Text(completionBannerHint(needsBasics: needsBasics, needsInterests: needsInterests))
                                         .font(.system(size: 12, weight: .regular))
                                         .foregroundStyle(SabqTheme.secondaryInk)
                                         .lineLimit(2)
@@ -284,51 +280,55 @@ struct SettingsView: View {
                             }
 
                             HStack(spacing: 8) {
-                                Button { showEditProfile = true } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "person.text.rectangle")
-                                            .font(.system(size: 12, weight: .semibold))
-                                        Text("البيانات الشخصية")
-                                            .font(.system(size: 13, weight: .semibold))
+                                if needsBasics {
+                                    Button { showEditProfile = true } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "person.text.rectangle")
+                                                .font(.system(size: 12, weight: .semibold))
+                                            Text("البيانات الشخصية")
+                                                .font(.system(size: 13, weight: .semibold))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 9)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                .fill(SabqTheme.primaryEnd)
+                                        )
                                     }
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 9)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .fill(SabqTheme.primaryEnd)
-                                    )
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
 
-                                Button {
-                                    // Refresh categories on tap in case the
-                                    // initial .task hasn't completed yet
-                                    // (cold start, slow network).
-                                    if interestsCategories.isEmpty {
-                                        interestsCategories = InterestsCategoryCache.shared.get()
+                                if needsInterests {
+                                    Button {
+                                        // Refresh categories on tap in case the
+                                        // initial .task hasn't completed yet
+                                        // (cold start, slow network).
+                                        if interestsCategories.isEmpty {
+                                            interestsCategories = InterestsCategoryCache.shared.get()
+                                        }
+                                        showInterestsPicker = true
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "slider.horizontal.3")
+                                                .font(.system(size: 12, weight: .semibold))
+                                            Text("اهتماماتك")
+                                                .font(.system(size: 13, weight: .semibold))
+                                        }
+                                        .foregroundStyle(needsBasics ? SabqTheme.primaryEnd : .white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 9)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                .fill(needsBasics ? SabqTheme.primaryEnd.opacity(0.10) : SabqTheme.primaryEnd)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                                .stroke(needsBasics ? SabqTheme.primaryEnd.opacity(0.35) : Color.clear, lineWidth: 1)
+                                        )
                                     }
-                                    showInterestsPicker = true
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "slider.horizontal.3")
-                                            .font(.system(size: 12, weight: .semibold))
-                                        Text("اهتماماتك")
-                                            .font(.system(size: 13, weight: .semibold))
-                                    }
-                                    .foregroundStyle(SabqTheme.primaryEnd)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 9)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .fill(SabqTheme.primaryEnd.opacity(0.10))
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                            .stroke(SabqTheme.primaryEnd.opacity(0.35), lineWidth: 1)
-                                    )
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                         .padding(12)
@@ -669,6 +669,23 @@ struct SettingsView: View {
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(.vertical, 3)
+    }
+
+    /// Sub-headline copy for the profile-completion banner. Tailored to
+    /// exactly which gate the user is missing so the message stays honest
+    /// — "اختر اهتماماتك" reads weird if they've already picked some, and
+    /// the generic "نقدّم لك تجربة أذكى" is fine for the mixed case.
+    private func completionBannerHint(needsBasics: Bool, needsInterests: Bool) -> String {
+        switch (needsBasics, needsInterests) {
+        case (true, true):
+            return "ساعدنا نقدّم لك تجربة شخصية أذكى"
+        case (true, false):
+            return "أكمل بياناتك الشخصية لتجربة أدق"
+        case (false, true):
+            return "اختر اهتماماتك لنرشّح لك ما يهمّك"
+        case (false, false):
+            return ""
+        }
     }
 
     private func roleIcon(for role: String?) -> String {
@@ -2298,6 +2315,12 @@ struct EditProfileSheet: View {
     @State private var showAvatarPicker = false
     @State private var selectedImage: UIImage?
     @State private var showUploadNotice = false
+    /// True when the user already has a non-empty firstName/lastName.
+    /// Names are write-once for comment-integrity reasons — once set the
+    /// backend silently drops further updates, so the UI mirrors that by
+    /// disabling the inputs and surfacing a lock helper.
+    @State private var firstNameLocked = false
+    @State private var lastNameLocked = false
 
     var body: some View {
         NavigationStack {
@@ -2323,8 +2346,27 @@ struct EditProfileSheet: View {
                     }
 
                     VStack(spacing: 16) {
-                        editField(label: "الاسم الأول", placeholder: "أدخل الاسم الأول", text: $firstName)
-                        editField(label: "اسم العائلة", placeholder: "أدخل اسم العائلة", text: $lastName)
+                        if firstNameLocked {
+                            readOnlyField(label: "الاسم الأول", value: firstName, icon: "person.fill")
+                        } else {
+                            editField(label: "الاسم الأول", placeholder: "أدخل الاسم الأول", text: $firstName)
+                        }
+                        if lastNameLocked {
+                            readOnlyField(label: "اسم العائلة", value: lastName, icon: "person.fill")
+                        } else {
+                            editField(label: "اسم العائلة", placeholder: "أدخل اسم العائلة", text: $lastName)
+                        }
+                        if firstNameLocked || lastNameLocked {
+                            HStack(spacing: 6) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                                Text("لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات")
+                                    .font(.system(size: 11, weight: .regular))
+                                    .foregroundStyle(SabqTheme.tertiaryInk)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         editField(label: "المدينة", placeholder: "أدخل مدينتك", text: $city)
                         genderPicker
 
@@ -2435,6 +2477,8 @@ struct EditProfileSheet: View {
                     city = user.city ?? ""
                     let normalizedGender = (user.gender ?? "").lowercased()
                     gender = (normalizedGender == "male" || normalizedGender == "female") ? normalizedGender : ""
+                    firstNameLocked = !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    lastNameLocked = !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 }
             }
         }

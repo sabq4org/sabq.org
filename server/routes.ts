@@ -1294,16 +1294,32 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   app.patch("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      
+
       const parsed = updateUserSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "بيانات غير صحيحة",
-          errors: parsed.error.errors 
+          errors: parsed.error.errors
         });
       }
 
-      const user = await storage.updateUser(userId, parsed.data);
+      // firstName / lastName are write-once for integrity: once a
+      // non-empty value exists on the row, the column is readonly. An
+      // attacker briefly in control of an account could otherwise rename
+      // it to impersonate a different commenter, turning the public
+      // comments archive into a deniability laundromat. We silently drop
+      // the name fields rather than 400-ing so legacy clients that always
+      // post the full form don't break on save.
+      const existing = await storage.getUser(userId);
+      const data = { ...parsed.data };
+      if (existing?.firstName && existing.firstName.trim().length > 0) {
+        delete data.firstName;
+      }
+      if (existing?.lastName && existing.lastName.trim().length > 0) {
+        delete data.lastName;
+      }
+
+      const user = await storage.updateUser(userId, data);
       res.json(user);
     } catch (error) {
       console.error("Error updating user:", error);
