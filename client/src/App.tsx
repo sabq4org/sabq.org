@@ -77,6 +77,26 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
           return;
         }
         if (isModuleError) {
+          // Out of retries on a chunk-load failure. Almost always means
+          // the user is holding stale HTML from a prior Vercel deploy
+          // that points at chunk hashes the new deploy no longer ships
+          // (404 on `/assets/ArticleDetail-{oldHash}.js`). Force a full
+          // reload so the browser fetches fresh index.html and the new
+          // chunk names. Guarded by sessionStorage so a deploy bug
+          // doesn't trap the user in a reload loop — second failure
+          // shows the manual instruction.
+          const RELOAD_KEY = 'sabq:chunk-reload-once';
+          try {
+            if (!sessionStorage.getItem(RELOAD_KEY)) {
+              sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+              window.location.reload();
+              return; // page is reloading — resolve never fires
+            }
+          } catch {
+            // sessionStorage can throw in private-mode Safari; fall
+            // through to the manual-refresh message rather than risk
+            // an infinite reload.
+          }
           reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
         } else {
           reject(error);
