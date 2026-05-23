@@ -139,7 +139,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    suspend fun register(name: String, email: String, password: String): User {
+    suspend fun register(name: String, email: String, password: String): RegisterOutcome {
         val response = try {
             api.register(
                 RegisterRequest(
@@ -152,13 +152,27 @@ class AuthRepository @Inject constructor(
         } catch (e: HttpException) {
             throw AuthException(extractErrorMessage(e) ?: "تعذّر إنشاء الحساب")
         }
+        // Mirrors iOS `AuthStore.register` branching in AuthStore.swift:158-185.
+        // Auto-activated mobile signups return a token + user → instant
+        // login. Older flows / opt-out signups only send `emailSent` →
+        // surface a "check your email" success card with a resend
+        // affordance.
         val token = response.token
-            ?: throw AuthException(response.message ?: "لم يصدر السيرفر رمز دخول")
-        tokenStore.set(token)
-        val user = response.user?.toDomain() ?: refreshProfile()
-            ?: throw AuthException("تم إنشاء الحساب لكن تعذّر تحميل الملف الشخصي")
-        _user.value = user
-        return user
+        if (!token.isNullOrBlank()) {
+            tokenStore.set(token)
+            val user = response.user?.toDomain() ?: refreshProfile()
+                ?: throw AuthException("تم إنشاء الحساب لكن تعذّر تحميل الملف الشخصي")
+            _user.value = user
+            return RegisterOutcome.Authenticated(user)
+        }
+        // No token — pending email activation. Use the user id from the
+        // response if present so resend-activation can target by id.
+        return RegisterOutcome.PendingActivation(
+            message = response.message
+                ?: "تم إنشاء الحساب بنجاح. يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب",
+            userId = response.user?.id?.takeIf { it.isNotBlank() },
+            email = email.trim(),
+        )
     }
 
     suspend fun logout() {
@@ -202,6 +216,24 @@ class AuthRepository @Inject constructor(
 }
 
 open class AuthException(message: String) : Exception(message)
+
+/**
+ * Outcome of a successful [AuthRepository.register] call. Mirrors iOS
+ * `AuthStore.register` in AuthStore.swift:158-185:
+ *  - [Authenticated] — backend returned a session token + user. The
+ *    token is already persisted and the cached user updated.
+ *  - [PendingActivation] — backend confirmed the account was created
+ *    but only sent an activation email; no session yet. The smart
+ *    signup screen surfaces a "check your email" + resend affordance.
+ */
+sealed interface RegisterOutcome {
+    data class Authenticated(val user: User) : RegisterOutcome
+    data class PendingActivation(
+        val message: String,
+        val userId: String?,
+        val email: String,
+    ) : RegisterOutcome
+}
 
 /**
  * Specialised [AuthException] thrown when the backend signals that

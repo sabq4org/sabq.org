@@ -117,6 +117,17 @@ fun FeaturedArticleCard(
                         .align(Alignment.Center),
                 )
             }
+
+            // AI-generated image disclosure — physical top-right corner,
+            // 10 dp inset matches iOS FeaturedArticleCard.swift:1178-1182.
+            if (article.isAiGeneratedImage) {
+                AIImageBadge(
+                    model = article.aiImageModel,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp),
+                )
+            }
         }
 
         Column(

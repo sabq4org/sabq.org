@@ -98,9 +98,11 @@ import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.settings.SettingsViewModel
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
@@ -639,43 +641,17 @@ private fun HeroImage(article: Article, onTap: () -> Unit) {
             }
         }
 
-        // AI image badge — top-leading corner (visual top-right in RTL).
+        // AI image badge — physical top-end corner. Shared component
+        // matches iOS AIImageBadge (accent fill + sparkles trailing).
         if (article.isAiGeneratedImage) {
-            AiImageBadge(
+            com.sabq.smart.ui.components.AIImageBadge(
                 model = article.aiImageModel,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(12.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun AiImageBadge(model: String?, modifier: Modifier = Modifier) {
-    val shape = CircleShape
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(SabqTheme.colors.mediaScrim, shape)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.AutoAwesome,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(11.dp),
-        )
-        Text(
-            text = if (model.isNullOrBlank()) "صورة AI" else "صورة AI · $model",
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-            maxLines = 1,
-        )
     }
 }
 
@@ -1007,9 +983,18 @@ private fun ListenPill(slug: String) {
         }
         Text(
             text = if (isThisPlaying) "إيقاف" else "استماع",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
             color = Color.White,
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                lineHeight = 11.sp,
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both,
+                ),
+            ),
         )
     }
 }
@@ -2126,34 +2111,17 @@ private fun CommentSkeletonList() {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         repeat(3) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(SabqTheme.colors.paleFill),
-                )
+                com.sabq.smart.ui.components.SkeletonCircle(diameter = 32.dp)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 110.dp, height = 12.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        width = 110.dp, height = 12.dp, radius = 4.dp,
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(width = 220.dp, height = 10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(SabqTheme.colors.paleFill),
+                    com.sabq.smart.ui.components.SkeletonBox(height = 10.dp, radius = 4.dp)
+                    com.sabq.smart.ui.components.SkeletonBox(
+                        width = 220.dp, height = 10.dp, radius = 4.dp,
                     )
                 }
             }

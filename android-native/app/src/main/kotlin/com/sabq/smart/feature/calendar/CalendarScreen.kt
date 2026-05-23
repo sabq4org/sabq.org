@@ -282,12 +282,9 @@ private fun EventCard(event: CalendarEvent) {
 private fun SkeletonList() {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         repeat(3) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RoundedCornerShape(SabqTheme.dimens.tileRadius))
-                    .background(SabqTheme.colors.paleFill),
+            com.sabq.smart.ui.components.SkeletonBox(
+                height = 80.dp,
+                radius = SabqTheme.dimens.tileRadius,
             )
         }
     }

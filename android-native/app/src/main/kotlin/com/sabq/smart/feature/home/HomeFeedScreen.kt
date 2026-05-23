@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -157,11 +159,13 @@ fun HomeFeedScreen(
                     settingsViewModel.setDarkMode(!isDarkMode)
                 },
                 onEndReached = viewModel::loadMore,
+                onRefresh = viewModel::refresh,
             )
         }
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LoadedFeed(
     state: HomeFeedUiState.Loaded,
@@ -184,6 +188,7 @@ private fun LoadedFeed(
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val listState = rememberLazyListState()
 
@@ -200,11 +205,27 @@ private fun LoadedFeed(
         if (endReached) onEndReached()
     }
 
-    LazyColumn(
-        state = listState,
+    // Re-tap on the bottom Home tab → smooth-scroll to top + refresh.
+    // Wired via [TabReselectBus] which fires only when the user taps
+    // the already-active Home tab (mirrors iOS SabqTabBar.onSelect).
+    LaunchedEffect(Unit) {
+        com.sabq.smart.nav.TabReselectBus.home.collect {
+            listState.animateScrollToItem(0)
+            onRefresh()
+        }
+    }
+
+    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+        isRefreshing = state.isRefreshing,
+        onRefresh = onRefresh,
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
+    ) {
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize(),
         contentPadding = PaddingValues(
             start = SabqTheme.dimens.screenPaddingH,
             end = SabqTheme.dimens.screenPaddingH,
@@ -370,6 +391,7 @@ private fun LoadedFeed(
             }
         }
     }
+    }  // close PullToRefreshBox
 }
 
 @Composable
@@ -458,15 +480,14 @@ private fun CenteredSpinner() {
 
 @Composable
 private fun LoadingState() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
-            Text(
-                text = "جاري تحميل الأخبار",
-                style = SabqTheme.typography.meta,
-                color = SabqTheme.colors.secondaryInk,
-            )
-        }
+    // Ports iOS HomeFeedSkeleton (SabqComponents.swift:126-176).
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SabqTheme.colors.background)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        com.sabq.smart.ui.components.HomeFeedSkeleton()
     }
 }
 
@@ -1164,42 +1185,54 @@ private fun TrendingPreviewBlock(
             }
         }
         SurfaceCard {
-            trending.forEachIndexed { idx, article ->
-                if (idx > 0) {
-                    HorizontalDivider(
-                        color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                        thickness = 0.5.dp,
-                    )
+            // iOS emits one ForEach iteration per item — SwiftUI then applies
+            // its VStack spacing between iteration boundaries, not between the
+            // `(Divider, Row)` pair *inside* one iteration. Compose's
+            // `forEachIndexed` would otherwise hand SurfaceCard's inner
+            // `spacedBy(18.dp)` Column FIVE children (Row, Divider, Row,
+            // Divider, Row) and add 4×18dp gaps. Wrapping each iteration in
+            // its own Column collapses it back to 3 children = 2×18dp gaps,
+            // matching iOS.
+            trending
+                .filter { it.title.isNotBlank() }
+                .forEachIndexed { idx, article ->
+                    Column {
+                        if (idx > 0) {
+                            HorizontalDivider(
+                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
+                                thickness = 0.5.dp,
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onArticleClick(article) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = "${idx + 1}",
+                                style = SabqTheme.typography.cardTitle.copy(
+                                    fontSize = 18.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
+                                    color = if (idx < 3) orange else SabqTheme.colors.tertiaryInk,
+                                ),
+                                modifier = Modifier.width(28.dp),
+                            )
+                            Text(
+                                text = article.title,
+                                style = SabqTheme.typography.cardTitle.copy(
+                                    fontSize = 14.sp,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                    color = SabqTheme.colors.ink,
+                                ),
+                                maxLines = 2,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onArticleClick(article) }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "${idx + 1}",
-                        style = SabqTheme.typography.cardTitle.copy(
-                            fontSize = 18.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Black,
-                            color = if (idx < 3) orange else SabqTheme.colors.tertiaryInk,
-                        ),
-                        modifier = Modifier.size(28.dp),
-                    )
-                    Text(
-                        text = article.title,
-                        style = SabqTheme.typography.cardTitle.copy(
-                            fontSize = 14.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                            color = SabqTheme.colors.ink,
-                        ),
-                        maxLines = 2,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
         }
     }
 }

@@ -162,9 +162,10 @@ fun OpinionsListScreen(
             .background(SabqTheme.colors.background),
     ) {
         when (val s = state) {
-            OpinionsUiState.Loading -> CenterContent {
-                CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
-            }
+            OpinionsUiState.Loading -> com.sabq.smart.ui.components.ArticleListSkeleton(
+                rows = 6,
+                modifier = Modifier.padding(top = 16.dp),
+            )
             is OpinionsUiState.Error -> CenterContent {
                 // iOS wraps the error EmptyStateView in a SurfaceCard
                 // with coral accent (OpinionsView.swift:277-287).

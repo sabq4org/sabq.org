@@ -99,10 +99,32 @@ fun LoyaltyHistoryScreen(
         TopBar(onBack = onBack)
 
         when {
-            state.isRefreshing && state.items.isEmpty() ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = SabqTheme.colors.primaryEnd)
+            state.isRefreshing && state.items.isEmpty() -> {
+                // Skeleton: totals strip + 6 history rows.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(3) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                com.sabq.smart.ui.components.SkeletonBox(
+                                    height = 76.dp,
+                                    radius = 14.dp,
+                                )
+                            }
+                        }
+                    }
+                    repeat(6) {
+                        com.sabq.smart.ui.components.SkeletonBox(
+                            height = 60.dp,
+                            radius = SabqTheme.dimens.tileRadius,
+                        )
+                    }
                 }
+            }
             state.items.isEmpty() && state.loadError != null ->
                 ErrorState(message = state.loadError!!, onRetry = viewModel::reload)
             state.items.isEmpty() ->
@@ -158,7 +180,8 @@ private fun TotalsStrip(items: List<LoyaltyHistoryEvent>) {
     ) {
         TotalsCell(value = total, label = "إجمالي السجل", tint = SabqTheme.colors.primaryEnd, modifier = Modifier.weight(1f))
         TotalsCell(value = today, label = "اليوم", tint = SabqTheme.colors.leaf, modifier = Modifier.weight(1f))
-        TotalsCell(value = week, label = "هذا الأسبوع", tint = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
+        // SwiftUI .orange — iOS LoyaltyHistoryView.swift:60 uses Color.orange (#FF9500).
+        TotalsCell(value = week, label = "هذا الأسبوع", tint = Color(0xFFFF9500), modifier = Modifier.weight(1f))
     }
 }
 
@@ -488,7 +511,8 @@ private fun actionEmoji(action: String): String = when (action) {
 
 @Composable
 private fun actionColor(action: String): Color = when (action) {
-    "DAILY_LOGIN" -> Color(0xFFFF8C00)
+    // SwiftUI .orange — iOS LoyaltyHistoryView.swift:297.
+    "DAILY_LOGIN" -> Color(0xFFFF9500)
     "READ", "READ_DEEP" -> SabqTheme.colors.primaryEnd
     "LIKE" -> SabqTheme.colors.coral
     "COMMENT" -> Color(red = 0.40f, green = 0.73f, blue = 0.22f)
