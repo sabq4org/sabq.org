@@ -795,51 +795,69 @@ struct SettingsView: View {
 
     // MARK: - Display
 
-    /// Eid Al-Adha theme toggle row — rendered inside displaySection.
-    /// Only visible while the Hijri window is open OR the developer
-    /// force-on flag is set; the rest of the year the row collapses
-    /// to nothing so the picker doesn't carry a permanent toggle
-    /// nobody can use. Long-pressing the row flips the force-on flag,
-    /// letting design preview the look in any month.
+    /// Eid Al-Adha theme toggle row — always rendered inside
+    /// displaySection so users (and designers) can preview the look
+    /// at any time of year. The toggle behaviour adapts to whether
+    /// today is inside the Hijri window:
+    ///   - In-season: switch controls the per-year dismissal flag
+    ///     ("hide the seasonal theme for this Eid"). Default = on.
+    ///   - Out-of-season: switch controls the preview override
+    ///     ("force-on" flag), so users can sample the theme before
+    ///     the real window opens. The subtitle text changes to make
+    ///     this clear.
     @ViewBuilder
     private var eidThemeToggle: some View {
-        if eidTheme.inSeason || eidTheme.forcedOn {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("ثيم عيد الأضحى")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(SabqTheme.ink)
-                        Text(eidTheme.userDisabled
-                             ? "الثيم المعتاد يظهر حتى تعيد التفعيل"
-                             : "خلفية موسمية تظهر تلقائياً خلال أيام الحج والعيد")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    Spacer(minLength: 0)
-                    SmallSquareBadge(systemImage: "moon.stars.fill",
-                                     tint: EidThemeManager.Palette.gold)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(eidTheme.inSeason ? "ثيم عيد الأضحى" : "معاينة ثيم العيد")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text(eidThemeSubtitle)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(SabqTheme.secondaryInk)
                 }
+                Spacer(minLength: 0)
+                SmallSquareBadge(systemImage: "moon.stars.fill",
+                                 tint: EidThemeManager.Palette.gold)
+            }
 
-                Toggle(
-                    "ثيم العيد",
-                    isOn: Binding(
-                        get: { !eidTheme.userDisabled },
-                        set: { eidTheme.setUserDisabled(!$0) }
-                    )
+            Toggle(
+                "ثيم العيد",
+                isOn: Binding(
+                    get: {
+                        // In-season: "on" = not user-disabled.
+                        // Out-of-season: "on" = force preview override.
+                        eidTheme.inSeason ? !eidTheme.userDisabled : eidTheme.forcedOn
+                    },
+                    set: { newValue in
+                        if eidTheme.inSeason {
+                            eidTheme.setUserDisabled(!newValue)
+                        } else {
+                            eidTheme.setForcedOn(newValue)
+                        }
+                    }
                 )
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: EidThemeManager.Palette.gold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .contentShape(Rectangle())
-            .onLongPressGesture(minimumDuration: 1.2) {
-                // Hidden developer affordance: long-press to flip
-                // force-on so designers can review the theme in any
-                // month. Setting this also keeps the row visible
-                // (see the surrounding `if` condition).
-                eidTheme.setForcedOn(!eidTheme.forcedOn)
-            }
+            )
+            .labelsHidden()
+            .toggleStyle(SwitchToggleStyle(tint: EidThemeManager.Palette.gold))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Subtitle text for the Eid toggle, branching on (inSeason,
+    /// userDisabled, forcedOn) so the message matches what flipping
+    /// the switch will actually do.
+    private var eidThemeSubtitle: String {
+        switch (eidTheme.inSeason, eidTheme.userDisabled, eidTheme.forcedOn) {
+        case (true, true, _):
+            return "الثيم المعتاد يظهر حتى تعيد التفعيل"
+        case (true, false, _):
+            return "خلفية موسمية تظهر تلقائياً خلال أيام الحج والعيد"
+        case (false, _, true):
+            return "وضع المعاينة مفعّل — الثيم سيظهر حتى انتهاء النافذة الفعلية"
+        case (false, _, false):
+            return "جرّب الثيم الآن — يبدأ تلقائياً يوم عرفة وينتهي بعد أيام التشريق"
         }
     }
 
