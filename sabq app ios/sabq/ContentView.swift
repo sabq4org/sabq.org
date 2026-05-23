@@ -22,10 +22,24 @@ struct ContentView: View {
     @State private var tabBarVisibility = TabBarVisibility.shared
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Seasonal Eid theme — observable so the background reacts when the
+    /// user toggles it on/off from Settings. Computed on launch + every
+    /// time the app foregrounds (see the `.onChange(of: scenePhase)`
+    /// handler near the bottom of this view).
+    @State private var eidTheme = EidThemeManager.shared
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            SabqTheme.background
-                .ignoresSafeArea()
+            // Background layer. When the Eid window is open and the
+            // user hasn't disabled it, swap in the seasonal parallax
+            // background — it sits behind everything and shows through
+            // the gaps between cards on every screen.
+            if eidTheme.isActive {
+                EidThemeBackground()
+            } else {
+                SabqTheme.background
+                    .ignoresSafeArea()
+            }
 
             NavigationStack(path: $navigationPath) {
                 Group {
@@ -156,6 +170,12 @@ struct ContentView: View {
                 if newPhase == .active && authStore.isLoggedIn {
                     Task { await notificationsStore.refreshUnreadCount() }
                     Task { await revisionsStore.refresh() }
+                }
+                // Re-check the Hijri date so the Eid theme flips on
+                // when the user opens the app right at the start of
+                // the window (or off the moment it closes).
+                if newPhase == .active {
+                    eidTheme.recompute()
                 }
             }
             .onChange(of: authStore.isLoggedIn) { _, loggedIn in
