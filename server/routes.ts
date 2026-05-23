@@ -15476,12 +15476,17 @@ Respond in valid JSON format only:
       res.status(201).json({ message: "تمت إضافة الكلمة بنجاح", word: created });
     } catch (error: any) {
       console.error("Error adding suspicious word:", error);
-      const dbMsg = error?.message || error?.detail || String(error);
+      const cause = error?.cause || {};
+      const dbMsg = cause?.message || cause?.detail || error?.message || error?.detail || String(error);
+      const dbCode = cause?.code || error?.code;
       res.status(500).json({
-        message: `فشل في إضافة الكلمة: ${dbMsg}`,
+        message: `فشل في إضافة الكلمة: [${dbCode || "?"}] ${dbMsg}`,
         error: dbMsg,
-        code: error?.code,
-        detail: error?.detail,
+        code: dbCode,
+        detail: cause?.detail || error?.detail,
+        hint: cause?.hint,
+        position: cause?.position,
+        where: cause?.where,
       });
     }
   });
@@ -15516,12 +15521,14 @@ Respond in valid JSON format only:
       res.json({ message: "تم تعديل الكلمة بنجاح", word: updated });
     } catch (error: any) {
       console.error("Error updating suspicious word:", error);
-      const dbMsg = error?.message || error?.detail || String(error);
+      const cause = error?.cause || {};
+      const dbMsg = cause?.message || cause?.detail || error?.message || error?.detail || String(error);
+      const dbCode = cause?.code || error?.code;
       res.status(500).json({
-        message: `فشل في تعديل الكلمة: ${dbMsg}`,
+        message: `فشل في تعديل الكلمة: [${dbCode || "?"}] ${dbMsg}`,
         error: dbMsg,
-        code: error?.code,
-        detail: error?.detail,
+        code: dbCode,
+        detail: cause?.detail || error?.detail,
       });
     }
   });
@@ -15545,12 +15552,14 @@ Respond in valid JSON format only:
       res.json({ message: "تم حذف الكلمة بنجاح" });
     } catch (error: any) {
       console.error("Error deleting suspicious word:", error);
-      const dbMsg = error?.message || error?.detail || String(error);
+      const cause = error?.cause || {};
+      const dbMsg = cause?.message || cause?.detail || error?.message || error?.detail || String(error);
+      const dbCode = cause?.code || error?.code;
       res.status(500).json({
-        message: `فشل في حذف الكلمة: ${dbMsg}`,
+        message: `فشل في حذف الكلمة: [${dbCode || "?"}] ${dbMsg}`,
         error: dbMsg,
-        code: error?.code,
-        detail: error?.detail,
+        code: dbCode,
+        detail: cause?.detail || error?.detail,
       });
     }
   });
@@ -15625,12 +15634,14 @@ Respond in valid JSON format only:
       });
     } catch (error: any) {
       console.error("Error adding bulk suspicious words:", error);
-      const dbMsg = error?.message || error?.detail || String(error);
+      const cause = error?.cause || {};
+      const dbMsg = cause?.message || cause?.detail || error?.message || error?.detail || String(error);
+      const dbCode = cause?.code || error?.code;
       res.status(500).json({
-        message: `فشل في إضافة الكلمات: ${dbMsg}`,
+        message: `فشل في إضافة الكلمات: [${dbCode || "?"}] ${dbMsg}`,
         error: dbMsg,
-        code: error?.code,
-        detail: error?.detail,
+        code: dbCode,
+        detail: cause?.detail || error?.detail,
       });
     }
   });
