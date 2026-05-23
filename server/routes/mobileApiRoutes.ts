@@ -1715,6 +1715,20 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       locale
     } = req.body;
 
+    // Pull the current name so we know whether the lock applies. The
+    // names are write-once: once a non-empty value exists in the row,
+    // the column becomes readonly and any later edit is silently
+    // ignored. Reasoning: an attacker who briefly takes over an account
+    // could otherwise rename it to impersonate a different commenter,
+    // turning the comments archive into a deniability laundromat.
+    const [currentRow] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+    const firstNameLocked = !!currentRow?.firstName?.trim();
+    const lastNameLocked = !!currentRow?.lastName?.trim();
+
     // Build the SET clause from ONLY the keys the client actually sent.
     // The previous implementation destructured every field from req.body,
     // so an iOS profile-edit that only changes `firstName` was effectively
@@ -1722,8 +1736,12 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     // undefined, ...}` and overwriting the rest of the columns with NULL.
     // After "save", the user's name became "مستخدم" and avatar disappeared.
     const updates: Record<string, unknown> = {};
-    if (typeof firstName === "string") updates.firstName = firstName.trim();
-    if (typeof lastName === "string") updates.lastName = lastName.trim();
+    if (typeof firstName === "string" && !firstNameLocked) {
+      updates.firstName = firstName.trim();
+    }
+    if (typeof lastName === "string" && !lastNameLocked) {
+      updates.lastName = lastName.trim();
+    }
     if (typeof profileImageUrl === "string") updates.profileImageUrl = profileImageUrl.trim();
     if (typeof gender === "string") updates.gender = gender;
     if (birthDate) updates.birthDate = new Date(birthDate);

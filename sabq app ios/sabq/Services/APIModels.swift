@@ -990,6 +990,22 @@ nonisolated struct APIUser: Decodable, Identifiable {
         return roles.first ?? role
     }
 
+    /// True when the basic personal fields needed for personalization are
+    /// filled in — drives the "البيانات الشخصية" half of the Settings
+    /// completion banner. firstName/lastName are NOT in the gate because
+    /// they're locked at registration and can't be edited later, so the
+    /// banner would never close for accounts that signed up without them.
+    var hasMinimumBasicProfile: Bool {
+        let cityFilled = !(city?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let genderFilled = !(gender?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        return cityFilled && genderFilled
+    }
+
+    /// True when at least one interest category is selected.
+    var hasAtLeastOneInterest: Bool {
+        return !interests.isEmpty
+    }
+
     var localizedRole: String {
         if let label = preferredRoleLabel {
             return label

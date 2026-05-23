@@ -777,35 +777,64 @@ export default function Profile() {
                 >
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="firstName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>الاسم الأول</FormLabel>
-                              <FormControl>
-                                <Input {...field} data-testid="input-first-name" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={form.control}
-                          name="lastName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>اسم العائلة</FormLabel>
-                              <FormControl>
-                                <Input {...field} data-testid="input-last-name" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                      {/* Names are write-once for comment integrity — once a
+                         non-empty value exists the input is read-only and the
+                         backend silently drops further updates. See PR for
+                         the security rationale. */}
+                      {(() => {
+                        const firstNameLocked = !!user?.firstName?.trim();
+                        const lastNameLocked = !!user?.lastName?.trim();
+                        return (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="firstName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>الاسم الأول</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        readOnly={firstNameLocked}
+                                        disabled={firstNameLocked}
+                                        className={firstNameLocked ? "opacity-70 cursor-not-allowed" : ""}
+                                        data-testid="input-first-name"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={form.control}
+                                name="lastName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>اسم العائلة</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        readOnly={lastNameLocked}
+                                        disabled={lastNameLocked}
+                                        className={lastNameLocked ? "opacity-70 cursor-not-allowed" : ""}
+                                        data-testid="input-last-name"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            {(firstNameLocked || lastNameLocked) && (
+                              <p className="text-xs text-muted-foreground -mt-2">
+                                لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
 
                       <FormField
                         control={form.control}
