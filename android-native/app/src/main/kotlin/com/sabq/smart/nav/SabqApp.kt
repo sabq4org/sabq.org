@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
+import com.sabq.smart.feature.auth.PendingAppleSignIn
 import com.sabq.smart.feature.auth.SmartSignUpScreen
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
 import com.sabq.smart.feature.brief.DailyBriefScreen
@@ -319,7 +320,9 @@ fun SabqApp(
                     )
                 }
                 composable(SabqRoutes.Login) {
+                    val appleNavVm: com.sabq.smart.feature.auth.AppleSignInNavViewModel = hiltViewModel()
                     LoginScreen(
+                        pendingApple = appleNavVm.pending,
                         onBack = { navController.popBackStack() },
                         onAuthenticated = { navController.popBackStack() },
                         onForgotPasswordClick = { navController.navigate(SabqRoutes.ForgotPassword) },

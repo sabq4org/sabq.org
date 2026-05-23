@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.sabq.smart.data.push.PendingPushDeepLink
 import com.sabq.smart.data.push.SabqMessagingService
+import com.sabq.smart.feature.auth.PendingAppleSignIn
 import com.sabq.smart.nav.SabqApp
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -19,12 +20,14 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var pendingPush: PendingPushDeepLink
+    @Inject lateinit var pendingApple: PendingAppleSignIn
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         capturePushExtras(intent)
+        captureAppleCallback(intent)
         setContent {
             // The whole app runs RTL. We force LayoutDirection.Rtl
             // unconditionally so iOS parity holds even if the device's
@@ -49,6 +52,25 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         capturePushExtras(intent)
+        captureAppleCallback(intent)
+    }
+
+    /** Apple sign-in deep link from
+     *  `https://sabq.org/api/auth/apple/mobile-callback` →
+     *  `sabq://auth/apple-callback?id_token=...&user=...&state=...`.
+     *  Handed off to [pendingApple] so the login screen can react. */
+    private fun captureAppleCallback(intent: Intent?) {
+        val data = intent?.data ?: return
+        val isAppleCallback = data.scheme == "sabq" &&
+            data.host == "auth" &&
+            data.path?.startsWith("/apple-callback") == true
+        if (!isAppleCallback) return
+        pendingApple.set(
+            idToken = data.getQueryParameter("id_token"),
+            userJson = data.getQueryParameter("user"),
+            state = data.getQueryParameter("state"),
+            error = data.getQueryParameter("error"),
+        )
     }
 
     private fun capturePushExtras(intent: Intent?) {

@@ -698,10 +698,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     passport.authenticate("apple")
   );
 
-  app.post("/api/auth/apple/callback", 
-    passport.authenticate("apple", { 
+  app.post("/api/auth/apple/callback",
+    passport.authenticate("apple", {
       failureRedirect: "/ar/login?error=apple_auth_failed",
-      failureMessage: true 
+      failureMessage: true
     }),
     (req, res) => {
       console.log("✅ Apple OAuth callback successful");
@@ -714,6 +714,80 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
     }
   );
+
+  // Apple Sign-In — Mobile callback.
+  //
+  // Apple has no native Android SDK, so the Android app launches a
+  // Chrome Custom Tab against `appleid.apple.com/auth/authorize` with
+  // *this* endpoint as the `redirect_uri`. Apple sends the result here
+  // via `form_post` (POST with `id_token`, `code`, `user`, `state` in
+  // `application/x-www-form-urlencoded`). We bounce it back to the app
+  // through a `sabq://auth/apple-callback` deep link the Android app
+  // intercepts via an intent filter; the app then exchanges the
+  // `id_token` at `/api/v1/auth/apple` exactly like iOS does.
+  //
+  // Two reasons we don't reuse `/api/auth/apple/callback`:
+  // 1. The web callback runs Passport's `authenticate("apple")` which
+  //    creates a session — we want the mobile path to be stateless and
+  //    let the app drive the session creation via `/api/v1/auth/apple`.
+  // 2. The web callback redirects to `/onboarding/welcome` or
+  //    `/dashboard`; mobile needs a redirect to the custom-scheme deep
+  //    link, which is incompatible with `res.redirect()` on some
+  //    browsers — JS-based redirect is more reliable for custom schemes.
+  //
+  // Apple Service ID `org.sabq.client` must list this URL in its
+  // "Return URLs" allowlist.
+  app.post("/api/auth/apple/mobile-callback", async (req, res) => {
+    try {
+      const { id_token, code, user, state, error } = (req.body ?? {}) as {
+        id_token?: string;
+        code?: string;
+        user?: string;
+        state?: string;
+        error?: string;
+      };
+
+      const deepLinkBase = "sabq://auth/apple-callback";
+      const params = new URLSearchParams();
+
+      if (error) {
+        params.set("error", error);
+      } else if (!id_token) {
+        params.set("error", "missing_id_token");
+      } else {
+        params.set("id_token", id_token);
+        if (code) params.set("code", code);
+        if (user) params.set("user", user);
+        if (state) params.set("state", state);
+      }
+
+      const deepLink = `${deepLinkBase}?${params.toString()}`;
+
+      // JS-based redirect — `res.redirect()` to a custom scheme breaks
+      // in some embedded WebViews + Chrome Custom Tabs depending on
+      // version. A minimal HTML page with `window.location.href` is
+      // the most reliable handoff path.
+      res.set("Content-Type", "text/html; charset=utf-8");
+      res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>سبق — جارٍ إكمال تسجيل الدخول…</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; text-align: center; padding-top: 40vh; color: #1f2937; }
+  </style>
+</head>
+<body>
+  <p>جارٍ إكمال تسجيل الدخول… يمكنك العودة إلى التطبيق.</p>
+  <script>window.location.href = ${JSON.stringify(deepLink)};</script>
+</body>
+</html>`);
+    } catch (err) {
+      console.error("[Apple mobile callback] error:", err);
+      res.redirect("sabq://auth/apple-callback?error=server_error");
+    }
+  });
 
   // Register
   // Reject obviously-malicious payloads at the door. We had 148 sqlmap-probe
