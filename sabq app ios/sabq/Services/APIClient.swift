@@ -1,5 +1,8 @@
 import Foundation
 import Security
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Keychain Helper
 
@@ -608,6 +611,68 @@ actor APIClient {
         return try await post(APILoginResponse.self, path: "/auth/register", body: APIRegisterRequest(
             name: name, email: email, password: password, passwordConfirmation: password
         ))
+    }
+
+    /// Exchange a Google ID token for a SABQ session. Backend route is
+    /// `POST /api/v1/auth/google` — verifies the token against the
+    /// configured iOS/web audiences, creates or links the user, and
+    /// returns a Bearer token in `APILoginResponse.token`.
+    func loginWithGoogle(idToken: String) async throws -> APILoginResponse {
+        await ensureCSRF()
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/google",
+            body: APIGoogleAuthRequest(idToken: idToken, deviceInfo: Self.currentDeviceInfo())
+        )
+    }
+
+    /// Exchange an Apple identity token for a SABQ session. Apple only
+    /// shares `fullName` and `email` on the FIRST authorization; pass nil
+    /// on subsequent sign-ins. Backend route is `POST /api/v1/auth/apple`.
+    func loginWithApple(
+        identityToken: String,
+        firstName: String?,
+        lastName: String?,
+        email: String?
+    ) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let fullName: APIAppleAuthRequest.AppleFullName? = (firstName != nil || lastName != nil)
+            ? .init(firstName: firstName, lastName: lastName)
+            : nil
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/apple",
+            body: APIAppleAuthRequest(
+                identityToken: identityToken,
+                fullName: fullName,
+                email: email,
+                deviceInfo: Self.currentDeviceInfo()
+            )
+        )
+    }
+
+    nonisolated private static func currentDeviceInfo() -> APIDeviceInfo {
+        let bundle = Bundle.main
+        let appVersion = (bundle.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
+        let build = (bundle.infoDictionary?["CFBundleVersion"] as? String) ?? "unknown"
+        #if canImport(UIKit)
+        let device = UIDevice.current
+        return APIDeviceInfo(
+            platform: "ios",
+            osVersion: device.systemVersion,
+            appVersion: "\(appVersion) (\(build))",
+            deviceName: device.model,
+            deviceId: device.identifierForVendor?.uuidString
+        )
+        #else
+        return APIDeviceInfo(
+            platform: "ios",
+            osVersion: "unknown",
+            appVersion: "\(appVersion) (\(build))",
+            deviceName: nil,
+            deviceId: nil
+        )
+        #endif
     }
 
     func fetchCurrentUser() async throws -> APIUser {
