@@ -1624,6 +1624,13 @@ router.get("/members/profile", async (req: Request, res: Response) => {
         department: users.department,
         verificationBadge: users.verificationBadge,
         hasPressCard: users.hasPressCard,
+        // Drives the "أكمل بياناتك" banner in Settings → defaults to false
+        // for accounts created via Apple/Google so the OAuth user is invited
+        // to fill in city/bio/gender + pick interests after first login.
+        isProfileComplete: users.isProfileComplete,
+        // The OAuth login endpoints set this to "apple" or "google" — iOS
+        // shows different copy depending on the provider when present.
+        authProvider: users.authProvider,
       })
       .from(users)
       .where(eq(users.id, session.userId))

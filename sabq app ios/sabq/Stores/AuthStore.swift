@@ -15,6 +15,14 @@ final class AuthStore {
     private(set) var pendingActivationUserId: String?
     private(set) var pendingActivationEmail: String?
     private(set) var isResendingActivation = false
+    /// True when the most-recent auth response surfaced
+    /// `isProfileComplete = false` — drives the "أكمل بياناتك" banner in
+    /// Settings. Kept separate from `currentUser.isProfileComplete` because
+    /// the legacy `/members/profile` payload doesn't ship the column, so a
+    /// later profile refresh used to overwrite the OAuth login signal with
+    /// `nil` and the banner vanished. Manually cleared once the user
+    /// finishes editing their profile or picks at least one interest.
+    var needsProfileCompletion: Bool = false
 
     private var loginAttempts = 0
     private var lastLoginAttempt: Date?
@@ -148,6 +156,84 @@ final class AuthStore {
         }
     }
 
+    /// Sign in with Google. Caller passes the ID token obtained from the
+    /// GoogleSignIn-iOS SDK (`GIDSignIn.sharedInstance.signIn`).
+    @MainActor
+    func loginWithGoogle(idToken: String) async {
+        isLoading = true
+        errorMessage = nil
+        successMessage = nil
+        pendingActivationUserId = nil
+        pendingActivationEmail = nil
+        do {
+            let response = try await APIClient.shared.loginWithGoogle(idToken: idToken)
+            if let token = response.token {
+                await APIClient.shared.setAuthToken(token)
+            }
+            await APIClient.shared.markAuthenticated()
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+            if let loginUser = response.user {
+                currentUser = loginUser
+                isLoggedIn = true
+                needsProfileCompletion = loginUser.isProfileComplete == false
+                SabqAnalytics.setUserId(loginUser.id)
+                SabqAnalytics.login(method: "google")
+            }
+            await fetchFullProfile()
+            await registerPushTokenAfterAuth()
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription
+        } catch {
+            errorMessage = "تعذر تسجيل الدخول عبر Google"
+        }
+        isLoading = false
+    }
+
+    /// Sign in with Apple. Apple only shares `firstName` / `lastName` /
+    /// `email` on the FIRST authorization for a given Apple ID — pass nil
+    /// on subsequent attempts. The backend matches by Apple `sub` so the
+    /// account is found even when the user info is missing.
+    @MainActor
+    func loginWithApple(
+        identityToken: String,
+        firstName: String?,
+        lastName: String?,
+        email: String?
+    ) async {
+        isLoading = true
+        errorMessage = nil
+        successMessage = nil
+        pendingActivationUserId = nil
+        pendingActivationEmail = nil
+        do {
+            let response = try await APIClient.shared.loginWithApple(
+                identityToken: identityToken,
+                firstName: firstName,
+                lastName: lastName,
+                email: email
+            )
+            if let token = response.token {
+                await APIClient.shared.setAuthToken(token)
+            }
+            await APIClient.shared.markAuthenticated()
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+            if let loginUser = response.user {
+                currentUser = loginUser
+                isLoggedIn = true
+                needsProfileCompletion = loginUser.isProfileComplete == false
+                SabqAnalytics.setUserId(loginUser.id)
+                SabqAnalytics.login(method: "apple")
+            }
+            await fetchFullProfile()
+            await registerPushTokenAfterAuth()
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription
+        } catch {
+            errorMessage = "تعذر تسجيل الدخول عبر Apple"
+        }
+        isLoading = false
+    }
+
     @MainActor
     func register(name: String, email: String, password: String) async {
         isLoading = true
@@ -197,6 +283,12 @@ final class AuthStore {
         guard isLoggedIn else { return }
         do {
             try await APIClient.shared.updateMemberInterests(categoryIds: categoryIds)
+            // Picking at least one interest is enough to clear the
+            // "أكمل بياناتك" banner — the rest (city/bio/gender) is
+            // nice-to-have, not required for personalization.
+            if !categoryIds.isEmpty {
+                needsProfileCompletion = false
+            }
             await fetchFullProfile()
         } catch {
             errorMessage = "تعذر تحديث الاهتمامات"
@@ -212,6 +304,9 @@ final class AuthStore {
                 firstName: firstName, lastName: lastName, bio: bio, city: city, gender: gender
             )
             currentUser = updated
+            // Saving the profile edit form means the user filled in the
+            // bits the OAuth provider didn't share — clear the banner.
+            needsProfileCompletion = false
             successMessage = "تم تحديث الملف الشخصي"
         } catch {
             errorMessage = error.localizedDescription
@@ -320,6 +415,7 @@ final class AuthStore {
         try? await APIClient.shared.logout()
         currentUser = nil
         isLoggedIn = false
+        needsProfileCompletion = false
         SabqAnalytics.setUserId(nil)
         unreadNotifications = 0
         successMessage = nil
@@ -335,6 +431,18 @@ final class AuthStore {
         pendingActivationEmail = nil
     }
 
+    /// Surface an error raised outside `login*` flows — used by the
+    /// social auth buttons when the iOS SDK itself fails (user cancels
+    /// rarely-typed paths, missing entitlement, etc.) BEFORE we ever
+    /// reach the backend. Keeps `errorMessage` as the single source of
+    /// truth for the login sheet.
+    @MainActor
+    func setExternalAuthError(_ message: String) {
+        errorMessage = message
+        successMessage = nil
+        isLoading = false
+    }
+
     @MainActor
     func markAllNotificationsReadLocally() {
         unreadNotifications = 0
@@ -346,6 +454,14 @@ final class AuthStore {
             await MainActor.run {
                 currentUser = user
                 isLoggedIn = true
+                // Surface the "أكمل بياناتك" banner across cold starts
+                // (foregrounding the app, killing + reopening, etc.) once
+                // the backend `/members/profile` endpoint ships the column.
+                // Until then this is a no-op — the OAuth login sets the
+                // flag explicitly and nothing here will reset it.
+                if user.isProfileComplete == false {
+                    needsProfileCompletion = true
+                }
                 SabqAnalytics.setUserId(user.id)
             }
             await refreshUnreadCount()

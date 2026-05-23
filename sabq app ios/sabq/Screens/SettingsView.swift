@@ -30,6 +30,8 @@ struct SettingsView: View {
     @State private var showContact = false
     @State private var showNewsletter = false
     @State private var showEditProfile = false
+    @State private var showInterestsPicker = false
+    @State private var interestsCategories: [APICategory] = []
     @State private var showChangePassword = false
     @State private var showDeleteAccount = false
     @State private var showForgotPassword = false
@@ -86,6 +88,19 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showEditProfile) {
             EditProfileSheet()
+        }
+        .sheet(isPresented: $showInterestsPicker) {
+            InterestsPickerSheet(
+                allCategories: interestsCategories,
+                selectedIds: Set(authStore.currentUser?.interests.map(\.id) ?? [])
+            )
+            .environment(authStore)
+        }
+        .task {
+            // Warm the shared cache so the interests sheet opens
+            // instantly when the OAuth-completion banner is tapped.
+            await InterestsCategoryCache.shared.loadIfStale()
+            interestsCategories = InterestsCategoryCache.shared.get()
         }
         .sheet(isPresented: $showChangePassword) {
             ChangePasswordSheet()
@@ -228,6 +243,102 @@ struct SettingsView: View {
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .fill(Color.orange.opacity(0.08))
+                        )
+                    }
+
+                    // Profile-completion nudge — surfaces for accounts
+                    // that signed in via Apple/Google (or any flow where
+                    // backend returned `isProfileComplete = false`) so the
+                    // reader is invited to fill in the bits the OAuth
+                    // provider didn't share (city, bio, gender, interests)
+                    // and unlock more personalized recommendations.
+                    //
+                    // Driven off `authStore.needsProfileCompletion` rather
+                    // than `user.isProfileComplete == false` because the
+                    // legacy `/members/profile` payload doesn't ship the
+                    // column, so the OAuth login signal would otherwise be
+                    // overwritten with `nil` by the follow-up profile
+                    // refresh.
+                    if authStore.needsProfileCompletion {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(SabqTheme.primaryEnd)
+                                    .frame(width: 32, height: 32)
+                                    .background(
+                                        Circle()
+                                            .fill(SabqTheme.primaryEnd.opacity(0.12))
+                                    )
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("أكمل بياناتك")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(SabqTheme.ink)
+                                    Text("ساعدنا نقدّم لك تجربة شخصية أذكى")
+                                        .font(.system(size: 12, weight: .regular))
+                                        .foregroundStyle(SabqTheme.secondaryInk)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            HStack(spacing: 8) {
+                                Button { showEditProfile = true } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "person.text.rectangle")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("البيانات الشخصية")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 9)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .fill(SabqTheme.primaryEnd)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    // Refresh categories on tap in case the
+                                    // initial .task hasn't completed yet
+                                    // (cold start, slow network).
+                                    if interestsCategories.isEmpty {
+                                        interestsCategories = InterestsCategoryCache.shared.get()
+                                    }
+                                    showInterestsPicker = true
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "slider.horizontal.3")
+                                            .font(.system(size: 12, weight: .semibold))
+                                        Text("اهتماماتك")
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(SabqTheme.primaryEnd)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 9)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .fill(SabqTheme.primaryEnd.opacity(0.10))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                            .stroke(SabqTheme.primaryEnd.opacity(0.35), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(SabqTheme.primaryEnd.opacity(0.06))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 1)
                         )
                     }
 
@@ -1087,6 +1198,8 @@ struct LoginSheet: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
+
+            SocialAuthButtons(onSuccess: { dismiss() })
 
             VStack(spacing: 16) {
                 inputField(icon: "envelope", placeholder: "البريد الإلكتروني", text: $email)

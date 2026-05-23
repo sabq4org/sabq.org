@@ -807,6 +807,31 @@ nonisolated struct APIRegisterRequest: Encodable {
     }
 }
 
+nonisolated struct APIDeviceInfo: Encodable {
+    let platform: String
+    let osVersion: String
+    let appVersion: String
+    let deviceName: String?
+    let deviceId: String?
+}
+
+nonisolated struct APIGoogleAuthRequest: Encodable {
+    let idToken: String
+    let deviceInfo: APIDeviceInfo?
+}
+
+nonisolated struct APIAppleAuthRequest: Encodable {
+    let identityToken: String
+    let fullName: AppleFullName?
+    let email: String?
+    let deviceInfo: APIDeviceInfo?
+
+    struct AppleFullName: Encodable {
+        let firstName: String?
+        let lastName: String?
+    }
+}
+
 nonisolated struct APIErrorResponse: Sendable {
     let message: String?
     /// Set by `/api/v1/auth/login` when the account exists but is still
