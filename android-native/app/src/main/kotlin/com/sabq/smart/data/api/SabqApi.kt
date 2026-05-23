@@ -128,6 +128,25 @@ interface SabqApi {
     suspend fun register(@Body body: RegisterRequest): ApiLoginResponse
 
     /**
+     * Native OAuth login via Apple Sign-In. The `identityToken` is the JWT
+     * obtained from the Apple authorization-code exchange (Custom Tab flow
+     * on Android). Backend verifies it against `APPLE_IOS_BUNDLE_ID` and
+     * `APPLE_CLIENT_ID` audiences and issues an `appMemberSessions` token.
+     * See `server/routes/v1/oauthMobile.ts:221`.
+     */
+    @POST("api/v1/auth/apple")
+    suspend fun loginWithApple(@Body body: AppleOAuthRequest): ApiLoginResponse
+
+    /**
+     * Native OAuth login via Google Sign-In through Credential Manager.
+     * Backend verifies `idToken` against `GOOGLE_CLIENT_ID` +
+     * `GOOGLE_IOS_CLIENT_ID` + `GOOGLE_ANDROID_CLIENT_ID` audiences and
+     * issues an `appMemberSessions` token. See `oauthMobile.ts:92`.
+     */
+    @POST("api/v1/auth/google")
+    suspend fun loginWithGoogle(@Body body: GoogleOAuthRequest): ApiLoginResponse
+
+    /**
      * Re-send the account-activation email when login surfaced
      * `requiresActivation: true`. Accepts either userId or email —
      * passing both lets the server pick the more reliable lookup.

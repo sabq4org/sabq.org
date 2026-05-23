@@ -23,6 +23,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +75,13 @@ fun EditProfileScreen(
     var bio by remember(user?.id) { mutableStateOf(user?.bio.orEmpty()) }
     var city by remember(user?.id) { mutableStateOf(user?.city.orEmpty()) }
     var gender by remember(user?.id) { mutableStateOf(user?.gender.orEmpty()) }
+
+    // Names are write-once for comment-archive integrity. See
+    // [[name-lock-policy]]. Once a non-empty value exists on the row the
+    // backend silently drops further updates, so the UI mirrors that by
+    // showing read-only locked fields instead of editable inputs.
+    val firstNameLocked = !user?.firstName.orEmpty().trim().isEmpty()
+    val lastNameLocked = !user?.lastName.orEmpty().trim().isEmpty()
 
     // Local override when the user picks a new image but the save
     // hasn't lifted off yet — the picker URI renders immediately.
@@ -137,18 +146,52 @@ fun EditProfileScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                SheetField(
-                    label = "الاسم الأول",
-                    value = firstName,
-                    onValueChange = { firstName = it },
-                    placeholder = "أدخل الاسم الأول",
-                )
-                SheetField(
-                    label = "اسم العائلة",
-                    value = lastName,
-                    onValueChange = { lastName = it },
-                    placeholder = "أدخل اسم العائلة",
-                )
+                if (firstNameLocked) {
+                    SheetReadOnlyField(
+                        label = "الاسم الأول",
+                        value = firstName,
+                        icon = Icons.Filled.Person,
+                    )
+                } else {
+                    SheetField(
+                        label = "الاسم الأول",
+                        value = firstName,
+                        onValueChange = { firstName = it },
+                        placeholder = "أدخل الاسم الأول",
+                    )
+                }
+                if (lastNameLocked) {
+                    SheetReadOnlyField(
+                        label = "اسم العائلة",
+                        value = lastName,
+                        icon = Icons.Filled.Person,
+                    )
+                } else {
+                    SheetField(
+                        label = "اسم العائلة",
+                        value = lastName,
+                        onValueChange = { lastName = it },
+                        placeholder = "أدخل اسم العائلة",
+                    )
+                }
+                if (firstNameLocked || lastNameLocked) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = SabqTheme.colors.tertiaryInk,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        androidx.compose.material3.Text(
+                            text = "لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات",
+                            fontSize = 11.sp,
+                            color = SabqTheme.colors.tertiaryInk,
+                        )
+                    }
+                }
                 SheetField(
                     label = "المدينة",
                     value = city,

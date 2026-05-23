@@ -26,6 +26,45 @@ data class RegisterRequest(
     @SerialName("password_confirmation") val passwordConfirmation: String,
 )
 
+/** Body for `POST /api/v1/auth/google`. Mirrors iOS `APIGoogleAuthRequest`
+ *  and the backend handler in `server/routes/v1/oauthMobile.ts:92`. The
+ *  `idToken` is the Google-issued ID JWT obtained from Credential Manager
+ *  via `GoogleIdTokenCredential.idToken`. */
+@Serializable
+data class GoogleOAuthRequest(
+    val idToken: String,
+    val deviceInfo: OAuthDeviceInfo? = null,
+)
+
+/** Body for `POST /api/v1/auth/apple`. Mirrors the backend handler in
+ *  `server/routes/v1/oauthMobile.ts:221`. `fullName` + `email` only ship
+ *  on the FIRST sign-in for a given Apple ID — backend matches by Apple
+ *  `sub` on subsequent attempts and tolerates them being null. */
+@Serializable
+data class AppleOAuthRequest(
+    val identityToken: String,
+    val fullName: AppleFullName? = null,
+    val email: String? = null,
+    val deviceInfo: OAuthDeviceInfo? = null,
+)
+
+@Serializable
+data class AppleFullName(
+    val firstName: String? = null,
+    val lastName: String? = null,
+)
+
+/** Optional device metadata included with OAuth login requests so the
+ *  session row carries platform / OS / app version for admin tools. */
+@Serializable
+data class OAuthDeviceInfo(
+    val platform: String? = null,
+    val osVersion: String? = null,
+    val appVersion: String? = null,
+    val deviceName: String? = null,
+    val deviceId: String? = null,
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ApiLoginResponse(
@@ -129,6 +168,8 @@ data class ApiUser(
     val hasPressCard: Boolean? = null,
     @JsonNames("auth_provider")
     val authProvider: String? = null,
+    @JsonNames("is_profile_complete")
+    val isProfileComplete: Boolean? = null,
     @JsonNames("created_at")
     val createdAt: String? = null,
     /** Member interest categories — populated by `/api/v1/members/profile`

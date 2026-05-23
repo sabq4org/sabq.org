@@ -116,6 +116,14 @@ fun LoginScreen(
             color = SabqTheme.colors.secondaryInk,
         )
 
+        // Apple + Google sign-in buttons. Sit above the email form so
+        // the OAuth path is the primary action; the email path is the
+        // fallback. Mirrors iOS PR #57 layout. Errors surfaced here
+        // (e.g. cancelled Google picker, missing Play Services) flow
+        // through `AuthViewModel.setExternalAuthError` and render via
+        // the existing form-state error banner.
+        SocialAuthButtons(viewModel = viewModel)
+
         SurfaceCard {
             FormField(
                 icon = Icons.Filled.AlternateEmail,

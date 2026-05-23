@@ -314,6 +314,7 @@ fun SabqApp(
                         onOpenTwitter = { openUrl("https://x.com/sabqorg") },
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
                         onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
+                        onPickInterestsClick = { navController.navigate(SabqRoutes.InterestsPicker) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
                     )
                 }

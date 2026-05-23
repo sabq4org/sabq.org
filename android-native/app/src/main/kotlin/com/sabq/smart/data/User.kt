@@ -50,6 +50,16 @@ data class User(
     val verificationBadge: String?,
     val hasPressCard: Boolean?,
     val createdAt: String?,
+    /** Indicates the OAuth providers (Apple/Google) the account is linked
+     *  to. Null on legacy email/password accounts. iOS counterpart:
+     *  `APIUser.authProvider`. */
+    val authProvider: String?,
+    /** True when the account's basic profile fields are filled in. Used
+     *  by the "أكمل بياناتك" banner alongside live field checks. iOS
+     *  PR #58 dropped the dependency on this column for the banner gate
+     *  (legacy rows defaulted to false even when complete) — Android
+     *  follows the same dynamic approach via [hasMinimumBasicProfile]. */
+    val isProfileComplete: Boolean?,
     /** Member's chosen interest categories. Empty when the user hasn't
      *  picked any yet — the DailyBrief screen surfaces an onboarding
      *  card in that case. */
@@ -106,6 +116,19 @@ data class User(
 
     val isAdminLike: Boolean
         get() = roles.plus(role).filterNotNull().any { it.lowercase() in ADMIN_LIKE_KEYS }
+
+    /** True when city + gender are filled in — drives the "البيانات
+     *  الشخصية" half of the Settings completion banner. firstName /
+     *  lastName are NOT in the gate because they're locked at
+     *  registration ([[name-lock-policy]]) and can't be edited later;
+     *  if we included them, accounts that signed up without sharing
+     *  the name would see the banner forever. */
+    val hasMinimumBasicProfile: Boolean
+        get() = !city.isNullOrBlank() && !gender.isNullOrBlank()
+
+    /** True when at least one interest category is selected. */
+    val hasAtLeastOneInterest: Boolean
+        get() = interests.isNotEmpty()
 
     companion object {
         private val WRITER_KEYS = setOf(
@@ -204,6 +227,8 @@ fun ApiUser.toDomain(): User {
         verificationBadge = verificationBadge,
         hasPressCard = hasPressCard,
         createdAt = createdAt,
+        authProvider = authProvider?.takeIf { it.isNotBlank() },
+        isProfileComplete = isProfileComplete,
         interests = interests.map { it.toDomain() },
     )
 }
