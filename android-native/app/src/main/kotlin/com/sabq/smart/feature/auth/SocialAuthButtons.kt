@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,14 +56,18 @@ import kotlinx.coroutines.launch
  * button renders a Canvas-drawn G with the official four brand colors
  * so we don't have to ship an asset.
  *
- * Apple Sign-In on Android requires a Custom-Tab + backend redirect
- * deep-link flow (Apple has no native Android SDK). The Apple button
- * here is wired to surface a "قريباً" notice until that backend piece
- * ships — Google still works fully and unblocks the majority of users.
+ * Apple Sign-In on Android uses a Chrome Custom Tab against
+ * `appleid.apple.com/auth/authorize`. The backend's
+ * `/api/auth/apple/mobile-callback` receives Apple's `form_post`
+ * response and bounces it back to the app via the
+ * `sabq://auth/apple-callback?...` deep link. [AppleSignInHelper]
+ * launches the tab; [PendingAppleSignIn] (collected here) carries the
+ * result back from the MainActivity intent filter to this composable.
  */
 @Composable
 fun SocialAuthButtons(
     viewModel: AuthViewModel,
+    pendingApple: PendingAppleSignIn,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -70,15 +75,51 @@ fun SocialAuthButtons(
     val helper = remember { GoogleSignInHelper() }
     var googleInFlight by remember { mutableStateOf(false) }
 
+    // The CSRF state we sent to Apple. Stored across the Custom-Tab
+    // round trip so we can verify Apple echoed the same value back.
+    var pendingAppleState by remember { mutableStateOf<String?>(null) }
+    val appleResult by pendingApple.result.collectAsStateWithLifecycle()
+
+    // React to the deep-link result whenever it lands.
+    androidx.compose.runtime.LaunchedEffect(appleResult) {
+        val r = appleResult ?: return@LaunchedEffect
+        // CSRF: drop the callback if state doesn't match the one we
+        // generated. Prevents a malicious deep link from completing
+        // someone else's half-finished sign-in.
+        val expected = pendingAppleState
+        when {
+            r.error != null -> {
+                viewModel.setExternalAuthError("تعذّر تسجيل الدخول عبر Apple (${r.error})")
+            }
+            r.idToken == null -> {
+                viewModel.setExternalAuthError("لم نتلقَّ رمز Apple")
+            }
+            expected != null && r.state != expected -> {
+                viewModel.setExternalAuthError("فشلت مطابقة الجلسة مع Apple — حاول مرة أخرى")
+            }
+            else -> {
+                val parsed = AppleSignInHelper.parseUserJson(r.userJson)
+                viewModel.loginWithApple(
+                    identityToken = r.idToken,
+                    firstName = parsed.firstName,
+                    lastName = parsed.lastName,
+                    email = parsed.email,
+                )
+            }
+        }
+        pendingAppleState = null
+        pendingApple.consume()
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         AppleSignInButton(
             onClick = {
-                viewModel.setExternalAuthError(
-                    "تسجيل الدخول بـ Apple على Android قريباً — يرجى استخدام Google أو البريد الإلكتروني",
-                )
+                val state = AppleSignInHelper.generateState()
+                pendingAppleState = state
+                AppleSignInHelper.launchSignIn(context, state)
             },
         )
         GoogleSignInButton(

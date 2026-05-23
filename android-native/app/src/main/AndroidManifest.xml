@@ -52,6 +52,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="sabq" android:host="push" />
             </intent-filter>
+
+            <!-- Apple Sign-In return URI. Apple has no native Android SDK,
+                 so we launch their web flow in a Chrome Custom Tab and the
+                 backend `/api/auth/apple/mobile-callback` bounces back here
+                 via `sabq://auth/apple-callback?id_token=...&user=...`. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabq" android:host="auth" android:pathPrefix="/apple-callback" />
+            </intent-filter>
         </activity>
 
         <!-- FCM entry point. Receives editorial push messages + token
