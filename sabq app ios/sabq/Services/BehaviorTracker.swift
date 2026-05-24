@@ -38,6 +38,13 @@ final class BehaviorTracker {
     // MARK: - Session lifecycle
 
     func startSession(articleId: String) {
+        // سبق Lite suppresses behavior tracking — the spec in #81 keeps
+        // the article-view event (editorial pageview) but skips the
+        // reading_history seed + dwell measurement so the reader's
+        // /insights/today counters don't grow while they're on the
+        // lighter mode by choice or by slow network.
+        if LiteModeManager.shared.shouldSuppressBehaviorTracking { return }
+
         // Idempotent — if the view re-appears (push/pop) we keep the
         // same session running rather than double-counting.
         if activeArticleId == articleId, !endedForCurrentSession {
@@ -89,6 +96,10 @@ final class BehaviorTracker {
     /// Closes the current session. Safe to call multiple times — only
     /// the first call after startSession posts.
     func endSession() {
+        // No session was ever opened while Lite is on — bail before
+        // we accidentally close a stale one from the pre-Lite reads.
+        if LiteModeManager.shared.shouldSuppressBehaviorTracking { return }
+
         guard !endedForCurrentSession, let articleId = activeArticleId else {
             return
         }

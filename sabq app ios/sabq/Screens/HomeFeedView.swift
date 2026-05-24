@@ -88,13 +88,17 @@ struct HomeFeedView: View {
     @Environment(LiteModeManager.self) private var liteManager
 
     var body: some View {
-        // Reactive switch — flipping the manager (manual toggle today,
-        // auto-trigger in Phase 3) re-renders the home screen without
-        // an app restart. The full feed below is unchanged.
-        if liteManager.isLiteActive {
-            HomeLiteView()
-        } else {
-            fullBody
+        // Reactive switch — flipping the manager (manual toggle or
+        // auto-trigger) re-renders the home screen without an app
+        // restart. The full feed below is unchanged. Banner overlay
+        // floats above whichever tree renders.
+        ZStack(alignment: .top) {
+            if liteManager.isLiteActive {
+                HomeLiteView()
+            } else {
+                fullBody
+            }
+            LiteBannerView()
         }
     }
 
