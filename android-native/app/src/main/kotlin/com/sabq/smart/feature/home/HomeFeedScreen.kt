@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.animation.core.animateFloat
@@ -201,12 +204,17 @@ private fun LoadedFeed(
         }
     }
 
+    // Drop statusBarsPadding from the PullToRefreshBox modifier and
+    // move it into LazyColumn's contentPadding — when the padding sat
+    // on the Box, the indicator's origin was pushed below the status
+    // bar AND landed inside the HomeHeaderBar's opaque background,
+    // so a pull would trigger onRefresh but the user saw nothing
+    // happen. Box now fills the full screen; the indicator floats at
+    // the top edge above the content. Reported 2026-05-24.
     androidx.compose.material3.pulltorefresh.PullToRefreshBox(
         isRefreshing = state.isRefreshing,
         onRefresh = onRefresh,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+        modifier = Modifier.fillMaxSize(),
     ) {
     LazyColumn(
         state = listState,
@@ -215,7 +223,7 @@ private fun LoadedFeed(
         contentPadding = PaddingValues(
             start = SabqTheme.dimens.screenPaddingH,
             end = SabqTheme.dimens.screenPaddingH,
-            top = 16.dp,
+            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp,
             bottom = SabqTheme.dimens.tabBarSafeArea,
         ),
         verticalArrangement = Arrangement.spacedBy(SabqTheme.dimens.sectionGap),
