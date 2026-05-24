@@ -113,12 +113,19 @@ struct ArticleDetailView: View {
     /// already-cached bitmap.
     @State private var inlineLightboxURL: URL?
 
+    @Environment(LiteModeManager.self) private var liteManager
+
     var body: some View {
         if let opinion = redirectToOpinion {
             // Slug landed here as an article but the API returned opinion
             // content — render OpinionDetailView in place so old deep links
             // still work after the article/opinion split.
             OpinionDetailView(opinion: opinion)
+        } else if liteManager.isLiteActive {
+            // Lite branch — strips related, comments, follow, reactions,
+            // analytics. Pageview still fires inside ArticleLiteView so
+            // editorial metrics aren't lost. Issue #81 Phase 2.
+            ArticleLiteView(article: article)
         } else {
             articleDetailContent
         }

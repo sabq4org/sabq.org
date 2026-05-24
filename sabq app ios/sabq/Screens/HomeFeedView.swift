@@ -82,7 +82,23 @@ struct HomeFeedView: View {
         !articlesStore.allArticles.isEmpty || !articlesStore.featuredArticles.isEmpty
     }
 
+    // Subscribe to the Lite manager so the home screen reactively
+    // swaps between the full feed and HomeLiteView. Injected from
+    // ContentView. See issue #81 for the full design.
+    @Environment(LiteModeManager.self) private var liteManager
+
     var body: some View {
+        // Reactive switch — flipping the manager (manual toggle today,
+        // auto-trigger in Phase 3) re-renders the home screen without
+        // an app restart. The full feed below is unchanged.
+        if liteManager.isLiteActive {
+            HomeLiteView()
+        } else {
+            fullBody
+        }
+    }
+
+    private var fullBody: some View {
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 if isContentReady {
