@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sabq.smart.ui.theme.SabqTheme
 import com.sabq.smart.ui.theme.brandGradient
 
@@ -74,17 +75,23 @@ fun StatusChip(
     title: String,
     tint: Color,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     val capsule = CircleShape
+    val h = if (compact) 8.dp else 11.dp
+    val v = if (compact) 4.dp else 7.dp
+    val style = if (compact) {
+        SabqTheme.typography.statusChip.copy(fontSize = 10.sp)
+    } else SabqTheme.typography.statusChip
     Row(
         modifier = modifier
             .clip(capsule)
             .background(tint.copy(alpha = 0.10f), capsule)
-            .padding(horizontal = 11.dp, vertical = 7.dp),
+            .padding(horizontal = h, vertical = v),
     ) {
         Text(
             text = title,
-            style = SabqTheme.typography.statusChip,
+            style = style,
             color = tint,
         )
     }

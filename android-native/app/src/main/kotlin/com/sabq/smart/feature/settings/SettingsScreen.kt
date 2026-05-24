@@ -133,6 +133,7 @@ fun SettingsScreen(
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val clearState by viewModel.clearLocalDataState.collectAsStateWithLifecycle()
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -201,7 +202,7 @@ fun SettingsScreen(
             AccountDangerSection(
                 onClearDataClick = { showClearConfirm = true },
                 onDeleteAccountClick = onDeleteAccountClick,
-                onLogoutClick = onLogout,
+                onLogoutClick = { showLogoutConfirm = true },
             )
         }
 
@@ -221,6 +222,17 @@ fun SettingsScreen(
         )
     }
 
+    // Logout confirmation — mirrors iOS SettingsView.swift:132-139.
+    if (showLogoutConfirm) {
+        LogoutConfirmDialog(
+            onCancel = { showLogoutConfirm = false },
+            onConfirm = {
+                showLogoutConfirm = false
+                onLogout()
+            },
+        )
+    }
+
     when (clearState) {
         SettingsViewModel.ClearLocalDataState.Cleared -> ClearLocalDataResultDialog(
             title = "تم المسح",
@@ -236,6 +248,28 @@ fun SettingsScreen(
         )
         SettingsViewModel.ClearLocalDataState.Idle -> Unit
     }
+}
+
+@Composable
+private fun LogoutConfirmDialog(onCancel: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        containerColor = SabqTheme.colors.surface,
+        titleContentColor = SabqTheme.colors.ink,
+        textContentColor = SabqTheme.colors.secondaryInk,
+        title = { Text("تسجيل الخروج؟", fontWeight = FontWeight.Bold) },
+        text = { Text("سيتم إنهاء جلستك على هذا الجهاز.") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("خروج", color = SabqTheme.colors.coral, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("إلغاء", color = SabqTheme.colors.secondaryInk)
+            }
+        },
+    )
 }
 
 @Composable

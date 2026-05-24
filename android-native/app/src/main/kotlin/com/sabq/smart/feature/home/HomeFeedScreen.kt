@@ -1,6 +1,5 @@
 package com.sabq.smart.feature.home
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +34,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Newspaper
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalFireDepartment
@@ -48,7 +48,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -192,19 +191,6 @@ private fun LoadedFeed(
 ) {
     val listState = rememberLazyListState()
 
-    // Trigger load-more when within 3 items of the end.
-    val endReached by remember {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            val total = info.totalItemsCount
-            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-            total > 0 && lastVisible >= total - 3
-        }
-    }
-    LaunchedEffect(endReached) {
-        if (endReached) onEndReached()
-    }
-
     // Re-tap on the bottom Home tab → smooth-scroll to top + refresh.
     // Wired via [TabReselectBus] which fires only when the user taps
     // the already-active Home tab (mirrors iOS SabqTabBar.onSelect).
@@ -243,12 +229,6 @@ private fun LoadedFeed(
                 onNotificationsClick = onNotificationsClick,
                 onToggleDarkMode = onToggleDarkMode,
             )
-        }
-
-        item {
-            AnimatedVisibility(state.isRefreshing) {
-                CenteredSpinner()
-            }
         }
 
         // Time-aware Arabic greeting block — ports iOS
@@ -352,7 +332,9 @@ private fun LoadedFeed(
         // them in a sheet later without re-wiring everything. iOS
         // HomeFeedView.swift line 162-165 mirrors this decision.
 
-        // Latest list (inside a SurfaceCard).
+        // Latest list — header + list inside SurfaceCard + explicit
+        // "تحميل المزيد" button (ports iOS HomeFeedView.swift:834-883).
+        item { LatestNewsHeader() }
         item {
             SurfaceCard {
                 state.articles.forEachIndexed { index, article ->
@@ -372,15 +354,17 @@ private fun LoadedFeed(
             }
         }
 
-        // Bottom load-more spinner.
-        item {
-            AnimatedVisibility(state.isLoadingMore) {
-                CenteredSpinner()
+        // Explicit "تحميل المزيد" button — replaces the previous
+        // auto-paginate-on-scroll behavior so the feed has a clear stop
+        // point matching iOS (HomeFeedView.swift:863-879).
+        if (state.hasMore && state.selectedSlug == null) {
+            item {
+                LoadMoreButton(
+                    isLoading = state.isLoadingMore,
+                    onClick = onEndReached,
+                )
             }
-        }
-
-        // End-of-list hint when no more pages.
-        if (!state.hasMore && state.articles.isNotEmpty() && !state.isLoadingMore) {
+        } else if (!state.hasMore && state.articles.isNotEmpty()) {
             item {
                 Text(
                     text = "وصلت إلى نهاية الأخبار",
@@ -1538,6 +1522,86 @@ private fun SectionRow(title: String, icon: androidx.compose.ui.graphics.vector.
                 color = SabqTheme.colors.ink,
             ),
         )
+    }
+}
+
+/**
+ * "آخر الأخبار" block header — newspaper icon + title + subtitle.
+ * Ports iOS HomeFeedView.swift:834-848 (SectionHeader). Mirrors the
+ * TrendingPreviewBlock header layout so all home blocks share the same
+ * 19/bold title + 11/medium subtitle rhythm.
+ */
+@Composable
+private fun LatestNewsHeader() {
+    val accent = SabqTheme.colors.primaryEnd
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Newspaper,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier
+                .padding(top = 2.dp)
+                .size(16.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "آخر الأخبار",
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 17.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "تابع أحدث الأخبار المحلية والعالمية",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    color = SabqTheme.colors.tertiaryInk,
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * "تحميل المزيد" — explicit pagination trigger replacing the previous
+ * scroll-end auto-loader. Ports iOS HomeFeedView.swift:863-879 button
+ * behavior: shows a spinner while loading, hidden once `hasMore` is
+ * false (handled by the caller).
+ */
+@Composable
+private fun LoadMoreButton(isLoading: Boolean, onClick: () -> Unit) {
+    val accent = SabqTheme.colors.primaryEnd
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .clickable(enabled = !isLoading) { onClick() }
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = accent,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(18.dp),
+            )
+        } else {
+            Text(
+                text = "تحميل المزيد",
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 14.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = accent,
+                ),
+            )
+        }
     }
 }
 
