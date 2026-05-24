@@ -39,13 +39,11 @@ struct KnowledgeJourneyHealthCard: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
+                .fill(SabqTheme.surface.opacity(0.55))
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
         )
         .onAppear { hk.fetchIfNeeded() }
     }
