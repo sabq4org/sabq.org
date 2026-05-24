@@ -3741,14 +3741,27 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
 
     const [created] = await db.insert(comments).values(parsed.data).returning();
 
+    // Mirror the web route's branch (server/routes.ts:12910). Mobile
+    // previously only flipped to "pending" regardless of the word's
+    // configured `action`, so words admin-configured for auto-reject
+    // still landed as pending and the AI moderation step couldn't fix
+    // them. Reported 2026-05-24: banned phrases were getting published
+    // because the mobile path bypassed the reject branch.
     if (blockedBySuspiciousWords && suspiciousCheck.foundWords.length > 0) {
       const foundWordsStr = suspiciousCheck.foundWords.map((w) => w.word).join(", ");
       const wordIds = suspiciousCheck.foundWords.map((w) => w.wordId);
+      const autoReject = suspiciousCheck.shouldAutoReject;
+      const rejectingWords = suspiciousCheck.foundWords
+        .filter((w) => w.action === "reject")
+        .map((w) => w.word);
       await db
         .update(comments)
         .set({
-          status: "pending",
-          moderationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
+          status: autoReject ? "rejected" : "pending",
+          moderatedAt: autoReject ? new Date() : undefined,
+          moderationReason: autoReject
+            ? `رُفض تلقائياً - كلمات محظورة: ${rejectingWords.join(", ")}`
+            : `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
         })
         .where(eq(comments.id, created.id));
       await incrementSuspiciousWordFlagCount(wordIds);
