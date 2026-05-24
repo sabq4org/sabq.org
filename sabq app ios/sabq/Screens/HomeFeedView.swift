@@ -1023,6 +1023,7 @@ struct HomeFeedView: View {
     private var personalJourneyBlock: some View {
         VStack(alignment: .leading, spacing: 14) {
             journeyHeader
+            KnowledgeJourneyHealthCard()
             LoyaltyStripView(onTap: { showLoyaltyAccount = true })
             journeyMetrics
             journeyInterests
