@@ -1455,22 +1455,25 @@ struct ArticleDetailView: View {
             }
 
             if authStore.isLoggedIn {
-                CommentComposer(
-                    store: store,
-                    onSubmit: { outcome in
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                            commentFeedback = .init(outcome: outcome)
+                // Top composer only when not replying — reply composer is inline below the target.
+                if store.replyingTo == nil {
+                    CommentComposer(
+                        store: store,
+                        onSubmit: { outcome in
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                commentFeedback = .init(outcome: outcome)
+                            }
+                            scheduleFeedbackDismissal()
+                        },
+                        onAuthRequired: { showLoginForCommentSheet = true },
+                        onError: { message in
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                commentFeedback = .init(message: message, isError: true)
+                            }
+                            scheduleFeedbackDismissal()
                         }
-                        scheduleFeedbackDismissal()
-                    },
-                    onAuthRequired: { showLoginForCommentSheet = true },
-                    onError: { message in
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
-                            commentFeedback = .init(message: message, isError: true)
-                        }
-                        scheduleFeedbackDismissal()
-                    }
-                )
+                    )
+                }
             } else {
                 signInPromptCard
             }
@@ -1508,6 +1511,27 @@ struct ArticleDetailView: View {
                 ForEach(store.comments) { comment in
                     CommentRow(comment: comment) { tapped in
                         store.replyingTo = tapped
+                    }
+                    // Inline reply composer appears directly below the target comment.
+                    if authStore.isLoggedIn, store.replyingTo?.id == comment.id {
+                        CommentComposer(
+                            store: store,
+                            onSubmit: { outcome in
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                    commentFeedback = .init(outcome: outcome)
+                                }
+                                scheduleFeedbackDismissal()
+                            },
+                            onAuthRequired: { showLoginForCommentSheet = true },
+                            onError: { message in
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                    commentFeedback = .init(message: message, isError: true)
+                                }
+                                scheduleFeedbackDismissal()
+                            }
+                        )
+                        .padding(.top, 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     Divider().foregroundStyle(SabqTheme.outline.opacity(0.4))
                 }

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
@@ -352,7 +353,16 @@ private fun ArticleBody(
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            // `imePadding()` keeps the comment composer visible above
+            // the soft keyboard. Without it the IME paints over the
+            // bottom of the list — the comment input becomes invisible
+            // while typing (Issue #67). Goes on the LazyColumn rather
+            // than the composer alone so the auto-scroll-to-reply
+            // behaviour for Issue #68 lands the inline composer in the
+            // visible area instead of behind the keyboard.
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding(),
             contentPadding = PaddingValues(top = topInset, bottom = 60.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
@@ -1988,16 +1998,27 @@ private fun CommentsSection(
         CommentsSectionHeader(state = state)
         feedback?.let { CommentFeedbackBanner(feedback = it, onDismiss = onFeedbackDismiss) }
         if (isSignedIn) {
-            CommentComposer(
-                replyingTo = state.replyingTo,
-                isSubmitting = state.isSubmitting,
-                onSubmit = onComposeSubmit,
-                onCancelReply = onCancelReply,
-            )
+            // Top composer only for new comments (no reply target).
+            // When replying, the composer appears inline below the target comment.
+            if (state.replyingTo == null) {
+                CommentComposer(
+                    replyingTo = null,
+                    isSubmitting = state.isSubmitting,
+                    onSubmit = onComposeSubmit,
+                    onCancelReply = onCancelReply,
+                )
+            }
         } else {
             SignInPromptCard(onLoginClick = onLoginClick)
         }
-        CommentsList(state = state, onReply = onReply, onRetryLoad = onRetryLoad)
+        CommentsList(
+            state = state,
+            isSignedIn = isSignedIn,
+            onReply = onReply,
+            onRetryLoad = onRetryLoad,
+            onComposeSubmit = onComposeSubmit,
+            onCancelReply = onCancelReply,
+        )
     }
 }
 
@@ -2021,8 +2042,11 @@ private fun CommentsSectionHeader(state: CommentsViewModel.UiState) {
 @Composable
 private fun CommentsList(
     state: CommentsViewModel.UiState,
+    isSignedIn: Boolean,
     onReply: (Comment) -> Unit,
     onRetryLoad: () -> Unit,
+    onComposeSubmit: (String) -> Unit,
+    onCancelReply: () -> Unit,
 ) {
     if (state.comments.isEmpty()) {
         when (val ls = state.loadState) {
@@ -2035,6 +2059,16 @@ private fun CommentsList(
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             state.comments.forEach { comment ->
                 CommentRow(comment = comment) { tapped -> onReply(tapped) }
+                // Inline reply composer appears directly below the target comment.
+                if (isSignedIn && comment.id == state.replyingTo?.id) {
+                    CommentComposer(
+                        replyingTo = state.replyingTo,
+                        isSubmitting = state.isSubmitting,
+                        onSubmit = onComposeSubmit,
+                        onCancelReply = onCancelReply,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.4f))
             }
         }

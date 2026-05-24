@@ -43,29 +43,30 @@ fun SurfaceCard(
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    val outlineColor = SabqTheme.colors.outline.copy(alpha = 0.5f)
+    val isDark = SabqTheme.colors.isDark
+    val outlineAlpha = if (isDark) 0.90f else 0.80f
+    val outlineColor = SabqTheme.colors.outline.copy(alpha = outlineAlpha)
+    val softElevation = if (isDark) 8.dp else 12.dp
+    val rimElevation  = if (isDark) 2.5.dp else 2.dp
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // Soft outer halo — iOS `radius: 16, y: 6`. Spot-only so the
-            // shadow sits below the card, ambient is transparent.
             .shadow(
-                elevation = 8.dp,
+                elevation = softElevation,
                 shape = shape,
-                ambientColor = Color.Transparent,
+                ambientColor = SabqTheme.colors.shadow.copy(alpha = if (isDark) 0.30f else 0.10f),
                 spotColor = SabqTheme.colors.shadow,
             )
-            // Tight under-rim — iOS `radius: 1, y: 1`.
             .shadow(
-                elevation = 1.dp,
+                elevation = rimElevation,
                 shape = shape,
                 ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.deepShadow,
             )
             .clip(shape)
             .background(SabqTheme.colors.surface, shape)
-            .border(BorderStroke(0.5.dp, outlineColor), shape),
+            .border(BorderStroke(if (isDark) 0.75.dp else 0.5.dp, outlineColor), shape),
     ) {
         if (accent != null) {
             // Decorative tinted circle in the corner — equivalent to

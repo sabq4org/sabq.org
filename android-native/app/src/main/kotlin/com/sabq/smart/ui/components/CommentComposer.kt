@@ -41,6 +41,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sabq.smart.data.Comment
 import com.sabq.smart.ui.theme.SabqTheme
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.delay
 
 /**
  * Multi-line composer + paper-plane send button. Ports iOS
@@ -51,6 +61,7 @@ import com.sabq.smart.ui.theme.SabqTheme
  * the same via `singleLine = false` + a maxLines cap on the inner
  * row.
  */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun CommentComposer(
     replyingTo: Comment?,
@@ -64,8 +75,21 @@ fun CommentComposer(
     val trimmed = text.trim()
     val isDisabled = trimmed.isEmpty() || text.length > maxLength
 
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    var isFocused by remember { mutableStateOf(false) }
+    val isImeVisible = WindowInsets.isImeVisible
+
+    LaunchedEffect(isFocused, isImeVisible) {
+        if (isFocused && isImeVisible) {
+            delay(150)
+            bringIntoViewRequester.bringIntoView()
+        }
+    }
+
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         replyingTo?.let { parent ->
@@ -82,6 +106,7 @@ fun CommentComposer(
                 onValueChange = { if (it.length <= maxLength + 200) text = it },
                 placeholder = if (replyingTo == null) "اكتب تعليقك…" else "اكتب ردك…",
                 modifier = Modifier.weight(1f),
+                onFocusChanged = { isFocused = it },
             )
 
             SendButton(
@@ -104,6 +129,7 @@ private fun ComposerField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.chipRadius)
     var focused by remember { mutableStateOf(false) }
@@ -145,7 +171,11 @@ private fun ComposerField(
             ),
             maxLines = 6,
             modifier = Modifier
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusChanged(it.isFocused)
+                },
         )
     }
 }

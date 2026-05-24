@@ -8,10 +8,10 @@ import androidx.compose.ui.graphics.Color
  * Sabq color tokens — ported 1:1 from iOS [SabqTheme] in
  * `sabq app ios/sabq/Components/SabqComponents.swift` (lines 723-825).
  *
- * Each Light/Dark pair matches the iOS dynamic UIColor declarations to
- * within rounding precision. Do not "improve" these values without
- * cross-checking with the iOS build — the user has explicitly asked for
- * visual parity, which means the exact same pixels.
+ * Most Light/Dark pairs track the iOS dynamic UIColor declarations.
+ * Background, surface, and shadow tokens are tuned for Compose because
+ * Android renders elevation more softly than SwiftUI; matching the raw
+ * iOS numbers made cards blend into the page background.
  */
 @Immutable
 data class SabqColors(
@@ -76,17 +76,17 @@ object SabqColorPalette {
      * into Color() with the 0-1 range so rounding stays identical.
      */
     fun light(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        background  = Color(0.95f, 0.97f, 0.99f, 1f),
+        background  = Color(0.895f, 0.910f, 0.930f, 1f),
         surface     = Color.White,
         ink         = Color(0.10f, 0.10f, 0.14f, 1f),
         secondaryInk = Color(0.38f, 0.40f, 0.46f, 1f),
         tertiaryInk = Color(0.56f, 0.58f, 0.64f, 1f),
-        outline     = Color(0.88f, 0.90f, 0.93f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.05f),
-        deepShadow  = Color(0f, 0f, 0f, 0.08f),
-        paleFill    = Color(0.94f, 0.97f, 0.99f, 1f),
-        softFill    = Color(0.92f, 0.95f, 0.98f, 1f),
-        warmGlow    = Color(0.95f, 0.97f, 0.99f, 1f),
+        outline     = Color(0.76f, 0.79f, 0.82f, 1f),
+        shadow      = Color(0f, 0f, 0f, 0.18f),
+        deepShadow  = Color(0f, 0f, 0f, 0.22f),
+        paleFill    = Color(0.88f, 0.91f, 0.94f, 1f),
+        softFill    = Color(0.86f, 0.895f, 0.925f, 1f),
+        warmGlow    = Color(0.90f, 0.92f, 0.94f, 1f),
         teal        = Color(0.16f, 0.65f, 0.55f, 1f),
         sky         = Color(0.22f, 0.52f, 0.95f, 1f),
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
@@ -105,17 +105,17 @@ object SabqColorPalette {
     )
 
     fun dark(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        background  = Color(0.07f, 0.07f, 0.09f, 1f),
-        surface     = Color(0.12f, 0.12f, 0.14f, 1f),
+        background  = Color(0.04f, 0.042f, 0.055f, 1f),
+        surface     = Color(0.16f, 0.165f, 0.20f, 1f),
         ink         = Color(0.95f, 0.95f, 0.97f, 1f),
         secondaryInk = Color(0.68f, 0.68f, 0.72f, 1f),
         tertiaryInk = Color(0.50f, 0.50f, 0.55f, 1f),
-        outline     = Color(0.20f, 0.20f, 0.23f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.30f),
-        deepShadow  = Color(0f, 0f, 0f, 0.40f),
-        paleFill    = Color(0.14f, 0.14f, 0.16f, 1f),
-        softFill    = Color(0.16f, 0.16f, 0.18f, 1f),
-        warmGlow    = Color(0.12f, 0.12f, 0.14f, 1f),
+        outline     = Color(0.28f, 0.29f, 0.35f, 1f),
+        shadow      = Color(0f, 0f, 0f, 0.55f),
+        deepShadow  = Color(0f, 0f, 0f, 0.65f),
+        paleFill    = Color(0.155f, 0.158f, 0.19f, 1f),
+        softFill    = Color(0.175f, 0.178f, 0.21f, 1f),
+        warmGlow    = Color(0.13f, 0.132f, 0.16f, 1f),
         teal        = Color(0.16f, 0.65f, 0.55f, 1f),
         sky         = Color(0.22f, 0.52f, 0.95f, 1f),
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
