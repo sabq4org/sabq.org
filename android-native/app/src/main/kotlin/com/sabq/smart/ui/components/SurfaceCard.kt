@@ -52,7 +52,7 @@ fun SurfaceCard(
     val frameColor = if (SabqTheme.colors.isDark) {
         SabqTheme.colors.outline
     } else {
-        Color(0xFFDEE1E5) // softer gray — was C8CCD2, dialed back per 2026-05-24 feedback
+        Color(0xFFEAECEF) // very soft gray — dialed back twice per 2026-05-24 feedback
     }
 
     Box(

@@ -68,7 +68,7 @@ fun PersonalJourneyBlock(
     val frameColor = if (SabqTheme.colors.isDark) {
         SabqTheme.colors.outline
     } else {
-        Color(0xFFDEE1E5)
+        Color(0xFFEAECEF)
     }
     Column(
         modifier = modifier
