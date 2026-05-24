@@ -400,14 +400,14 @@ private fun AuthorStatsStrip(authorPage: AuthorPage) {
         StatBox(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.Article,
-            value = formatStatsNumber(stats.articleCount),
+            value = compactCount(stats.articleCount),
             label = "مقال",
             tint = SabqTheme.colors.primaryEnd,
         )
         StatBox(
             modifier = Modifier.weight(1f),
             icon = Icons.Default.TrendingUp,
-            value = formatViews(stats.totalViews),
+            value = compactCount(stats.totalViews),
             label = "قراءة",
             tint = SabqTheme.colors.teal,
         )
@@ -539,14 +539,21 @@ private fun AuthorCategoriesSection(categories: List<AuthorCategory>) {
     }
 }
 
-private fun formatStatsNumber(num: Int): String {
-    return String.format(Locale.getDefault(), "%d", num)
-}
-
-private fun formatViews(num: Int): String {
-    return when {
-        num >= 1_000_000 -> String.format(Locale.getDefault(), "%.1fم", num / 1_000_000f)
-        num >= 1_000 -> String.format(Locale.getDefault(), "%dألف", num / 1000)
-        else -> num.toString()
+/**
+ * Compact, eye-friendly stat formatter. Latin digits + K/M suffix —
+ * 1,234 → "1,234" • 12,500 → "12.5K" • 1,200,000 → "1.2M".
+ * Mirrors iOS [SabqFormatters.compactViewCount] (SabqModels.swift:73)
+ * so author-page stats render the same on both platforms instead of
+ * a mix of Eastern Arabic locale digits and ad-hoc "ألف / م" suffixes.
+ */
+private fun compactCount(num: Int): String {
+    if (num >= 1_000_000) {
+        return String.format(Locale.US, "%.1fM", num / 1_000_000f)
     }
+    if (num >= 1_000) {
+        val thousands = num / 1_000f
+        return if (thousands % 1f == 0f) "${thousands.toInt()}K"
+        else String.format(Locale.US, "%.1fK", thousands)
+    }
+    return num.toString()
 }
