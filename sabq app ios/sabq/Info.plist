@@ -4,6 +4,8 @@
 <dict>
 	<key>NSHealthShareUsageDescription</key>
 	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
 	<key>GA4_API_SECRET</key>
 	<string>fYZEmXdzQuKjai7EUD7PXA</string>
 	<key>GA4_MEASUREMENT_ID</key>
