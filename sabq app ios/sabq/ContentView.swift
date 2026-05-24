@@ -146,6 +146,7 @@ struct ContentView: View {
             .environment(authStore)
             .environment(followedKeywords)
             .environment(revisionsStore)
+            .environment(LiteModeManager.shared)
             .onChange(of: notificationsStore.pendingDeepLink) { _, newLink in
                 guard let link = newLink else { return }
                 handleDeepLink(link)

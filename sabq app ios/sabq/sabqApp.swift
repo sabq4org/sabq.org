@@ -17,6 +17,12 @@ struct sabqApp: App {
         // tries to look it up via .font(.custom(...)).
         SabqFonts.registerAll()
 
+        // Start passive NWPathMonitor so `LiteModeManager.networkQuality`
+        // reflects the current connection from the first frame. The
+        // active speed probe + auto-trigger land in Phase 3 of #81;
+        // today this just keeps the API surface warm.
+        LiteModeManager.shared.startMonitoring()
+
         // Migrate `isDarkMode` Bool to `appAppearance` enum (3-state)
         // so users who set light/dark before the picker landed keep their
         // choice instead of being silently flipped onto "system".
