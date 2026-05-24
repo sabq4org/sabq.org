@@ -2,44 +2,71 @@ import Foundation
 import Combine
 import HealthKit
 
+/// HealthKit access is opt-in via an invitation card inside the
+/// "رحلتك المعرفية" block — the system prompt only fires after the
+/// reader taps "تفعيل" (issue #72 follow-up, 2026-05-24). Until then we
+/// never call `requestAuthorization`, so the prompt can't appear before
+/// the user has even seen the home screen.
+///
+/// Apple's HealthKit only reports `.sharingDenied` for *write*
+/// authorization. For read-only authorization there's no API to tell
+/// "granted" from "denied" — both surface as `.notDetermined`. We work
+/// around that by persisting a `hasOptedIn` flag the moment the user
+/// confirms the system sheet (the request completion fires for both
+/// allow + deny). Subsequent fetches honor that flag.
 final class HealthKitManager: ObservableObject {
 
     static let shared = HealthKitManager()
 
     private let store = HKHealthStore()
+    private let optedInKey = "sabq_health_opted_in_v1"
 
     @Published var todaySteps: Int?
     @Published var sleepHours: Int?
     @Published var sleepMinutes: Int?
+    /// True after the user has dismissed the HealthKit prompt (allow OR
+    /// deny). Drives the card's "invitation vs. metrics" state.
+    @Published private(set) var hasOptedIn: Bool
 
-    private var authorized = false
-
-    private init() {}
+    private init() {
+        self.hasOptedIn = UserDefaults.standard.bool(forKey: "sabq_health_opted_in_v1")
+    }
 
     // MARK: - Public
 
+    /// Whether the device has HealthKit at all (iPad / Mac may not).
+    var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
+
+    /// Fetch today's metrics if the user has previously opted in. No
+    /// prompt is shown here — `requestAccess` is the only path that
+    /// surfaces the system sheet.
     func fetchIfNeeded() {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
-        if authorized {
-            fetch()
-        } else {
-            requestAuthorization()
-        }
+        guard isAvailable, hasOptedIn else { return }
+        fetch()
     }
 
-    // MARK: - Authorization
-
-    private func requestAuthorization() {
+    /// User tapped "تفعيل" on the invitation card. Surfaces the system
+    /// permission sheet once; flips `hasOptedIn` on completion regardless
+    /// of the user's choice (Apple's read-auth API can't distinguish
+    /// allow from deny). Subsequent fetches read whatever the user
+    /// actually granted.
+    @MainActor
+    func requestAccess() async {
+        guard isAvailable else { return }
         guard
             let stepType  = HKQuantityType.quantityType(forIdentifier: .stepCount),
             let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
         else { return }
 
-        store.requestAuthorization(toShare: [], read: [stepType, sleepType]) { [weak self] ok, _ in
-            guard let self, ok else { return }
-            self.authorized = true
-            self.fetch()
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            store.requestAuthorization(toShare: [], read: [stepType, sleepType]) { _, _ in
+                cont.resume()
+            }
         }
+
+        UserDefaults.standard.set(true, forKey: optedInKey)
+        self.hasOptedIn = true
+        fetch()
     }
 
     // MARK: - Fetch

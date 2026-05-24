@@ -12,6 +12,36 @@ struct KnowledgeJourneyHealthCard: View {
     private let sleepAccent = Color(red: 0.36, green: 0.42, blue: 0.78)   // indigo
 
     var body: some View {
+        Group {
+            if hk.hasOptedIn {
+                metricsContent
+            } else {
+                invitationContent
+            }
+        }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity)
+        // Soft tinted fill — the parent journey block is now an opaque
+        // surface (see HomeFeedView.swift commentary), so the previous
+        // translucent fill here disappeared against it. Using the page
+        // background tone frames the row without competing with the
+        // parent card.
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
+        )
+        .onAppear { hk.fetchIfNeeded() }
+    }
+
+    // MARK: - Modes
+
+    /// Two-row metric layout shown once the user has opted in.
+    private var metricsContent: some View {
         VStack(spacing: 14) {
             metricRow(
                 symbol:    "figure.walk.motion",
@@ -34,23 +64,56 @@ struct KnowledgeJourneyHealthCard: View {
                 hint:      sleepHint
             )
         }
-        .padding(.vertical, 16)
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity)
-        // Soft tinted fill — the parent journey block is now an opaque
-        // surface (see HomeFeedView.swift commentary), so the previous
-        // translucent fill here disappeared against it. Using the page
-        // background tone frames the row without competing with the
-        // parent card.
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.background)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
-        )
-        .onAppear { hk.fetchIfNeeded() }
+    }
+
+    /// Pre-opt-in invitation. Tapping "تفعيل" is the only path that
+    /// surfaces the HealthKit permission sheet — fixes the previous
+    /// behavior where the prompt fired on first home load before the
+    /// reader had a chance to understand why (#72 follow-up).
+    private var invitationContent: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [stepsAccent.opacity(0.18), sleepAccent.opacity(0.22)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: "heart.text.square.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(sleepAccent)
+            }
+            .frame(width: 48, height: 48)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("اربط بياناتك الصحية")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                Text("اعرض خطواتك وساعات نومك ضمن رحلتك المعرفية")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                SabqHaptics.medium()
+                Task { await hk.requestAccess() }
+            } label: {
+                Text("تفعيل")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule().fill(SabqTheme.primaryEnd)
+                    )
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     // MARK: - Sub-views
