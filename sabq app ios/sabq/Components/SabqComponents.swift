@@ -1237,9 +1237,15 @@ struct FeaturedArticleCard: View {
             // .clipped()` paints the image inside that fixed frame
             // without ever asking SwiftUI to recompute layout from the
             // image's pixel size.
+            // 16:10 hero — was fixed 200pt which produced a too-short
+            // viewport that crop-clipped faces in portrait shots (the
+            // backend's focal point is centred for most photos and the
+            // resulting hero ate the top of the head). Android renders
+            // a taller hero at the same width and shows the full
+            // subject; matching it here. Reported 2026-05-24.
             Color.clear
                 .frame(maxWidth: .infinity)
-                .frame(height: 200)
+                .aspectRatio(16.0 / 10.0, contentMode: .fit)
                 .overlay {
                     if let urlString = article.imageURL, let url = URL(string: urlString) {
                         FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
