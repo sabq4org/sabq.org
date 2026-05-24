@@ -151,8 +151,10 @@ fun AudioNewslettersScreen(
             }
         }
 
-        // Top toolbar — back chevron only (RTL: visually right). iOS
+        // Top toolbar — back chevron at the start (right in RTL). iOS
         // hides the system back; we mirror that with a manual button.
+        // Back is the FIRST child of the Row so RTL places it on the
+        // right edge — same convention as every other Sabq TopBar.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -160,7 +162,6 @@ fun AudioNewslettersScreen(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Spacer(modifier = Modifier.weight(1f))
             Box(
                 modifier = Modifier
                     .size(36.dp)
@@ -176,6 +177,7 @@ fun AudioNewslettersScreen(
                     modifier = Modifier.size(16.dp),
                 )
             }
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
