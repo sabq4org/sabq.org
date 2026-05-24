@@ -99,6 +99,7 @@ struct LoyaltyCelebrationBanner: View {
                     .blur(radius: 8)
                     .padding(-2)
             )
+            .clipped()
         }
         .buttonStyle(.plain)
         .transition(.move(edge: .top).combined(with: .opacity))

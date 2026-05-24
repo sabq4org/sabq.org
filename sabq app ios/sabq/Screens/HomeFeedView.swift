@@ -100,6 +100,15 @@ struct HomeFeedView: View {
             }
             LiteBannerView()
         }
+        // Prevent horizontal scrolling — reported 2026-05-24. One of
+        // the inner blocks (LoyaltyCelebrationBanner or the featured
+        // TabView) renders slightly wider than the screen on some
+        // devices, which let the user drag the entire page left/right.
+        // clipped() + contentShape ensures only the visible frame
+        // receives touches.
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .contentShape(Rectangle())
     }
 
     private var fullBody: some View {
