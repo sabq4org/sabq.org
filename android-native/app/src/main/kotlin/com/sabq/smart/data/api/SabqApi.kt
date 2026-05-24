@@ -401,6 +401,17 @@ interface SabqApi {
         @Body body: ApiBehaviorEventRequest,
     ): retrofit2.Response<Unit>
 
+    // -- bookmarks (server-synced) ------------------------------------
+
+    @GET("api/v1/bookmarks")
+    suspend fun getBookmarks(): ApiBookmarksResponse
+
+    @POST("api/v1/bookmarks/{articleId}")
+    suspend fun addBookmark(@Path("articleId") articleId: String): retrofit2.Response<Unit>
+
+    @DELETE("api/v1/bookmarks/{articleId}")
+    suspend fun removeBookmark(@Path("articleId") articleId: String): retrofit2.Response<Unit>
+
     /**
      * AI-derived insights for an article — sentiment, credibility,
      * engagement metrics. iOS `APIClient.fetchAIInsights` (Services

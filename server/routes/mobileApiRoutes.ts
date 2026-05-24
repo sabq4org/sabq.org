@@ -6279,4 +6279,72 @@ router.get("/loyalty/redemptions/me", async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// Bookmarks — server-synced per user
+//
+// Previously bookmarks were local-only on iOS (UserDefaults) and
+// Android (DataStore). Deleting the app lost them; they didn't sync
+// across platforms. These endpoints mirror the web's
+// `/api/articles/:id/bookmark` + `/api/profile/bookmarks` but under
+// the mobile Bearer-token auth so native apps can use them.
+// ==========================================
+
+router.get("/bookmarks", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const rows = await db
+      .select({ articleId: bookmarks.articleId })
+      .from(bookmarks)
+      .where(eq(bookmarks.userId, session.userId))
+      .orderBy(desc(bookmarks.createdAt));
+
+    res.json({ success: true, articleIds: rows.map((r) => r.articleId) });
+  } catch (error) {
+    console.error("[Mobile API] GET /bookmarks error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب المحفوظات" });
+  }
+});
+
+router.post("/bookmarks/:articleId", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const articleId = req.params.articleId;
+    const [existing] = await db
+      .select({ id: bookmarks.id })
+      .from(bookmarks)
+      .where(and(eq(bookmarks.articleId, articleId), eq(bookmarks.userId, session.userId)))
+      .limit(1);
+    if (!existing) {
+      await db.insert(bookmarks).values({ articleId, userId: session.userId });
+    }
+    res.json({ success: true, isBookmarked: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /bookmarks error:", error);
+    res.status(500).json({ success: false, message: "تعذر حفظ المقال" });
+  }
+});
+
+router.delete("/bookmarks/:articleId", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const articleId = req.params.articleId;
+    await db
+      .delete(bookmarks)
+      .where(and(eq(bookmarks.articleId, articleId), eq(bookmarks.userId, session.userId)));
+    res.json({ success: true, isBookmarked: false });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /bookmarks error:", error);
+    res.status(500).json({ success: false, message: "تعذر إزالة المحفوظة" });
+  }
+});
+
 export default router;

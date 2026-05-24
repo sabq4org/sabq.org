@@ -26,7 +26,8 @@ final class BookmarksStore {
     }
 
     func toggle(_ articleID: String, article: Article? = nil) {
-        if bookmarkedIDs.contains(articleID) {
+        let wasBookmarked = bookmarkedIDs.contains(articleID)
+        if wasBookmarked {
             bookmarkedIDs.remove(articleID)
             cachedArticles.removeValue(forKey: articleID)
         } else {
@@ -35,8 +36,61 @@ final class BookmarksStore {
         }
         persist()
         persistArticleCache()
+        // Sync to server via the v1 Bearer-token endpoints. The old
+        // call to /articles/:id/bookmark used Passport auth and
+        // silently 401'd for iOS, so bookmarks never reached the DB.
         Task {
-            try? await APIClient.shared.bookmarkArticle(articleId: articleID)
+            do {
+                if wasBookmarked {
+                    try await APIClient.shared.deleteRaw(path: "/bookmarks/\(articleID)")
+                } else {
+                    try await APIClient.shared.postRaw(path: "/bookmarks/\(articleID)")
+                }
+            } catch {
+                // Best-effort — local state is authoritative; server
+                // catches up on next syncFromServer.
+            }
+        }
+    }
+
+    /// Merge server bookmarks into local state. Called once on login /
+    /// app launch when a session is active. Server is the union source:
+    /// any ID the server has that local doesn't → add locally; any ID
+    /// local has that server doesn't → push to server. This two-way
+    /// merge ensures a reinstall recovers old bookmarks AND preserves
+    /// any that were saved while offline.
+    func syncFromServer() {
+        Task {
+            do {
+                struct BookmarksResponse: Decodable {
+                    let success: Bool
+                    let articleIds: [String]
+                }
+                let response = try await APIClient.shared.get(
+                    BookmarksResponse.self,
+                    path: "/bookmarks"
+                )
+                let serverSet = Set(response.articleIds)
+                let localSet = bookmarkedIDs
+
+                // IDs on server but not local → adopt locally
+                let toAddLocally = serverSet.subtracting(localSet)
+                for id in toAddLocally {
+                    bookmarkedIDs.insert(id)
+                }
+
+                // IDs local but not on server → push to server
+                let toPushToServer = localSet.subtracting(serverSet)
+                for id in toPushToServer {
+                    try? await APIClient.shared.postRaw(path: "/bookmarks/\(id)")
+                }
+
+                if !toAddLocally.isEmpty || !toPushToServer.isEmpty {
+                    persist()
+                }
+            } catch {
+                // Offline or not logged in — keep local state as-is
+            }
         }
     }
 

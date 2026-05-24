@@ -301,6 +301,12 @@ data class ApiBehaviorEventRequest(
 )
 
 @Serializable
+data class ApiBookmarksResponse(
+    val success: Boolean,
+    val articleIds: List<String> = emptyList(),
+)
+
+@Serializable
 data class ApiAuthorPage(
     val author: ApiAuthorProfile,
     val stats: ApiAuthorStats? = null,
