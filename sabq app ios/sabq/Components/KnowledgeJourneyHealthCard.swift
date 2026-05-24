@@ -1,32 +1,42 @@
 import SwiftUI
 
-/// A compact two-column card showing today's steps and last night's sleep
-/// from HealthKit, placed inside the "رحلتك المعرفية" block on the home screen.
+/// A two-row health card showing today's steps and last night's sleep
+/// from HealthKit, with adaptive motivational captions. Placed inside
+/// the "رحلتك المعرفية" block on the home screen.
 struct KnowledgeJourneyHealthCard: View {
 
     @ObservedObject private var hk = HealthKitManager.shared
 
+    // Brand accents
+    private let stepsAccent = Color(red: 0.18, green: 0.62, blue: 0.42)   // calm green
+    private let sleepAccent = Color(red: 0.36, green: 0.42, blue: 0.78)   // indigo
+
     var body: some View {
-        HStack(spacing: 0) {
-            metricColumn(
-                symbol:  "figure.walk",
-                value:   stepsText,
-                label:   "خطوة اليوم"
+        VStack(spacing: 14) {
+            metricRow(
+                symbol:    "figure.walk.motion",
+                tint:      stepsAccent,
+                value:     stepsText,
+                unit:      "خطوة اليوم",
+                hint:      stepsHint
             )
 
             Rectangle()
-                .fill(SabqTheme.outline.opacity(0.4))
-                .frame(width: 0.5)
-                .padding(.vertical, 10)
+                .fill(SabqTheme.outline.opacity(0.35))
+                .frame(height: 0.5)
+                .padding(.horizontal, 6)
 
-            metricColumn(
-                symbol:  "moon.fill",
-                value:   sleepText,
-                label:   "ساعات النوم"
+            metricRow(
+                symbol:    "moon.stars.fill",
+                tint:      sleepAccent,
+                value:     sleepText,
+                unit:      "ساعات النوم",
+                hint:      sleepHint
             )
         }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .fill(SabqTheme.surface)
@@ -42,26 +52,39 @@ struct KnowledgeJourneyHealthCard: View {
 
     // MARK: - Sub-views
 
-    private func metricColumn(symbol: String, value: String, label: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(SabqTheme.primaryEnd)
+    private func metricRow(symbol: String, tint: Color, value: String, unit: String, hint: String) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                Image(systemName: symbol)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 46, height: 46)
 
-            Text(value)
-                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                .foregroundStyle(SabqTheme.ink)
-                .minimumScaleFactor(0.7)
-                .lineLimit(1)
-
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(value)
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                    Text(unit)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Text(hint)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk.opacity(0.85))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Formatting
+    // MARK: - Values
 
     private var stepsText: String {
         guard let steps = hk.todaySteps else { return "- -" }
@@ -75,7 +98,34 @@ struct KnowledgeJourneyHealthCard: View {
         return "\(arabicFormatted(h))س \(arabicFormatted(m))د"
     }
 
-    /// Converts an integer to Eastern Arabic digits with thousands separator.
+    // MARK: - Motivational hints
+
+    private var stepsHint: String {
+        guard let s = hk.todaySteps else {
+            return "ابدأ يومك بخطوة — جسدك سيشكرك لاحقاً"
+        }
+        switch s {
+        case 0..<1_500:    return "تحرّك قليلاً — كل خطوة تُحتسب لصحتك"
+        case 1_500..<4_000: return "بداية لطيفة — جولة قصيرة تنشّط ذهنك"
+        case 4_000..<7_000: return "تقدّم جيد — أكمل المسار لتصل الهدف"
+        case 7_000..<10_000: return "ممتاز — اقتربت من ١٠٬٠٠٠ خطوة"
+        default:            return "أحسنت! تجاوزت هدف اليوم 🎯"
+        }
+    }
+
+    private var sleepHint: String {
+        guard let h = hk.sleepHours, let m = hk.sleepMinutes else {
+            return "نوم منتظم يحسّن تركيزك وذاكرتك"
+        }
+        let total = Double(h) + Double(m) / 60.0
+        switch total {
+        case ..<5:   return "نوم قصير — حاول تعويضه الليلة بساعتين إضافيتين"
+        case 5..<6.5: return "قريب من الكفاية — أضف نصف ساعة لراحة أعمق"
+        case 6.5..<9: return "نوم متوازن — حافظ على هذا الإيقاع"
+        default:      return "نوم وفير — جسدك أخذ كفايته"
+        }
+    }
+
     private func arabicFormatted(_ n: Int) -> String {
         let formatter = NumberFormatter()
         formatter.locale      = Locale(identifier: "ar")
