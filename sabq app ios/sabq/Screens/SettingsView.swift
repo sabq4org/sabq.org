@@ -854,13 +854,19 @@ struct SettingsView: View {
             )
 
             let lite = LiteModeManager.shared
+            // Bind to the persisted MANUAL flag, not the derived
+            // `isLiteActive`. Otherwise an active auto-trigger keeps
+            // the toggle visually "on" after the user taps off — the
+            // `auto` half of `manual || auto` re-arms the binding and
+            // the toggle never appears to switch back. Reported
+            // 2026-05-24.
             settingsToggle(
                 title: "تصفح سبق Lite",
                 subtitle: "عرض الأخبار فقط — أسرع وأخف",
                 icon: "bolt.fill",
                 tint: SabqTheme.primaryEnd,
                 isOn: Binding(
-                    get: { lite.isLiteActive },
+                    get: { lite.manualEnabled },
                     set: { lite.setManualEnabled($0) }
                 )
             )

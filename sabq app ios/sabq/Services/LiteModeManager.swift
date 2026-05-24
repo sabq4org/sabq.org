@@ -63,13 +63,23 @@ final class LiteModeManager {
 
     private let storageKey = "sabqLiteModeEnabled"
 
-    private var manualEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: storageKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: storageKey)
-            recompute()
-        }
+    /// Persisted "user explicitly wants Lite" preference. Exposed so
+    /// the Settings toggle binds to THIS, not to `isLiteActive`. If the
+    /// toggle bound to the combined `isLiteActive`, the auto-trigger
+    /// could keep it stuck "on" — user reported they couldn't switch
+    /// back to Normal from Settings because the toggle re-armed itself
+    /// against the `auto` half of the OR. (Reported 2026-05-24.)
+    private(set) var manualEnabled: Bool {
+        didSet { UserDefaults.standard.set(manualEnabled, forKey: storageKey); recompute() }
     }
+
+    /// Suppress the auto-trigger for a short window after the user
+    /// explicitly turns Lite off. Without this, a single slow probe a
+    /// few seconds later would flip them right back to Lite — the
+    /// opposite of what they just asked for. 5-minute cooldown matches
+    /// the user's typical "I just changed networks" window.
+    private var autoSuppressedUntil: Date?
+    private let autoSuppressSeconds: TimeInterval = 5 * 60
 
     // MARK: - Auto-trigger state
 
@@ -101,7 +111,8 @@ final class LiteModeManager {
     private init() {
         // Seed from persisted preference so the very first frame after
         // a cold launch reflects the user's choice without a flash.
-        self.isLiteActive = UserDefaults.standard.bool(forKey: storageKey)
+        self.manualEnabled = UserDefaults.standard.bool(forKey: storageKey)
+        self.isLiteActive = self.manualEnabled
         if self.isLiteActive { self.trigger = .manual }
     }
 
@@ -149,9 +160,17 @@ final class LiteModeManager {
         SabqAnalytics.liteModeActivated(trigger: "manual")
     }
 
-    /// User flipped the Settings toggle OFF. Auto-detection resumes.
+    /// User flipped the Settings toggle OFF. Clears the auto-trigger
+    /// state too — the explicit OFF tap should mean "out of Lite right
+    /// now", not "out of manual but still in auto-Lite". Suppresses
+    /// the auto-trigger for 5 minutes so a single slow probe doesn't
+    /// snap them right back. Auto resumes after the cooldown.
     func disableManually() {
         manualEnabled = false
+        autoActive = false
+        consecutiveGoodChecks = 0
+        banner = nil
+        autoSuppressedUntil = Date().addingTimeInterval(autoSuppressSeconds)
         SabqAnalytics.liteModeDeactivated()
     }
 
@@ -203,11 +222,10 @@ final class LiteModeManager {
     // MARK: - Internal
 
     /// Recompute the public `isLiteActive` / `trigger` from the
-    /// persisted manual flag combined with the auto-trigger.
+    /// in-memory `manualEnabled` combined with the auto-trigger.
     private func recompute() {
-        let manual = UserDefaults.standard.bool(forKey: storageKey)
-        isLiteActive = manual || autoActive
-        trigger = manual ? .manual : (autoActive ? .auto : .none)
+        isLiteActive = manualEnabled || autoActive
+        trigger = manualEnabled ? .manual : (autoActive ? .auto : .none)
     }
 
     // MARK: - Speed probe
@@ -269,6 +287,8 @@ final class LiteModeManager {
         // Manual override wins — never auto-fiddle while the user has
         // explicitly opted in.
         guard !manualEnabled else { return }
+        // Cooldown after an explicit OFF tap — see `disableManually`.
+        if let until = autoSuppressedUntil, Date() < until { return }
 
         switch quality {
         case .poor:
