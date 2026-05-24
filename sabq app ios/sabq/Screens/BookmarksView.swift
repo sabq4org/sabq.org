@@ -3,7 +3,8 @@ import SwiftUI
 struct BookmarksView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
-    
+
+    @State private var isSyncing = false
 
     private var bookmarkedArticles: [Article] {
         bookmarksStore.bookmarkedArticles(from: articlesStore.allArticles)
@@ -17,8 +18,22 @@ struct BookmarksView: View {
                     subtitle: "الأخبار التي حفظتها للقراءة لاحقاً"
                 )
 
-                if bookmarkedArticles.isEmpty {
+                if isSyncing {
+                    HStack { Spacer(); ProgressView().tint(SabqTheme.primaryEnd); Spacer() }
+                        .padding(.vertical, 40)
+                } else if bookmarkedArticles.isEmpty && bookmarksStore.bookmarkedIDs.isEmpty {
                     emptyState
+                } else if bookmarkedArticles.isEmpty {
+                    // IDs exist (from server sync) but no cached metadata.
+                    // Show a hint that data is loading.
+                    VStack(spacing: 12) {
+                        ProgressView().tint(SabqTheme.primaryEnd)
+                        Text("يتم تحميل المحفوظات…")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
                 } else {
                     statsSection
                     articlesListSection
@@ -32,6 +47,15 @@ struct BookmarksView: View {
         .background(SabqTheme.background)
         .sabqRTL()
         .sabqScreen("Bookmarks")
+        .task {
+            // Sync from server on every tab visit so reinstalls +
+            // cross-platform bookmarks appear. Best-effort.
+            isSyncing = true
+            bookmarksStore.syncFromServer()
+            // Give the async sync a moment to complete.
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            isSyncing = false
+        }
     }
 
     // MARK: - Empty State
