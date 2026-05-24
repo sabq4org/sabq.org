@@ -263,17 +263,22 @@ struct ArticleDetailView: View {
                 placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
             )
         }
-        .onAppear {
+        // Behavior + analytics fire keyed off displayArticle.id so a
+        // placeholder entry (Hajj NavigationLink or sabq:// deep link
+        // where id == slug) doesn't ship the slug to /behavior/track —
+        // the server looks the id up in `articles.id`, 404s, and the
+        // read is silently dropped (insights/today counters stay zero
+        // for that read). `.task(id:)` re-fires once `fullArticle`
+        // lands and the canonical id is available; startSession is
+        // idempotent on same articleId. Reported in issue #72 item #2.
+        .task(id: displayArticle.id) {
+            guard displayArticle.id != displayArticle.slug else { return }
             SabqAnalytics.articleView(
-                id: article.id,
-                title: article.title,
-                category: article.category.title
+                id: displayArticle.id,
+                title: displayArticle.title,
+                category: displayArticle.category.title
             )
-            // Unified behavior tracker — writes reading_history seed
-            // row + bumps articles.views so iOS reads show up in the
-            // home "Reading Journey" card and the trending opinion
-            // ranking on equal footing with web reads.
-            BehaviorTracker.shared.startSession(articleId: article.id)
+            BehaviorTracker.shared.startSession(articleId: displayArticle.id)
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -415,8 +420,11 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func loadExtras() async {
-        Task { try? await APIClient.shared.trackView(articleId: article.id) }
-
+        // Defer the global view-count bump until after the detail
+        // fetch lands so placeholder entries (id == slug) don't ship
+        // the slug to /articles/{id}/view (404, view drop). Fired
+        // inside the bundle-success branch below once we know the
+        // real id.
         if let slug = article.slug {
             // Create the per-article comments store on first appearance so the
             // section can show its own skeleton while the article bundle loads.
@@ -444,6 +452,7 @@ struct ArticleDetailView: View {
                 fullArticle = bundle.article
                 relatedArticles = bundle.related
                 updateResolvedTags(from: bundle.article)
+                Task { try? await APIClient.shared.trackView(articleId: bundle.article.id) }
             } else {
                 // No news bundle for this slug. Old `sabq://article/<slug>`
                 // deep links emitted before the article/opinion split point

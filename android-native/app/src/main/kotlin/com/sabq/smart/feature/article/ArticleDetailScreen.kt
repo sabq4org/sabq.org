@@ -1791,9 +1791,24 @@ private fun TopToolbar(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Trailing buttons cluster (visual LEFT in RTL by Compose
-        // default) — share + bookmark + like.
-        // Code order is Like -> Bookmark -> Share to match iOS visual order (Like on the right of the actions group).
+        // Back chevron — FIRST in code order so RTL places it at the
+        // start (right edge). The previous order put it after a
+        // weight=1f spacer, which sent it to the left edge in RTL —
+        // visually inconsistent with the rest of the app's TopBars
+        // and with iOS's `.cancellationAction` placement. Reported
+        // 2026-05-24.
+        ToolbarIcon(
+            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = "رجوع",
+            tint = SabqTheme.colors.ink,
+            onClick = onBack,
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Actions cluster on the trailing edge (visual LEFT in RTL).
+        // Code order is Like → Bookmark → Share to match iOS layering
+        // (Like is the inner-most icon next to the article body).
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToolbarIcon(
                 icon = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
@@ -1814,17 +1829,6 @@ private fun TopToolbar(
                 onClick = onShare,
             )
         }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Back chevron (visual RIGHT in RTL). Uses arrow-forward icon
-        // so RTL flips it to a right-pointing chevron.
-        ToolbarIcon(
-            icon = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "رجوع",
-            tint = SabqTheme.colors.ink,
-            onClick = onBack,
-        )
     }
 }
 

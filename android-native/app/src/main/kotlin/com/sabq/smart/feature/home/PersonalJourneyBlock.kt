@@ -62,12 +62,20 @@ fun PersonalJourneyBlock(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    // Sharper gray frame to match SurfaceCard treatment — the previous
+    // 0.5dp / 50%-alpha outline blended with the feed background and
+    // the block lost its edge. Reported 2026-05-24.
+    val frameColor = if (SabqTheme.colors.isDark) {
+        SabqTheme.colors.outline
+    } else {
+        Color(0xFFEAECEF)
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.85f), shape)
-            .border(width = 0.5.dp, color = SabqTheme.colors.outline.copy(alpha = 0.5f), shape = shape)
+            .background(SabqTheme.colors.surface, shape)
+            .border(width = 1.dp, color = frameColor, shape = shape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {

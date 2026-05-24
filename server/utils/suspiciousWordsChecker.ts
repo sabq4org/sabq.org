@@ -18,6 +18,31 @@ export interface CheckResult {
   shouldAutoReject: boolean;
 }
 
+/**
+ * Normalize Arabic text so a stored word matches the same phrase
+ * regardless of cosmetic variations the reader typed:
+ *   - Tashkeel (diacritics U+064B..U+0652, U+0670)
+ *   - Tatweel (U+0640) — readers paste it to lengthen letters
+ *   - Hamza variants: أ إ آ ٱ → ا
+ *   - Final ى → ي
+ *   - Ta marbuta ة → ه (reader often types either form)
+ *   - Hamza-bearing letters ؤ → و, ئ → ي
+ *
+ * Without this, "كلمَة" or "كلــمة" or "أحمد" failed to match the
+ * stored "كلمة" / "احمد" — comments slipped past the filter (reported
+ * 2026-05-24, user saw banned phrases published verbatim).
+ */
+function normalizeArabic(input: string): string {
+  return input
+    .replace(/[ً-ْٰ]/g, "")  // tashkeel
+    .replace(/ـ/g, "")                  // tatweel
+    .replace(/[آأإٱ]/g, "ا") // آأإٱ → ا
+    .replace(/ى/g, "ي")            // ى → ي
+    .replace(/ة/g, "ه")            // ة → ه
+    .replace(/ؤ/g, "و")            // ؤ → و
+    .replace(/ئ/g, "ي");           // ئ → ي
+}
+
 export async function checkTextForSuspiciousWords(text: string): Promise<CheckResult> {
   try {
     const activeWords = await db
@@ -26,11 +51,11 @@ export async function checkTextForSuspiciousWords(text: string): Promise<CheckRe
       .where(eq(suspiciousWords.isActive, true));
 
     const foundWords: SuspiciousWordMatch[] = [];
-    const lowerText = text.toLowerCase();
+    const lowerText = normalizeArabic(text.toLowerCase());
 
     for (const wordEntry of activeWords) {
       let matched = false;
-      const lowerWord = wordEntry.word.toLowerCase();
+      const lowerWord = normalizeArabic(wordEntry.word.toLowerCase());
 
       switch (wordEntry.matchType) {
         case "exact":

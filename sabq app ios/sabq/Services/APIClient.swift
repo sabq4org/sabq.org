@@ -1706,6 +1706,9 @@ nonisolated private struct WrappedOrDirect<T: Decodable>: Decodable {
 nonisolated struct CommentSubmitBody: Encodable {
     let content: String
     let parentId: String?
+    /// Source platform — lets the admin Smart Moderation dashboard
+    /// show which app the comment came from. Fixed to "ios" here.
+    let platform: String = "ios"
 }
 
 // MARK: - Type Erasure for Encodable

@@ -1140,6 +1140,12 @@ export const comments = pgTable("comments", {
   aiDetectedIssues: jsonb("ai_detected_issues").$type<string[]>(), // toxicity, hate_speech, spam, etc.
   aiModerationReason: text("ai_moderation_reason"), // شرح سبب التصنيف
   aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  // Submission source — lets the moderation dashboard show whether a
+  // comment came from the web, the iOS app, or the Android app at a
+  // glance. Set by the comment-post route (mobile reads req.body
+  // platform, web hardcodes "web"). Default "web" keeps existing rows
+  // sensible after migration.
+  platform: text("platform").default("web").notNull(), // web, ios, android
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_comments_article_status").on(table.articleId, table.status),

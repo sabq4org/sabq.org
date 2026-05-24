@@ -90,6 +90,9 @@ interface ModerationResult {
     content: string;
     status: string;
     createdAt: string;
+    /** Source platform — set when the comment was posted. Drives the
+     *  small platform pill rendered on each moderation row. */
+    platform?: "web" | "ios" | "android" | string;
     user: {
       id: string;
       firstName?: string;
@@ -202,6 +205,26 @@ const SectionHeader = ({ title, color }: { title: string; color: string }) => (
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
+
+/**
+ * Small inline pill that surfaces where a comment was posted from —
+ * web (👁), iOS (🍎), or Android (🤖). Helps moderators spot mobile-
+ * specific abuse patterns at a glance.
+ */
+function PlatformBadge({ platform }: { platform?: string }) {
+  const p = (platform || "web").toLowerCase();
+  const config: Record<string, { label: string; cls: string }> = {
+    web:     { label: "ويب",     cls: "border-slate-300 text-slate-600 bg-slate-50" },
+    ios:     { label: "iOS",      cls: "border-zinc-300 text-zinc-700 bg-zinc-50" },
+    android: { label: "Android",  cls: "border-emerald-300 text-emerald-700 bg-emerald-50" },
+  };
+  const c = config[p] || config.web;
+  return (
+    <Badge variant="outline" className={`text-xs ${c.cls}`}>
+      {c.label}
+    </Badge>
+  );
+}
 
 export default function AIModerationDashboard() {
   const { toast } = useToast();
@@ -850,9 +873,10 @@ export default function AIModerationDashboard() {
                                 {result.moderationScore}%
                               </span>
                               <Badge variant="outline" className="text-xs">
-                                {result.comment.status === "pending" ? "معلق" : 
+                                {result.comment.status === "pending" ? "معلق" :
                                  result.comment.status === "approved" ? "معتمد" : "مرفوض"}
                               </Badge>
+                              <PlatformBadge platform={result.comment.platform} />
                             </div>
 
                             <p className="text-sm mb-3 line-clamp-2">{result.comment.content}</p>

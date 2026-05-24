@@ -3722,10 +3722,19 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
 
+    // Source: trust the client-declared platform but only if it's one
+    // of the two mobile values we expect. Anything else (or missing)
+    // falls back to "ios" — historically this route was iOS-only. The
+    // admin dashboard surfaces this so moderators can see whether a
+    // comment came from the web, iOS, or Android.
+    const declaredPlatform = typeof req.body?.platform === "string" ? req.body.platform : "";
+    const platform = declaredPlatform === "android" ? "android" : "ios";
+
     const parsed = insertCommentSchema.safeParse({
       ...req.body,
       articleId: article.id,
       userId: session.userId,
+      platform,
     });
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid comment data" });
@@ -3741,14 +3750,27 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
 
     const [created] = await db.insert(comments).values(parsed.data).returning();
 
+    // Mirror the web route's branch (server/routes.ts:12910). Mobile
+    // previously only flipped to "pending" regardless of the word's
+    // configured `action`, so words admin-configured for auto-reject
+    // still landed as pending and the AI moderation step couldn't fix
+    // them. Reported 2026-05-24: banned phrases were getting published
+    // because the mobile path bypassed the reject branch.
     if (blockedBySuspiciousWords && suspiciousCheck.foundWords.length > 0) {
       const foundWordsStr = suspiciousCheck.foundWords.map((w) => w.word).join(", ");
       const wordIds = suspiciousCheck.foundWords.map((w) => w.wordId);
+      const autoReject = suspiciousCheck.shouldAutoReject;
+      const rejectingWords = suspiciousCheck.foundWords
+        .filter((w) => w.action === "reject")
+        .map((w) => w.word);
       await db
         .update(comments)
         .set({
-          status: "pending",
-          moderationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
+          status: autoReject ? "rejected" : "pending",
+          moderatedAt: autoReject ? new Date() : undefined,
+          moderationReason: autoReject
+            ? `رُفض تلقائياً - كلمات محظورة: ${rejectingWords.join(", ")}`
+            : `يحتوي على كلمات مشبوهة: ${foundWordsStr}`,
         })
         .where(eq(comments.id, created.id));
       await incrementSuspiciousWordFlagCount(wordIds);

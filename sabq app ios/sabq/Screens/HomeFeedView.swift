@@ -564,12 +564,14 @@ struct HomeFeedView: View {
             // TabView so the indicator hugs the card instead of floating at
             // the bottom of the TabView frame with a Spacer-sized gap above.
             .tabViewStyle(.page(indexDisplayMode: .never))
-            // 425pt covers the worst-case featured card: 200pt hero + 40pt
-            // vertical padding + 3-line title (~80pt) + 12pt + 2-line
-            // excerpt (~45pt) + 12pt + 30pt meta row + a few pt slack. Most
-            // cards sit shorter than this; the Spacer inside still absorbs
-            // the remainder so the card top stays pinned.
-            .frame(height: 425)
+            // 470pt covers the worst-case featured card. Hero is now a
+            // 16:10 aspect frame (≈234pt on iPhone std, up to ~269pt on
+            // Pro Max-class widths) instead of the previous fixed 200pt,
+            // plus 40pt vertical padding + 3-line title (~80pt) + 12pt +
+            // 2-line excerpt (~45pt) + 12pt + 30pt meta row + slack.
+            // Spacer inside still absorbs the remainder so the card top
+            // stays pinned. Reported 2026-05-24.
+            .frame(height: 470)
 
             if featured.count > 1 {
                 HStack(spacing: 7) {
@@ -1043,15 +1045,25 @@ struct HomeFeedView: View {
     private var personalJourneyBlock: some View {
         VStack(alignment: .leading, spacing: 14) {
             journeyHeader
+            KnowledgeJourneyHealthCard()
             LoyaltyStripView(onTap: { showLoyaltyAccount = true })
             journeyMetrics
             journeyInterests
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Solid surface + soft drop shadow instead of `.ultraThinMaterial`.
+        // The material blended too closely with the page background
+        // (SabqTheme.background sits ~5% above pure white in light mode,
+        // and the material averaged to the same tone), so the block
+        // disappeared into the feed. Reported 2026-05-24. Matching the
+        // surface used by every other home card gives the journey block
+        // a clear edge without competing with the cards inside it.
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
+                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
