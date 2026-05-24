@@ -59,12 +59,26 @@ final class BookmarksStore {
     /// local has that server doesn't → push to server. This two-way
     /// merge ensures a reinstall recovers old bookmarks AND preserves
     /// any that were saved while offline.
+    ///
+    /// Also fetches article metadata for any IDs that don't have a
+    /// cached Article (e.g., after a reinstall), so the Bookmarks tab
+    /// can render titles and images without waiting for the home feed
+    /// to load.
     func syncFromServer() {
         Task {
             do {
+                struct BookmarkArticle: Decodable {
+                    let id: String
+                    let title: String?
+                    let slug: String?
+                    let imageUrl: String?
+                    let categoryName: String?
+                    let publishedAt: String?
+                }
                 struct BookmarksResponse: Decodable {
                     let success: Bool
                     let articleIds: [String]
+                    let articles: [BookmarkArticle]?
                 }
                 let response = try await APIClient.shared.get(
                     BookmarksResponse.self,
@@ -73,13 +87,11 @@ final class BookmarksStore {
                 let serverSet = Set(response.articleIds)
                 let localSet = bookmarkedIDs
 
-                // IDs on server but not local → adopt locally
                 let toAddLocally = serverSet.subtracting(localSet)
                 for id in toAddLocally {
                     bookmarkedIDs.insert(id)
                 }
 
-                // IDs local but not on server → push to server
                 let toPushToServer = localSet.subtracting(serverSet)
                 for id in toPushToServer {
                     try? await APIClient.shared.postRaw(path: "/bookmarks/\(id)")
@@ -88,6 +100,38 @@ final class BookmarksStore {
                 if !toAddLocally.isEmpty || !toPushToServer.isEmpty {
                     persist()
                 }
+
+                // Hydrate article metadata from the response so the
+                // Bookmarks tab can render titles + images even after a
+                // reinstall (no local cache). The server JOIN returns
+                // enough fields to build a minimal Article shell.
+                var didUpdateCache = false
+                for item in response.articles ?? [] {
+                    if cachedArticles[item.id] == nil {
+                        let dateFormatter = ISO8601DateFormatter()
+                        let date = item.publishedAt.flatMap { dateFormatter.date(from: $0) } ?? Date()
+                        let category = ArticleCategory.allCases.first { $0.title == item.categoryName } ?? .saudi
+                        cachedArticles[item.id] = Article(
+                            id: item.id,
+                            title: item.title ?? "",
+                            excerpt: "",
+                            aiSummary: "",
+                            body: "",
+                            bodyHTML: "",
+                            category: category,
+                            author: "",
+                            publishDate: date,
+                            isBreaking: false,
+                            isFeatured: false,
+                            tags: [],
+                            imageURL: item.imageUrl,
+                            slug: item.slug,
+                            articleURL: nil
+                        )
+                        didUpdateCache = true
+                    }
+                }
+                if didUpdateCache { persistArticleCache() }
             } catch {
                 // Offline or not logged in — keep local state as-is
             }

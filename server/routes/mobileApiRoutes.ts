@@ -6296,12 +6296,32 @@ router.get("/bookmarks", async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "غير مسجل" });
     }
     const rows = await db
-      .select({ articleId: bookmarks.articleId })
+      .select({
+        articleId: bookmarks.articleId,
+        title: articles.title,
+        slug: articles.slug,
+        imageUrl: articles.imageUrl,
+        categoryName: categories.nameAr,
+        publishedAt: articles.publishedAt,
+      })
       .from(bookmarks)
+      .innerJoin(articles, eq(bookmarks.articleId, articles.id))
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
       .where(eq(bookmarks.userId, session.userId))
       .orderBy(desc(bookmarks.createdAt));
 
-    res.json({ success: true, articleIds: rows.map((r) => r.articleId) });
+    res.json({
+      success: true,
+      articleIds: rows.map((r) => r.articleId),
+      articles: rows.map((r) => ({
+        id: r.articleId,
+        title: r.title,
+        slug: r.slug,
+        imageUrl: r.imageUrl,
+        categoryName: r.categoryName,
+        publishedAt: r.publishedAt?.toISOString() ?? null,
+      })),
+    });
   } catch (error) {
     console.error("[Mobile API] GET /bookmarks error:", error);
     res.status(500).json({ success: false, message: "تعذر جلب المحفوظات" });
