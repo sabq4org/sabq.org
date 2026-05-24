@@ -43,7 +43,17 @@ fun SurfaceCard(
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    val outlineColor = SabqTheme.colors.outline.copy(alpha = 0.5f)
+    // Sharper, fully-opaque gray frame. The previous 0.5dp / 50%-alpha
+    // outline disappeared against the light page background, so the
+    // user couldn't visually pick out where a block started or ended.
+    // Light mode uses a noticeably darker gray than `outline` (which is
+    // tuned for hairline separators); dark mode keeps the theme outline.
+    // Reported 2026-05-24.
+    val frameColor = if (SabqTheme.colors.isDark) {
+        SabqTheme.colors.outline
+    } else {
+        Color(0xFFC8CCD2) // ~78% gray, clearly visible on the cream feed bg
+    }
 
     Box(
         modifier = modifier
@@ -65,7 +75,7 @@ fun SurfaceCard(
             )
             .clip(shape)
             .background(SabqTheme.colors.surface, shape)
-            .border(BorderStroke(0.5.dp, outlineColor), shape),
+            .border(BorderStroke(1.dp, frameColor), shape),
     ) {
         if (accent != null) {
             // Decorative tinted circle in the corner — equivalent to
