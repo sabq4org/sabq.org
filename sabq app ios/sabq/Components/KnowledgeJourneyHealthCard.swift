@@ -37,13 +37,18 @@ struct KnowledgeJourneyHealthCard: View {
         .padding(.vertical, 16)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
+        // Soft tinted fill — the parent journey block is now an opaque
+        // surface (see HomeFeedView.swift commentary), so the previous
+        // translucent fill here disappeared against it. Using the page
+        // background tone frames the row without competing with the
+        // parent card.
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface.opacity(0.55))
+                .fill(SabqTheme.background)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.4), lineWidth: 0.5)
         )
         .onAppear { hk.fetchIfNeeded() }
     }

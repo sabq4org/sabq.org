@@ -1052,9 +1052,18 @@ struct HomeFeedView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Solid surface + soft drop shadow instead of `.ultraThinMaterial`.
+        // The material blended too closely with the page background
+        // (SabqTheme.background sits ~5% above pure white in light mode,
+        // and the material averaged to the same tone), so the block
+        // disappeared into the feed. Reported 2026-05-24. Matching the
+        // surface used by every other home card gives the journey block
+        // a clear edge without competing with the cards inside it.
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
+                .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
