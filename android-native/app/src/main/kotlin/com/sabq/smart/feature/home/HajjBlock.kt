@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sabq.smart.data.HajjArticle
 import com.sabq.smart.data.HajjBlock
+import com.sabq.smart.ui.theme.SabqTheme
 import com.sabq.smart.util.formatRelativeDateAr
 
 /**
@@ -56,7 +56,12 @@ fun HajjBlockSection(
     onArticleClick: (HajjArticle) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = isSystemInDarkTheme()
+    // Bind dark mode to the app-level theme (which honors the user's
+    // manual sun/moon toggle in HomeHeaderBar) instead of the OS-level
+    // `isSystemInDarkTheme()` — otherwise the block stayed ivory-gold
+    // when the user flipped the app to dark while the system was light
+    // (reported in #72).
+    val isDark = SabqTheme.colors.isDark
     val palette = remember(isDark) { hajjPalette(isDark) }
     val shape = RoundedCornerShape(20.dp)
 

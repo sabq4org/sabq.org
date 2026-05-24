@@ -50,18 +50,22 @@ fun CompactArticleRow(
     Row(
         modifier = modifier
             .clickable { onClick() }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // Text column on the LEADING edge (right in RTL, matching iOS
         // HStack iteration order under .sabqRTL()).
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusChip(title = article.category.title, tint = article.category.tint())
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                StatusChip(
+                    title = article.category.title,
+                    tint = article.category.tint(),
+                    compact = true,
+                )
                 if (article.isBreaking) BreakingPill()
             }
 
@@ -69,7 +73,7 @@ fun CompactArticleRow(
                 text = article.title,
                 style = SabqTheme.typography.compactCardTitle,
                 color = SabqTheme.colors.ink,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )
 
