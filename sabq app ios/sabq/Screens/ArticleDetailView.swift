@@ -293,12 +293,12 @@ struct ArticleDetailView: View {
 
                     Button {
                         SabqHaptics.medium()
-                        bookmarksStore.toggle(article.id, article: article)
+                        bookmarksStore.toggle(displayArticle.id, article: displayArticle)
                     } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(article.id) ? "bookmark.fill" : "bookmark")
+                        Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(
-                                bookmarksStore.isBookmarked(article.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
+                                bookmarksStore.isBookmarked(displayArticle.id) ? SabqTheme.primaryEnd : SabqTheme.secondaryInk
                             )
                             .padding(8)
                             .background(
@@ -361,7 +361,14 @@ struct ArticleDetailView: View {
     // small overlay badge once we know it. Disabled while a toggle is
     // in flight so a rapid double-tap can't create duplicate rows.
     private var likeButton: some View {
-        let isLiked = likesStore.isLiked(article.id)
+        // Bind to displayArticle.id so that entries via a placeholder
+        // (e.g. from HajjBlockView's NavigationLink, which passes
+        // Article.placeholder where id == slug) flip to the canonical
+        // backend id once `fullArticle` lands. Without this, the
+        // /react POST targets `/articles/{slug}/react` and the server
+        // silently no-ops, so the heart never appears to respond.
+        // Reported in issue #72.
+        let isLiked = likesStore.isLiked(displayArticle.id)
         return Button {
             SabqHaptics.medium()
             toggleLike()
@@ -378,11 +385,10 @@ struct ArticleDetailView: View {
 
     @MainActor
     private func refreshLikeStatus() async {
-        // Hand reconciliation to LikesStore — it knows how to merge
-        // local-cached liked-state with the server's response without
-        // dropping the user's intent if the network blips.
-        await likesStore.reconcile(article.id)
-        if let serverCount = likesStore.count(for: article.id) {
+        // Always use the resolved id — see likeButton commentary.
+        let id = displayArticle.id
+        await likesStore.reconcile(id)
+        if let serverCount = likesStore.count(for: id) {
             likesCount = serverCount
         }
     }
@@ -390,7 +396,7 @@ struct ArticleDetailView: View {
     private func toggleLike() {
         guard !isLikeBusy else { return }
         isLikeBusy = true
-        let articleId = article.id
+        let articleId = displayArticle.id
         Task { @MainActor in
             defer { isLikeBusy = false }
             if let result = await likesStore.toggle(articleId) {
@@ -838,12 +844,12 @@ struct ArticleDetailView: View {
 
             Button {
                 SabqHaptics.medium()
-                bookmarksStore.toggle(article.id, article: article)
+                bookmarksStore.toggle(displayArticle.id, article: displayArticle)
             } label: {
                 actionButton(
-                    icon: bookmarksStore.isBookmarked(article.id) ? "bookmark.fill" : "bookmark",
-                    label: bookmarksStore.isBookmarked(article.id) ? "تم الحفظ" : "حفظ",
-                    isActive: bookmarksStore.isBookmarked(article.id)
+                    icon: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark",
+                    label: bookmarksStore.isBookmarked(displayArticle.id) ? "تم الحفظ" : "حفظ",
+                    isActive: bookmarksStore.isBookmarked(displayArticle.id)
                 )
             }
             .buttonStyle(.plain)
