@@ -87,6 +87,17 @@ enum SabqAnalytics {
     ///  is the editorial event class ("published" / "scheduled" /
     /// "needs_revision" / "rejected" / etc.) so we can see which
     /// notifications actually drive opens.
+    /// "سبق Lite" mode lifecycle. `trigger` is "manual" or "auto".
+    /// Helps editorial see whether readers are opting in deliberately
+    /// vs. the auto-detector flipping them on.
+    static func liteModeActivated(trigger: String) {
+        log("lite_mode_activated", parameters: ["trigger": trigger])
+    }
+
+    static func liteModeDeactivated() {
+        log("lite_mode_deactivated", parameters: nil)
+    }
+
     static func notificationOpen(type: String, articleId: String?) {
         var params: [String: Any] = ["notification_type": type]
         if let articleId { params["article_id"] = articleId }

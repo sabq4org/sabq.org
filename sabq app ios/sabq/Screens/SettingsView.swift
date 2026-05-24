@@ -58,6 +58,7 @@ struct SettingsView: View {
                     pressCardEntrySection
                 }
                 displaySection
+                browsingExperienceSection
                 subscriptionSection
                 aboutSection
                 if authStore.isLoggedIn {
@@ -840,6 +841,29 @@ struct SettingsView: View {
                 // (see the surrounding `if` condition).
                 eidTheme.setForcedOn(!eidTheme.forcedOn)
             }
+        }
+    }
+
+    private var browsingExperienceSection: some View {
+        SurfaceCard {
+            SectionHeader(
+                title: "تجربة التصفح",
+                subtitle: "تحكّم بكثافة الواجهة",
+                icon: "bolt.fill",
+                tint: SabqTheme.primaryEnd
+            )
+
+            let lite = LiteModeManager.shared
+            settingsToggle(
+                title: "تصفح سبق Lite",
+                subtitle: "عرض الأخبار فقط — أسرع وأخف",
+                icon: "bolt.fill",
+                tint: SabqTheme.primaryEnd,
+                isOn: Binding(
+                    get: { lite.isLiteActive },
+                    set: { lite.setManualEnabled($0) }
+                )
+            )
         }
     }
 
