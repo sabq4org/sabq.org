@@ -203,6 +203,10 @@ class HomeFeedViewModel @Inject constructor(
             // hidden because [journeyInsights] remains null.
             val insightsJob = async { runCatching { insightsRepo.getToday() }.getOrNull() }
             val loyaltyJob = async { runCatching { loyaltyRepo.getSummary() }.getOrNull() }
+            // Sync bookmarks with the server (two-way merge). Best-effort
+            // — failure keeps local state. Fires on every home load so a
+            // reinstall or cross-platform session picks up server state.
+            async { runCatching { bookmarks.syncFromServer() } }
 
             val breaking = breakingJob.await().firstOrNull()
             val opinions = opinionsJob.await()

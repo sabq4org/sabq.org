@@ -1,9 +1,11 @@
 package com.sabq.smart.data
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.sabq.smart.data.api.SabqApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +33,7 @@ private val META_PREFIX = "meta:"
 @Singleton
 class BookmarksStore @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val api: SabqApi,
 ) {
     /** Reactive flow of the currently-bookmarked article IDs. */
     val ids: Flow<Set<String>> = context.bookmarksDataStore.data
@@ -49,6 +52,9 @@ class BookmarksStore @Inject constructor(
             prefs[IDS_KEY] = next
         }
         com.sabq.smart.data.analytics.SabqAnalytics.bookmarkToggle(id, resultIsBookmarked)
+        try {
+            if (resultIsBookmarked) api.addBookmark(id) else api.removeBookmark(id)
+        } catch (_: Exception) { }
     }
 
     suspend fun setBookmarked(id: String, bookmarked: Boolean) {
@@ -61,6 +67,34 @@ class BookmarksStore @Inject constructor(
 
     suspend fun clearAll() {
         context.bookmarksDataStore.edit { it.remove(IDS_KEY) }
+    }
+
+    /**
+     * Two-way merge with the server. Called once on login / app
+     * foreground when a session is active. Server IDs not local → adopt
+     * locally. Local IDs not on server → push to server. Best-effort:
+     * network failure keeps local state as-is.
+     */
+    suspend fun syncFromServer() {
+        try {
+            val response = api.getBookmarks()
+            val serverIds = response.articleIds.toSet()
+            val localIds = current()
+
+            val toAddLocally = serverIds - localIds
+            val toPush = localIds - serverIds
+
+            if (toAddLocally.isNotEmpty()) {
+                context.bookmarksDataStore.edit { prefs ->
+                    prefs[IDS_KEY] = (prefs[IDS_KEY] ?: emptySet()) + toAddLocally
+                }
+            }
+            for (id in toPush) {
+                try { api.addBookmark(id) } catch (_: Exception) { }
+            }
+        } catch (e: Exception) {
+            Log.w("BookmarksStore", "syncFromServer failed: ${e.message}")
+        }
     }
 
     @Suppress("unused")

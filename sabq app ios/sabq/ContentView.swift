@@ -171,6 +171,7 @@ struct ContentView: View {
                 if newPhase == .active && authStore.isLoggedIn {
                     Task { await notificationsStore.refreshUnreadCount() }
                     Task { await revisionsStore.refresh() }
+                    bookmarksStore.syncFromServer()
                 }
                 // Re-check the Hijri date so the Eid theme flips on
                 // when the user opens the app right at the start of
@@ -185,6 +186,7 @@ struct ContentView: View {
                 // writer's queue.
                 if loggedIn {
                     Task { await revisionsStore.refresh() }
+                    bookmarksStore.syncFromServer()
                 } else {
                     revisionsStore.clear()
                 }
