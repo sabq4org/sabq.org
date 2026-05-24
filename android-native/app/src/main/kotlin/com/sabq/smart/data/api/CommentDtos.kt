@@ -51,4 +51,7 @@ data class ApiComment(
 data class CommentSubmitBody(
     val content: String,
     val parentId: String? = null,
+    /** Source platform — drives the platform pill in the admin Smart
+     *  Moderation dashboard. Fixed to "android" here. */
+    val platform: String = "android",
 )

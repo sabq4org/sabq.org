@@ -3722,10 +3722,19 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Article not found" });
     }
 
+    // Source: trust the client-declared platform but only if it's one
+    // of the two mobile values we expect. Anything else (or missing)
+    // falls back to "ios" — historically this route was iOS-only. The
+    // admin dashboard surfaces this so moderators can see whether a
+    // comment came from the web, iOS, or Android.
+    const declaredPlatform = typeof req.body?.platform === "string" ? req.body.platform : "";
+    const platform = declaredPlatform === "android" ? "android" : "ios";
+
     const parsed = insertCommentSchema.safeParse({
       ...req.body,
       articleId: article.id,
       userId: session.userId,
+      platform,
     });
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: "Invalid comment data" });

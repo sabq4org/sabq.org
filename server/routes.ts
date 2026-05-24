@@ -12882,6 +12882,7 @@ Respond in valid JSON format only:
         ...req.body,
         articleId: article.id,
         userId,
+        platform: "web",
       });
 
       if (!parsed.success) {

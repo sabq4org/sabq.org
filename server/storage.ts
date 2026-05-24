@@ -5226,6 +5226,7 @@ export class DatabaseStorage implements IStorage {
       content: string;
       status: string;
       createdAt: string;
+      platform: string;
       user: { id: string; firstName?: string; lastName?: string; email: string };
       articleId: string;
       articleTitle?: string;
@@ -5274,6 +5275,7 @@ export class DatabaseStorage implements IStorage {
         content: r.comment.content,
         status: r.comment.status,
         createdAt: r.comment.createdAt.toISOString(),
+        platform: r.comment.platform || "web",
         user: {
           id: r.user?.id || '',
           firstName: r.user?.firstName || undefined,
