@@ -17,8 +17,8 @@ final class EidThemeManager {
     /// The Hijri month for ذو الحجة.
     private static let dhuAlHijjah = 12
 
-    /// 9 = يوم عرفة, 10 = العيد, 11–13 = أيام التشريق.
-    private static let windowStart = 9
+    /// 1 = بداية ذو الحجة, 9 = عرفة, 10 = العيد, 11–13 = التشريق.
+    private static let windowStart = 1
     private static let windowEnd = 13
 
     /// Per-Hijri-year UserDefaults key prefix. Includes the year so a
