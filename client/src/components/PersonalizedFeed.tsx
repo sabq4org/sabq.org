@@ -84,37 +84,37 @@ function MatchBadge({ match, articleId, size = "md" }: MatchBadgeProps) {
   }
 
   return (
-    <div className="space-y-1" data-testid={`block-match-${articleId}`}>
-      <div className="flex items-center gap-2 text-xs">
-        <Target className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        <span className="text-muted-foreground">نسبة التطابق</span>
+    <div className="flex items-center justify-between gap-2 text-xs" data-testid={`block-match-${articleId}`}>
+      <p
+        className="line-clamp-1 text-muted-foreground"
+        data-testid={`text-match-reason-${articleId}`}
+      >
+        {match.reason}
+      </p>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Target className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+        <span className="text-muted-foreground whitespace-nowrap">نسبة التطابق</span>
         <span
           className={`font-bold ${numColor}`}
           data-testid={`text-match-score-${articleId}`}
         >
           {match.score}%
         </span>
-      </div>
-      <div
-        className="h-1 w-full overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-valuenow={match.score}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`نسبة التطابق ${match.score}%`}
-        data-testid={`bar-match-${articleId}`}
-      >
         <div
-          className={`h-full ${barColor} transition-all`}
-          style={{ width: `${Math.max(match.score, 4)}%` }}
-        />
+          className="h-1 w-10 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={match.score}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`نسبة التطابق ${match.score}%`}
+          data-testid={`bar-match-${articleId}`}
+        >
+          <div
+            className={`h-full ${barColor} transition-all`}
+            style={{ width: `${Math.max(match.score, 4)}%` }}
+          />
+        </div>
       </div>
-      <p
-        className="line-clamp-1 text-xs text-muted-foreground"
-        data-testid={`text-match-reason-${articleId}`}
-      >
-        {match.reason}
-      </p>
     </div>
   );
 }
