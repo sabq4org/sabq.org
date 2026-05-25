@@ -21,13 +21,16 @@ android {
         // Play Store published bundles for com.sabqorg.sabq:
         //   • 9.0.1 (120) — legacy Capacitor build
         //   • 10.0.0 (121) — first native release (2026-05-21)
-        //   • 10.0.1 (122) — launcher icon update (this build)
+        //   • 10.0.1 (122) — launcher icon update
+        //   • 10.0.2 (126) — Google Sign-In project migration to Sabq Production
+        //   • 10.0.3 (127) — this build (Google Web Client switched to dedicated
+        //     mobile-backend client `664097075837-tk2a6h79...`, no client secret)
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 126
-        versionName = "10.0.2"
+        versionCode = 127
+        versionName = "10.0.3"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced
@@ -52,10 +55,16 @@ android {
         // the right SHA-1, but THAT client's value isn't passed at
         // runtime — Google figures out which Android client this APK is
         // by matching the package name + signing certificate.
+        //
+        // Project: "Sabq Production" (project number 664097075837). This is
+        // the same Google Cloud project that hosts the iOS client + the
+        // Web client used by sabq.org for Google Sign-In. Android Debug
+        // (com.sabqorg.sabq.dev) and Release (com.sabqorg.sabq) Android
+        // OAuth clients live alongside, each bound to its package + SHA-1.
         buildConfigField(
             "String",
             "GOOGLE_WEB_CLIENT_ID",
-            "\"673268181122-msfmsjj3l458dpgukll8npsbonsgolkr.apps.googleusercontent.com\"",
+            "\"664097075837-tk2a6h79sovkgu75teukvcb3bv7gfjpr.apps.googleusercontent.com\"",
         )
     }
 
