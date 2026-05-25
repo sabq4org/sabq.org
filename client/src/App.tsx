@@ -880,7 +880,7 @@ function Router() {
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
         <Route path="/dashboard/chat">{() => <LazyRoute component={ChatPage} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
-        <Route path="/discover-users">{() => <LazyRoute component={DiscoverUsers} />}</Route>
+        {/* discover-users hidden */}
         <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
         <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>

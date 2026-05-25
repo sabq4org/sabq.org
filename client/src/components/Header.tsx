@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Users, MessageSquare, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search, Eye } from "lucide-react";
+import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, MessageSquare, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search, Eye } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -159,17 +159,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                 </Link>
               )
             ))}
-            {user && (
-              <Link href="/discover-users">
-                <span 
-                  className="text-sm font-medium text-foreground hover:text-primary transition-colors whitespace-nowrap cursor-pointer" 
-                  data-testid="link-discover-users"
-                  aria-current={location === "/discover-users" ? "page" : undefined}
-                >
-                  اكتشف
-                </span>
-              </Link>
-            )}
+            {/* discover-users hidden */}
           </nav>
 
           {/* Actions - Right side */}
@@ -507,18 +497,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                 استكشف أكثر
               </h3>
               <div className="space-y-1">
-                {user && (
-                  <Link href="/discover-users">
-                    <span
-                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
-                      onClick={() => setMobileMenuOpen(false)}
-                      data-testid="link-mobile-discover-users"
-                    >
-                      <Users className="h-5 w-5 text-primary" aria-hidden="true" />
-                      اكتشف قراء
-                    </span>
-                  </Link>
-                )}
+                {/* discover-users hidden */}
                 <Link href="/categories">
                   <span
                     className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer"
