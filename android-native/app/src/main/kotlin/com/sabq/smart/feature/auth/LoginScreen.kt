@@ -122,7 +122,7 @@ fun LoginScreen(
         // (e.g. cancelled Google picker, missing Play Services) flow
         // through `AuthViewModel.setExternalAuthError` and render via
         // the existing form-state error banner.
-        SocialAuthButtons(viewModel = viewModel)
+        // SocialAuthButtons(viewModel = viewModel) // Temporarily disabled due to Google OAuth registration conflict on Google Cloud.
 
         SurfaceCard {
             FormField(
