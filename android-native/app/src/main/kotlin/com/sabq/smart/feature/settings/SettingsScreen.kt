@@ -1407,7 +1407,7 @@ private fun AppInfoSection() {
             modifier = Modifier.height(56.dp),
         )
         Text(
-            text = "الإصدار 10.0.0 (native)",
+            text = "الإصدار ${com.sabq.smart.BuildConfig.VERSION_NAME}",
             style = SabqTheme.typography.metaSmall.copy(
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

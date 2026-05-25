@@ -26,7 +26,7 @@ android {
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 125
+        versionCode = 126
         versionName = "10.0.2"
 
         // Locks the rendering locale to Arabic. We still honour the
@@ -55,7 +55,7 @@ android {
         buildConfigField(
             "String",
             "GOOGLE_WEB_CLIENT_ID",
-            "\"664097075837-63pb4ja61jjo6fnikljvmkude964451a.apps.googleusercontent.com\"",
+            "\"673268181122-msfmsjj3l458dpgukll8npsbonsgolkr.apps.googleusercontent.com\"",
         )
     }
 
@@ -96,7 +96,6 @@ android {
             // Coexist with the published app on the same device while
             // testing. Drop the suffix when shipping to Play Store.
             applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
             isMinifyEnabled = false
         }
         release {
