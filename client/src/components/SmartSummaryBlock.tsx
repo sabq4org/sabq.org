@@ -75,10 +75,7 @@ function MetricCard({ icon, label, value, color }: MetricCardProps) {
 }
 
 export function SmartSummaryBlock() {
-  const [isExpanded, setIsExpanded] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth >= 1024;
-  });
+  const [isExpanded, setIsExpanded] = useState(false);
   
   // Check if user is logged in
   const { data: user, isLoading: isLoadingUser } = useQuery<{ id: string; name?: string; email?: string }>({
