@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 const DISMISS_KEY = "sabq:hajj-greeting-dismissed:2026";
 const DHU_AL_HIJJAH = 12;
 // 9 = يوم عرفة، 10 = العيد، 11–13 = أيام التشريق
-const HAJJ_START_DAY = 9;
+const HAJJ_START_DAY = 1;
 const HAJJ_END_DAY = 13;
 
 type HijriParts = { day: number; month: number; year: number };
@@ -56,7 +56,7 @@ function writeDismissedYear(year: number) {
 }
 
 /**
- * Detects whether today (Asia/Riyadh) falls within 5–15 Dhu al-Hijjah,
+ * Detects whether today (Asia/Riyadh) falls within 1–13 Dhu al-Hijjah,
  * and tracks dismissal of the greeting banner for the duration of the window.
  *
  * The QUERY string `?hajj=force` activates the window in any month — useful
