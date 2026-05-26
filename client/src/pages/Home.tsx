@@ -32,8 +32,6 @@ const PersonalizedFeed = lazy(() =>
 const ContinueReadingWidget = lazy(() => 
   import("@/components/ContinueReadingWidget").then(module => ({ default: module.ContinueReadingWidget }))
 );
-const DeepDiveSection = lazy(() => 
-  import("@/components/DeepDiveSection").then(module => ({ default: module.DeepDiveSection }))
 );
 const TrendingTopics = lazy(() => 
   import("@/components/TrendingTopics").then(module => ({ default: module.TrendingTopics }))
@@ -380,12 +378,6 @@ export default function Home() {
         <LazySection>
           <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
             <div className="space-y-8">
-              {homepage.deepDive && homepage.deepDive.length > 0 && (
-                <div className="scroll-fade-in">
-                  <DeepDiveSection articles={homepage.deepDive} />
-                </div>
-              )}
-
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {homepage.trending && homepage.trending.length > 0 && (
                   <div className="scroll-fade-in">

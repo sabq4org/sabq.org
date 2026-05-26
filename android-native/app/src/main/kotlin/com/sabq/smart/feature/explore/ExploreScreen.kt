@@ -301,15 +301,9 @@ private fun ExploreTile(section: Section, onClick: () -> Unit = {}, modifier: Mo
                 spotColor = SabqTheme.colors.shadow,
             )
             .clip(shape)
-            .background(
-                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                    colors = listOf(
-                        tint.copy(alpha = 0.08f),
-                        SabqTheme.colors.surface,
-                    ),
-                ),
-                shape = shape,
-            )
+            // Solid white surface — user requested clean white cards
+            // instead of the tinted gradient that made tiles hard to read.
+            .background(color = SabqTheme.colors.surface, shape = shape)
             .border(width = 0.6.dp, color = tint.copy(alpha = 0.18f), shape = shape)
             .clickable { onClick() }
             .padding(16.dp),

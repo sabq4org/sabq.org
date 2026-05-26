@@ -1578,70 +1578,46 @@ struct CompactArticleRow: View {
 
 struct CategoryTile: View {
     let category: ArticleCategory
-    let action: () -> Void
 
-    // `articleCount` was removed per user request — the prominent number
-    // felt noisy and dominated the tile. Kept the initializer overload
-    // below for backwards compatibility with older call sites that still
-    // pass a count; we just ignore it.
+    init(category: ArticleCategory) {
+        self.category = category
+    }
+
     init(category: ArticleCategory, action: @escaping () -> Void) {
         self.category = category
-        self.action = action
     }
 
     init(category: ArticleCategory, articleCount: Int, action: @escaping () -> Void) {
         self.category = category
-        self.action = action
-        _ = articleCount
     }
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    SmallSquareBadge(systemImage: category.icon, tint: category.tint)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(category.tint.opacity(0.6))
-                        .padding(.top, 6)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(category.title)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundStyle(SabqTheme.ink)
-
-                    Text(category.subtitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                Spacer(minLength: 0)
+                SmallSquareBadge(systemImage: category.icon, tint: category.tint)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                category.tint.opacity(0.08),
-                                SabqTheme.surface,
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: SabqTheme.shadow, radius: 8, x: 0, y: 3)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                    .stroke(category.tint.opacity(0.18), lineWidth: 0.6)
-            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(category.title)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+
+                Text(category.subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 8, x: 0, y: 3)
+        )
     }
 }
 

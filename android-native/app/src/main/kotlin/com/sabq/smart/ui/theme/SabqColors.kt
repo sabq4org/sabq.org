@@ -76,17 +76,24 @@ object SabqColorPalette {
      * into Color() with the 0-1 range so rounding stays identical.
      */
     fun light(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        background  = Color(0.95f, 0.97f, 0.99f, 1f),
+        // Android-specific tuning: background is noticeably darker than
+        // surface so cards read as a distinct layer without heavy borders.
+        // iOS values (0.95/0.97/0.99) were too close to White on Compose.
+        background  = Color(0.91f, 0.93f, 0.95f, 1f),
         surface     = Color.White,
         ink         = Color(0.10f, 0.10f, 0.14f, 1f),
         secondaryInk = Color(0.38f, 0.40f, 0.46f, 1f),
         tertiaryInk = Color(0.56f, 0.58f, 0.64f, 1f),
-        outline     = Color(0.88f, 0.90f, 0.93f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.05f),
-        deepShadow  = Color(0f, 0f, 0f, 0.08f),
-        paleFill    = Color(0.91f, 0.93f, 0.96f, 1f),
-        softFill    = Color(0.89f, 0.91f, 0.94f, 1f),
-        warmGlow    = Color(0.92f, 0.94f, 0.96f, 1f),
+        outline     = Color(0.82f, 0.84f, 0.87f, 1f),
+        shadow      = Color(0f, 0f, 0f, 0.09f),
+        deepShadow  = Color(0f, 0f, 0f, 0.14f),
+        // Pure white family — article body, summary box, and loading
+        // states all read as one clean white surface with no visible tint.
+        paleFill    = Color(0.99f, 0.99f, 0.99f, 1f),
+        // softFill: used for summary + action bar — one clear step darker
+        // than pure white so both boxes read as distinct surfaces.
+        softFill    = Color(0.94f, 0.94f, 0.95f, 1f),
+        warmGlow    = Color(0.98f, 0.98f, 0.98f, 1f),
         teal        = Color(0.16f, 0.65f, 0.55f, 1f),
         sky         = Color(0.22f, 0.52f, 0.95f, 1f),
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
@@ -105,14 +112,16 @@ object SabqColorPalette {
     )
 
     fun dark(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        background  = Color(0.07f, 0.07f, 0.09f, 1f),
-        surface     = Color(0.12f, 0.12f, 0.14f, 1f),
+        // Android dark: background slightly darker, surface lifted further
+        // so the delta between the two layers is visible on OLED/LCD alike.
+        background  = Color(0.05f, 0.05f, 0.07f, 1f),
+        surface     = Color(0.14f, 0.14f, 0.17f, 1f),
         ink         = Color(0.95f, 0.95f, 0.97f, 1f),
         secondaryInk = Color(0.68f, 0.68f, 0.72f, 1f),
         tertiaryInk = Color(0.50f, 0.50f, 0.55f, 1f),
-        outline     = Color(0.20f, 0.20f, 0.23f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.30f),
-        deepShadow  = Color(0f, 0f, 0f, 0.40f),
+        outline     = Color(0.26f, 0.26f, 0.30f, 1f),
+        shadow      = Color(0f, 0f, 0f, 0.40f),
+        deepShadow  = Color(0f, 0f, 0f, 0.55f),
         paleFill    = Color(0.14f, 0.14f, 0.16f, 1f),
         softFill    = Color(0.16f, 0.16f, 0.18f, 1f),
         warmGlow    = Color(0.12f, 0.12f, 0.14f, 1f),

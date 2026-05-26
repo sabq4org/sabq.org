@@ -351,9 +351,11 @@ private fun ArticleBody(
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
 
     val focusBackground = if (isFocusMode) {
+        // Focus/reader mode: warm sepia (light) or deep warm dark.
         if (SabqTheme.colors.isDark) Color(0xFF1A1714) else Color(0xFFFAF2E8)
     } else {
-        SabqTheme.colors.surface
+        // Normal mode: pure white — article body reads as clean white page.
+        if (SabqTheme.colors.isDark) SabqTheme.colors.surface else Color.White
     }
     Box(modifier = Modifier.fillMaxSize().background(focusBackground)) {
         LazyColumn(
@@ -880,9 +882,8 @@ private fun SmartSummaryCard(article: Article) {
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.85f), shape)
-            .background(SabqTheme.colors.primaryEnd.copy(alpha = 0.04f), shape)
-            .border(width = 0.5.dp, color = SabqTheme.colors.primaryEnd.copy(alpha = 0.18f), shape = shape)
+            .background(SabqTheme.colors.softFill, shape)
+            .border(width = 1.dp, color = SabqTheme.colors.outline, shape = shape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -1483,9 +1484,8 @@ private fun ActionBar(
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(shape)
-            .background(SabqTheme.colors.surface.copy(alpha = 0.85f), shape)
-            .background(SabqTheme.colors.paleFill.copy(alpha = 0.4f), shape)
-            .border(width = 0.5.dp, color = SabqTheme.colors.outline.copy(alpha = 0.4f), shape = shape)
+            .background(SabqTheme.colors.softFill, shape)
+            .border(width = 1.dp, color = SabqTheme.colors.outline, shape = shape)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(0.dp),

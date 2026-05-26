@@ -3,9 +3,7 @@ import SwiftUI
 struct SectionsView: View {
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
-    @State private var selectedCategory: ArticleCategory?
     @State private var trendingTags: [String] = []
-    @State private var categoryCounts: [String: Int] = [:]
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -22,13 +20,10 @@ struct SectionsView: View {
 
                 LazyVGrid(columns: columns, spacing: 14) {
                     ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { index, category in
-                        CategoryTile(
-                            category: category,
-                            articleCount: categoryCounts[category.slug] ?? articlesStore.articleCount(for: category)
-                        ) {
-                            SabqHaptics.light()
-                            selectedCategory = category
+                        NavigationLink(value: category) {
+                            CategoryTile(category: category)
                         }
+                        .buttonStyle(.plain)
                         .animatedAppear(index: index)
                     }
                 }
@@ -42,21 +37,11 @@ struct SectionsView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .sheet(item: $selectedCategory) { category in
-            CategoryArticlesSheet(category: category)
+        .navigationDestination(for: ArticleCategory.self) { category in
+            CategoryArticlesView(category: category)
         }
         .task {
-            async let cats = NewsService.fetchCategories()
-            async let keywords = NewsService.fetchTrending()
-
-            let fetchedCats = await cats
-            for cat in fetchedCats {
-                if let slug = cat.slug, let count = cat.articlesCount {
-                    categoryCounts[slug] = count
-                }
-            }
-
-            let fetchedKeywords = await keywords
+            let fetchedKeywords = await NewsService.fetchTrending()
             if !fetchedKeywords.isEmpty {
                 trendingTags = fetchedKeywords
             } else if !articlesStore.trendingKeywords.isEmpty {
@@ -100,9 +85,9 @@ struct SectionsView: View {
     }
 }
 
-// MARK: - Category Articles Sheet
+// MARK: - Category Articles View
 
-struct CategoryArticlesSheet: View {
+struct CategoryArticlesView: View {
     let category: ArticleCategory
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
@@ -110,94 +95,84 @@ struct CategoryArticlesSheet: View {
     @State private var isLoading = true
     @State private var hasMore = false
     @State private var currentPage = 1
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
-                    heroSection
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                heroSection
 
-                    if isLoading && categoryArticles.isEmpty {
-                        VStack(spacing: 16) {
-                            ForEach(0..<5, id: \.self) { _ in
-                                ArticleRowSkeleton()
-                                Divider().foregroundStyle(SabqTheme.outline.opacity(0.3))
-                            }
+                if isLoading && categoryArticles.isEmpty {
+                    VStack(spacing: 16) {
+                        ForEach(0..<5, id: \.self) { _ in
+                            ArticleRowSkeleton()
+                            Divider().foregroundStyle(SabqTheme.outline.opacity(0.3))
                         }
-                        .padding(20)
-                        .background(
-                            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                                .fill(SabqTheme.surface)
-                                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
-                        )
-                    } else if categoryArticles.isEmpty {
-                        EmptyStateView(
-                            icon: category.icon,
-                            tint: category.tint,
-                            title: "لا توجد أخبار",
-                            subtitle: "لم نجد أخباراً في هذا القسم حالياً"
-                        )
-                    } else {
-                        SurfaceCard {
-                            ForEach(Array(categoryArticles.enumerated()), id: \.element.id) { index, article in
-                                if index > 0 {
-                                    Divider()
-                                        .foregroundStyle(SabqTheme.outline)
-                                }
-
-                                NavigationLink(value: article) {
-                                    CompactArticleRow(
-                                        article: article,
-                                        onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                        isBookmarked: bookmarksStore.isBookmarked(article.id)
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                            .fill(SabqTheme.surface)
+                            .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
+                    )
+                } else if categoryArticles.isEmpty {
+                    EmptyStateView(
+                        icon: category.icon,
+                        tint: category.tint,
+                        title: "لا توجد أخبار",
+                        subtitle: "لم نجد أخباراً في هذا القسم حالياً"
+                    )
+                } else {
+                    SurfaceCard {
+                        ForEach(Array(categoryArticles.enumerated()), id: \.element.id) { index, article in
+                            if index > 0 {
+                                Divider()
+                                    .foregroundStyle(SabqTheme.outline)
                             }
 
-                            if hasMore {
-                                Button {
-                                    Task { await loadMore() }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        if isLoading {
-                                            ProgressView().tint(SabqTheme.primaryEnd)
-                                        }
-                                        Text("تحميل المزيد")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(SabqTheme.primaryEnd)
+                            NavigationLink(value: article) {
+                                CompactArticleRow(
+                                    article: article,
+                                    onBookmark: { bookmarksStore.toggle(article.id, article: article) },
+                                    isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if hasMore {
+                            Button {
+                                Task { await loadMore() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isLoading {
+                                        ProgressView().tint(SabqTheme.primaryEnd)
                                     }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
+                                    Text("تحميل المزيد")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(SabqTheme.primaryEnd)
                                 }
-                                .buttonStyle(.plain)
-                                .disabled(isLoading)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
                             }
+                            .buttonStyle(.plain)
+                            .disabled(isLoading)
                         }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 40)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(SabqTheme.background)
-            .sabqRTL()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                    }
-                }
-            }
-            .navigationDestination(for: Article.self) { article in
-                ArticleDetailView(article: article)
-            }
-            .task { await loadArticles() }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 40)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(SabqTheme.background)
+        .sabqRTL()
+        .navigationTitle(category.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: Article.self) { article in
+            ArticleDetailView(article: article)
+        }
+        .task { await loadArticles() }
     }
 
     private func loadArticles() async {

@@ -1,7 +1,6 @@
 package com.sabq.smart.feature.sections
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -170,16 +168,7 @@ private fun CategoryTile(
                 spotColor = SabqTheme.colors.shadow,
             )
             .clip(shape)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        tint.copy(alpha = 0.08f),
-                        SabqTheme.colors.surface,
-                    ),
-                ),
-                shape = shape,
-            )
-            .border(width = 0.6.dp, color = tint.copy(alpha = 0.18f), shape = shape)
+            .background(color = SabqTheme.colors.surface, shape = shape)
             .clickable { onClick() }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -188,6 +177,7 @@ private fun CategoryTile(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
+            Spacer(modifier = Modifier.weight(1f))
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -206,15 +196,6 @@ private fun CategoryTile(
                     modifier = Modifier.size(18.dp),
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = null,
-                tint = tint.copy(alpha = 0.6f),
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .size(14.dp),
-            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(

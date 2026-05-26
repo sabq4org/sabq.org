@@ -20,9 +20,7 @@ struct ExploreView: View {
         UserDefaults.standard.stringArray(forKey: "sabq_recent_searches") ?? []
     }()
     @State private var trendingKeywords: [String] = []
-    @State private var categoryCounts: [String: Int] = [:]
     @State private var apiResults: [Article] = []
-    @State private var selectedCategory: ArticleCategory?
     @State private var isSearching = false
     @State private var submittedQuery = ""
     @State private var searchTask: Task<Void, Never>?
@@ -75,20 +73,11 @@ struct ExploreView: View {
         .sabqRTL()
         .sabqScreen("Explore")
         .scrollDismissesKeyboard(.interactively)
-        .sheet(item: $selectedCategory) { category in
-            CategoryArticlesSheet(category: category)
+        .navigationDestination(for: ArticleCategory.self) { category in
+            CategoryArticlesView(category: category)
         }
         .task {
-            async let cats = NewsService.fetchCategories()
-            async let keywords = NewsService.fetchTrending()
-
-            for cat in await cats {
-                if let slug = cat.slug, let count = cat.articlesCount {
-                    categoryCounts[slug] = count
-                }
-            }
-
-            let kw = await keywords
+            let kw = await NewsService.fetchTrending()
             if !kw.isEmpty {
                 trendingKeywords = kw
             } else if !articlesStore.trendingKeywords.isEmpty {
@@ -156,14 +145,10 @@ struct ExploreView: View {
 
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(Array(ArticleCategory.allCases.enumerated()), id: \.element.id) { _, category in
-                    CategoryTile(
-                        category: category,
-                        articleCount: categoryCounts[category.slug]
-                            ?? articlesStore.articleCount(for: category)
-                    ) {
-                        SabqHaptics.light()
-                        selectedCategory = category
+                    NavigationLink(value: category) {
+                        CategoryTile(category: category)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

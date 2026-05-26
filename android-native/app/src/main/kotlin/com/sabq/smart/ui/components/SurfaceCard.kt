@@ -55,20 +55,26 @@ fun SurfaceCard(
         Color(0xFFDCDFE3)
     }
 
+    // Elevation values differ between light and dark: light mode needs
+    // a stronger halo to pop the white card off the gray background;
+    // dark mode uses a subtler lift since surface is already lighter than bg.
+    val softElevation = if (SabqTheme.colors.isDark) 6.dp else 10.dp
+    val rimElevation  = if (SabqTheme.colors.isDark) 2.dp  else 1.5.dp
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             // Soft outer halo — iOS `radius: 16, y: 6`. Spot-only so the
             // shadow sits below the card, ambient is transparent.
             .shadow(
-                elevation = 8.dp,
+                elevation = softElevation,
                 shape = shape,
                 ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.shadow,
             )
             // Tight under-rim — iOS `radius: 1, y: 1`.
             .shadow(
-                elevation = 1.dp,
+                elevation = rimElevation,
                 shape = shape,
                 ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.deepShadow,

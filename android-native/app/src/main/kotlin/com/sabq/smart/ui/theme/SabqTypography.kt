@@ -136,9 +136,11 @@ data class SabqTypography(
                 textAlign = TextAlign.Start,
             )
             return SabqTypography(
-                screenTitle        = base(FontWeight.Bold, 30f, tracking = 0.3f),
-                sectionHeader      = base(FontWeight.Bold, 19f, tracking = 0.3f),
-                cardTitle          = base(FontWeight.Bold, 20f, tracking = 0.2f),
+                // Reduced from 30sp → 26sp: 30 read as oversized on most
+                // Android screens where density is higher than iOS Retina.
+                screenTitle        = base(FontWeight.Bold, 26f, tracking = 0.3f),
+                sectionHeader      = base(FontWeight.Bold, 18f, tracking = 0.3f),
+                cardTitle          = base(FontWeight.Bold, 19f, tracking = 0.2f),
                 articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f, tracking = 0.2f),
                 featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f, tracking = 0.2f),
                 compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f, tracking = 0.2f),
@@ -152,7 +154,9 @@ data class SabqTypography(
                 ctaButton          = base(FontWeight.Bold, 17f, tracking = 0.2f),
                 tabLabel           = base(FontWeight.Bold, 12.5f, tracking = 0.2f),
                 // Phase 2 — strict-parity audit additions:
-                statValue          = base(FontWeight.Bold, 22f, tracking = 0.2f),
+                // Reduced from 22sp → 19sp: stat values in BookmarksView/
+                // TrendingView felt disproportionately large next to body text.
+                statValue          = base(FontWeight.Bold, 19f, tracking = 0.2f),
                 tileTitle          = base(FontWeight.Bold, 17f, tracking = 0.2f),
                 greetingHeadline   = base(FontWeight.Black, 15f, tracking = 0.2f),
                 mostViewedCardTitle = base(FontWeight.Bold, 14.5f, lh = 20f, tracking = 0.1f),
