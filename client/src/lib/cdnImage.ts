@@ -34,7 +34,15 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
   if (src.includes('/cdn-cgi/image/')) return src;
 
   if (src.includes('imagedelivery.net')) {
-    return src.replace(/\/[^/]+$/, '/public');
+    // Use flexible variants for full-quality delivery.
+    // Format: /w=WIDTH,q=QUALITY,fit=scale-down
+    // Falls back to /public if flexible variants aren't enabled.
+    const parts: string[] = [];
+    if (options?.width) parts.push(`w=${options.width}`);
+    if (options?.height) parts.push(`h=${options.height}`);
+    parts.push(`q=${options?.quality || 90}`);
+    parts.push(options?.width && options?.height ? 'fit=cover' : 'fit=scale-down');
+    return src.replace(/\/[^/]+$/, `/${parts.join(',')}`);
   }
 
   if (src.startsWith('data:') || src.startsWith('blob:')) return src;
@@ -78,8 +86,7 @@ export const RESPONSIVE_WIDTHS = [320, 640, 960, 1280, 1920] as const;
 export function generateResponsiveSrcSet(src: string, quality: number = 85): string {
   if (!src) return '';
 
-  if (src.includes('imagedelivery.net')) return '';
-  if (src.startsWith('http') && !ALLOWED_EXTERNAL_HOSTS.some(host => src.includes(host))) return '';
+  if (src.startsWith('http') && !src.includes('imagedelivery.net') && !ALLOWED_EXTERNAL_HOSTS.some(host => src.includes(host))) return '';
   if (src.startsWith('data:') || src.startsWith('blob:')) return '';
 
   const entries = RESPONSIVE_WIDTHS.map(w => {
