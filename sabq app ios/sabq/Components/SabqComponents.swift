@@ -908,21 +908,9 @@ struct SurfaceCard<Content: View>: View {
     }
 
     var body: some View {
-        // When the seasonal Eid theme is on, swap the neutral outline +
-        // shadow for the brand gold so the cards feel cohesive with
-        // the parallax background. The fill stays the same surface
-        // color so readability isn't affected. We read the manager
-        // once per render — it's @Observable so changes from Settings
-        // (toggle or recompute on scenePhase) trigger a re-render
-        // automatically.
-        let eidActive = EidThemeManager.shared.isActive
-        let strokeColor = eidActive
-            ? EidThemeManager.Palette.goldBorder
-            : SabqTheme.outline.opacity(0.5)
-        let strokeWidth: CGFloat = eidActive ? 1.0 : 0.5
-        let topShadow = eidActive
-            ? EidThemeManager.Palette.goldShadow
-            : SabqTheme.shadow
+        let strokeColor = SabqTheme.outline.opacity(0.5)
+        let strokeWidth: CGFloat = 0.5
+        let topShadow = SabqTheme.shadow
 
         return VStack(alignment: .leading, spacing: 18) {
             content

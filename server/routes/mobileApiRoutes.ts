@@ -3156,30 +3156,54 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       });
     }
 
-    // Lifetime article + view stats. Counts when the user is either the
-    // reporter (byline) or the author (staff entry) on a PUBLISHED row.
-    const statsRow = await db.execute(sql`
-      SELECT
-        COUNT(DISTINCT a.id) AS article_count,
-        COALESCE(SUM(a.views), 0) AS total_views,
-        MIN(a.published_at) AS earliest_publish
-      FROM articles a
-      WHERE a.status = 'published'
-        AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
-    `) as any;
-    const stats = (statsRow?.rows || statsRow || [])[0] || {};
+    // Run stats, categories, and articles queries in parallel — they
+    // all depend only on author.id and were previously sequential (~3×
+    // round-trip latency savings).
+    const [statsRow, topCatsRows, recent] = await Promise.all([
+      db.execute(sql`
+        SELECT
+          COUNT(DISTINCT a.id) AS article_count,
+          COALESCE(SUM(a.views), 0) AS total_views,
+          MIN(a.published_at) AS earliest_publish
+        FROM articles a
+        WHERE a.status = 'published'
+          AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
+      `) as any,
 
-    // Top 3 categories the author writes in most.
-    const topCatsRows = await db.execute(sql`
-      SELECT c.id, c.name_ar, c.color, c.icon, COUNT(*) AS count
-      FROM articles a
-      INNER JOIN categories c ON a.category_id = c.id
-      WHERE a.status = 'published'
-        AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
-      GROUP BY c.id, c.name_ar, c.color, c.icon
-      ORDER BY count DESC
-      LIMIT 3
-    `) as any;
+      db.execute(sql`
+        SELECT c.id, c.name_ar, c.color, c.icon, COUNT(*) AS count
+        FROM articles a
+        INNER JOIN categories c ON a.category_id = c.id
+        WHERE a.status = 'published'
+          AND (a.reporter_id = ${author.id} OR a.author_id = ${author.id})
+        GROUP BY c.id, c.name_ar, c.color, c.icon
+        ORDER BY count DESC
+        LIMIT 3
+      `) as any,
+
+      db
+        .select({
+          article: articleCardSelect,
+          category: { nameAr: categories.nameAr, id: categories.id },
+          author: { firstName: users.firstName, lastName: users.lastName },
+          reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
+        })
+        .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            or(eq(articles.reporterId, author.id), eq(articles.authorId, author.id)),
+          )
+        )
+        .orderBy(desc(articles.publishedAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
+
+    const stats = (statsRow?.rows || statsRow || [])[0] || {};
     const topCategories = (topCatsRows?.rows || topCatsRows || []).map((r: any) => ({
       id: r.id,
       nameAr: r.name_ar,
@@ -3187,28 +3211,6 @@ router.get("/authors/by-name", async (req: Request, res: Response) => {
       icon: r.icon,
       count: Number(r.count) || 0,
     }));
-
-    // Recent 30 articles (formatted via the shared mobile formatter).
-    const recent = await db
-      .select({
-        article: articleCardSelect,
-        category: { nameAr: categories.nameAr, id: categories.id },
-        author: { firstName: users.firstName, lastName: users.lastName },
-        reporter: { firstName: reporterUsers.firstName, lastName: reporterUsers.lastName },
-      })
-      .from(articles)
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          or(eq(articles.reporterId, author.id), eq(articles.authorId, author.id)),
-        )
-      )
-      .orderBy(desc(articles.publishedAt))
-      .limit(limit)
-      .offset(offset);
 
     const role = author.job_title || author.department || "كاتب في سبق";
     const fullName = [author.first_name, author.last_name].filter(Boolean).join(" ").trim();

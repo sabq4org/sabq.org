@@ -42,7 +42,6 @@ struct SettingsView: View {
     /// Live observable so the toggle reflects the current state +
     /// reacts to changes from elsewhere (e.g. scenePhase recompute
     /// when the user opens the app at the start of the window).
-    @State private var eidTheme = EidThemeManager.shared
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -796,53 +795,6 @@ struct SettingsView: View {
 
     // MARK: - Display
 
-    /// Eid Al-Adha theme toggle row — rendered inside displaySection.
-    /// Only visible while the Hijri window is open OR the developer
-    /// force-on flag is set; the rest of the year the row collapses
-    /// to nothing so the picker doesn't carry a permanent toggle
-    /// nobody can use. Long-pressing the row flips the force-on flag,
-    /// letting design preview the look in any month.
-    @ViewBuilder
-    private var eidThemeToggle: some View {
-        if eidTheme.inSeason || eidTheme.forcedOn {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("ثيم عيد الأضحى")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(SabqTheme.ink)
-                        Text(eidTheme.userDisabled
-                             ? "الثيم المعتاد يظهر حتى تعيد التفعيل"
-                             : "خلفية موسمية تظهر تلقائياً خلال أيام الحج والعيد")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    Spacer(minLength: 0)
-                    SmallSquareBadge(systemImage: "moon.stars.fill",
-                                     tint: EidThemeManager.Palette.gold)
-                }
-
-                Toggle(
-                    "ثيم العيد",
-                    isOn: Binding(
-                        get: { !eidTheme.userDisabled },
-                        set: { eidTheme.setUserDisabled(!$0) }
-                    )
-                )
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: EidThemeManager.Palette.gold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .contentShape(Rectangle())
-            .onLongPressGesture(minimumDuration: 1.2) {
-                // Hidden developer affordance: long-press to flip
-                // force-on so designers can review the theme in any
-                // month. Setting this also keeps the row visible
-                // (see the surrounding `if` condition).
-                eidTheme.setForcedOn(!eidTheme.forcedOn)
-            }
-        }
-    }
 
     private var browsingExperienceSection: some View {
         SurfaceCard {
@@ -910,12 +862,6 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
             }
 
-            // Eid Al-Adha seasonal theme — only rendered while we're
-            // inside the Hijri window. Hidden the rest of the year so
-            // the picker doesn't acquire a permanent "off" toggle that
-            // serves no purpose. Long-pressing the row toggles a
-            // developer-only force-on flag for design review.
-            eidThemeToggle
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
