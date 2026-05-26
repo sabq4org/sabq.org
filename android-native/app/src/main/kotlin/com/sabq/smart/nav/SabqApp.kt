@@ -98,6 +98,7 @@ object SabqRoutes {
     const val SubmitOpinion = "submit/opinion"
     const val SubmitNews = "submit/news"
     const val KeywordArticles = "keyword/{keyword}"
+    const val CategoryArticles = "category/{slug}/{name}"
     const val AuthorArticles = "author/{name}"
     const val AudioNewsletters = "audio-newsletters"
     // Phase 5 routes — dedicated iOS-equivalent destinations that
@@ -112,6 +113,9 @@ object SabqRoutes {
     fun articleDetail(slug: String): String = "article/${Uri.encode(slug)}"
 
     fun keywordArticles(keyword: String): String = "keyword/${Uri.encode(keyword)}"
+
+    fun categoryArticles(slug: String, name: String): String =
+        "category/${Uri.encode(slug)}/${Uri.encode(name)}"
 
     fun authorArticles(name: String): String = "author/${Uri.encode(name)}"
 
@@ -249,7 +253,7 @@ fun SabqApp(
                             }
                         },
                         onCategoryClick = { section ->
-                            navController.navigate(SabqRoutes.keywordArticles(section.name))
+                            navController.navigate(SabqRoutes.categoryArticles(section.slug, section.name))
                         },
                         onKeywordClick = { keyword ->
                             navController.navigate(SabqRoutes.keywordArticles(keyword))
@@ -514,6 +518,22 @@ fun SabqApp(
                         },
                         onAuthorClick = { name ->
                             navController.navigate(SabqRoutes.authorArticles(name))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.CategoryArticles,
+                    arguments = listOf(
+                        navArgument("slug") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType },
+                    ),
+                ) {
+                    com.sabq.smart.feature.category.CategoryArticlesScreen(
+                        onBack = { navController.popBackStack() },
+                        onArticleClick = { article ->
+                            article.slug?.let { slug ->
+                                navController.navigate(SabqRoutes.articleDetail(slug))
+                            }
                         },
                     )
                 }
