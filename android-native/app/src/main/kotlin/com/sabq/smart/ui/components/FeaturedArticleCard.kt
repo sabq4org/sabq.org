@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -86,11 +87,11 @@ fun FeaturedArticleCard(
             .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
             .clickable { onClick() },
     ) {
-        // Hero — fixed 200dp height, parent-width driven.
+        // Hero — 16:10 aspect ratio matching iOS FeaturedArticleCard.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(SabqTheme.dimens.heroImageHeight)
+                .aspectRatio(16f / 10f)
                 .clip(heroShape)
                 .background(
                     Brush.linearGradient(

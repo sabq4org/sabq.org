@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -105,6 +108,7 @@ fun ExploreScreen(
     searchViewModel: SearchViewModel = hiltViewModel(),
     recentSearchesViewModel: RecentSearchesViewModel = hiltViewModel(),
     onArticleClick: (Article) -> Unit = {},
+    onCategoryClick: (Section) -> Unit = {},
     onKeywordClick: (String) -> Unit = {},
 ) {
     val sections by sectionsViewModel.sections.collectAsStateWithLifecycle()
@@ -152,15 +156,7 @@ fun ExploreScreen(
                 )
             }
         } else {
-            if (trending.isNotEmpty()) {
-                item {
-                    TrendingPillsSection(
-                        keywords = trending,
-                        onKeywordClick = onKeywordClick,
-                    )
-                }
-            }
-            item { SectionsGridSection(sections = sections) }
+            item { SectionsGridSection(sections = sections, onCategoryClick = onCategoryClick) }
             if (recentSearches.isNotEmpty()) {
                 item {
                     RecentSearchesSection(
@@ -229,7 +225,7 @@ private fun KeywordPill(keyword: String, onClick: () -> Unit) {
 // ============================================================
 
 @Composable
-private fun SectionsGridSection(sections: List<Section>) {
+private fun SectionsGridSection(sections: List<Section>, onCategoryClick: (Section) -> Unit = {}) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionTitle(
             icon = Icons.Outlined.GridView,
@@ -254,9 +250,12 @@ private fun SectionsGridSection(sections: List<Section>) {
             // inside an outer LazyColumn — Compose forbids that).
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 sections.chunked(2).forEach { pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.height(IntrinsicSize.Max),
+                    ) {
                         pair.forEach { section ->
-                            ExploreTile(section = section, modifier = Modifier.weight(1f))
+                            ExploreTile(section = section, onClick = { onCategoryClick(section) }, modifier = Modifier.weight(1f).fillMaxHeight())
                         }
                         if (pair.size == 1) {
                             androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
@@ -288,7 +287,7 @@ private fun SectionsGridSection(sections: List<Section>) {
  *   - Subtitle: 12sp Medium tertiaryInk, max 2 lines.
  */
 @Composable
-private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
+private fun ExploreTile(section: Section, onClick: () -> Unit = {}, modifier: Modifier = Modifier) {
     val visual = ArticleCategory.fromSlug(section.slug)
     val tint = visual.tint()
     val shape = RoundedCornerShape(SabqTheme.dimens.tileRadius)
@@ -296,7 +295,7 @@ private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 1.dp,
+                elevation = 6.dp,
                 shape = shape,
                 ambientColor = Color.Transparent,
                 spotColor = SabqTheme.colors.shadow,
@@ -312,7 +311,7 @@ private fun ExploreTile(section: Section, modifier: Modifier = Modifier) {
                 shape = shape,
             )
             .border(width = 0.6.dp, color = tint.copy(alpha = 0.18f), shape = shape)
-            .clickable { /* TODO: navigate to a category-filtered list */ }
+            .clickable { onClick() }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

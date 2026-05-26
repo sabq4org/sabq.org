@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -180,7 +181,7 @@ fun ArticleDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(SabqTheme.colors.background),
+            .background(SabqTheme.colors.surface),
     ) {
         when (val s = uiState) {
             ArticleDetailUiState.Loading -> LoadingState()
@@ -349,7 +350,12 @@ private fun ArticleBody(
     // bottom padding configured on TopToolbar.
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    val focusBackground = if (isFocusMode) {
+        if (SabqTheme.colors.isDark) Color(0xFF1A1714) else Color(0xFFFAF2E8)
+    } else {
+        SabqTheme.colors.surface
+    }
+    Box(modifier = Modifier.fillMaxSize().background(focusBackground)) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -409,12 +415,13 @@ private fun ArticleBody(
             }
 
             // 7. Article body.
-            items(blocks) { block ->
+            itemsIndexed(blocks) { index, block ->
                 BodyBlock(
                     block = block,
                     fontSize = fontSize,
                     lineSpacing = lineSpacing,
                     useSerif = useSerif,
+                    isFirstParagraph = index == 0 && block is BlockNode.Paragraph,
                     onImageTap = { imageUrl ->
                         haptics.light()
                         lightboxUrl = imageUrl
@@ -451,7 +458,7 @@ private fun ArticleBody(
             // padding per iOS (`.padding(.top, 16)` on top of the
             // 18 spacing).
             item {
-                Spacer(modifier = Modifier.height(0.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 ActionBar(
                     isBookmarked = isBookmarked,
                     isFocusMode = isFocusMode,
@@ -462,17 +469,23 @@ private fun ArticleBody(
                 )
             }
 
-            // 9. Tags.
+            // 9. Tags — iOS adds 20dp extra top padding.
             if (!isFocusMode && article.tags.isNotEmpty()) {
-                item { TagsSection(tags = article.tags, onTagClick = onTagClick) }
+                item {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    TagsSection(tags = article.tags, onTagClick = onTagClick)
+                }
             }
 
-            // 10. Related articles (max 5).
+            // 10. Related articles (max 5) — iOS adds 24dp extra top padding.
             if (!isFocusMode && related.isNotEmpty()) {
-                item { RelatedSection(related = related, onClick = onRelatedClick) }
+                item {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    RelatedSection(related = related, onClick = onRelatedClick)
+                }
             }
 
-            // 11. Comments.
+            // 11. Comments — iOS adds 24dp extra top padding.
             if (!isFocusMode) {
                 item {
                     CommentsSection(
@@ -777,7 +790,7 @@ private fun ArticleTitle(article: Article, fontSize: Float, useSerif: Boolean) {
     Text(
         text = article.title,
         fontSize = (fontSize + 8).sp,
-        fontWeight = FontWeight.Black,
+        fontWeight = FontWeight.Bold,
         color = SabqTheme.colors.ink,
         fontFamily = if (useSerif) FontFamily.Serif else IbmPlexSansArabic,
         lineHeight = (fontSize + 8 + 4).sp,
@@ -1111,6 +1124,7 @@ private fun BodyBlock(
     fontSize: Float,
     lineSpacing: Float,
     useSerif: Boolean,
+    isFirstParagraph: Boolean = false,
     onImageTap: (String) -> Unit = {},
 ) {
     Box(
@@ -1140,9 +1154,10 @@ private fun BodyBlock(
             is BlockNode.Paragraph -> {
                 RichText(
                     runs = block.runs,
-                    fontSize = fontSize,
+                    fontSize = if (isFirstParagraph) fontSize + 1 else fontSize,
                     lineSpacing = lineSpacing,
                     useSerif = useSerif,
+                    fontWeight = if (isFirstParagraph) FontWeight.Medium else FontWeight.Normal,
                     color = SabqTheme.colors.ink.copy(alpha = 0.92f)
                 )
             }
@@ -1841,7 +1856,7 @@ private fun ToolbarIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(40.dp)
             .clip(CircleShape)
             .background(SabqTheme.colors.surface.copy(alpha = 0.85f), CircleShape)
             .clickable { onClick() },
@@ -1851,7 +1866,7 @@ private fun ToolbarIcon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
         )
     }
 }

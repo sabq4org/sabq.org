@@ -193,6 +193,9 @@ fun SabqApp(
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
                         },
+                        onSearchClick = {
+                            navController.navigate(SabqRoutes.Search)
+                        },
                         onMomentByMomentClick = {
                             navController.navigate(SabqRoutes.MomentByMoment)
                         },
@@ -244,6 +247,9 @@ fun SabqApp(
                             article.slug?.let { slug ->
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
+                        },
+                        onCategoryClick = { section ->
+                            navController.navigate(SabqRoutes.keywordArticles(section.name))
                         },
                         onKeywordClick = { keyword ->
                             navController.navigate(SabqRoutes.keywordArticles(keyword))

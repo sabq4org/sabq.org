@@ -424,7 +424,7 @@ private fun LatestSection(items: List<Article>, onArticleClick: (Article) -> Uni
         SurfaceCard {
             items.forEachIndexed { idx, article ->
                 if (idx > 0) {
-                    HorizontalDivider(color = SabqTheme.colors.outline.copy(alpha = 0.4f))
+                    HorizontalDivider(color = SabqTheme.colors.outline)
                 }
                 OpinionLatestRow(
                     article = article,
@@ -441,7 +441,7 @@ private fun OpinionLatestRow(article: Article, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 8.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -527,12 +527,12 @@ private fun SectionHeader(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text(
                 text = title,
@@ -542,7 +542,7 @@ private fun SectionHeader(
             )
             Text(
                 text = subtitle,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = SabqTheme.colors.secondaryInk,
             )
         }
@@ -550,7 +550,11 @@ private fun SectionHeader(
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(iconTint.copy(alpha = 0.12f)),
+                .background(
+                    Brush.linearGradient(
+                        listOf(iconTint.copy(alpha = 0.12f), iconTint.copy(alpha = 0.06f)),
+                    ),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

@@ -104,11 +104,6 @@ struct ExploreView: View {
 
     @ViewBuilder
     private var idleContent: some View {
-        if !trendingKeywords.isEmpty {
-            trendingPillsSection
-                .animatedAppear(index: 2)
-        }
-
         sectionsGridSection
             .animatedAppear(index: 3)
 

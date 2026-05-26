@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.outlined.Podcasts
 import androidx.compose.material3.CircularProgressIndicator
@@ -99,6 +100,7 @@ fun HomeFeedScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     bellViewModel: EditorialBellViewModel = hiltViewModel(),
     onArticleClick: (Article) -> Unit = {},
+    onSearchClick: () -> Unit = {},
     onMomentByMomentClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
     onOpinionsAllClick: () -> Unit = {},
@@ -142,6 +144,7 @@ fun HomeFeedScreen(
                 onSectionSelect = viewModel::selectSection,
                 onBookmark = viewModel::toggleBookmark,
                 onArticleClick = onArticleClick,
+                onSearchClick = onSearchClick,
                 onMomentByMomentClick = onMomentByMomentClick,
                 onNotificationsClick = onNotificationsClick,
                 onOpinionsAllClick = onOpinionsAllClick,
@@ -178,6 +181,7 @@ private fun LoadedFeed(
     onSectionSelect: (String?) -> Unit,
     onBookmark: (String) -> Unit,
     onArticleClick: (Article) -> Unit,
+    onSearchClick: () -> Unit,
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onOpinionsAllClick: () -> Unit,
@@ -233,6 +237,7 @@ private fun LoadedFeed(
                 isDarkMode = isDarkMode,
                 showNotificationsBell = showNotificationsBell,
                 notificationsUnreadCount = notificationsUnreadCount,
+                onSearchClick = onSearchClick,
                 onMomentByMomentClick = onMomentByMomentClick,
                 onNotificationsClick = onNotificationsClick,
                 onToggleDarkMode = onToggleDarkMode,
@@ -413,17 +418,17 @@ private fun FeaturedCarousel(
         if (articles.size > 1) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
             ) {
                 repeat(articles.size) { i ->
                     val isActive = i == pagerState.currentPage
                     Box(
                         modifier = Modifier
-                            .size(if (isActive) 8.dp else 6.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
                             .background(
                                 if (isActive) SabqTheme.colors.primaryEnd
-                                else SabqTheme.colors.outline,
+                                else SabqTheme.colors.ink.copy(alpha = 0.30f),
                             ),
                     )
                 }
@@ -528,6 +533,7 @@ private fun HomeHeaderBar(
     isDarkMode: Boolean,
     showNotificationsBell: Boolean,
     notificationsUnreadCount: Int,
+    onSearchClick: () -> Unit,
     onMomentByMomentClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onToggleDarkMode: () -> Unit,
@@ -545,6 +551,11 @@ private fun HomeHeaderBar(
         )
         Spacer(modifier = Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HeaderIcon(
+                icon = Icons.Filled.Search,
+                contentDescription = "بحث",
+                onClick = onSearchClick,
+            )
             if (showNotificationsBell) {
                 HeaderIcon(
                     icon = Icons.Filled.Notifications,

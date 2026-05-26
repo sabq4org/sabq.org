@@ -23,12 +23,7 @@ data class SabqDimens(
     // chipRadius (14) and above pure-pill shapes.
     val mediaCardRadius: Dp = 12.dp,
 
-    // Vertical spacing matches iOS HomeFeedView 1:1 (VStack 26pt at
-    // HomeFeedView.swift:95). Horizontal padding intentionally tighter
-    // than iOS's 16pt: at Pixel-class density 16dp reads looser than the
-    // iOS visual, so we sit at 12dp for a closer feel. Affects every
-    // screen consuming this token.
-    val screenPaddingH: Dp = 12.dp,
+    val screenPaddingH: Dp = 16.dp,
     val sectionGap: Dp = 26.dp,
     val cardPadding: Dp = 20.dp,
     // Horizontal rails (opinions, stories): iOS uses 14pt gaps.
