@@ -906,518 +906,211 @@ export default function Profile() {
           );
         })()}
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 md:gap-4 mb-6">
-          <MobileOptimizedKpiCard
-            label="متابع"
-            value={(followStats?.followersCount || 0).toLocaleString('en-US')}
-            icon={Users}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            testId="text-stat-followers"
-          />
+        {/* Clean vertical sections — no tabs, no sidebar */}
+        <div className="space-y-5 max-w-3xl mx-auto">
 
-          <MobileOptimizedKpiCard
-            label="إعجاب"
-            value={likedArticles.length.toLocaleString('en-US')}
-            icon={Heart}
-            iconColor="text-red-500"
-            iconBgColor="bg-red-500/10"
-            testId="text-stat-likes"
-          />
-
-          <MobileOptimizedKpiCard
-            label="محفوظ"
-            value={bookmarkedArticles.length.toLocaleString('en-US')}
-            icon={Bookmark}
-            iconColor="text-blue-500"
-            iconBgColor="bg-blue-500/10"
-            testId="text-stat-bookmarks"
-          />
-
-          <MobileOptimizedKpiCard
-            label="قراءة"
-            value={readingHistory.length.toLocaleString('en-US')}
-            icon={Eye}
-            iconColor="text-green-500"
-            iconBgColor="bg-green-500/10"
-            testId="text-stat-reads"
-          />
-
-          <MobileOptimizedKpiCard
-            label="نقطة"
-            value={(loyaltyPoints?.totalPoints || 0).toLocaleString('en-US')}
-            icon={Coins}
-            iconColor="text-amber-500"
-            iconBgColor="bg-amber-500/10"
-            testId="text-stat-points"
-          />
-        </div>
-
-        {/* Main Content with Tabs */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList dir="rtl" className="rounded-lg bg-muted p-1 flex flex-wrap w-full mb-6">
-                  <TabsTrigger value="activity" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
-                    <TrendingUp className="h-4 w-4 hidden sm:block" />
-                    <span>نشاطي</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="bookmarks" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-bookmarks">
-                    <Bookmark className="h-4 w-4 hidden sm:block" />
-                    <span>المحفوظات</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="followers" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-followers">
-                    <Users className="h-4 w-4 hidden sm:block" />
-                    <span>المتابعون</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="settings" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-settings">
-                    <Settings className="h-4 w-4 hidden sm:block" />
-                    <span>الإعدادات</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="wallet" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-wallet">
-                    <Wallet className="h-4 w-4 hidden sm:block" />
-                    <span>المحفظة</span>
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Activity Tab */}
-                <TabsContent value="activity" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Heart className="h-5 w-5 text-red-500" />
-                      المقالات المفضلة
-                    </h3>
-                    {isLoadingLiked ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <Skeleton key={i} className="h-64" />
-                        ))}
-                      </div>
-                    ) : likedArticles.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {likedArticles.map((article) => (
-                          <ArticleCard key={article.id} article={article} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-muted/30 rounded-lg">
-                        <Heart className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">لم تعجبك أي مقالات بعد</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-blue-500" />
-                      سجل القراءة
-                    </h3>
-                    {isLoadingHistory ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <Skeleton key={i} className="h-64" />
-                        ))}
-                      </div>
-                    ) : readingHistory.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {readingHistory.slice(0, 6).map((article) => (
-                          <ArticleCard key={article.id} article={article} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-muted/30 rounded-lg">
-                        <Clock className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">لم تقرأ أي مقالات بعد</p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
-                {/* Bookmarks Tab */}
-                <TabsContent value="bookmarks" dir="rtl">
-                  {isLoadingBookmarks ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} className="h-64" />
-                      ))}
-                    </div>
-                  ) : bookmarkedArticles.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {bookmarkedArticles.map((article) => (
-                        <ArticleCard key={article.id} article={article} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Bookmark className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-muted-foreground">لم تحفظ أي مقالات بعد</p>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        احفظ المقالات المهمة لقراءتها لاحقًا
-                      </p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Followers Tab */}
-                <TabsContent value="followers" className="space-y-4" dir="rtl">
-                  <div className="flex gap-4 border-b">
-                    <Button
-                      variant="ghost"
-                      className="pb-3 relative"
-                      onClick={() => setActiveTab('followers')}
-                      data-testid="button-show-followers"
-                    >
-                      المتابعون ({followStats?.followersCount || 0})
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="pb-3"
-                      onClick={() => setActiveTab('following')}
-                      data-testid="button-show-following"
-                    >
-                      المتابَعون ({followStats?.followingCount || 0})
-                    </Button>
-                  </div>
-
-                  {isLoadingFollowers ? (
-                    <div className="space-y-3">
-                      {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-20" />
-                      ))}
-                    </div>
-                  ) : followers.length > 0 ? (
-                    <div className="space-y-3">
-                      {followers.map((follower) => (
-                        <Card key={follower.id} className="hover-elevate">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage src={follower.profileImageUrl || ""} />
-                                <AvatarFallback>
-                                  {getFollowerInitials(follower)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1">
-                                <p className="font-medium">
-                                  {getFollowerDisplayName(follower)}
-                                </p>
-                                {follower.bio && (
-                                  <p className="text-sm text-muted-foreground line-clamp-1">
-                                    {follower.bio}
-                                  </p>
-                                )}
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                data-testid={`button-view-profile-${follower.id}`}
-                              >
-                                <Link href={`/user/${follower.id}`}>
-                                  عرض الملف الشخصي
-                                </Link>
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-muted-foreground">لا يوجد متابعون بعد</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Following Tab */}
-                <TabsContent value="following" className="space-y-4" dir="rtl">
-                  <div className="flex gap-4 border-b">
-                    <Button
-                      variant="ghost"
-                      className="pb-3"
-                      onClick={() => setActiveTab('followers')}
-                      data-testid="button-show-followers-2"
-                    >
-                      المتابعون ({followStats?.followersCount || 0})
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="pb-3 relative"
-                      onClick={() => setActiveTab('following')}
-                      data-testid="button-show-following-2"
-                    >
-                      المتابَعون ({followStats?.followingCount || 0})
-                    </Button>
-                  </div>
-
-                  {isLoadingFollowing ? (
-                    <div className="space-y-3">
-                      {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-20" />
-                      ))}
-                    </div>
-                  ) : following.length > 0 ? (
-                    <div className="space-y-3">
-                      {following.map((followed) => (
-                        <Card key={followed.id} className="hover-elevate">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage src={followed.profileImageUrl || ""} />
-                                <AvatarFallback>
-                                  {getFollowerInitials(followed)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1">
-                                <p className="font-medium">
-                                  {getFollowerDisplayName(followed)}
-                                </p>
-                                {followed.bio && (
-                                  <p className="text-sm text-muted-foreground line-clamp-1">
-                                    {followed.bio}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                  data-testid={`button-view-profile-${followed.id}`}
-                                >
-                                  <Link href={`/user/${followed.id}`}>
-                                    عرض
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => unfollowUserMutation.mutate(followed.id)}
-                                  disabled={unfollowUserMutation.isPending}
-                                  data-testid={`button-unfollow-user-${followed.id}`}
-                                >
-                                  <UserMinus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-muted-foreground">لا تتابع أحدًا بعد</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Settings Tab */}
-                <TabsContent value="settings" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Bell className="h-5 w-5" />
-                      إعدادات الإشعارات
-                    </h3>
-                    <Card>
-                      <CardContent className="p-6">
-                        <p className="text-muted-foreground">
-                          قريبًا: خيارات تخصيص الإشعارات
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      الخصوصية والأمان
-                    </h3>
-                    <Card>
-                      <CardContent className="p-6">
-                        <TwoFactorSettings />
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
-
-                {/* Wallet Tab */}
-                <TabsContent value="wallet" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Apple Wallet
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      {/* Loyalty Card */}
-                      <Card>
-                        <CardContent className="p-6">
-                          <div className="flex items-start gap-4">
-                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center shrink-0">
-                              <Trophy className="h-6 w-6 text-blue-500" />
-                            </div>
-                            <div className="flex-1 space-y-3">
-                              <div>
-                                <h4 className="font-semibold">بطاقة العضوية</h4>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  احصل على بطاقة عضوية رقمية تعرض نقاط الولاء ورتبتك
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="gap-1">
-                                  <Coins className="h-3 w-3" />
-                                  {loyaltyPoints?.totalPoints || 0} نقطة
-                                </Badge>
-                                <Badge variant="outline">
-                                  {loyaltyPoints?.currentRank || "القارئ الجديد"}
-                                </Badge>
-                              </div>
-                              <Button
-                                onClick={() => issueLoyaltyCardMutation.mutate()}
-                                disabled={issueLoyaltyCardMutation.isPending}
-                                className="gap-2"
-                                data-testid="button-download-loyalty-card"
-                              >
-                                {issueLoyaltyCardMutation.isPending ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    جاري الإصدار...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    تحميل بطاقة العضوية
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Press Card (if eligible) */}
-                      {user.hasPressCard && (
-                        <Card>
-                          <CardContent className="p-6">
-                            <div className="flex items-start gap-4">
-                              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center shrink-0">
-                                <IdCard className="h-6 w-6 text-green-500" />
-                              </div>
-                              <div className="flex-1 space-y-3">
-                                <div>
-                                  <h4 className="font-semibold">البطاقة الصحفية</h4>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    بطاقة صحفية رقمية معتمدة من سبق للصحفيين
-                                  </p>
-                                </div>
-                                <Badge variant="default" className="gap-1">
-                                  <Check className="h-3 w-3" />
-                                  صحفي معتمد
-                                </Badge>
-                                <Button
-                                  onClick={() => issuePressCardMutation.mutate()}
-                                  disabled={issuePressCardMutation.isPending}
-                                  className="gap-2"
-                                  data-testid="button-download-press-card"
-                                >
-                                  {issuePressCardMutation.isPending ? (
-                                    <>
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      جاري الإصدار...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Download className="h-4 w-4" />
-                                      تحميل البطاقة الصحفية
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Sidebar */}
-          <aside className="space-y-6">
-            {/* Smart Interests */}
-            <div>
-              <SmartInterestsBlock userId={user.id} />
-            </div>
-
-            {/* Followed Keywords */}
+          {/* Bookmarks */}
+          {bookmarkedArticles.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  كلماتي المتابعة
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingKeywords ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-8" />
-                    ))}
-                  </div>
-                ) : followedKeywords.length > 0 ? (
-                  <div className="space-y-2">
-                    {followedKeywords.slice(0, 5).map((keyword) => (
-                      <div
-                        key={keyword.tagId}
-                        className="flex items-center justify-between gap-2 p-2 rounded-md hover-elevate"
-                      >
-                        <Link href={`/keyword/${keyword.tagName}`}>
-                          <span className="flex items-center gap-2 flex-1 cursor-pointer" data-testid={`link-keyword-${keyword.tagId}`}>
-                            <Tag className="h-3.5 w-3.5 text-primary" />
-                            <span className="text-sm font-medium">{keyword.tagName}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {keyword.articleCount}
-                            </Badge>
-                          </span>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => unfollowKeywordMutation.mutate(keyword.tagId)}
-                          disabled={unfollowKeywordMutation.isPending}
-                          data-testid={`button-unfollow-keyword-${keyword.tagId}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
+              <CardContent className="p-5" dir="rtl">
+                <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-blue-500" />
+                  المحفوظات
+                  <Badge variant="secondary" className="text-xs mr-auto">{bookmarkedArticles.length}</Badge>
+                </h3>
+                <div className="divide-y divide-border">
+                  {bookmarkedArticles.slice(0, 5).map((article) => (
+                    <Link key={article.id} href={`/article/${(article as any).slug || (article as any).englishSlug || article.id}`}>
+                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+                        {(article as any).imageUrl && (
+                          <img src={(article as any).imageUrl} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold line-clamp-2 leading-relaxed">{article.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{(article as any).categoryName || ""}</p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Tag className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      لم تتابع أي كلمات بعد
-                    </p>
-                  </div>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Liked */}
+          {likedArticles.length > 0 && (
+            <Card>
+              <CardContent className="p-5" dir="rtl">
+                <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                  <Heart className="h-4 w-4 text-red-500" />
+                  إعجاباتي
+                  <Badge variant="secondary" className="text-xs mr-auto">{likedArticles.length}</Badge>
+                </h3>
+                <div className="divide-y divide-border">
+                  {likedArticles.slice(0, 5).map((article) => (
+                    <Link key={article.id} href={`/article/${(article as any).slug || (article as any).englishSlug || article.id}`}>
+                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+                        {(article as any).imageUrl && (
+                          <img src={(article as any).imageUrl} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold line-clamp-2 leading-relaxed">{article.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{(article as any).categoryName || ""}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reading History */}
+          {readingHistory.length > 0 && (
+            <Card>
+              <CardContent className="p-5" dir="rtl">
+                <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-green-500" />
+                  سجل القراءة
+                  <Badge variant="secondary" className="text-xs mr-auto">{readingHistory.length}</Badge>
+                </h3>
+                <div className="divide-y divide-border">
+                  {readingHistory.slice(0, 5).map((article) => (
+                    <Link key={article.id} href={`/article/${(article as any).slug || (article as any).englishSlug || article.id}`}>
+                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+                        {(article as any).imageUrl && (
+                          <img src={(article as any).imageUrl} alt="" className="w-16 h-16 rounded-xl object-cover shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold line-clamp-2 leading-relaxed">{article.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{(article as any).categoryName || ""}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Followed Keywords */}
+          {followedKeywords.length > 0 && (
+            <Card>
+              <CardContent className="p-5" dir="rtl">
+                <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-primary" />
+                  كلماتي المتابعة
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {followedKeywords.map((kw) => (
+                    <Link key={kw.tagId} href={`/keyword/${kw.tagName}`}>
+                      <Badge variant="secondary" className="gap-1.5 py-1.5 px-3 text-sm cursor-pointer hover:bg-muted transition-colors" data-testid={`link-keyword-${kw.tagId}`}>
+                        #{kw.tagName}
+                        <span className="text-muted-foreground text-xs">({kw.articleCount})</span>
+                        <button
+                          className="mr-1 hover:text-destructive"
+                          onClick={(e) => { e.preventDefault(); unfollowKeywordMutation.mutate(kw.tagId); }}
+                          data-testid={`button-unfollow-keyword-${kw.tagId}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Followers & Following — combined */}
+          {((followStats?.followersCount || 0) > 0 || (followStats?.followingCount || 0) > 0) && (
+            <Card>
+              <CardContent className="p-5" dir="rtl">
+                <div className="flex items-center gap-4 mb-4">
+                  <button
+                    className={`text-base font-bold pb-1 border-b-2 transition-colors ${activeTab === 'followers' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                    onClick={() => setActiveTab('followers')}
+                    data-testid="button-show-followers"
+                  >
+                    المتابعون ({followStats?.followersCount || 0})
+                  </button>
+                  <button
+                    className={`text-base font-bold pb-1 border-b-2 transition-colors ${activeTab === 'following' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                    onClick={() => setActiveTab('following')}
+                    data-testid="button-show-following"
+                  >
+                    المتابَعون ({followStats?.followingCount || 0})
+                  </button>
+                </div>
+
+                {activeTab === 'followers' && (
+                  isLoadingFollowers ? (
+                    <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14" />)}</div>
+                  ) : followers.length > 0 ? (
+                    <div className="divide-y divide-border">
+                      {followers.map((f) => (
+                        <div key={f.id} className="flex items-center gap-3 py-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={f.profileImageUrl || ""} />
+                            <AvatarFallback className="text-sm">{getFollowerInitials(f)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{getFollowerDisplayName(f)}</p>
+                            {f.bio && <p className="text-xs text-muted-foreground line-clamp-1">{f.bio}</p>}
+                          </div>
+                          <Button variant="outline" size="sm" asChild data-testid={`button-view-profile-${f.id}`}>
+                            <Link href={`/user/${f.id}`}>عرض</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-6">لا يوجد متابعون بعد</p>
+                  )
+                )}
+
+                {activeTab === 'following' && (
+                  isLoadingFollowing ? (
+                    <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14" />)}</div>
+                  ) : following.length > 0 ? (
+                    <div className="divide-y divide-border">
+                      {following.map((f) => (
+                        <div key={f.id} className="flex items-center gap-3 py-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={f.profileImageUrl || ""} />
+                            <AvatarFallback className="text-sm">{getFollowerInitials(f)}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{getFollowerDisplayName(f)}</p>
+                          </div>
+                          <Button variant="outline" size="sm" asChild data-testid={`button-view-profile-${f.id}`}>
+                            <Link href={`/user/${f.id}`}>عرض</Link>
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => unfollowUserMutation.mutate(f.id)} disabled={unfollowUserMutation.isPending} data-testid={`button-unfollow-user-${f.id}`}>
+                            <UserMinus className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-6">لا تتابع أحدًا بعد</p>
+                  )
                 )}
               </CardContent>
             </Card>
+          )}
 
-            <LoyaltyBlock />
-          </aside>
+          {/* Security */}
+          <Card>
+            <CardContent className="p-5" dir="rtl">
+              <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                الخصوصية والأمان
+              </h3>
+              <TwoFactorSettings />
+            </CardContent>
+          </Card>
+
         </div>
       </div>
     </div>
