@@ -732,6 +732,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
     // Word docs and other files are uploaded to PRIVATE immediately for processing
     let extractedTextFromDocs = "";
     const allAttachmentsMetadata: Array<{ filename: string; contentType: string; size: number; url: string; type: 'image' | 'document' | 'other' }> = [];
+    const cleanAttachmentsForLog = () => allAttachmentsMetadata.map(({ filename, contentType, size, url }) => ({ filename, contentType, size, url }));
     const uploadedImages: string[] = [];
     const pendingImageUploads: Array<{ buffer: Buffer; filename: string; contentType: string; size: number }> = [];
     
@@ -1048,7 +1049,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         tokenVerified: false,
         // Save all attachments even if rejected early (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1077,7 +1078,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         trustedSenderId: trustedSender.id,
         // Save all attachments even if rejected early (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1135,7 +1136,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         trustedSenderId: trustedSender.id,
         // Save all attachments even if rejected early (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1425,7 +1426,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         trustedSenderId: trustedSender.id,
         // Save all attachments even if rejected (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1505,7 +1506,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         },
         // Save all attachments even if rejected (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1546,7 +1547,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         },
         // Save all attachments even if rejected (for editorial review)
         attachmentsCount: allAttachmentsMetadata.length,
-        attachmentsData: allAttachmentsMetadata
+        attachmentsData: cleanAttachmentsForLog()
       });
 
       const today = new Date();
@@ -1939,21 +1940,21 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       console.log("[Email Agent] ℹ️ Skipping staff notification (auto-publish disabled or article not created)");
     }
 
-    // Update webhook log with correct status and attachments data (already processed early)
+    // Update webhook log — wrapped in try/catch so a log-update failure
+    // doesn't mask the fact that the article was already published.
     const webhookStatus = trustedSender.autoPublish ? "published" : "processed";
-    await storage.updateEmailWebhookLog(webhookLog.id, {
-      status: webhookStatus,
-      trustedSenderId: trustedSender.id,
-      articleId: article?.id,
-      attachmentsCount: allAttachmentsMetadata.length,
-      attachmentsData: allAttachmentsMetadata,
-    });
-    
-    console.log("[Email Agent] 📊 Webhook log updated:");
-    console.log("[Email Agent]    - Attachments saved:", allAttachmentsMetadata.length);
-    console.log("[Email Agent]    - Images:", allAttachmentsMetadata.filter(a => a.type === 'image').length);
-    console.log("[Email Agent]    - Word docs:", allAttachmentsMetadata.filter(a => a.type === 'document').length);
-    console.log("[Email Agent]    - Other files:", allAttachmentsMetadata.filter(a => a.type === 'other').length);
+    try {
+      await storage.updateEmailWebhookLog(webhookLog.id, {
+        status: webhookStatus,
+        trustedSenderId: trustedSender.id,
+        articleId: article?.id,
+        attachmentsCount: allAttachmentsMetadata.length,
+        attachmentsData: cleanAttachmentsForLog(),
+      });
+      console.log("[Email Agent] 📊 Webhook log updated — attachments:", allAttachmentsMetadata.length);
+    } catch (logUpdateError: any) {
+      console.error("[Email Agent] ⚠️ Failed to update webhook log (article was published):", logUpdateError?.cause || logUpdateError);
+    }
 
     const today = new Date();
     await storage.updateEmailAgentStats(today, {
