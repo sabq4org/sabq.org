@@ -742,7 +742,12 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
     
     if (parsedAttachments.length > 0) {
       for (const att of parsedAttachments) {
-        if (att.contentId) {
+        // Only treat as inline if contentDisposition is 'inline' (not 'attachment').
+        // Gmail assigns Content-IDs to ALL attachments including pure file
+        // attachments — without this check, attached images get added to
+        // cidMap, skipped in the main loop, and never uploaded.
+        const isInlineDisposition = att.contentDisposition === 'inline';
+        if (att.contentId && isInlineDisposition) {
           const cid = att.contentId.replace(/[<>]/g, '');
           const filename = att.filename || `cid-image-${nanoid(8)}.jpg`;
           cidMap.set(cid, {
@@ -750,10 +755,11 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
             contentType: att.contentType || 'image/jpeg',
             filename
           });
-          // Mark this attachment as inline so we skip it in the main loop
           inlineAttachmentFilenames.add(filename);
           if (att.filename) inlineAttachmentFilenames.add(att.filename);
-          console.log(`[Email Agent] 🔗 CID map entry: ${cid} -> ${filename} (will skip in main loop)`);
+          console.log(`[Email Agent] 🔗 CID map entry: ${cid} -> ${filename} (inline, will skip in main loop)`);
+        } else if (att.contentId && !isInlineDisposition) {
+          console.log(`[Email Agent] 📎 Attachment has CID but disposition='${att.contentDisposition}' — treating as regular attachment: ${att.filename}`);
         }
       }
     }
