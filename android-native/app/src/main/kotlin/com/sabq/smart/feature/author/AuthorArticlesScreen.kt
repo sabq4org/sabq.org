@@ -287,26 +287,31 @@ private fun AuthorFeed(
 @Composable
 private fun AuthorHeroCard(authorPage: AuthorPage) {
     val author = authorPage.author
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
     val gradient = Brush.linearGradient(
         colors = listOf(
-            SabqTheme.colors.primaryStart.copy(alpha = 0.08f),
-            SabqTheme.colors.primaryEnd.copy(alpha = 0.03f)
+            SabqTheme.colors.primaryEnd.copy(alpha = 0.10f),
+            SabqTheme.colors.surface,
         )
     )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(gradient)
             .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(16.dp),
-                ambientColor = SabqTheme.colors.shadow,
-                spotColor = SabqTheme.colors.deepShadow
+                elevation = 8.dp,
+                shape = shape,
+                ambientColor = Color.Transparent,
+                spotColor = SabqTheme.colors.shadow,
             )
-            .background(SabqTheme.colors.surface)
-            .padding(16.dp)
+            .clip(shape)
+            .background(gradient)
+            .border(
+                width = 0.6.dp,
+                color = SabqTheme.colors.primaryEnd.copy(alpha = 0.16f),
+                shape = shape,
+            )
+            .padding(20.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
