@@ -58,7 +58,8 @@ export function LiteSidebar({ open, onClose }: LiteSidebarProps) {
 
   useEffect(() => {
     if (open && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 300);
+      const timer = setTimeout(() => inputRef.current?.focus(), 300);
+      return () => clearTimeout(timer);
     }
     if (!open) {
       setSearchQuery("");

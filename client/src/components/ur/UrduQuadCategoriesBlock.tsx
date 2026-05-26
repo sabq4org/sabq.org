@@ -179,16 +179,16 @@ function CategoryColumn({ data, index }: { data: CategoryColumnData; index: numb
 }
 
 // Mobile Compact List Component
+const getIconComponent = (iconName: string) => {
+  return (LucideIcons as any)[iconName] || LucideIcons.Folder;
+};
+
 function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
-  const IconComponent = (iconName: string) => {
-    const Icon = (LucideIcons as any)[iconName] || LucideIcons.Folder;
-    return Icon;
-  };
 
   return (
     <div className="space-y-4" data-testid="mobile-compact-list">
       {items.map((item, index) => {
-        const Icon = IconComponent(item.category.icon);
+        const Icon = getIconComponent(item.category.icon);
         
         return (
           <motion.div

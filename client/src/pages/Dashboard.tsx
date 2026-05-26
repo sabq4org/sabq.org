@@ -193,6 +193,15 @@ function getRandomMotivationalQuote(): string {
   return MOTIVATIONAL_QUOTES[randomIndex];
 }
 
+function SectionHeader({ title, color }: { title: string; color: string }) {
+  return (
+    <div className="flex items-center gap-3 px-1">
+      <div className={`h-8 w-1 ${color} rounded-full`}></div>
+      <h3 className="text-lg font-bold text-foreground">{title}</h3>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user, isLoading: isUserLoading } = useAuth({ redirectToLogin: true });
   const [, navigate] = useLocation();
@@ -273,13 +282,6 @@ function Dashboard() {
     { name: "قيد المراجعة", value: stats.comments.pending, color: COLORS[1] },
     { name: "مرفوض", value: stats.comments.rejected, color: COLORS[2] },
   ] : [];
-
-  const SectionHeader = ({ title, color }: { title: string; color: string }) => (
-    <div className="flex items-center gap-3 px-1">
-      <div className={`h-8 w-1 ${color} rounded-full`}></div>
-      <h3 className="text-lg font-bold text-foreground">{title}</h3>
-    </div>
-  );
 
   if (isUserLoading || !user) {
     return (

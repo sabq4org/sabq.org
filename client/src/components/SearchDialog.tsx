@@ -52,7 +52,8 @@ export function SearchDialog({ buttonClassName, buttonVariant = "ghost", iconCla
 
   useEffect(() => {
     if (open && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
     }
     if (!open) {
       setQuery("");

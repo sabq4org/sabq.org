@@ -79,6 +79,110 @@ const categoryColors: Record<string, string> = {
   "ai-opinions": "from-[hsl(var(--ifox-error)/1)] to-[hsl(var(--ifox-error-muted)/1)]",
 };
 
+function CategoryCard({ category, onToggleStatus }: { category: IFoxCategory; onToggleStatus: (c: IFoxCategory) => void }) {
+  const IconComponent = categoryIcons[category.icon] || Layers;
+  const colorGradient = categoryColors[category.slug] || "from-[hsl(var(--ifox-neutral)/1)] to-[hsl(var(--ifox-neutral-muted)/1)]";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ scale: 1.02 }}
+      className="group"
+      data-testid={`card-category-${category.id}`}
+    >
+      <Card className="bg-[hsl(var(--ifox-surface-primary)/.8)] border-[hsl(var(--ifox-surface-overlay))] backdrop-blur-lg hover:border-[hsl(var(--ifox-surface-overlay))] transition-all cursor-pointer">
+        <CardContent className="p-4 sm:p-5 md:p-6">
+          <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
+            <div className={`p-2 sm:p-2.5 md:p-3 rounded-xl bg-gradient-to-br ${colorGradient} shadow-[0_10px_15px_hsl(var(--ifox-surface-overlay)/.1)] flex-shrink-0`}>
+              <IconComponent className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[hsl(var(--ifox-text-primary))]" />
+            </div>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+              <Badge
+                variant={category.status === "active" ? "default" : "secondary"}
+                className={`text-xs ${category.status === "active" ? "bg-[hsl(var(--ifox-success)/.2)] text-[hsl(var(--ifox-success))] border-[hsl(var(--ifox-success)/.3)]" : ""}`}
+                data-testid={`badge-status-${category.id}`}
+              >
+                {category.status === "active" ? "نشط" : "معطل"}
+              </Badge>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => onToggleStatus(category)}
+                className="hover:bg-[hsl(var(--ifox-surface-overlay)/.6)] h-8 w-8 sm:h-9 sm:w-9"
+                data-testid={`button-toggle-${category.id}`}
+              >
+                {category.status === "active" ? (
+                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[hsl(var(--ifox-success))]" />
+                ) : (
+                  <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[hsl(var(--ifox-text-secondary))]" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mb-3 sm:mb-4 min-w-0">
+            <h3 className="text-base sm:text-lg font-bold text-[hsl(var(--ifox-text-primary))] mb-1 truncate">{category.nameAr}</h3>
+            <p className="text-xs sm:text-sm text-[hsl(var(--ifox-text-secondary))] truncate">{category.nameEn}</p>
+            {category.description && (
+              <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mt-2 line-clamp-2">{category.description}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
+              <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المقالات</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.articlesCount)}</p>
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="text-xs text-[hsl(var(--ifox-success))] whitespace-nowrap">{category.publishedCount} منشور</span>
+                <span className="text-xs text-[hsl(var(--ifox-text-secondary))]">•</span>
+                <span className="text-xs text-[hsl(var(--ifox-text-secondary))] whitespace-nowrap">{category.draftCount} مسودة</span>
+              </div>
+            </div>
+
+            <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
+              <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المشاهدات</p>
+              <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.totalViews)}</p>
+              <div className="flex items-center gap-1 mt-1">
+                <TrendingUp className="w-3 h-3 text-[hsl(var(--ifox-success))]" />
+                <span className="text-xs text-[hsl(var(--ifox-success))]">+12.5%</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-[hsl(var(--ifox-surface-overlay))]">
+            <div className="flex items-center gap-2">
+              <Badge
+                className={`
+                  px-2 py-0.5 text-xs
+                  ${category.avgAIScore >= 90 ? 'bg-gradient-to-r from-[hsl(var(--ifox-success)/1)] to-[hsl(var(--ifox-success-muted)/1)]' :
+                    category.avgAIScore >= 80 ? 'bg-gradient-to-r from-[hsl(var(--ifox-info)/1)] to-[hsl(var(--ifox-info-muted)/1)]' :
+                    'bg-gradient-to-r from-[hsl(var(--ifox-warning)/1)] to-[hsl(var(--ifox-warning-muted)/1)]'}
+                  text-[hsl(var(--ifox-text-primary))] border-0
+                `}
+                data-testid={`badge-ai-score-${category.id}`}
+              >
+                AI {category.avgAIScore}
+              </Badge>
+            </div>
+            <Link href={`/dashboard/admin/ifox/articles?category=${category.slug}`}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-[hsl(var(--ifox-accent-primary))] hover:text-[hsl(var(--ifox-accent-primary))] hover:bg-[hsl(var(--ifox-surface-overlay)/.6)] text-xs sm:text-sm w-full sm:w-auto"
+                data-testid={`button-view-articles-${category.id}`}
+              >
+                عرض المقالات
+                <ArrowUpRight className="w-3 h-3 mr-1" />
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 export default function IFoxCategory() {
   useRoleProtection('admin');
   const { toast } = useToast();
@@ -156,110 +260,6 @@ export default function IFoxCategory() {
     avgAIScore: categories.length > 0 
       ? Math.round(categories.reduce((sum, c) => sum + c.avgAIScore, 0) / categories.length)
       : 0,
-  };
-
-  const CategoryCard = ({ category }: { category: IFoxCategory }) => {
-    const IconComponent = categoryIcons[category.icon] || Layers;
-    const colorGradient = categoryColors[category.slug] || "from-[hsl(var(--ifox-neutral)/1)] to-[hsl(var(--ifox-neutral-muted)/1)]";
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        whileHover={{ scale: 1.02 }}
-        className="group"
-        data-testid={`card-category-${category.id}`}
-      >
-        <Card className="bg-[hsl(var(--ifox-surface-primary)/.8)] border-[hsl(var(--ifox-surface-overlay))] backdrop-blur-lg hover:border-[hsl(var(--ifox-surface-overlay))] transition-all cursor-pointer">
-          <CardContent className="p-4 sm:p-5 md:p-6">
-            <div className="flex items-start justify-between mb-3 sm:mb-4 gap-2">
-              <div className={`p-2 sm:p-2.5 md:p-3 rounded-xl bg-gradient-to-br ${colorGradient} shadow-[0_10px_15px_hsl(var(--ifox-surface-overlay)/.1)] flex-shrink-0`}>
-                <IconComponent className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[hsl(var(--ifox-text-primary))]" />
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                <Badge 
-                  variant={category.status === "active" ? "default" : "secondary"}
-                  className={`text-xs ${category.status === "active" ? "bg-[hsl(var(--ifox-success)/.2)] text-[hsl(var(--ifox-success))] border-[hsl(var(--ifox-success)/.3)]" : ""}`}
-                  data-testid={`badge-status-${category.id}`}
-                >
-                  {category.status === "active" ? "نشط" : "معطل"}
-                </Badge>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => handleToggleStatus(category)}
-                  className="hover:bg-[hsl(var(--ifox-surface-overlay)/.6)] h-8 w-8 sm:h-9 sm:w-9"
-                  data-testid={`button-toggle-${category.id}`}
-                >
-                  {category.status === "active" ? (
-                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[hsl(var(--ifox-success))]" />
-                  ) : (
-                    <EyeOff className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[hsl(var(--ifox-text-secondary))]" />
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="mb-3 sm:mb-4 min-w-0">
-              <h3 className="text-base sm:text-lg font-bold text-[hsl(var(--ifox-text-primary))] mb-1 truncate">{category.nameAr}</h3>
-              <p className="text-xs sm:text-sm text-[hsl(var(--ifox-text-secondary))] truncate">{category.nameEn}</p>
-              {category.description && (
-                <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mt-2 line-clamp-2">{category.description}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
-              <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
-                <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المقالات</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.articlesCount)}</p>
-                <div className="flex items-center gap-1 mt-1 flex-wrap">
-                  <span className="text-xs text-[hsl(var(--ifox-success))] whitespace-nowrap">{category.publishedCount} منشور</span>
-                  <span className="text-xs text-[hsl(var(--ifox-text-secondary))]">•</span>
-                  <span className="text-xs text-[hsl(var(--ifox-text-secondary))] whitespace-nowrap">{category.draftCount} مسودة</span>
-                </div>
-              </div>
-
-              <div className="p-2 sm:p-2.5 md:p-3 rounded-lg bg-[hsl(var(--ifox-surface-muted)/.7)]">
-                <p className="text-xs text-[hsl(var(--ifox-text-secondary))] mb-1 truncate">المشاهدات</p>
-                <p className="text-lg sm:text-xl md:text-2xl font-bold text-[hsl(var(--ifox-text-primary))]">{formatNumber(category.totalViews)}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <TrendingUp className="w-3 h-3 text-[hsl(var(--ifox-success))]" />
-                  <span className="text-xs text-[hsl(var(--ifox-success))]">+12.5%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 border-t border-[hsl(var(--ifox-surface-overlay))]">
-              <div className="flex items-center gap-2">
-                <Badge 
-                  className={`
-                    px-2 py-0.5 text-xs
-                    ${category.avgAIScore >= 90 ? 'bg-gradient-to-r from-[hsl(var(--ifox-success)/1)] to-[hsl(var(--ifox-success-muted)/1)]' : 
-                      category.avgAIScore >= 80 ? 'bg-gradient-to-r from-[hsl(var(--ifox-info)/1)] to-[hsl(var(--ifox-info-muted)/1)]' :
-                      'bg-gradient-to-r from-[hsl(var(--ifox-warning)/1)] to-[hsl(var(--ifox-warning-muted)/1)]'}
-                    text-[hsl(var(--ifox-text-primary))] border-0
-                  `}
-                  data-testid={`badge-ai-score-${category.id}`}
-                >
-                  AI {category.avgAIScore}
-                </Badge>
-              </div>
-              <Link href={`/dashboard/admin/ifox/articles?category=${category.slug}`}>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="text-[hsl(var(--ifox-accent-primary))] hover:text-[hsl(var(--ifox-accent-primary))] hover:bg-[hsl(var(--ifox-surface-overlay)/.6)] text-xs sm:text-sm w-full sm:w-auto"
-                  data-testid={`button-view-articles-${category.id}`}
-                >
-                  عرض المقالات
-                  <ArrowUpRight className="w-3 h-3 mr-1" />
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-    );
   };
 
   return (
@@ -483,7 +483,7 @@ export default function IFoxCategory() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
                     >
-                      <CategoryCard category={category} />
+                      <CategoryCard category={category} onToggleStatus={handleToggleStatus} />
                     </motion.div>
                   ))}
                 </div>

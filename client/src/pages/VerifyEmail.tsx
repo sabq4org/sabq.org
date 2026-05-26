@@ -21,7 +21,8 @@ export default function VerifyEmail() {
       return;
     }
 
-    // Verify email
+    let redirectTimer: ReturnType<typeof setTimeout>;
+
     const verifyEmail = async () => {
       try {
         const data = await apiRequest('/api/auth/verify-email', {
@@ -29,15 +30,12 @@ export default function VerifyEmail() {
           body: JSON.stringify({ token }),
         });
 
-        // If apiRequest succeeds, it means verification was successful
         setStatus('success');
         setMessage(data.message || 'تم التحقق من بريدك الإلكتروني بنجاح!');
-        
-        // Invalidate user cache
+
         queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-        
-        // Redirect to home after 3 seconds
-        setTimeout(() => navigate('/'), 3000);
+
+        redirectTimer = setTimeout(() => navigate('/'), 3000);
       } catch (error: any) {
         setStatus('error');
         setMessage(error.message || 'حدث خطأ أثناء التحقق من البريد الإلكتروني');
@@ -46,6 +44,7 @@ export default function VerifyEmail() {
     };
 
     verifyEmail();
+    return () => clearTimeout(redirectTimer);
   }, [token, navigate]);
 
   const handleResend = async () => {

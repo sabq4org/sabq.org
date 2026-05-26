@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Calendar, momentLocalizer, Views, View } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -72,11 +72,10 @@ export function IFoxCalendar({
   const [currentView, setCurrentView] = useState<View>(Views.MONTH);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Custom event component
-  const EventComponent = ({ event }: { event: CalendarEvent }) => {
+  const EventComponent = useCallback(({ event }: { event: CalendarEvent }) => {
     const categoryColor = categoryColors[event.category] || "bg-gray-500";
     const statusColor = event.status ? statusColors[event.status] : "";
-    
+
     return (
       <motion.div
         whileHover={{ scale: 1.02 }}
@@ -97,10 +96,9 @@ export function IFoxCalendar({
         )}
       </motion.div>
     );
-  };
+  }, [onEventClick, currentView]);
 
-  // Custom toolbar
-  const CustomToolbar = () => {
+  const CustomToolbar = useCallback(() => {
     return (
       <div className="flex items-center justify-between mb-4 px-4 py-3 bg-white/5 rounded-lg" dir="rtl">
         <div className="flex items-center gap-2">
@@ -164,10 +162,9 @@ export function IFoxCalendar({
         </div>
       </div>
     );
-  };
+  }, [currentDate, currentView, setCurrentDate, setCurrentView]);
 
-  // Custom date cell wrapper for month view
-  const DateCellWrapper = ({ children, value }: any) => {
+  const DateCellWrapper = useCallback(({ children, value }: any) => {
     const hasEvents = events.some(
       event => moment(event.start).isSame(value, 'day')
     );
@@ -184,7 +181,7 @@ export function IFoxCalendar({
         {children}
       </div>
     );
-  };
+  }, [events, onDateClick]);
 
   const formats = useMemo(() => ({
     dayFormat: 'dd DD',

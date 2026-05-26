@@ -47,13 +47,12 @@ const getReadingTime = (content?: string) => {
 };
 
 export function NewsArticleCard({ article, viewMode, hideCategory = false }: NewsArticleCardProps) {
-  // Use special infographic card for infographic articles
+  const [isHovered, setIsHovered] = useState(false);
+
   if (article.articleType === 'infographic') {
     const infographicVariant = viewMode === "compact" ? "compact" : "grid";
     return <InfographicArticleCard article={article} variant={infographicVariant} />;
   }
-
-  const [isHovered, setIsHovered] = useState(false);
   
   const timeAgo = article.publishedAt
     ? formatDistanceToNow(new Date(article.publishedAt), {

@@ -118,13 +118,13 @@ export function MediaLibraryPicker({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Auto-focus search input when dialog opens
   useEffect(() => {
     if (isOpen && activeTab === "library") {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         const searchInput = document.querySelector('[data-testid="input-search"]') as HTMLInputElement;
         searchInput?.focus();
       }, 100);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, activeTab]);
 

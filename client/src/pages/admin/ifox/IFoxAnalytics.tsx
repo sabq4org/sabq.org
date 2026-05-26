@@ -129,6 +129,33 @@ const categoryColors: Record<string, string> = {
   'ai-community': COLORS.green,
 };
 
+function MetricCard({ title, value, growth, icon: Icon, color, suffix = "" }: any) {
+  return (
+    <Card className="bg-[hsl(var(--ifox-surface-primary)/.8)] border-[hsl(var(--ifox-surface-overlay))] backdrop-blur-lg" data-testid={`metric-card-${title}`}>
+      <CardContent className="p-3 sm:p-4 md:p-6">
+        <div className="flex items-center justify-between mb-2 sm:mb-3 md:mb-4">
+          <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br ${color} shadow-[0_10px_15px_hsl(var(--ifox-surface-overlay)/.1)]`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[hsl(var(--ifox-text-primary))]" />
+          </div>
+          <div className={`flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${
+            growth >= 0 ? 'bg-[hsl(var(--ifox-success)/.2)] text-[hsl(var(--ifox-success))]' : 'bg-[hsl(var(--ifox-error)/.2)] text-[hsl(var(--ifox-error))]'
+          }`}>
+            {growth >= 0 ? <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> : <TrendingDown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
+            <span className="text-[10px] sm:text-xs font-bold">{Math.abs(growth)}%</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm text-[hsl(var(--ifox-text-secondary))] mb-0.5 sm:mb-1 truncate">{title}</p>
+          <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
+            {typeof value === 'number' ? formatNumber(value) : value}
+            {suffix && <span className="text-sm sm:text-base md:text-lg text-[hsl(var(--ifox-text-secondary))] mr-1">{suffix}</span>}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function IFoxAnalytics() {
   useRoleProtection('admin');
   
@@ -162,31 +189,6 @@ export default function IFoxAnalytics() {
   const { data: engagementMetrics } = useQuery<EngagementMetrics>({
     queryKey: ["/api/admin/ifox/analytics/engagement", timeRange]
   });
-
-  const MetricCard = ({ title, value, growth, icon: Icon, color, suffix = "" }: any) => (
-    <Card className="bg-[hsl(var(--ifox-surface-primary)/.8)] border-[hsl(var(--ifox-surface-overlay))] backdrop-blur-lg" data-testid={`metric-card-${title}`}>
-      <CardContent className="p-3 sm:p-4 md:p-6">
-        <div className="flex items-center justify-between mb-2 sm:mb-3 md:mb-4">
-          <div className={`p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br ${color} shadow-[0_10px_15px_hsl(var(--ifox-surface-overlay)/.1)]`}>
-            <Icon className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-[hsl(var(--ifox-text-primary))]" />
-          </div>
-          <div className={`flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full ${
-            growth >= 0 ? 'bg-[hsl(var(--ifox-success)/.2)] text-[hsl(var(--ifox-success))]' : 'bg-[hsl(var(--ifox-error)/.2)] text-[hsl(var(--ifox-error))]'
-          }`}>
-            {growth >= 0 ? <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> : <TrendingDown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
-            <span className="text-[10px] sm:text-xs font-bold">{Math.abs(growth)}%</span>
-          </div>
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs sm:text-sm text-[hsl(var(--ifox-text-secondary))] mb-0.5 sm:mb-1 truncate">{title}</p>
-          <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[hsl(var(--ifox-text-primary))] truncate">
-            {typeof value === 'number' ? formatNumber(value) : value}
-            {suffix && <span className="text-sm sm:text-base md:text-lg text-[hsl(var(--ifox-text-secondary))] mr-1">{suffix}</span>}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <IFoxLayout>

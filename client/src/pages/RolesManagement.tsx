@@ -44,6 +44,33 @@ import {
 } from "lucide-react";
 import type { RoleWithPermissions, Permission } from "@shared/schema";
 
+function ModuleIcon({ module }: { module: string }) {
+  const iconProps = { className: "w-5 h-5 text-primary" };
+  switch (module) {
+    case "articles": return <FileText {...iconProps} />;
+    case "categories": return <FolderOpen {...iconProps} />;
+    case "users": return <Users {...iconProps} />;
+    case "comments": return <MessageSquare {...iconProps} />;
+    case "staff": return <UserCog {...iconProps} />;
+    case "system": return <Settings {...iconProps} />;
+    case "calendar": return <Calendar {...iconProps} />;
+    case "mirqab": return <Telescope {...iconProps} />;
+    case "visual_ai": return <Image {...iconProps} />;
+    case "ifox": return <Bot {...iconProps} />;
+    case "audio_newsletters": return <Mic {...iconProps} />;
+    case "omq": return <Microscope {...iconProps} />;
+    case "whatsapp_agent": return <MessageCircle {...iconProps} />;
+    case "email_agent": return <Mail {...iconProps} />;
+    case "media_library": return <ImageIcon {...iconProps} />;
+    case "infographics": return <BarChart2 {...iconProps} />;
+    case "analytics": return <BarChart2 {...iconProps} />;
+    case "story_cards": return <LayoutGrid {...iconProps} />;
+    case "publisher_sales": return <Briefcase {...iconProps} />;
+    case "muqtarab": return <Pin {...iconProps} />;
+    default: return <Shield {...iconProps} />;
+  }
+}
+
 export default function RolesManagement() {
   const { user } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
@@ -235,34 +262,6 @@ export default function RolesManagement() {
     story_cards: "بطاقات القصص",
     publisher_sales: "نظام الناشرين",
     muqtarab: "مُقترب",
-  };
-
-  // أيقونات الوحدات - استخدام مكونات Lucide
-  const ModuleIcon = ({ module }: { module: string }) => {
-    const iconProps = { className: "w-5 h-5 text-primary" };
-    switch (module) {
-      case "articles": return <FileText {...iconProps} />;
-      case "categories": return <FolderOpen {...iconProps} />;
-      case "users": return <Users {...iconProps} />;
-      case "comments": return <MessageSquare {...iconProps} />;
-      case "staff": return <UserCog {...iconProps} />;
-      case "system": return <Settings {...iconProps} />;
-      case "calendar": return <Calendar {...iconProps} />;
-      case "mirqab": return <Telescope {...iconProps} />;
-      case "visual_ai": return <Image {...iconProps} />;
-      case "ifox": return <Bot {...iconProps} />;
-      case "audio_newsletters": return <Mic {...iconProps} />;
-      case "omq": return <Microscope {...iconProps} />;
-      case "whatsapp_agent": return <MessageCircle {...iconProps} />;
-      case "email_agent": return <Mail {...iconProps} />;
-      case "media_library": return <ImageIcon {...iconProps} />;
-      case "infographics": return <BarChart2 {...iconProps} />;
-      case "analytics": return <BarChart2 {...iconProps} />;
-      case "story_cards": return <LayoutGrid {...iconProps} />;
-      case "publisher_sales": return <Briefcase {...iconProps} />;
-      case "muqtarab": return <Pin {...iconProps} />;
-      default: return <Shield {...iconProps} />;
-    }
   };
 
   // ترتيب الصلاحيات حسب الوحدات

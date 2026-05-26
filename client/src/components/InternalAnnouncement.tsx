@@ -44,10 +44,12 @@ export function InternalAnnouncement() {
   });
 
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
     announcements.forEach(ann => {
       if (!trackedImpressions.has(ann.id)) {
-        trackMetricMutation.mutate({ 
-          announcementId: ann.id, 
+        trackMetricMutation.mutate({
+          announcementId: ann.id,
           event: 'impression',
           channel: getCurrentChannel(),
         });
@@ -56,21 +58,22 @@ export function InternalAnnouncement() {
 
       const uniqueViewKey = `${VIEWED_PREFIX}${ann.id}`;
       const hasViewedInSession = sessionStorage.getItem(uniqueViewKey);
-      
+
       if (!hasViewedInSession && !trackedUniqueViews.has(ann.id)) {
         const timer = setTimeout(() => {
-          trackMetricMutation.mutate({ 
-            announcementId: ann.id, 
+          trackMetricMutation.mutate({
+            announcementId: ann.id,
             event: 'unique_view',
             channel: getCurrentChannel(),
           });
           sessionStorage.setItem(uniqueViewKey, 'true');
           setTrackedUniqueViews(prev => new Set(Array.from(prev).concat(ann.id)));
         }, 3000);
-
-        return () => clearTimeout(timer);
+        timers.push(timer);
       }
     });
+
+    return () => timers.forEach(t => clearTimeout(t));
   }, [announcements, trackedImpressions, trackedUniqueViews]);
 
   const getCurrentChannel = () => {

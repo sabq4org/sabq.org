@@ -40,6 +40,40 @@ import {
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+function CodeBlock({ code, id, language }: { code: string; id: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="relative">
+      <div className="absolute top-2 left-2 flex items-center gap-2">
+        <Badge variant="secondary" className="text-xs">{language}</Badge>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6"
+          onClick={handleCopy}
+          data-testid={`button-copy-${id}`}
+        >
+          {copied ? (
+            <CheckCircle className="h-3 w-3 text-green-500" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+        </Button>
+      </div>
+      <pre className="bg-gray-900 text-gray-100 p-4 pt-10 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed" dir="ltr">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 export default function DevelopersPage() {
   const { toast } = useToast();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -202,30 +236,6 @@ curl -X POST "https://sabq.org/api/articles" \\
     }
   ]
 }`;
-
-  const CodeBlock = ({ code, id, language }: { code: string; id: string; language: string }) => (
-    <div className="relative">
-      <div className="absolute top-2 left-2 flex items-center gap-2">
-        <Badge variant="secondary" className="text-xs">{language}</Badge>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6"
-          onClick={() => copyToClipboard(code, id)}
-          data-testid={`button-copy-${id}`}
-        >
-          {copiedCode === id ? (
-            <CheckCircle className="h-3 w-3 text-green-500" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
-        </Button>
-      </div>
-      <pre className="bg-gray-900 text-gray-100 p-4 pt-10 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed" dir="ltr">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">

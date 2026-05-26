@@ -30,6 +30,10 @@ export default function AnalyticsDashboard() {
     }
   }, [user, isLoading, setLocation]);
 
+  useEffect(() => {
+    document.title = "لوحة التحليلات - سبق الذكية";
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -44,11 +48,6 @@ export default function AnalyticsDashboard() {
   if (!user || !authorizedRoles.includes(user.role || '')) {
     return null;
   }
-
-  // Set page title
-  useEffect(() => {
-    document.title = "لوحة التحليلات - سبق الذكية";
-  }, []);
 
   return (
     <div className="min-h-screen bg-background">

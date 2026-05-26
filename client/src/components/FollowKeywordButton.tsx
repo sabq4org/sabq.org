@@ -22,16 +22,13 @@ export function FollowKeywordButton({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Safety check: return null if keyword is invalid
-  if (!keyword || typeof keyword !== 'string' || !keyword.trim()) {
-    return null;
-  }
+  const isValidKeyword = !!keyword && typeof keyword === 'string' && !!keyword.trim();
 
   const { data: followedKeywordsRaw, isLoading } = useQuery<
     Array<{ tagId: string; tagName: string; notify: boolean }>
   >({
     queryKey: ["/api/user/followed-keywords"],
-    enabled: !!user,
+    enabled: !!user && isValidKeyword,
   });
   const followedKeywords = Array.isArray(followedKeywordsRaw) ? followedKeywordsRaw : [];
 
@@ -109,7 +106,7 @@ export function FollowKeywordButton({
     }
   };
 
-  if (!user) return null;
+  if (!isValidKeyword || !user) return null;
 
   const isPending = followMutation.isPending || unfollowMutation.isPending;
 

@@ -55,20 +55,21 @@ export default function TwoFactorVerify() {
   };
 
   useEffect(() => {
+    let redirectTimer: ReturnType<typeof setTimeout>;
+
     const fetchUserMethod = async () => {
       try {
         const response = await fetch('/api/2fa/pending-method');
         if (!response.ok) {
           throw new Error('فشل في الحصول على طريقة التحقق');
         }
-        
+
         const data = await response.json();
         setUserMethod(data.method);
-        
+
         if (data.method === 'sms' || data.method === 'both') {
           setVerificationMethod('sms');
           if (data.method === 'sms') {
-            // Auto-send SMS for SMS-only method using shared function
             sendSMSOTP();
           }
         } else {
@@ -81,14 +82,14 @@ export default function TwoFactorVerify() {
           description: "فشل في تحميل بيانات التحقق. يرجى المحاولة مرة أخرى",
           variant: "destructive",
         });
-        // Redirect to login after a short delay
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
           window.location.href = "/login";
         }, 2000);
       }
     };
 
     fetchUserMethod();
+    return () => clearTimeout(redirectTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

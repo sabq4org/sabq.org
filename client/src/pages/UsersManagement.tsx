@@ -163,16 +163,6 @@ export default function UsersManagement() {
     }
   }, [isUserLoading, user, setLocation]);
 
-  // Don't render for non-admin
-  if (!isUserLoading && user && !hasRole(user, "admin", "system_admin")) {
-    return null;
-  }
-
-  // Store current user ID globally for button disable logic
-  if (user?.id) {
-    (globalThis as any).__currentUserId = user.id;
-  }
-
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
   const [deletingUser, setDeletingUser] = useState<UserListItem | null>(null);
   const [addingUser, setAddingUser] = useState(false);
@@ -484,6 +474,14 @@ export default function UsersManagement() {
       </Badge>
     );
   };
+
+  if (!isUserLoading && user && !hasRole(user, "admin", "system_admin")) {
+    return null;
+  }
+
+  if (user?.id) {
+    (globalThis as any).__currentUserId = user.id;
+  }
 
   return (
     <DashboardLayout>

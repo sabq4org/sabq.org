@@ -18,10 +18,6 @@ export function WeeklyPhotosDisplay({ photos, title }: WeeklyPhotosDisplayProps)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const validPhotos = photos?.filter(p => p.imageUrl) || [];
-  
-  if (validPhotos.length === 0) {
-    return null;
-  }
 
   const goToPrevious = useCallback(() => {
     if (selectedIndex !== null) {
@@ -57,6 +53,10 @@ export function WeeklyPhotosDisplay({ photos, title }: WeeklyPhotosDisplayProps)
   }, [selectedIndex, goToPrevious, goToNext]);
 
   const selectedPhoto = selectedIndex !== null ? validPhotos[selectedIndex] : null;
+
+  if (validPhotos.length === 0) {
+    return null;
+  }
 
   return (
     <div className="w-full" dir="rtl">

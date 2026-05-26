@@ -500,14 +500,14 @@ export default function EnglishArticlesPage() {
     return badges[type as keyof typeof badges] || <Badge>{type}</Badge>;
   };
 
-  const StatusCards = ({ 
-    metrics, 
-    activeStatus, 
-    onSelect 
-  }: { 
-    metrics: any; 
-    activeStatus: string; 
-    onSelect: (status: "published" | "scheduled" | "draft" | "archived") => void 
+  const StatusCards = ({
+    metrics,
+    activeStatus,
+    onSelect
+  }: {
+    metrics: any;
+    activeStatus: string;
+    onSelect: (status: "published" | "scheduled" | "draft" | "archived") => void
   }) => {
     const cards = [
       { status: "published" as const, label: "Published", count: metrics.published || 0 },

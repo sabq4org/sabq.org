@@ -86,6 +86,35 @@ interface RichTextEditorProps {
   disabled?: boolean;
 }
 
+function ToolbarButton({
+  onClick,
+  isActive = false,
+  disabled = false,
+  children,
+  title
+}: {
+  onClick: () => void;
+  isActive?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={isActive ? "default" : "ghost"}
+      size="sm"
+      onClick={onClick}
+      disabled={disabled}
+      className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0"
+      title={title}
+      data-testid={`button-${title.replace(/\s+/g, '-')}`}
+    >
+      {children}
+    </Button>
+  );
+}
+
 export function RichTextEditor({ 
   content, 
   onChange, 
@@ -176,92 +205,47 @@ export function RichTextEditor({
     }
   }, [disabled, editor]);
 
-  // Load Twitter widgets script when editor is ready
   useEffect(() => {
     if (!editor) return;
 
-    console.log('[RichTextEditor] Editor ready, checking Twitter script...');
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // Check if script is already loaded
+    const loadTweets = () => {
+      if (cancelled) return;
+      const isDark = document.documentElement.classList.contains('dark');
+      const editorElement = editor.view.dom;
+      const tweetBlocks = editorElement.querySelectorAll('blockquote.twitter-tweet');
+      tweetBlocks.forEach((block) => block.setAttribute('data-theme', isDark ? 'dark' : 'light'));
+      if (tweetBlocks.length > 0) window.twttr?.widgets?.load(editorElement);
+    };
+
+    const pollForApi = (retries = 0) => {
+      if (cancelled) return;
+      if (window.twttr?.widgets) {
+        loadTweets();
+      } else if (retries < 20) {
+        timers.push(setTimeout(() => pollForApi(retries + 1), 250));
+      }
+    };
+
     const existingScript = document.querySelector('script[src="https://platform.twitter.com/widgets.js"]');
-    
+
     if (existingScript) {
-      console.log('[RichTextEditor] Twitter script already exists in DOM');
-      
-      // Wait for twttr to be available
-      const waitForTwitter = (retries = 0) => {
-        if (window.twttr?.widgets) {
-          console.log('[RichTextEditor] Twitter widgets API is ready');
-          const isDark = document.documentElement.classList.contains('dark');
-          const theme = isDark ? 'dark' : 'light';
-          const editorElement = editor.view.dom;
-          const tweetBlocks = editorElement.querySelectorAll('blockquote.twitter-tweet');
-          console.log(`[RichTextEditor] Found ${tweetBlocks.length} tweet blocks in editor`);
-          
-          tweetBlocks.forEach((block) => {
-            block.setAttribute('data-theme', theme);
-          });
-          
-          if (tweetBlocks.length > 0) {
-            window.twttr.widgets.load(editorElement);
-          }
-        } else if (retries < 20) {
-          console.log(`[RichTextEditor] Waiting for Twitter widgets API... (attempt ${retries + 1})`);
-          setTimeout(() => waitForTwitter(retries + 1), 250);
-        } else {
-          console.error('[RichTextEditor] Twitter widgets API failed to load after 5 seconds');
-        }
-      };
-      
-      waitForTwitter();
-      return;
+      pollForApi();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://platform.twitter.com/widgets.js';
+      script.async = true;
+      script.charset = 'utf-8';
+      script.onload = () => pollForApi();
+      document.body.appendChild(script);
     }
 
-    // Load script for the first time
-    console.log('[RichTextEditor] Loading Twitter script for the first time...');
-    const script = document.createElement('script');
-    script.src = 'https://platform.twitter.com/widgets.js';
-    script.async = true;
-    script.charset = 'utf-8';
-    
-    script.onload = () => {
-      console.log('[RichTextEditor] Twitter widgets script loaded successfully');
-      
-      // Wait for twttr.widgets to be available
-      const checkWidgets = (retries = 0) => {
-        if (window.twttr?.widgets) {
-          console.log('[RichTextEditor] Twitter widgets API is ready');
-          const isDark = document.documentElement.classList.contains('dark');
-          const theme = isDark ? 'dark' : 'light';
-          const editorElement = editor.view.dom;
-          const tweetBlocks = editorElement.querySelectorAll('blockquote.twitter-tweet');
-          console.log(`[RichTextEditor] Found ${tweetBlocks.length} tweet blocks in editor`);
-          
-          tweetBlocks.forEach((block) => {
-            block.setAttribute('data-theme', theme);
-          });
-          
-          if (tweetBlocks.length > 0) {
-            window.twttr.widgets.load(editorElement);
-          }
-        } else if (retries < 20) {
-          console.log(`[RichTextEditor] Waiting for widgets API... (attempt ${retries + 1})`);
-          setTimeout(() => checkWidgets(retries + 1), 250);
-        } else {
-          console.error('[RichTextEditor] Widgets API not available after script load');
-        }
-      };
-      
-      checkWidgets();
+    return () => {
+      cancelled = true;
+      timers.forEach(t => clearTimeout(t));
     };
-
-    script.onerror = (error) => {
-      console.error('[RichTextEditor] Failed to load Twitter widgets script:', error);
-    };
-
-    document.body.appendChild(script);
-
-    // No cleanup - script should stay loaded for the entire session
   }, [editor]);
 
   useEffect(() => {
@@ -472,33 +456,6 @@ export function RichTextEditor({
   if (!editor) {
     return null;
   }
-
-  const ToolbarButton = ({ 
-    onClick, 
-    isActive = false, 
-    disabled = false, 
-    children, 
-    title 
-  }: { 
-    onClick: () => void; 
-    isActive?: boolean; 
-    disabled?: boolean; 
-    children: React.ReactNode;
-    title: string;
-  }) => (
-    <Button
-      type="button"
-      variant={isActive ? "default" : "ghost"}
-      size="sm"
-      onClick={onClick}
-      disabled={disabled}
-      className="h-10 w-10 sm:h-8 sm:w-8 p-0 shrink-0"
-      title={title}
-      data-testid={`button-${title.replace(/\s+/g, '-')}`}
-    >
-      {children}
-    </Button>
-  );
 
   return (
     <div className="border rounded-md" dir={dir}>
