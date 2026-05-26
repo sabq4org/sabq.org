@@ -596,6 +596,20 @@ nonisolated enum ImageCache {
         shared.removeAllObjects()
     }
 
+    /// Warm the cache for a batch of image URLs without blocking UI.
+    /// Called when articles appear near the viewport edge so images
+    /// are already decoded by the time the user scrolls to them.
+    static func prefetch(urls: [URL], maxPixelSize: CGFloat = 2400) {
+        for url in urls {
+            if shared.object(forKey: url as NSURL) != nil { continue }
+            Task.detached(priority: .utility) {
+                guard let (data, _) = try? await imageSession.data(from: url) else { return }
+                guard let img = decodedImage(data: data, maxPixelSize: maxPixelSize) else { return }
+                shared.setObject(img, forKey: url as NSURL, cost: byteCost(of: img))
+            }
+        }
+    }
+
     /// Decode + downsample an image to a sensible on-screen maximum.
     /// Uses ImageIO's `kCGImageSourceCreateThumbnailFromImageAlways` so
     /// the full-resolution bitmap never lives in memory.

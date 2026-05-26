@@ -69,6 +69,7 @@ actor APIClient {
             memoryCapacity: 10_000_000,
             diskCapacity: 50_000_000
         )
+        config.httpMaximumConnectionsPerHost = 8
         config.requestCachePolicy = .useProtocolCachePolicy
         config.httpAdditionalHeaders = [
             "Accept": "application/json",

@@ -877,7 +877,7 @@ struct HomeFeedView: View {
                 // VStack rendered all ~15-50 CompactArticleRow views
                 // upfront on every paginated `تحميل المزيد` tap.
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { _, article in
+                    ForEach(Array(articlesStore.filteredArticles.enumerated()), id: \.element.id) { index, article in
                         NavigationLink(value: article) {
                             CompactArticleRow(
                                 article: article,
@@ -887,6 +887,13 @@ struct HomeFeedView: View {
                         }
                         .buttonStyle(.plain)
                         .padding(.vertical, 4)
+                        .onAppear {
+                            // Prefetch images for the next 5 articles
+                            let allArticles = articlesStore.filteredArticles
+                            let upcoming = allArticles.dropFirst(index + 1).prefix(5)
+                            let urls = upcoming.compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+                            if !urls.isEmpty { ImageCache.prefetch(urls: urls, maxPixelSize: 1200) }
+                        }
                     }
                 }
 
