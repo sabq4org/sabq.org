@@ -32,7 +32,6 @@ const PersonalizedFeed = lazy(() =>
 const ContinueReadingWidget = lazy(() => 
   import("@/components/ContinueReadingWidget").then(module => ({ default: module.ContinueReadingWidget }))
 );
-);
 const TrendingTopics = lazy(() => 
   import("@/components/TrendingTopics").then(module => ({ default: module.TrendingTopics }))
 );
