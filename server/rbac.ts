@@ -4,7 +4,7 @@ import { db } from "./db";
 import { users, roles, permissions, rolePermissions, userRoles, userPermissionOverrides } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
+import { SUPERUSER_ROLE_NAMES, getPermissionsForRoles } from "@shared/rbac-constants";
 
 // Type definitions
 export type PermissionCode = string; // e.g., "articles.create"
@@ -38,8 +38,15 @@ export async function userHasPermission(
         isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
       }
 
-      const permissions = isSuperuser ? [] : await getUserPermissions(userId);
-      permData = { isSuperuser, permissions };
+      if (isSuperuser) {
+        permData = { isSuperuser, permissions: [] };
+      } else {
+        const dbPerms = await getUserPermissions(userId);
+        const allRoles = await getUserRoleNames(userId);
+        const codePerms = getPermissionsForRoles(allRoles);
+        const merged = [...new Set([...dbPerms, ...codePerms])];
+        permData = { isSuperuser, permissions: merged };
+      }
       memoryCache.set(cacheKey, permData, 2 * 60 * 1000); // 2 min cache
     }
 
