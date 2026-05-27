@@ -1592,6 +1592,15 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 85000);
         
+        setTimeout(async () => {
+          try {
+            const { startArticleDailyStatsJob } = await import("./jobs/articleDailyStatsJob");
+            startArticleDailyStatsJob();
+          } catch (error) {
+            console.error("[Server] Error starting article daily stats job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 90000);
+
         // Missing Thumbnails Regeneration - DISABLED for performance
         // TODO: Re-enable when missing images are fixed
         // setTimeout(async () => {

@@ -3,10 +3,8 @@ import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
@@ -16,18 +14,27 @@ import {
   invalidateContributorAnalytics,
 } from "@/lib/contributorAnalyticsCache";
 import {
+  ContributorStatsRow,
+  PerformanceChart,
+  BestArticleCard,
+  EngagementTable,
+  FollowerCard,
+  FeaturedCommentCard,
+  PublishingActivityCard,
+  ContributorRankCard,
+  MonthComparisonCard,
+  ArticleStatusBreakdown,
+} from "@/components/contributor-dashboard";
+import {
   FileText,
-  CheckCircle,
-  Clock,
-  XCircle,
   Edit,
+  PlusCircle,
+  MessageSquare,
+  AlertCircle,
   Eye,
   ThumbsUp,
   MessageCircle,
-  PlusCircle,
-  FileEdit,
-  MessageSquare,
-  AlertCircle,
+  Bookmark,
 } from "lucide-react";
 
 interface OpinionAuthorAnalytics {
@@ -40,6 +47,40 @@ interface OpinionAuthorAnalytics {
   totalViews: number;
   totalLikes: number;
   totalComments: number;
+  totalBookmarks: number;
+  dailyStats: Array<{ date: string; views: number; likes: number; comments: number }>;
+  bestArticleThisWeek: { id: string; title: string; views: number } | null;
+  comparison: {
+    viewsThisMonth: number;
+    viewsLastMonth: number;
+    likesThisMonth: number;
+    likesLastMonth: number;
+  };
+  followers: {
+    count: number;
+    dailyGrowth: Array<{ date: string; count: number }>;
+  };
+  topArticles: Array<{
+    id: string;
+    title: string;
+    views: number;
+    likes: number;
+    comments: number;
+    bookmarks: number;
+    publishedAt: string | null;
+  }>;
+  featuredComment: {
+    content: string;
+    userName: string;
+    articleTitle: string;
+    articleId: string;
+  } | null;
+  publishingActivity: {
+    lastPublishedAt: string | null;
+    daysSinceLastPublished: number | null;
+    thisWeekCount: number;
+    thisMonthCount: number;
+  };
   articles: Array<{
     id: string;
     title: string;
@@ -49,6 +90,9 @@ interface OpinionAuthorAnalytics {
     reviewedAt?: string | null;
     updatedAt?: string | null;
     views: number;
+    likes: number;
+    comments: number;
+    bookmarks: number;
     publishedAt: string | null;
     createdAt: string;
   }>;
@@ -115,6 +159,7 @@ export default function OpinionAuthorDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-4 md:p-6" dir="rtl">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">
@@ -163,19 +208,9 @@ export default function OpinionAuthorDashboard() {
               إعادة المحاولة
             </Button>
           </div>
-        ) : isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <Skeleton className="h-4 w-20 mb-2" />
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         ) : (
           <>
+            {/* Needs Changes Alert */}
             {needsChangesList.length > 0 && (
               <div className="rounded-xl border-2 border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40 p-4 md:p-5 space-y-3">
                 <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100 font-semibold">
@@ -201,11 +236,7 @@ export default function OpinionAuthorDashboard() {
                         )}
                       </div>
                       <div className="flex shrink-0 gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleEditArticle(article.id)}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => handleEditArticle(article.id)}>
                           <Edit className="h-4 w-4 ml-1" />
                           تعديل
                         </Button>
@@ -221,121 +252,90 @@ export default function OpinionAuthorDashboard() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card data-testid="card-total-articles">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <FileText className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">إجمالي المقالات</p>
-                      <p className="text-2xl font-bold">{analytics?.totalArticles || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Section: Overview */}
+            <section className="space-y-4">
+              <h2 className="text-lg font-semibold">نظرة عامة</h2>
 
-              <Card data-testid="card-published-articles">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-green-500/10">
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">منشور</p>
-                      <p className="text-2xl font-bold">{analytics?.publishedArticles || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <ContributorStatsRow
+                totalViews={analytics?.totalViews ?? 0}
+                totalLikes={analytics?.totalLikes ?? 0}
+                totalComments={analytics?.totalComments ?? 0}
+                totalBookmarks={analytics?.totalBookmarks ?? 0}
+                comparison={analytics?.comparison}
+                loading={isLoading}
+              />
 
-              <Card data-testid="card-draft-articles">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-yellow-500/10">
-                      <FileEdit className="h-5 w-5 text-yellow-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">مسودة</p>
-                      <p className="text-2xl font-bold">{analytics?.draftArticles || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <ArticleStatusBreakdown
+                  published={analytics?.publishedArticles ?? 0}
+                  draft={analytics?.draftArticles ?? 0}
+                  pending={analytics?.pendingArticles ?? 0}
+                  needsChanges={analytics?.needsChangesArticles ?? 0}
+                  rejected={analytics?.rejectedArticles ?? 0}
+                  loading={isLoading}
+                />
+                <MonthComparisonCard
+                  comparison={analytics?.comparison ?? { viewsThisMonth: 0, viewsLastMonth: 0, likesThisMonth: 0, likesLastMonth: 0 }}
+                  loading={isLoading}
+                />
+                <BestArticleCard
+                  article={analytics?.bestArticleThisWeek ?? null}
+                  loading={isLoading}
+                  onNavigate={(id) => navigate(`/article/${id}`)}
+                />
+              </div>
+            </section>
 
-              <Card data-testid="card-pending-articles">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <Clock className="h-5 w-5 text-blue-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">قيد المراجعة</p>
-                      <p className="text-2xl font-bold">{analytics?.pendingArticles || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Section: Performance Chart */}
+            <section>
+              <h2 className="text-lg font-semibold mb-4">أداء المقالات</h2>
+              <PerformanceChart
+                dailyStats={analytics?.dailyStats ?? []}
+                loading={isLoading}
+              />
+            </section>
 
-              <Card data-testid="card-rejected-articles">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-red-500/10">
-                      <XCircle className="h-5 w-5 text-red-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">مرفوض</p>
-                      <p className="text-2xl font-bold">{analytics?.rejectedArticles || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Section: Engagement */}
+            <section>
+              <h2 className="text-lg font-semibold mb-4">التفاعل</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2">
+                  <EngagementTable
+                    articles={analytics?.topArticles ?? []}
+                    loading={isLoading}
+                    onNavigate={(id) => navigate(`/article/${id}`)}
+                  />
+                </div>
+                <FeaturedCommentCard
+                  comment={analytics?.featuredComment ?? null}
+                  loading={isLoading}
+                  onNavigate={(id) => navigate(`/article/${id}`)}
+                />
+              </div>
+            </section>
 
-              <Card data-testid="card-total-views">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-purple-500/10">
-                      <Eye className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">المشاهدات</p>
-                      <p className="text-2xl font-bold">{analytics?.totalViews?.toLocaleString("en-US") || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Section: Audience */}
+            <section>
+              <h2 className="text-lg font-semibold mb-4">الجمهور</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FollowerCard
+                  count={analytics?.followers?.count ?? 0}
+                  dailyGrowth={analytics?.followers?.dailyGrowth ?? []}
+                  loading={isLoading}
+                />
+                <ContributorRankCard roleType="opinion_author" loading={isLoading} />
+                <PublishingActivityCard
+                  lastPublishedAt={analytics?.publishingActivity?.lastPublishedAt ?? null}
+                  daysSinceLastPublished={analytics?.publishingActivity?.daysSinceLastPublished ?? null}
+                  thisWeekCount={analytics?.publishingActivity?.thisWeekCount ?? 0}
+                  thisMonthCount={analytics?.publishingActivity?.thisMonthCount ?? 0}
+                  loading={isLoading}
+                />
+              </div>
+            </section>
 
-              <Card data-testid="card-total-likes">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-pink-500/10">
-                      <ThumbsUp className="h-5 w-5 text-pink-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">الإعجابات</p>
-                      <p className="text-2xl font-bold">{analytics?.totalLikes?.toLocaleString("en-US") || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card data-testid="card-total-comments">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-cyan-500/10">
-                      <MessageCircle className="h-5 w-5 text-cyan-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">التعليقات</p>
-                      <p className="text-2xl font-bold">{analytics?.totalComments?.toLocaleString("en-US") || 0}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="mt-8">
+            {/* Section: Articles Table */}
+            <section>
               <h2 className="text-lg font-semibold mb-4" data-testid="text-articles-section-title">
                 مقالاتي
               </h2>
@@ -348,7 +348,18 @@ export default function OpinionAuthorDashboard() {
                         <th className="text-right py-3 px-4 font-medium">العنوان</th>
                         <th className="text-right py-3 px-4 font-medium">الحالة</th>
                         <th className="text-right py-3 px-4 font-medium min-w-[200px]">ملاحظات التحرير</th>
-                        <th className="text-right py-3 px-4 font-medium">المشاهدات</th>
+                        <th className="text-center py-3 px-4 font-medium">
+                          <Eye className="h-3.5 w-3.5 inline" />
+                        </th>
+                        <th className="text-center py-3 px-4 font-medium">
+                          <ThumbsUp className="h-3.5 w-3.5 inline" />
+                        </th>
+                        <th className="text-center py-3 px-4 font-medium">
+                          <MessageCircle className="h-3.5 w-3.5 inline" />
+                        </th>
+                        <th className="text-center py-3 px-4 font-medium">
+                          <Bookmark className="h-3.5 w-3.5 inline" />
+                        </th>
                         <th className="text-right py-3 px-4 font-medium">تاريخ الإنشاء</th>
                         <th className="text-center py-3 px-4 font-medium">إجراءات</th>
                       </tr>
@@ -391,10 +402,19 @@ export default function OpinionAuthorDashboard() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-4">
-                            {article.views?.toLocaleString("en-US") || 0}
+                          <td className="py-3 px-4 text-center tabular-nums">
+                            {(article.views || 0).toLocaleString("ar-SA")}
                           </td>
-                          <td className="py-3 px-4 text-muted-foreground">
+                          <td className="py-3 px-4 text-center tabular-nums">
+                            {(article.likes || 0).toLocaleString("ar-SA")}
+                          </td>
+                          <td className="py-3 px-4 text-center tabular-nums">
+                            {(article.comments || 0).toLocaleString("ar-SA")}
+                          </td>
+                          <td className="py-3 px-4 text-center tabular-nums">
+                            {(article.bookmarks || 0).toLocaleString("ar-SA")}
+                          </td>
+                          <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
                             {article.createdAt
                               ? format(new Date(article.createdAt), "d MMMM yyyy", { locale: ar })
                               : "-"}
@@ -429,7 +449,7 @@ export default function OpinionAuthorDashboard() {
                     </tbody>
                   </table>
                 </div>
-              ) : (
+              ) : !isLoading ? (
                 <div className="text-center py-12 border rounded-lg bg-muted/20">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-4">
@@ -440,8 +460,8 @@ export default function OpinionAuthorDashboard() {
                     ابدأ بكتابة مقالك الأول
                   </Button>
                 </div>
-              )}
-            </div>
+              ) : null}
+            </section>
           </>
         )}
       </div>

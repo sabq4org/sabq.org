@@ -307,6 +307,7 @@ import {
   announcementDismissals,
   articlePolls,
   userPointsTotal,
+  articleDailyStats,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -10714,8 +10715,7 @@ Respond in valid JSON format only:
       if (!isOpinionAuthor) {
         return res.status(403).json({ error: "هذا الـ endpoint خاص بكتّاب الرأي فقط" });
       }
-      
-      // مقالات الرأي المرتبطة بالكاتب (مؤلف أو مُرسِل)
+
       const myArticles = await db
         .select()
         .from(articles)
@@ -10728,49 +10728,179 @@ Respond in valid JSON format only:
             ),
           ),
         );
-      
+
       const articleIds = myArticles.map(a => a.id);
-      
+
+      const emptyResponse = {
+        totalArticles: 0, publishedArticles: 0, draftArticles: 0,
+        pendingArticles: 0, needsChangesArticles: 0, rejectedArticles: 0,
+        totalViews: 0, totalLikes: 0, totalComments: 0, totalBookmarks: 0,
+        dailyStats: [], bestArticleThisWeek: null,
+        comparison: { viewsThisMonth: 0, viewsLastMonth: 0, likesThisMonth: 0, likesLastMonth: 0 },
+        followers: { count: 0, dailyGrowth: [] },
+        topArticles: [], featuredComment: null,
+        publishingActivity: { lastPublishedAt: null, daysSinceLastPublished: null, thisWeekCount: 0, thisMonthCount: 0 },
+        articles: [],
+      };
+
       if (articleIds.length === 0) {
-        return res.json({
-          totalArticles: 0,
-          publishedArticles: 0,
-          draftArticles: 0,
-          pendingArticles: 0,
-          rejectedArticles: 0,
-          totalViews: 0,
-          totalLikes: 0,
-          totalComments: 0,
-          articles: [],
-        });
+        const followerCount = await db.select({ c: sql<number>`count(*)::int` }).from(socialFollows).where(eq(socialFollows.followingId, user.id));
+        emptyResponse.followers.count = followerCount[0]?.c || 0;
+        return res.json(emptyResponse);
       }
-      
-      // حساب الإحصائيات بناءً على الحالة
-      const publishedArticles = myArticles.filter(a => a.status === 'published').length;
-      const draftArticles = myArticles.filter(a => a.status === 'draft').length;
-      const pendingArticles = myArticles.filter(
-        (a) => a.reviewStatus === "pending_review" || a.status === "pending",
-      ).length;
-      const needsChangesArticles = myArticles.filter(
-        (a) => a.reviewStatus === "needs_changes",
-      ).length;
-      const rejectedArticles = myArticles.filter(a => a.status === 'rejected').length;
+
+      const publishedCount = myArticles.filter(a => a.status === 'published').length;
+      const draftCount = myArticles.filter(a => a.status === 'draft').length;
+      const pendingCount = myArticles.filter(a => a.reviewStatus === "pending_review" || a.status === "pending").length;
+      const needsChangesCount = myArticles.filter(a => a.reviewStatus === "needs_changes").length;
+      const rejectedCount = myArticles.filter(a => a.status === 'rejected').length;
       const totalViews = myArticles.reduce((sum, a) => sum + (a.views || 0), 0);
-      
-      const likesResult = await db
-        .select({ count: sql<number>`count(*)::int` })
+
+      const [likesResult, commentsResult, bookmarksResult] = await Promise.all([
+        db.select({ count: sql<number>`count(*)::int` }).from(reactions)
+          .where(and(inArray(reactions.articleId, articleIds), eq(reactions.type, 'like'))),
+        db.select({ count: sql<number>`count(*)::int` }).from(comments)
+          .where(inArray(comments.articleId, articleIds)),
+        db.select({ count: sql<number>`count(*)::int` }).from(bookmarks)
+          .where(inArray(bookmarks.articleId, articleIds)),
+      ]);
+
+      // Daily stats (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
+
+      const dailyStatsRows = await db
+        .select({
+          date: articleDailyStats.date,
+          views: sql<number>`sum(${articleDailyStats.views})::int`,
+          likes: sql<number>`sum(${articleDailyStats.likes})::int`,
+          comments: sql<number>`sum(${articleDailyStats.comments})::int`,
+        })
+        .from(articleDailyStats)
+        .where(and(
+          inArray(articleDailyStats.articleId, articleIds),
+          gte(articleDailyStats.date, thirtyDaysAgoStr),
+        ))
+        .groupBy(articleDailyStats.date)
+        .orderBy(articleDailyStats.date);
+
+      // Best article this week (by views)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const publishedArticlesSorted = myArticles
+        .filter(a => a.status === "published")
+        .sort((a, b) => (b.views || 0) - (a.views || 0));
+      const bestThisWeek = publishedArticlesSorted[0] || null;
+
+      // Month-over-month comparison
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const thisMonthStr = thisMonthStart.toISOString().split("T")[0];
+      const lastMonthStr = lastMonthStart.toISOString().split("T")[0];
+
+      const [thisMonthStats, lastMonthStats] = await Promise.all([
+        db.select({
+          views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
+          likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
+        }).from(articleDailyStats)
+          .where(and(inArray(articleDailyStats.articleId, articleIds), gte(articleDailyStats.date, thisMonthStr))),
+        db.select({
+          views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
+          likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
+        }).from(articleDailyStats)
+          .where(and(
+            inArray(articleDailyStats.articleId, articleIds),
+            gte(articleDailyStats.date, lastMonthStr),
+            lt(articleDailyStats.date, thisMonthStr),
+          )),
+      ]);
+
+      // Followers + growth
+      const [followerCountResult] = await db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(socialFollows)
+        .where(eq(socialFollows.followingId, user.id));
+
+      const followerGrowth = await db
+        .select({
+          date: sql<string>`date(${socialFollows.createdAt})`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(socialFollows)
+        .where(and(
+          eq(socialFollows.followingId, user.id),
+          gte(socialFollows.createdAt, thirtyDaysAgo),
+        ))
+        .groupBy(sql`date(${socialFollows.createdAt})`)
+        .orderBy(sql`date(${socialFollows.createdAt})`);
+
+      // Top 10 articles by engagement
+      const articleLikeCounts = await db
+        .select({ articleId: reactions.articleId, c: sql<number>`count(*)::int` })
         .from(reactions)
-        .where(
-          and(
-            inArray(reactions.articleId, articleIds),
-            eq(reactions.type, 'like')
-          )
-        );
-      
-      const commentsResult = await db
-        .select({ count: sql<number>`count(*)::int` })
+        .where(and(inArray(reactions.articleId, articleIds), eq(reactions.type, "like")))
+        .groupBy(reactions.articleId);
+      const articleCommentCounts = await db
+        .select({ articleId: comments.articleId, c: sql<number>`count(*)::int` })
         .from(comments)
-        .where(inArray(comments.articleId, articleIds));
+        .where(inArray(comments.articleId, articleIds))
+        .groupBy(comments.articleId);
+      const articleBookmarkCounts = await db
+        .select({ articleId: bookmarks.articleId, c: sql<number>`count(*)::int` })
+        .from(bookmarks)
+        .where(inArray(bookmarks.articleId, articleIds))
+        .groupBy(bookmarks.articleId);
+
+      const likesMap = Object.fromEntries(articleLikeCounts.map(r => [r.articleId, r.c]));
+      const commentsMap = Object.fromEntries(articleCommentCounts.map(r => [r.articleId, r.c]));
+      const bookmarksMap = Object.fromEntries(articleBookmarkCounts.map(r => [r.articleId, r.c]));
+
+      const topArticles = myArticles
+        .filter(a => a.status === "published")
+        .map(a => ({
+          id: a.id,
+          title: a.title,
+          views: a.views || 0,
+          likes: likesMap[a.id] || 0,
+          comments: commentsMap[a.id] || 0,
+          bookmarks: bookmarksMap[a.id] || 0,
+          publishedAt: a.publishedAt,
+          engagement: (a.views || 0) + (likesMap[a.id] || 0) * 5 + (commentsMap[a.id] || 0) * 3,
+        }))
+        .sort((a, b) => b.engagement - a.engagement)
+        .slice(0, 10)
+        .map(({ engagement: _, ...rest }) => rest);
+
+      // Featured comment this week
+      const featuredCommentRows = await db
+        .select({
+          content: comments.content,
+          userName: sql<string>`coalesce(u."first_name" || ' ' || u."last_name", u."email", 'قارئ')`,
+          articleTitle: articles.title,
+          articleId: comments.articleId,
+        })
+        .from(comments)
+        .innerJoin(articles, eq(comments.articleId, articles.id))
+        .innerJoin(users, eq(comments.userId, users.id))
+        .where(and(
+          inArray(comments.articleId, articleIds),
+          eq(comments.status, "approved"),
+          gte(comments.createdAt, sevenDaysAgo),
+        ))
+        .orderBy(desc(comments.createdAt))
+        .limit(1);
+
+      // Publishing activity
+      const publishedOnes = myArticles
+        .filter(a => a.status === "published" && a.publishedAt)
+        .sort((a, b) => new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime());
+      const lastPublished = publishedOnes[0]?.publishedAt || null;
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      weekStart.setHours(0, 0, 0, 0);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
       const sortedArticles = [...myArticles].sort((a, b) => {
         const aNeeds = a.reviewStatus === "needs_changes" ? 0 : 1;
@@ -10779,17 +10909,62 @@ Respond in valid JSON format only:
         return new Date(b.updatedAt || b.createdAt).getTime() -
           new Date(a.updatedAt || a.createdAt).getTime();
       });
-      
+
       res.json({
         totalArticles: myArticles.length,
-        publishedArticles,
-        draftArticles,
-        pendingArticles,
-        needsChangesArticles,
-        rejectedArticles,
+        publishedArticles: publishedCount,
+        draftArticles: draftCount,
+        pendingArticles: pendingCount,
+        needsChangesArticles: needsChangesCount,
+        rejectedArticles: rejectedCount,
         totalViews,
         totalLikes: likesResult[0]?.count || 0,
         totalComments: commentsResult[0]?.count || 0,
+        totalBookmarks: bookmarksResult[0]?.count || 0,
+
+        dailyStats: dailyStatsRows.map(r => ({
+          date: r.date,
+          views: r.views || 0,
+          likes: r.likes || 0,
+          comments: r.comments || 0,
+        })),
+
+        bestArticleThisWeek: bestThisWeek
+          ? { id: bestThisWeek.id, title: bestThisWeek.title, views: bestThisWeek.views || 0 }
+          : null,
+
+        comparison: {
+          viewsThisMonth: thisMonthStats[0]?.views || 0,
+          viewsLastMonth: lastMonthStats[0]?.views || 0,
+          likesThisMonth: thisMonthStats[0]?.likes || 0,
+          likesLastMonth: lastMonthStats[0]?.likes || 0,
+        },
+
+        followers: {
+          count: followerCountResult?.c || 0,
+          dailyGrowth: followerGrowth.map(r => ({ date: r.date, count: r.count })),
+        },
+
+        topArticles,
+
+        featuredComment: featuredCommentRows[0]
+          ? {
+              content: featuredCommentRows[0].content,
+              userName: featuredCommentRows[0].userName,
+              articleTitle: featuredCommentRows[0].articleTitle,
+              articleId: featuredCommentRows[0].articleId,
+            }
+          : null,
+
+        publishingActivity: {
+          lastPublishedAt: lastPublished,
+          daysSinceLastPublished: lastPublished
+            ? Math.floor((Date.now() - new Date(lastPublished).getTime()) / 86400000)
+            : null,
+          thisWeekCount: publishedOnes.filter(a => new Date(a.publishedAt!) >= weekStart).length,
+          thisMonthCount: publishedOnes.filter(a => new Date(a.publishedAt!) >= monthStart).length,
+        },
+
         articles: sortedArticles.map(a => ({
           id: a.id,
           title: a.title,
@@ -10798,6 +10973,9 @@ Respond in valid JSON format only:
           reviewNotes: a.reviewNotes,
           reviewedAt: a.reviewedAt,
           views: a.views,
+          likes: likesMap[a.id] || 0,
+          comments: commentsMap[a.id] || 0,
+          bookmarks: bookmarksMap[a.id] || 0,
           publishedAt: a.publishedAt,
           createdAt: a.createdAt,
           updatedAt: a.updatedAt,
@@ -10806,6 +10984,50 @@ Respond in valid JSON format only:
     } catch (error) {
       console.error("Error fetching opinion author analytics:", error);
       res.status(500).json({ message: "فشل في جلب الإحصائيات" });
+    }
+  });
+
+  app.get("/api/contributor/ranking", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const roleType = (req.query.role as string) || "opinion_author";
+      const articleType = roleType === "opinion_author" ? "opinion" : undefined;
+
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const allAuthors = await db
+        .select({
+          authorId: articles.authorId,
+          totalViews: sql<number>`coalesce(sum(${articles.views}), 0)::int`,
+        })
+        .from(articles)
+        .where(and(
+          eq(articles.status, "published"),
+          gte(articles.publishedAt, monthStart),
+          ...(articleType ? [eq(articles.articleType, articleType)] : []),
+        ))
+        .groupBy(articles.authorId)
+        .orderBy(desc(sql`sum(${articles.views})`));
+
+      const myIndex = allAuthors.findIndex(a => a.authorId === userId);
+      const myViews = myIndex >= 0 ? allAuthors[myIndex].totalViews : 0;
+      const rank = myIndex >= 0 ? myIndex + 1 : allAuthors.length + 1;
+      const total = allAuthors.length || 1;
+
+      res.json({
+        rank,
+        totalAuthors: total,
+        percentile: Math.round(((total - rank) / total) * 100),
+        myViews,
+        isTopTen: rank <= 10,
+      });
+    } catch (error) {
+      console.error("Error fetching contributor ranking:", error);
+      res.status(500).json({ message: "فشل في جلب الترتيب" });
     }
   });
 

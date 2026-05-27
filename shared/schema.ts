@@ -12761,3 +12761,20 @@ export type OpinionTicketMessage = typeof opinionTicketMessages.$inferSelect;
 export type InsertOpinionTicketMessage = z.infer<typeof insertOpinionTicketMessageSchema>;
 
 export type ImageMigration = typeof imageMigrations.$inferSelect;
+
+// ── Article Daily Stats (time-series for contributor dashboards) ──
+export const articleDailyStats = pgTable("article_daily_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  views: integer("views").default(0).notNull(),
+  likes: integer("likes").default(0).notNull(),
+  comments: integer("comments").default(0).notNull(),
+  bookmarks: integer("bookmarks").default(0).notNull(),
+}, (table) => [
+  uniqueIndex("idx_article_daily_stats_unique").on(table.articleId, table.date),
+  index("idx_article_daily_stats_date").on(table.date),
+  index("idx_article_daily_stats_article").on(table.articleId),
+]);
+
+export type ArticleDailyStat = typeof articleDailyStats.$inferSelect;
