@@ -244,25 +244,36 @@ final class ContributorDashboardViewModel: ObservableObject {
 struct ContributorDashboardView: View {
     @StateObject private var vm = ContributorDashboardViewModel()
 
+    private let accentGreen = Color(red: 0.18, green: 0.80, blue: 0.44)
+    private let accentBlue  = Color(red: 0.25, green: 0.56, blue: 0.97)
+    private let accentPink  = Color(red: 0.93, green: 0.36, blue: 0.48)
+    private let accentAmber = Color(red: 0.96, green: 0.62, blue: 0.04)
+    private let accentCyan  = Color(red: 0.20, green: 0.78, blue: 0.85)
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             if vm.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 300)
             } else if let error = vm.error {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.secondary)
+                VStack(spacing: 16) {
+                    Image(systemName: "chart.bar.xaxis.ascending")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
                     Text(error)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Button("إعادة المحاولة") { Task { await vm.load() } }
-                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                    Button { Task { await vm.load() } } label: {
+                        Text("إعادة المحاولة")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 8)
+                            .background(Capsule().fill(accentBlue.opacity(0.12)))
+                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: 300)
             } else if let data = vm.analytics {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 24) {
                     headerSection(data)
                     statsCardsSection(data)
                     overviewRow(data)
@@ -273,12 +284,13 @@ struct ContributorDashboardView: View {
                     articlesSection(data)
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 100)
             }
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(vm.analytics?.role == "reporter" ? "لوحة المراسل" : "لوحة الكاتب")
+        .navigationTitle("لوحة الأداء")
         .navigationBarTitleDisplayMode(.large)
         .task { await vm.load() }
         .refreshable { await vm.load() }
@@ -288,10 +300,15 @@ struct ContributorDashboardView: View {
 
     @ViewBuilder
     private func headerSection(_ data: ContributorAnalytics) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(data.role == "reporter" ? "لوحة المراسل" : "لوحة كاتب الرأي")
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(SabqTheme.ink)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: data.role == "reporter" ? "newspaper.fill" : "pencil.and.outline")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(accentBlue)
+                Text(data.role == "reporter" ? "لوحة المراسل" : "لوحة كاتب الرأي")
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+            }
             Text("مرحباً بك في لوحة التحكم الخاصة بك")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
@@ -303,41 +320,49 @@ struct ContributorDashboardView: View {
     @ViewBuilder
     private func statsCardsSection(_ data: ContributorAnalytics) -> some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            statCard(title: "المشاهدات", value: data.totalViews, icon: "eye.fill", color: .purple, trend: trendPct(data.comparison.viewsThisMonth, data.comparison.viewsLastMonth))
-            statCard(title: "الإعجابات", value: data.totalLikes, icon: "heart.fill", color: .pink, trend: trendPct(data.comparison.likesThisMonth, data.comparison.likesLastMonth))
-            statCard(title: "التعليقات", value: data.totalComments, icon: "bubble.left.fill", color: .cyan, trend: nil)
-            statCard(title: "المفضلة", value: data.totalBookmarks, icon: "bookmark.fill", color: .orange, trend: nil)
+            statCard(title: "المشاهدات", value: data.totalViews, icon: "eye.fill", color: accentBlue, bgColor: accentBlue, trend: trendPct(data.comparison.viewsThisMonth, data.comparison.viewsLastMonth))
+            statCard(title: "الإعجابات", value: data.totalLikes, icon: "heart.fill", color: accentPink, bgColor: accentPink, trend: trendPct(data.comparison.likesThisMonth, data.comparison.likesLastMonth))
+            statCard(title: "التعليقات", value: data.totalComments, icon: "bubble.left.fill", color: accentCyan, bgColor: accentCyan, trend: nil)
+            statCard(title: "المفضلة", value: data.totalBookmarks, icon: "bookmark.fill", color: accentAmber, bgColor: accentAmber, trend: nil)
         }
     }
 
     @ViewBuilder
-    private func statCard(title: String, value: Int, icon: String, color: Color, trend: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func statCard(title: String, value: Int, icon: String, color: Color, bgColor: Color, trend: Int?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(color)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(bgColor.opacity(0.12))
+                        .frame(width: 30, height: 30)
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(color)
+                }
                 Spacer()
                 if let t = trend {
                     HStack(spacing: 2) {
                         Image(systemName: t >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 8, weight: .bold))
                         Text("\(abs(t))%")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
                     }
-                    .foregroundStyle(t >= 0 ? .green : .red)
+                    .foregroundStyle(t >= 0 ? accentGreen : accentPink)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill((t >= 0 ? accentGreen : accentPink).opacity(0.1)))
                 }
             }
             Text("\(value)")
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(.system(size: 24, weight: .heavy, design: .rounded))
                 .foregroundStyle(SabqTheme.ink)
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.3), lineWidth: 0.5))
+        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.25), lineWidth: 0.5))
     }
 
     // MARK: - Overview Row
@@ -445,11 +470,15 @@ struct ContributorDashboardView: View {
                 sectionTitle("أعلى المقالات تفاعلاً")
                 ForEach(Array(data.topArticles.prefix(5).enumerated()), id: \.element.id) { index, article in
                     HStack(spacing: 10) {
-                        Text("\(index + 1)")
-                            .font(.system(size: 13, weight: .heavy, design: .rounded))
-                            .foregroundStyle(index < 3 ? Color.orange : SabqTheme.secondaryInk)
-                            .frame(width: 22)
-                        VStack(alignment: .leading, spacing: 2) {
+                        ZStack {
+                            Circle()
+                                .fill(index < 3 ? accentAmber.opacity(0.12) : SabqTheme.outline.opacity(0.15))
+                                .frame(width: 26, height: 26)
+                            Text("\(index + 1)")
+                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .foregroundStyle(index < 3 ? accentAmber : SabqTheme.secondaryInk)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(article.title)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
@@ -462,39 +491,48 @@ struct ContributorDashboardView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.vertical, 6)
-                    if index < min(data.topArticles.count, 5) - 1 {
-                        Divider()
-                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.outline.opacity(0.06)))
                 }
-                .padding(14)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 4)
                 .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
                 .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.3), lineWidth: 0.5))
             }
         }
 
         if let comment = data.featuredComment {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
                     Image(systemName: "quote.opening")
-                        .font(.system(size: 11))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accentCyan)
                     Text("أبرز تعليق هذا الأسبوع")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
                 }
                 Text("«\(comment.content)»")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
-                Text("\(comment.userName) · \(comment.articleTitle)")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(1)
+                    .italic()
+                HStack(spacing: 4) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                    Text("\(comment.userName) · \(comment.articleTitle)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .lineLimit(1)
+                }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
-            .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.3), lineWidth: 0.5))
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(accentCyan.opacity(0.04))
+            )
+            .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(accentCyan.opacity(0.2), lineWidth: 0.5))
         }
     }
 
@@ -590,7 +628,7 @@ struct ContributorDashboardView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.outline.opacity(0.15)))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(accentBlue.opacity(0.06)))
 
                 VStack(spacing: 4) {
                     Text("\(pa.thisMonthCount)")
@@ -602,7 +640,7 @@ struct ContributorDashboardView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.outline.opacity(0.15)))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(accentGreen.opacity(0.06)))
             }
             if let days = pa.daysSinceLastPublished {
                 HStack(spacing: 4) {
@@ -628,7 +666,7 @@ struct ContributorDashboardView: View {
                 sectionTitle(data.role == "reporter" ? "أخباري" : "مقالاتي")
                 ForEach(data.articles.prefix(10)) { article in
                     HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(article.title)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
@@ -642,14 +680,10 @@ struct ContributorDashboardView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.vertical, 4)
-                    if article.id != data.articles.prefix(10).last?.id {
-                        Divider()
-                    }
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 14)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.outline.opacity(0.06)))
                 }
-                .padding(14)
-                .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
-                .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.3), lineWidth: 0.5))
             }
         }
     }
@@ -706,7 +740,7 @@ struct ContributorDashboardView: View {
         case "published": return ("منشور", .green)
         case "draft": return ("مسودة", .yellow)
         case "rejected": return ("مرفوض", .red)
-        case "archived": return ("مؤرشف", .gray)
+        case "archived": return ("مؤرشف", .red)
         default: return (status, .gray)
         }
     }
