@@ -53,7 +53,7 @@ struct SettingsView: View {
 
                 profileSection
                 if authStore.isLoggedIn {
-                    if let user = authStore.user, user.isWriter || user.isReporter || user.isAdminLike {
+                    if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
                         contributorDashboardEntrySection
                     }
                     loyaltyEntrySection
