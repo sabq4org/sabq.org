@@ -226,16 +226,16 @@ struct HomeFeedView: View {
                 scrollOffsetRef.value = y
             }
             .sabqAutoHideTabBar()
+            .refreshable {
+                SabqHaptics.medium()
+                await articlesStore.loadArticles(ignoreCache: true)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
                 guard scrollOffsetRef.value > Self.scrollToTopThreshold else { return }
                 withAnimation(.easeOut(duration: 0.28)) {
                     scrollProxy.scrollTo(Self.scrollTopID, anchor: .top)
                 }
             }
-        }
-        .refreshable {
-            SabqHaptics.medium()
-            await articlesStore.loadArticles(ignoreCache: true)
         }
         .background(SabqTheme.background)
         .sabqRTL()

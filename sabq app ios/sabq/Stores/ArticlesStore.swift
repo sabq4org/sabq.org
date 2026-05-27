@@ -42,22 +42,22 @@ final class ArticlesStore {
         let live = await liveTask
         let fetchedOpinions = await opinionsTask
 
+        await NewsService.clearCategoryCache()
         if !result.latest.isEmpty || !result.featured.isEmpty {
-            await NewsService.clearCategoryCache()
             allFetchedArticles = result.latest
             featuredArticles = result.featured
             breakingNews = result.breaking
             stories = result.stories
             trendingKeywords = result.trending
-            trendingArticles = trending
-            opinions = fetchedOpinions
-            liveData = live
             nextArticlesPage = 1
             hasMoreFromAPI = true
             displayedCount = min(pageSize, allFetchedArticles.count)
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
         }
+        trendingArticles = trending
+        opinions = fetchedOpinions
+        liveData = live
         isLoading = false
     }
 
