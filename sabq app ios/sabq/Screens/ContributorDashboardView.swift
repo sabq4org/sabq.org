@@ -199,7 +199,7 @@ struct ContributorArticle: Decodable, Identifiable {
 }
 
 struct ContributorRanking: Decodable {
-    let rank: Int
+    let rank: Int?
     let totalAuthors: Int
     let percentile: Int
     let myViews: Int
@@ -207,7 +207,7 @@ struct ContributorRanking: Decodable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        rank = (try? c.decode(Int.self, forKey: FlexKey("rank"))) ?? 0
+        rank = (try? c.decode(Int.self, forKey: FlexKey("rank")))
         totalAuthors = (try? c.decode(Int.self, forKey: FlexKey("totalAuthors"))) ?? (try? c.decode(Int.self, forKey: FlexKey("total_authors"))) ?? 0
         percentile = (try? c.decode(Int.self, forKey: FlexKey("percentile"))) ?? 0
         myViews = (try? c.decode(Int.self, forKey: FlexKey("myViews"))) ?? (try? c.decode(Int.self, forKey: FlexKey("my_views"))) ?? 0
@@ -575,36 +575,42 @@ struct ContributorDashboardView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "medal.fill")
                                 .font(.system(size: 12))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(accentAmber)
                             Text("ترتيبك")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
-                        HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text("#\(ranking.rank)")
-                                .font(.system(size: 24, weight: .heavy, design: .rounded))
-                                .foregroundStyle(SabqTheme.ink)
-                            Text("من \(ranking.totalAuthors)")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(SabqTheme.secondaryInk)
-                        }
-                        if ranking.isTopTen {
-                            Text("الأكثر قراءة")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.orange)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.orange.opacity(0.12)))
+                        if let rank = ranking.rank {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("#\(rank)")
+                                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(SabqTheme.ink)
+                                Text("من \(ranking.totalAuthors)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                            }
+                            if ranking.isTopTen {
+                                Text("الأكثر قراءة")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(accentAmber)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(accentAmber.opacity(0.12)))
+                            } else {
+                                Text("أعلى من \(ranking.percentile)%")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(SabqTheme.secondaryInk)
+                            }
                         } else {
-                            Text("أعلى من \(ranking.percentile)%")
-                                .font(.system(size: 10, weight: .medium))
+                            Text("لم تنشر هذا الشهر")
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(.ultraThinMaterial))
-                    .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.3), lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.25), lineWidth: 0.5))
                 }
             }
         }

@@ -6618,14 +6618,14 @@ router.get("/contributor/ranking", async (req: Request, res: Response) => {
       .orderBy(desc(sql`sum(${articles.views})`));
 
     const myIndex = allAuthors.findIndex(a => a.authorId === session.userId);
-    const rank = myIndex >= 0 ? myIndex + 1 : allAuthors.length + 1;
     const total = allAuthors.length || 1;
+    const rank = myIndex >= 0 ? myIndex + 1 : null;
 
     res.json({
       success: true, rank, totalAuthors: total,
-      percentile: Math.round(((total - rank) / total) * 100),
+      percentile: rank ? Math.round(((total - rank) / total) * 100) : 0,
       myViews: myIndex >= 0 ? allAuthors[myIndex].totalViews : 0,
-      isTopTen: rank <= 10,
+      isTopTen: rank !== null && rank <= 10,
     });
   } catch (error) {
     console.error("[Mobile API] GET /contributor/ranking error:", error);

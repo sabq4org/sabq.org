@@ -11243,15 +11243,15 @@ Respond in valid JSON format only:
 
       const myIndex = allAuthors.findIndex(a => a.authorId === userId);
       const myViews = myIndex >= 0 ? allAuthors[myIndex].totalViews : 0;
-      const rank = myIndex >= 0 ? myIndex + 1 : allAuthors.length + 1;
       const total = allAuthors.length || 1;
+      const rank = myIndex >= 0 ? myIndex + 1 : null;
 
       res.json({
         rank,
         totalAuthors: total,
-        percentile: Math.round(((total - rank) / total) * 100),
+        percentile: rank ? Math.round(((total - rank) / total) * 100) : 0,
         myViews,
-        isTopTen: rank <= 10,
+        isTopTen: rank !== null && rank <= 10,
       });
     } catch (error) {
       console.error("Error fetching contributor ranking:", error);
