@@ -28,6 +28,7 @@ export async function userHasPermission(
         .limit(1);
 
       let isSuperuser = user ? (SUPERUSER_ROLE_NAMES as readonly string[]).includes(user.role) : false;
+      let rbacRoleNames: string[] = [];
 
       if (!isSuperuser) {
         const rbacRoles = await db
@@ -35,19 +36,20 @@ export async function userHasPermission(
           .from(userRoles)
           .innerJoin(roles, eq(userRoles.roleId, roles.id))
           .where(eq(userRoles.userId, userId));
+        rbacRoleNames = rbacRoles.map(r => r.roleName);
         isSuperuser = rbacRoles.some(r => (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r.roleName));
       }
 
       if (isSuperuser) {
         permData = { isSuperuser, permissions: [] };
       } else {
+        const allRoles = rbacRoleNames.length > 0 ? rbacRoleNames : [user?.role || "reader"];
         const dbPerms = await getUserPermissions(userId);
-        const allRoles = await getUserRoleNames(userId);
         const codePerms = getPermissionsForRoles(allRoles);
         const merged = [...new Set([...dbPerms, ...codePerms])];
         permData = { isSuperuser, permissions: merged };
       }
-      memoryCache.set(cacheKey, permData, 2 * 60 * 1000); // 2 min cache
+      memoryCache.set(cacheKey, permData, 5 * 60 * 1000); // 5 min cache
     }
 
     if (permData.isSuperuser) return true;

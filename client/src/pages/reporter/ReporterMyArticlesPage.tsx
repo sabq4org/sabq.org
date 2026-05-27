@@ -108,8 +108,8 @@ export default function ReporterMyArticlesPage() {
     refetch,
   } = useQuery<ReporterAnalytics>({
     queryKey: ["/api/reporter/analytics"],
-    refetchOnWindowFocus: true,
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const needsChangesList =

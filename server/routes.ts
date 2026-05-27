@@ -10635,6 +10635,10 @@ Respond in valid JSON format only:
         return res.status(403).json({ error: "هذا الـ endpoint خاص بالمراسلين فقط" });
       }
 
+      const cacheKey = `contributor:analytics:reporter:${user.id}`;
+      const cached = memoryCache.get(cacheKey);
+      if (cached) return res.json(cached);
+
       const myArticles = await db
         .select()
         .from(articles)
@@ -10841,7 +10845,7 @@ Respond in valid JSON format only:
           new Date(a.updatedAt || a.createdAt).getTime();
       });
 
-      res.json({
+      const response = {
         totalArticles: myArticles.length,
         publishedArticles: publishedCount,
         draftArticles: draftCount,
@@ -10908,7 +10912,9 @@ Respond in valid JSON format only:
           createdAt: a.createdAt,
           updatedAt: a.updatedAt,
         })),
-      });
+      };
+      memoryCache.set(cacheKey, response, 5 * 60 * 1000);
+      res.json(response);
     } catch (error) {
       console.error("Error fetching reporter analytics:", error);
       res.status(500).json({ message: "فشل في جلب الإحصائيات" });
@@ -10929,6 +10935,10 @@ Respond in valid JSON format only:
       if (!isOpinionAuthor) {
         return res.status(403).json({ error: "هذا الـ endpoint خاص بكتّاب الرأي فقط" });
       }
+
+      const cacheKey = `contributor:analytics:${user.id}`;
+      const cached = memoryCache.get(cacheKey);
+      if (cached) return res.json(cached);
 
       const myArticles = await db
         .select()
@@ -11138,7 +11148,7 @@ Respond in valid JSON format only:
           new Date(a.updatedAt || a.createdAt).getTime();
       });
 
-      res.json({
+      const response = {
         totalArticles: myArticles.length,
         publishedArticles: publishedCount,
         draftArticles: draftCount,
@@ -11208,7 +11218,9 @@ Respond in valid JSON format only:
           createdAt: a.createdAt,
           updatedAt: a.updatedAt,
         })),
-      });
+      };
+      memoryCache.set(cacheKey, response, 5 * 60 * 1000);
+      res.json(response);
     } catch (error) {
       console.error("Error fetching opinion author analytics:", error);
       res.status(500).json({ message: "فشل في جلب الإحصائيات" });

@@ -109,8 +109,8 @@ export default function OpinionAuthorDashboard() {
     refetch,
   } = useQuery<OpinionAuthorAnalytics>({
     queryKey: ["/api/opinion-author/analytics"],
-    refetchOnWindowFocus: true,
-    staleTime: 0,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const needsChangesList =
