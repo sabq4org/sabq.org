@@ -1196,7 +1196,7 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
     emailContent = emailContent
       .replace(/\[TOKEN:\s*[A-F0-9]{64}\s*\]/gi, '')  // [TOKEN:xxx]
       .replace(/TOKEN:\s*[A-F0-9]{64}/gi, '')          // TOKEN:xxx or TOKEN: xxx
-      .replace(/\b[A-F0-9]{64}\b/g, '')                // bare 64-hex
+      .replace(/\b[A-Fa-f0-9]{64}\b/g, '')              // bare 64-hex (case-insensitive)
       .trim();
     
     console.log("[Email Agent] Content length after token removal:", emailContent.length);
@@ -1560,6 +1560,40 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
         success: false,
         message: "Content has no news value",
         issues: editorialResult.issues,
+      });
+    }
+
+    // 🛡️ SAFETY: Reject if AI returned empty content (truncated response, partial JSON, etc.)
+    if (!editorialResult.optimized.content || editorialResult.optimized.content.trim().length < 20) {
+      console.log("[Email Agent] AI returned empty/insufficient content - rejected (safety guard)");
+
+      await uploadPendingImages(false);
+
+      await storage.updateEmailWebhookLog(webhookLog.id, {
+        status: "rejected",
+        rejectionReason: "ai_content_empty",
+        trustedSenderId: trustedSender.id,
+        aiAnalysis: {
+          contentQuality: editorialResult.qualityScore,
+          languageDetected: editorialResult.language,
+          categoryPredicted: editorialResult.detectedCategory,
+          isNewsWorthy: editorialResult.hasNewsValue,
+          errors: ["AI returned empty or insufficient optimized content"],
+          warnings: editorialResult.suggestions,
+        },
+        attachmentsCount: allAttachmentsMetadata.length,
+        attachmentsData: cleanAttachmentsForLog()
+      });
+
+      const today = new Date();
+      await storage.updateEmailAgentStats(today, {
+        emailsReceived: 1,
+        emailsRejected: 1,
+      });
+
+      return res.status(200).json({
+        success: false,
+        message: "AI processing returned empty content - article not published for safety",
       });
     }
 

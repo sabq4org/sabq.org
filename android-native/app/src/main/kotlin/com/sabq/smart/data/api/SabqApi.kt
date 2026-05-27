@@ -32,7 +32,7 @@ interface SabqApi {
      */
     @GET("api/v1/articles")
     suspend fun getArticles(
-        @Query("page") page: Int = 1,
+        @Query("offset") offset: Int = 0,
         @Query("limit") limit: Int = 20,
         @Query("section") section: String? = null,
         @Query("featured") featured: Boolean? = null,

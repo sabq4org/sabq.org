@@ -2642,7 +2642,8 @@ function setCache(key: string, data: any, ttlMs: number) {
 router.get("/articles", async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const page = parseInt(req.query.page as string) || 0;
+    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
     const section = req.query.section as string | undefined;
     const breaking = req.query.breaking as string | undefined;
     const featured = req.query.featured as string | undefined;

@@ -631,7 +631,7 @@ Professional English news story, ready for immediate publication, presenting Sau
         // hits the database.
         title: applyPoliticalFactsFilter(result.optimized?.title || "", finalLang),
         lead: applyPoliticalFactsFilter(result.optimized?.lead || "", finalLang),
-        content: applyPoliticalFactsFilter(result.optimized?.content || text, finalLang),
+        content: applyPoliticalFactsFilter(result.optimized?.content || "", finalLang),
         seoKeywords: result.optimized?.seoKeywords || [],
       },
     };

@@ -25,8 +25,9 @@ class ArticleRepository @Inject constructor(
         section: String? = null,
         featuredOnly: Boolean = false,
     ): ArticlesPage {
+        val offset = (page - 1) * limit
         val response = api.getArticles(
-            page = page,
+            offset = offset,
             limit = limit,
             section = section,
             featured = if (featuredOnly) true else null,

@@ -251,9 +251,10 @@ class HomeFeedViewModel @Inject constructor(
                 .onSuccess { page2 ->
                     _state.update { c ->
                         if (c !is HomeFeedUiState.Loaded) return@update c
-                        val newArticles = if (append)
-                            c.articles + page2.items
-                        else page2.items
+                        val newArticles = if (append) {
+                            val existingIds = c.articles.map { it.id }.toHashSet()
+                            c.articles + page2.items.filter { it.id !in existingIds }
+                        } else page2.items
                         c.copy(
                             articles = newArticles,
                             selectedSlug = slug,
