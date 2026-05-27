@@ -95,6 +95,9 @@ struct ContentView: View {
                 .navigationDestination(for: EditorialNotificationsRoute.self) { _ in
                     EditorialNotificationsView()
                 }
+                .navigationDestination(for: ContributorDashboardRoute.self) { _ in
+                    ContributorDashboardView()
+                }
                 .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                     LoyaltyAccountView()
                 }

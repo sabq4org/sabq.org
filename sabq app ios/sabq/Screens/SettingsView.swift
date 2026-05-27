@@ -53,6 +53,9 @@ struct SettingsView: View {
 
                 profileSection
                 if authStore.isLoggedIn {
+                    if let user = authStore.user, user.isWriter || user.isReporter || user.isAdminLike {
+                        contributorDashboardEntrySection
+                    }
                     loyaltyEntrySection
                     pressCardEntrySection
                 }
@@ -708,6 +711,45 @@ struct SettingsView: View {
     }
 
     // MARK: - Loyalty entry
+
+    // MARK: - Contributor Dashboard entry
+
+    private var contributorDashboardEntrySection: some View {
+        NavigationLink(value: ContributorDashboardRoute()) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(red: 0.30, green: 0.69, blue: 0.31).opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "chart.bar.xaxis.ascending")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.30, green: 0.69, blue: 0.31))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("مركز الأداء")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("إحصائيات مقالاتك وتفاعل جمهورك")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
     // Quick-tap row that pushes LoyaltyAccountView. Sits right under
     // profileSection so signed-in users see their loyalty surface before
