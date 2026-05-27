@@ -403,16 +403,16 @@ export default function OpinionAuthorDashboard() {
                             )}
                           </td>
                           <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.views || 0).toLocaleString("ar-SA")}
+                            {(article.views || 0).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.likes || 0).toLocaleString("ar-SA")}
+                            {(article.likes || 0).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.comments || 0).toLocaleString("ar-SA")}
+                            {(article.comments || 0).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.bookmarks || 0).toLocaleString("ar-SA")}
+                            {(article.bookmarks || 0).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
                             {article.createdAt

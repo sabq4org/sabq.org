@@ -40,7 +40,7 @@ export function PerformanceChart({ dailyStats, loading }: PerformanceChartProps)
         { key: "likes", color: "#f43f5e", name: "إعجابات" },
         { key: "comments", color: "#8b5cf6", name: "تعليقات" },
       ]}
-      formatValue={(v) => v.toLocaleString("ar-SA")}
+      formatValue={(v) => v.toLocaleString()}
     />
   );
 }

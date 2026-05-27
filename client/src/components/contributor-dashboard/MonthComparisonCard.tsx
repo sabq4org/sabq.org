@@ -57,7 +57,7 @@ export function MonthComparisonCard({ comparison, loading }: MonthComparisonCard
               <span className="text-xs text-muted-foreground">المشاهدات</span>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold tabular-nums">
-                  {comparison.viewsThisMonth.toLocaleString("ar-SA")}
+                  {comparison.viewsThisMonth.toLocaleString()}
                 </span>
                 <TrendIndicator value={viewsChange} />
               </div>
@@ -66,13 +66,13 @@ export function MonthComparisonCard({ comparison, loading }: MonthComparisonCard
               <span className="text-xs text-muted-foreground">الإعجابات</span>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold tabular-nums">
-                  {comparison.likesThisMonth.toLocaleString("ar-SA")}
+                  {comparison.likesThisMonth.toLocaleString()}
                 </span>
                 <TrendIndicator value={likesChange} />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground text-center">
-              مقارنة بالشهر الماضي ({comparison.viewsLastMonth.toLocaleString("ar-SA")} مشاهدة)
+              مقارنة بالشهر الماضي ({comparison.viewsLastMonth.toLocaleString()} مشاهدة)
             </p>
           </div>
         )}

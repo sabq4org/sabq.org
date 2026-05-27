@@ -28,7 +28,7 @@ export function FollowerCard({ count, dailyGrowth, loading }: FollowerCardProps)
           </div>
         ) : (
           <>
-            <div className="text-3xl font-bold">{count.toLocaleString("ar-SA")}</div>
+            <div className="text-3xl font-bold">{count.toLocaleString()}</div>
             {cumulativeData.length > 1 && (
               <div className="mt-3 h-16">
                 <ResponsiveContainer width="100%" height="100%">
@@ -41,7 +41,7 @@ export function FollowerCard({ count, dailyGrowth, loading }: FollowerCardProps)
                     </defs>
                     <XAxis dataKey="date" hide />
                     <Tooltip
-                      formatter={(v: number) => [v.toLocaleString("ar-SA"), "متابعين جدد"]}
+                      formatter={(v: number) => [v.toLocaleString(), "متابعين جدد"]}
                       labelFormatter={(l) => {
                         try { return format(new Date(l), "dd MMM"); } catch { return l; }
                       }}
@@ -65,7 +65,7 @@ export function FollowerCard({ count, dailyGrowth, loading }: FollowerCardProps)
             )}
             {dailyGrowth.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                +{dailyGrowth.reduce((s, d) => s + d.count, 0).toLocaleString("ar-SA")} متابع جديد آخر 30 يوم
+                +{dailyGrowth.reduce((s, d) => s + d.count, 0).toLocaleString()} متابع جديد آخر 30 يوم
               </p>
             )}
           </>

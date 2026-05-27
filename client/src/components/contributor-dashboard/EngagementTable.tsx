@@ -74,16 +74,16 @@ export function EngagementTable({ articles, loading, onNavigate }: EngagementTab
                       {article.title}
                     </td>
                     <td className="px-4 py-2.5 text-center tabular-nums">
-                      {article.views.toLocaleString("ar-SA")}
+                      {article.views.toLocaleString()}
                     </td>
                     <td className="px-4 py-2.5 text-center tabular-nums">
-                      {article.likes.toLocaleString("ar-SA")}
+                      {article.likes.toLocaleString()}
                     </td>
                     <td className="px-4 py-2.5 text-center tabular-nums">
-                      {article.comments.toLocaleString("ar-SA")}
+                      {article.comments.toLocaleString()}
                     </td>
                     <td className="px-4 py-2.5 text-center tabular-nums">
-                      {article.bookmarks.toLocaleString("ar-SA")}
+                      {article.bookmarks.toLocaleString()}
                     </td>
                   </tr>
                 ))}
