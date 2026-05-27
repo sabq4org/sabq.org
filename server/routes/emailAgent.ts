@@ -1753,12 +1753,24 @@ router.post("/webhook", upload.any(), async (req: Request, res: Response) => {
       channel: "email",
     };
     
+    // Embed additional images (beyond the featured one) as <img> tags in content
+    // so they render on all clients (web, iOS, Android) without needing a separate API call
+    let finalContent = editorialResult.optimized.content;
+    if (uploadedImages.length > 1) {
+      const extraImages = uploadedImages.slice(1);
+      const imgTags = extraImages
+        .map((url, i) => `<img src="${url}" alt="${articleTitle} - صورة ${i + 2}" />`)
+        .join('\n');
+      finalContent = finalContent + '\n' + imgTags;
+      console.log(`[Email Agent] 🖼️ Embedded ${extraImages.length} additional images into article content`);
+    }
+
     const articleData: any = {
       id: nanoid(),
       title: articleTitle,
       slug: articleSlug,
       englishSlug,
-      content: editorialResult.optimized.content,
+      content: finalContent,
       excerpt: editorialResult.optimized.lead || "",
       authorId: articleAuthorId, // 👤 Newspaper account if anonymous, else reporter
       submitterId: reporterUser.id, // 📊 Always track original submitter for productivity
