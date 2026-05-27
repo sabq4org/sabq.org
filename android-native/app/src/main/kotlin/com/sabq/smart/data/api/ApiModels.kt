@@ -307,6 +307,20 @@ data class ApiBehaviorEventRequest(
 data class ApiBookmarksResponse(
     val success: Boolean,
     val articleIds: List<String> = emptyList(),
+    val articles: List<ApiBookmarkArticle> = emptyList(),
+)
+
+@Serializable
+data class ApiBookmarkArticle(
+    val id: String = "",
+    val title: String = "",
+    val slug: String = "",
+    @JsonNames("imageUrl", "image_url")
+    val imageUrl: String? = null,
+    @JsonNames("categoryName", "category_name")
+    val categoryName: String? = null,
+    @JsonNames("publishedAt", "published_at")
+    val publishedAt: String? = null,
 )
 
 @Serializable
