@@ -10765,25 +10765,56 @@ Respond in valid JSON format only:
           .where(inArray(bookmarks.articleId, articleIds)),
       ]);
 
-      // Daily stats (last 30 days)
+      // Daily stats (last 30 days) — graceful fallback if table doesn't exist yet
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
 
-      const dailyStatsRows = await db
-        .select({
-          date: articleDailyStats.date,
-          views: sql<number>`sum(${articleDailyStats.views})::int`,
-          likes: sql<number>`sum(${articleDailyStats.likes})::int`,
-          comments: sql<number>`sum(${articleDailyStats.comments})::int`,
-        })
-        .from(articleDailyStats)
-        .where(and(
-          inArray(articleDailyStats.articleId, articleIds),
-          gte(articleDailyStats.date, thirtyDaysAgoStr),
-        ))
-        .groupBy(articleDailyStats.date)
-        .orderBy(articleDailyStats.date);
+      let dailyStatsRows: Array<{ date: string; views: number; likes: number; comments: number }> = [];
+      let thisMonthStats = [{ views: 0, likes: 0 }];
+      let lastMonthStats = [{ views: 0, likes: 0 }];
+
+      try {
+        dailyStatsRows = await db
+          .select({
+            date: articleDailyStats.date,
+            views: sql<number>`sum(${articleDailyStats.views})::int`,
+            likes: sql<number>`sum(${articleDailyStats.likes})::int`,
+            comments: sql<number>`sum(${articleDailyStats.comments})::int`,
+          })
+          .from(articleDailyStats)
+          .where(and(
+            inArray(articleDailyStats.articleId, articleIds),
+            gte(articleDailyStats.date, thirtyDaysAgoStr),
+          ))
+          .groupBy(articleDailyStats.date)
+          .orderBy(articleDailyStats.date);
+
+        const now2 = new Date();
+        const thisMonthStart = new Date(now2.getFullYear(), now2.getMonth(), 1);
+        const lastMonthStart = new Date(now2.getFullYear(), now2.getMonth() - 1, 1);
+        const thisMonthStr = thisMonthStart.toISOString().split("T")[0];
+        const lastMonthStr = lastMonthStart.toISOString().split("T")[0];
+
+        [thisMonthStats, lastMonthStats] = await Promise.all([
+          db.select({
+            views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
+            likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
+          }).from(articleDailyStats)
+            .where(and(inArray(articleDailyStats.articleId, articleIds), gte(articleDailyStats.date, thisMonthStr))),
+          db.select({
+            views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
+            likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
+          }).from(articleDailyStats)
+            .where(and(
+              inArray(articleDailyStats.articleId, articleIds),
+              gte(articleDailyStats.date, lastMonthStr),
+              lt(articleDailyStats.date, thisMonthStr),
+            )),
+        ]);
+      } catch (e) {
+        console.warn("[opinion-author/analytics] articleDailyStats query failed (table may not exist yet):", (e as Error).message);
+      }
 
       // Best article this week (by views)
       const sevenDaysAgo = new Date();
@@ -10793,29 +10824,7 @@ Respond in valid JSON format only:
         .sort((a, b) => (b.views || 0) - (a.views || 0));
       const bestThisWeek = publishedArticlesSorted[0] || null;
 
-      // Month-over-month comparison
       const now = new Date();
-      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const thisMonthStr = thisMonthStart.toISOString().split("T")[0];
-      const lastMonthStr = lastMonthStart.toISOString().split("T")[0];
-
-      const [thisMonthStats, lastMonthStats] = await Promise.all([
-        db.select({
-          views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
-          likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
-        }).from(articleDailyStats)
-          .where(and(inArray(articleDailyStats.articleId, articleIds), gte(articleDailyStats.date, thisMonthStr))),
-        db.select({
-          views: sql<number>`coalesce(sum(${articleDailyStats.views}), 0)::int`,
-          likes: sql<number>`coalesce(sum(${articleDailyStats.likes}), 0)::int`,
-        }).from(articleDailyStats)
-          .where(and(
-            inArray(articleDailyStats.articleId, articleIds),
-            gte(articleDailyStats.date, lastMonthStr),
-            lt(articleDailyStats.date, thisMonthStr),
-          )),
-      ]);
 
       // Followers + growth
       const [followerCountResult] = await db
@@ -10874,23 +10883,28 @@ Respond in valid JSON format only:
         .map(({ engagement: _, ...rest }) => rest);
 
       // Featured comment this week
-      const featuredCommentRows = await db
-        .select({
-          content: comments.content,
-          userName: sql<string>`coalesce(u."first_name" || ' ' || u."last_name", u."email", 'قارئ')`,
-          articleTitle: articles.title,
-          articleId: comments.articleId,
-        })
-        .from(comments)
-        .innerJoin(articles, eq(comments.articleId, articles.id))
-        .innerJoin(users, eq(comments.userId, users.id))
-        .where(and(
-          inArray(comments.articleId, articleIds),
-          eq(comments.status, "approved"),
-          gte(comments.createdAt, sevenDaysAgo),
-        ))
-        .orderBy(desc(comments.createdAt))
-        .limit(1);
+      let featuredCommentRows: Array<{ content: string; userName: string; articleTitle: string; articleId: string }> = [];
+      try {
+        featuredCommentRows = await db
+          .select({
+            content: comments.content,
+            userName: sql<string>`coalesce(${users.firstName} || ' ' || ${users.lastName}, ${users.email}, 'قارئ')`,
+            articleTitle: articles.title,
+            articleId: comments.articleId,
+          })
+          .from(comments)
+          .innerJoin(articles, eq(comments.articleId, articles.id))
+          .innerJoin(users, eq(comments.userId, users.id))
+          .where(and(
+            inArray(comments.articleId, articleIds),
+            eq(comments.status, "approved"),
+            gte(comments.createdAt, sevenDaysAgo),
+          ))
+          .orderBy(desc(comments.createdAt))
+          .limit(1);
+      } catch (e) {
+        console.warn("[opinion-author/analytics] featured comment query failed:", (e as Error).message);
+      }
 
       // Publishing activity
       const publishedOnes = myArticles
