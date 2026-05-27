@@ -109,6 +109,9 @@ interface SabqApi {
     @GET("api/articles/{slug}/related")
     suspend fun getRelatedArticles(@Path("slug") slug: String): List<ApiArticle>
 
+    @GET("api/articles/{articleId}/media-assets")
+    suspend fun getMediaAssets(@Path("articleId") articleId: String): List<ApiMediaAsset>
+
     /**
      * Content Passport ("جواز المحتوى") — the trust + provenance
      * fingerprint surfaced by the green "موثَّق" badge.
@@ -465,4 +468,12 @@ interface SabqApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 20,
     ): ApiAuthorPage
+
+    // -- contributor dashboard ----------------------------------------
+
+    @GET("api/v1/contributor/analytics")
+    suspend fun getContributorAnalytics(): ApiContributorAnalytics
+
+    @GET("api/v1/contributor/ranking")
+    suspend fun getContributorRanking(): ApiContributorRanking
 }

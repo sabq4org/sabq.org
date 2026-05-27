@@ -105,6 +105,7 @@ object SabqRoutes {
     // weren't previously reachable from Android nav.
     const val Search = "search"
     const val Sections = "sections"
+    const val ContributorDashboard = "dashboard/contributor"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -325,6 +326,7 @@ fun SabqApp(
                         onSubmitOpinionClick = { navController.navigate(SabqRoutes.SubmitOpinion) },
                         onSubmitNewsClick = { navController.navigate(SabqRoutes.SubmitNews) },
                         onPickInterestsClick = { navController.navigate(SabqRoutes.InterestsPicker) },
+                        onDashboardClick = { navController.navigate(SabqRoutes.ContributorDashboard) },
                         onLogout = { coroutineScope.launch { authVm.logout() } },
                     )
                 }
@@ -361,6 +363,11 @@ fun SabqApp(
                 }
                 composable(SabqRoutes.LoyaltyRewards) {
                     LoyaltyRewardsScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.ContributorDashboard) {
+                    com.sabq.smart.feature.settings.ContributorDashboardScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

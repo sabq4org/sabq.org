@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.PersonOutline
@@ -127,6 +128,7 @@ fun SettingsScreen(
     onSubmitOpinionClick: () -> Unit = {},
     onSubmitNewsClick: () -> Unit = {},
     onPickInterestsClick: () -> Unit = {},
+    onDashboardClick: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -175,7 +177,14 @@ fun SettingsScreen(
             )
         }
 
-        // 3) Loyalty entry (signed-in only)
+        // 3) Contributor dashboard (writers/reporters/admins only)
+        currentUser?.let { u ->
+            if (u.isWriter || u.isReporter || u.isAdminLike) {
+                DashboardEntryRow(onClick = onDashboardClick)
+            }
+        }
+
+        // 4) Loyalty entry (signed-in only)
         if (currentUser != null) {
             LoyaltyEntryRow(onClick = onLoyaltyClick)
         }
@@ -973,6 +982,66 @@ private fun ProfileCompletionCTA(
             fontWeight = FontWeight.SemiBold,
             color = fg,
             modifier = Modifier.weight(1f, fill = false),
+        )
+    }
+}
+
+// MARK: - Dashboard entry
+
+@Composable
+private fun DashboardEntryRow(onClick: () -> Unit) {
+    val accentGreen = Color(red = 0.30f, green = 0.69f, blue = 0.31f)
+    val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface.copy(alpha = 0.92f), shape)
+            .border(BorderStroke(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.5f)), shape)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(accentGreen.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.BarChart,
+                contentDescription = null,
+                tint = accentGreen,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = "مركز الأداء",
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                text = "إحصائيات مقالاتك وتفاعل جمهورك",
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            tint = SabqTheme.colors.secondaryInk,
+            modifier = Modifier.size(13.dp),
         )
     }
 }

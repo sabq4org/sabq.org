@@ -171,6 +171,9 @@ data class ApiArticle(
      */
     @JsonNames("weeklyPhotosData", "weekly_photos_data")
     val weeklyPhotosContainer: ApiWeeklyPhotosContainer? = null,
+
+    @JsonNames("albumImages", "album_images")
+    val albumImages: List<String>? = null,
 )
 
 @Serializable
@@ -350,5 +353,171 @@ data class ApiAuthorCategory(
     val color: String? = null,
     val icon: String? = null,
     val count: Int = 0,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiMediaAsset(
+    val id: String = "",
+    @JsonNames("displayOrder", "display_order")
+    val displayOrder: Int = 0,
+    @JsonNames("altText", "alt_text")
+    val altText: String? = null,
+    val mediaFile: ApiMediaFile? = null,
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiMediaFile(
+    val id: String = "",
+    val url: String = "",
+    @JsonNames("fileName", "file_name")
+    val fileName: String? = null,
+)
+
+// -- Contributor Dashboard ------------------------------------------
+
+@Serializable
+data class ApiContributorAnalytics(
+    val success: Boolean = true,
+    val role: String = "writer",
+    @JsonNames("totalArticles", "total_articles")
+    val totalArticles: Int = 0,
+    @JsonNames("publishedArticles", "published_articles")
+    val publishedArticles: Int = 0,
+    @JsonNames("draftArticles", "draft_articles")
+    val draftArticles: Int = 0,
+    @JsonNames("pendingArticles", "pending_articles")
+    val pendingArticles: Int = 0,
+    @JsonNames("needsChangesArticles", "needs_changes_articles")
+    val needsChangesArticles: Int = 0,
+    @JsonNames("rejectedArticles", "rejected_articles")
+    val rejectedArticles: Int = 0,
+    @JsonNames("totalViews", "total_views")
+    val totalViews: Int = 0,
+    @JsonNames("totalLikes", "total_likes")
+    val totalLikes: Int = 0,
+    @JsonNames("totalComments", "total_comments")
+    val totalComments: Int = 0,
+    @JsonNames("totalBookmarks", "total_bookmarks")
+    val totalBookmarks: Int = 0,
+    @JsonNames("dailyStats", "daily_stats")
+    val dailyStats: List<ApiDailyStat> = emptyList(),
+    @JsonNames("bestArticleThisWeek", "best_article_this_week")
+    val bestArticleThisWeek: ApiBestArticle? = null,
+    val comparison: ApiComparison = ApiComparison(),
+    val followers: ApiFollowerData = ApiFollowerData(),
+    @JsonNames("topArticles", "top_articles")
+    val topArticles: List<ApiTopArticle> = emptyList(),
+    @JsonNames("featuredComment", "featured_comment")
+    val featuredComment: ApiFeaturedComment? = null,
+    @JsonNames("publishingActivity", "publishing_activity")
+    val publishingActivity: ApiPublishingActivity = ApiPublishingActivity(),
+    val articles: List<ApiContributorArticle> = emptyList(),
+)
+
+@Serializable
+data class ApiDailyStat(
+    val date: String = "",
+    val views: Int = 0,
+    val likes: Int = 0,
+    val comments: Int = 0,
+)
+
+@Serializable
+data class ApiBestArticle(
+    val id: String = "",
+    val title: String = "",
+    val views: Int = 0,
+)
+
+@Serializable
+data class ApiComparison(
+    @JsonNames("viewsThisMonth", "views_this_month")
+    val viewsThisMonth: Int = 0,
+    @JsonNames("viewsLastMonth", "views_last_month")
+    val viewsLastMonth: Int = 0,
+    @JsonNames("likesThisMonth", "likes_this_month")
+    val likesThisMonth: Int = 0,
+    @JsonNames("likesLastMonth", "likes_last_month")
+    val likesLastMonth: Int = 0,
+)
+
+@Serializable
+data class ApiFollowerData(
+    val count: Int = 0,
+    @JsonNames("dailyGrowth", "daily_growth")
+    val dailyGrowth: List<ApiFollowerDay> = emptyList(),
+)
+
+@Serializable
+data class ApiFollowerDay(
+    val date: String = "",
+    val count: Int = 0,
+)
+
+@Serializable
+data class ApiTopArticle(
+    val id: String = "",
+    val title: String = "",
+    val views: Int = 0,
+    val likes: Int = 0,
+    val comments: Int = 0,
+    val bookmarks: Int = 0,
+)
+
+@Serializable
+data class ApiFeaturedComment(
+    val content: String = "",
+    @JsonNames("userName", "user_name")
+    val userName: String = "قارئ",
+    @JsonNames("articleTitle", "article_title")
+    val articleTitle: String = "",
+    @JsonNames("articleId", "article_id")
+    val articleId: String = "",
+)
+
+@Serializable
+data class ApiPublishingActivity(
+    @JsonNames("lastPublishedAt", "last_published_at")
+    val lastPublishedAt: String? = null,
+    @JsonNames("daysSinceLastPublished", "days_since_last_published")
+    val daysSinceLastPublished: Int? = null,
+    @JsonNames("thisWeekCount", "this_week_count")
+    val thisWeekCount: Int = 0,
+    @JsonNames("thisMonthCount", "this_month_count")
+    val thisMonthCount: Int = 0,
+)
+
+@Serializable
+data class ApiContributorArticle(
+    val id: String = "",
+    val title: String = "",
+    val status: String = "",
+    @JsonNames("reviewStatus", "review_status")
+    val reviewStatus: String? = null,
+    @JsonNames("reviewNotes", "review_notes")
+    val reviewNotes: String? = null,
+    val views: Int = 0,
+    val likes: Int = 0,
+    val comments: Int = 0,
+    val bookmarks: Int = 0,
+    @JsonNames("publishedAt", "published_at")
+    val publishedAt: String? = null,
+    @JsonNames("createdAt", "created_at")
+    val createdAt: String? = null,
+)
+
+@Serializable
+data class ApiContributorRanking(
+    val success: Boolean = true,
+    val rank: Int? = null,
+    @JsonNames("totalAuthors", "total_authors")
+    val totalAuthors: Int = 0,
+    val percentile: Int = 0,
+    @JsonNames("myViews", "my_views")
+    val myViews: Int = 0,
+    @JsonNames("isTopTen", "is_top_ten")
+    val isTopTen: Boolean = false,
 )
 
