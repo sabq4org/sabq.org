@@ -12743,10 +12743,11 @@ Respond in valid JSON format only:
             audioBuffer = await Promise.race([
               elevenLabsService.textToSpeech({
                 text: textToConvert,
+                model: 'eleven_flash_v2_5',
                 voiceSettings: {
-                  stability: 0.6,
+                  stability: 0.75,
                   similarity_boost: 0.75,
-                  style: 0.5,
+                  style: 0.30,
                   use_speaker_boost: true
                 }
               }),
