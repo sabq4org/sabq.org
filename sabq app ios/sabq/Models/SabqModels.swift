@@ -424,6 +424,7 @@ struct Article: Identifiable, Equatable, Hashable {
     var articleType: String? = nil
     /// Photo packs for weekly-photos articles. Nil for everything else.
     var weeklyPhotos: [APIWeeklyPhoto]? = nil
+    var mediaAssets: [APIMediaAsset]? = nil
 
     var readingMinutes: Int {
         max(1, body.count / 800)
@@ -508,7 +509,8 @@ struct Article: Identifiable, Equatable, Hashable {
             articleURL: articleURL,
             viewsCount: api.viewsCount ?? 0,
             articleType: api.articleType,
-            weeklyPhotos: api.weeklyPhotos
+            weeklyPhotos: api.weeklyPhotos,
+            mediaAssets: api.mediaAssets
         )
     }
 

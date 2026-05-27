@@ -11875,6 +11875,17 @@ Respond in valid JSON format only:
         await storage.recordArticleRead(userId, finalArticle.id);
       }
 
+      // Attach media assets (email agent images) so mobile apps can render them
+      const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
+      if (mediaAssets && mediaAssets.length > 0) {
+        finalArticle.mediaAssets = mediaAssets
+          .filter((a: any) => a.mediaFile?.url)
+          .map((a: any) => ({
+            url: a.mediaFile.url,
+            altText: a.altText || "",
+            displayOrder: a.displayOrder ?? 0,
+          }));
+      }
 
       res.json(finalArticle);
     } catch (error) {

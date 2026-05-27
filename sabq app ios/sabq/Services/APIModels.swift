@@ -16,6 +16,25 @@ nonisolated struct FlexKey: CodingKey, Sendable {
 /// photographer/source credit. Backend lives at
 /// `articles.weeklyPhotosData.photos`. Decoder is permissive so missing
 /// caption/credit values still yield a renderable struct.
+nonisolated struct APIMediaAsset: Decodable, Identifiable, Hashable {
+    let url: String
+    let altText: String
+    let displayOrder: Int
+
+    var id: String { "\(url)-\(displayOrder)" }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        url = (try? c.decode(String.self, forKey: FlexKey("url"))) ?? ""
+        altText = (try? c.decode(String.self, forKey: FlexKey("altText")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("alt_text")))
+            ?? ""
+        displayOrder = (try? c.decode(Int.self, forKey: FlexKey("displayOrder")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("display_order")))
+            ?? 0
+    }
+}
+
 nonisolated struct APIWeeklyPhoto: Decodable, Identifiable, Hashable {
     let imageUrl: String
     let caption: String
@@ -86,6 +105,7 @@ nonisolated struct APIArticle: Decodable {
     /// the detail endpoint ships a `weeklyPhotosData.photos` array. iOS
     /// renders these as a numbered gallery inside the article body.
     let weeklyPhotos: [APIWeeklyPhoto]?
+    let mediaAssets: [APIMediaAsset]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
@@ -217,6 +237,8 @@ nonisolated struct APIArticle: Decodable {
         } else {
             weeklyPhotos = nil
         }
+
+        mediaAssets = try? c.decode([APIMediaAsset].self, forKey: FlexKey("mediaAssets"))
     }
 
     func withKeywords(_ newKeywords: [String]) -> APIArticle {

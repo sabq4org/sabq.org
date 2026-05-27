@@ -187,6 +187,7 @@ struct ArticleDetailView: View {
 
                         Divider().foregroundStyle(SabqTheme.outline.opacity(0.6))
                         articleBody
+                        mediaAssetsGallery
 
                         // Weekly-photos pack — only renders when the
                         // backend tagged this article as a photo
@@ -1298,6 +1299,39 @@ struct ArticleDetailView: View {
                 }
                 .padding(.horizontal, 6)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var mediaAssetsGallery: some View {
+        let assets = (displayArticle.mediaAssets ?? []).filter {
+            !$0.url.isEmpty && $0.url != displayArticle.imageURL
+        }
+        if !assets.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(assets.enumerated()), id: \.element.url) { _, asset in
+                    if let url = URL(string: asset.url) {
+                        Button {
+                            inlineLightboxURL = url
+                        } label: {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(SabqTheme.outline.opacity(0.15))
+                                    .frame(height: 200)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
         }
     }
 
