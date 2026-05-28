@@ -46,6 +46,14 @@ export default defineConfig({
   define: {
     __SABQ_BUILD_ID__: JSON.stringify(SABQ_BUILD_ID),
   },
+  esbuild: {
+    // Strip noisy debug logging from PRODUCTION bundles only (minification
+    // drops these pure-annotated calls). Dev keeps every log (no minify in
+    // dev). console.error / console.warn are preserved on purpose so genuine
+    // failures stay visible. Prevents future debug logs from leaking to the
+    // browser console regardless of stray console.log calls in source.
+    pure: ["console.log", "console.debug", "console.info"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
