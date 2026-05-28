@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
 import { prefetchArticleDetail, prefetchCategoryPage, prefetchWhenIdle } from "@/lib/prefetchRoute";
+import { readHomepageCache, writeHomepageCache } from "@/lib/homepageCache";
 import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
 import type { User } from "@/hooks/useAuth";
 
@@ -38,9 +39,6 @@ const TrendingTopics = lazy(() =>
 );
 const OpinionArticlesBlock = lazy(() => 
   import("@/components/OpinionArticlesBlock").then(module => ({ default: module.OpinionArticlesBlock }))
-);
-const LiteModeHint = lazy(() => 
-  import("@/components/LiteModeHint").then(module => ({ default: module.LiteModeHint }))
 );
 const TrendingWeekSection = lazy(() => 
   import("@/components/TrendingWeekSection").then(module => ({ default: module.TrendingWeekSection }))
@@ -145,14 +143,25 @@ export default function Home() {
       .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [categoriesWithStats]);
 
-  const { data: homepage, isLoading, error, refetch: refetchHomepage } = useQuery<HomepageData>({
+  const { data: homepage, isLoading, isPlaceholderData, error, refetch: refetchHomepage } = useQuery<HomepageData>({
     queryKey: ["/api/homepage-lite"],
     staleTime: 60 * 1000, // Data becomes stale after 1 minute (so focus refetch works)
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchInterval: 60 * 1000, // Poll every 60 seconds for new articles (SSE was removed)
     refetchIntervalInBackground: false, // Don't waste resources when tab hidden
     refetchOnWindowFocus: true, // Refetch when user returns to tab
+    // Paint the last-known feed instantly on reload (HTML is no-store, so the
+    // in-memory cache is empty after a refresh) while we revalidate in the
+    // background. Eliminates the full-screen skeleton flash on every refresh.
+    placeholderData: () => readHomepageCache<HomepageData>(),
   });
+
+  // Snapshot fresh (non-placeholder) homepage data for the next reload.
+  useEffect(() => {
+    if (homepage && !isPlaceholderData) {
+      writeHomepageCache(homepage);
+    }
+  }, [homepage, isPlaceholderData]);
 
   // Set document.title for SEO (GA4 auto-tracks page views)
   useEffect(() => {
@@ -412,11 +421,6 @@ export default function Home() {
       </main>
       
       <Footer />
-
-      {/* Floating Widgets */}
-      <Suspense fallback={null}>
-        <LiteModeHint />
-      </Suspense>
     </div>
   );
 }
