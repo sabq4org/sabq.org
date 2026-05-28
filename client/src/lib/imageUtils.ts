@@ -99,7 +99,7 @@ export function getFocalPoint(article: any): FocalPoint | null {
  * @param defaultPosition - Default position if no focal point (default: 'center')
  * @returns CSS object-position string (e.g., "30% 70%")
  */
-export function getObjectPosition(article: any, defaultPosition: string = 'center 20%'): string {
+export function getObjectPosition(article: any, defaultPosition: string = 'center'): string {
   const focalPoint = getFocalPoint(article);
   
   if (!focalPoint) {
@@ -119,7 +119,7 @@ export function getObjectPosition(article: any, defaultPosition: string = 'cente
  * @param defaultPosition - Default position if no focal point
  * @returns CSS style object with backgroundPosition
  */
-export function getFocalPointStyle(article: any, defaultPosition: string = 'center 20%'): React.CSSProperties {
+export function getFocalPointStyle(article: any, defaultPosition: string = 'center'): React.CSSProperties {
   const position = getObjectPosition(article, defaultPosition);
   return {
     backgroundPosition: position,
