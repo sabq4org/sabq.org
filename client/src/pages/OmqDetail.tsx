@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import DOMPurify from "isomorphic-dompurify";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,7 @@ const formatAnalysisContent = (content: string | null | undefined): string => {
     processedLines.push('</p>');
   }
   
-  return processedLines.join('\n');
+  return DOMPurify.sanitize(processedLines.join('\n'));
 };
 
 export default function OmqDetail() {

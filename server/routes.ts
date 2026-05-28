@@ -308,6 +308,8 @@ import {
   articlePolls,
   userPointsTotal,
   articleDailyStats,
+  whatsappWebhookLogs,
+  emailWebhookLogs,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -427,8 +429,12 @@ import {
 } from "@shared/schema";
 import { pool } from "./db";
 
-function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: string; subject: string; needsReview?: boolean }; shouldSave: boolean } {
-  const data: any = { x: result.x, y: result.y, confidence: result.confidence, subject: result.subject };
+function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean }; shouldSave: boolean } {
+  const data: { x: number; y: number; confidence: "high" | "medium" | "low"; needsReview?: boolean } = {
+    x: result.x,
+    y: result.y,
+    confidence: result.confidence,
+  };
   if (result.confidence === "low") {
     data.needsReview = true;
     return { data, shouldSave: true };
@@ -9282,7 +9288,7 @@ Respond in valid JSON format only:
           publishedAt: articles.publishedAt,
           createdAt: articles.createdAt,
           categoryId: articles.categoryId,
-          categoryName: categories.nameArAr,
+          categoryName: categories.nameAr,
           categorySlug: categories.slug,
           authorId: articles.authorId,
           authorFirstName: users.firstName,
@@ -9487,7 +9493,7 @@ Respond in valid JSON format only:
           newsType: articles.newsType,
           isFeatured: articles.isFeatured,
           categoryId: articles.categoryId,
-          categoryName: categories.nameArAr,
+          categoryName: categories.nameAr,
           categorySlug: categories.slug,
           authorId: articles.authorId,
           authorFirstName: users.firstName,
@@ -9694,7 +9700,7 @@ Respond in valid JSON format only:
           views: articles.views,
           publishedAt: articles.publishedAt,
           createdAt: articles.createdAt,
-          categoryName: categories.nameArAr,
+          categoryName: categories.nameAr,
           authorFirstName: users.firstName,
           authorLastName: users.lastName,
         })
@@ -17060,7 +17066,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           title: articles.title,
         subtitle: articles.subtitle,
           summary: articles.aiSummary,
-          categoryName: categories.nameArAr,
+          categoryName: categories.nameAr,
         })
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
@@ -25829,7 +25835,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             views: articles.views,
             publishedAt: articles.publishedAt,
             categoryId: articles.categoryId,
-            categoryName: categories.nameArAr,
+            categoryName: categories.nameAr,
             categorySlug: categories.slug,
           })
           .from(articles)

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import DOMPurify from "isomorphic-dompurify";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -483,7 +484,7 @@ export default function EmailTemplatesPage() {
                   <TabsContent value="html">
                     <div 
                       className="border rounded-lg p-4 min-h-[200px] bg-white dark:bg-gray-900"
-                      dangerouslySetInnerHTML={{ __html: previewContent.bodyHtml }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(previewContent.bodyHtml) }}
                       data-testid="preview-html-content"
                     />
                   </TabsContent>

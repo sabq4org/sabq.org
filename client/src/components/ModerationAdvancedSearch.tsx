@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import DOMPurify from "isomorphic-dompurify";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
@@ -380,7 +381,7 @@ export function ModerationAdvancedSearch({ onSelectComment, onSelectArticle }: M
     if (!highlighted || highlighted === text) {
       return <span>{text}</span>;
     }
-    return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+    return <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(highlighted) }} />;
   };
 
   const getClassificationBadge = (classification: string | null) => {

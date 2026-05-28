@@ -620,8 +620,7 @@ const apmStats = {
   errorPaths: new Map<string, number>(),
 };
 
-// APM stats endpoint
-app.get("/api/apm/stats", (req, res) => {
+function sendApmStats(_req: Request, res: Response) {
   const samplesCount = apmBufferCount;
   let avgResponseTime = 0;
   if (samplesCount > 0) {
@@ -649,10 +648,9 @@ app.get("/api/apm/stats", (req, res) => {
     memoryUsage: process.memoryUsage(),
     timestamp: new Date().toISOString(),
   });
-});
+}
 
-// Reset APM stats (for testing)
-app.post("/api/apm/reset", (req, res) => {
+function resetApmStats(_req: Request, res: Response) {
   apmStats.requests = { total: 0, success: 0, errors: 0 };
   apmResponseBuffer.fill(0);
   apmBufferIndex = 0;
@@ -660,7 +658,7 @@ app.post("/api/apm/reset", (req, res) => {
   apmStats.slowRequests = [];
   apmStats.errorPaths.clear();
   res.json({ message: "APM stats reset successfully" });
-});
+}
 
 const isDevEnv = process.env.NODE_ENV !== 'production';
 
@@ -777,6 +775,21 @@ if (!(globalThis as any).__sabqServer) {
 
     await registerRoutes(app, server);
     console.log("[Server] ✅ Routes registered successfully");
+
+    const { requireAuth, requirePermission } = await import("./rbac");
+    app.get(
+      "/api/apm/stats",
+      requireAuth,
+      requirePermission("system.manage_settings"),
+      sendApmStats,
+    );
+    app.post(
+      "/api/apm/reset",
+      requireAuth,
+      requirePermission("system.manage_settings"),
+      resetApmStats,
+    );
+    console.log("[Server] ✅ APM endpoints protected (system.manage_settings)");
 
     const { setupAgentReady } = await import("./agentReady");
     setupAgentReady(app);

@@ -1414,9 +1414,9 @@ export async function generateIFoxContentSuggestions(
     
     // Filter, trim, limit length, and cap array size
     const suggestions = result.suggestions
-      .filter((s): s is string => typeof s === 'string')
-      .map(s => s.trim().substring(0, 500)) // Max 500 chars per suggestion
-      .filter(s => s.length > 0) // Remove empty strings
+      .filter((s: unknown): s is string => typeof s === 'string')
+      .map((s: string) => s.trim().substring(0, 500)) // Max 500 chars per suggestion
+      .filter((s: string) => s.length > 0) // Remove empty strings
       .slice(0, 10); // Max 10 suggestions
     
     console.log("[iFox AI] ✅ Suggestions generated successfully");
@@ -1546,9 +1546,9 @@ export async function analyzeIFoxContent(
     // Validate and sanitize suggestions array
     const suggestions = Array.isArray(result.suggestions) 
       ? result.suggestions
-          .filter((s): s is string => typeof s === 'string')
-          .map(s => s.trim().substring(0, 500)) // Max 500 chars per suggestion
-          .filter(s => s.length > 0) // Remove empty strings
+          .filter((s: unknown): s is string => typeof s === 'string')
+          .map((s: string) => s.trim().substring(0, 500)) // Max 500 chars per suggestion
+          .filter((s: string) => s.length > 0) // Remove empty strings
           .slice(0, 10) // Max 10 suggestions
       : [];
     

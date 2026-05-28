@@ -5,21 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OptimizedImage } from "./OptimizedImage";
-import { ArrowLeft, Sparkles, Calendar, ChevronLeft, ChevronRight, PenLine } from "lucide-react";
-import * as LucideIcons from "lucide-react";
-import { Circle } from "lucide-react";
+import { ArrowLeft, Sparkles, Calendar, ChevronLeft, ChevronRight, PenLine, Circle } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import { useRef, useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 import type { Topic, Angle } from "@shared/schema";
 
 function getIconComponent(iconKey: string) {
-  const iconName = iconKey as keyof typeof LucideIcons;
-  const IconComponent = LucideIcons[iconName];
-  if (IconComponent && typeof IconComponent === 'function') {
-    return IconComponent as React.ComponentType<{ className?: string }>;
-  }
-  return Circle;
+  return getLucideIcon(iconKey, Circle);
 }
 
 interface TopicWithAngle extends Topic {

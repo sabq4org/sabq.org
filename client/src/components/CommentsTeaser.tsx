@@ -85,7 +85,7 @@ export function CommentsTeaser({
               ))}
               {commentsCount > 3 && (
                 <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center border-2 border-background text-[10px] font-medium z-0 mr-[-12px] rtl:mr-0 rtl:ml-[-12px]">
-                  +{ (commentsCount - formatNumber(3)) }
+                  +{formatNumber(commentsCount - 3)}
                 </div>
               )}
             </div>

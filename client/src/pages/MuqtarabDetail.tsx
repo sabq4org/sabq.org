@@ -8,20 +8,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAngleDetail } from "@/lib/muqtarab";
-import { ArrowRight, ChevronRight, Share2, Calendar, FileText } from "lucide-react";
-import * as LucideIcons from "lucide-react";
-import { Circle } from "lucide-react";
+import { ArrowRight, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import type { Topic } from "@shared/schema";
 
 function getIconComponent(iconKey: string) {
-  const iconName = iconKey as keyof typeof LucideIcons;
-  const IconComponent = LucideIcons[iconName];
-  
-  if (IconComponent && typeof IconComponent === 'function') {
-    return IconComponent as React.ComponentType<{ className?: string }>;
-  }
-  
-  return Circle;
+  return getLucideIcon(iconKey, Circle);
 }
 
 export default function MuqtarabDetail() {

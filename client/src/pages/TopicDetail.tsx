@@ -1,6 +1,7 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,7 +125,7 @@ function renderContentBlock(block: {
           key={index}
           className="my-6"
           data-testid={`content-embed-${index}`}
-          dangerouslySetInnerHTML={{ __html: block.content || "" }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content || "") }}
         />
       );
     
@@ -419,7 +420,7 @@ export default function TopicDetail() {
               contentBlocks.map((block, index) => renderContentBlock(block, index))
             ) : topic.content?.rawHtml ? (
               <div 
-                dangerouslySetInnerHTML={{ __html: topic.content.rawHtml }} 
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(topic.content.rawHtml) }} 
                 data-testid="content-raw-html"
               />
             ) : topic.content?.plainText ? (
