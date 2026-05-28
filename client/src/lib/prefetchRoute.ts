@@ -10,6 +10,8 @@
 // emits one chunk and the browser cache dedupes the request: prefetch +
 // later real navigation share the exact same module.
 
+import { queryClient } from "@/lib/queryClient";
+
 const inFlight = new Set<string>();
 
 function prefetchOnce(key: string, importer: () => Promise<unknown>): void {
@@ -29,6 +31,26 @@ export function prefetchArticleDetail(): void {
 /** Warm the category page chunk (category pills / nav). */
 export function prefetchCategoryPage(): void {
   prefetchOnce("category", () => import("@/pages/CategoryPage"));
+}
+
+/**
+ * Warm BOTH the article-detail chunk AND the article's data into the
+ * react-query cache. Call on link hover/touch with the same slug the URL
+ * uses ({englishSlug || slug}). The query key matches ArticleDetail's own
+ * useQuery(["/api/articles", slug]) so the click finds cached data and
+ * renders immediately instead of showing a loading state while the API
+ * round-trips. The default query fn (getQueryFn) derives the URL from the
+ * key, so no fetcher needs to be passed here.
+ */
+export function prefetchArticle(slug: string | undefined | null): void {
+  prefetchArticleDetail();
+  if (!slug) return;
+  const key = `article-data:${slug}`;
+  if (inFlight.has(key)) return;
+  inFlight.add(key);
+  queryClient
+    .prefetchQuery({ queryKey: ["/api/articles", slug] })
+    .catch(() => inFlight.delete(key));
 }
 
 /**

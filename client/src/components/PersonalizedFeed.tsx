@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatArticleTimestamp } from "@/lib/formatTime";
 import { getObjectPosition } from "@/lib/imageUtils";
-import { prefetchArticleDetail } from "@/lib/prefetchRoute";
+import { prefetchArticle } from "@/lib/prefetchRoute";
 import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
 import { OptimizedImage } from "@/components/OptimizedImage";
@@ -349,8 +349,8 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                     <div
                       className="block group cursor-pointer"
                       data-testid={`link-article-mobile-${article.id}`}
-                      onMouseEnter={prefetchArticleDetail}
-                      onTouchStart={prefetchArticleDetail}
+                      onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)}
+                      onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}
                     >
                       <div className={`p-4 hover-elevate active-elevate-2 transition-all ${
                         article.newsType === "breaking" ? "bg-destructive/5" : ""
@@ -483,8 +483,8 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                   article.newsType === "breaking" ? "bg-destructive/5" : ""
                 }`}
                 data-testid={`card-article-${article.id}`}
-                onMouseEnter={prefetchArticleDetail}
-                onTouchStart={prefetchArticleDetail}
+                onMouseEnter={() => prefetchArticle(article.englishSlug || article.slug)}
+                onTouchStart={() => prefetchArticle(article.englishSlug || article.slug)}
               >
                 {(article.imageUrl || article.thumbnailUrl || (article as any).infographicBannerUrl) && (
                   <div className="relative aspect-[16/9] overflow-hidden">
