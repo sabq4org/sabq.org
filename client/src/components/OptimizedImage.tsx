@@ -132,7 +132,7 @@ export function OptimizedImage({
   alt,
   className = "",
   wrapperClassName = "",
-  objectPosition = "center 20%",
+  objectPosition = "center",
   priority = false,
   aspectRatio,
   fallbackGradient = "from-primary/10 to-accent/10",
@@ -160,8 +160,16 @@ export function OptimizedImage({
   
   const optimizedSrc = useMemo(() => {
     if (webpSrc) return webpSrc;
-    return getOptimizedUrl(normalizedSrc, { width, height, quality, preferSize });
-  }, [normalizedSrc, webpSrc, width, height, quality, preferSize]);
+    let resolvedHeight = height;
+    if (!resolvedHeight && aspectRatio && typeof aspectRatio === 'string' && aspectRatio.includes('/')) {
+      const [w, h] = aspectRatio.split('/').map(Number);
+      const baseWidth = width || (preferSize ? ({ thumbnail: 150, small: 320, medium: 640, large: 960, original: 0 } as const)[preferSize] : 640);
+      if (w > 0 && h > 0 && baseWidth > 0) {
+        resolvedHeight = Math.round((baseWidth * h) / w);
+      }
+    }
+    return getOptimizedUrl(normalizedSrc, { width, height: resolvedHeight, quality, preferSize });
+  }, [normalizedSrc, webpSrc, width, height, quality, preferSize, aspectRatio]);
   
   const isTransformed = optimizedSrc !== normalizedSrc;
   
