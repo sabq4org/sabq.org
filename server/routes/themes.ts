@@ -3,7 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
-import { themes } from "@shared/schema";
+import { themes, themeAuditLog, insertThemeSchema, updateThemeSchema } from "@shared/schema";
 import { isAuthenticated } from "../auth";
 import { requireRole, logActivity } from "../rbac";
 import { cacheControl, CACHE_DURATIONS } from "../cacheMiddleware";

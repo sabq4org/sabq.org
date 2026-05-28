@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import puppeteer from "puppeteer";
 import { canAcceptExternalSse, trackExternalSse, memoryCache, CACHE_TTL } from "./memoryCache";
 import { db } from "./db";
+import { pickTableColumns } from "./utils/sanitizeBody";
 import { 
   adAccounts, 
   campaigns, 
@@ -834,7 +835,7 @@ router.put("/ad-groups/:id", requireAdvertiser, async (req, res) => {
     const [updatedGroup] = await db
       .update(adGroups)
       .set({
-        ...req.body,
+        ...pickTableColumns(adGroups, req.body),
         updatedAt: new Date()
       })
       .where(eq(adGroups.id, adGroupId))
@@ -1094,7 +1095,7 @@ router.put("/creatives/:id", requireAdvertiser, async (req, res) => {
     const [updatedCreative] = await db
       .update(creatives)
       .set({
-        ...req.body,
+        ...pickTableColumns(creatives, req.body),
         updatedAt: new Date()
       })
       .where(eq(creatives.id, creativeId))
@@ -2036,7 +2037,7 @@ router.put("/inventory-slots/:id", requireAdvertiser, async (req, res) => {
     const [updatedSlot] = await db
       .update(inventorySlots)
       .set({
-        ...req.body,
+        ...pickTableColumns(inventorySlots, req.body),
         updatedAt: new Date()
       })
       .where(eq(inventorySlots.id, slotId))

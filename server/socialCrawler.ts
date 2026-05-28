@@ -987,7 +987,7 @@ export async function socialCrawlerMiddleware(
 
       // Use englishSlug (short URL) for social sharing if available
       const articleWithSlug = { ...article, slug: article.englishSlug || article.slug };
-      const rawImg = article.imageUrl || article.image_url || '';
+      const rawImg = article.imageUrl || '';
       // Fire-and-forget — do not block the request on social image transcoding
       prepareSocialImage(rawImg).catch(() => {});
       const html = generateArticleHTML(articleWithSlug, baseUrl);
@@ -1061,7 +1061,7 @@ export async function socialCrawlerMiddleware(
           englishSlug: enArticles.englishSlug,
           excerpt: enArticles.excerpt,
           imageUrl: enArticles.imageUrl,
-          thumbnailUrl: enArticles.thumbnailUrl,
+          thumbnailUrl: enArticles.imageUrl,
           publishedAt: enArticles.publishedAt,
           updatedAt: enArticles.updatedAt,
           seo: enArticles.seo,
@@ -1101,7 +1101,7 @@ export async function socialCrawlerMiddleware(
           englishSlug: urArticles.englishSlug,
           excerpt: urArticles.excerpt,
           imageUrl: urArticles.imageUrl,
-          thumbnailUrl: urArticles.thumbnailUrl,
+          thumbnailUrl: urArticles.imageUrl,
           publishedAt: urArticles.publishedAt,
           updatedAt: urArticles.updatedAt,
           seo: urArticles.seo,

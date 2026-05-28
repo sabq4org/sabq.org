@@ -43,7 +43,7 @@ async function main() {
     process.exit(1);
   }
 
-  const rows: any[] = await db.execute(sql.raw(
+  const rows: any = await db.execute(sql.raw(
     `SELECT id, profile_image_url as url FROM users 
      WHERE profile_image_url LIKE '/public-objects/%' 
         OR profile_image_url LIKE '/objects/%'

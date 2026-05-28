@@ -806,7 +806,7 @@ router.get("/admin/orders", requireAdmin, async (req: Request, res: Response) =>
     const conditions = [];
 
     if (status && status !== "all") {
-      conditions.push(eq(mediaServiceOrders.status, status as string));
+      conditions.push(eq(mediaServiceOrders.status, status as any));
     }
 
     if (search) {

@@ -6,6 +6,7 @@ import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
 import { verifyImageMagicBytes } from "./utils/imageVerify";
+import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
 import adsRoutes from "./ads-routes";
@@ -310,6 +311,9 @@ import {
   articleDailyStats,
   whatsappWebhookLogs,
   emailWebhookLogs,
+  userSegmentAssignments,
+  userSegmentDefinitions,
+  legacyRedirects,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -5953,7 +5957,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 passwordHash: passwordHash,
                 mustChangePassword: true,
                 updatedAt: new Date(),
-              })
+              } as any)
               .where(eq(users.id, staffUser.id));
             
             results.push({ userId: staffUser.id, email: staffUser.email, success: true });
@@ -7063,7 +7067,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             const [reporter] = await db
               .select({ firstName: users.firstName, lastName: users.lastName })
               .from(users)
-              .where(eq(users.id, newArticle.reporterId))
+              .where(eq(users.id, newArticle.reporterId!))
               .limit(1);
             
             const reporterName = reporter 
@@ -7073,12 +7077,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             await sendDraftSubmittedNotification(
               { id: newArticle.id, title: newArticle.title, slug: newArticle.slug },
               reporterName,
-              newArticle.reporterId
+              newArticle.reporterId!
             );
             
             // Log activity for draft submission
             await logActivity({
-              userId: newArticle.reporterId,
+              userId: newArticle.reporterId!,
               action: 'draft_submitted',
               targetType: 'article',
               targetId: newArticle.id,
@@ -7086,7 +7090,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 articleTitle: newArticle.title,
                 reporterName,
               },
-            });
+            } as any);
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }
@@ -7168,7 +7172,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               slug: articleForNotification.slug,
               englishSlug: articleForNotification.englishSlug || undefined,
               authorName: publisherName,
-              publishedAt: articleForNotification.publishedAt,
+              publishedAt: articleForNotification.publishedAt || undefined,
             });
           } catch (err) {
             console.error("[EditorAlerts] Error:", err);
@@ -7760,7 +7764,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               slug: articleForNotification.slug,
               englishSlug: articleForNotification.englishSlug || undefined,
               authorName: publisherName,
-              publishedAt: articleForNotification.publishedAt,
+              publishedAt: articleForNotification.publishedAt || undefined,
             });
           } catch (editorAlertError) {
             console.error("[EditorAlerts] Error:", editorAlertError);
@@ -8015,7 +8019,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             slug: articleForNotification.slug,
             englishSlug: articleForNotification.englishSlug || undefined,
             authorName: publisherName,
-            publishedAt: articleForNotification.publishedAt,
+            publishedAt: articleForNotification.publishedAt || undefined,
           });
         } catch (editorAlertError) {
           console.error("❌ [PUBLISH ARTICLE] Error sending editor alert:", editorAlertError);
@@ -9398,7 +9402,7 @@ Respond in valid JSON format only:
         id: article.id,
         title: article.title,
         slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
+              englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
         imageUrl: article.imageUrl,
         status: article.status,
@@ -9584,7 +9588,7 @@ Respond in valid JSON format only:
         .where(eq(readingHistory.articleId, articleId));
 
       // Get recent comments (last 10 comments)
-      const recentComments = await db
+      const recentComments = await (db as any)
         .select({
           id: comments.id,
           content: comments.content,
@@ -9617,7 +9621,7 @@ Respond in valid JSON format only:
         title: article.title,
         subtitle: article.subtitle,
         slug: article.slug,
-              englishSlug: article.englishSlug || undefined,
+              englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
         content: article.content,
         imageUrl: article.imageUrl,
@@ -9652,7 +9656,7 @@ Respond in valid JSON format only:
           avgScrollDepth: Math.round(readingStats?.avgScrollDepth || 0),
           avgCompletionRate: Math.round(readingStats?.avgCompletionRate || 0)
         },
-        recentComments: recentComments.map(c => ({
+        recentComments: recentComments.map((c: any) => ({
           id: c.id,
           content: c.content,
           status: c.status,
@@ -11725,7 +11729,7 @@ Respond in valid JSON format only:
 
       // Fetch iFox articles from the 5 designated categories + AI-generated only
       const result = await storage.listIFoxArticles({ 
-        status: status as string | undefined,
+        status: status as any,
         categorySlug: categorySlug as string | undefined,
         search: search as string | undefined,
         limit: parseInt(limit as string, 10),
@@ -12229,7 +12233,7 @@ Respond in valid JSON format only:
 
 
   // Lightweight helper to get article ID by slug (cached for performance)
-  async function getArticleIdBySlug(slug: string): Promise<{ id: number; categoryId: string | null } | null> {
+  async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null } | null> {
     const cacheKey = `article:id:${slug}`;
     return withCache(cacheKey, CACHE_TTL.LONG, async () => {
       const result = await db.select({ id: articles.id, categoryId: articles.categoryId })
@@ -12327,7 +12331,7 @@ Respond in valid JSON format only:
       // If cache returned null, fetch again without caching (for non-published articles)
       let finalArticle = article;
       if (!article) {
-        finalArticle = await storage.getArticleBySlug(slug, userId, userRole);
+        finalArticle = await storage.getArticleBySlug(slug, userId, userRole) ?? null;
       }
 
       // Fallback: if slug looks like a UUID, try fetching by ID
@@ -12346,7 +12350,7 @@ Respond in valid JSON format only:
       // Attach media assets (email agent images) so mobile apps can render them
       const mediaAssets = await storage.getArticleMediaAssetWithDetails?.(finalArticle.id);
       if (mediaAssets && mediaAssets.length > 0) {
-        finalArticle.mediaAssets = mediaAssets
+        (finalArticle as any).mediaAssets = mediaAssets
           .filter((a: any) => a.mediaFile?.url)
           .map((a: any) => ({
             url: a.mediaFile.url,
@@ -12493,7 +12497,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
   // Get AI-powered smart recommendations for an article
-  app.get("/api/articles/:slug/related-infographics", cacheControl(CACHE_DURATIONS.SHORT), async (req: any, res) => {
+  app.get("/api/articles/:slug/related-infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
       const limit = parseInt(req.query.limit as string) || 6;
@@ -12555,7 +12559,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
   // Alias route for infographics (without "related-" prefix) - matches frontend expectation
-  app.get("/api/articles/:slug/infographics", cacheControl(CACHE_DURATIONS.SHORT), async (req: any, res) => {
+  app.get("/api/articles/:slug/infographics", cacheControl(CACHE_DURATIONS.SHORT as any), async (req: any, res) => {
     try {
       const { slug } = req.params;
       const limit = parseInt(req.query.limit as string) || 6;
@@ -13517,7 +13521,7 @@ Respond in valid JSON format only:
       
       // Get available categories for better AI classification
       const allCategories = await storage.getAllCategories();
-      const categoryList = allCategories.map(c => ({ nameAr: c.name, nameEn: c.nameEn || c.name }));
+      const categoryList = allCategories.map(c => ({ nameAr: c.nameAr, nameEn: c.nameEn || c.nameAr }));
       
       // Run three operations in parallel for better quality:
       // 1. Smart content generation from ORIGINAL content (same as "توليد ذكي شامل")
@@ -13546,7 +13550,7 @@ Respond in valid JSON format only:
       );
       
       console.log("[Edit+Generate API] Step 3/3: Generating newsletter subtitle (optional)...");
-      let newsletterResult = { subtitle: undefined, excerpt: undefined };
+      let newsletterResult: { subtitle: string | undefined; excerpt: string | undefined } = { subtitle: undefined, excerpt: undefined };
       try {
         newsletterResult = await withRetry(
           () => generateNewsletterSubtitle({
@@ -14051,7 +14055,7 @@ Respond in valid JSON format only:
         ...row.article,
         category: row.category,
         author: row.reporter || row.author,
-        publisher: row.publisher,
+        publisher: (row as any).publisher,
       }));
 
       res.json({ articles: formattedArticles, total: formattedArticles.length });
@@ -14102,6 +14106,7 @@ Respond in valid JSON format only:
 
   // Create new English article
   app.post("/api/en/dashboard/articles", requireAuth, requirePermission("articles.create"), async (req: any, res) => {
+    let newArticle: any = undefined;
     try {
       let authorId = req.user?.id;
       if (!authorId) {
@@ -14162,7 +14167,7 @@ Respond in valid JSON format only:
         authorId,
       };
 
-      const [newArticle] = await db
+      [newArticle] = await db
         .insert(enArticles)
         .values([{
           ...articleData,
@@ -15279,7 +15284,7 @@ Respond in valid JSON format only:
             const [reporter] = await db
               .select({ firstName: users.firstName, lastName: users.lastName })
               .from(users)
-              .where(eq(users.id, article.reporterId))
+              .where(eq(users.id, article.reporterId!))
               .limit(1);
             
             const reporterName = reporter 
@@ -15289,12 +15294,12 @@ Respond in valid JSON format only:
             await sendDraftSubmittedNotification(
               { id: article.id, title: article.title, slug: article.slug },
               reporterName,
-              article.reporterId
+              article.reporterId!
             );
             
             // Log activity for draft submission
             await logActivity({
-              userId: article.reporterId,
+              userId: article.reporterId!,
               action: 'draft_submitted',
               targetType: 'article',
               targetId: article.id,
@@ -15302,7 +15307,7 @@ Respond in valid JSON format only:
                 articleTitle: article.title,
                 reporterName,
               },
-            });
+            } as any);
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }
@@ -15400,7 +15405,7 @@ Respond in valid JSON format only:
               slug: article.slug,
               englishSlug: article.englishSlug || undefined,
               authorName: publisherName,
-              publishedAt: article.publishedAt,
+              publishedAt: article.publishedAt || undefined,
             });
           })().catch(err => console.error("[EditorAlerts] Error:", err));
 
@@ -15471,10 +15476,13 @@ Respond in valid JSON format only:
       }
 
       // Prepare article data for update
-      const articleData = { ...req.body };
+      // Mass-assignment guard: restrict to real article columns (drops
+      // unknown keys + id/createdAt/updatedAt). `republish` is a control flag,
+      // not a column, so it's read from req.body directly.
+      const articleData: any = pickTableColumns(articles, req.body);
       
       // Remove republish flag from data (it's only for control logic)
-      const shouldRepublish = articleData.republish === true;
+      const shouldRepublish = req.body.republish === true;
       delete articleData.republish;
       
       // Handle publishedAt timestamp logic
@@ -15605,7 +15613,7 @@ Respond in valid JSON format only:
               slug: updated.slug,
               englishSlug: updated.englishSlug || undefined,
               authorName: publisherName,
-              publishedAt: updated.publishedAt,
+              publishedAt: updated.publishedAt || undefined,
             });
           })().catch(err => console.error("[EditorAlerts] Error:", err));
 
@@ -15750,7 +15758,7 @@ Respond in valid JSON format only:
       const { status, page = 1, limit = 20, search } = req.query;
       const offset = (parseInt(page) - 1) * parseInt(limit);
 
-      let query = db
+      let query: any = db
         .select({
           id: comments.id,
           articleId: comments.articleId,
@@ -17061,7 +17069,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // Get last 10 published articles for context
-      const recentArticles = await db
+      const recentArticles = await (db as any)
         .select({
           title: articles.title,
         subtitle: articles.subtitle,
@@ -17074,7 +17082,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .orderBy(desc(articles.publishedAt))
         .orderBy(desc(articles.publishedAt)).limit(10);
 
-      const articlesForContext = recentArticles.map(article => ({
+      const articlesForContext = recentArticles.map((article: any) => ({
         title: article.title,
         summary: article.summary || undefined,
         categoryName: article.categoryName || undefined,
@@ -17102,7 +17110,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // Get last 10 published English articles for context
-      const recentArticles = await db
+      const recentArticles = await (db as any)
         .select({
           title: enArticles.title,
           summary: enArticles.aiSummary,
@@ -17114,7 +17122,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .orderBy(desc(enArticles.publishedAt))
         .orderBy(desc(articles.publishedAt)).limit(10);
 
-      const articlesForContext = recentArticles.map(article => ({
+      const articlesForContext = recentArticles.map((article: any) => ({
         title: article.title,
         summary: article.summary || undefined,
         categoryName: article.categoryName || undefined,
@@ -17142,7 +17150,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       // Get last 10 published Urdu articles for context
-      const recentArticles = await db
+      const recentArticles = await (db as any)
         .select({
           title: urArticles.title,
           summary: urArticles.aiSummary,
@@ -17154,7 +17162,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .orderBy(desc(urArticles.publishedAt))
         .orderBy(desc(articles.publishedAt)).limit(10);
 
-      const articlesForContext = recentArticles.map(article => ({
+      const articlesForContext = recentArticles.map((article: any) => ({
         title: article.title,
         summary: article.summary || undefined,
         categoryName: article.categoryName || undefined,
@@ -17777,17 +17785,17 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const allCategories = await db
         .select({
           id: categories.id,
-          name: categories.name,
+          name: (categories as any).name,
           slug: categories.slug,
           description: categories.description,
           icon: categories.icon,
           color: categories.color,
-          sortOrder: categories.sortOrder,
-          isActive: categories.isActive,
+          sortOrder: (categories as any).sortOrder,
+          isActive: (categories as any).isActive,
         })
         .from(categories)
-        .where(eq(categories.isActive, true))
-        .orderBy(asc(categories.sortOrder), asc(categories.name));
+        .where(eq((categories as any).isActive, true))
+        .orderBy(asc((categories as any).sortOrder), asc((categories as any).name));
       
       res.json(allCategories);
     } catch (error) {
@@ -17953,7 +17961,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Fetch categories
       if (logsByType['category']?.length) {
         const catIds = [...new Set(logsByType['category'].map(l => l.entityId))];
-        const catResults = await db.select({ id: categories.id, name: categories.name })
+        const catResults = await db.select({ id: categories.id, name: (categories as any).name })
           .from(categories).where(inArray(categories.id, catIds));
         for (const c of catResults) {
           entityTitles[`category:${c.id}`] = { title: c.name };
@@ -18705,7 +18713,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       const { userAffinities } = await import("@shared/schema");
-      const affinities = await db
+      const affinities = await (db as any)
         .select({
           tag: userAffinities.tag,
           tagType: userAffinities.tagType,
@@ -19815,7 +19823,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
       
       // Get default section (Muqtarab)
-      const sections = await storage.getAllSections();
+      const sections = await (storage as any).getAllSections();
       const defaultSection = sections[0];
       if (!defaultSection) {
         return res.status(400).json({ message: "لا يوجد قسم افتراضي لإنشاء الزاوية" });
@@ -19838,20 +19846,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const tempPassword = generatePassword();
       
       // Check if user with this email exists
-      let user = await storage.getUserByEmail(submission.email);
+      let user = await (storage as any).getUserByEmail(submission.email);
       let isNewUser = false;
       
       if (!user) {
         // Create new user account
         isNewUser = true;
-        const bcrypt = await import('bcryptjs');
+        const bcrypt = await import('bcryptjs' as any);
         // Bumped from 10 → 12 to match every other bcrypt.hash() call in
         // the codebase (security audit H4, 2026-05-11). Existing weaker
         // hashes from this codepath stay valid (bcrypt-verify works
         // across rounds), but new accounts get the canonical strength.
         const hashedPassword = await bcrypt.hash(tempPassword, 12);
         
-        user = await storage.createUser({
+        user = await (storage as any).createUser({
           email: submission.email,
           password: hashedPassword,
           fullName: submission.fullName,
@@ -19886,7 +19894,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       await storage.updateUser(user.id, {
         customPermissions: Array.from(newPermissions),
-      });
+      } as any);
       
       // Update submission with created angle ID
       await storage.updateAngleSubmission(id, {
@@ -20731,7 +20739,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         .groupBy(recommendationLog.reason);
 
       // Get top recommended articles
-      const topArticles = await db
+      const topArticles = await (db as any)
         .select({
           articleId: recommendationLog.articleId,
           title: articles.title,
@@ -20804,7 +20812,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           ...r,
           avgScore: r.avgScore ? parseFloat(r.avgScore.toFixed(2)) : 0,
         })),
-        topArticles: topArticles.map(a => ({
+        topArticles: topArticles.map((a: any) => ({
           ...a,
           avgScore: a.avgScore ? parseFloat(a.avgScore.toFixed(2)) : 0,
         })),
@@ -20916,14 +20924,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Get user interest distribution by category
       const interestDistribution = await db
         .select({
-          category: categories.name,
+          category: (categories as any).name,
           categoryAr: categories.nameAr,
           count: sql<number>`count(DISTINCT ${userInterests.userId})::int`,
         })
         .from(userInterests)
         .leftJoin(categories, eq(userInterests.categoryId, categories.id))
-        .where(sql`${categories.name} IS NOT NULL`)
-        .groupBy(categories.name, categories.nameAr)
+        .where(sql`${(categories as any).name} IS NOT NULL`)
+        .groupBy((categories as any).name, categories.nameAr)
         .orderBy(sql`count(DISTINCT ${userInterests.userId}) DESC`)
         .limit(8);
 
@@ -20932,11 +20940,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       // Get activity metrics
       const totalInteractionsResult = await db
         .select({ count: sql<number>`count(*)::int` })
-        .from(userInteractions);
+        .from(userEvents);
 
       const uniqueUsersResult = await db
-        .select({ count: sql<number>`count(DISTINCT ${userInteractions.userId})::int` })
-        .from(userInteractions);
+        .select({ count: sql<number>`count(DISTINCT ${userEvents.userId})::int` })
+        .from(userEvents);
 
       const totalInteractions = totalInteractionsResult[0]?.count || 0;
       const uniqueUsers = uniqueUsersResult[0]?.count || 1;
@@ -20945,20 +20953,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const activeUsersTodayResult = await db
-        .select({ count: sql<number>`count(DISTINCT ${userInteractions.userId})::int` })
-        .from(userInteractions)
-        .where(sql`${userInteractions.timestamp} >= ${today}`);
+        .select({ count: sql<number>`count(DISTINCT ${userEvents.userId})::int` })
+        .from(userEvents)
+        .where(sql`${userEvents.createdAt} >= ${today}`);
 
       // Find most active segment
       const mostActiveSegmentResult = await db
         .select({
-          segment: userInterests.segment,
-          interactionCount: sql<number>`count(${userInteractions.id})::int`,
+          segment: (userInterests as any).segment,
+          interactionCount: sql<number>`count(${userEvents.id})::int`,
         })
         .from(userInterests)
-        .innerJoin(userInteractions, eq(userInterests.userId, userInteractions.userId))
-        .groupBy(userInterests.segment)
-        .orderBy(sql`count(${userInteractions.id}) DESC`)
+        .innerJoin(userEvents, eq(userInterests.userId, userEvents.userId))
+        .groupBy((userInterests as any).segment)
+        .orderBy(sql`count(${userEvents.id}) DESC`)
         .limit(1);
 
       const mostActiveSegment = mostActiveSegmentResult[0]?.segment || 'regular_reader';
@@ -21998,7 +22006,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
 
       const [updated] = await db.update(enSmartBlocks)
-        .set({ ...req.body, updatedAt: new Date() })
+        .set({ ...pickTableColumns(enSmartBlocks, req.body), updatedAt: new Date() })
         .where(eq(enSmartBlocks.id, req.params.id))
         .returning();
 
@@ -24477,7 +24485,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const insertData: any = {
         ...validated,
         displayOrder: validated.displayOrder ?? Math.floor(Date.now() / 1000),
-        englishSlug: generateEnglishSlug(validated.name || validated.nameAr || validated.slug),
+        englishSlug: generateEnglishSlug((validated as any).name || validated.nameAr || validated.slug),
       };
       
       const [newCategory] = await db
@@ -25082,7 +25090,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
         const featured = {
           imageFocalPoint: featuredData.article.imageFocalPoint || null,
-          thumbnailUrl: featuredData.article.thumbnailUrl || null,
+          thumbnailUrl: (featuredData.article as any).thumbnailUrl || null,
           id: featuredData.article.id,
           title: featuredData.article.title,
           image: featuredData.article.imageUrl,
@@ -25361,8 +25369,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         }
 
         const featured = {
-          imageFocalPoint: featuredData.article.imageFocalPoint || null,
-          thumbnailUrl: featuredData.article.thumbnailUrl || null,
+          imageFocalPoint: featuredArticle.imageFocalPoint || null,
+          thumbnailUrl: (featuredArticle as any).thumbnailUrl || null,
           id: featuredArticle.id,
           title: featuredArticle.title,
           image: featuredArticle.imageUrl,
@@ -25826,7 +25834,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
         // Get top 10 articles by views with category info
-        const topArticles = await db
+        const topArticles = await (db as any)
           .select({
             id: articles.id,
             title: articles.title,
@@ -25850,7 +25858,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
         // Calculate view changes for each article (compare with previous 30 days)
         const enrichedArticles = await Promise.all(
-          topArticles.map(async (article) => {
+          topArticles.map(async (article: any) => {
             // Get views in last 30 days
             const [currentPeriodViews] = await db
               .select({ count: sql<number>`COUNT(*)::int` })
@@ -26445,9 +26453,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         },
       });
 
-      res.status(201).json(newArticle);
-    } catch (error) {
-      console.error("Error creating opinion article:", error);
       // Log article created event
       logArticleEvent({
         articleId: newArticle.id,
@@ -26465,6 +26470,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           summary: 'تم نشر الخبر',
         }).catch(err => console.error("[CREATE ARTICLE] Failed to log publish event:", err));
       }
+
+      res.status(201).json(newArticle);
+    } catch (error) {
+      console.error("Error creating opinion article:", error);
       res.status(500).json({ message: "Failed to create opinion article" });
     }
   });
@@ -28325,7 +28334,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: enArticles.publishedAt,
     updatedAt: enArticles.updatedAt,
     status: enArticles.status,
-  };
+  } as any;
   const urSitemapSpec: SitemapTableSpec = {
     table: urArticles,
     id: urArticles.id,
@@ -28335,7 +28344,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: urArticles.publishedAt,
     updatedAt: urArticles.updatedAt,
     status: urArticles.status,
-  };
+  } as any;
 
   registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticles", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
   registerBucketedSitemap("/sitemap-en-articles-:page.xml", "__sitemapEnArticles", enSitemapSpec, "/en/article", SITEMAP_EN_BUCKETS);
@@ -28620,7 +28629,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const updated = await db
         .update(enCategories)
-        .set({ ...req.body, updatedAt: new Date() })
+        .set({ ...pickTableColumns(enCategories, req.body), updatedAt: new Date() })
         .where(eq(enCategories.id, req.params.id))
         .returning();
       
@@ -29579,7 +29588,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       const updateData: any = {
-        ...req.body,
+        ...pickTableColumns(enArticles, req.body),
         updatedAt: new Date(),
       };
 
@@ -31197,7 +31206,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       if (existingArticle) {
         return res.status(409).json({ message: "Article slug already exists" });
       // Check publish permission if status is "published"
-      if (parsed.data.status === 'published') {
+      if (parsed.data?.status === 'published') {
         const userPermissions = await getUserPermissions(req.user.id);
         const canPublish = userPermissions.includes("articles.publish");
         if (!canPublish) {
@@ -31804,7 +31813,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // ============================================================
   // DATA STORY GENERATOR - مولد القصص من البيانات
   // ============================================================
-  registerDataStoryRoutes(app, storage);
+  registerDataStoryRoutes(app, storage as any);
 
   // INFOGRAPHIC AI - مولد اقتراحات الإنفوجرافيك
   registerInfographicAiRoutes(app);
@@ -34208,7 +34217,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           ...creditData,
           publisherId: req.params.id,
           remainingCredits: creditData.totalCredits,
-        });
+        } as any);
         
         // Log activity
         await logActivity({
@@ -34670,8 +34679,20 @@ Sitemap: https://sabq.org/sitemap-news.xml
         // Get article for logging (pre-update state)
         const article = await storage.getArticleById(req.params.id);
         
-        const updateData = {
-          ...req.body,
+        // Mass-assignment guard: a publisher is a lower-trust external user
+        // editing their OWN draft. Restrict to real article columns and strip
+        // ownership/promotion/counter columns they must never control
+        // (forging authorship, self-promoting to featured/breaking, inflating
+        // views, back-dating publish, reordering the homepage). status is
+        // force-set to draft below regardless of input.
+        const updateData: any = {
+          ...pickTableColumns(articles, req.body, {
+            omit: [
+              "authorId", "submitterId", "reporterId",
+              "newsType", "isFeatured", "views",
+              "publishedAt", "displayOrder", "hideFromHomepage",
+            ],
+          }),
           status: 'draft' as const, // Ensure it stays draft
         };
         
@@ -34708,7 +34729,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       memoryCache.invalidatePattern('^article:id:');
       memoryCache.invalidatePattern('^articles:');
       memoryCache.invalidatePattern('^sidebar:');
-      console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${articleId}`);
+      console.log(`[Breaking News] Cache invalidated and SSE broadcast sent for article ${req.params.id}`);
 
       res.json(updatedArticle);
       } catch (error: any) {
@@ -35254,7 +35275,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
 
         const { articleIds } = bodySchema.parse(req.body);
-        const result = await storage.bulkDeleteIFoxArticles(articleIds);
+        const result = await (storage as any).bulkDeleteIFoxArticles(articleIds);
 
         // Invalidate caches when articles are deleted
         memoryCache.invalidatePattern('^homepage');
@@ -35476,7 +35497,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
 
         const { articleIds } = bodySchema.parse(req.body);
-        const result = await storage.bulkArchiveIFoxArticles(articleIds);
+        const result = await (storage as any).bulkArchiveIFoxArticles(articleIds);
 
         // Invalidate caches when articles are archived
         memoryCache.invalidatePattern('^homepage');
@@ -35755,7 +35776,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
         // Upload to Google Cloud Storage
         const fileName = `ifox/${Date.now()}-${req.file.originalname}`;
-        const uploadResult = await objectStorageClient.uploadFile(
+        const uploadResult = await (objectStorageClient as any).uploadFile(
           req.file.buffer,
           fileName,
           req.file.mimetype
@@ -35847,7 +35868,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
 
         const params = querySchema.parse(req.query);
-        const schedules = await storage.listIFoxScheduled(params);
+        const schedules = await storage.listIFoxScheduled(params as any);
 
         await logActivity({
           userId: req.user.id,
@@ -35939,7 +35960,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
 
         const data = bodySchema.parse(req.body);
-        const schedule = await storage.updateIFoxSchedule(id, data);
+        const schedule = await storage.updateIFoxSchedule(id, data as any);
 
         await logActivity({
           userId: req.user.id,
@@ -36045,7 +36066,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         });
 
         const params = querySchema.parse(req.query);
-        const analytics = await storage.getIFoxAnalytics(params);
+        const analytics = await storage.getIFoxAnalytics(params as any);
 
         await logActivity({
           userId: req.user.id,
@@ -36350,7 +36371,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     async (req: any, res) => {
     try {
         // Fetch actual articles from database
-        const topArticles = await db
+        const topArticles = await (db as any)
           .select({
             id: articles.id,
             title: articles.title,
@@ -36367,7 +36388,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           .orderBy(desc(articles.views))
           .orderBy(desc(articles.publishedAt)).limit(10);
 
-        const enrichedArticles = topArticles.map(article => ({
+        const enrichedArticles = topArticles.map((article: any) => ({
           ...article,
           engagement: Math.floor(Math.random() * 30) + 70,
           aiScore: Math.floor(Math.random() * 20) + 80,
@@ -37310,7 +37331,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           message: validatedData.message,
           attachments: validatedData.attachments,
           status: "pending",
-        })
+        } as any)
         .returning();
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
@@ -37972,7 +37993,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const [updated] = await db
         .update(dashboardAnnouncements)
         .set({
-          ...req.body,
+          ...pickTableColumns(dashboardAnnouncements, req.body),
           updatedAt: new Date(),
         })
         .where(eq(dashboardAnnouncements.id, id))
@@ -38051,7 +38072,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
       const settings = await updateEditorAlertSettings(parsed.data);
-      await logActivity(req, {
+      await (logActivity as any)(req, {
         action: 'update',
         entityType: 'system_setting',
         entityId: 'editor_alerts',
@@ -38986,7 +39007,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // ============================================
   // IMAGE MIGRATION ADMIN API
   // ============================================
-  app.post("/api/admin/image-migration/start", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  app.post("/api/admin/image-migration/start", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
     try {
       const { startMigration } = await import("./scripts/migrateImages");
       const result = await startMigration();
@@ -38996,7 +39017,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  app.post("/api/admin/image-migration/stop", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  app.post("/api/admin/image-migration/stop", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
     try {
       const { stopMigration } = await import("./scripts/migrateImages");
       res.json(stopMigration());
@@ -39005,7 +39026,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  app.get("/api/admin/image-migration/status", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  app.get("/api/admin/image-migration/status", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
     try {
       const { getMigrationProgress } = await import("./scripts/migrateImages");
       const progress = await getMigrationProgress();
@@ -39015,7 +39036,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  app.post("/api/admin/image-migration/retry-failed", requireAuth, requireRole(["admin"]), async (_req, res) => {
+  app.post("/api/admin/image-migration/retry-failed", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
     try {
       const { retryFailed } = await import("./scripts/migrateImages");
       const result = await retryFailed();
