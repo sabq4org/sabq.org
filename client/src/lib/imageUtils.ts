@@ -99,7 +99,7 @@ export function getFocalPoint(article: any): FocalPoint | null {
  * @param defaultPosition - Default position if no focal point (default: 'center')
  * @returns CSS object-position string (e.g., "30% 70%")
  */
-export function getObjectPosition(article: any, defaultPosition: string = 'center center'): string {
+export function getObjectPosition(article: any, defaultPosition: string = 'center 20%'): string {
   const focalPoint = getFocalPoint(article);
   
   if (!focalPoint) {
