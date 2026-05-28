@@ -23,6 +23,7 @@ import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
 import deployWebhooksRouter from "./deployWebhooks";
 import chatRouter from "./chat";
+import cspReportRouter from "./cspReport";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -54,4 +55,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(opinionTicketsRouter);
   app.use(deployWebhooksRouter);
   app.use(chatRouter);
+  app.use(cspReportRouter);
 }

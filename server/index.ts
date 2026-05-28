@@ -10,6 +10,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
+import { randomBytes } from "crypto";
 import { isNoindexPath } from "./utils/noindexPaths";
 
 process.on('uncaughtException', (error) => {
@@ -202,6 +203,45 @@ app.use(cors({
 
 // Security headers with Helmet.js - 'unsafe-inline' and 'unsafe-eval' needed for Swagger UI
 const isDevelopment = process.env.NODE_ENV !== "production";
+
+// Per-request CSP nonce. Used by the strict Report-Only policy below and
+// injected into inline <script> tags by the SEO/HTML pipeline (seoInjector).
+app.use((_req, res, next) => {
+  (res as any).locals.cspNonce = randomBytes(16).toString("base64");
+  next();
+});
+
+// Strict CSP in REPORT-ONLY mode (nonce + strict-dynamic, no 'unsafe-inline'
+// or blanket 'https:' for scripts). This does NOT block anything — it only
+// surfaces what a hardened policy would flag, so we can migrate the enforced
+// policy off 'unsafe-inline'/'https:' for script-src without risking the live
+// site. The enforced (loose) Helmet policy below is intentionally unchanged.
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api")) {
+    const nonce = (res as any).locals.cspNonce;
+    res.setHeader(
+      "Content-Security-Policy-Report-Only",
+      [
+        "default-src 'self'",
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+        "script-src-attr 'none'",
+        "connect-src 'self' https: ws: wss:",
+        "frame-src 'self' https:",
+        "frame-ancestors 'self'",
+        "img-src 'self' data: https: blob:",
+        "style-src 'self' 'unsafe-inline' https:",
+        "font-src 'self' data: https:",
+        "media-src 'self' data: https: blob:",
+        "object-src 'none'",
+        "worker-src 'self' blob:",
+        "base-uri 'self'",
+        "form-action 'self' https://appleid.apple.com",
+        "report-uri /api/security/csp-report",
+      ].join("; "),
+    );
+  }
+  next();
+});
 
 app.use(
   helmet({
