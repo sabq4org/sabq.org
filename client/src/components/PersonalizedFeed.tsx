@@ -359,10 +359,10 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                               <OptimizedImage
                                 src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
                                 alt={article.title}
-                                className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-110`}
-                                objectPosition={getObjectPosition(article)}
+                                className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+                                wrapperClassName="w-full h-full bg-muted/20"
+                                objectPosition="center"
                                 preferSize="small"
-                                aspectRatio="16/9"
                                 sizes="112px"
                               />
                             ) : (
