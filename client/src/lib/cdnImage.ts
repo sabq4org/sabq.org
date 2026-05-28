@@ -41,7 +41,12 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
     if (options?.width) parts.push(`w=${options.width}`);
     if (options?.height) parts.push(`h=${options.height}`);
     parts.push(`q=${options?.quality || 90}`);
-    parts.push(options?.width && options?.height ? 'fit=cover' : 'fit=scale-down');
+    if (options?.width && options?.height) {
+      parts.push('fit=cover');
+      parts.push('gravity=auto');
+    } else {
+      parts.push('fit=scale-down');
+    }
     return src.replace(/\/[^/]+$/, `/${parts.join(',')}`);
   }
 
@@ -74,6 +79,7 @@ export function buildCloudflareUrl(src: string, options?: CloudflareUrlOptions):
 
   if (options?.width && options?.height) {
     params.push('fit=cover');
+    params.push('gravity=auto');
   } else {
     params.push('fit=scale-down');
   }
