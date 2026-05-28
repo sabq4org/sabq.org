@@ -113,15 +113,16 @@
 
 ### 2. استكمال استبدال `<img>` بـ `OptimizedImage`
 
-الموجة الأولى غطّت `PersonalizedFeed` و`QuadCategoriesBlock`. تبيّن وجود ثلاث مكونات أخرى مرئية على الصفحة الرئيسية لا تزال تستخدم `<img>` خاماً وتطلب صور `/public` الكبيرة:
+الموجة الأولى غطّت `PersonalizedFeed` و`QuadCategoriesBlock`. تبيّن وجود مكوّنين مرئيين على الصفحة الرئيسية لا يزالان يستخدمان `<img>` خاماً ويطلبان صور `/public` الكبيرة:
 
 | المكوّن | الاستخدام | المقاس الذي طُلب |
 |---|---|---:|
-| `client/src/components/MoreFromSabq.tsx` | صورة المقال المميّز | width=640 |
 | `client/src/components/ShortsHomeBlock.tsx` | غلاف قسم الشورتس | width=320 |
 | `client/src/components/MuqtarabTopicsShowcase.tsx` | صورة موضوع مُقترب | width=480 |
 
 **الأثر:** Cloudflare Images تُطلَب بأبعاد البطاقة بدل النسخة الأصلية في صفحة الصفحة الرئيسية وأي صفحة تعرض هذه المكونات.
+
+**تنظيف إضافي:** حُذف `client/src/components/MoreFromSabq.tsx` لأنه مكوّن قديم وغير موصول بالصفحة الرئيسية حالياً، وكان يحمل قسم "محتوى مخصص لك" المخفي منذ فترة. حذفه يمنع بقاء كود ميت أو صور غير مقصودة ضمن مسار التطوير، ولا يغيّر الواجهة الحالية.
 
 ### 3. إصلاح CLS في `DmsAdSlot`
 
@@ -141,7 +142,7 @@
 
 ```
 vite.config.ts
-client/src/components/MoreFromSabq.tsx
+client/src/components/MoreFromSabq.tsx (حذف مكوّن قديم غير مستخدم)
 client/src/components/ShortsHomeBlock.tsx
 client/src/components/MuqtarabTopicsShowcase.tsx
 client/src/components/DmsAdSlot.tsx
@@ -149,7 +150,7 @@ client/src/components/DmsAdSlot.tsx
 
 ### التحقق
 
-- `npm run check` — صفر أخطاء TypeScript.
+- `NODE_OPTIONS=--max-old-space-size=8192 npm run check` — لا يزال يفشل بسبب أخطاء TypeScript قائمة خارج نطاق هذه الموجة. بعد حذف `MoreFromSabq` لم يعد هناك خطأ متعلق بمكوّن "محتوى مخصص لك".
 - `npm run build:client` — البناء ناجح، تأكيد عدم وجود `vendor-charts` في modulepreload.
 - لم تُشغَّل أوامر قاعدة بيانات ولم تُعدَّل إعدادات الإنتاج.
 
