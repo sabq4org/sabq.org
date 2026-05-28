@@ -59,33 +59,34 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-dom/client'],
-          'vendor-core': ['wouter', '@tanstack/react-query'],
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-tooltip',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-select',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-accordion',
-            '@radix-ui/react-avatar',
-            '@radix-ui/react-checkbox',
-            '@radix-ui/react-label',
-            '@radix-ui/react-switch',
-            '@radix-ui/react-slot',
-          ],
-          // 'vendor-charts' intentionally NOT a manual chunk — Vite emits
-          // modulepreload for every manual chunk, which forced 430KB of
-          // recharts into every page load. Removing it lets Vite split
-          // recharts dynamically only when a dashboard/analytics page
-          // imports a component that pulls it in.
-          'vendor-editor': [
-            '@tiptap/react',
-            '@tiptap/starter-kit',
-          ],
-          'vendor-motion': ['framer-motion'],
+        // Function form (not the object form) so react/react-dom reliably
+        // land in vendor-react. The old object form left vendor-react nearly
+        // empty (175 B) — react-dom got hoisted into the entry chunk, bloating
+        // it to ~249KB on every page.
+        //
+        // Radix UI is intentionally NOT grouped into a single 'vendor-ui'
+        // chunk anymore. A manual chunk forces a modulepreload on EVERY page,
+        // which pushed all ~261KB of Radix into the critical path even on
+        // article pages that use only a couple of primitives. Letting Vite
+        // split Radix per-usage means each route downloads just what it needs
+        // (same lesson as 'vendor-charts'/recharts above).
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules\/(react|react-dom|scheduler|use-sync-external-store)\//.test(id)) {
+            return 'vendor-react';
+          }
+          if (/node_modules\/(wouter|@tanstack\/react-query)\//.test(id)) {
+            return 'vendor-core';
+          }
+          if (/node_modules\/(@tiptap|prosemirror)/.test(id)) {
+            return 'vendor-editor';
+          }
+          if (/node_modules\/framer-motion\//.test(id)) {
+            return 'vendor-motion';
+          }
+          // Everything else (incl. Radix UI, recharts): Vite auto-splits so
+          // chunks load only with the routes that import them.
+          return undefined;
         },
       },
     },

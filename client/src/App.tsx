@@ -1,8 +1,6 @@
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -107,6 +105,11 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
 
 // Lazy load non-critical components
 const VoiceCommandsHelp = lazy(() => retryImport(() => import("@/components/VoiceCommandsHelp").then(m => ({ default: m.VoiceCommandsHelp }))));
+
+// Vercel telemetry — non-critical for first paint, deferred out of the entry
+// chunk so it doesn't add JS to the always-loaded bundle on every page.
+const Analytics = lazy(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })));
+const SpeedInsights = lazy(() => import("@vercel/speed-insights/react").then(m => ({ default: m.SpeedInsights })));
 
 // === LAZY IMPORTS (Critical Path - Code split for faster initial load) ===
 const Home = lazy(() => retryImport(() => import("@/pages/Home")));
@@ -1098,8 +1101,10 @@ function App() {
                 <TooltipProvider>
                   <SkipLinks />
                   <Toaster />
-                  <Analytics />
-                  <SpeedInsights />
+                  <Suspense fallback={null}>
+                    <Analytics />
+                    <SpeedInsights />
+                  </Suspense>
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
