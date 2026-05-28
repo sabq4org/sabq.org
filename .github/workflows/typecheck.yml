@@ -28,4 +28,9 @@ jobs:
         run: npm ci
 
       - name: Typecheck
+        # tsc on this codebase (251 tables, ~37k-line routes.ts) exceeds Node's
+        # default old-space limit on the runner and OOMs (exit 134). The
+        # ubuntu-latest runner has 16GB, so raise the heap generously.
         run: npm run check
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
