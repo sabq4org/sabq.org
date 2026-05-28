@@ -114,11 +114,13 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
     };
   }, [adState]);
 
-  // Inner style: just the slot's own size/centering. Spacing is on the
-  // wrapper so we don't lose it when the slot is wrapped.
-  const innerStyle: React.CSSProperties = adState === 'empty'
-    ? { minHeight: 0, height: 0, overflow: 'hidden', margin: 0, padding: 0, border: 'none' }
-    : type === 'leaderboard'
+  // Inner style: ALWAYS reserve the slot's size — never collapse on
+  // empty. Collapsing was the root cause of CLS=0.28 on mobile (Core
+  // Web Vitals "Poor"). The wrapper has no background, so reserved-
+  // empty space is invisible to readers anyway. The trade is: a small
+  // unused space when the ad fails to fill, versus content jumping
+  // 250px upward — SEO + reader experience both prefer the former.
+  const innerStyle: React.CSSProperties = type === 'leaderboard'
     ? { minHeight: '90px', width: '100%', textAlign: 'center', overflow: 'hidden' }
     : { minHeight: '250px', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
@@ -223,13 +225,8 @@ export function LiteModeAdSlot({ index }: { index: number }) {
     return () => clearTimeout(fallbackTimeout);
   }, [adState]);
 
-  const mpuFilledStyle: React.CSSProperties = { minHeight: '250px', marginTop: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' };
-
-  const style: React.CSSProperties = adState === 'filled'
-    ? mpuFilledStyle
-    : adState === 'empty'
-    ? { minHeight: 0, height: 0, overflow: 'hidden', margin: 0, padding: 0, border: 'none' }
-    : mpuFilledStyle;
+  // Always reserve space — see DmsAdSlot comment on CLS rationale.
+  const style: React.CSSProperties = { minHeight: '250px', marginTop: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
   return (
     <div
@@ -301,13 +298,8 @@ export function LiteModeArticleAd() {
     return () => clearTimeout(fallbackTimeout);
   }, [adState]);
 
-  const articleMpuStyle: React.CSSProperties = { minHeight: '250px', marginTop: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' };
-
-  const style: React.CSSProperties = adState === 'filled'
-    ? articleMpuStyle
-    : adState === 'empty'
-    ? { minHeight: 0, height: 0, overflow: 'hidden', margin: 0, padding: 0, border: 'none' }
-    : articleMpuStyle;
+  // Always reserve space — see DmsAdSlot comment on CLS rationale.
+  const style: React.CSSProperties = { minHeight: '250px', marginTop: '2rem', width: '100%', textAlign: 'center', overflow: 'hidden' };
 
   return (
     <div 

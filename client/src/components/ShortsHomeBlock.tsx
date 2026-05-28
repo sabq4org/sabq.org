@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OptimizedImage } from "./OptimizedImage";
 
 interface ShortItem {
   id: string;
@@ -100,9 +101,10 @@ export function ShortsHomeBlock() {
           >
             {/* Cover Image */}
             <div className="absolute inset-0">
-              <img 
-                src={featuredShort.coverImage} 
+              <OptimizedImage
+                src={featuredShort.coverImage}
                 alt={featuredShort.title}
+                width={320}
                 className="w-full h-full object-cover"
                 data-testid={`short-cover-${featuredShort.id}`}
               />

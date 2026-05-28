@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import type { ArticleWithDetails } from "@shared/schema";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { OptimizedImage } from "./OptimizedImage";
 
 export function MoreFromSabq() {
   const { data: personalFeed, isLoading } = useQuery<{
@@ -46,11 +47,11 @@ export function MoreFromSabq() {
                 <div className="group cursor-pointer" data-testid={`featured-article-${featuredArticle.id}`}>
                   {featuredArticle.imageUrl && (
                     <div className="relative aspect-video overflow-hidden mb-4">
-                      <img
+                      <OptimizedImage
                         src={featuredArticle.imageUrl}
                         alt={featuredArticle.title}
+                        width={640}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
                         style={{
                           objectPosition: getObjectPosition(featuredArticle)
                         }}

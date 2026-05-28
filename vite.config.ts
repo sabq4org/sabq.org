@@ -76,7 +76,11 @@ export default defineConfig({
             '@radix-ui/react-switch',
             '@radix-ui/react-slot',
           ],
-          'vendor-charts': ['recharts'],
+          // 'vendor-charts' intentionally NOT a manual chunk — Vite emits
+          // modulepreload for every manual chunk, which forced 430KB of
+          // recharts into every page load. Removing it lets Vite split
+          // recharts dynamically only when a dashboard/analytics page
+          // imports a component that pulls it in.
           'vendor-editor': [
             '@tiptap/react',
             '@tiptap/starter-kit',

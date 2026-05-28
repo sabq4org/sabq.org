@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OptimizedImage } from "./OptimizedImage";
 import { ArrowLeft, Sparkles, Calendar, ChevronLeft, ChevronRight, PenLine } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { Circle } from "lucide-react";
@@ -263,11 +264,11 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
                   <div className="relative">
                     {topic.heroImageUrl ? (
                       <div className="relative h-32 overflow-hidden">
-                        <img 
-                          src={topic.heroImageUrl} 
+                        <OptimizedImage
+                          src={topic.heroImageUrl}
                           alt={topic.title}
+                          width={480}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
                         />
                         <div 
                           className="absolute inset-0"
