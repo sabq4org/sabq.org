@@ -100,6 +100,15 @@ fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
         publishedAtIso = publishedAt?.takeIf { it.isNotBlank() },
         readingMinutesInt = readingMinutes?.takeIf { it > 0 },
         weeklyPhotos = resolvedWeeklyPhotos,
+        albumImages = albumImages.orEmpty()
+            .filter { it.isNotBlank() }
+            .map { url ->
+                when {
+                    url.startsWith("http") -> url
+                    url.startsWith("/") -> "$webOrigin$url"
+                    else -> "$webOrigin/$url"
+                }
+            },
     )
 }
 

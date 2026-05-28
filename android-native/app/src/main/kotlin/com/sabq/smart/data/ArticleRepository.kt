@@ -132,6 +132,12 @@ class ArticleRepository @Inject constructor(
     suspend fun getRelated(slug: String): List<Article> =
         api.getRelatedArticles(slug).map { it.toDomain() }.take(5)
 
+    suspend fun getMediaAssets(articleId: String): List<MediaAsset> =
+        api.getMediaAssets(articleId)
+            .filter { it.displayOrder != 0 && it.mediaFile?.url?.isNotBlank() == true }
+            .sortedBy { it.displayOrder }
+            .map { MediaAsset(url = it.mediaFile!!.url, altText = it.altText) }
+
     suspend fun getArticlesByKeyword(keyword: String): List<Article> =
         api.getArticlesByKeyword(keyword).map { it.toDomain() }
 
@@ -176,4 +182,9 @@ data class ArticlesPage(
 data class TrendingPage(
     val articles: List<Article>,
     val tags: List<String>,
+)
+
+data class MediaAsset(
+    val url: String,
+    val altText: String?,
 )

@@ -96,7 +96,37 @@ class HomeFeedViewModel @Inject constructor(
     fun refresh() {
         val current = _state.value
         val slug = if (current is HomeFeedUiState.Loaded) current.selectedSlug else null
-        loadFeed(slug = slug, page = 1, append = false)
+        viewModelScope.launch {
+            _state.update { c ->
+                if (c is HomeFeedUiState.Loaded) c.copy(isRefreshing = true) else c
+            }
+            runCatching {
+                val featuredJob = async { repo.getArticles(page = 1, limit = 5, featuredOnly = true) }
+                val articlesJob = async { repo.getArticles(page = 1, section = slug) }
+                Pair(featuredJob.await(), articlesJob.await())
+            }
+                .onSuccess { (featured, articles) ->
+                    _state.update { c ->
+                        if (c !is HomeFeedUiState.Loaded) return@update c
+                        c.copy(
+                            featured = featured.items,
+                            articles = articles.items.filterNot { f ->
+                                featured.items.any { it.id == f.id }
+                            },
+                            selectedSlug = slug,
+                            currentPage = articles.page,
+                            hasMore = articles.hasMore,
+                            isRefreshing = false,
+                        )
+                    }
+                    loadExtras()
+                }
+                .onFailure {
+                    _state.update { c ->
+                        if (c is HomeFeedUiState.Loaded) c.copy(isRefreshing = false) else c
+                    }
+                }
+        }
     }
 
     fun selectSection(slug: String?) {

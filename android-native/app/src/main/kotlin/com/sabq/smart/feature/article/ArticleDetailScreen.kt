@@ -189,6 +189,7 @@ fun ArticleDetailScreen(
             is ArticleDetailUiState.Loaded -> ArticleBody(
                 article = s.article,
                 related = s.related,
+                mediaAssets = s.mediaAssets,
                 fontSize = settings.articleFontSize,
                 lineSpacing = settings.articleLineSpacing,
                 useSerif = settings.articleUseReaderFont,
@@ -209,6 +210,7 @@ fun ArticleDetailScreen(
 private fun ArticleBody(
     article: Article,
     related: List<Article>,
+    mediaAssets: List<com.sabq.smart.data.MediaAsset>,
     fontSize: Float,
     lineSpacing: Float,
     useSerif: Boolean,
@@ -453,6 +455,40 @@ private fun ArticleBody(
                         fontSize = fontSize,
                         lineSpacing = lineSpacing,
                     )
+                }
+            }
+
+            // 7.6 — Attached images (from media-assets + albumImages).
+            val allAttachedImages = mediaAssets.map { it.url } + article.albumImages
+            if (!isFocusMode && allAttachedImages.isNotEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = "الصور المرفقة",
+                            style = SabqTheme.typography.sectionHeader,
+                            color = SabqTheme.colors.ink,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
+                        allAttachedImages.forEachIndexed { index, url ->
+                            coil.compose.AsyncImage(
+                                model = url,
+                                contentDescription = "صورة ${index + 1}",
+                                contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        haptics.light()
+                                        lightboxUrl = url
+                                    },
+                            )
+                            if (index < allAttachedImages.lastIndex) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
+                    }
                 }
             }
 

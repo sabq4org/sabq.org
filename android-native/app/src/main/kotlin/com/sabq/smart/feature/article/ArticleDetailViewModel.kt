@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.Article
 import com.sabq.smart.data.ArticleRepository
+import com.sabq.smart.data.MediaAsset
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.async
@@ -20,6 +21,7 @@ sealed interface ArticleDetailUiState {
     data class Loaded(
         val article: Article,
         val related: List<Article> = emptyList(),
+        val mediaAssets: List<MediaAsset> = emptyList(),
     ) : ArticleDetailUiState
 }
 
@@ -50,9 +52,8 @@ class ArticleDetailViewModel @Inject constructor(
             runCatching { repo.getArticleBySlug(slug) }
                 .onSuccess { article ->
                     _state.value = ArticleDetailUiState.Loaded(article = article)
-                    // Side-fetch related articles. Best-effort: failure
-                    // keeps the section empty (it hides itself).
                     loadRelated()
+                    loadMediaAssets(article.id)
                 }
                 .onFailure { e ->
                     _state.value = ArticleDetailUiState.Error(
@@ -72,6 +73,17 @@ class ArticleDetailViewModel @Inject constructor(
                 }
                 .onFailure { e ->
                     android.util.Log.e("ArticleDetailVM", "Failed to load related articles", e)
+                }
+        }
+    }
+
+    private fun loadMediaAssets(articleId: String) {
+        viewModelScope.launch {
+            runCatching { repo.getMediaAssets(articleId) }
+                .onSuccess { assets ->
+                    _state.update { c ->
+                        if (c is ArticleDetailUiState.Loaded) c.copy(mediaAssets = assets) else c
+                    }
                 }
         }
     }

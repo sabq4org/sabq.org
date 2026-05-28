@@ -54,6 +54,7 @@ data class Article(
      *  `weeklyPhotosData.photos`). Renders as a numbered timeline
      *  in the article body — iOS `weeklyPhotosGallery`. */
     val weeklyPhotos: List<WeeklyPhoto> = emptyList(),
+    val albumImages: List<String> = emptyList(),
 ) {
     /**
      * Stable identifier used by [BookmarksStore] (and any persistent

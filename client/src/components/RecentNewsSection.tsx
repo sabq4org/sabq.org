@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { buildCloudflareUrl } from "@/lib/cdnImage";
 
 interface NewsArticle {
   id: string;
@@ -50,10 +51,10 @@ function NewsCard({ article }: { article: NewsArticle }) {
             {imageUrl && (
               <div className="relative w-20 h-16 rounded-md overflow-hidden flex-shrink-0">
                 <img
-                  src={imageUrl}
+                  src={buildCloudflareUrl(imageUrl, { width: 160, height: 128, quality: 85 })}
                   alt={article.title}
                   className="w-full h-full object-cover"
-                  style={{ objectPosition: getObjectPosition(article) }}
+                  style={{ objectPosition: getObjectPosition(article, 'center') }}
                 />
               </div>
             )}
