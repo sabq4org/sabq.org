@@ -4,6 +4,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
+import { prefetchArticleDetail, prefetchCategoryPage, prefetchWhenIdle } from "@/lib/prefetchRoute";
 import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
 import type { User } from "@/hooks/useAuth";
 
@@ -168,6 +169,18 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [homepage, initialLoadComplete]);
+
+  // Warm the article-detail chunk during idle time: virtually every homepage
+  // visitor opens an article next, so this makes the first click feel instant
+  // instead of blocking on the chunk download. Runs once the feed has data.
+  useEffect(() => {
+    if (!initialLoadComplete) return;
+    const cancel = prefetchWhenIdle(() => {
+      prefetchArticleDetail();
+      prefetchCategoryPage();
+    });
+    return cancel;
+  }, [initialLoadComplete]);
 
   const feedTitle = useMemo(() => user ? "أخبارك الذكية" : "جميع الأخبار", [user]);
   const feedSubtitle = useMemo(() => user ? "محتوى مُختار بذكاء بناءً على اهتماماتك" : undefined, [user]);
