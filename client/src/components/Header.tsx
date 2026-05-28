@@ -31,7 +31,6 @@ import logoImage from "@assets/sabq-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
 import { hasPermission } from "@/hooks/useAuth";
-import { HajjEidGreetingBar, HajjEidHeaderDecor } from "./seasonal/HajjEidTheme";
 
 interface HeaderProps {
   user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
@@ -90,9 +89,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
   return (
     <>
-    <HajjEidGreetingBar />
     <header role="banner" aria-label="رأس الصفحة الرئيسي" className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60" dir="rtl">
-      <HajjEidHeaderDecor />
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
