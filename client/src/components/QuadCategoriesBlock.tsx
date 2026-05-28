@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { isAICategory } from "@/utils/filterAICategories";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 // Icon mapper
 const getIcon = (iconName: string) => {
@@ -73,14 +74,14 @@ function FeaturedCard({ data }: { data: CategoryColumnData["featured"] }) {
         {/* Image */}
         <div className="relative aspect-[16/9] bg-muted overflow-hidden">
           {displayImage ? (
-            <img
+            <OptimizedImage
               src={displayImage}
               alt={data.title}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-              style={{
-                objectPosition: getObjectPosition(data)
-              }}
+              objectPosition={getObjectPosition(data)}
+              preferSize="small"
+              aspectRatio="16/9"
+              sizes="(max-width: 1023px) 100vw, 25vw"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50" />
@@ -228,14 +229,14 @@ function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
                 {/* Wider Thumbnail */}
                 <div className="relative flex-shrink-0 w-28 h-20 rounded overflow-hidden">
                   {(item.featured.image || item.featured.thumbnailUrl) ? (
-                    <img
+                    <OptimizedImage
                       src={item.featured.image || item.featured.thumbnailUrl || ''}
                       alt={item.featured.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      loading="lazy"
-                      style={{
-                        objectPosition: getObjectPosition(item.featured)
-                      }}
+                      objectPosition={getObjectPosition(item.featured)}
+                      preferSize="small"
+                      aspectRatio="16/9"
+                      sizes="112px"
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50" />
