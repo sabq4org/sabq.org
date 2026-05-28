@@ -90,3 +90,93 @@
 3. فصل `vendor-charts` عن المسار العام، أو منع تحميله قبل زيارة صفحات التحليلات.
 4. مراجعة سبب عدم ظهور Cloudflare HIT على `/api/homepage-lite` رغم وجود `s-maxage`.
 5. تحسين صور المقال legacy داخل المحتوى بإضافة أبعاد أو aspect ratio قبل التحميل.
+
+---
+
+## الموجة الثانية — Wave 2 (2026-05-28، بعد القياس الأولي)
+
+بعد نشر الموجة الأولى (`Optimize homepage image delivery` — commit `3ee891d`) ورصد تحسن فعلي في الإقلاع وفتح الصفحات، نُفّذت موجة ثانية تعالج التوصيات 1-3 و5 جزئياً.
+
+### 1. فصل recharts عن التحميل الأولي
+
+**المشكلة المكتشفة:**
+- `manualChunks` في `vite.config.ts` كان يعرّف `vendor-charts: ['recharts']` كـ chunk منفصل.
+- Vite يضيف `<link rel="modulepreload">` تلقائياً لكل manual chunk في `index.html`.
+- النتيجة: 430KB من recharts كانت تُحمَّل في **كل** صفحة عبر preload، حتى الصفحة الرئيسية ومقالات الأخبار التي لا تستخدمها أبداً.
+
+**التعديل:**
+- إزالة `'vendor-charts': ['recharts']` من `manualChunks` في `vite.config.ts`.
+- Vite الآن يدمج recharts داخل الـ chunks اللي تستوردها فعلياً (صفحات Dashboard/Analytics المعرّفة بالفعل كـ `lazy()` في `App.tsx`).
+- التحقق: `npm run build:client` بعد التعديل، فحص `dist/public/index.html` — لم يعد يحوي `vendor-charts` في modulepreload ولا حتى chunk مستقل بنفس الاسم.
+
+**الأثر:** -430KB من حجم JS الأولي في كل صفحة عامة (الرئيسية، المقالات، الفئات...).
+
+### 2. استكمال استبدال `<img>` بـ `OptimizedImage`
+
+الموجة الأولى غطّت `PersonalizedFeed` و`QuadCategoriesBlock`. تبيّن وجود ثلاث مكونات أخرى مرئية على الصفحة الرئيسية لا تزال تستخدم `<img>` خاماً وتطلب صور `/public` الكبيرة:
+
+| المكوّن | الاستخدام | المقاس الذي طُلب |
+|---|---|---:|
+| `client/src/components/MoreFromSabq.tsx` | صورة المقال المميّز | width=640 |
+| `client/src/components/ShortsHomeBlock.tsx` | غلاف قسم الشورتس | width=320 |
+| `client/src/components/MuqtarabTopicsShowcase.tsx` | صورة موضوع مُقترب | width=480 |
+
+**الأثر:** Cloudflare Images تُطلَب بأبعاد البطاقة بدل النسخة الأصلية في صفحة الصفحة الرئيسية وأي صفحة تعرض هذه المكونات.
+
+### 3. إصلاح CLS في `DmsAdSlot`
+
+**المشكلة:** في المنطق الحالي:
+- حالة `loading` تحجز 250px (MPU) أو 90px (Leaderboard).
+- حالة `empty` (الإعلان فشل بالامتلاء) تنهار إلى `height: 0`.
+- هذا الانهيار من 250px إلى 0 هو السبب المباشر لـ CLS=0.28 على الموبايل (تصنيف Poor في Core Web Vitals).
+
+**التعديل في `client/src/components/DmsAdSlot.tsx`:**
+- إزالة فرع `adState === 'empty'` من حساب `innerStyle` في `DmsAdSlot`، و`LiteModeAdSlot`، و`LiteModeArticleAd`.
+- المساحة تبقى محجوزة دائماً (250px / 90px) بصرف النظر عن حالة الإعلان.
+- المُغلِّف (wrapper) لا يحمل أي خلفية (ملاحظة `DMS` 2026-05-20)، لذا المساحة المحجوزة الفارغة غير مرئية للقارئ — المقايضة: مساحة غير مستخدمة عند فشل التعبئة، مقابل ثبات تخطيط الصفحة.
+
+**الأثر المتوقع:** CLS من 0.28 إلى ما دون 0.1 (تصنيف Good) على الموبايل في الصفحة الرئيسية.
+
+### الملفات المعدّلة في هذه الموجة
+
+```
+vite.config.ts
+client/src/components/MoreFromSabq.tsx
+client/src/components/ShortsHomeBlock.tsx
+client/src/components/MuqtarabTopicsShowcase.tsx
+client/src/components/DmsAdSlot.tsx
+```
+
+### التحقق
+
+- `npm run check` — صفر أخطاء TypeScript.
+- `npm run build:client` — البناء ناجح، تأكيد عدم وجود `vendor-charts` في modulepreload.
+- لم تُشغَّل أوامر قاعدة بيانات ولم تُعدَّل إعدادات الإنتاج.
+
+### Commit
+
+```
+3c45dae  perf(web): wave 2 — lazy charts, more OptimizedImage, fix CLS
+```
+
+على فرع `codex/sabq-org-performance-audit`.
+
+### ما تبقّى من التوصيات الأصلية
+
+| التوصية | الحالة |
+|---|---|
+| 1. إعادة قياس Lighthouse بعد الصور | تمّت بعد الموجة الأولى ✓ — تنتظر قياس بعد الموجة الثانية |
+| 2. CLS في `DmsAdSlot` | نُفِّذ ✓ |
+| 3. فصل `vendor-charts` | نُفِّذ ✓ |
+| 4. Cloudflare HIT على `/api/homepage-lite` | لم يُعالَج — يحتاج فحصاً منفصلاً (CF Worker / vercel.json / Vercel-CDN-Cache-Control) |
+| 5. أبعاد صور المقال legacy داخل المحتوى | لم يُعالَج — يحتاج تمريرة مستقلة على HTML الجسم |
+
+### خطوات بعد النشر
+
+1. الانتظار 5-10 دقائق بعد دمج/نشر `codex/sabq-org-performance-audit` (Vercel + CF cache).
+2. تشغيل Lighthouse على `https://sabq.org/` و`https://sabq.org/article/dtIp139` لكل من Mobile و Desktop.
+3. مقارنة بخط الأساس في أعلى الملف، خصوصاً:
+   - **CLS** (متوقع تحسن ملحوظ على الموبايل).
+   - **Transfer Size** للـ JS الأولي (متوقع نقص ~430KB).
+   - **LCP** (قد يتأثر إيجاباً بإكمال OptimizedImage).
+4. تسجيل الأرقام الجديدة في هذا الملف لاحقاً للمقارنة.
