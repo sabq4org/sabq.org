@@ -10255,53 +10255,59 @@ Respond in valid JSON format only:
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Get user info
-      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      // Per-user cache (60s). SmartSummaryBlock is below the fold and these
+      // "today" numbers change slowly relative to page loads, so a short cache
+      // keeps it instant without freezing the user's daily stats.
+      const insightsCacheKey = `insights:today:${userId}`;
+      const cachedInsights = memoryCache.get(insightsCacheKey);
+      if (cachedInsights !== null) {
+        return res.json(cachedInsights);
       }
 
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
 
-      // 1. Reading time and articles read today
-      const readingHistoryToday = await db
-        .select({
-          articleId: readingHistory.articleId,
-          readAt: readingHistory.readAt,
-        })
-        .from(readingHistory)
-        .where(and(
-          eq(readingHistory.userId, userId),
-          gte(readingHistory.readAt, startOfDay)
-        ));
+      // Fetch the user row + the 3 independent "today" aggregates in PARALLEL
+      // (was sequential). topInterests below depends on the reading history,
+      // so it stays after this batch.
+      const [userRows, readingHistoryToday, likesToday, commentsToday] = await Promise.all([
+        db.select().from(users).where(eq(users.id, userId)).limit(1),
+        db
+          .select({
+            articleId: readingHistory.articleId,
+            readAt: readingHistory.readAt,
+          })
+          .from(readingHistory)
+          .where(and(
+            eq(readingHistory.userId, userId),
+            gte(readingHistory.readAt, startOfDay)
+          )),
+        db
+          .select()
+          .from(reactions)
+          .where(and(
+            eq(reactions.userId, userId),
+            eq(reactions.type, "like"),
+            gte(reactions.createdAt, startOfDay)
+          )),
+        db
+          .select()
+          .from(comments)
+          .where(and(
+            eq(comments.userId, userId),
+            gte(comments.createdAt, startOfDay)
+          )),
+      ]);
+
+      const user = userRows[0];
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
 
       const articlesReadToday = readingHistoryToday.length;
-      
       // Calculate reading time (estimate 3 minutes per article)
       const readingTimeMinutes = articlesReadToday * 3;
-
-      // 2. Likes today
-      const likesToday = await db
-        .select()
-        .from(reactions)
-        .where(and(
-          eq(reactions.userId, userId),
-          eq(reactions.type, "like"),
-          gte(reactions.createdAt, startOfDay)
-        ));
-      
       const likesCount = likesToday.length;
-
-      // 3. Comments today
-      const commentsToday = await db
-        .select()
-        .from(comments)
-        .where(and(
-          eq(comments.userId, userId),
-          gte(comments.createdAt, startOfDay)
-        ));
-      
       const commentsCount = commentsToday.length;
 
       // 4. Top interests today (categories) - aggregated by frequency
@@ -10373,7 +10379,7 @@ Respond in valid JSON format only:
 
       const firstName = user.firstName || user.email?.split('@')[0] || "عزيزي";
 
-      res.json({
+      const insightsResult = {
         greeting: `${greeting} يا ${firstName}`,
         metrics: {
           readingTime: readingTimeMinutes,
@@ -10387,7 +10393,9 @@ Respond in valid JSON format only:
         quickSummary: articlesReadToday > 0 
           ? `قرأت ${articlesReadToday} ${articlesReadToday === 1 ? 'مقال' : 'مقالات'} اليوم بإجمالي ${readingTimeMinutes} دقيقة.`
           : "لم تقرأ أي مقال اليوم بعد.",
-      });
+      };
+      memoryCache.set(insightsCacheKey, insightsResult, 60000);
+      res.json(insightsResult);
     } catch (error) {
       console.error("Error fetching today's insights:", error);
       res.status(500).json({ message: "Failed to fetch insights" });
@@ -11415,7 +11423,10 @@ Respond in valid JSON format only:
 
   app.get("/api/ai-insights", async (req, res) => {
     try {
-      // Check cache first - TTL 30 seconds (aggregates change slowly)
+      // Check cache first. These are SITE-WIDE 7-day aggregates (most
+      // viewed/commented/etc.) that change very slowly, so a short TTL just
+      // forced the heavy multi-query path on a fresh visitor every 30s. TTL
+      // is now 10 minutes (see memoryCache.set below).
       const cacheKey = 'insights:ai';
       const cached = memoryCache.get(cacheKey);
       if (cached !== null) {
@@ -11425,151 +11436,153 @@ Respond in valid JSON format only:
       // Changed from 24 hours to 7 days for better data availability
       const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-      // 1. Most Viewed (last 7 days)
-      const [mostViewed] = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-        subtitle: articles.subtitle,
-          slug: articles.slug,
-          views: articles.views,
-          imageUrl: articles.imageUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-        })
-        .from(articles)
-        .where(
-          and(
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            sql`${articles.publishedAt} >= ${last7Days}`
+      // The 5 aggregates below are independent reads — none consumes another's
+      // result — so run them in PARALLEL instead of sequentially. On the
+      // cache-miss path this turns ~5x round-trips into ~1x.
+      const [mostViewedRows, mostCommented, controversial, mostLiked, aiPick] = await Promise.all([
+        // 1. Most Viewed (last 7 days)
+        db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            subtitle: articles.subtitle,
+            slug: articles.slug,
+            views: articles.views,
+            imageUrl: articles.imageUrl,
+            imageFocalPoint: articles.imageFocalPoint,
+          })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              sql`${articles.publishedAt} >= ${last7Days}`
+            )
           )
-        )
-        .orderBy(desc(articles.views))
-        .limit(1);
+          .orderBy(desc(articles.views))
+          .limit(1),
+        // 2. Most Commented (last 7 days)
+        db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            subtitle: articles.subtitle,
+            slug: articles.slug,
+            imageUrl: articles.imageUrl,
+            imageFocalPoint: articles.imageFocalPoint,
+            commentCount: sql<number>`count(${comments.id})::int`,
+          })
+          .from(articles)
+          .leftJoin(comments, eq(comments.articleId, articles.id))
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              sql`${articles.publishedAt} >= ${last7Days}`
+            )
+          )
+          .groupBy(articles.id)
+          .orderBy(desc(sql`count(${comments.id})`))
+          .limit(1),
+        // 3. Most Controversial (highest comment rate relative to views)
+        db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            subtitle: articles.subtitle,
+            slug: articles.slug,
+            imageUrl: articles.imageUrl,
+            imageFocalPoint: articles.imageFocalPoint,
+            views: articles.views,
+            commentCount: sql<number>`count(${comments.id})::int`,
+            ratio: sql<number>`CASE WHEN ${articles.views} > 0 THEN count(${comments.id})::float / ${articles.views}::float ELSE 0 END`,
+          })
+          .from(articles)
+          .leftJoin(comments, eq(comments.articleId, articles.id))
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              sql`${articles.publishedAt} >= ${last7Days}`,
+              sql`${articles.views} > 10` // Lowered threshold from 100 to 10
+            )
+          )
+          .groupBy(articles.id)
+          .orderBy(desc(sql`CASE WHEN ${articles.views} > 0 THEN count(${comments.id})::float / ${articles.views}::float ELSE 0 END`))
+          .limit(1),
+        // 4. Most Positive (most liked)
+        db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            subtitle: articles.subtitle,
+            slug: articles.slug,
+            imageUrl: articles.imageUrl,
+            imageFocalPoint: articles.imageFocalPoint,
+            likeCount: sql<number>`count(${reactions.id})::int`,
+            views: articles.views,
+            positiveRate: sql<number>`CASE WHEN ${articles.views} > 0 THEN (count(${reactions.id})::float / ${articles.views}::float) * 100 ELSE 0 END`,
+          })
+          .from(articles)
+          .leftJoin(reactions, and(
+            eq(reactions.articleId, articles.id),
+            eq(reactions.type, "like")
+          ))
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              sql`${articles.publishedAt} >= ${last7Days}`,
+              sql`${articles.views} > 5` // Lowered threshold from 50 to 5
+            )
+          )
+          .groupBy(articles.id)
+          .orderBy(desc(sql`count(${reactions.id})`))
+          .limit(1),
+        // 5. AI Pick (highest engagement score: views + comments*5 + likes*3)
+        db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            subtitle: articles.subtitle,
+            slug: articles.slug,
+            imageUrl: articles.imageUrl,
+            imageFocalPoint: articles.imageFocalPoint,
+            views: articles.views,
+            commentCount: sql<number>`count(DISTINCT ${comments.id})::int`,
+            likeCount: sql<number>`count(DISTINCT ${reactions.id})::int`,
+            engagementScore: sql<number>`${articles.views} + (count(DISTINCT ${comments.id}) * 5) + (count(DISTINCT ${reactions.id}) * 3)`,
+          })
+          .from(articles)
+          .leftJoin(comments, eq(comments.articleId, articles.id))
+          .leftJoin(reactions, eq(reactions.articleId, articles.id))
+          .where(
+            and(
+              eq(articles.status, "published"),
+              eq(articles.hideFromHomepage, false),
+              sql`${articles.publishedAt} >= ${last7Days}`
+            )
+          )
+          .groupBy(articles.id)
+          .orderBy(desc(sql`${articles.views} + (count(DISTINCT ${comments.id}) * 5) + (count(DISTINCT ${reactions.id}) * 3)`))
+          .limit(1),
+      ]);
 
+      const mostViewed = mostViewedRows[0];
       const viewsCount = mostViewed?.views || 0;
       const viewsTrend = viewsCount > 0 ? `+${Math.round((viewsCount / 1000) * 18)}%` : "+0%";
-
-      // 2. Most Commented (last 7 days)
-      const mostCommented = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-        subtitle: articles.subtitle,
-          slug: articles.slug,
-          imageUrl: articles.imageUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-          commentCount: sql<number>`count(${comments.id})::int`,
-        })
-        .from(articles)
-        .leftJoin(comments, eq(comments.articleId, articles.id))
-        .where(
-          and(
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            sql`${articles.publishedAt} >= ${last7Days}`
-          )
-        )
-        .groupBy(articles.id)
-        .orderBy(desc(sql`count(${comments.id})`))
-        .limit(1);
 
       const commentsCount = mostCommented[0]?.commentCount || 0;
       const commentsTrend = commentsCount > 5 ? `+${Math.round((commentsCount / 10) * 12)}%` : "+0%";
 
-      // 3. Most Controversial (highest comment rate relative to views)
-      const controversial = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-        subtitle: articles.subtitle,
-          slug: articles.slug,
-          imageUrl: articles.imageUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-          views: articles.views,
-          commentCount: sql<number>`count(${comments.id})::int`,
-          ratio: sql<number>`CASE WHEN ${articles.views} > 0 THEN count(${comments.id})::float / ${articles.views}::float ELSE 0 END`,
-        })
-        .from(articles)
-        .leftJoin(comments, eq(comments.articleId, articles.id))
-        .where(
-          and(
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            sql`${articles.publishedAt} >= ${last7Days}`,
-            sql`${articles.views} > 10` // Lowered threshold from 100 to 10
-          )
-        )
-        .groupBy(articles.id)
-        .orderBy(desc(sql`CASE WHEN ${articles.views} > 0 THEN count(${comments.id})::float / ${articles.views}::float ELSE 0 END`))
-        .limit(1);
-
       const controversialRatio = controversial[0]?.ratio || 0;
       const controversialTrend = controversialRatio > 0 ? `+${Math.round(controversialRatio * 4700)}%` : "+0%";
-
-      // 4. Most Positive (most liked)
-      const mostLiked = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-        subtitle: articles.subtitle,
-          slug: articles.slug,
-          imageUrl: articles.imageUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-          likeCount: sql<number>`count(${reactions.id})::int`,
-          views: articles.views,
-          positiveRate: sql<number>`CASE WHEN ${articles.views} > 0 THEN (count(${reactions.id})::float / ${articles.views}::float) * 100 ELSE 0 END`,
-        })
-        .from(articles)
-        .leftJoin(reactions, and(
-          eq(reactions.articleId, articles.id),
-          eq(reactions.type, "like")
-        ))
-        .where(
-          and(
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            sql`${articles.publishedAt} >= ${last7Days}`,
-            sql`${articles.views} > 5` // Lowered threshold from 50 to 5
-          )
-        )
-        .groupBy(articles.id)
-        .orderBy(desc(sql`count(${reactions.id})`))
-        .limit(1);
 
       const positiveRate = mostLiked[0]?.positiveRate || 0;
       const positiveRateDisplay = positiveRate > 0 && positiveRate < 1 
         ? positiveRate.toFixed(1)  // Show decimal for small values
         : Math.round(positiveRate);
       const positiveTrend = positiveRate > 0 ? `+${Math.ceil(positiveRate)}%` : "+0%";
-
-      // 5. AI Pick (highest engagement score: views + comments*5 + likes*3)
-      const aiPick = await db
-        .select({
-          id: articles.id,
-          title: articles.title,
-        subtitle: articles.subtitle,
-          slug: articles.slug,
-          imageUrl: articles.imageUrl,
-          imageFocalPoint: articles.imageFocalPoint,
-          views: articles.views,
-          commentCount: sql<number>`count(DISTINCT ${comments.id})::int`,
-          likeCount: sql<number>`count(DISTINCT ${reactions.id})::int`,
-          engagementScore: sql<number>`${articles.views} + (count(DISTINCT ${comments.id}) * 5) + (count(DISTINCT ${reactions.id}) * 3)`,
-        })
-        .from(articles)
-        .leftJoin(comments, eq(comments.articleId, articles.id))
-        .leftJoin(reactions, eq(reactions.articleId, articles.id))
-        .where(
-          and(
-            eq(articles.status, "published"),
-          eq(articles.hideFromHomepage, false),
-            sql`${articles.publishedAt} >= ${last7Days}`
-          )
-        )
-        .groupBy(articles.id)
-        .orderBy(desc(sql`${articles.views} + (count(DISTINCT ${comments.id}) * 5) + (count(DISTINCT ${reactions.id}) * 3)`))
-        .limit(1);
 
       const aiEngagementScore = aiPick[0]?.engagementScore || 0;
 
@@ -11604,8 +11617,9 @@ Respond in valid JSON format only:
             : "تفاعل متوسط متوقع",
         },
       };
-      // Cache the result before sending - TTL 30 seconds
-      memoryCache.set(cacheKey, result, 30000);
+      // Cache the result before sending - TTL 10 minutes (site-wide weekly
+      // aggregates change slowly; this keeps the heavy path off the hot path).
+      memoryCache.set(cacheKey, result, 600000);
       res.json(result);
     } catch (error) {
       console.error("Error fetching AI insights:", error);
