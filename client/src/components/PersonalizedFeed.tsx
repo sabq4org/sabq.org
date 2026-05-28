@@ -359,9 +359,8 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                               <OptimizedImage
                                 src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
                                 alt={article.title}
-                                className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-                                wrapperClassName="w-full h-full bg-muted/20"
-                                objectPosition="center"
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                objectPosition="center bottom"
                                 preferSize="small"
                                 sizes="112px"
                               />
