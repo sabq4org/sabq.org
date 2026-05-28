@@ -3886,7 +3886,7 @@ router.post("/contact", async (req: Request, res: Response) => {
         email: validated.email,
         subject: validated.subject,
         message: validated.message,
-        attachments: validated.attachments,
+        attachments: validated.attachments as any,
         status: "pending",
       })
       .returning();
@@ -4709,15 +4709,29 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
     // Hero + album handling. New base64 images go to Cloudflare
     // Images via the same helper /articles/submit uses; existing URLs
     // (already on imagedelivery.net) pass through.
+    const uploadDataUrlToCf = async (dataUrl: string, idHint: string): Promise<string | null> => {
+      const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
+      if (!m) return null;
+      const mimeType = `image/${m[1].toLowerCase() === "heif" ? "heic" : m[1].toLowerCase()}`;
+      const buffer = Buffer.from(m[2], "base64");
+      const result = await cloudflareImagesService.uploadToCloudflare(
+        buffer,
+        `${idHint}.${m[1]}`,
+        { type: "mobile-article-revision" },
+        mimeType,
+      );
+      return result.success && result.deliveryUrl ? result.deliveryUrl : null;
+    };
+
     let heroImageUrl = existing.imageUrl;
     if (data.heroImage !== undefined) {
       if (data.heroImage.startsWith("data:")) {
         try {
-          const cf = await cloudflareImagesService.uploadImage(
+          const url = await uploadDataUrlToCf(
             data.heroImage,
             `mobile-revision-${articleId}-hero-${Date.now()}`,
           );
-          if (cf.success && cf.url) heroImageUrl = cf.url;
+          if (url) heroImageUrl = url;
         } catch (err) {
           console.error("[Mobile API] /articles/:id/resubmit hero upload failed:", err);
         }
@@ -4732,11 +4746,11 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       for (const img of data.albumImages) {
         if (img.startsWith("data:")) {
           try {
-            const cf = await cloudflareImagesService.uploadImage(
+            const url = await uploadDataUrlToCf(
               img,
               `mobile-revision-${articleId}-album-${Date.now()}-${albumUrls.length}`,
             );
-            if (cf.success && cf.url) albumUrls.push(cf.url);
+            if (url) albumUrls.push(url);
           } catch (err) {
             console.error("[Mobile API] /articles/:id/resubmit album upload failed:", err);
           }

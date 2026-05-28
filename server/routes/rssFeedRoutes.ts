@@ -30,12 +30,11 @@ router.get('/audio-newsletters', cacheControl({ maxAge: 300, staleWhileRevalidat
                 thumbnailUrl: true,
                 publishedAt: true,
                 categoryId: true,
-                audioUrl: true,
                 seo: true,
               }
             }
           },
-          orderBy: (articles, { asc }) => [asc(articles.orderIndex)]
+          orderBy: (articles, { asc }) => [asc(articles.order)]
         }
       },
       orderBy: [desc(audioNewsletters.createdAt)],
@@ -74,13 +73,13 @@ router.get('/audio-newsletters', cacheControl({ maxAge: 300, staleWhileRevalidat
       <link>${baseUrl}/audio/${newsletter.id}</link>
       <guid isPermaLink="true">${baseUrl}/audio/${newsletter.id}</guid>
       <pubDate>${pubDate}</pubDate>
-      <enclosure url="${newsletter.audioUrl}" type="audio/mpeg" length="${newsletter.audioSize || 0}"/>
+      <enclosure url="${newsletter.audioUrl}" type="audio/mpeg" length="${newsletter.fileSize || 0}"/>
       <itunes:author>سبق الإلكترونية</itunes:author>
       <itunes:subtitle><![CDATA[${newsletter.description || newsletter.title}]]></itunes:subtitle>
       <itunes:summary><![CDATA[${description}]]></itunes:summary>
       <itunes:duration>${itunesDuration}</itunes:duration>
       <itunes:explicit>no</itunes:explicit>
-      <itunes:episode>${newsletter.episodeNumber || newsletters.indexOf(newsletter) + 1}</itunes:episode>
+      <itunes:episode>${newsletters.indexOf(newsletter) + 1}</itunes:episode>
       <itunes:episodeType>full</itunes:episodeType>
     </item>`;
     }).join('\n');
@@ -162,12 +161,11 @@ router.get('/audio-newsletters.json', cacheControl({ maxAge: 300, staleWhileReva
                 thumbnailUrl: true,
                 publishedAt: true,
                 categoryId: true,
-                audioUrl: true,
                 seo: true,
               }
             }
           },
-          orderBy: (articles, { asc }) => [asc(articles.orderIndex)]
+          orderBy: (articles, { asc }) => [asc(articles.order)]
         }
       },
       orderBy: [desc(audioNewsletters.createdAt)],
@@ -214,11 +212,11 @@ router.get('/audio-newsletters.json', cacheControl({ maxAge: 300, staleWhileReva
         attachments: [{
           url: newsletter.audioUrl,
           mime_type: 'audio/mpeg',
-          size_in_bytes: newsletter.audioSize || 0,
+          size_in_bytes: newsletter.fileSize || 0,
           duration_in_seconds: newsletter.duration || 0
         }],
         _itunes: {
-          episode: newsletter.episodeNumber || newsletters.length - index,
+          episode: newsletters.length - index,
           duration: newsletter.duration || 0,
           explicit: false,
           episode_type: 'full'

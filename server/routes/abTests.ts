@@ -3,7 +3,13 @@ import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { experimentVariants } from "@shared/schema";
-import { insertExperimentSchema, insertExperimentVariantSchema } from "@shared/schema";
+import {
+  insertExperimentSchema,
+  insertExperimentVariantSchema,
+  updateExperimentVariantSchema,
+  insertExperimentExposureSchema,
+  insertExperimentConversionSchema,
+} from "@shared/schema";
 import { storage } from "../storage";
 import { requireAuth, requireRole, logActivity } from "../rbac";
 

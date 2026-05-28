@@ -117,7 +117,7 @@ export class AITaskExecutor {
         throw new Error('Failed to convert task to article data');
       }
 
-      const createdArticle = await storage.createArticle(articleData);
+      const createdArticle = await storage.createArticle(articleData as any);
       
       // Update with featured image if generated
       if (imageUrl && createdArticle.id) {

@@ -9,7 +9,7 @@ import { extractGeoLocations } from "../services/geoExtractionService";
 
 const router: Router = Router();
 
-function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; confidence: string; subject: string; needsReview?: boolean }; shouldSave: boolean } {
+function processFocalPointResult(result: FocalPointResult): { data: { x: number; y: number; needsReview?: boolean; confidence?: "high" | "medium" | "low" }; shouldSave: boolean } {
   const data: any = { x: result.x, y: result.y, confidence: result.confidence, subject: result.subject };
   if (result.confidence === "low") {
     data.needsReview = true;
@@ -21,7 +21,7 @@ function processFocalPointResult(result: FocalPointResult): { data: { x: number;
 // Get stats about focal point coverage
 router.get("/api/admin/focal-points/stats", requireAuth, requirePermission("articles.edit_any"), async (req: any, res) => {
   try {
-    const [stats] = await db.execute(sql`
+    const result = await db.execute(sql`
       SELECT 
         COUNT(*) FILTER (WHERE status = 'published') as total_published,
         COUNT(*) FILTER (WHERE status = 'published' AND image_url IS NOT NULL) as with_images,
@@ -30,6 +30,7 @@ router.get("/api/admin/focal-points/stats", requireAuth, requirePermission("arti
         COUNT(*) FILTER (WHERE status = 'published' AND image_url IS NOT NULL AND image_focal_point IS NOT NULL AND (image_focal_point->>'needsReview')::boolean = true) as needs_review
       FROM articles
     `);
+    const stats = ((result as any).rows || result)[0];
     res.json(stats);
   } catch (error: any) {
     console.error("[FocalPoint Stats] Error:", error);

@@ -40,12 +40,11 @@ function getAuthClient() {
     // Handle escaped newlines in private key
     const formattedKey = privateKey.replace(/\\n/g, '\n');
     
-    authClient = new google.auth.JWT(
-      clientEmail,
-      undefined,
-      formattedKey,
-      ['https://www.googleapis.com/auth/indexing']
-    );
+    authClient = new google.auth.JWT({
+      email: clientEmail,
+      key: formattedKey,
+      scopes: ['https://www.googleapis.com/auth/indexing'],
+    });
     
     isConfigured = true;
     console.log('[Google Indexing] ✅ Service configured successfully');

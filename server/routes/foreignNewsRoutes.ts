@@ -318,12 +318,14 @@ router.post('/processed/:id/approve', isAuthenticated, isAdmin, async (req: Requ
       authorId: user.id,
       submitterId: user.id,
       status: 'draft', // Goes to drafts
-      seoTitle: processedArticle.seoTitle,
-      seoDescription: processedArticle.seoDescription,
+      seo: {
+        metaTitle: processedArticle.seoTitle,
+        metaDescription: processedArticle.seoDescription,
+      },
       locale: 'ar',
       createdAt: new Date(),
       updatedAt: new Date(),
-    }).returning({ id: articles.id });
+    } as any).returning({ id: articles.id });
     
     const newArticleId = insertResult[0]?.id;
     

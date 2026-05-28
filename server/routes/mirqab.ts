@@ -1,7 +1,18 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-import { insertMirqabEntrySchema } from "@shared/schema";
-import { requireAuth, requirePermission } from "../rbac";
+import {
+  insertMirqabEntrySchema,
+  insertMirqabSabqIndexSchema,
+  insertMirqabNextStorySchema,
+  insertMirqabRadarAlertSchema,
+  insertMirqabAlgorithmArticleSchema,
+  updateMirqabEntrySchema,
+  updateMirqabSabqIndexSchema,
+  updateMirqabNextStorySchema,
+  updateMirqabRadarAlertSchema,
+  updateMirqabAlgorithmArticleSchema,
+} from "@shared/schema";
+import { requireAuth, requirePermission, logActivity } from "../rbac";
 
 function generateSlug(text: string): string {
   return text

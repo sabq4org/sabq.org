@@ -35,7 +35,7 @@ const focusLimiter = rateLimit({
 const router: Router = Router();
 
 // POST /api/focus-sessions - Create a new focus session (auth optional; logged-in users persist; guests stay on client)
-router.post("/api/focus-sessions", focusLimiter, async (req: AuthedRequest, res: Response) => {
+router.post("/api/focus-sessions", focusLimiter, async (req: any, res: Response) => {
   try {
     const userId = req.user?.id || null;
 
@@ -68,7 +68,7 @@ router.post("/api/focus-sessions", focusLimiter, async (req: AuthedRequest, res:
 });
 
 // PATCH /api/focus-sessions/:id - Update progress / complete / generate share slug
-router.patch("/api/focus-sessions/:id", focusLimiter, requireAuth, async (req: AuthedRequest, res: Response) => {
+router.patch("/api/focus-sessions/:id", focusLimiter, requireAuth, async (req: any, res: Response) => {
   try {
     const userId = req.user!.id;
     const id = req.params.id;
@@ -83,7 +83,7 @@ router.patch("/api/focus-sessions/:id", focusLimiter, requireAuth, async (req: A
     });
     const parsed = updateSchema.parse(req.body);
 
-    const updates: Partial<FocusReadingSession> & { shareSlug?: string } = {};
+    const updates: { completed?: boolean; endedAt?: Date; focusedSeconds?: number; shareSlug?: string } = {};
     let nextFocusedSeconds = existing.focusedSeconds;
     if (typeof parsed.focusedSeconds === "number") {
       nextFocusedSeconds = Math.max(existing.focusedSeconds, parsed.focusedSeconds);
@@ -138,7 +138,7 @@ router.post(
   "/api/focus-sessions/sync",
   focusLimiter,
   requireAuth,
-  async (req: AuthedRequest, res: Response) => {
+  async (req: any, res: Response) => {
     try {
       const userId = req.user!.id;
       const parsed = z.object({ sessions: z.array(syncEntrySchema).max(50) }).parse(req.body);
@@ -325,7 +325,7 @@ function aggregateWeek(sessions: FocusReadingSession[], start: Date, end: Date):
 }
 
 // GET /api/me/focus-sessions/weekly - Weekly aggregated report (current + previous week)
-router.get("/api/me/focus-sessions/weekly", requireAuth, async (req: AuthedRequest, res: Response) => {
+router.get("/api/me/focus-sessions/weekly", requireAuth, async (req: any, res: Response) => {
   try {
     const userId = req.user!.id;
     const now = new Date();

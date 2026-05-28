@@ -1364,12 +1364,13 @@ router.post("/webhook", async (req: Request, res: Response) => {
     console.log("[WhatsApp Agent] ============ WEBHOOK END (AGGREGATION) ============");
     return res.status(200).send('OK');
     
-    /* 
+    /*
     // ============================================
     // LEGACY: DIRECT PROCESSING (BYPASSED BY AGGREGATION)
+    // Unreachable since the aggregation/instant paths above always return.
+    // Kept (commented) for reference; remove once the new flow is proven.
     // ============================================
-    */
-  
+
     // 🌐 FORCE ARABIC OUTPUT: WhatsApp Agent always publishes in Arabic
     // Regardless of source language, translate/rewrite to Arabic for consistency
     const targetLang = "ar" as const;
@@ -1615,6 +1616,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
 
     console.log("[WhatsApp Agent] ============ WEBHOOK END (SUCCESS) ============");
     return res.status(200).send('OK');
+    */
 
   } catch (error) {
     console.error("[WhatsApp Agent] ============ WEBHOOK ERROR ============");
@@ -1786,14 +1788,14 @@ router.post("/status-callback", async (req: Request, res: Response) => {
       ChannelPrefix
     } = req.body;
 
-    const statusEmoji = {
+    const statusEmoji = ({
       'queued': '📥',
       'sent': '📤',
       'delivered': '✅',
       'read': '👁️',
       'failed': '❌',
       'undelivered': '⚠️'
-    }[MessageStatus] || '📋';
+    } as Record<string, string>)[MessageStatus] || '📋';
 
     console.log(`[WhatsApp Status] ${statusEmoji} Message ${MessageSid}:`);
     console.log(`[WhatsApp Status]   Status: ${MessageStatus}`);
@@ -1846,7 +1848,7 @@ router.post("/status-callback", async (req: Request, res: Response) => {
 // ============================================
 // TEST ENDPOINT - For debugging WhatsApp sending
 // ============================================
-router.post("/test-send", requireAuth, requireRole(["super_admin", "admin"]), async (req: Request, res: Response) => {
+router.post("/test-send", requireAuth, requireRole("super_admin", "admin"), async (req: Request, res: Response) => {
   try {
     const { to, message } = req.body;
     

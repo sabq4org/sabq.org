@@ -2,9 +2,9 @@ import type { Express } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db } from "../db";
 import { articles } from "@shared/schema";
-import { insertStorySchema } from "@shared/schema";
+import { insertStorySchema, insertStoryLinkSchema } from "@shared/schema";
 import { storage } from "../storage";
-import { requireAuth, requireRole } from "../rbac";
+import { requireAuth, requireRole, logActivity } from "../rbac";
 
 export function registerStoryRoutes(app: Express) {
   // GET /api/stories - جلب جميع القصص

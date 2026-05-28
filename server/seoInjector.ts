@@ -1322,6 +1322,14 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
 
       console.log(`[SEO] Injected meta tags for ${route.type}: ${route.slug || '/'}`);
 
+      // Tag every <script> with the per-request CSP nonce so the strict
+      // Report-Only policy reflects reality (and so a future enforced policy
+      // can drop 'unsafe-inline'). Report-only never blocks, so this is safe.
+      const cspNonce = (res as any).locals?.cspNonce;
+      if (cspNonce) {
+        html = html.replace(/<script(?![^>]*\bnonce=)/gi, `<script nonce="${cspNonce}"`);
+      }
+
       const isNoindex = (seoData.robots || '').toLowerCase().includes('noindex');
       const headers: Record<string, string> = {
         'Content-Type': 'text/html; charset=utf-8',

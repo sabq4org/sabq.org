@@ -63,3 +63,11 @@ MIGRATION_RUNBOOK.md
 spa-index-html.generated.ts
 *.p12
 sabq-press.p12
+
+# Internal reports must NEVER live under client/public (served publicly).
+# Keep authored copies under docs/ instead.
+client/public/*.docx
+
+# Stray/duplicate iOS workspace — canonical project is ios/ (see AGENTS.md).
+# Kept on disk locally, untracked from git.
+sabq app ios/

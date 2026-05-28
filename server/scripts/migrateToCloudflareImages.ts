@@ -67,7 +67,7 @@ async function migrateJob(job: MigrationJob): Promise<{ ok: number; fail: number
   const { table, idColumn, urlColumn } = job;
   console.log(`\n[Migration] === ${table}.${urlColumn} ===`);
 
-  const rows: any[] = await db.execute(sql.raw(
+  const rows: any = await db.execute(sql.raw(
     `SELECT "${idColumn}" as id, "${urlColumn}" as url FROM "${table}" 
      WHERE "${urlColumn}" LIKE '/public-objects/%' 
         OR "${urlColumn}" LIKE '/api/public-media/public/%'

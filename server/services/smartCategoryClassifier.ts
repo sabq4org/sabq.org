@@ -159,7 +159,7 @@ ${articleContent}
         categoryName: cat.nameAr,
         confidence: alt.confidence,
       } : null;
-    }).filter(Boolean) || [];
+    }).filter((c): c is { categoryId: string; categoryName: string; confidence: number } => c !== null) || [];
 
     return {
       categoryId: parsed.categoryId,
