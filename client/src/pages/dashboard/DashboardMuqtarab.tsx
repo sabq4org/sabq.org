@@ -50,6 +50,7 @@ import {
   Droplet,
   Mountain,
   Waves,
+  HelpCircle,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -98,7 +99,6 @@ import { queryClient, apiRequest, getCsrfToken } from "@/lib/queryClient";
 import { insertAngleSchema } from "@shared/schema";
 import type { Angle } from "@/lib/muqtarab";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import * as LucideIcons from "lucide-react";
 
 // Form schema - extends insertAngleSchema with validation
 const angleFormSchema = insertAngleSchema.extend({
@@ -633,8 +633,7 @@ export default function DashboardMuqtarab() {
 
   // Get icon component
   const getIconComponent = (iconKey: string) => {
-    const IconComponent = (LucideIcons as any)[iconKey];
-    return IconComponent || LucideIcons.HelpCircle;
+    return AVAILABLE_ICONS.find((item) => item.key === iconKey)?.icon || HelpCircle;
   };
 
   return (

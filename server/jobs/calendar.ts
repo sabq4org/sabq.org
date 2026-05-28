@@ -137,23 +137,17 @@ export const processReminders = cron.schedule('0 * * * *', async () => {
         // إرسال إشعارات لكل مستلم
         for (const userId of recipientIds) {
           try {
-            // تحديد نوع الإشعار بناءً على القنوات
-            const channels = reminder.channels || ['IN_APP'];
+            const channels = [reminder.channel || 'IN_APP'];
+            const reminderMessage = `حدث قادم في ${event.dateStart.toLocaleDateString('ar-SA-u-ca-gregory')}`;
             
             await createNotification({
-              type: 'calendar_reminder',
-              title: `تذكير: ${event.title}`,
-              titleAr: `تذكير: ${event.title}`,
-              message: reminder.message || `حدث قادم في ${event.dateStart.toLocaleDateString('ar-SA-u-ca-gregory')}`,
-              messageAr: reminder.message || `حدث قادم في ${event.dateStart.toLocaleDateString('ar-SA-u-ca-gregory')}`,
-              userId: userId as string,
-              link: `/calendar/${event.id}`,
-              metadata: {
-                eventId: event.id,
-                eventType: event.type,
-                importance: event.importance,
-                channels
-              }
+              type: 'NEW_ARTICLE',
+              data: {
+                articleId: event.id,
+                articleTitle: `تذكير: ${event.title} - ${reminderMessage}`,
+                articleSlug: event.id,
+                newsType: channels.join(','),
+              },
             });
 
             sentCount++;
@@ -192,7 +186,7 @@ export const processReminders = cron.schedule('0 * * * *', async () => {
 let upcomingEventsCache: any[] = [];
 let cacheLastUpdated: Date | null = null;
 
-export const updateUpcomingEventsCache = cron.schedule('*/15 * * * *', async () => {
+async function refreshUpcomingEventsCache() {
   log.info("[CalendarJobs] 📦 Updating upcoming events cache...");
 
   try {
@@ -204,7 +198,9 @@ export const updateUpcomingEventsCache = cron.schedule('*/15 * * * *', async () 
   } catch (error) {
     console.error("[CalendarJobs] ❌ Error updating cache:", error);
   }
-}, {
+}
+
+export const updateUpcomingEventsCache = cron.schedule('*/15 * * * *', refreshUpcomingEventsCache, {
   timezone: "Asia/Riyadh"
 });
 
@@ -229,7 +225,7 @@ export function startCalendarJobs() {
   updateUpcomingEventsCache.start();
   
   // تحديث فوري للذاكرة المؤقتة عند البدء
-  updateUpcomingEventsCache.now();
+  void refreshUpcomingEventsCache();
   
   log.info("[CalendarJobs] ✅ All calendar jobs started successfully");
   log.info("[CalendarJobs] 📅 Schedules:");

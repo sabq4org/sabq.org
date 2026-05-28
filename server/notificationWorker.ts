@@ -1,4 +1,4 @@
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import { db } from "./db";
 import { eq, and, lte, isNull, sql } from "drizzle-orm";
 import { notificationQueue, notificationsInbox, notificationMetrics, articles } from "@shared/schema";
@@ -546,7 +546,7 @@ export function startNotificationWorker() {
   try {
     console.log("[NotificationWorker] Starting notification worker...");
 
-    const scheduledTasks: cron.ScheduledTask[] = [];
+    const scheduledTasks: ScheduledTask[] = [];
 
     scheduledTasks.push(
       cron.schedule("0,5,10,15,20,25,30,35,40,45,50,55 * * * *", () => {

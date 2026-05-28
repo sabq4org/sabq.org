@@ -299,7 +299,7 @@ export function CommentSection({
                     data-testid={`button-show-more-replies-${comment.id}`}
                   >
                     <MessageCircle className="h-3 w-3" />
-                    عرض {(comment.replies.length - formatNumber(INITIAL_REPLIES))} ردود إضافية
+                    عرض {formatNumber(comment.replies.length - INITIAL_REPLIES)} ردود إضافية
                   </Button>
                 )}
               </div>
@@ -404,7 +404,7 @@ export function CommentSection({
                   data-testid="button-load-more-comments"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  عرض المزيد ({(sortedComments.length - formatNumber(visibleCount))} تعليق آخر)
+                  عرض المزيد ({formatNumber(sortedComments.length - visibleCount)} تعليق آخر)
                 </Button>
               </div>
             )}

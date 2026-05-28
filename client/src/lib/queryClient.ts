@@ -118,6 +118,7 @@ let keepaliveBytesUsed = 0;
  */
 export function trackBeacon(url: string, body?: unknown): boolean {
   if (typeof window === "undefined") return false;
+  const targetUrl = apiUrl(url);
 
   let payloadString: string | undefined;
   let blobPayload: Blob | FormData | undefined;
@@ -159,7 +160,7 @@ export function trackBeacon(url: string, body?: unknown): boolean {
       if (payloadString !== undefined) headers["Content-Type"] = contentType;
       const token = getCsrfToken();
       if (token) headers["x-csrf-token"] = token;
-      void fetch(apiUrl(url), {
+      void fetch(targetUrl, {
         method: "POST",
         headers,
         body: blobPayload ?? payloadString,
@@ -194,8 +195,8 @@ export function trackBeacon(url: string, body?: unknown): boolean {
             ? new Blob([payloadString], { type: contentType })
             : undefined;
       const ok = beaconBody !== undefined
-        ? navigator.sendBeacon(url, beaconBody)
-        : navigator.sendBeacon(url);
+        ? navigator.sendBeacon(targetUrl, beaconBody)
+        : navigator.sendBeacon(targetUrl);
       if (ok) {
         keepaliveBytesUsed += estimatedBytes;
         return true;
@@ -215,7 +216,7 @@ export function trackBeacon(url: string, body?: unknown): boolean {
     if (token) {
       headers["x-csrf-token"] = token;
     }
-    void fetch(apiUrl(url), {
+    void fetch(targetUrl, {
       method: "POST",
       headers,
       body: blobPayload ?? payloadString,

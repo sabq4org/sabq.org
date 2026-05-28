@@ -3,8 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 import type { Angle } from "@/lib/muqtarab";
-import * as LucideIcons from "lucide-react";
 import { Circle } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 
 interface AngleCardProps {
   angle: Angle;
@@ -13,14 +13,7 @@ interface AngleCardProps {
 }
 
 function getIconComponent(iconKey: string) {
-  const iconName = iconKey as keyof typeof LucideIcons;
-  const IconComponent = LucideIcons[iconName];
-  
-  if (IconComponent && typeof IconComponent === 'function') {
-    return IconComponent as React.ComponentType<{ className?: string }>;
-  }
-  
-  return Circle;
+  return getLucideIcon(iconKey, Circle);
 }
 
 export function AngleCard({ angle, articleCount, onClick }: AngleCardProps) {

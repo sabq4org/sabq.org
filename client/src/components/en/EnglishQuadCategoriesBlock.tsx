@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import * as LucideIcons from "lucide-react";
 import { motion } from "framer-motion";
-import { Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, ChevronLeft, ChevronRight, Folder } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -11,8 +11,7 @@ import { getObjectPosition } from "@/lib/imageUtils";
 
 // Icon mapper
 const getIcon = (iconName: string) => {
-  const Icon = (LucideIcons as any)[iconName] || LucideIcons.Folder;
-  return Icon;
+  return getLucideIcon(iconName, Folder);
 };
 
 // Types
@@ -192,7 +191,7 @@ function CategoryColumn({ data, index }: { data: CategoryColumnData; index: numb
 
 // Mobile Compact List Component
 const getIconComponent = (iconName: string) => {
-  return (LucideIcons as any)[iconName] || LucideIcons.Folder;
+  return getLucideIcon(iconName, Folder);
 };
 
 function MobileCompactList({ items }: { items: CategoryColumnData[] }) {

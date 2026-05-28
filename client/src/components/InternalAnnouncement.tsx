@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-import * as LucideIcons from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import { cn } from "@/lib/utils";
 
 interface Announcement {
@@ -143,9 +143,7 @@ export function InternalAnnouncement() {
 
   const getIcon = (iconName: string | null) => {
     if (!iconName) return null;
-    const Icon = (LucideIcons as any)[iconName];
-    if (!Icon) return null;
-    return Icon;
+    return getLucideIcon(iconName);
   };
 
   const currentChannel = getCurrentChannel();

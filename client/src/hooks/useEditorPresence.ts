@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { apiUrl } from "@/lib/queryClient";
 
 export interface CoEditorPresence {
   userId: string;
@@ -25,7 +26,7 @@ function postHeartbeat(payload: {
   articleTitle: string;
   articleSummary: string;
 }) {
-  return fetch("/api/editor-presence/heartbeat", {
+  return fetch(apiUrl("/api/editor-presence/heartbeat"), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -38,7 +39,7 @@ function leavePresence() {
     if (typeof navigator !== "undefined" && "sendBeacon" in navigator) {
       const blob = new Blob([JSON.stringify({})], { type: "application/json" });
       const sent = (navigator as any).sendBeacon?.(
-        "/api/editor-presence/leave",
+        apiUrl("/api/editor-presence/leave"),
         blob,
       );
       if (sent) return;
@@ -46,7 +47,7 @@ function leavePresence() {
   } catch {
     // fall through to fetch
   }
-  fetch("/api/editor-presence/leave", {
+  fetch(apiUrl("/api/editor-presence/leave"), {
     method: "DELETE",
     credentials: "include",
     keepalive: true,

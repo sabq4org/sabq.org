@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { ImageOff } from "lucide-react";
 import {
   buildCloudflareUrl as sharedBuildCloudflareUrl,
@@ -24,6 +25,7 @@ interface OptimizedImageProps {
   threshold?: number;
   sizes?: string;
   srcSet?: string;
+  style?: CSSProperties;
   fetchPriority?: "high" | "low" | "auto";
   onLoad?: () => void;
   onError?: () => void;
@@ -139,6 +141,7 @@ export function OptimizedImage({
   threshold = 0.1,
   sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
   srcSet,
+  style,
   fetchPriority = "auto",
   onLoad,
   onError,
@@ -238,8 +241,9 @@ export function OptimizedImage({
     );
   }
 
-  const imageStyles = {
-    objectPosition,
+  const imageStyles: CSSProperties = {
+    ...style,
+    objectPosition: style?.objectPosition ?? objectPosition,
   };
 
   // Build the final className for the img element, including opacity transition

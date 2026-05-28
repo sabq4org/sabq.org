@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Sparkles, BookOpen } from "lucide-react";
-import * as LucideIcons from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -25,12 +25,7 @@ type TopicWithAngle = {
 };
 
 function getIconComponent(iconKey: string) {
-  const iconName = iconKey as keyof typeof LucideIcons;
-  const IconComponent = LucideIcons[iconName];
-  if (IconComponent && typeof IconComponent === 'function') {
-    return IconComponent as React.ComponentType<{ className?: string }>;
-  }
-  return Sparkles;
+  return getLucideIcon(iconKey, Sparkles);
 }
 
 interface MuqtarabHomeBlockProps {

@@ -4,8 +4,8 @@ import { Header } from "@/components/Header";
 import { useMuqtarabAngles } from "@/lib/muqtarab";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import * as LucideIcons from "lucide-react";
 import { Circle, ArrowLeft, Sparkles, Calendar, ChevronLeft, ChevronRight, PenLine, BookOpen } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,12 +16,7 @@ import { ar } from "date-fns/locale";
 import type { Topic, Angle } from "@shared/schema";
 
 function getIconComponent(iconKey: string) {
-  const iconName = iconKey as keyof typeof LucideIcons;
-  const IconComponent = LucideIcons[iconName];
-  if (IconComponent && typeof IconComponent === 'function') {
-    return IconComponent as React.ComponentType<{ className?: string }>;
-  }
-  return Circle;
+  return getLucideIcon(iconKey, Circle);
 }
 
 interface TopicWithAngle extends Topic {

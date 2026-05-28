@@ -356,7 +356,7 @@ export async function logActivity(params: {
   entityId: string;
   oldValue?: Record<string, any>;
   newValue?: Record<string, any>;
-  metadata?: {
+  metadata?: Record<string, any> & {
     ip?: string;
     userAgent?: string;
     reason?: string;
