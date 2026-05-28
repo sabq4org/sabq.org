@@ -360,6 +360,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                 src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
                                 alt={article.title}
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                wrapperClassName="w-full h-full"
                                 objectPosition={getObjectPosition(article, "center")}
                                 preferSize="small"
                                 aspectRatio="16/9"
@@ -481,11 +482,12 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                 data-testid={`card-article-${article.id}`}
               >
                 {(article.imageUrl || article.thumbnailUrl || (article as any).infographicBannerUrl) && (
-                  <div className="relative h-48 overflow-hidden">
+                  <div className="relative aspect-[16/9] overflow-hidden">
                     <OptimizedImage
                       src={(article as any).infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
                       alt={article.title}
                       className="w-full h-full object-cover"
+                      wrapperClassName="w-full h-full"
                       objectPosition={getObjectPosition(article)}
                       preferSize="small"
                       aspectRatio="16/9"
