@@ -105,6 +105,7 @@ export function ShortsHomeBlock() {
                 src={featuredShort.coverImage}
                 alt={featuredShort.title}
                 width={320}
+                wrapperClassName="w-full h-full"
                 className="w-full h-full object-cover"
                 data-testid={`short-cover-${featuredShort.id}`}
               />

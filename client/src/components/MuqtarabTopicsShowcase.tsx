@@ -268,6 +268,7 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
                           src={topic.heroImageUrl}
                           alt={topic.title}
                           width={480}
+                          wrapperClassName="w-full h-full"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                         <div 
