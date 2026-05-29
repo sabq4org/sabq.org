@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo, Fragment } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { formatDistanceToNow, parseISO, startOfDay, subDays, subHours, differenceInMinutes } from "date-fns";
+import { formatDistanceToNow, parseISO, startOfDay, subDays, subHours, differenceInMinutes, isToday, isYesterday } from "date-fns";
 import { ar } from "date-fns/locale";
 import {
   Radio,
@@ -18,8 +18,8 @@ import {
   Timer,
   Home,
   ChevronRight,
+  ChevronUp,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,6 +90,54 @@ function isNewUpdate(dateString: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Exact clock time (e.g. ١٢:٤٥) shown on each timeline node.
+function formatClock(dateString: string): string {
+  try {
+    return parseISO(dateString).toLocaleTimeString("ar-EG", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+// Which time bucket an update belongs to. Drives the live-blog grouping
+// (الآن / آخر ساعة / اليوم / الأمس / أقدم) so the reader always has a clear
+// sense of "when" as they scroll down the spine.
+type BucketKey = "now" | "hour" | "today" | "yesterday" | "older";
+
+function getBucketKey(dateString: string): BucketKey {
+  try {
+    const date = parseISO(dateString);
+    const mins = differenceInMinutes(new Date(), date);
+    if (mins <= 15) return "now";
+    if (mins <= 60) return "hour";
+    if (isToday(date)) return "today";
+    if (isYesterday(date)) return "yesterday";
+    return "older";
+  } catch {
+    return "older";
+  }
+}
+
+const BUCKET_META: { key: BucketKey; label: string; icon: typeof Radio }[] = [
+  { key: "now", label: "الآن", icon: Radio },
+  { key: "hour", label: "آخر ساعة", icon: Zap },
+  { key: "today", label: "اليوم", icon: Activity },
+  { key: "yesterday", label: "الأمس", icon: Clock },
+  { key: "older", label: "أقدم", icon: Clock },
+];
+
+// Normalize a category colour into a usable CSS colour. Editors store hex
+// (#rrggbb) or occasionally a bare token; fall back to the brand primary.
+function resolveCategoryColor(raw?: string | null): string {
+  if (!raw) return "hsl(var(--primary))";
+  const v = raw.trim();
+  if (!v) return "hsl(var(--primary))";
+  return v;
 }
 
 function StatisticsSkeleton() {
@@ -244,128 +292,160 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
   );
 }
 
-interface ModernNewsCardProps {
+interface TimelineEntryProps {
   item: LiveUpdate;
-  index: number;
 }
 
-function ModernNewsCard({ item, index }: ModernNewsCardProps) {
+// A single node on the live timeline. The coloured dot (category colour)
+// sits on the shared vertical spine drawn by the parent group; breaking /
+// just-arrived entries get a breathing ring so the freshest news pops.
+function TimelineEntry({ item }: TimelineEntryProps) {
   const isNew = isNewUpdate(item.publishedAt);
-  const categoryColor = item.categoryColor || "hsl(var(--primary))";
+  const color = resolveCategoryColor(item.categoryColor);
+  const accent = isNew || item.isBreaking;
 
   return (
-    <Link href={`/article/${item.englishSlug || item.slug}`} data-testid={`link-article-${item.id}`}>
-      <Card 
-        className="group hover-elevate active-elevate-2 border-r-2 sm:border-r-4 transition-all"
-        style={{ 
-          borderRightColor: categoryColor,
-        }}
-        data-testid={`card-news-${item.id}`}
-      >
-        <CardContent className="p-0">
-          <div className="flex gap-3 sm:gap-4 p-4 sm:p-5">
+    <Link
+      href={`/article/${item.englishSlug || item.slug}`}
+      className="block mbm-enter"
+      data-testid={`link-article-${item.id}`}
+    >
+      <article className="relative group" data-testid={`card-news-${item.id}`}>
+        {/* Timeline node — centred on the parent spine (right gutter, RTL) */}
+        <span
+          className={`absolute top-4 right-[9px] z-[1] h-3.5 w-3.5 rounded-full ring-4 ring-background ${accent ? "mbm-node-pulse" : ""}`}
+          style={{ backgroundColor: color, ["--mbm-dot" as any]: color }}
+          aria-hidden="true"
+          data-testid={`node-${item.id}`}
+        />
+
+        <div
+          className="rounded-xl border bg-card hover-elevate active-elevate-2 transition-all p-3 sm:p-4"
+          style={{ borderRightColor: color, borderRightWidth: 3 }}
+        >
+          {/* Meta row: clock + category + state badges */}
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2 flex-wrap">
+            <span
+              className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold tabular-nums"
+              style={{ color }}
+              data-testid={`text-clock-${item.id}`}
+            >
+              <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              {formatClock(item.publishedAt)}
+            </span>
+
+            <span
+              className="text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: `${color}1A`, color }}
+              data-testid={`badge-category-${item.id}`}
+            >
+              {item.categoryNameAr}
+            </span>
+
+            {item.isBreaking && (
+              <Badge variant="destructive" className="text-[10px] sm:text-xs gap-0.5 sm:gap-1 shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-5" data-testid={`badge-breaking-${item.id}`}>
+                <Zap className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                عاجل
+              </Badge>
+            )}
+            {isNew && (
+              <Badge className="text-[10px] sm:text-xs bg-green-600 text-white shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-5" data-testid={`badge-new-${item.id}`}>
+                جديد
+              </Badge>
+            )}
+
+            <span className="text-[10px] sm:text-xs text-muted-foreground mr-auto" data-testid={`text-time-${item.id}`}>
+              {formatRelativeTime(item.publishedAt)}
+            </span>
+          </div>
+
+          <div className="flex gap-3 sm:gap-4">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-sm sm:text-base mb-1 sm:mb-1.5 line-clamp-2 leading-snug group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
+                {item.title}
+              </h3>
+
+              {item.summary && (
+                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed hidden sm:block mb-2" data-testid={`text-summary-${item.id}`}>
+                  {item.summary}
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-muted-foreground">
+                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-views-${item.id}`}>
+                  <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  {item.viewsCount.toLocaleString()}
+                </span>
+                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-comments-${item.id}`}>
+                  <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  {item.commentsCount.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
             {item.imageUrl && (
-              <div className="relative flex-shrink-0 w-24 h-20 rounded-lg overflow-hidden">
-                <OptimizedImage 
-                  src={item.imageUrl} 
+              <div className="relative flex-shrink-0 w-20 h-16 sm:w-28 sm:h-24 rounded-lg overflow-hidden self-center">
+                <OptimizedImage
+                  src={item.imageUrl}
                   alt={item.title}
                   className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110"
                   wrapperClassName="w-full h-full"
                   priority={false}
                   objectPosition={getObjectPosition(item)}
                 />
-                {item.isBreaking && (
-                  <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2">
-                    <Badge variant="destructive" className="text-[10px] sm:text-xs shadow-lg px-1 sm:px-2 py-0.5 sm:py-0.5" data-testid={`badge-breaking-overlay-${item.id}`}>
-                      <Zap className="h-2.5 sm:h-3 w-2.5 sm:w-3" />
-                    </Badge>
-                  </div>
-                )}
               </div>
             )}
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-3 flex-wrap">
-                {isNew && (
-                  <Badge className="text-[10px] sm:text-xs bg-green-600 text-white shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-auto" data-testid={`badge-new-${item.id}`}>
-                    جديد
-                  </Badge>
-                )}
-                {item.isBreaking && !item.imageUrl && (
-                  <Badge variant="destructive" className="text-[10px] sm:text-xs gap-0.5 sm:gap-1 shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-auto" data-testid={`badge-breaking-${item.id}`}>
-                    <Zap className="h-2.5 sm:h-3 w-2.5 sm:w-3" />
-                    عاجل
-                  </Badge>
-                )}
-                <Badge 
-                  variant="secondary" 
-                  className="text-[10px] sm:text-xs text-black px-1.5 sm:px-2 py-0 h-4 sm:h-auto"
-                  style={{ 
-                    borderRight: `2px solid ${categoryColor}`,
-                    backgroundColor: '#e5e5e6'
-                  }}
-                  data-testid={`badge-category-${item.id}`}
-                >
-                  {item.categoryNameAr}
-                </Badge>
-                <span className="text-[10px] sm:text-xs text-muted-foreground mr-auto flex items-center gap-1 sm:gap-1" data-testid={`text-time-${item.id}`}>
-                  <Clock className="h-3 sm:h-3 w-3 sm:w-3" />
-                  {formatRelativeTime(item.publishedAt)}
-                </span>
-              </div>
-
-              <h3 className="font-bold text-sm sm:text-base mb-1.5 sm:mb-2 line-clamp-2 leading-relaxed sm:leading-relaxed" data-testid={`text-title-${item.id}`}>
-                {item.title}
-              </h3>
-
-              <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1 sm:line-clamp-2 mb-2 sm:mb-4 leading-relaxed sm:leading-relaxed hidden sm:block" data-testid={`text-summary-${item.id}`}>
-                {item.summary}
-              </p>
-
-              <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-xs text-muted-foreground">
-                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" data-testid={`text-views-${item.id}`}>
-                  <Eye className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-                  {item.viewsCount.toLocaleString()}
-                </span>
-                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" data-testid={`text-comments-${item.id}`}>
-                  <MessageSquare className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
-                  {item.commentsCount.toLocaleString()}
-                </span>
-              </div>
-            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </article>
     </Link>
   );
 }
 
-function CompactSkeleton({ count = 10 }: { count?: number }) {
+// Header chip that introduces each time bucket; its marker sits on the spine.
+function TimelineGroupHeader({ label, count, icon: Icon }: { label: string; count: number; icon: typeof Radio }) {
   return (
-    <div className="flex flex-col gap-6" data-testid="skeleton-loading">
-      {Array.from({ length: count }).map((_, i) => (
-        <Card key={i} className="border-r-4 border-r-muted">
-          <CardContent className="p-5">
-            <div className="flex gap-4">
-              <Skeleton className="w-28 h-28 rounded-xl shrink-0" />
-              <div className="flex-1 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-5 w-16" />
-                  <Skeleton className="h-5 w-20" />
-                  <Skeleton className="h-4 w-24 mr-auto" />
+    <div className="relative mb-3" data-testid={`group-header-${label}`}>
+      <span className="absolute top-1/2 -translate-y-1/2 right-[4px] z-[1] h-6 w-6 rounded-full bg-background ring-4 ring-background flex items-center justify-center">
+        <Icon className="h-3.5 w-3.5 text-primary" />
+      </span>
+      <div className="inline-flex items-center gap-2 mr-9 rounded-full border bg-muted/70 backdrop-blur-sm px-3 py-1 text-xs sm:text-sm font-bold">
+        {label}
+        <span className="text-muted-foreground font-medium">({count})</span>
+      </div>
+    </div>
+  );
+}
+
+function TimelineSkeleton({ count = 8 }: { count?: number }) {
+  return (
+    <div className="relative pr-7 sm:pr-8" data-testid="skeleton-loading">
+      <div className="mbm-spine pointer-events-none absolute top-2 bottom-0 right-[15px] w-0.5" />
+      <div className="space-y-3 sm:space-y-4">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="relative">
+            <span className="absolute top-4 right-[9px] z-[1] h-3.5 w-3.5 rounded-full ring-4 ring-background bg-muted" />
+            <div className="rounded-xl border border-r-[3px] border-r-muted p-3 sm:p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton className="h-4 w-12" />
+                <Skeleton className="h-4 w-16 rounded-full" />
+                <Skeleton className="h-3 w-20 mr-auto" />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-4 w-4/5" />
+                  <div className="flex gap-3 pt-1">
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
                 </div>
-                <Skeleton className="h-5 w-full" />
-                <Skeleton className="h-5 w-4/5" />
-                <Skeleton className="h-4 w-3/4" />
-                <div className="flex gap-4">
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                </div>
+                <Skeleton className="w-20 h-16 sm:w-28 sm:h-24 rounded-lg shrink-0" />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -563,6 +643,47 @@ export default function MomentByMoment() {
 
     return filtered;
   }, [allItems, timeRange, categoryFilter]);
+
+  // Group the visible updates into time buckets for the live-blog spine.
+  const timelineGroups = useMemo(() => {
+    const byBucket = new Map<BucketKey, LiveUpdate[]>();
+    for (const item of filteredItems) {
+      const key = getBucketKey(item.publishedAt);
+      const arr = byBucket.get(key);
+      if (arr) arr.push(item);
+      else byBucket.set(key, [item]);
+    }
+    return BUCKET_META
+      .map((meta) => ({ ...meta, items: byBucket.get(meta.key) ?? [] }))
+      .filter((g) => g.items.length > 0);
+  }, [filteredItems]);
+
+  // "New updates" live pill — counts items that arrived ahead of the newest
+  // one the reader has acknowledged, so polling never silently reshuffles the
+  // feed under them (a classic live-blog pattern).
+  const [seenTopId, setSeenTopId] = useState<string | null>(null);
+
+  // Reset the watermark whenever the breaking/all filter flips (new dataset).
+  useEffect(() => {
+    setSeenTopId(null);
+  }, [filter]);
+
+  useEffect(() => {
+    if (seenTopId === null && allItems.length > 0) {
+      setSeenTopId(allItems[0].id);
+    }
+  }, [allItems, seenTopId]);
+
+  const newCount = useMemo(() => {
+    if (!seenTopId) return 0;
+    const idx = allItems.findIndex((i) => i.id === seenTopId);
+    return idx > 0 ? idx : 0;
+  }, [allItems, seenTopId]);
+
+  const revealNewUpdates = () => {
+    if (allItems.length > 0) setSeenTopId(allItems[0].id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const handleManualRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/live/updates"] });
@@ -780,23 +901,55 @@ export default function MomentByMoment() {
         </div>
       </div>
 
-      {/* News Feed - Compact on mobile */}
-      <main className="container max-w-4xl px-3 sm:px-6 py-3 sm:py-8" data-testid="main-content">
-        {isLoading && <CompactSkeleton count={10} />}
+      {/* Live Timeline Feed */}
+      <main className="container max-w-3xl px-3 sm:px-6 py-3 sm:py-8" data-testid="main-content">
+        {/* "New updates" live pill */}
+        {newCount > 0 && (
+          <div className="sticky top-2 z-30 flex justify-center pointer-events-none mb-3">
+            <button
+              onClick={revealNewUpdates}
+              className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
+              data-testid="button-new-updates"
+            >
+              <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+              {newCount} تحديث جديد · اضغط للعرض
+              <ChevronUp className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {isLoading && <TimelineSkeleton count={8} />}
 
         {!isLoading && filteredItems.length === 0 && <EmptyState />}
 
-        {!isLoading && filteredItems.length > 0 && (
-          <div className="flex flex-col gap-2 sm:gap-6" data-testid="list-news">
-            {filteredItems.map((item, index) => (
-              <Fragment key={item.id}>
-                <ModernNewsCard item={item} index={index} />
-                {/* Mobile ad slot after every 5th item */}
-                {(index + 1) % 5 === 0 && index < filteredItems.length - 1 && (
-                  <DmsMpuAd id={`MPU-mbm-${Math.floor(index / 5)}`} lazyLoad={true} />
-                )}
-              </Fragment>
-            ))}
+        {!isLoading && timelineGroups.length > 0 && (
+          <div className="space-y-6 sm:space-y-8" data-testid="list-news">
+            {(() => {
+              let globalIndex = -1;
+              return timelineGroups.map((group) => (
+                <section key={group.key} className="relative pr-7 sm:pr-8" data-testid={`group-${group.key}`}>
+                  {/* Continuous spine for this time bucket */}
+                  <div className="mbm-spine pointer-events-none absolute top-7 bottom-0 right-[15px] w-0.5" />
+                  <TimelineGroupHeader label={group.label} count={group.items.length} icon={group.icon} />
+                  <div className="space-y-3 sm:space-y-4">
+                    {group.items.map((item) => {
+                      globalIndex += 1;
+                      const showAd = (globalIndex + 1) % 6 === 0;
+                      return (
+                        <Fragment key={item.id}>
+                          <TimelineEntry item={item} />
+                          {showAd && (
+                            <div className="pr-0">
+                              <DmsMpuAd id={`MPU-mbm-${Math.floor(globalIndex / 6)}`} lazyLoad={true} />
+                            </div>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                </section>
+              ));
+            })()}
           </div>
         )}
 

@@ -1935,6 +1935,56 @@ input, select, textarea {
   box-shadow: 0 4px 14px hsl(var(--destructive) / 0.25);
 }
 
+/* ============================================
+   Moment-by-moment live TIMELINE (لحظة بلحظة)
+   ============================================ */
+
+/* The vertical spine that the timeline nodes sit on. RTL: anchored to the
+   right edge of the rail gutter. Fades out at the bottom so the feed feels
+   open-ended (a live blog that keeps flowing). */
+.mbm-spine {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--border)) 0%,
+    hsl(var(--border)) 85%,
+    transparent 100%
+  );
+}
+
+/* A timeline node ring that breathes — used for "now"/breaking entries so the
+   eye is drawn to the freshest updates. Colour is injected per category via
+   the inline --mbm-dot custom property. */
+.mbm-node-pulse {
+  animation: mbm-node-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes mbm-node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--mbm-dot, hsl(var(--primary) / 0.7));
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+/* Group header chip ("الآن / اليوم / الأمس") — sticks just under the filter
+   bar while its group scrolls, giving a clear time context like a live blog. */
+.mbm-group-sticky {
+  position: sticky;
+  top: 4.5rem;
+  z-index: 10;
+}
+
+/* Soft entrance for freshly inserted updates. */
+.mbm-enter {
+  animation: mbm-enter 0.45s ease-out both;
+}
+
+@keyframes mbm-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Fix RTL sidebar spacing for dashboard */
 [dir="rtl"] [data-slot="sidebar-gap"] {
   display: none;

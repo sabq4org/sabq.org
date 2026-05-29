@@ -39,6 +39,7 @@ router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate:
         newsType: articles.newsType,
         categoryId: articles.categoryId,
         categoryNameAr: categories.nameAr,
+        categoryColor: categories.color,
         viewsCount: articles.views,
         content: articles.content,
       })
@@ -85,6 +86,7 @@ router.get("/api/live/updates", cacheControl({ maxAge: 30, staleWhileRevalidate:
       isBreaking: item.newsType === "breaking",
       categoryId: item.categoryId || "",
       categoryNameAr: item.categoryNameAr || "غير مصنف",
+      categoryColor: item.categoryColor || null,
       viewsCount: item.viewsCount || 0,
       commentsCount: commentsCountMap[item.id] || 0,
       summary: item.content
@@ -123,6 +125,7 @@ router.get("/api/live/breaking", async (req, res) => {
         newsType: articles.newsType,
         categoryId: articles.categoryId,
         categoryNameAr: categories.nameAr,
+        categoryColor: categories.color,
         viewsCount: articles.views,
         content: articles.content,
       })
@@ -173,6 +176,7 @@ router.get("/api/live/breaking", async (req, res) => {
       isBreaking: true,
       categoryId: item.categoryId || "",
       categoryNameAr: item.categoryNameAr || "غير مصنف",
+      categoryColor: item.categoryColor || null,
       viewsCount: item.viewsCount || 0,
       commentsCount: commentsCountMap[item.id] || 0,
       summary: item.content
