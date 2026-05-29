@@ -1,0 +1,821 @@
+import Foundation
+import SwiftUI
+
+// MARK: - Shared Formatters
+
+nonisolated enum SabqFormatters {
+    /// Arabic locale that ALWAYS uses Latin digits (1234) instead of the
+    /// default Eastern Arabic digits (١٢٣٤). The numbering-system override
+    /// is a BCP-47 Unicode extension — `nu-latn` forces the formatter
+    /// regardless of the device's locale preferences. Per user request
+    /// 2026-05-16: notifications + history list must read "4545" not
+    /// "٤٥٤٥" because the editorial team standardised on Latin digits
+    /// across web + email + dashboard.
+    private static let arabicLatinDigits = Locale(identifier: "ar-u-nu-latn")
+    private static let saudiArabicLatinDigits = Locale(identifier: "ar_SA-u-nu-latn")
+
+    static let arabicDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = arabicLatinDigits
+        f.dateFormat = "d MMMM yyyy"
+        return f
+    }()
+
+    static let relativeArabic: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.locale = arabicLatinDigits
+        f.unitsStyle = .short
+        return f
+    }()
+
+    static let iso8601Fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    static let iso8601Basic: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    static let riyadhTime: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    static let arabicFullDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = saudiArabicLatinDigits
+        f.dateFormat = "EEEE d MMMM yyyy"
+        return f
+    }()
+
+    /// Arabic-correct "X minutes to read" label. Plain `"\(n) دقائق قراءة"`
+    /// reads wrong at n=1 ("١ دقائق") and n=2 (should be dual). We handle 1
+    /// and 2 explicitly and fall back to the plural form for 3+. Returning
+    /// no number for n=1/2 (just "دقيقة"/"دقيقتان") is closer to natural
+    /// Arabic — the article doesn't need to shout "1 minute".
+    static func arabicReadingTime(minutes: Int) -> String {
+        switch minutes {
+        case ...1: return "دقيقة قراءة"
+        case 2:    return "دقيقتان قراءة"
+        default:   return "\(minutes) دقائق قراءة"
+        }
+    }
+
+    /// Compact, eye-friendly view count. 1,234 → "1,234". 12,500 → "12.5K".
+    /// 1,200,000 → "1.2M". Uses Latin digits to match the rest of the app.
+    static func compactViewCount(_ n: Int) -> String {
+        if n >= 1_000_000 {
+            return String(format: "%.1fM", Double(n) / 1_000_000)
+        }
+        if n >= 1_000 {
+            // Drop the decimal when it would just be ".0" (10,000 → 10K, not 10.0K)
+            let thousands = Double(n) / 1_000
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(thousands))K"
+            }
+            return String(format: "%.1fK", thousands)
+        }
+        return "\(n)"
+    }
+
+    static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    static func parseISO8601(_ string: String) -> Date? {
+        iso8601Fractional.date(from: string) ?? iso8601Basic.date(from: string)
+    }
+}
+
+// MARK: - App Tab
+
+enum AppTab: String, CaseIterable, Identifiable {
+    case home
+    case explore
+    case bookmarks
+    case profile
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .home:      "الرئيسية"
+        case .explore:   "استكشف"
+        case .bookmarks: "محفوظاتي"
+        case .profile:   "حسابي"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .home:      "house"
+        case .explore:   "sparkle.magnifyingglass"
+        case .bookmarks: "bookmark"
+        case .profile:   "person.crop.circle"
+        }
+    }
+
+    var selectedImage: String {
+        switch self {
+        case .home:      "house.fill"
+        case .explore:   "sparkle.magnifyingglass"
+        case .bookmarks: "bookmark.fill"
+        case .profile:   "person.crop.circle.fill"
+        }
+    }
+}
+
+struct OpinionsRoute: Hashable {}
+
+struct KeywordRoute: Hashable {
+    let keyword: String
+}
+
+struct SearchRoute: Hashable {}
+
+struct TrendingRoute: Hashable {}
+
+struct AuthorRoute: Hashable {
+    let name: String
+}
+
+struct LiveCoverageRoute: Hashable {}
+/// "لحظة بلحظة" — published-articles live feed (mirrors web's
+/// `/moment-by-moment`). Distinct from `LiveCoverageRoute` which targets the
+/// live-events table.
+struct MomentByMomentRoute: Hashable {}
+
+/// Push the loyalty account screen ("نقاطي والمكافآت") onto the active
+/// navigation stack. Defined here so SettingsView can use value-based
+/// NavigationLink, which keeps ContentView.navigationPath in sync —
+/// without that, tapping the tab bar's Home icon while inside the
+/// screen used to silently no-op because the pop-to-root logic was
+/// gated on `navigationPath.isEmpty`.
+struct LoyaltyAccountRoute: Hashable {}
+
+/// Push the "بطاقتي الصحفية" Apple Wallet activation screen. Same
+/// rationale as LoyaltyAccountRoute — value-based so the tab bar can
+/// pop us back out cleanly.
+struct PressCardRoute: Hashable {}
+
+// MARK: - Article Category
+
+enum ArticleCategory: String, CaseIterable, Identifiable {
+    case saudi = "محليات"
+    case regions = "مناطق"
+    case culture = "ثقافة"
+    case community = "مجتمع"
+    case sports = "رياضة"
+    case tourism = "سياحة"
+    case technology = "تقنية"
+    case business = "أعمال"
+    case life = "حياتنا"
+    case cars = "سيارات"
+    case stations = "محطات"
+    case world = "العالم"
+
+    var id: String { rawValue }
+
+    var title: String { rawValue }
+
+    var subtitle: String {
+        switch self {
+        case .saudi:      "أخبار المملكة والمدن الرئيسية"
+        case .regions:    "تغطيات من مختلف مناطق المملكة"
+        case .culture:    "فنون وتراث وأدب ومشهد ثقافي"
+        case .community:  "مجتمع وتعليم وقضايا يومية"
+        case .sports:     "رياضة محلية وعالمية"
+        case .tourism:    "وجهات وفعاليات وسفر"
+        case .technology: "تقنية وابتكار ورقمنة"
+        case .business:   "اقتصاد وأسواق وأعمال"
+        case .life:       "نمط حياة وصحة وعائلة"
+        case .cars:       "سيارات وطرق ومواصلات"
+        case .stations:   "محطات وقصص وملفات"
+        case .world:      "أخبار عربية ودولية"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .saudi:      "building.2.fill"
+        case .regions:    "map.fill"
+        case .culture:    "theatermasks.fill"
+        case .community:  "person.3.fill"
+        case .sports:     "sportscourt.fill"
+        case .tourism:    "airplane.departure"
+        case .technology: "cpu.fill"
+        case .business:   "briefcase.fill"
+        case .life:       "heart.fill"
+        case .cars:       "car.fill"
+        case .stations:   "signpost.right.fill"
+        case .world:      "globe.americas.fill"
+        }
+    }
+
+    nonisolated var slug: String {
+        switch self {
+        case .saudi:      "saudi"
+        case .regions:    "regions"
+        case .culture:    "culture"
+        case .community:  "community"
+        case .sports:     "sports"
+        case .tourism:    "tourism"
+        case .technology: "technology"
+        case .business:   "business"
+        case .life:       "life"
+        case .cars:       "cars"
+        case .stations:   "stations"
+        case .world:      "world"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .saudi:      Self.color(hex: "3498db")
+        case .regions:    Self.color(hex: "84cc16")
+        case .culture:    Self.color(hex: "d946ef")
+        case .community:  Self.color(hex: "f97316")
+        case .sports:     Self.color(hex: "2ecc71")
+        case .tourism:    Self.color(hex: "14b8a6")
+        case .technology: Self.color(hex: "6366f1")
+        case .business:   Self.color(hex: "ca8a04")
+        case .life:       Self.color(hex: "F472B6")
+        case .cars:       Self.color(hex: "0EA5E9")
+        case .stations:   Self.color(hex: "FBBF24")
+        case .world:      Self.color(hex: "e74c3c")
+        }
+    }
+
+    nonisolated init(fromSection name: String?) {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let match = ArticleCategory(rawValue: trimmed) {
+            self = match
+            return
+        }
+        let lower = trimmed.lowercased()
+        if let bySlug = ArticleCategory.allCases.first(where: { $0.slug == lower }) {
+            self = bySlug
+            return
+        }
+        self = .saudi
+    }
+
+    private static func color(hex: String) -> Color {
+        let s = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var value: UInt64 = 0
+        guard Scanner(string: s).scanHexInt64(&value), s.count == 6 else {
+            return SabqTheme.primaryEnd
+        }
+        let r = Double((value >> 16) & 0xFF) / 255
+        let g = Double((value >> 8) & 0xFF) / 255
+        let b = Double(value & 0xFF) / 255
+        return Color(.sRGB, red: r, green: g, blue: b, opacity: 1)
+    }
+}
+
+// MARK: - App Accent
+
+enum AppAccent: String, CaseIterable, Identifiable {
+    case blue
+    case teal
+    case purple
+    case rose
+    case orange
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .blue:   "أزرق"
+        case .teal:   "فيروزي"
+        case .purple: "بنفسجي"
+        case .rose:   "وردي"
+        case .orange: "برتقالي"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .blue:   Color(red: 0.36, green: 0.74, blue: 0.91)
+        case .teal:   Color(red: 0.16, green: 0.65, blue: 0.55)
+        case .purple: Color(red: 0.55, green: 0.35, blue: 0.85)
+        case .rose:   Color(red: 0.88, green: 0.34, blue: 0.46)
+        case .orange: Color(red: 0.95, green: 0.55, blue: 0.20)
+        }
+    }
+
+    var darkColor: Color {
+        switch self {
+        case .blue:   Color(red: 0.45, green: 0.80, blue: 0.96)
+        case .teal:   Color(red: 0.25, green: 0.78, blue: 0.65)
+        case .purple: Color(red: 0.68, green: 0.50, blue: 0.95)
+        case .rose:   Color(red: 0.95, green: 0.48, blue: 0.58)
+        case .orange: Color(red: 1.0, green: 0.65, blue: 0.30)
+        }
+    }
+
+    static var current: AppAccent {
+        AppAccent(rawValue: UserDefaults.standard.string(forKey: "appAccent") ?? "blue") ?? .blue
+    }
+}
+
+// MARK: - Image Focal Point
+
+/// Editorial focal point for an image, expressed as percentages from the
+/// top-left corner (matches the web `image_focal_point` jsonb shape
+/// shipped by the backend). Used by `FocalCachedAsyncImage` to anchor a
+/// fill-mode crop so the key subject (face, ball, logo…) is never cropped
+/// out of the frame — same behaviour as CSS `object-position` on the web.
+nonisolated struct ImageFocalPoint: Equatable, Hashable {
+    /// 0–100 from the left edge.
+    let x: Double
+    /// 0–100 from the top edge.
+    let y: Double
+
+    init(x: Double, y: Double) {
+        self.x = Self.clamp(x)
+        self.y = Self.clamp(y)
+    }
+
+    /// Normalises a raw axis value coming off the wire. The backend
+    /// historically stored focal points as 0–100 percentages, but legacy
+    /// rows and some auto-detection paths shipped 0–1 floats. Android's
+    /// `ImageFocalPoint.normalised()` accepts both; iOS used to assume
+    /// 0–100 only, which silently treated 0.20 (0–1 form) as 0.002
+    /// (near-corner) and produced the body-only crop the reader saw on
+    /// 2026-05-20. This initializer mirrors Android: if the raw value
+    /// exceeds 1, it's a percentage; otherwise it's already in unit
+    /// space — multiply by 100 to live in the same 0–100 storage range
+    /// the rest of the model uses.
+    init?(rawX: Double?, rawY: Double?) {
+        guard let rawX, let rawY else { return nil }
+        func toPercent(_ v: Double) -> Double {
+            let asPercent = v > 1.0 ? v : v * 100.0
+            return min(100, max(0, asPercent))
+        }
+        self.x = toPercent(rawX)
+        self.y = toPercent(rawY)
+    }
+
+    static let center = ImageFocalPoint(x: 50, y: 50)
+
+    /// Normalised 0–1 coordinates — convenient for layout math that
+    /// expects unit space.
+    var unit: CGPoint {
+        CGPoint(x: x / 100, y: y / 100)
+    }
+
+    private static func clamp(_ value: Double) -> Double {
+        min(100, max(0, value))
+    }
+}
+
+// MARK: - Article
+
+struct Article: Identifiable, Equatable, Hashable {
+    let id: String
+    let title: String
+    let excerpt: String
+    /// Dashboard-generated AI summary surfaced as "الموجز الذكي" in the
+    /// article detail card. Empty when the article hasn't been AI-processed
+    /// yet — the card then falls back to `excerpt` (matching the web).
+    let aiSummary: String
+    /// Plain-text fallback used for share sheets, list rows, accessibility.
+    let body: String
+    /// Raw HTML body when the API returns one (article detail). Empty for
+    /// list-payload articles. ArticleHtmlParser consumes this — never `body`.
+    let bodyHTML: String
+    let category: ArticleCategory
+    let author: String
+    let publishDate: Date
+    let isBreaking: Bool
+    let isFeatured: Bool
+    var tags: [String]
+    let imageURL: String?
+    /// Editorial focal point (percentages from top-left) shipped by the
+    /// backend's `image_focal_point` jsonb column. Mirrors the web
+    /// behaviour: hero & card crops anchor on the editor-picked subject
+    /// instead of always centering. Nil → default centre.
+    var imageFocalPoint: ImageFocalPoint? = nil
+    /// True when the hero image was produced by the dashboard's AI
+    /// generator. Drives the "مولّدة بالذكاء الاصطناعي" badge overlay
+    /// that ArticleDetailView + the carousel cards paint on top-leading
+    /// of the hero. Matches the web convention.
+    var isAiGeneratedImage: Bool = false
+    var aiImageModel: String? = nil
+    let slug: String?
+    let articleURL: String?
+    /// Total reads. Surfaced next to trending rows so the sort order
+    /// (by engagement, not by date) is visible to the reader. 0 when
+    /// the API didn't supply it.
+    var viewsCount: Int = 0
+    /// Backend article type — only `"weekly_photos"` matters to the UI
+    /// today (triggers the photo-pack gallery inside the detail view).
+    /// Plain news articles leave this nil.
+    var articleType: String? = nil
+    /// Photo packs for weekly-photos articles. Nil for everything else.
+    var weeklyPhotos: [APIWeeklyPhoto]? = nil
+    var mediaAssets: [APIMediaAsset]? = nil
+
+    var readingMinutes: Int {
+        max(1, body.count / 800)
+    }
+
+    var readingTime: String {
+        SabqFormatters.arabicReadingTime(minutes: readingMinutes)
+    }
+
+    var dateFormatted: String {
+        SabqFormatters.arabicDate.string(from: publishDate)
+    }
+
+    var relativeDate: String {
+        SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+    }
+
+    /// Minimal Article shell used by deep-link navigation when only the
+    /// slug is known. `ArticleDetailView`'s loader replaces the
+    /// placeholder fields with real values once the slug-based fetch
+    /// completes — the placeholder just keeps the navigation type-safe.
+    static func placeholder(slug: String) -> Article {
+        Article(
+            id: slug,
+            title: "",
+            excerpt: "",
+            aiSummary: "",
+            body: "",
+            bodyHTML: "",
+            category: .saudi,
+            author: "",
+            publishDate: Date(),
+            isBreaking: false,
+            isFeatured: false,
+            tags: [],
+            imageURL: nil,
+            slug: slug,
+            articleURL: nil
+        )
+    }
+
+    static func == (lhs: Article, rhs: Article) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    nonisolated static func from(_ api: APIArticle) -> Article {
+        let body = Self.stripHTMLTags(from: api.fullText)
+        // Preserve raw HTML for the rich renderer. List payloads return a
+        // short excerpt without HTML; detail payloads carry the full body
+        // with TipTap markup (paragraphs, bold, blockquotes, galleries, …).
+        let bodyHTML = api.fullText
+        let excerpt = Self.resolveExcerpt(excerpt: api.excerpt, summary: api.summary, subtitle: api.subtitle, body: body)
+        let aiSummary = (api.aiSummary ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let slug = api.slug.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+        let sharePath = api.englishSlug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? slug
+        let articleURL = sharePath.map { URLConstants.articleURL(slug: $0) }
+
+        return Article(
+            id: api.id,
+            title: api.title,
+            excerpt: excerpt,
+            aiSummary: aiSummary,
+            body: body.isEmpty ? excerpt : body,
+            bodyHTML: bodyHTML,
+            category: ArticleCategory(fromSection: api.categoryName),
+            author: api.authorName.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 } ?? "سبق",
+            publishDate: Self.parsePublishedAt(api.publishedAt),
+            isBreaking: api.newsType == "breaking",
+            isFeatured: api.isFeatured ?? false,
+            tags: api.keywords ?? [],
+            imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
+            slug: slug,
+            articleURL: articleURL,
+            viewsCount: api.viewsCount ?? 0,
+            articleType: api.articleType,
+            weeklyPhotos: api.weeklyPhotos,
+            mediaAssets: api.mediaAssets
+        )
+    }
+
+    nonisolated fileprivate static func parsePublishedAt(_ string: String) -> Date {
+        SabqFormatters.parseISO8601(string) ?? Date()
+    }
+
+    // Regex compilation is the slow part of `replacingOccurrences(of:options:.regularExpression)`
+    // and `String` recompiles on every call. With ~9 regex passes per
+    // article × dozens of articles per home load, that adds up. Pre-
+    // compile once as static `NSRegularExpression` instances and reuse.
+    nonisolated private static let stripHTMLRegexRules: [(regex: NSRegularExpression, replacement: String)] = {
+        let patterns: [(String, String, NSRegularExpression.Options)] = [
+            ("<p[^>]*>",                          "\n\n", [.caseInsensitive]),
+            ("</p>",                              "\n\n", [.caseInsensitive]),
+            ("<br\\s*/?>",                        "\n",   [.caseInsensitive]),
+            ("</div>",                            "\n\n", [.caseInsensitive]),
+            ("</li>",                             "\n",   [.caseInsensitive]),
+            ("</h[1-6]>",                         "\n\n", [.caseInsensitive]),
+            ("<[^>]+>",                           "",     [.caseInsensitive]),
+            (#"[^\S\n]+"#,                        " ",    []),
+            (#"\n[ \t]+"#,                        "\n",   []),
+            (#"\n{3,}"#,                          "\n\n", []),
+        ]
+        return patterns.compactMap { pattern, replacement, opts in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: opts) else { return nil }
+            return (regex, replacement)
+        }
+    }()
+
+    nonisolated fileprivate static func stripHTMLTags(from html: String) -> String {
+        var text = html
+        for (regex, replacement) in stripHTMLRegexRules {
+            let range = NSRange(text.startIndex..., in: text)
+            text = regex.stringByReplacingMatches(
+                in: text,
+                options: [],
+                range: range,
+                withTemplate: replacement
+            )
+        }
+        // Entity decoding is a handful of literal replacements — cheaper
+        // as plain `replacingOccurrences` than wrapping in a regex.
+        text = text.replacingOccurrences(of: "&nbsp;", with: " ")
+        text = text.replacingOccurrences(of: "&amp;",  with: "&")
+        text = text.replacingOccurrences(of: "&lt;",   with: "<")
+        text = text.replacingOccurrences(of: "&gt;",   with: ">")
+        text = text.replacingOccurrences(of: "&quot;", with: "\"")
+        text = text.replacingOccurrences(of: "&#39;",  with: "'")
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Paragraphs for article body UI. Normalizes CMS/API plain text (no space after `.` / `؟` before the next word) so layout matches the web.
+    nonisolated static func displayParagraphs(for body: String) -> [String] {
+        let trimmed = normalizeEditorialPlainText(body).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+
+        let normalized = trimmed
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        var chunks = normalized
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if chunks.count <= 1 {
+            chunks = normalized
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+
+        return chunks.isEmpty ? [trimmed] : chunks
+    }
+
+    /// Sabq API often returns one continuous string where sentence breaks are glued (e.g. `القطاع.وفي`, `4».وقالت`). The site renders these as new blocks; we insert paragraph breaks the same way.
+    nonisolated private static let editorialRegexRules: [(regex: NSRegularExpression, template: String)] = {
+        let patterns: [(String, String)] = [
+            (#"([.!?؟])([\u0600-\u06FF]{2,})"#, "$1\n\n$2"),
+            (#"(»)([\u0600-\u06FF]{2,})"#, "$1\n\n$2"),
+            (#"([.!?؟])([A-Za-z]{2,})"#, "$1\n\n$2"),
+        ]
+        return patterns.compactMap { pattern, template in
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+            return (regex, template)
+        }
+    }()
+
+    nonisolated private static func normalizeEditorialPlainText(_ text: String) -> String {
+        var result = text
+        for (regex, template) in editorialRegexRules {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: template)
+        }
+        while result.contains("\n\n\n") {
+            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+        return result
+    }
+
+    nonisolated fileprivate static func resolveExcerpt(excerpt: String?, summary: String?, subtitle: String? = nil, body: String) -> String {
+        if let e = excerpt?.trimmingCharacters(in: .whitespacesAndNewlines), !e.isEmpty {
+            return e
+        }
+        if let s = summary?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty {
+            return s
+        }
+        if let sub = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines), !sub.isEmpty {
+            return sub
+        }
+        if body.isEmpty { return "" }
+        let prefix = String(body.prefix(200))
+        if prefix.count < body.count {
+            return prefix + "…"
+        }
+        return prefix
+    }
+
+}
+
+struct OpinionArticle: Identifiable, Equatable, Hashable {
+    let id: String
+    let title: String
+    let excerpt: String
+    let body: String
+    let authorName: String
+    let authorImageURL: String?
+    let authorGender: String?
+    let publishDate: Date
+    let tags: [String]
+    let imageURL: String?
+    /// Editorial focal point — see `Article.imageFocalPoint`.
+    var imageFocalPoint: ImageFocalPoint? = nil
+    var isAiGeneratedImage: Bool = false
+    var aiImageModel: String? = nil
+    let slug: String?
+    let articleURL: String?
+
+    /// Minimal opinion shell used by deep-link routes that only carry a
+    /// slug. OpinionDetailView re-fetches the full payload via
+    /// `loadOpinion()` on appear, so all the fields below are
+    /// placeholders that get overwritten as soon as the network call
+    /// resolves.
+    static func placeholder(slug: String) -> OpinionArticle {
+        OpinionArticle(
+            id: slug,
+            title: "",
+            excerpt: "",
+            body: "",
+            authorName: "",
+            authorImageURL: nil,
+            authorGender: nil,
+            publishDate: Date(),
+            tags: [],
+            imageURL: nil,
+            slug: slug,
+            articleURL: nil
+        )
+    }
+
+    var readingMinutes: Int {
+        max(1, body.count / 800)
+    }
+
+    var readingTime: String {
+        SabqFormatters.arabicReadingTime(minutes: readingMinutes)
+    }
+
+    var dateFormatted: String {
+        SabqFormatters.arabicDate.string(from: publishDate)
+    }
+
+    var relativeDate: String {
+        SabqFormatters.relativeArabic.localizedString(for: publishDate, relativeTo: Date())
+    }
+
+    /// Gendered byline label. Returns "الكاتبة" for female authors, "الكاتب"
+    /// for male, and the neutral "بقلم" when gender is unknown. The backend
+    /// reads `users.gender` (`"male" | "female"`).
+    var bylineLabel: String {
+        switch authorGender?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "female", "f", "أنثى": return "الكاتبة"
+        case "male", "m", "ذكر": return "الكاتب"
+        default: return "بقلم"
+        }
+    }
+
+    /// Bridge an opinion into an Article shell so the existing bookmarks
+    /// store (which is `Article`-typed end-to-end) can cache + render it
+    /// alongside news items. `articleURL` is set to the public /opinion/…
+    /// route so deep-links from the bookmarks list re-open in
+    /// OpinionDetailView via the existing URL handler. Category is set to
+    /// `.community` as a neutral fallback — opinion isn't its own
+    /// ArticleCategory case today.
+    func asArticleForBookmark() -> Article {
+        Article(
+            id: id,
+            title: title,
+            excerpt: excerpt,
+            aiSummary: "",
+            body: body,
+            bodyHTML: "",
+            category: .community,
+            author: authorName,
+            publishDate: publishDate,
+            isBreaking: false,
+            isFeatured: false,
+            tags: tags,
+            imageURL: imageURL,
+            imageFocalPoint: imageFocalPoint,
+            slug: slug,
+            articleURL: articleURL
+        )
+    }
+
+    nonisolated static func from(_ api: APIOpinion) -> OpinionArticle {
+        let body = Article.stripHTMLTags(from: api.fullText)
+        let excerpt = Article.resolveExcerpt(
+            excerpt: api.excerpt,
+            summary: api.summary,
+            subtitle: api.subtitle,
+            body: body
+        )
+        let slug = api.slug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let sharePath = api.englishSlug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? slug
+        let articleURL = sharePath.map { URLConstants.opinionURL(slug: $0) }
+
+        return OpinionArticle(
+            id: api.id,
+            title: api.title,
+            excerpt: excerpt,
+            // Keep `body` and `excerpt` strictly separate. The previous
+            // `body.isEmpty ? excerpt : body` fallback meant that when the
+            // list-payload (no `content` field) loaded first, the body
+            // field was silently filled with the AI summary — so the
+            // opinion detail screen showed the summary AS the article
+            // body until the detail fetch resolved (or forever, if it
+            // failed). Now an empty body honestly renders the "loading"
+            // empty state, and the summary card carries the excerpt.
+            body: body,
+            authorName: api.authorName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty ?? "كاتب الرأي",
+            authorImageURL: api.authorImage,
+            authorGender: api.authorGender,
+            publishDate: Article.parsePublishedAt(api.publishedAt ?? ""),
+            tags: api.tags
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty },
+            imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
+            slug: slug,
+            articleURL: articleURL
+        )
+    }
+
+    nonisolated static func from(_ api: APIArticle) -> OpinionArticle {
+        let body = Article.stripHTMLTags(from: api.fullText)
+        let excerpt = Article.resolveExcerpt(
+            excerpt: api.excerpt,
+            summary: api.summary,
+            subtitle: api.subtitle,
+            body: body
+        )
+        let slug = api.slug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let sharePath = api.englishSlug?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty ?? slug
+        let articleURL = sharePath.map { URLConstants.articleURL(slug: $0) }
+
+        return OpinionArticle(
+            id: api.id,
+            title: api.title,
+            excerpt: excerpt,
+            body: body, // see same comment on the APIOpinion overload above
+            authorName: api.authorName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .nilIfEmpty ?? "كاتب الرأي",
+            authorImageURL: nil,
+            authorGender: nil,
+            publishDate: Article.parsePublishedAt(api.publishedAt),
+            tags: (api.keywords ?? [])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty },
+            imageURL: api.imageUrl,
+            imageFocalPoint: api.imageFocalPoint,
+            isAiGeneratedImage: api.isAiGeneratedImage ?? false,
+            aiImageModel: api.aiImageModel,
+            slug: slug,
+            articleURL: articleURL
+        )
+    }
+}
+
+private extension String {
+    nonisolated var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
+}

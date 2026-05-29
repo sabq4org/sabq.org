@@ -68,6 +68,13 @@ sabq-press.p12
 # Keep authored copies under docs/ instead.
 client/public/*.docx
 
-# Stray/duplicate iOS workspace — canonical project is ios/ (see AGENTS.md).
-# Kept on disk locally, untracked from git.
-sabq app ios/
+# Native SwiftUI iOS app (sabq app ios/) is now TRACKED in git to protect
+# its sources from accidental deletion and to ship perf fixes via the
+# branch. Only build artifacts, DerivedData, Xcode user state, and the
+# stray dated backup copy are ignored — never the sources.
+sabq app ios/build/
+sabq app ios/DerivedData/
+sabq app ios/test-results/
+sabq app ios/sabq 2026-05-18 08-30-20/
+sabq app ios/**/xcuserdata/
+sabq app ios/**/*.xcuserstate
