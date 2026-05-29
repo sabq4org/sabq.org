@@ -83,9 +83,21 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
           // chunk names. Guarded by sessionStorage so a deploy bug
           // doesn't trap the user in a reload loop — second failure
           // shows the manual instruction.
-          const RELOAD_KEY = 'sabq:chunk-reload-once';
+          // Time-throttled, NOT once-per-session. The previous version
+          // set a boolean that was never cleared, so after the first
+          // auto-reload the guard stayed set for the whole browser
+          // session — every *subsequent* deploy's chunk error then went
+          // straight to the dead error screen instead of auto-recovering
+          // (the exact repeat-white-page pattern seen while testing
+          // back-to-back deploys). A cooldown timestamp lets each new
+          // deploy get a fresh auto-reload while still breaking a tight
+          // reload loop from a genuinely broken build (which fails again
+          // within seconds, inside the cooldown).
+          const RELOAD_KEY = 'sabq:chunk-reload-at';
+          const RELOAD_COOLDOWN_MS = 30_000;
           try {
-            if (!sessionStorage.getItem(RELOAD_KEY)) {
+            const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+            if (!last || Date.now() - last > RELOAD_COOLDOWN_MS) {
               sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
               window.location.reload();
               return; // page is reloading — resolve never fires
