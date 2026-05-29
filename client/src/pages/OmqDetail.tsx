@@ -18,9 +18,6 @@ import {
   User,
   Eye,
   Share2,
-  Download,
-  FileText,
-  FileDown,
   Brain,
   TrendingUp,
   Sparkles,
@@ -43,9 +40,6 @@ interface DeepAnalysis {
   authorName?: string;
   viewsCount?: number;
   sharesCount?: number;
-  downloadsCount?: number;
-  exportsPdfCount?: number;
-  exportsDocxCount?: number;
   generationTime?: number;
   gptAnalysis: string | null;
   geminiAnalysis: string | null;
@@ -267,45 +261,6 @@ export default function OmqDetail() {
     }
   };
 
-  const handleDownload = async () => {
-    await recordEvent('download');
-    if (!analysis) return;
-    
-    const titleClean = cleanTitle(analysis.title);
-    const content = `# ${titleClean}\n\n## الموضوع\n${cleanTitle(analysis.topic)}\n\n## الكلمات المفتاحية\n${analysis.keywords.join(', ')}\n\n## التحليل الموحد\n${analysis.mergedAnalysis || 'غير متوفر'}\n\n## تحليل GPT-5.1\n${analysis.gptAnalysis || 'غير متوفر'}\n\n## تحليل Gemini 3\n${analysis.geminiAnalysis || 'غير متوفر'}\n\n## تحليل Claude\n${analysis.claudeAnalysis || 'غير متوفر'}\n\n## الملخص التنفيذي\n${analysis.executiveSummary || 'غير متوفر'}\n\n## التوصيات\n${analysis.recommendations || 'غير متوفر'}`;
-
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${titleClean.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "تم التنزيل",
-      description: "تم تنزيل التحليل بنجاح",
-    });
-  };
-
-  const handleExportPDF = async () => {
-    await recordEvent('export_pdf');
-    toast({
-      title: "قريباً",
-      description: "سيتم إضافة ميزة التصدير إلى PDF قريباً",
-    });
-  };
-
-  const handleExportWord = async () => {
-    await recordEvent('export_docx');
-    toast({
-      title: "قريباً",
-      description: "سيتم إضافة ميزة التصدير إلى Word قريباً",
-    });
-  };
-
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center" dir="rtl">
@@ -484,36 +439,6 @@ export default function OmqDetail() {
             >
               <Share2 className="w-4 h-4" />
             </Button>
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={handleDownload}
-              data-testid="button-download"
-              title="تنزيل كملف نصي"
-              className="border-slate-700 text-gray-400 hover:text-white hover:bg-indigo-500/20 hover:border-indigo-500/30"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={handleExportPDF}
-              data-testid="button-export-pdf"
-              title="تصدير PDF"
-              className="border-slate-700 text-gray-400 hover:text-white hover:bg-indigo-500/20 hover:border-indigo-500/30"
-            >
-              <FileText className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={handleExportWord}
-              data-testid="button-export-word"
-              title="تصدير Word"
-              className="border-slate-700 text-gray-400 hover:text-white hover:bg-indigo-500/20 hover:border-indigo-500/30"
-            >
-              <FileDown className="w-4 h-4" />
-            </Button>
           </div>
         </motion.div>
 
@@ -623,7 +548,7 @@ export default function OmqDetail() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8"
+          className="grid grid-cols-2 gap-4 mb-8"
         >
           <Card className="bg-slate-900/50 border-slate-800 hover:border-indigo-500/30 transition-colors" data-testid="metric-card-views">
             <CardContent className="p-4">
@@ -652,54 +577,6 @@ export default function OmqDetail() {
                     {formatNumber(analysis.sharesCount)}
                   </p>
                   <p className="text-xs text-gray-500">مشاركة</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 hover:border-emerald-500/30 transition-colors" data-testid="metric-card-downloads">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Download className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white" data-testid="metric-downloads-count">
-                    {formatNumber(analysis.downloadsCount)}
-                  </p>
-                  <p className="text-xs text-gray-500">تنزيل</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 hover:border-amber-500/30 transition-colors" data-testid="metric-card-pdf">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white" data-testid="metric-pdf-count">
-                    {formatNumber(analysis.exportsPdfCount)}
-                  </p>
-                  <p className="text-xs text-gray-500">PDF</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 hover:border-cyan-500/30 transition-colors" data-testid="metric-card-word">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
-                  <FileDown className="w-5 h-5 text-cyan-400" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-white" data-testid="metric-word-count">
-                    {formatNumber(analysis.exportsDocxCount)}
-                  </p>
-                  <p className="text-xs text-gray-500">Word</p>
                 </div>
               </div>
             </CardContent>
