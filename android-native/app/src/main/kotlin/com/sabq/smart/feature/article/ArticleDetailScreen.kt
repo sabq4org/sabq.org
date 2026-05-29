@@ -73,6 +73,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
@@ -137,9 +138,11 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Article detail screen — 1:1 port of iOS `ArticleDetailView.swift`.
@@ -321,11 +324,19 @@ private fun ArticleBody(
         }
     }
 
-    // Parse body once. iOS caches the parsed blocks per-article in
-    // `cachedBlocks` for the same reason — re-parsing on every recompose
-    // stalls scroll on long articles.
-    val blocks = remember(article.id, article.body) {
-        HtmlSimpleParser.parse(article.body)
+    // Parse body off the main thread. HtmlSimpleParser walks the full
+    // TipTap HTML (can be 50-300 KB) — doing it inline during composition
+    // janked the first scroll on long articles. produceState runs the
+    // parse on Dispatchers.Default and feeds the result back; the body
+    // list (itemsIndexed below) renders empty for the brief parse window
+    // while the hero + title are already on screen. iOS caches parsed
+    // blocks per-article for the same reason.
+    val blocks by produceState(
+        initialValue = emptyList<BlockNode>(),
+        article.id,
+        article.body,
+    ) {
+        value = withContext(Dispatchers.Default) { HtmlSimpleParser.parse(article.body) }
     }
 
     // Reader controls — `fontSize`, `lineSpacing`, `useSerif` arrive

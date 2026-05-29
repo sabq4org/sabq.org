@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,18 +110,20 @@ private fun Loaded(
         item {
             SurfaceCard {
                 items.forEachIndexed { index, article ->
-                    if (index > 0) {
-                        HorizontalDivider(
-                            color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                            thickness = 0.5.dp,
+                    key(article.id) {
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
+                                thickness = 0.5.dp,
+                            )
+                        }
+                        CompactArticleRow(
+                            article = article,
+                            isBookmarked = true,
+                            onBookmark = { onUnbookmark(article.id) },
+                            onClick = { onArticleClick(article) },
                         )
                     }
-                    CompactArticleRow(
-                        article = article,
-                        isBookmarked = true,
-                        onBookmark = { onUnbookmark(article.id) },
-                        onClick = { onArticleClick(article) },
-                    )
                 }
             }
         }

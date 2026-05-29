@@ -29,13 +29,42 @@ class AuthTokenStore @Inject constructor(
 ) {
     val token: Flow<String?> = context.authDataStore.data.map { it[TOKEN_KEY] }
 
-    suspend fun current(): String? = token.first()
+    // In-memory mirror of the persisted token. The auth interceptor runs
+    // on every HTTP request; reading DataStore there via `runBlocking`
+    // blocked an OkHttp dispatcher thread per call. We keep a volatile
+    // copy here so the hot path is a plain field read. `primed` tells the
+    // interceptor whether the mirror is trustworthy yet — before the
+    // first read it falls back to a one-time blocking load.
+    @Volatile
+    private var cached: String? = null
+
+    @Volatile
+    private var primed: Boolean = false
+
+    /** Non-blocking accessor for the hot path. Null when not [primed]. */
+    fun cachedToken(): String? = cached
+
+    fun isPrimed(): Boolean = primed
+
+    suspend fun current(): String? {
+        val value = token.first()
+        cached = value
+        primed = true
+        return value
+    }
+
+    /** Load the token into memory once (call at app start to warm the cache). */
+    suspend fun prime() {
+        if (!primed) current()
+    }
 
     suspend fun set(value: String?) {
         context.authDataStore.edit { prefs ->
             if (value.isNullOrBlank()) prefs.remove(TOKEN_KEY)
             else prefs[TOKEN_KEY] = value
         }
+        cached = value?.takeIf { it.isNotBlank() }
+        primed = true
     }
 
     suspend fun clear() = set(null)

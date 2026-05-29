@@ -12,6 +12,7 @@ import com.sabq.smart.data.api.ResendActivationResponse
 import com.sabq.smart.data.api.SabqApi
 import com.sabq.smart.data.api.UpdateMemberInterestsRequest
 import com.sabq.smart.data.auth.AuthTokenStore
+import android.os.SystemClock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,30 @@ class AuthRepository @Inject constructor(
 
     private val _user = MutableStateFlow<User?>(null)
     val user: StateFlow<User?> = _user.asStateFlow()
+
+    // Timestamp (elapsedRealtime) of the last successful profile fetch.
+    // Used by [ensureProfileFresh] to coalesce the many `init`-time
+    // refresh calls that fire when navigating between screens (each
+    // screen spins up an AuthViewModel whose init refreshes the profile).
+    @Volatile
+    private var lastProfileFetchAt = 0L
+
+    /**
+     * Refresh the profile only if it's stale. Multiple screens opening
+     * within [ttlMs] share the AuthRepository singleton, so the first
+     * call hits `/members/profile` and the rest return the cached
+     * [user] without a network round-trip. Login/register/interest
+     * paths keep calling [refreshProfile] directly (always forced).
+     */
+    suspend fun ensureProfileFresh(ttlMs: Long = 60_000L): User? {
+        val now = SystemClock.elapsedRealtime()
+        if (_user.value != null && now - lastProfileFetchAt < ttlMs) {
+            return _user.value
+        }
+        val result = refreshProfile()
+        if (result != null) lastProfileFetchAt = now
+        return result
+    }
 
     /** True if a bearer token is stored AND we have a resolved user. */
     val isSignedIn: Flow<Boolean> = combine(tokenStore.token, _user) { t, u ->

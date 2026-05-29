@@ -64,8 +64,10 @@ class AuthViewModel @Inject constructor(
     init {
         // Resolve the current user on construction. If a token is
         // already stored from a previous session, this hydrates
-        // [currentUser] without requiring login.
-        viewModelScope.launch { repo.refreshProfile() }
+        // [currentUser] without requiring login. Uses the throttled
+        // variant so navigating across screens (each creating an
+        // AuthViewModel) doesn't re-hit /members/profile every time.
+        viewModelScope.launch { repo.ensureProfileFresh() }
     }
 
     fun login(email: String, password: String) {

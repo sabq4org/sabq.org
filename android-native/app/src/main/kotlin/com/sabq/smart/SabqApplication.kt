@@ -11,6 +11,7 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.google.firebase.FirebaseApp
 import com.sabq.smart.data.AuthRepository
+import com.sabq.smart.data.auth.AuthTokenStore
 import com.sabq.smart.data.LoyaltyEventQueue
 import com.sabq.smart.data.analytics.SabqAnalytics
 import com.sabq.smart.data.push.DeviceRegistrationManager
@@ -38,6 +39,7 @@ class SabqApplication : Application(), ImageLoaderFactory {
     @Inject lateinit var deviceRegistrationManager: DeviceRegistrationManager
     @Inject lateinit var loyaltyEventQueue: LoyaltyEventQueue
     @Inject lateinit var authRepository: AuthRepository
+    @Inject lateinit var authTokenStore: AuthTokenStore
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -49,20 +51,32 @@ class SabqApplication : Application(), ImageLoaderFactory {
         // Sabq GA3 - GA4 property (shared with web + iOS). Initialised
         // before any feature code so the first events from app boot get
         // captured. Auto-tracks user_id changes from AuthRepository.
+        // Cheap (stores refs + launches a collector), so it stays on the
+        // synchronous path to catch the earliest boot events.
         SabqAnalytics.start(this, okHttpClient, authRepository, applicationScope)
-
-        // Push (FCM).
-        initialiseFirebase()
-        SabqMessagingService.ensureChannel(this)
-        deviceRegistrationManager.start(applicationScope)
 
         // Loyalty event queue — restore pending events from disk + start
         // the 30s flush loop. Fire-and-forget caller sites
         // (BehaviorTracker, like/share/comment toggles) depend on this
         // being resident from app launch so events buffer correctly
         // before the user signs in. Mirrors iOS
-        // `LoyaltyEventQueue.shared`.
+        // `LoyaltyEventQueue.shared`. (Internally launches on
+        // applicationScope, so this returns immediately.)
         loyaltyEventQueue.start(applicationScope)
+
+        // Defer the heavier boot work off the main thread so it doesn't
+        // extend cold-start time-to-first-frame:
+        //   • token-cache warm  — DataStore read (see AuthTokenStore)
+        //   • FirebaseApp init  — synchronous, tens of ms
+        //   • FCM channel + device registration — depend on Firebase
+        // All are thread-safe; the auth interceptor still has a one-time
+        // blocking fallback if a request beats the token prime.
+        applicationScope.launch {
+            runCatching { authTokenStore.prime() }
+            initialiseFirebase()
+            SabqMessagingService.ensureChannel(this@SabqApplication)
+            deviceRegistrationManager.start(applicationScope)
+        }
 
         // Flush pending loyalty events when the user backgrounds the
         // app. iOS does the same in `sabqApp.swift` via the

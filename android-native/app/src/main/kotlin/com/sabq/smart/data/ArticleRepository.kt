@@ -32,9 +32,6 @@ class ArticleRepository @Inject constructor(
             section = section,
             featured = if (featuredOnly) true else null,
         )
-        response.articles.forEach { 
-            android.util.Log.d("ArticleRepoList", "id=${it.id}, title=${it.title}, imageUrl=${it.imageUrl}") 
-        }
         return ArticlesPage(
             items = response.articles.map { it.toDomain() },
             total = response.total ?: 0,
@@ -117,14 +114,7 @@ class ArticleRepository @Inject constructor(
 
     suspend fun getArticleBySlug(slug: String): Article {
         val apiArticle = api.getArticleBySlug(slug)
-        android.util.Log.d("ArticleRepo", "API Article ID: ${apiArticle.id}")
-        android.util.Log.d("ArticleRepo", "API Article Title: ${apiArticle.title}")
-        android.util.Log.d("ArticleRepo", "API Article Slug: ${apiArticle.slug}")
-        android.util.Log.d("ArticleRepo", "API Article ImageUrl: ${apiArticle.imageUrl}")
-        android.util.Log.d("ArticleRepo", "API Article ImageFocalPoint: ${apiArticle.imageFocalPoint}")
-        val domainArticle = apiArticle.toDomain()
-        android.util.Log.d("ArticleRepo", "Domain Article mapped: imageUrl=${domainArticle.imageUrl}")
-        return domainArticle
+        return apiArticle.toDomain()
     }
 
     /** Related articles for the bottom of the detail screen. iOS shows

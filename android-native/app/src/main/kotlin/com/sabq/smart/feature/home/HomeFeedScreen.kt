@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -351,18 +352,24 @@ private fun LoadedFeed(
         item {
             SurfaceCard {
                 state.articles.forEachIndexed { index, article ->
-                    if (index > 0) {
-                        HorizontalDivider(
-                            color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                            thickness = 0.5.dp,
+                    // Stable slot identity so appends ("تحميل المزيد") and
+                    // pull-to-refresh recompose only changed rows instead of
+                    // re-keying by position. Keeps the SurfaceCard one-card
+                    // visual (iOS parity) while cutting recomposition churn.
+                    key(article.id) {
+                        if (index > 0) {
+                            HorizontalDivider(
+                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
+                                thickness = 0.5.dp,
+                            )
+                        }
+                        CompactArticleRow(
+                            article = article,
+                            isBookmarked = article.bookmarkKey in state.bookmarkedIds,
+                            onBookmark = { onBookmark(article.bookmarkKey) },
+                            onClick = { onArticleClick(article) },
                         )
                     }
-                    CompactArticleRow(
-                        article = article,
-                        isBookmarked = article.bookmarkKey in state.bookmarkedIds,
-                        onBookmark = { onBookmark(article.bookmarkKey) },
-                        onClick = { onArticleClick(article) },
-                    )
                 }
             }
         }

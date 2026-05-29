@@ -1,16 +1,20 @@
 package com.sabq.smart.data.api
 
+import android.content.Context
 import com.sabq.smart.BuildConfig
 import com.sabq.smart.data.auth.AuthTokenStore
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -49,7 +53,14 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideAuthInterceptor(tokenStore: AuthTokenStore): Interceptor = Interceptor { chain ->
-        val token = runBlocking { tokenStore.current() }
+        // Hot path: read the in-memory token mirror (a plain field). Only
+        // the very first request before the cache is primed pays a
+        // one-time blocking DataStore read; everything after is lock-free.
+        val token = if (tokenStore.isPrimed()) {
+            tokenStore.cachedToken()
+        } else {
+            runBlocking { tokenStore.current() }
+        }
         val request = chain.request().newBuilder().apply {
             header("Accept", "application/json")
             header("User-Agent", "Sabq-Android/${BuildConfig.VERSION_NAME}")
@@ -60,8 +71,18 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: Interceptor): OkHttpClient {
+    fun provideOkHttpClient(
+        @ApplicationContext context: Context,
+        authInterceptor: Interceptor,
+    ): OkHttpClient {
         val builder = OkHttpClient.Builder().apply {
+            // HTTP disk cache. Honours the server's Cache-Control headers:
+            // public GETs (article lists, sections) get served from disk on
+            // repeat opens / offline; personalised or `no-store` responses
+            // are never cached, so no auth-scoped data leaks. 20 MB is
+            // plenty for JSON payloads (images cache separately via Coil).
+            cache(Cache(File(context.cacheDir, "http_cache"), 20L * 1024 * 1024))
+
             // Railway can take 10-20s on a cold start of a Fluid Compute
             // instance. Default 10s timeouts were tripping on real
             // devices and propagating as uncaught SocketTimeoutException
