@@ -41,10 +41,11 @@ export function prefetchCategoryPage(): void {
  * cache by the time the section scrolls in — only the data fetch remains.
  *
  * The specifiers MUST match the lazy() wrappers in Home.tsx so Vite dedupes
- * them onto the same chunk. The heavy Leaflet map is gated behind `includeMap`
- * because it isn't rendered on mobile at all.
+ * them onto the same chunk. Desktop-only sections (the heavy Leaflet map plus
+ * the Trending Topics / Trending Keywords panels) are gated behind
+ * `includeDesktopOnly` because they aren't rendered on mobile at all.
  */
-export function prefetchHomeSections({ includeMap = true }: { includeMap?: boolean } = {}): void {
+export function prefetchHomeSections({ includeDesktopOnly = true }: { includeDesktopOnly?: boolean } = {}): void {
   prefetchOnce("home-smart-summary", () => import("@/components/SmartSummaryBlock"));
   prefetchOnce("home-ai-insights", () => import("@/components/AIInsightsBlock"));
   prefetchOnce("home-quad-categories", () => import("@/components/QuadCategoriesBlock"));
@@ -52,9 +53,9 @@ export function prefetchHomeSections({ includeMap = true }: { includeMap?: boole
   prefetchOnce("home-muqtarab", () => import("@/components/MuqtarabTopicsShowcase"));
   prefetchOnce("home-opinion", () => import("@/components/OpinionArticlesBlock"));
   prefetchOnce("home-continue-reading", () => import("@/components/ContinueReadingWidget"));
-  prefetchOnce("home-trending-topics", () => import("@/components/TrendingTopics"));
-  prefetchOnce("home-trending-keywords", () => import("@/components/TrendingKeywords"));
-  if (includeMap) {
+  if (includeDesktopOnly) {
+    prefetchOnce("home-trending-topics", () => import("@/components/TrendingTopics"));
+    prefetchOnce("home-trending-keywords", () => import("@/components/TrendingKeywords"));
     prefetchOnce("home-news-map", () => import("@/components/NewsMap"));
   }
 }

@@ -204,8 +204,9 @@ export default function Home() {
       prefetchCategoryPage();
       // Warm the below-the-fold homepage section chunks during idle so they're
       // already cached when the user scrolls — only the data fetch remains.
-      // Skip the heavy Leaflet map chunk on mobile (it isn't rendered there).
-      prefetchHomeSections({ includeMap: !isMobile });
+      // Skip desktop-only chunks on mobile (map + trending panels aren't
+      // rendered there).
+      prefetchHomeSections({ includeDesktopOnly: !isMobile });
     });
     return cancel;
   }, [initialLoadComplete, isMobile]);
@@ -415,22 +416,25 @@ export default function Home() {
           <ContinueReadingWidget />
         </LazySection>
 
-        <LazySection>
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {homepage.trending && homepage.trending.length > 0 && (
+        {/* Trending Topics + Trending Keywords — desktop only (hidden on mobile). */}
+        {!isMobile && (
+          <LazySection>
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {homepage.trending && homepage.trending.length > 0 && (
+                    <div className="scroll-fade-in">
+                      <TrendingTopics topics={homepage.trending} />
+                    </div>
+                  )}
                   <div className="scroll-fade-in">
-                    <TrendingTopics topics={homepage.trending} />
+                    <TrendingKeywords />
                   </div>
-                )}
-                <div className="scroll-fade-in">
-                  <TrendingKeywords />
                 </div>
               </div>
             </div>
-          </div>
-        </LazySection>
+          </LazySection>
+        )}
 
         {/* News Map (Leaflet) — desktop only. The map library is heavy
             (~150KB+); skipping the section on mobile means the chunk never
