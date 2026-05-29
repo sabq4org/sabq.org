@@ -8,6 +8,7 @@ import { OptimizedImage } from "./OptimizedImage";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatArticleTimestamp, formatDateOnly } from "@/lib/formatTime";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Detect iOS Safari to use simplified carousel (prevents zoom bug)
 const isIOSSafari = (): boolean => {
@@ -46,6 +47,11 @@ interface HeroCarouselProps {
 // Simple fade carousel for iOS Safari (no transforms)
 function SafariHeroCarousel({ articles }: HeroCarouselProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Only the visible layout's hero image should load eagerly. On a phone the
+  // desktop hero (960px) is display:none but an eager <img> would still
+  // download; gating priority by viewport keeps the lazy+hidden image from
+  // ever fetching, so the device downloads exactly one hero image.
+  const isMobile = useIsMobile();
 
   const processedArticles = useMemo((): ProcessedHeroArticle[] => {
     const processed = articles.map(article => ({
@@ -85,7 +91,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   alt={heroArticle.title}
                   className="w-full h-full object-cover"
                   objectPosition={heroArticle.objectPosition}
-                  priority={true}
+                  priority={isMobile}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
@@ -238,7 +244,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   alt={heroArticle.title}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   objectPosition={heroArticle.objectPosition}
-                  priority={true}
+                  priority={!isMobile}
                   preferSize="large"
                 />
               ) : (
@@ -396,6 +402,9 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
     direction: "rtl",
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // See SafariHeroCarousel: gate hero image eager-loading by viewport so the
+  // hidden layout's hero never downloads.
+  const isMobile = useIsMobile();
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -457,7 +466,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   alt={heroArticle.title}
                   className="w-full h-full object-cover"
                   objectPosition={heroArticle.objectPosition}
-                  priority={true}
+                  priority={isMobile}
                   preferSize="medium"
                   aspectRatio="16/9"
                 />
@@ -612,7 +621,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   alt={heroArticle.title}
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   objectPosition={heroArticle.objectPosition}
-                  priority={true}
+                  priority={!isMobile}
                   preferSize="large"
                 />
               ) : (

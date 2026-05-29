@@ -13,6 +13,7 @@ import { prefetchArticle } from "@/lib/prefetchRoute";
 import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MatchBadgeProps {
   match: MatchResult;
@@ -146,6 +147,12 @@ interface Recommendation {
 
 export function PersonalizedFeed({ articles: initialArticles, title = "جميع الأخبار", subtitle, showReason = false }: PersonalizedFeedProps) {
   const { user } = useAuth();
+  // Render only ONE layout for the current viewport instead of mounting both
+  // the mobile list and the desktop grid (display:none). On a phone this halves
+  // the DOM nodes, OptimizedImage IntersectionObservers, and React work for the
+  // feed — the heaviest block on the homepage. Breakpoint matches the original
+  // `lg` (1024px) split so tablets keep the list view.
+  const isCompact = useIsMobile(1024);
   const [articles, setArticles] = useState(initialArticles);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -335,6 +342,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
       </p>
 
       {/* Mobile View: Vertical List (like RecommendationsWidget) */}
+      {isCompact && (
       <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border">
         <CardContent className="p-0">
           <div className="dark:divide-y">
@@ -471,8 +479,10 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Desktop View: Grid with 4 columns */}
+      {!isCompact && (
       <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {articles.map((article) => {
           const match = matches.get(article.id);
@@ -594,6 +604,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
           );
         })}
       </div>
+      )}
 
       {/* زر "المزيد من الأخبار" */}
       {hasMore && (
