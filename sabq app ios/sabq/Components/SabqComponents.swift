@@ -397,11 +397,14 @@ struct CachedAsyncImage<Placeholder: View>: View {
         // a transient error on the first connect; without retry, the
         // image slot stays empty for the rest of the session because
         // .task(id:) doesn't auto-retry.
+        // Download a width-bounded CF variant (saves bytes), but keep the
+        // NSCache key as the original URL so the lightbox/prefetch align.
+        let fetchURL = ImageCDN.sized(requestedURL, width: Int(maxPx))
         var loaded: UIImage? = nil
         for attempt in 0..<2 {
             if Task.isCancelled { return }
             loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                guard let (data, _) = try? await ImageCache.imageSession.data(from: requestedURL) else {
+                guard let (data, _) = try? await ImageCache.imageSession.data(from: fetchURL) else {
                     return nil
                 }
                 return ImageCache.decodedImage(data: data, maxPixelSize: maxPx)
@@ -529,11 +532,12 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         // these, articles with 10+ inline images stalled half-loaded
         // because URLSession.shared caps at 4 concurrent + .task(id:)
         // does not auto-retry on transient failures.
+        let fetchURL = ImageCDN.sized(requestedURL, width: 2400)
         var loaded: UIImage? = nil
         for attempt in 0..<2 {
             if Task.isCancelled { return }
             loaded = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                guard let (data, _) = try? await ImageCache.imageSession.data(from: requestedURL) else {
+                guard let (data, _) = try? await ImageCache.imageSession.data(from: fetchURL) else {
                     return nil
                 }
                 return ImageCache.decodedImage(data: data, maxPixelSize: 2400)
@@ -559,6 +563,30 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         } else {
             image = nil
         }
+    }
+}
+
+/// Rewrites Cloudflare Images delivery URLs to a width-bounded flexible
+/// variant so the network downloads a right-sized payload instead of the
+/// full-resolution original. Mirrors the web client (`client/src/lib/
+/// cdnImage.ts`): for `imagedelivery.net/<hash>/<id>/<variant>` it swaps
+/// the trailing variant segment for `w=<width>,q=<quality>,fit=scale-down`.
+/// Flexible variants are enabled on the CF account; if they ever get
+/// disabled CF falls back to the named variant. Non-CF hosts (and URLs
+/// that already carry a flexible variant) are returned untouched, so the
+/// helper is safe to call on every image URL.
+nonisolated enum ImageCDN {
+    static func sized(_ url: URL, width: Int, quality: Int = 82) -> URL {
+        guard let host = url.host, host.contains("imagedelivery.net") else { return url }
+
+        // Skip if the last path component is already a flexible variant
+        // (contains `w=`/`h=`), otherwise we'd nest variants and 404.
+        let last = url.lastPathComponent
+        if last.contains("w=") || last.contains("h=") { return url }
+
+        let variant = "w=\(width),q=\(quality),fit=scale-down"
+        let base = url.deletingLastPathComponent()
+        return base.appendingPathComponent(variant)
     }
 }
 
@@ -600,10 +628,15 @@ nonisolated enum ImageCache {
     /// Called when articles appear near the viewport edge so images
     /// are already decoded by the time the user scrolls to them.
     static func prefetch(urls: [URL], maxPixelSize: CGFloat = 2400) {
+        let width = Int(maxPixelSize)
         for url in urls {
+            // Cache key is always the ORIGINAL url so the lightbox and the
+            // on-mount loaders all hit the same entry. Only the network
+            // fetch uses the width-bounded CF variant.
             if shared.object(forKey: url as NSURL) != nil { continue }
+            let fetchURL = ImageCDN.sized(url, width: width)
             Task.detached(priority: .utility) {
-                guard let (data, _) = try? await imageSession.data(from: url) else { return }
+                guard let (data, _) = try? await imageSession.data(from: fetchURL) else { return }
                 guard let img = decodedImage(data: data, maxPixelSize: maxPixelSize) else { return }
                 shared.setObject(img, forKey: url as NSURL, cost: byteCost(of: img))
             }

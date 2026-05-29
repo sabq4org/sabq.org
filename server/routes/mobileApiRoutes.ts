@@ -2641,6 +2641,24 @@ function setCache(key: string, data: any, ttlMs: number) {
   memoryCache.set(key, { data, expiry: Date.now() + ttlMs });
 }
 
+/**
+ * True when the client explicitly asked for fresh data — i.e. a native
+ * pull-to-refresh. The iOS/Android clients signal this with a
+ * `Cache-Control: no-cache`/`no-store` header AND a cache-busting `_nc`
+ * (or `_t`) query param on the refresh fetch. The server-side memoryCache
+ * is keyed only by route (it ignores query strings), so without honouring
+ * this signal a freshly published article stays invisible until the route
+ * TTL expires — the user pulls 2-3 times and sees nothing. When this
+ * returns true the caller skips the cache READ but still re-populates it,
+ * so subsequent normal loads stay fast and current.
+ */
+function wantsFreshData(req: Request): boolean {
+  const cc = String(req.headers["cache-control"] || "").toLowerCase();
+  if (cc.includes("no-cache") || cc.includes("no-store")) return true;
+  if (req.query._nc !== undefined || req.query.refresh !== undefined) return true;
+  return false;
+}
+
 // GET /api/v1/articles (list)
 router.get("/articles", async (req: Request, res: Response) => {
   try {
@@ -3560,8 +3578,10 @@ router.get("/roles", async (_req: Request, res: Response) => {
 router.get("/homepage", async (req: Request, res: Response) => {
   try {
     const cacheKey = "mobile:homepage";
-    const cached = getCached(cacheKey);
-    if (cached) return res.json(cached);
+    if (!wantsFreshData(req)) {
+      const cached = getCached(cacheKey);
+      if (cached) return res.json(cached);
+    }
 
     const heroArticles = await db
       .select({

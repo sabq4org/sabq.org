@@ -342,6 +342,12 @@ struct ArticleDetailView: View {
             await loadExtras()
             await refreshLikeStatus()
         }
+        // Warm the cache for every body/gallery/attached image the moment
+        // the HTML is parsed into blocks — they no longer wait until their
+        // (often off-screen, lazily-mounted) cell appears to start loading.
+        .onChange(of: cachedBlocks.html) { _, _ in
+            prefetchInlineImages(from: cachedBlocks.items)
+        }
         .onDisappear {
             audioPlayer?.pause()
             audioPlayer = nil
@@ -417,6 +423,31 @@ struct ArticleDetailView: View {
                 SabqAnalytics.articleLike(id: articleId, liked: result.liked)
             }
         }
+    }
+
+    /// Kick off background downloads + decodes for the article's inline
+    /// body images, gallery entries, and attached media assets so they're
+    /// already in `ImageCache` by the time the reader scrolls to them.
+    /// Cache keys stay the original URLs; only the network fetch uses a
+    /// width-bounded CF variant.
+    private func prefetchInlineImages(from blocks: [ArticleBlock]) {
+        var urls: [URL] = []
+        for block in blocks {
+            switch block {
+            case .image(let url, _, _):
+                urls.append(url)
+            case .imageGallery(let images):
+                urls.append(contentsOf: images.map(\.url))
+            default:
+                break
+            }
+        }
+        urls.append(contentsOf:
+            (displayArticle.mediaAssets ?? [])
+                .compactMap { URL(string: $0.url) }
+        )
+        guard !urls.isEmpty else { return }
+        ImageCache.prefetch(urls: urls, maxPixelSize: 1600)
     }
 
     @MainActor
@@ -1314,17 +1345,21 @@ struct ArticleDetailView: View {
                         Button {
                             inlineLightboxURL = url
                         } label: {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            } placeholder: {
+                            // CachedAsyncImage (not the plain AsyncImage):
+                            // gives this gallery the same NSCache, ImageIO
+                            // downsample, dedicated 12-connection session,
+                            // retry, and CF width-bounded download that the
+                            // rest of the reader already has — the previous
+                            // AsyncImage re-downloaded full-res originals on
+                            // every appearance, so the attached/album images
+                            // were the slowest to show.
+                            CachedAsyncImage(url: url, contentMode: .fit, maxPixelSize: 1600) {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .fill(SabqTheme.outline.opacity(0.15))
                                     .frame(height: 200)
                             }
+                            .frame(maxWidth: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
