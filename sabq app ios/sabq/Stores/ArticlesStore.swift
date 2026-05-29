@@ -54,6 +54,17 @@ final class ArticlesStore {
             displayedCount = min(pageSize, allFetchedArticles.count)
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
+
+            // سخّن صور أعلى الرئيسية فور توفّر البيانات حتى تظهر الصور
+            // فوراً عند الرسم بدل تحميلها كسولاً عند ظهور كل بطاقة.
+            // الهيرو بميزانية بكسل أعلى (لا تدهور جودة)، وبطاقات الأخبار
+            // بحجم البطاقة. prefetch يتخطّى أي رابط موجود في الكاش.
+            let heroURLs = featuredArticles.prefix(3)
+                .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+            let cardURLs = allArticles.prefix(6)
+                .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
+            if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 2000) }
+            if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 1200) }
         }
         // الخلاصة الأساسية ظاهرة الآن — لا تُبقِ زر "تحميل المزيد"
         // معطّلاً بينما تكمّل الأقسام الثانوية تحميلها أدناه.
