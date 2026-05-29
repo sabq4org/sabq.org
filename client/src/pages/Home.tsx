@@ -4,7 +4,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
-import { prefetchArticleDetail, prefetchCategoryPage, prefetchWhenIdle } from "@/lib/prefetchRoute";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { prefetchArticleDetail, prefetchCategoryPage, prefetchHomeSections, prefetchWhenIdle } from "@/lib/prefetchRoute";
 import { readHomepageCache, writeHomepageCache } from "@/lib/homepageCache";
 import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
 import type { User } from "@/hooks/useAuth";
@@ -75,7 +76,10 @@ function ArticleCardSkeleton() {
 }
 
 function LazySection({ children, minHeight = 200 }: { children: ReactNode; minHeight?: number }) {
-  const [ref, isVisible] = useInViewport<HTMLDivElement>({ rootMargin: '300px' });
+  // Start loading well before the section enters the viewport so its JS chunk
+  // and data fetch resolve by the time the user scrolls to it — eliminates the
+  // per-section skeleton flash that made mobile scrolling feel laggy.
+  const [ref, isVisible] = useInViewport<HTMLDivElement>({ rootMargin: '800px' });
   const [shouldRender, setShouldRender] = useState(false);
   
   useEffect(() => {
@@ -87,7 +91,17 @@ function LazySection({ children, minHeight = 200 }: { children: ReactNode; minHe
   }, [isVisible, shouldRender]);
   
   return (
-    <div ref={ref} style={{ minHeight: shouldRender ? 'auto' : minHeight }}>
+    <div
+      ref={ref}
+      style={{
+        // Keep a stable reserved height for not-yet-rendered sections to avoid
+        // layout shift (CLS), and let offscreen sections skip paint/layout work
+        // on weaker mobile devices via content-visibility.
+        minHeight: shouldRender ? undefined : minHeight,
+        contentVisibility: shouldRender ? undefined : 'auto',
+        containIntrinsicSize: shouldRender ? undefined : `auto ${minHeight}px`,
+      }}
+    >
       {shouldRender ? (
         <Suspense fallback={<SectionSkeleton height={minHeight} />}>
           {children}
@@ -111,7 +125,8 @@ interface HomepageData {
 export default function Home() {
   // Track when initial load is complete to defer non-critical queries
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  
+
+  const isMobile = useIsMobile();
   const [, navigate] = useLocation();
 
   // DMS Ad tracking for homepage
@@ -187,9 +202,13 @@ export default function Home() {
     const cancel = prefetchWhenIdle(() => {
       prefetchArticleDetail();
       prefetchCategoryPage();
+      // Warm the below-the-fold homepage section chunks during idle so they're
+      // already cached when the user scrolls — only the data fetch remains.
+      // Skip the heavy Leaflet map chunk on mobile (it isn't rendered there).
+      prefetchHomeSections({ includeMap: !isMobile });
     });
     return cancel;
-  }, [initialLoadComplete]);
+  }, [initialLoadComplete, isMobile]);
 
   const feedTitle = useMemo(() => user ? "أخبارك الذكية" : "جميع الأخبار", [user]);
   const feedSubtitle = useMemo(() => user ? "محتوى مُختار بذكاء بناءً على اهتماماتك" : undefined, [user]);
@@ -413,11 +432,16 @@ export default function Home() {
           </div>
         </LazySection>
 
-        <LazySection>
-          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <NewsMap />
-          </div>
-        </LazySection>
+        {/* News Map (Leaflet) — desktop only. The map library is heavy
+            (~150KB+); skipping the section on mobile means the chunk never
+            downloads there. */}
+        {!isMobile && (
+          <LazySection>
+            <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              <NewsMap />
+            </div>
+          </LazySection>
+        )}
       </main>
       
       <Footer />

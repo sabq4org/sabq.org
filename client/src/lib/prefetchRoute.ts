@@ -34,6 +34,32 @@ export function prefetchCategoryPage(): void {
 }
 
 /**
+ * Warm the below-the-fold homepage section chunks during idle time. Each
+ * section in Home.tsx is its own lazy() chunk that today only starts
+ * downloading once the user scrolls near it, producing a per-section skeleton
+ * flash on slower mobile networks. Prefetching here means the JS is already in
+ * cache by the time the section scrolls in — only the data fetch remains.
+ *
+ * The specifiers MUST match the lazy() wrappers in Home.tsx so Vite dedupes
+ * them onto the same chunk. The heavy Leaflet map is gated behind `includeMap`
+ * because it isn't rendered on mobile at all.
+ */
+export function prefetchHomeSections({ includeMap = true }: { includeMap?: boolean } = {}): void {
+  prefetchOnce("home-smart-summary", () => import("@/components/SmartSummaryBlock"));
+  prefetchOnce("home-ai-insights", () => import("@/components/AIInsightsBlock"));
+  prefetchOnce("home-quad-categories", () => import("@/components/QuadCategoriesBlock"));
+  prefetchOnce("home-trending-week", () => import("@/components/TrendingWeekSection"));
+  prefetchOnce("home-muqtarab", () => import("@/components/MuqtarabTopicsShowcase"));
+  prefetchOnce("home-opinion", () => import("@/components/OpinionArticlesBlock"));
+  prefetchOnce("home-continue-reading", () => import("@/components/ContinueReadingWidget"));
+  prefetchOnce("home-trending-topics", () => import("@/components/TrendingTopics"));
+  prefetchOnce("home-trending-keywords", () => import("@/components/TrendingKeywords"));
+  if (includeMap) {
+    prefetchOnce("home-news-map", () => import("@/components/NewsMap"));
+  }
+}
+
+/**
  * Warm BOTH the article-detail chunk AND the article's data into the
  * react-query cache. Call on link hover/touch with the same slug the URL
  * uses ({englishSlug || slug}). The query key matches ArticleDetail's own

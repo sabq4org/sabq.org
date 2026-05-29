@@ -166,7 +166,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                             alt={art.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             objectPosition={art.objectPosition}
-                            priority={true}
+                            priority={false}
                             preferSize="small"
                             aspectRatio="16/9"
                           />
@@ -316,7 +316,7 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             objectPosition={article.objectPosition || "center top"}
-                            priority={true}
+                            priority={false}
                             preferSize="small"
                           />
                         ) : (
@@ -540,7 +540,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             objectPosition={article.objectPosition}
-                            priority={true}
+                            priority={false}
                             preferSize="small"
                             aspectRatio="16/9"
                           />
@@ -711,7 +711,7 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                             alt={article.title}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             objectPosition={article.objectPosition || "center top"}
-                            priority={true}
+                            priority={false}
                             preferSize="small"
                           />
                         ) : (
