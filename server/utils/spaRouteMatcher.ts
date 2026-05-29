@@ -26,7 +26,7 @@ export const VALID_PREFIXES = new Set([
   'about', 'contact', 'terms', 'privacy', 'accessibility',
   'accessibility-statement', 'archive', 'careers', 'sponsored',
   // Content sections
-  'categories', 'search', 'omq', 'muqtarab', 'mirqab',
+  'categories', 'search', 'omq', 'muqtarab',
   'daily-brief', 'shorts', 'moment-by-moment', 'newsletters',
   // Dashboard & Admin
   'dashboard', 'admin', 'ifox',

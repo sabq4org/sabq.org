@@ -30,7 +30,7 @@ var SHORT_URL_PATTERN = /^\/([a-zA-Z0-9]{5,9})$/;
 
 var KNOWN_ROOT_WORDS = [
   'news', 'about', 'login', 'admin', 'staff', 'terms', 'ifox',
-  'search', 'video', 'media', 'live', 'mirqab', 'opinion', 'audio',
+  'search', 'video', 'media', 'live', 'opinion', 'audio',
   'careers', 'privacy', 'register', 'profile', 'settings', 'contact',
   'bookmarks', 'history', 'notifications', 'trending', 'latest', 'popular',
   'dashboard', 'categories', 'advertise', 'publishers', 'health', 'ready',

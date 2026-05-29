@@ -92,7 +92,6 @@ function SearchPanel({ onSearch }: { onSearch: (query: string) => void }) {
 
   const quickLinks = [
     { href: "/categories", label: "الأقسام", icon: FolderOpen },
-    { href: "/mirqab", label: "مرقاب", icon: TrendingUp },
     { href: "/opinion", label: "الرأي", icon: Newspaper },
   ];
 
