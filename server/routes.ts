@@ -252,11 +252,6 @@ import {
   experimentVariants,
   experimentExposures,
   experimentConversions,
-  mirqabEntries,
-  mirqabSabqIndex,
-  mirqabNextStory,
-  mirqabRadarAlerts,
-  mirqabAlgorithmArticles,
   audioNewsletters,
   audioNewsletterArticles,
   audioNewsletterListens,
@@ -358,17 +353,7 @@ import {
   insertPublisherCreditSchema,
   insertTaskAttachmentSchema,
   insertExperimentConversionSchema,
-  insertMirqabEntrySchema,
-  updateMirqabEntrySchema,
-  insertMirqabSabqIndexSchema,
-  updateMirqabSabqIndexSchema,
-  insertMirqabNextStorySchema,
-  updateMirqabNextStorySchema,
-  insertMirqabRadarAlertSchema,
-  updateMirqabRadarAlertSchema,
-  insertMirqabAlgorithmArticleSchema,
   insertSmartBlockSchema,
-  updateMirqabAlgorithmArticleSchema,
   insertAudioNewsletterSchema,
   updateAudioNewsletterSchema,
   insertAudioNewsletterArticleSchema,
@@ -21696,7 +21681,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // News Analytics Endpoint - Smart statistics and insights
 
   // STORY MANAGEMENT ROUTES — moved to server/routes/stories.ts
-  // MIRQAB ROUTES — moved to server/routes/mirqab.ts
   // A/B TESTING ROUTES — moved to server/routes/abTests.ts
   // ==========================================
   // Reporter/Staff Routes

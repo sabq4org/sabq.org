@@ -133,14 +133,6 @@ export const PERMISSION_CODES = {
   TAGS_UPDATE: "tags.update",
   TAGS_DELETE: "tags.delete",
   
-  // Mirqab - المرقاب (Future Forecasting/Observatory)
-  MIRQAB_VIEW: "mirqab.view",
-  MIRQAB_CREATE: "mirqab.create",
-  MIRQAB_EDIT: "mirqab.edit",
-  MIRQAB_DELETE: "mirqab.delete",
-  MIRQAB_PUBLISH: "mirqab.publish",
-  MIRQAB_MANAGE_SETTINGS: "mirqab.manage_settings",
-  
   // Audio Newsletters - النشرات الصوتية
   AUDIO_NEWSLETTERS_VIEW: "audio_newsletters.view",
   AUDIO_NEWSLETTERS_CREATE: "audio_newsletters.create",
@@ -205,7 +197,7 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
   // list). The previous explicit list silently omitted dozens of codes
   // (categories.*, tags.*, roles.*, permissions.*, articles.create,
   // articles.edit_own, articles.unpublish, articles.archive, articles.feature,
-  // smart_links.*, foreign_news.*, ads.*, ai.*, blocks.*, integrations.*, ...)
+  // smart_links.*, ads.*, ai.*, blocks.*, integrations.*, ...)
   // which hid sidebar items and dashboard buttons even though the backend
   // would have allowed the actions. Role-assignment restrictions (e.g.
   // admin can't create system_admin) are enforced separately by
@@ -239,10 +231,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.CATEGORIES_CREATE,
     PERMISSION_CODES.CATEGORIES_UPDATE,
     PERMISSION_CODES.ANALYTICS_VIEW,
-    PERMISSION_CODES.MIRQAB_VIEW,
-    PERMISSION_CODES.MIRQAB_CREATE,
-    PERMISSION_CODES.MIRQAB_EDIT,
-    PERMISSION_CODES.MIRQAB_PUBLISH,
     PERMISSION_CODES.AUDIO_NEWSLETTERS_VIEW,
     PERMISSION_CODES.AUDIO_NEWSLETTERS_CREATE,
     PERMISSION_CODES.AUDIO_NEWSLETTERS_EDIT,
@@ -415,13 +403,6 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   [PERMISSION_CODES.TAGS_CREATE]: "إنشاء الوسوم",
   [PERMISSION_CODES.TAGS_UPDATE]: "تعديل الوسوم",
   [PERMISSION_CODES.TAGS_DELETE]: "حذف الوسوم",
-  
-  [PERMISSION_CODES.MIRQAB_VIEW]: "عرض المرقاب",
-  [PERMISSION_CODES.MIRQAB_CREATE]: "إنشاء محتوى المرقاب",
-  [PERMISSION_CODES.MIRQAB_EDIT]: "تعديل محتوى المرقاب",
-  [PERMISSION_CODES.MIRQAB_DELETE]: "حذف محتوى المرقاب",
-  [PERMISSION_CODES.MIRQAB_PUBLISH]: "نشر محتوى المرقاب",
-  [PERMISSION_CODES.MIRQAB_MANAGE_SETTINGS]: "إدارة إعدادات المرقاب",
   
   [PERMISSION_CODES.AUDIO_NEWSLETTERS_VIEW]: "عرض النشرات الصوتية",
   [PERMISSION_CODES.AUDIO_NEWSLETTERS_CREATE]: "إنشاء نشرة صوتية",

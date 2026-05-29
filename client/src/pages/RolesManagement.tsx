@@ -38,7 +38,7 @@ import { Label } from "@/components/ui/label";
 import { 
   Shield, Users, Key, Lock, Plus, Trash2,
   FileText, FolderOpen, MessageSquare, UserCog, Settings, 
-  Calendar, Telescope, Image, Bot, Mic, Microscope, 
+  Calendar, Image, Bot, Mic, Microscope, 
   MessageCircle, Mail, ImageIcon, BarChart2, LayoutGrid, 
   Briefcase, Pin 
 } from "lucide-react";
@@ -54,7 +54,6 @@ function ModuleIcon({ module }: { module: string }) {
     case "staff": return <UserCog {...iconProps} />;
     case "system": return <Settings {...iconProps} />;
     case "calendar": return <Calendar {...iconProps} />;
-    case "mirqab": return <Telescope {...iconProps} />;
     case "visual_ai": return <Image {...iconProps} />;
     case "ifox": return <Bot {...iconProps} />;
     case "audio_newsletters": return <Mic {...iconProps} />;
@@ -238,7 +237,7 @@ export default function RolesManagement() {
     "visual_ai", "ifox", "audio_newsletters", "story_cards",
     "media_library", "whatsapp_agent", "email_agent",
     "analytics", "publisher_sales",
-    "users", "staff", "comments", "calendar", "mirqab", "system"
+    "users", "staff", "comments", "calendar", "system"
   ];
   
   const moduleNames: Record<string, string> = {
@@ -249,7 +248,6 @@ export default function RolesManagement() {
     staff: "الكادر",
     system: "النظام",
     calendar: "التقويم التحريري",
-    mirqab: "المرقاب",
     visual_ai: "توليد الصور بالذكاء الاصطناعي",
     ifox: "iFox - توليد المحتوى",
     audio_newsletters: "النشرات الصوتية",

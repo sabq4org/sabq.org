@@ -15,7 +15,6 @@ import { registerTwoFactorRoutes } from "./twoFactorRoutes";
 import editorPresenceRouter from "./editorPresence";
 import { registerThemeRoutes } from "./themes";
 import { registerStoryRoutes } from "./stories";
-import { registerMirqabRoutes } from "./mirqab";
 import { registerAbTestRoutes } from "./abTests";
 import focusSessionsRouter from "./focusSessions";
 import edgeMetaRouter from "./edgeMeta";
@@ -47,7 +46,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(editorPresenceRouter);
   registerThemeRoutes(app);
   registerStoryRoutes(app);
-  registerMirqabRoutes(app);
   registerAbTestRoutes(app);
   app.use(focusSessionsRouter);
   app.use(edgeMetaRouter);

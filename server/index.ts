@@ -897,10 +897,6 @@ if (!(globalThis as any).__sabqServer) {
     app.use(quizRoutes);
     console.log("[Server] ✅ Quiz routes registered");
 
-    const foreignNewsRoutes = (await import("./routes/foreignNewsRoutes")).default;
-    app.use("/api/foreign-news", foreignNewsRoutes);
-    console.log("[Server] ✅ Foreign News Monitoring routes registered");
-
     const smartClassificationRoutes = (await import("./routes/smartClassificationRoutes")).default;
     app.use("/api/smart-classification", smartClassificationRoutes);
     console.log("[Server] ✅ Smart Classification routes registered");
@@ -1635,15 +1631,6 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting staff comms scheduler:", error);
           }
         }, BACKGROUND_JOB_DELAY + 80000);
-        
-        setTimeout(async () => {
-          try {
-            const { startForeignNewsJob } = await import("./jobs/foreignNewsJob");
-            startForeignNewsJob();
-          } catch (error) {
-            console.error("[Server] Error starting foreign news job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY + 85000);
         
         setTimeout(async () => {
           try {

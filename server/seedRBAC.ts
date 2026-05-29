@@ -62,14 +62,6 @@ export async function seedRBAC() {
     { code: "muqtarab.manage", label: "Manage Muqtarab Angles", labelAr: "إدارة زوايا مُقترب", module: "muqtarab" },
     { code: "muqtarab.publish", label: "Publish Muqtarab Angles", labelAr: "نشر زوايا مُقترب", module: "muqtarab" },
 
-    // Mirqab permissions (المرقاب - Future Forecasting)
-    { code: "mirqab.view", label: "View Mirqab", labelAr: "عرض المرقاب", module: "mirqab" },
-    { code: "mirqab.create", label: "Create Mirqab Content", labelAr: "إنشاء محتوى المرقاب", module: "mirqab" },
-    { code: "mirqab.edit", label: "Edit Mirqab Content", labelAr: "تعديل محتوى المرقاب", module: "mirqab" },
-    { code: "mirqab.delete", label: "Delete Mirqab Content", labelAr: "حذف محتوى المرقاب", module: "mirqab" },
-    { code: "mirqab.publish", label: "Publish Mirqab Content", labelAr: "نشر محتوى المرقاب", module: "mirqab" },
-    { code: "mirqab.manage_settings", label: "Manage Mirqab Settings", labelAr: "إدارة إعدادات المرقاب", module: "mirqab" },
-
     // Shorts permissions (سبق قصير - Vertical Video Reels)
     { code: "shorts:view", label: "View Shorts", labelAr: "عرض الشورتس", module: "shorts" },
     { code: "shorts:create", label: "Create Shorts", labelAr: "إنشاء الشورتس", module: "shorts" },
@@ -184,7 +176,6 @@ export async function seedRBAC() {
       "staff.view", "staff.create", "staff.update", "staff.delete",
       "system.view_logs", "system.manage_themes",
       "muqtarab.manage", "muqtarab.publish",
-      "mirqab.view", "mirqab.create", "mirqab.edit", "mirqab.delete", "mirqab.publish", "mirqab.manage_settings",
       "shorts:view", "shorts:create", "shorts:edit", "shorts:delete", "shorts:manage",
       "calendar:view", "calendar:create", "calendar:edit", "calendar:delete", "calendar:assign_tasks", "calendar:generate_ai",
       "tasks.view_all", "tasks.create", "tasks.edit_any", "tasks.delete_any", "tasks.assign", "tasks.view_analytics",
@@ -199,7 +190,6 @@ export async function seedRBAC() {
       "comments.view", "comments.approve", "comments.reject",
       "staff.view",
       "muqtarab.manage", "muqtarab.publish",
-      "mirqab.view", "mirqab.create", "mirqab.edit", "mirqab.publish",
       "shorts:view", "shorts:create", "shorts:edit", "shorts:manage",
       "calendar:view", "calendar:create", "calendar:edit", "calendar:assign_tasks", "calendar:generate_ai",
       "tasks.view_all", "tasks.create", "tasks.edit_any", "tasks.assign", "tasks.view_analytics",

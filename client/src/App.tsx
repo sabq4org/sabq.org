@@ -271,25 +271,6 @@ const ContactMessagesManagement = lazy(() => retryImport(() => import("@/pages/d
 const SystemAnnouncementsManagement = lazy(() => retryImport(() => import("@/pages/dashboard/AnnouncementsManagement")));
 const ContactMessageDetail = lazy(() => retryImport(() => import("@/pages/ContactMessageDetail")));
 
-// === LAZY IMPORTS (Mirqab) ===
-const MirqabPage = lazy(() => retryImport(() => import("@/pages/MirqabPage")));
-const SabqIndexListPage = lazy(() => retryImport(() => import("@/pages/mirqab/SabqIndexListPage")));
-const SabqIndexDetailPage = lazy(() => retryImport(() => import("@/pages/mirqab/SabqIndexDetailPage")));
-const NextStoriesListPage = lazy(() => retryImport(() => import("@/pages/mirqab/NextStoriesListPage")));
-const NextStoryDetailPage = lazy(() => retryImport(() => import("@/pages/mirqab/NextStoryDetailPage")));
-const RadarListPage = lazy(() => retryImport(() => import("@/pages/mirqab/RadarListPage")));
-const RadarDetailPage = lazy(() => retryImport(() => import("@/pages/mirqab/RadarDetailPage")));
-const AlgorithmWritesListPage = lazy(() => retryImport(() => import("@/pages/mirqab/AlgorithmWritesListPage")));
-const AlgorithmWriteDetailPage = lazy(() => retryImport(() => import("@/pages/mirqab/AlgorithmWriteDetailPage")));
-const MirqabDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/MirqabDashboard")));
-const CreateSabqIndex = lazy(() => retryImport(() => import("@/pages/dashboard/mirqab/CreateSabqIndex")));
-const CreateNextStory = lazy(() => retryImport(() => import("@/pages/dashboard/mirqab/CreateNextStory")));
-const CreateRadar = lazy(() => retryImport(() => import("@/pages/dashboard/mirqab/CreateRadar")));
-const CreateAlgorithmWrite = lazy(() => retryImport(() => import("@/pages/dashboard/mirqab/CreateAlgorithmWrite")));
-
-// === LAZY IMPORTS (Foreign News Monitor) ===
-const ForeignNewsMonitor = lazy(() => retryImport(() => import("@/pages/dashboard/ForeignNewsMonitor")));
-
 // === LAZY IMPORTS (Audio) ===
 const AudioNewslettersDashboard = lazy(() => retryImport(() => import("@/pages/AudioNewslettersDashboard")));
 const AudioNewsletterEditor = lazy(() => retryImport(() => import("@/pages/AudioNewsletterEditor")));
@@ -681,17 +662,6 @@ function Router() {
         <Route path="/omq/:id">{() => <LazyRoute component={OmqDetail} />}</Route>
         <Route path="/omq">{() => <LazyRoute component={Omq} />}</Route>
         
-        {/* Mirqab public pages */}
-        <Route path="/mirqab">{() => <LazyRoute component={MirqabPage} />}</Route>
-        <Route path="/mirqab/sabq-index">{() => <LazyRoute component={SabqIndexListPage} />}</Route>
-        <Route path="/mirqab/sabq-index/:slug">{() => <LazyRoute component={SabqIndexDetailPage} />}</Route>
-        <Route path="/mirqab/next-stories">{() => <LazyRoute component={NextStoriesListPage} />}</Route>
-        <Route path="/mirqab/next-stories/:slug">{() => <LazyRoute component={NextStoryDetailPage} />}</Route>
-        <Route path="/mirqab/radar">{() => <LazyRoute component={RadarListPage} />}</Route>
-        <Route path="/mirqab/radar/:slug">{() => <LazyRoute component={RadarDetailPage} />}</Route>
-        <Route path="/mirqab/algorithm-writes">{() => <LazyRoute component={AlgorithmWritesListPage} />}</Route>
-        <Route path="/mirqab/algorithm-writes/:slug">{() => <LazyRoute component={AlgorithmWriteDetailPage} />}</Route>
-        
         <Route path="/payment/callback">{() => <LazyRoute component={PaymentCallback} />}</Route>
         
         {/* Advertiser self-service routes */}
@@ -739,20 +709,6 @@ function Router() {
         {/* Audio Newsletters public pages */}
         <Route path="/audio-newsletters">{() => <LazyRoute component={AudioNewslettersPublic} />}</Route>
         <Route path="/audio-newsletters/:id">{() => <LazyRoute component={AudioNewsletterDetail} />}</Route>
-        
-        {/* Mirqab dashboard */}
-        <Route path="/dashboard/mirqab">{() => <LazyRoute component={MirqabDashboard} />}</Route>
-        <Route path="/dashboard/mirqab/sabq-index/new">{() => <LazyRoute component={CreateSabqIndex} />}</Route>
-        <Route path="/dashboard/mirqab/sabq-index/:id/edit">{() => <LazyRoute component={CreateSabqIndex} />}</Route>
-        <Route path="/dashboard/mirqab/next-stories/new">{() => <LazyRoute component={CreateNextStory} />}</Route>
-        <Route path="/dashboard/mirqab/next-stories/:id/edit">{() => <LazyRoute component={CreateNextStory} />}</Route>
-        <Route path="/dashboard/mirqab/radar/new">{() => <LazyRoute component={CreateRadar} />}</Route>
-        <Route path="/dashboard/mirqab/radar/:id/edit">{() => <LazyRoute component={CreateRadar} />}</Route>
-        <Route path="/dashboard/mirqab/algorithm-writes/new">{() => <LazyRoute component={CreateAlgorithmWrite} />}</Route>
-        <Route path="/dashboard/mirqab/algorithm-writes/:id/edit">{() => <LazyRoute component={CreateAlgorithmWrite} />}</Route>
-        
-        {/* Foreign News Monitor */}
-        <Route path="/dashboard/foreign-news">{() => <LazyRoute component={ForeignNewsMonitor} />}</Route>
         
         <Route path="/dashboard/muqtarab">{() => <LazyRoute component={DashboardMuqtarab} />}</Route>
         <Route path="/dashboard/muqtarab/angles/:angleId/topics">{() => <LazyRoute component={TopicsManagement} />}</Route>
