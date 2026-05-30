@@ -65,7 +65,12 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
 export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   READ: 24,
   READ_DEEP: 24,
-  LIKE: null,
+  // Liking is keyed on the articleId source. A like is a one-time signal
+  // per article, so dedup over a lifetime window: the FIRST like of a
+  // given article awards a point and re-liking never does. Without this
+  // (was `null`) the react route re-awarded on every toggle, letting a
+  // user farm up to the daily cap by spamming like/unlike on one article.
+  LIKE: 100000,
   SHARE: 4,
   COMMENT: null,
   NOTIFICATION_OPEN: 1,
