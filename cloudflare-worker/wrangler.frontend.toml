@@ -11,11 +11,18 @@ name = "sabq-frontend-edge"
 main = "frontend-edge-worker.js"
 compatibility_date = "2024-09-01"
 account_id = "1ac069d5f5c7a3dd7f4e3c864f51446d"
+# Dormant after the Pages handover: no routes + no workers.dev URL, so this
+# worker is deployed but unreachable (avoids an indexable *.workers.dev dup).
+workers_dev = false
 
-routes = [
-  { pattern = "sabq.org/*", zone_name = "sabq.org" },
-  { pattern = "www.sabq.org/*", zone_name = "sabq.org" }
-]
+# Routes REMOVED 2026-05-31: full handover of sabq.org edge-SEO to the
+# Cloudflare Pages project `sabq-org` (functions/_middleware.js, EDGE_SEO=on),
+# which is a complete superset (meta injection + sitemap/robots proxy to API).
+# The middleware's own note forbids both layers injecting at once. To roll back,
+# restore the two routes below and re-run `wrangler deploy`:
+#   { pattern = "sabq.org/*", zone_name = "sabq.org" },
+#   { pattern = "www.sabq.org/*", zone_name = "sabq.org" }
+routes = []
 
 [vars]
 API_ORIGIN = "https://api.sabq.org"
