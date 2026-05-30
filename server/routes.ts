@@ -11869,13 +11869,25 @@ Respond in valid JSON format only:
   // ARTICLE ROUTES
   // ============================================================
 
-  app.get("/api/articles", cacheControl({ maxAge: 30, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req: any, res) => {
+  app.get("/api/articles", (req: any, res, next) => {
+    // A logged-in response carries per-user hasReacted / isBookmarked, so it
+    // must be `private` — no shared cache (Cloudflare edge) may store it, or
+    // one user's like state leaks to others (the list-level twin of the
+    // article-detail bug). Anonymous responses stay publicly edge-cacheable.
+    if (req.user?.id) {
+      return cacheControl({ maxAge: 0, public: false })(req, res, next);
+    }
+    return cacheControl({ maxAge: 30, sMaxAge: 120, staleWhileRevalidate: 60 })(req, res, next);
+  }, async (req: any, res) => {
     try {
       const { category, search, status, author, limit, orderBy } = req.query;
+      const userId = req.user?.id;
       const userRole = req.user?.role;
-      
-      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${limit || ''}:${orderBy || ''}:${userRole || ''}`;
-      
+
+      // userId is part of the key so each user gets their own per-user flags
+      // and they never cross-contaminate. Anonymous shares one 'anon' entry.
+      const cacheKey = `articles:list:${category || ''}:${search || ''}:${status || ''}:${author || ''}:${limit || ''}:${orderBy || ''}:${userRole || ''}:${userId || 'anon'}`;
+
       const result = await withSWR(cacheKey, CACHE_TTL.SHORT, CACHE_TTL.SHORT * 2, async () => {
         const articles = await storage.getArticles({
           categoryId: category as string,
@@ -11887,7 +11899,7 @@ Respond in valid JSON format only:
           limit: limit ? Math.min(parseInt(limit as string), 100) : 50,
           orderBy: orderBy as string,
         });
-        
+
         if (articles.length > 0) {
           const articleIds = articles.map(a => a.id);
           const activePolls = await db
@@ -11897,17 +11909,35 @@ Respond in valid JSON format only:
               inArray(articlePolls.articleId, articleIds),
               eq(articlePolls.isActive, true)
             ));
-          
+
           const pollArticleIds = new Set(activePolls.map(p => p.articleId));
+
+          // Per-user like/bookmark flags so list cards reflect the viewer's
+          // own state (web + mobile). Two indexed (userId, articleId) lookups.
+          let userReactions = new Set<string>();
+          let userBookmarks = new Set<string>();
+          if (userId) {
+            const [reactionsList, bookmarksList] = await Promise.all([
+              db.select({ articleId: reactions.articleId }).from(reactions)
+                .where(and(eq(reactions.userId, userId), inArray(reactions.articleId, articleIds))),
+              db.select({ articleId: bookmarks.articleId }).from(bookmarks)
+                .where(and(eq(bookmarks.userId, userId), inArray(bookmarks.articleId, articleIds))),
+            ]);
+            userReactions = new Set(reactionsList.map(r => r.articleId));
+            userBookmarks = new Set(bookmarksList.map(b => b.articleId));
+          }
+
           return articles.map(article => ({
             ...article,
-            hasPoll: pollArticleIds.has(article.id)
+            hasPoll: pollArticleIds.has(article.id),
+            hasReacted: userReactions.has(article.id),
+            isBookmarked: userBookmarks.has(article.id),
           }));
         }
-        
+
         return articles;
       });
-      
+
       res.json(result);
     } catch (error) {
       console.error("Error fetching articles:", error);
@@ -12317,36 +12347,76 @@ Respond in valid JSON format only:
   // pattern-invalidated on every write) absorbs the read load, and every
   // user — including the editor verifying their own save — sees the latest
   // content immediately. Per-pod memoryCache hit rate keeps DB load bounded.
-  app.get("/api/articles/:slug", cacheControl({ maxAge: 0, sMaxAge: 0 }), async (req: any, res) => {
+  app.get("/api/articles/:slug", (req: any, res, next) => {
+    // Logged-in responses carry per-user hasReacted / isBookmarked, so mark
+    // them `private` — no shared cache may store them. Anonymous responses
+    // keep the prior public, revalidate-always header.
+    if (req.user?.id) {
+      return cacheControl({ maxAge: 0, public: false })(req, res, next);
+    }
+    return cacheControl({ maxAge: 0, sMaxAge: 0 })(req, res, next);
+  }, async (req: any, res) => {
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
       const slug = req.params.slug;
-      
-      // Use cache for published articles only
-      const cacheKey = `article:detail:${slug}`;
+
+      // The shared cache key holds the USER-NEUTRAL article payload only.
+      // Per-user engagement state (hasReacted / isBookmarked) and the live
+      // reactions count are NOT cached here — they're overlaid per-request
+      // below. Caching them under a slug-only key was the bug: the first
+      // (often anonymous) fetch cached hasReacted=false / reactionsCount=0
+      // and that copy was then served to every logged-in user, so a like
+      // appeared to vanish on refresh and the counter stayed at 0. Fetch
+      // with no userId so the cached copy is genuinely user-neutral.
+      const cacheKey = `article:detail:anonymous:${slug}`;
       const article = await withCache(cacheKey, CACHE_TTL.MEDIUM, async () => {
-        const fetchedArticle = await storage.getArticleBySlug(slug, userId, userRole);
+        const fetchedArticle = await storage.getArticleBySlug(slug, undefined, userRole);
         // Only cache published articles
         if (fetchedArticle && fetchedArticle.status === 'published') {
           return fetchedArticle;
         }
         return null; // Don't cache non-published articles
       });
-      
+
       // If cache returned null, fetch again without caching (for non-published articles)
       let finalArticle = article;
       if (!article) {
-        finalArticle = await storage.getArticleBySlug(slug, userId, userRole) ?? null;
+        finalArticle = await storage.getArticleBySlug(slug, undefined, userRole) ?? null;
       }
 
       // Fallback: if slug looks like a UUID, try fetching by ID
       if (!finalArticle && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)) {
-        finalArticle = await storage.getArticleById(slug, userId) ?? null;
+        finalArticle = await storage.getArticleById(slug) ?? null;
       }
 
       if (!finalArticle) {
         return res.status(404).json({ message: "Article not found" });
+      }
+
+      // Overlay live, per-user engagement state on a CLONE so the shared
+      // cached object is never mutated. Three cheap indexed lookups keep the
+      // heavy article query cached while guaranteeing the viewer always sees
+      // their own like/bookmark and an up-to-date count (also keeps web + iOS
+      // + Android consistent since they all read this endpoint).
+      if (userId) {
+        const articleId = finalArticle.id;
+        const [reactionRow, bookmarkRow, [countRow]] = await Promise.all([
+          db.select({ id: reactions.id }).from(reactions)
+            .where(and(eq(reactions.userId, userId), eq(reactions.articleId, articleId)))
+            .limit(1),
+          db.select({ id: bookmarks.id }).from(bookmarks)
+            .where(and(eq(bookmarks.userId, userId), eq(bookmarks.articleId, articleId)))
+            .limit(1),
+          db.select({ count: sql<number>`count(*)::int` }).from(reactions)
+            .where(eq(reactions.articleId, articleId)),
+        ]);
+        finalArticle = {
+          ...finalArticle,
+          hasReacted: reactionRow.length > 0,
+          isBookmarked: bookmarkRow.length > 0,
+          reactionsCount: Number(countRow?.count ?? (finalArticle as any).reactionsCount ?? 0),
+        };
       }
 
       if (userId) {
@@ -13181,6 +13251,12 @@ Respond in valid JSON format only:
       const userId = req.user.id;
       const result = await storage.toggleReaction(req.params.id, userId);
 
+      // This user's per-user list cache embeds their hasReacted flags, so
+      // flush it now that their state changed (next list fetch recomputes).
+      // The article-detail cache is user-neutral + overlaid live, so it needs
+      // no invalidation here.
+      memoryCache.invalidatePattern(`^articles:list:.*:${userId}$`);
+
       // إضافة نقطة ولاء عند الإعجاب (ليس عند الإلغاء)
       if (result.hasReacted) {
         try {
@@ -13223,7 +13299,9 @@ Respond in valid JSON format only:
       const userId = req.user.id;
       const result = await storage.toggleBookmark(req.params.id, userId);
 
-
+      // Flush this user's per-user list cache so their isBookmarked flags
+      // refresh on the next list fetch (detail cache is user-neutral).
+      memoryCache.invalidatePattern(`^articles:list:.*:${userId}$`);
 
       // Track user event for daily summary analytics (when bookmarking, not unbookmarking)
       if (result.isBookmarked) {
