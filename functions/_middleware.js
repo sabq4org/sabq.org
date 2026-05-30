@@ -21,6 +21,12 @@
  *
  * Env (Pages → Settings → Environment variables, Production + Preview):
  *   API_ORIGIN — defaults to "https://api.sabq.org".
+ *   EDGE_SEO   — "on" to do slug-redirect + SEO injection here; anything else
+ *                (default OFF) makes this middleware proxy-only and leaves SEO
+ *                to the standalone `sabq-frontend-edge` worker. Staged handover:
+ *                deploy proxy-only first (worker still injects), then once stable
+ *                flip EDGE_SEO=on AND remove the worker's sabq.org routes — never
+ *                both injecting at once.
  *
  * NOTE: keep `VITE_API_URL` UNSET on the Pages build so the client uses relative
  * `/api/*` paths and THIS middleware proxies them (same as Vercel did). Setting
@@ -203,6 +209,7 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = url.pathname;
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
+  const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
 
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
@@ -214,9 +221,10 @@ export async function onRequest(context) {
     }
   }
 
-  // 2) Non-GET/HEAD, or static assets / noindex screens → serve statically.
+  // 2) Non-GET/HEAD, static assets / noindex screens, or SEO handled elsewhere
+  //    (EDGE_SEO off — the standalone worker injects) → serve the shell as-is.
   if (request.method !== "GET" && request.method !== "HEAD") return next();
-  if (!isInjectablePath(path)) return withHtmlNoStore(await next());
+  if (!seoEnabled || !isInjectablePath(path)) return withHtmlNoStore(await next());
 
   // 3) Indexable HTML route → slug redirect + SEO meta/body injection.
   try {

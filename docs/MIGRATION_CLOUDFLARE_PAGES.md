@@ -39,6 +39,8 @@ serving the live Vercel site.
 - **Production branch:** `main`
 - **Environment variables (Production + Preview):**
   - `API_ORIGIN = https://api.sabq.org`
+  - `EDGE_SEO` — leave UNSET/`off` initially (proxy-only; the standalone worker
+    keeps doing SEO). Flip to `on` only in the SEO-handover step below.
   - **Leave `VITE_API_URL` UNSET** — keeps the client in PROXY mode (relative
     `/api/*`). Setting it breaks the ~243 raw `fetch('/api/...')` callsites.
   - Copy any other `VITE_*` the build needs (currently only `VITE_WS_URL`, if used).
@@ -65,18 +67,27 @@ serving the live Vercel site.
 7. **Cache headers:** `/assets/*.js` → `immutable`; `/dashboard` and `/admin` →
    `private, no-store`.
 
-## Cutover (only after every check above is green)
+## Cutover — staged (safest; avoids betting on untested SEO + double-injection)
 
-Do it in a **low-traffic window (KSA night)**.
+The domain is already on Pages. The two risky changes (proxy vs SEO-injection)
+are decoupled via `EDGE_SEO` so they ship separately.
 
-1. In the Pages project → **Custom domains** → add `sabq.org` and `www.sabq.org`.
-2. **Retire the standalone SEO worker** so it doesn't double-inject:
-   remove the `sabq.org/*` + `www.sabq.org/*` routes from `sabq-frontend-edge`
-   (Workers → Triggers/Routes), or delete the worker. Its job now lives in
-   `functions/_middleware.js`.
-3. Verify on `https://sabq.org`: same 7 checks, plus a **real login** (now
-   same-site → session persists), comments, and one publish→article meta refresh.
-4. Watch logs / GSC coverage / share-unfurl for ~24h.
+**Stage 1 — proxy only (un-break `/api`), worker keeps SEO.**
+1. Get `functions/` into the production deployment: either set the Pages
+   **Production branch → `feat/cloudflare-pages-migration`** (isolated; no Railway
+   touch), or merge `feat → main` (also redeploys Railway, which watches `main`).
+2. Keep `EDGE_SEO` unset (proxy-only). Leave the `sabq-frontend-edge` worker
+   routes in place — it still injects SEO.
+3. Verify on `https://sabq.org`: `/api/homepage-lite` → 200 **JSON**; article
+   pages still carry `sabq-edge-meta-injected` (from the worker) — **exactly once**.
+
+**Stage 2 — SEO handover (later, calm window).**
+4. Set `EDGE_SEO=on` in Pages env AND, in the same change, remove the worker's
+   `sabq.org/*` + `www.sabq.org/*` routes (Workers → Triggers/Routes). Never both
+   inject at once.
+5. Verify: article SEO injected **once** (now from the middleware), slug 301s work,
+   real login (same-site → session persists), comments, publish→meta refresh.
+6. Watch logs / GSC coverage / share-unfurl ~24h, then retire the worker.
 
 ## Rollback
 
