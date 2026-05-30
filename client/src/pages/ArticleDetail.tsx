@@ -152,13 +152,24 @@ export default function ArticleDetail() {
     return [cleaned];
   }, [article?.aiSummary]);
 
-  // If no stored summary, generate bullets in the background via API
+  // If no stored summary, generate bullets in the background via API.
+  // The endpoint no longer blocks on OpenAI — on a cold miss it kicks off
+  // generation server-side and returns { source: "pending", bullets: [] }.
+  // We poll a few times so the freshly-generated bullets appear within a few
+  // seconds without ever blocking the request. Polling stops as soon as
+  // bullets arrive (or the server reports a non-pending source), and is hard-
+  // capped so a persistent generation failure can't loop forever.
   const shouldFetchBullets = !!article?.id && storedBullets.length === 0;
-  const { data: bulletsData, isLoading: isLoadingBullets } = useQuery<{ bullets: string[] }>({
+  const { data: bulletsData, isLoading: isLoadingBullets } = useQuery<{ bullets: string[]; source?: string }>({
     queryKey: ["/api/articles", slug, "ai-bullets"],
     enabled: shouldFetchBullets,
     staleTime: 1000 * 60 * 30,
     retry: false,
+    refetchInterval: (query) => {
+      const d = query.state.data as { bullets?: string[]; source?: string } | undefined;
+      const stillPending = d?.source === "pending" && (d?.bullets?.length ?? 0) === 0;
+      return stillPending && query.state.dataUpdateCount < 5 ? 3500 : false;
+    },
   });
   const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
 

@@ -12805,13 +12805,28 @@ Respond in valid JSON format only:
 
   // Get AI inline summary (3 short bullets) for an article
   // Returns existing aiSummary parsed into bullets if available; otherwise generates them
-  app.get("/api/articles/:slug/ai-bullets", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM, sMaxAge: 600, staleWhileRevalidate: 300 }), async (req: any, res) => {
+  app.get("/api/articles/:slug/ai-bullets", async (req: any, res) => {
+    // Cache-Control is set per-outcome here rather than via the route-level
+    // cacheControl middleware: that middleware force-overrides res.writeHead,
+    // which would cache "pending"/empty/error responses at the edge for the
+    // full s-maxage window. We instead long-cache real bullets and no-store
+    // the misses so the next request self-heals once bullets are stored.
+    // (Global /api/ caching is opt-in — see server/index.ts smart-cache mw.)
+    const cacheBullets = () =>
+      res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=300");
+    const noStore = () => res.setHeader("Cache-Control", "no-store");
+    // Preserve split-topology header parity (Vercel edge always revalidates;
+    // CF zones cache via the public s-maxage above when we long-cache).
+    res.setHeader("Vary", "Accept-Encoding");
+    res.setHeader("Vercel-CDN-Cache-Control", "no-store");
+
     try {
       const userId = req.user?.id;
       const userRole = req.user?.role;
       const article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
 
       if (!article) {
+        noStore();
         return res.status(404).json({ message: "المقال غير موجود" });
       }
 
@@ -12841,6 +12856,7 @@ Respond in valid JSON format only:
             .slice(0, 3))
         : [];
       if (storedBullets.length > 0) {
+        cacheBullets();
         return res.json({ bullets: storedBullets, source: "db" });
       }
 
@@ -12852,11 +12868,22 @@ Respond in valid JSON format only:
           // Persist parsed bullets so future requests skip parsing
           storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
             .catch((e) => console.error("[ai-bullets] failed to persist parsed bullets:", e instanceof Error ? e.message : e));
+          cacheBullets();
           return res.json({ bullets, source: "stored" });
         }
       }
 
-      // Generate via OpenAI (with in-memory dedupe + short cache to avoid duplicate generations)
+      const cacheKey = article.id;
+      const now = Date.now();
+
+      // 3) Memory-cache hit from a recent background generation
+      const cached = aiBulletsCache.get(cacheKey);
+      if (cached && cached.expiresAt > now) {
+        cacheBullets();
+        return res.json({ bullets: cached.bullets, source: "generated" });
+      }
+
+      // Build the source text for generation (used only by the background job)
       const sourceText = [
         article.title,
         article.excerpt || "",
@@ -12867,84 +12894,84 @@ Respond in valid JSON format only:
         .slice(0, 6000);
 
       if (!sourceText.trim()) {
+        noStore();
         return res.json({ bullets: [], source: "empty" });
       }
 
-      const cacheKey = article.id;
-      const now = Date.now();
-      const cached = aiBulletsCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
-        return res.json({ bullets: cached.bullets, source: "generated" });
-      }
-
-      const inflight = aiBulletsInFlight.get(cacheKey);
-      const generationPromise: Promise<string[]> = inflight ?? (async () => {
-        const OpenAIMod = (await import("openai")).default;
-        const openai = new OpenAIMod({ apiKey: process.env.OPENAI_API_KEY });
-        // 8s ceiling — past this we bail out to a clean 503 instead of
-        // burning the request slot waiting on a slow OpenAI response.
-        const completion = await openai.chat.completions.create(
-          {
-            model: "gpt-4o-mini",
-            temperature: 0.3,
-            response_format: { type: "json_object" },
-            messages: [
-              {
-                role: "system",
-                content:
-                  "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
-              },
-              {
-                role: "user",
-                content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
-              },
-            ],
-          },
-          { signal: AbortSignal.timeout(8_000) }
-        );
-        const raw = completion.choices?.[0]?.message?.content || "{}";
-        let bullets: string[] = [];
-        try {
-          const parsed: unknown = JSON.parse(raw);
-          const arr = (parsed && typeof parsed === "object" && "bullets" in (parsed as Record<string, unknown>))
-            ? (parsed as { bullets: unknown }).bullets
-            : null;
-          if (Array.isArray(arr)) {
-            bullets = arr
-              .map((b: unknown): string => (typeof b === "string" ? b.trim() : ""))
-              .filter((s): s is string => s.length > 0)
-              .slice(0, 3);
+      // 4) Generate via OpenAI — but NEVER on the request path. A synchronous
+      // LLM call was adding ~1.8s to every cold request and tripping the APM
+      // slow-request alarm. Instead we kick generation off in the background
+      // (deduped across concurrent requests via aiBulletsInFlight), persist the
+      // result to the memory cache + DB, and return an empty "pending" response
+      // with no-store. The next load (CDN/browser revalidates because of
+      // no-store) hits the fast "db"/"generated" path above. Bullets are a
+      // progressive enhancement, so a one-load delay is acceptable.
+      if (!aiBulletsInFlight.has(cacheKey)) {
+        const generationPromise: Promise<string[]> = (async () => {
+          const OpenAIMod = (await import("openai")).default;
+          const openai = new OpenAIMod({ apiKey: process.env.OPENAI_API_KEY });
+          // 8s ceiling so a stuck OpenAI call can't pin the in-flight slot forever.
+          const completion = await openai.chat.completions.create(
+            {
+              model: "gpt-4o-mini",
+              temperature: 0.3,
+              response_format: { type: "json_object" },
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
+                },
+                {
+                  role: "user",
+                  content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
+                },
+              ],
+            },
+            { signal: AbortSignal.timeout(8_000) }
+          );
+          const raw = completion.choices?.[0]?.message?.content || "{}";
+          let bullets: string[] = [];
+          try {
+            const parsed: unknown = JSON.parse(raw);
+            const arr = (parsed && typeof parsed === "object" && "bullets" in (parsed as Record<string, unknown>))
+              ? (parsed as { bullets: unknown }).bullets
+              : null;
+            if (Array.isArray(arr)) {
+              bullets = arr
+                .map((b: unknown): string => (typeof b === "string" ? b.trim() : ""))
+                .filter((s): s is string => s.length > 0)
+                .slice(0, 3);
+            }
+          } catch {
+            bullets = parseToBullets(raw);
           }
-        } catch {
-          bullets = parseToBullets(raw);
-        }
-        return bullets;
-      })();
+          return bullets;
+        })();
 
-      if (!inflight) {
         aiBulletsInFlight.set(cacheKey, generationPromise);
+        generationPromise
+          .then((bullets) => {
+            aiBulletsCache.set(cacheKey, { bullets, expiresAt: Date.now() + AI_BULLETS_TTL_MS });
+            // Persist to DB so future requests skip OpenAI entirely (fire-and-forget)
+            if (bullets.length > 0) {
+              storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
+                .catch((e) => console.error("[ai-bullets] failed to persist generated bullets:", e instanceof Error ? e.message : e));
+            }
+          })
+          .catch((genErr) => {
+            console.error("[ai-bullets] background generation error:", genErr instanceof Error ? genErr.message : String(genErr));
+          })
+          .finally(() => {
+            aiBulletsInFlight.delete(cacheKey);
+          });
       }
 
-      try {
-        const bullets = await generationPromise;
-        aiBulletsCache.set(cacheKey, { bullets, expiresAt: Date.now() + AI_BULLETS_TTL_MS });
-        // Persist to DB so future requests skip OpenAI entirely (fire-and-forget)
-        if (bullets.length > 0) {
-          storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
-            .catch((e) => console.error("[ai-bullets] failed to persist generated bullets:", e instanceof Error ? e.message : e));
-        }
-        return res.json({ bullets, source: "generated" });
-      } catch (genErr) {
-        const msg = genErr instanceof Error ? genErr.message : String(genErr);
-        console.error("[ai-bullets] generation error:", msg);
-        return res.status(503).json({ message: "تعذّر توليد الملخص حالياً", bullets: [] });
-      } finally {
-        if (!inflight) {
-          aiBulletsInFlight.delete(cacheKey);
-        }
-      }
+      noStore();
+      return res.json({ bullets: [], source: "pending" });
     } catch (error) {
       console.error("Error in ai-bullets:", error);
+      noStore();
       res.status(500).json({ message: "فشل توليد الملخص الذكي", bullets: [] });
     }
   });
