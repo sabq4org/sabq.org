@@ -28234,9 +28234,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       const baseUrl = "https://sabq.org";
       const now = Date.now();
       const cache = (app as any).__sitemapIndexCache;
-      if (cache && now - cache.ts < 10 * 60 * 1000) {
+      if (cache && now - cache.ts < 30 * 60 * 1000) {
         res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
         return res.send(cache.xml);
       }
 
@@ -28268,7 +28268,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       (app as any).__sitemapIndexCache = { xml, ts: now };
       res.header('Content-Type', 'application/xml; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
+      res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
       res.send(xml);
     } catch (error) {
       console.error("Error generating sitemap index:", error);
@@ -28434,9 +28434,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         const now = Date.now();
         const cacheKey = `${cachePrefix}_${bucket}`;
         const cache = (app as any)[cacheKey];
-        if (cache && now - cache.ts < 10 * 60 * 1000) {
+        if (cache && now - cache.ts < 30 * 60 * 1000) {
           res.header('Content-Type', 'application/xml; charset=utf-8');
-          res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
+          res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
           return res.send(cache.xml);
         }
 
@@ -28445,7 +28445,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
         (app as any)[cacheKey] = { xml, ts: now };
         res.header('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=600');
+        res.setHeader('Cache-Control', 'public, max-age=1800, s-maxage=1800');
         res.send(xml);
       } catch (error) {
         console.error(`Error generating ${cachePrefix} sitemap:`, error);

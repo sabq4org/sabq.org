@@ -348,10 +348,17 @@ export default {
     }
 
     // Sitemaps + robots.txt: straight to the API origin (bypass Vercel's SPA
-    // fallback). Plain fetch so Cloudflare still edge-caches per the backend's
-    // own Cache-Control instead of hammering Railway on every crawl.
+    // fallback so a backend hiccup is a 5xx Google retries, never an HTML 200).
+    // Edge-cache them — but keep the NEWS sitemap SHORT (120s) so freshly
+    // published articles still surface within minutes (Google News relies on
+    // it); the big, stable article buckets are fine cached for an hour.
+    // cacheEverything is safe here: this branch only serves XML/text, never the
+    // HTML shell (whose staleness causes post-deploy white pages).
     if (isApiDirect(url.pathname)) {
-      return fetch(`${env.API_ORIGIN}${url.pathname}${url.search}`);
+      const cacheTtl = url.pathname === "/sitemap-news.xml" ? 120 : 3600;
+      return fetch(`${env.API_ORIGIN}${url.pathname}${url.search}`, {
+        cf: { cacheTtl, cacheEverything: true },
+      });
     }
 
     if (!isInjectablePath(url.pathname)) {
