@@ -50,7 +50,8 @@ import { requireAuth, requirePermission, requireAnyPermission, requireRole, logA
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
-import { indexArticle, isGoogleIndexingConfigured } from "./services/googleIndexingService";
+// Google Indexing API (services/googleIndexingService) intentionally NOT
+// imported for articles — it only supports JobPosting/BroadcastEvent, not news.
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
 import { awardPoints } from "./services/loyalty";
@@ -7698,19 +7699,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             console.error("❌ [UPDATE ARTICLE] Error notifying reporter:", reporterNotifyError);
           }
 
-          // Notify Google Indexing API for instant indexing
-          try {
-            if (isGoogleIndexingConfigured() && articleForNotification.slug) {
-              const indexResult = await indexArticle(articleForNotification.slug, "ar");
-              if (indexResult.success) {
-                console.log(`🔍 [Google Indexing] Article indexed: ${articleForNotification.slug}`);
-              } else {
-                console.warn(`⚠️ [Google Indexing] Failed: ${indexResult.error}`);
-              }
-            }
-          } catch (indexError) {
-            console.error("[Google Indexing] Error:", indexError);
-          }
+          // NOTE: The Google Indexing API call that used to live here was
+          // removed. Google's Indexing API only supports JobPosting and
+          // BroadcastEvent schemas — it does NOT index news/NewsArticle, so
+          // the call never actually indexed anything. New-article discovery
+          // for Google now relies on the news sitemap + Search Console /
+          // News Publisher Center (see server/indexNow.ts header).
 
           // If this is an opinion article, also notify the opinion author
           if (articleForNotification.articleType === 'opinion' && articleForNotification.authorId) {
@@ -28624,13 +28618,11 @@ Disallow: /notification-settings
 Disallow: /recommendation-settings
 Disallow: /payment/
 
-User-agent: Googlebot-News
-Allow: /article/
-Allow: /en/article/
-Allow: /ur/article/
-Allow: /sitemap-news.xml
-Allow: /sitemap.xml
-Disallow: /
+# Googlebot-News intentionally has NO separate group — a previous
+# "Disallow: /" (with a few Allow exceptions) blocked it from the homepage
+# and section/category pages, which is where Google News discovers new
+# articles. With no group of its own it falls back to "User-agent: *" above
+# and can crawl everything public (articles + sections), which is what we want.
 
 Sitemap: https://sabq.org/sitemap.xml
 Sitemap: https://sabq.org/sitemap-news.xml

@@ -1,9 +1,19 @@
 /**
- * IndexNow + Google Sitemap Ping Service
+ * IndexNow Service
  *
  * Notifies search engines immediately when a new article is published.
- * IndexNow is supported by Bing, Yandex, Naver, and (via Bing) Google.
- * Google direct ping is done via /ping?sitemap= endpoint.
+ * IndexNow is supported by Bing, Yandex, Naver (and Bing relays some signal
+ * to Google, but Google does NOT consume IndexNow directly for indexing).
+ *
+ * NOTE: There is intentionally NO Google "sitemap ping" here. Google
+ * deprecated and removed the `https://www.google.com/ping?sitemap=` endpoint
+ * in June 2023 — it now 404s and does nothing. Relying on it gave false
+ * confidence that Google was being notified. The real Google levers are:
+ *   - submitting the sitemap in Search Console, and
+ *   - URL Inspection → Request Indexing for new URLs,
+ *   - Google News Publisher Center for fast Top-stories inclusion.
+ * (The Google Indexing API only supports JobPosting/BroadcastEvent, NOT news
+ * articles, so it is also not used here.)
  *
  * Key file is served publicly at /{key}.txt — this is how search engines
  * verify domain ownership (not a secret, just a unique token).
@@ -15,8 +25,6 @@ export const BASE_URL = 'https://sabq.org';
 // To rotate the key: set INDEXNOW_KEY env var and re-deploy.
 export const INDEXNOW_KEY: string =
   process.env.INDEXNOW_KEY || 'sabq2026f4a8b2d3e1c7a9f5b0d6e2c4';
-
-const SITEMAP_NEWS_URL = `${BASE_URL}/sitemap-news.xml`;
 
 /**
  * Ping IndexNow API to request immediate indexing of an article.
@@ -49,26 +57,9 @@ export async function pingIndexNow(slug: string): Promise<void> {
 }
 
 /**
- * Ping Google to re-fetch the News Sitemap after a new article is published.
- * Fire-and-forget — errors are logged but never re-thrown.
- */
-export async function pingGoogleSitemap(): Promise<void> {
-  const pingUrl = `https://www.google.com/ping?sitemap=${encodeURIComponent(SITEMAP_NEWS_URL)}`;
-  try {
-    const res = await fetch(pingUrl, {
-      method: 'GET',
-      signal: AbortSignal.timeout(10_000),
-    });
-    console.log(`[Google Ping] ✅ News sitemap pinged (HTTP ${res.status})`);
-  } catch (err) {
-    console.error('[Google Ping] ❌ Failed to ping Google sitemap:', err);
-  }
-}
-
-/**
- * Full immediate-indexing pipeline:
- *   1. IndexNow (Bing/Yandex/Naver)
- *   2. Google sitemap ping
+ * Immediate-indexing notification after an article is published.
+ * Currently IndexNow only (Bing/Yandex/Naver). See the file header for why
+ * the Google sitemap ping was removed and what to use for Google instead.
  *
  * Call this fire-and-forget after any article is published.
  * Example:
@@ -76,5 +67,4 @@ export async function pingGoogleSitemap(): Promise<void> {
  */
 export async function notifySearchEngines(slug: string): Promise<void> {
   await pingIndexNow(slug);
-  await pingGoogleSitemap();
 }
