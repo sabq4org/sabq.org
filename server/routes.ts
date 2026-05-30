@@ -26538,6 +26538,12 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         ...parsed.data,
         authorId,
         articleType: "opinion",
+        // Opinion creation previously left englishSlug NULL (unlike regular
+        // article creation, routes.ts ~6920). A NULL englishSlug means the
+        // article is only reachable via its Arabic slug and gets an
+        // Arabic-slug canonical — a recurring source of the GSC duplicate /
+        // non-canonical buckets. Generate one on create, same as articles.
+        englishSlug: parsed.data.englishSlug || generateEnglishSlug(parsed.data.title),
       };
 
       const [newArticle] = await db

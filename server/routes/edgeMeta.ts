@@ -276,7 +276,15 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         title: `${row.title} | سبق`,
         description: trunc(excerpt, 220),
         image: abs(row.imageUrl),
-        canonical: `${SITE_URL}/opinion/${row.englishSlug || slug}`,
+        // Opinion articles are reachable at BOTH /opinion/<slug> (frontend
+        // links) AND /article/<slug> (what the XML sitemap emits — the
+        // sitemap query is not articleType-filtered). Two 200s with
+        // self-canonicals = Google's "Duplicate, chose different canonical"
+        // (~44k in GSC). Consolidate on /article/<slug> — the sitemap URL —
+        // so /opinion/ folds into it. (Do NOT 404 either side: /article/
+        // versions are advertised in the sitemap; 404ing them would create
+        // tens of thousands of 404s.)
+        canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
         robots: "index,follow",
         type: "article",
         locale: "ar_SA",
