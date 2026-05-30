@@ -19,6 +19,7 @@ import { db } from "../db";
 import {
   articles,
   categories,
+  users,
   enArticles,
   urArticles,
   enCategories,
@@ -27,9 +28,11 @@ import {
   worldDays,
   gulfEvents,
 } from "@shared/schema";
-import { eq, or, and, desc } from "drizzle-orm";
+import { eq, or, and, desc, aliasedTable } from "drizzle-orm";
 
 const router = Router();
+// `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
+const reporterUsers = aliasedTable(users, "reporter_user");
 const ARABIC_RE = /[؀-ۿ]/;
 const containsArabic = (s: string) => ARABIC_RE.test(s);
 
@@ -196,6 +199,215 @@ function buildLinkListHtml(
   return `<nav style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h2>${escapeHtml(heading)}</h2><ul>${items}</ul></nav>`;
 }
 
+// Per-language publisher identity, OG locale, and <title> brand suffix.
+const ARTICLE_BRAND = {
+  ar: { name: "صحيفة سبق الإلكترونية", locale: "ar_SA", suffix: "سبق" },
+  en: { name: "Sabq News", locale: "en_US", suffix: "Sabq" },
+  ur: { name: "سبق نیوز", locale: "ur_PK", suffix: "سبق" },
+} as const;
+
+/**
+ * For an old article whose `updatedAt` drifts far past `publishedAt` (e.g. a
+ * bulk re-save months later), don't advertise a misleading "fresh" dateModified
+ * to Google News. Mirrors the 30-day / 7-day clamp in seoInjector.ts.
+ */
+function clampModified(
+  publishedAt?: Date | string | null,
+  updatedAt?: Date | string | null,
+  publishedIso?: string,
+  modifiedIso?: string,
+): string | undefined {
+  if (publishedIso && modifiedIso && publishedAt && updatedAt) {
+    const pubMs = new Date(publishedAt).getTime();
+    const updMs = new Date(updatedAt).getTime();
+    const ageMs = Date.now() - pubMs;
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (ageMs > thirtyDaysMs && updMs - pubMs > sevenDaysMs) {
+      return publishedIso;
+    }
+  }
+  return modifiedIso;
+}
+
+/**
+ * Builds the full crawler payload for an article surface: NewsArticle JSON-LD,
+ * hreflang chain, article:* / og:locale / og:site_name fields, plus the base
+ * meta. The Cloudflare worker (frontend-edge-worker.js) turns these fields into
+ * <head> tags. This is the parity port of seoInjector.ts's article handler —
+ * the rich path that the edge-served production HTML was missing entirely.
+ */
+function articleMetaPayload(opts: {
+  lang: "ar" | "en" | "ur";
+  title: string;
+  description: string;
+  image: string;
+  canonical: string;
+  englishSlug?: string | null;
+  slug: string;
+  publishedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  author: string;
+  section?: string | null;
+  keywords?: string[];
+  semanticHtml?: string;
+}) {
+  const b = ARTICLE_BRAND[opts.lang];
+  const publishedTime = opts.publishedAt
+    ? new Date(opts.publishedAt).toISOString()
+    : undefined;
+  const updatedIso = opts.updatedAt
+    ? new Date(opts.updatedAt).toISOString()
+    : publishedTime;
+  const modifiedTime = clampModified(
+    opts.publishedAt,
+    opts.updatedAt,
+    publishedTime,
+    updatedIso,
+  );
+  const keywords = (opts.keywords || []).filter(Boolean);
+
+  // hreflang chain — each locale points at its siblings + x-default on Arabic.
+  const arSlug = opts.englishSlug || opts.slug;
+  const hreflang: { lang: string; href: string }[] = [];
+  if (opts.lang === "ar") {
+    hreflang.push(
+      { lang: "ar", href: opts.canonical },
+      { lang: "x-default", href: opts.canonical },
+    );
+    if (opts.englishSlug) {
+      hreflang.push({ lang: "en", href: `${SITE_URL}/en/article/${opts.englishSlug}` });
+    }
+  } else if (opts.lang === "en") {
+    hreflang.push({ lang: "en", href: opts.canonical });
+    if (arSlug) {
+      hreflang.push(
+        { lang: "ar", href: `${SITE_URL}/article/${arSlug}` },
+        { lang: "x-default", href: `${SITE_URL}/article/${arSlug}` },
+      );
+    }
+  } else {
+    hreflang.push({ lang: "ur", href: opts.canonical });
+    if (arSlug) {
+      hreflang.push(
+        { lang: "ar", href: `${SITE_URL}/article/${arSlug}` },
+        { lang: "x-default", href: `${SITE_URL}/article/${arSlug}` },
+      );
+    }
+  }
+
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    mainEntityOfPage: { "@type": "WebPage", "@id": opts.canonical },
+    headline: opts.title,
+    description: opts.description,
+    image: [opts.image],
+    datePublished: publishedTime,
+    dateModified: modifiedTime,
+    inLanguage: opts.lang,
+    author: { "@type": "Person", name: opts.author },
+    publisher: {
+      "@type": "NewsMediaOrganization",
+      name: b.name,
+      logo: { "@type": "ImageObject", url: BRAND_OG_IMAGE },
+    },
+  };
+  if (opts.section) jsonLd.articleSection = opts.section;
+  if (keywords.length) jsonLd.keywords = keywords;
+
+  return {
+    title: `${opts.title} | ${b.suffix}`,
+    description: opts.description,
+    image: opts.image,
+    canonical: opts.canonical,
+    robots: "index,follow",
+    type: "article",
+    locale: b.locale,
+    siteName: b.name,
+    imageWidth: 1200,
+    imageHeight: 630,
+    publishedTime,
+    modifiedTime,
+    section: opts.section || undefined,
+    tags: keywords.length ? keywords : undefined,
+    author: opts.author,
+    twitterSite: "@sabq",
+    hreflang,
+    jsonLd,
+    semanticHtml: opts.semanticHtml,
+  };
+}
+
+/** Arabic-table article lookup with byline + section joins (ar + opinion). */
+async function fetchArArticle(slug: string) {
+  const where = or(eq(articles.englishSlug, slug), eq(articles.slug, slug));
+  const [row] = await db
+    .select({
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      excerpt: articles.excerpt,
+      aiSummary: articles.aiSummary,
+      content: articles.content,
+      imageUrl: articles.imageUrl,
+      publishedAt: articles.publishedAt,
+      updatedAt: articles.updatedAt,
+      seo: articles.seo,
+      categoryName: categories.nameAr,
+      authorFirstName: users.firstName,
+      authorLastName: users.lastName,
+      reporterFirstName: reporterUsers.firstName,
+      reporterLastName: reporterUsers.lastName,
+    })
+    .from(articles)
+    .leftJoin(categories, eq(articles.categoryId, categories.id))
+    .leftJoin(users, eq(articles.authorId, users.id))
+    .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+    .where(where!)
+    .limit(1);
+  return row || null;
+}
+
+function buildArArticlePayload(
+  row: NonNullable<Awaited<ReturnType<typeof fetchArArticle>>>,
+  slug: string,
+  canonical: string,
+) {
+  const seoData = (row.seo as any) || {};
+  const title = row.title || seoData.metaTitle || "";
+  // Description priority mirrors seoInjector.ts: editorial metaDescription, then
+  // the AI summary (so the smart summary appears in shares), then the excerpt.
+  const description = trunc(
+    seoData.metaDescription || row.aiSummary || row.excerpt || title,
+    220,
+  );
+  // Byline prefers the chosen reporter over the staff author, then the brand.
+  const reporterName = [row.reporterFirstName, row.reporterLastName].filter(Boolean).join(" ");
+  const editorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
+  const author = reporterName || editorName || ARTICLE_BRAND.ar.name;
+  return articleMetaPayload({
+    lang: "ar",
+    title,
+    description,
+    image: abs(row.imageUrl),
+    canonical,
+    englishSlug: row.englishSlug,
+    slug,
+    publishedAt: row.publishedAt,
+    updatedAt: row.updatedAt,
+    author,
+    section: row.categoryName,
+    keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+    semanticHtml: buildSemanticHtml({
+      title,
+      excerpt: row.excerpt || row.aiSummary || "",
+      content: row.content || "",
+      publishedAt: row.publishedAt,
+    }),
+  });
+}
+
 function defaultMeta(path: string) {
   return {
     title: "سبق الذكية",
@@ -246,91 +458,27 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = decodeURIComponent(m[1]);
-      const where = or(eq(articles.englishSlug, slug), eq(articles.slug, slug));
-      const [row] = await db
-        .select({
-          title: articles.title,
-          excerpt: articles.excerpt,
-          aiSummary: articles.aiSummary,
-          content: articles.content,
-          imageUrl: articles.imageUrl,
-          englishSlug: articles.englishSlug,
-          publishedAt: articles.publishedAt,
-        })
-        .from(articles)
-        .where(where!)
-        .limit(1);
+      const row = await fetchArArticle(slug);
       if (!row) return null;
-      // Description prefers the AI-generated summary so the crawler unfurl
-      // matches what the user picked editorially — same change made in
-      // `seoInjector.ts` on 2026-05-15 per user request.
-      const excerpt = row.aiSummary || row.excerpt || row.title || "";
-      return {
-        title: `${row.title} | سبق`,
-        description: trunc(excerpt, 220),
-        image: abs(row.imageUrl),
-        canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
-        robots: "index,follow",
-        type: "article",
-        locale: "ar_SA",
-        semanticHtml: buildSemanticHtml({
-          title: row.title || "",
-          excerpt,
-          content: row.content || "",
-          publishedAt: row.publishedAt,
-        }),
-      };
+      return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
     },
   },
   // Opinion article: /opinion/:slug
   // Lives in the same `articles` table with articleType='opinion' — same
-  // schema as the article handler, just canonicalises to /opinion/<slug>.
-  // Was missing entirely, so opinion shares unfurled with the generic SPA
-  // shell meta ("سبق الذكية" + icon.png) instead of the article's image +
-  // title + summary.
+  // schema as the article handler. Opinion articles are reachable at BOTH
+  // /opinion/<slug> (frontend links) AND /article/<slug> (what the XML sitemap
+  // emits — the sitemap query is not articleType-filtered). Two 200s with
+  // self-canonicals = Google's "Duplicate, chose different canonical" (~44k in
+  // GSC). Consolidate on /article/<slug> — the sitemap URL — so /opinion/
+  // folds into it. (Do NOT 404 either side: /article/ versions are advertised
+  // in the sitemap; 404ing them would create tens of thousands of 404s.)
   {
     pattern: /^\/opinion\/([^/?#]+)/,
     handle: async (m) => {
       const slug = decodeURIComponent(m[1]);
-      const where = or(eq(articles.englishSlug, slug), eq(articles.slug, slug));
-      const [row] = await db
-        .select({
-          title: articles.title,
-          excerpt: articles.excerpt,
-          aiSummary: articles.aiSummary,
-          content: articles.content,
-          imageUrl: articles.imageUrl,
-          englishSlug: articles.englishSlug,
-          publishedAt: articles.publishedAt,
-        })
-        .from(articles)
-        .where(where!)
-        .limit(1);
+      const row = await fetchArArticle(slug);
       if (!row) return null;
-      const excerpt = row.aiSummary || row.excerpt || row.title || "";
-      return {
-        title: `${row.title} | سبق`,
-        description: trunc(excerpt, 220),
-        image: abs(row.imageUrl),
-        // Opinion articles are reachable at BOTH /opinion/<slug> (frontend
-        // links) AND /article/<slug> (what the XML sitemap emits — the
-        // sitemap query is not articleType-filtered). Two 200s with
-        // self-canonicals = Google's "Duplicate, chose different canonical"
-        // (~44k in GSC). Consolidate on /article/<slug> — the sitemap URL —
-        // so /opinion/ folds into it. (Do NOT 404 either side: /article/
-        // versions are advertised in the sitemap; 404ing them would create
-        // tens of thousands of 404s.)
-        canonical: `${SITE_URL}/article/${row.englishSlug || slug}`,
-        robots: "index,follow",
-        type: "article",
-        locale: "ar_SA",
-        semanticHtml: buildSemanticHtml({
-          title: row.title || "",
-          excerpt,
-          content: row.content || "",
-          publishedAt: row.publishedAt,
-        }),
-      };
+      return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
     },
   },
   // English article: /en/article/:slug
@@ -342,32 +490,46 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const [row] = await db
         .select({
           title: enArticles.title,
+          slug: enArticles.slug,
+          englishSlug: enArticles.englishSlug,
           excerpt: enArticles.excerpt,
+          aiSummary: enArticles.aiSummary,
           content: enArticles.content,
           imageUrl: enArticles.imageUrl,
-          englishSlug: enArticles.englishSlug,
           publishedAt: enArticles.publishedAt,
+          updatedAt: enArticles.updatedAt,
+          seo: enArticles.seo,
+          authorFirstName: users.firstName,
+          authorLastName: users.lastName,
         })
         .from(enArticles)
+        .leftJoin(users, eq(enArticles.authorId, users.id))
         .where(where!)
         .limit(1);
       if (!row) return null;
-      const excerpt = row.excerpt || row.title || "";
-      return {
-        title: `${row.title} | Sabq`,
-        description: trunc(excerpt, 220),
+      const seoData = (row.seo as any) || {};
+      const title = row.title || seoData.metaTitle || "";
+      const description = trunc(seoData.metaDescription || row.aiSummary || row.excerpt || title, 220);
+      const author = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") || ARTICLE_BRAND.en.name;
+      return articleMetaPayload({
+        lang: "en",
+        title,
+        description,
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
-        robots: "index,follow",
-        type: "article",
-        locale: "en_US",
+        englishSlug: row.englishSlug,
+        slug,
+        publishedAt: row.publishedAt,
+        updatedAt: row.updatedAt,
+        author,
+        keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
         semanticHtml: buildSemanticHtml({
-          title: row.title || "",
-          excerpt,
+          title,
+          excerpt: row.excerpt || row.aiSummary || "",
           content: row.content || "",
           publishedAt: row.publishedAt,
         }),
-      };
+      });
     },
   },
   // Urdu article: /ur/article/:slug
@@ -379,32 +541,46 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const [row] = await db
         .select({
           title: urArticles.title,
+          slug: urArticles.slug,
+          englishSlug: urArticles.englishSlug,
           excerpt: urArticles.excerpt,
+          aiSummary: urArticles.aiSummary,
           content: urArticles.content,
           imageUrl: urArticles.imageUrl,
-          englishSlug: urArticles.englishSlug,
           publishedAt: urArticles.publishedAt,
+          updatedAt: urArticles.updatedAt,
+          seo: urArticles.seo,
+          authorFirstName: users.firstName,
+          authorLastName: users.lastName,
         })
         .from(urArticles)
+        .leftJoin(users, eq(urArticles.authorId, users.id))
         .where(where!)
         .limit(1);
       if (!row) return null;
-      const excerpt = row.excerpt || row.title || "";
-      return {
-        title: `${row.title} | سبق`,
-        description: trunc(excerpt, 220),
+      const seoData = (row.seo as any) || {};
+      const title = row.title || seoData.metaTitle || "";
+      const description = trunc(seoData.metaDescription || row.aiSummary || row.excerpt || title, 220);
+      const author = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") || ARTICLE_BRAND.ur.name;
+      return articleMetaPayload({
+        lang: "ur",
+        title,
+        description,
         image: abs(row.imageUrl),
         canonical: `${SITE_URL}/ur/article/${row.englishSlug || slug}`,
-        robots: "index,follow",
-        type: "article",
-        locale: "ur_PK",
+        englishSlug: row.englishSlug,
+        slug,
+        publishedAt: row.publishedAt,
+        updatedAt: row.updatedAt,
+        author,
+        keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
         semanticHtml: buildSemanticHtml({
-          title: row.title || "",
-          excerpt,
+          title,
+          excerpt: row.excerpt || row.aiSummary || "",
           content: row.content || "",
           publishedAt: row.publishedAt,
         }),
-      };
+      });
     },
   },
   // Arabic category: /category/:slug

@@ -160,6 +160,24 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
+// Serialize the NewsArticle (or other) JSON-LD safely. JSON inside a <script>
+// must not contain a literal "</script>" or a HTML special that lets the block
+// break out — escape <, >, & to their \uXXXX forms (valid JSON, inert HTML).
+function buildJsonLd(jsonLd) {
+  if (!jsonLd || typeof jsonLd !== "object") return "";
+  let json;
+  try {
+    json = JSON.stringify(jsonLd);
+  } catch (_) {
+    return "";
+  }
+  json = json
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+  return `<script type="application/ld+json">${json}</script>`;
+}
+
 function buildMetaBlock(meta) {
   if (!meta) return "";
   const title = escapeHtml(meta.title || "سبق الذكية");
@@ -168,8 +186,11 @@ function buildMetaBlock(meta) {
   const canonical = escapeHtml(meta.canonical || "");
   const robots = escapeHtml(meta.robots || "index,follow");
   const ogType = escapeHtml(meta.type || "website");
+  const locale = escapeHtml(meta.locale || "");
+  const siteName = escapeHtml(meta.siteName || "");
+  const twitterSite = escapeHtml(meta.twitterSite || "");
 
-  return [
+  const parts = [
     `<title>${title}</title>`,
     `<meta name="description" content="${desc}">`,
     `<meta name="robots" content="${robots}">`,
@@ -179,12 +200,43 @@ function buildMetaBlock(meta) {
     `<meta property="og:type" content="${ogType}">`,
     canonical ? `<meta property="og:url" content="${canonical}">` : "",
     image ? `<meta property="og:image" content="${image}">` : "",
+    image && meta.imageWidth ? `<meta property="og:image:width" content="${escapeHtml(meta.imageWidth)}">` : "",
+    image && meta.imageHeight ? `<meta property="og:image:height" content="${escapeHtml(meta.imageHeight)}">` : "",
+    locale ? `<meta property="og:locale" content="${locale}">` : "",
+    siteName ? `<meta property="og:site_name" content="${siteName}">` : "",
     `<meta name="twitter:card" content="summary_large_image">`,
+    twitterSite ? `<meta name="twitter:site" content="${twitterSite}">` : "",
     `<meta name="twitter:title" content="${title}">`,
     `<meta name="twitter:description" content="${desc}">`,
     image ? `<meta name="twitter:image" content="${image}">` : "",
-    `<!-- sabq-edge-meta-injected -->`,
-  ].filter(Boolean).join("\n");
+  ];
+
+  // Article freshness + provenance — the strongest Google News on-page signals
+  // (datePublished/dateModified, byline, section). Were entirely absent before.
+  if (meta.publishedTime) parts.push(`<meta property="article:published_time" content="${escapeHtml(meta.publishedTime)}">`);
+  if (meta.modifiedTime) parts.push(`<meta property="article:modified_time" content="${escapeHtml(meta.modifiedTime)}">`);
+  if (meta.section) parts.push(`<meta property="article:section" content="${escapeHtml(meta.section)}">`);
+  if (meta.author) parts.push(`<meta property="article:author" content="${escapeHtml(meta.author)}">`);
+  if (Array.isArray(meta.tags)) {
+    for (const t of meta.tags) {
+      if (t) parts.push(`<meta property="article:tag" content="${escapeHtml(t)}">`);
+    }
+  }
+
+  // hreflang chain — connects the ar/en/ur variants for multilingual indexing.
+  if (Array.isArray(meta.hreflang)) {
+    for (const h of meta.hreflang) {
+      if (h && h.lang && h.href) {
+        parts.push(`<link rel="alternate" hreflang="${escapeHtml(h.lang)}" href="${escapeHtml(h.href)}">`);
+      }
+    }
+  }
+
+  const jsonLd = buildJsonLd(meta.jsonLd);
+  if (jsonLd) parts.push(jsonLd);
+
+  parts.push(`<!-- sabq-edge-meta-injected -->`);
+  return parts.filter(Boolean).join("\n");
 }
 
 class TagRemover {
@@ -262,6 +314,8 @@ async function handleHtml(request, env) {
     .on('head > meta[property^="og:"]', remover)
     .on('head > meta[name^="twitter:"]', remover)
     .on('head > meta[property^="twitter:"]', remover)
+    .on('head > meta[property^="article:"]', remover)
+    .on('head > link[rel="alternate"][hreflang]', remover)
     .on("head", new HeadInjector(metaBlock));
   if (meta.semanticHtml) {
     rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
