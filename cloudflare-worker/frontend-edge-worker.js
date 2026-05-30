@@ -314,6 +314,17 @@ async function handleHtml(request, env) {
     return withHtmlNoStore(originRes);
   }
 
+  // Idempotency guard: if a prior layer already injected our meta into the
+  // origin HTML — e.g. the Cloudflare Pages middleware (functions/_middleware.js)
+  // with EDGE_SEO=on, which reads the SAME /api/edge/seo-meta — do NOT inject
+  // again, or the NewsArticle JSON-LD would be duplicated. Honors the documented
+  // "never both injecting at once" rule by deferring to whoever injected first.
+  const html = await originRes.text();
+  if (html.includes("sabq-edge-meta-injected")) {
+    return withHtmlNoStore(new Response(html, originRes));
+  }
+  const buffered = new Response(html, originRes);
+
   const metaBlock = buildMetaBlock(meta);
   // Strip the static SPA shell's stale meta tags first, otherwise crawlers
   // that pick the *first* duplicate (Twitter, some Slack/Telegram variants)
@@ -336,7 +347,7 @@ async function handleHtml(request, env) {
   if (meta.semanticHtml) {
     rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
   }
-  return withHtmlNoStore(rewriter.transform(originRes));
+  return withHtmlNoStore(rewriter.transform(buffered));
 }
 
 export default {
