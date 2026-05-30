@@ -12235,9 +12235,16 @@ Respond in valid JSON format only:
   async function getArticleIdBySlug(slug: string): Promise<{ id: string; categoryId: string | null } | null> {
     const cacheKey = `article:id:${slug}`;
     return withCache(cacheKey, CACHE_TTL.LONG, async () => {
+      // Match by slug or englishSlug. If the param looks like a UUID, also match
+      // by id — mirrors the UUID fallback in GET /api/articles/:slug so that the
+      // /comments, /related and /sidebar subroutes resolve UUID-form URLs too.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+      const matcher = isUuid
+        ? or(eq(articles.slug, slug), eq(articles.englishSlug, slug), eq(articles.id, slug))
+        : or(eq(articles.slug, slug), eq(articles.englishSlug, slug));
       const result = await db.select({ id: articles.id, categoryId: articles.categoryId })
         .from(articles)
-        .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
+        .where(matcher)
         .limit(1);
       return result.length > 0 ? { id: result[0].id, categoryId: result[0].categoryId } : null;
     });
