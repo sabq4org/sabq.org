@@ -481,7 +481,11 @@ const ROUTE_HANDLERS: RouteHandler[] = [
             englishSlug: categories.englishSlug,
           })
           .from(categories)
-          .where(and(eq(categories.status, "active"), eq(categories.isIfoxCategory, false)))
+          // Shown sections use status='visible' (the schema default 'active'
+          // is the "category status trap" — dashboard edits reset it and HIDE
+          // the section). Mirror /sitemap-categories.xml so homepage links ==
+          // the indexable category set.
+          .where(and(eq(categories.status, "visible"), eq(categories.isIfoxCategory, false)))
           .orderBy(categories.displayOrder)
           .limit(25),
       ]);
