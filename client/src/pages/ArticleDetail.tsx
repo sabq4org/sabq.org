@@ -675,6 +675,29 @@ export default function ArticleDetail() {
     };
   }, [article?.id, article?.seo, article?.imageUrl, mediaAssets]);
 
+  // Inline AI-flavored feedback under the engagement buttons. After a
+  // like/save we surface a friendly line that hints the action feeds
+  // personalization, then auto-dismiss it. `kind` drives the icon tint.
+  const [engagementHint, setEngagementHint] = useState<{
+    text: string;
+    kind: "like" | "bookmark" | "off";
+  } | null>(null);
+  const engagementHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showEngagementHint = useCallback(
+    (text: string, kind: "like" | "bookmark" | "off") => {
+      if (engagementHintTimer.current) clearTimeout(engagementHintTimer.current);
+      setEngagementHint({ text, kind });
+      engagementHintTimer.current = setTimeout(() => setEngagementHint(null), 5000);
+    },
+    [],
+  );
+  useEffect(
+    () => () => {
+      if (engagementHintTimer.current) clearTimeout(engagementHintTimer.current);
+    },
+    [],
+  );
+
   const reactMutation = useMutation({
     mutationFn: async () => {
       if (!article) return;
@@ -682,12 +705,36 @@ export default function ArticleDetail() {
         method: "POST",
       });
     },
-    onSuccess: () => {
+    onSuccess: (result: { hasReacted?: boolean } | undefined) => {
+      const nowReacted = !!result?.hasReacted;
+      // Reflect the toggle in the cache straight from the server's
+      // authoritative result so the button flips instantly. The old
+      // invalidate-only path relied on a background refetch that didn't
+      // always re-render in time — that's why "liked" only appeared after
+      // a second action (e.g. pressing save also refetched this query).
+      queryClient.setQueryData<ArticleWithDetails>(["/api/articles", slug], (old) =>
+        old
+          ? {
+              ...old,
+              hasReacted: nowReacted,
+              reactionsCount: Math.max(
+                0,
+                (old.reactionsCount || 0) +
+                  (nowReacted === !!old.hasReacted ? 0 : nowReacted ? 1 : -1),
+              ),
+            }
+          : old,
+      );
       if (article) {
-        logBehavior("reaction_add", { articleId: article.id });
-        trackArticleLike(article.id, true);
+        if (nowReacted) logBehavior("reaction_add", { articleId: article.id });
+        trackArticleLike(article.id, nowReacted);
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/articles", slug] });
+      showEngagementHint(
+        nowReacted
+          ? "تم تذكّر اهتمامك — سيقترح عليك الذكاء الاصطناعي المزيد من هذا النوع من الأخبار"
+          : "أُلغي الإعجاب",
+        nowReacted ? "like" : "off",
+      );
     },
     onError: (error: Error) => {
       console.log("React mutation error:", error.message);
@@ -714,19 +761,25 @@ export default function ArticleDetail() {
         method: "POST",
       });
     },
-    onSuccess: (result: any) => {
+    onSuccess: (result: { isBookmarked?: boolean } | undefined) => {
+      const nowBookmarked = !!result?.isBookmarked;
+      // Same instant, authoritative cache update as reactions so the save
+      // button reflects state immediately without waiting on a refetch.
+      queryClient.setQueryData<ArticleWithDetails>(["/api/articles", slug], (old) =>
+        old ? { ...old, isBookmarked: nowBookmarked } : old,
+      );
       if (article) {
-        logBehavior(
-          result?.isBookmarked ? "bookmark_add" : "bookmark_remove",
-          { articleId: article.id }
-        );
-        trackBookmarkToggle(article.id, Boolean(result?.isBookmarked));
+        logBehavior(nowBookmarked ? "bookmark_add" : "bookmark_remove", {
+          articleId: article.id,
+        });
+        trackBookmarkToggle(article.id, nowBookmarked);
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/articles", slug] });
-      toast({
-        title: "تم الحفظ",
-        description: "تم تحديث المقالات المحفوظة",
-      });
+      showEngagementHint(
+        nowBookmarked
+          ? "حُفظ في مكتبتك — يأخذ الذكاء الاصطناعي اهتمامك بهذا الموضوع في الحسبان"
+          : "أُزيل من المحفوظات",
+        nowBookmarked ? "bookmark" : "off",
+      );
     },
     onError: (error: Error) => {
       console.log("Bookmark mutation error:", error.message);
@@ -1486,61 +1539,94 @@ export default function ArticleDetail() {
               </div>
             )}
 
-            {/* Engagement & Share Section - Combined */}
-            <div className="bg-card border rounded-lg p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                  {isLoadingShortLink ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-green-500" />
-                  ) : (
-                    <Share2 className="h-5 w-5 text-green-500" />
-                  )}
+            {/* Engagement & Share Section - Combined.
+                Laid out as two full-width rows (header+actions, then
+                share) with `justify-between` so the card fills its width
+                instead of leaving a large empty gutter on the side. */}
+            <div className="bg-card border rounded-lg p-4 sm:p-5 space-y-4">
+              {/* Row 1: title (start) + engagement actions (end) */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center shrink-0">
+                    {isLoadingShortLink ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-green-500" />
+                    ) : (
+                      <Share2 className="h-5 w-5 text-green-500" />
+                    )}
+                  </div>
+                  <div className="leading-tight">
+                    <h3 className="text-lg font-bold">شارك المقال</h3>
+                    <p className="text-xs text-muted-foreground">تفاعل مع الخبر وشاركه مع غيرك</p>
+                  </div>
                 </div>
-                <h3 className="text-lg font-bold">شارك المقال</h3>
+
+                {/* Engagement Actions */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={article.hasReacted ? "default" : "outline"}
+                    size="sm"
+                    className="gap-2 transition-colors"
+                    onClick={handleReact}
+                    aria-pressed={!!article.hasReacted}
+                    data-testid="button-article-react"
+                  >
+                    <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
+                    <span>إعجاب ({article.reactionsCount || 0})</span>
+                  </Button>
+
+                  <Button
+                    variant={article.isBookmarked ? "default" : "outline"}
+                    size="sm"
+                    className="gap-2 transition-colors"
+                    onClick={handleBookmark}
+                    aria-pressed={!!article.isBookmarked}
+                    data-testid="button-article-bookmark"
+                  >
+                    <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
+                    <span>{article.isBookmarked ? "محفوظ" : "حفظ"}</span>
+                  </Button>
+
+                  {/* Focus Mode trigger (Task #80) */}
+                  <FocusReaderTrigger
+                    language="ar"
+                    onClick={() => setFocusOpen(true)}
+                  />
+                </div>
               </div>
-              
-              {/* Engagement Actions */}
-              <div className="flex gap-2">
-                <Button
-                  variant={article.hasReacted ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={handleReact}
-                  data-testid="button-article-react"
+
+              {/* Inline AI-flavored feedback after like/save */}
+              {engagementHint && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm animate-in fade-in slide-in-from-bottom-1 duration-300 ${
+                    engagementHint.kind === "off"
+                      ? "border-border bg-muted/50 text-muted-foreground"
+                      : "border-green-500/20 bg-green-500/5 text-green-700 dark:text-green-400"
+                  }`}
+                  role="status"
+                  aria-live="polite"
+                  data-testid="engagement-ai-hint"
                 >
-                  <Heart className={`h-4 w-4 ${article.hasReacted ? 'fill-current' : ''}`} />
-                  <span>إعجاب ({article.reactionsCount || 0})</span>
-                </Button>
+                  {engagementHint.kind !== "off" && (
+                    <Sparkles className="h-4 w-4 shrink-0 text-green-500" />
+                  )}
+                  <span>{engagementHint.text}</span>
+                </div>
+              )}
 
-                <Button
-                  variant={article.isBookmarked ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={handleBookmark}
-                  data-testid="button-article-bookmark"
-                >
-                  <Bookmark className={`h-4 w-4 ${article.isBookmarked ? 'fill-current' : ''}`} />
-                  <span>حفظ</span>
-                </Button>
-              </div>
+              <Separator />
 
-              {/* Focus Mode trigger (Task #80) */}
-              <div className="mb-3">
-                <FocusReaderTrigger
-                  language="ar"
-                  onClick={() => setFocusOpen(true)}
-                />
-              </div>
-
-              {/* Social Share — lazy-trigger short-link creation on user
-                  intent (hover/touch/focus). Falls back to the canonical URL
+              {/* Row 2: share label (start) + social buttons (end).
+                  Lazy-trigger short-link creation on user intent
+                  (hover/touch/focus). Falls back to the canonical URL
                   immediately so the share buttons are always usable, even
                   before (or if) the short link finishes generating. */}
               <div
+                className="flex flex-wrap items-center justify-between gap-3"
                 onMouseEnter={ensureShortLink}
                 onTouchStart={ensureShortLink}
                 onFocus={ensureShortLink}
               >
+                <span className="text-sm font-medium text-muted-foreground">انشر الخبر عبر</span>
                 <SocialShareBar
                   title={article.title}
                   // Always share the canonical /article/<slug> URL — the
@@ -1553,6 +1639,7 @@ export default function ArticleDetail() {
                   copyUrl={`https://sabq.org/article/${slug}`}
                   description={article.excerpt || ""}
                   articleId={article.id}
+                  className="justify-end"
                 />
               </div>
             </div>
