@@ -211,6 +211,34 @@ export async function onRequest(context) {
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
 
+  // Only sabq.org is the canonical, indexable frontend. Any OTHER host that
+  // serves this same SPA — the sabq.news test domain, `*.pages.dev` preview
+  // builds, or a `www.` variant — must NOT be indexed, or it competes with
+  // sabq.org for identical content and dilutes/splits Google's signals.
+  const noindexHost = url.hostname !== "sabq.org";
+
+  // On a non-canonical host, override robots.txt with a blanket disallow so
+  // crawlers skip the duplicate entirely (the proxied backend robots.txt says
+  // "Allow: /"). Page responses below also carry X-Robots-Tag: noindex.
+  if (noindexHost && path === "/robots.txt") {
+    return new Response("User-agent: *\nDisallow: /\n", {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=3600",
+      },
+    });
+  }
+
+  // Adds no-store (always) + X-Robots-Tag: noindex (non-canonical hosts only)
+  // to an HTML response. Use for every HTML return below.
+  const finalizeHtml = (res) => {
+    const out = withHtmlNoStore(res);
+    if (!noindexHost || !isHtml(out)) return out;
+    const headers = new Headers(out.headers);
+    headers.set("X-Robots-Tag", "noindex, follow");
+    return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
+  };
+
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
     try {
@@ -224,7 +252,7 @@ export async function onRequest(context) {
   // 2) Non-GET/HEAD, static assets / noindex screens, or SEO handled elsewhere
   //    (EDGE_SEO off — the standalone worker injects) → serve the shell as-is.
   if (request.method !== "GET" && request.method !== "HEAD") return next();
-  if (!seoEnabled || !isInjectablePath(path)) return withHtmlNoStore(await next());
+  if (!seoEnabled || !isInjectablePath(path)) return finalizeHtml(await next());
 
   // 3) Indexable HTML route → slug redirect + SEO meta/body injection.
   try {
@@ -244,7 +272,7 @@ export async function onRequest(context) {
       cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL),
     ]);
 
-    if (!isHtml(shell) || !meta) return withHtmlNoStore(shell);
+    if (!isHtml(shell) || !meta) return finalizeHtml(shell);
 
     // Strip the shell's generic tags first so crawlers that read the FIRST
     // duplicate (Twitter, some Slack/Telegram) don't see homepage tags.
@@ -261,9 +289,9 @@ export async function onRequest(context) {
     if (meta.semanticHtml) {
       rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
     }
-    return withHtmlNoStore(rewriter.transform(shell));
+    return finalizeHtml(rewriter.transform(shell));
   } catch (err) {
     console.error("[pages-fn] html error:", err);
-    return withHtmlNoStore(await next());
+    return finalizeHtml(await next());
   }
 }
