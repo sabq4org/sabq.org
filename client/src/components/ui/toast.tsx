@@ -1,7 +1,7 @@
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X } from "lucide-react"
+import { Check, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -28,6 +28,8 @@ const toastVariants = cva(
     variants: {
       variant: {
         default: "border bg-background text-foreground",
+        success:
+          "success group border-green-200 bg-green-50 text-green-900 border-b-green-200/40 dark:border-green-900/50 dark:bg-green-950 dark:text-green-100",
         destructive:
           "destructive group border-destructive bg-destructive text-destructive-foreground border-b-destructive/10",
       },
@@ -110,6 +112,15 @@ const ToastDescription = React.forwardRef<
 ))
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
+// Solid green check badge used by the success variant (matches the
+// Cloudflare-style "تم بنجاح" toast). Rendered at the inline-start of the
+// toast body by the Toaster.
+const ToastSuccessIcon = () => (
+  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-600 text-white dark:bg-green-500">
+    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+  </span>
+)
+
 type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
@@ -124,4 +135,5 @@ export {
   ToastDescription,
   ToastClose,
   ToastAction,
+  ToastSuccessIcon,
 }
