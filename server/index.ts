@@ -974,32 +974,49 @@ if (!(globalThis as any).__sabqServer) {
     });
     console.log("[Server] ✅ Social image endpoint registered (/social-image/)");
 
-    // Social media crawler middleware - MUST come before Vite/static setup
-    // This intercepts crawler requests and serves static HTML with proper meta tags
-    const { socialCrawlerMiddleware } = await import("./socialCrawler");
-    app.use(socialCrawlerMiddleware);
-    console.log("[Server] ✅ Social crawler middleware registered");
+    // SPA serving is ON by default (preserves Replit single-process behavior).
+    // Set SERVE_SPA=false on Railway (or any headless deployment where the
+    // frontend lives elsewhere, e.g. Vercel + Cloudflare) to disable the SPA
+    // wiring entirely. Computed here — not just at the SPA-serve block below —
+    // because the crawler/SEO middlewares that follow all transform or fall
+    // back to dist/public/index.html, which the server-only build never
+    // produces. Without this guard seoInjector's getTemplate() throws ENOENT
+    // on every non-API GET to the headless backend. Lenient parser: accepts
+    // "false"/"0"/"no"/"off" in any case with surrounding whitespace, since
+    // Railway/CI env editors sometimes inject them on copy-paste.
+    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
+    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
 
-    // Legacy URL redirects middleware - MUST run BEFORE seoInjector so that
-    // legacy paths like /news/{slug} are 301-redirected before seoInjector
-    // sees them as spa-fallback and serves a 200 SPA shell.
-    const { legacyRedirectMiddleware } = await import("./legacyRedirectMiddleware");
-    app.use(legacyRedirectMiddleware);
-    console.log("[Server] ✅ Legacy redirect middleware registered");
+    if (serveSpa) {
+      // Social media crawler middleware - MUST come before Vite/static setup
+      // This intercepts crawler requests and serves static HTML with proper meta tags
+      const { socialCrawlerMiddleware } = await import("./socialCrawler");
+      app.use(socialCrawlerMiddleware);
+      console.log("[Server] ✅ Social crawler middleware registered");
 
-    // Content existence middleware - MUST run BEFORE seoInjector. In production
-    // it serves a 404 SPA shell directly for missing entity slugs (article,
-    // muqtarab, world-day, keyword, reporter, writer, category), preventing
-    // seoInjector from overwriting the status with 200.
-    const { contentExistenceMiddleware } = await import("./contentExistenceMiddleware");
-    app.use(contentExistenceMiddleware);
-    console.log("[Server] ✅ Content existence middleware registered (SEO 404)");
+      // Legacy URL redirects middleware - MUST run BEFORE seoInjector so that
+      // legacy paths like /news/{slug} are 301-redirected before seoInjector
+      // sees them as spa-fallback and serves a 200 SPA shell.
+      const { legacyRedirectMiddleware } = await import("./legacyRedirectMiddleware");
+      app.use(legacyRedirectMiddleware);
+      console.log("[Server] ✅ Legacy redirect middleware registered");
 
-    // SEO meta tag injection middleware - Injects dynamic title, OG, Twitter, canonical, JSON-LD
-    // into the SPA HTML for all browsers (not just crawlers) to fix SEO indexing.
-    const { seoInjectorMiddleware } = await import("./seoInjector");
-    app.use(seoInjectorMiddleware);
-    console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
+      // Content existence middleware - MUST run BEFORE seoInjector. In production
+      // it serves a 404 SPA shell directly for missing entity slugs (article,
+      // muqtarab, world-day, keyword, reporter, writer, category), preventing
+      // seoInjector from overwriting the status with 200.
+      const { contentExistenceMiddleware } = await import("./contentExistenceMiddleware");
+      app.use(contentExistenceMiddleware);
+      console.log("[Server] ✅ Content existence middleware registered (SEO 404)");
+
+      // SEO meta tag injection middleware - Injects dynamic title, OG, Twitter, canonical, JSON-LD
+      // into the SPA HTML for all browsers (not just crawlers) to fix SEO indexing.
+      const { seoInjectorMiddleware } = await import("./seoInjector");
+      app.use(seoInjectorMiddleware);
+      console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
+    } else {
+      console.log("[Server] 🛰  Headless mode — crawler/SEO middleware skipped (SERVE_SPA=false). SEO is handled by the frontend deployment + Cloudflare edge worker.");
+    }
 
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
@@ -1134,15 +1151,9 @@ if (!(globalThis as any).__sabqServer) {
     console.log("[Server] ✅ HTML cache headers handled by serve layer");
     
     // SPA serving is ON by default — preserves existing Replit behavior.
-    // Set SERVE_SPA=false on Railway (or any headless deployment where the
-    // frontend lives elsewhere, e.g. Vercel) to disable SPA wiring entirely.
-    // Production on Replit (no env override) → unchanged.
-    // Lenient parser: accepts "false"/"0"/"no"/"off" in any case with
-    // surrounding whitespace, since Railway/CI env editors sometimes inject
-    // them on copy-paste.
-    const serveSpaEnv = String(process.env.SERVE_SPA || "").trim().toLowerCase();
-    const serveSpa = !["false", "0", "no", "off"].includes(serveSpaEnv);
-
+    // `serveSpa` was computed earlier (just before the crawler/SEO middleware
+    // block) so that headless deployments skip that block too. Production on
+    // Replit (no env override) → serveSpa=true → unchanged.
     if (!serveSpa) {
       console.log("[Server] 🛰  Headless mode — SPA serving disabled (SERVE_SPA=false). Frontend is served externally.");
       // Catch-all for non-API GETs so we return JSON 404 instead of HTML.
