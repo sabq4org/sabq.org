@@ -28240,19 +28240,29 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.send(cache.xml);
       }
 
+      // Most-recent published article → a <lastmod> hint on the
+      // frequently-changing news + article-bucket children so Google
+      // reprioritizes them on recrawl. One cheap aggregate; index is cached 10m.
+      let lastmod = '';
+      try {
+        const r = await db.execute(sql`SELECT MAX(published_at) AS m FROM articles WHERE status = 'published'`);
+        const m = (((r as any).rows || r)[0] || {}).m;
+        if (m) lastmod = `<lastmod>${new Date(m).toISOString()}</lastmod>`;
+      } catch { /* lastmod is best-effort */ }
+
       let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
       xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
       xml += `  <sitemap><loc>${baseUrl}/sitemap-static.xml</loc></sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc></sitemap>\n`;
-      xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc></sitemap>\n`;
+      xml += `  <sitemap><loc>${baseUrl}/sitemap-categories.xml</loc>${lastmod}</sitemap>\n`;
+      xml += `  <sitemap><loc>${baseUrl}/sitemap-news.xml</loc>${lastmod}</sitemap>\n`;
       for (let i = 1; i <= SITEMAP_AR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
       }
       for (let i = 1; i <= SITEMAP_EN_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-en-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
       }
       for (let i = 1; i <= SITEMAP_UR_BUCKETS; i++) {
-        xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc></sitemap>\n`;
+        xml += `  <sitemap><loc>${baseUrl}/sitemap-ur-articles-${i}.xml</loc>${lastmod}</sitemap>\n`;
       }
       xml += '</sitemapindex>';
 
@@ -28326,6 +28336,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: typeof articles.publishedAt;
     updatedAt: typeof articles.updatedAt;
     status: typeof articles.status;
+    imageUrl: typeof articles.imageUrl;
   };
 
   async function generateArticleSitemap(
@@ -28346,6 +28357,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         title: spec.title,
         publishedAt: spec.publishedAt,
         updatedAt: spec.updatedAt,
+        imageUrl: spec.imageUrl,
       })
       .from(spec.table)
       .where(
@@ -28366,8 +28378,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n</urlset>';
     }
 
+    const xmlEscape = (s: string) => s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const absImg = (u: string | null | undefined) => {
+      if (!u) return null;
+      return /^https?:\/\//i.test(u) ? u : `${baseUrl}${u.startsWith('/') ? '' : '/'}${u}`;
+    };
+
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n';
+    xml += '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n';
     for (const row of rows) {
       const canonicalSlug = row.englishSlug || row.slug;
       if (!canonicalSlug) continue;
@@ -28378,11 +28402,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       let changefreq = 'yearly';
       if (pubDate > sevenDaysAgo) { priority = '0.9'; changefreq = 'hourly'; }
       else if (pubDate > thirtyDaysAgo) { priority = '0.7'; changefreq = 'daily'; }
+      const img = absImg(row.imageUrl);
       xml += `  <url>\n`;
       xml += `    <loc>${baseUrl}${pathPrefix}/${encodeURIComponent(canonicalSlug)}</loc>\n`;
       xml += `    <lastmod>${lastmod}</lastmod>\n`;
       xml += `    <changefreq>${changefreq}</changefreq>\n`;
       xml += `    <priority>${priority}</priority>\n`;
+      if (img) {
+        xml += `    <image:image><image:loc>${xmlEscape(img)}</image:loc></image:image>\n`;
+      }
       xml += `  </url>\n`;
     }
     xml += '</urlset>';
@@ -28435,6 +28463,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: articles.publishedAt,
     updatedAt: articles.updatedAt,
     status: articles.status,
+    imageUrl: articles.imageUrl,
   };
   const enSitemapSpec: SitemapTableSpec = {
     table: enArticles,
@@ -28445,6 +28474,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: enArticles.publishedAt,
     updatedAt: enArticles.updatedAt,
     status: enArticles.status,
+    imageUrl: enArticles.imageUrl,
   } as any;
   const urSitemapSpec: SitemapTableSpec = {
     table: urArticles,
@@ -28455,6 +28485,7 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     publishedAt: urArticles.publishedAt,
     updatedAt: urArticles.updatedAt,
     status: urArticles.status,
+    imageUrl: urArticles.imageUrl,
   } as any;
 
   registerBucketedSitemap("/sitemap-articles-:page.xml", "__sitemapArticles", arSitemapSpec, "/article", SITEMAP_AR_BUCKETS);
