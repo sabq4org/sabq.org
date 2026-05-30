@@ -79,6 +79,18 @@ function fetchOrigin(request) {
   return fetch(request, ORIGIN_FETCH);
 }
 
+// Backend-owned, non-HTML resources that must NEVER be served as the SPA HTML
+// shell. When these go through Vercel and the backend hiccups, Vercel's
+// SPA fallback returns index.html (HTML 200) — which Google records as
+// "Sitemap is HTML" and drops the whole bucket. Routing them straight to the
+// API origin turns a transient failure into a 5xx (which Google silently
+// retries) and never an HTML 200.
+const API_DIRECT_RE = /^\/(sitemap[a-z0-9-]*\.xml|robots\.txt)$/i;
+
+function isApiDirect(pathname) {
+  return API_DIRECT_RE.test(pathname);
+}
+
 function isStaticAsset(pathname) {
   for (const ext of STATIC_EXTENSIONS) {
     if (pathname.endsWith(ext)) return true;
@@ -333,6 +345,13 @@ export default {
 
     if (request.method !== "GET" && request.method !== "HEAD") {
       return fetch(request);
+    }
+
+    // Sitemaps + robots.txt: straight to the API origin (bypass Vercel's SPA
+    // fallback). Plain fetch so Cloudflare still edge-caches per the backend's
+    // own Cache-Control instead of hammering Railway on every crawl.
+    if (isApiDirect(url.pathname)) {
+      return fetch(`${env.API_ORIGIN}${url.pathname}${url.search}`);
     }
 
     if (!isInjectablePath(url.pathname)) {
