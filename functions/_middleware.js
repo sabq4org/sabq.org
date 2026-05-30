@@ -239,6 +239,21 @@ export async function onRequest(context) {
     return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
   };
 
+  // Normalize trailing slashes on content routes: /article/x/ -> /article/x
+  // (301). Both forms return 200 today (the slash version self-canonicalizes,
+  // so it's the benign "alternate w/ canonical" GSC bucket — this just saves
+  // Google the extra crawl). Excludes proxy paths (/api, /uploads, sitemaps,
+  // /s/…) and static assets so it never touches media or API endpoints.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    path !== "/" &&
+    path.endsWith("/") &&
+    !isProxyPath(path) &&
+    !isStaticAsset(path)
+  ) {
+    return Response.redirect(`${url.origin}${path.replace(/\/+$/, "")}${url.search}`, 301);
+  }
+
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
     try {
