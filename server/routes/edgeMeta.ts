@@ -33,6 +33,19 @@ const router = Router();
 const ARABIC_RE = /[؀-ۿ]/;
 const containsArabic = (s: string) => ARABIC_RE.test(s);
 
+// Pre-migration article URL prefixes (the old /<category>/<legacySlug> scheme,
+// e.g. /saudia/k27fxz). These map 1:1 to a current /article/<englishSlug> via
+// articles.legacySlug. Mirrors the legacy /<cat>/:id routes in client App.tsx.
+// DELIBERATELY EXCLUDES current features that share the shape: `gulf` (gulf
+// events), `omq` (deep analyses), `category`, `article`, `news`, `opinion`,
+// `en`, `ur`, `world-day(s)`.
+const LEGACY_ARTICLE_PREFIXES = new Set([
+  "saudia", "saudi", "world", "arab", "local", "sport", "sports", "business",
+  "economy", "politics", "society", "culture", "health", "tech", "technology",
+  "cars", "tourism", "media", "entertainment", "accidents", "breaking",
+  "mylife", "stations", "articles",
+]);
+
 const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
@@ -85,6 +98,29 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
         if (row?.englishSlug) {
           return res.json({ redirect: `/category/${row.englishSlug}` });
         }
+      }
+    }
+
+    // Legacy pre-migration article URLs: /saudia/<legacySlug>,
+    // /world/<legacySlug>, /saudia/community/<legacySlug>, etc. These still
+    // return 200 today (a self-canonical DUPLICATE of /article/<englishSlug>)
+    // because the DB-backed legacyRedirects middleware runs on Express, which
+    // edge-served HTML never reaches. That duplicate URL structure (every
+    // migrated article reachable at TWO self-canonical URLs) is a major
+    // crawl-budget + duplicate-content drag. Resolve the trailing segment via
+    // the indexed `articles.legacySlug` and 301 to the canonical /article/ URL.
+    // Excludes CURRENT features that share a /<x>/<id> shape (gulf, omq).
+    const legacyMatch = path.match(/^\/([a-z]+)(?:\/[a-z0-9-]+)*\/([^/?#]+)\/?$/i);
+    if (legacyMatch && LEGACY_ARTICLE_PREFIXES.has(legacyMatch[1].toLowerCase())) {
+      const legacySlug = decodeURIComponent(legacyMatch[2]);
+      const [row] = await db
+        .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+        .from(articles)
+        .where(eq(articles.legacySlug, legacySlug))
+        .limit(1);
+      const canonical = row?.englishSlug || row?.slug;
+      if (canonical) {
+        return res.json({ redirect: `/article/${canonical}` });
       }
     }
 
