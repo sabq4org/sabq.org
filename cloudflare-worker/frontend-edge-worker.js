@@ -211,6 +211,9 @@ function buildMetaBlock(meta) {
     image ? `<meta name="twitter:image" content="${image}">` : "",
   ];
 
+  // Age-based News indexing (articles > 30d drop out of Google News index).
+  if (meta.googlebotNews) parts.push(`<meta name="googlebot-news" content="${escapeHtml(meta.googlebotNews)}">`);
+
   // Article freshness + provenance — the strongest Google News on-page signals
   // (datePublished/dateModified, byline, section). Were entirely absent before.
   if (meta.publishedTime) parts.push(`<meta property="article:published_time" content="${escapeHtml(meta.publishedTime)}">`);
@@ -315,6 +318,7 @@ async function handleHtml(request, env) {
     .on('head > meta[name^="twitter:"]', remover)
     .on('head > meta[property^="twitter:"]', remover)
     .on('head > meta[property^="article:"]', remover)
+    .on('head > meta[name="googlebot-news"]', remover)
     .on('head > link[rel="alternate"][hreflang]', remover)
     .on("head", new HeadInjector(metaBlock));
   if (meta.semanticHtml) {

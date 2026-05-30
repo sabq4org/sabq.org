@@ -231,6 +231,32 @@ function clampModified(
 }
 
 /**
+ * Age-based robots directives (mirrors seoInjector.ts). Google News should only
+ * surface fresh articles, so > 30 days old we tell `googlebot-news` to noindex
+ * (the article stays in web Search). > 1 year we also relax snippet limits and
+ * set `noarchive`. Keeps the edge path consistent with the Express path.
+ */
+function computeArticleRobots(
+  publishedAt?: Date | string | null,
+): { robots: string; googlebotNews?: string } {
+  const base = "index, follow, max-image-preview:large";
+  if (!publishedAt) return { robots: base };
+  const ageMs = Date.now() - new Date(publishedAt).getTime();
+  const day = 24 * 60 * 60 * 1000;
+  if (ageMs >= 365 * day) {
+    return {
+      robots:
+        "index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1, noarchive",
+      googlebotNews: "noindex",
+    };
+  }
+  if (ageMs >= 30 * day) {
+    return { robots: base, googlebotNews: "noindex" };
+  }
+  return { robots: base };
+}
+
+/**
  * Builds the full crawler payload for an article surface: NewsArticle JSON-LD,
  * hreflang chain, article:* / og:locale / og:site_name fields, plus the base
  * meta. The Cloudflare worker (frontend-edge-worker.js) turns these fields into
@@ -316,12 +342,15 @@ function articleMetaPayload(opts: {
   if (opts.section) jsonLd.articleSection = opts.section;
   if (keywords.length) jsonLd.keywords = keywords;
 
+  const { robots, googlebotNews } = computeArticleRobots(opts.publishedAt);
+
   return {
     title: `${opts.title} | ${b.suffix}`,
     description: opts.description,
     image: opts.image,
     canonical: opts.canonical,
-    robots: "index,follow",
+    robots,
+    googlebotNews,
     type: "article",
     locale: b.locale,
     siteName: b.name,
@@ -431,25 +460,49 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/$/,
     handle: async () => {
-      const rows = await db
-        .select({
-          slug: articles.slug,
-          englishSlug: articles.englishSlug,
-          title: articles.title,
-        })
-        .from(articles)
-        .where(eq(articles.status, "published"))
-        .orderBy(desc(articles.publishedAt))
-        .limit(60);
+      // Two crawlable hubs: the section index (was MISSING — homepage exposed
+      // zero /category/ links, so Googlebot had no path to the section pages
+      // where Google News discovers new articles) + the latest-articles list.
+      const [rows, cats] = await Promise.all([
+        db
+          .select({
+            slug: articles.slug,
+            englishSlug: articles.englishSlug,
+            title: articles.title,
+          })
+          .from(articles)
+          .where(eq(articles.status, "published"))
+          .orderBy(desc(articles.publishedAt))
+          .limit(60),
+        db
+          .select({
+            nameAr: categories.nameAr,
+            slug: categories.slug,
+            englishSlug: categories.englishSlug,
+          })
+          .from(categories)
+          .where(and(eq(categories.status, "active"), eq(categories.isIfoxCategory, false)))
+          .orderBy(categories.displayOrder)
+          .limit(25),
+      ]);
+      const sections = buildLinkListHtml(
+        "أقسام سبق",
+        cats.map((c) => ({
+          href: `/category/${c.englishSlug || c.slug}`,
+          title: c.nameAr || "",
+        })),
+      );
+      const latest = buildLinkListHtml(
+        "أحدث الأخبار على سبق",
+        rows.map((r) => ({
+          href: `/article/${r.englishSlug || r.slug}`,
+          title: r.title || "",
+        })),
+      );
+      const semanticHtml = [sections, latest].filter(Boolean).join("") || undefined;
       return {
         ...defaultMeta("/"),
-        semanticHtml: buildLinkListHtml(
-          "أحدث الأخبار على سبق",
-          rows.map((r) => ({
-            href: `/article/${r.englishSlug || r.slug}`,
-            title: r.title || "",
-          })),
-        ),
+        semanticHtml,
       };
     },
   },
