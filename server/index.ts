@@ -178,6 +178,19 @@ app.use(cors({
       console.warn(`[CORS] Rejected non-URL origin: ${origin}`);
       return callback(null, false);
     }
+    // ── Mobile WebView allowance (Capacitor iOS / Android) ──────────────
+    // iOS  → capacitor://localhost
+    // Android → https://localhost   (Capacitor 5+)  or  http://localhost (legacy)
+    // Ionic legacy → ionic://localhost
+    // These are app-bundle WebViews loading our own JS, so we trust them like
+    // first-party origins. App identity is enforced separately by auth tokens.
+    const isCapacitorWebView =
+      (parsed.protocol === 'capacitor:' && parsed.hostname === 'localhost') ||
+      (parsed.protocol === 'ionic:' && parsed.hostname === 'localhost') ||
+      ((parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.hostname === 'localhost');
+    if (isCapacitorWebView) {
+      return callback(null, true);
+    }
     if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
       console.warn(`[CORS] Rejected non-HTTPS origin in production: ${origin}`);
       return callback(null, false);
