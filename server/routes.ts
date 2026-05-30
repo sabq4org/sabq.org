@@ -7009,9 +7009,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }).catch(err => console.error('[GeoExtraction] Error:', err));
       }
 
-      // IndexNow + Google sitemap ping for immediate indexing (fire-and-forget)
-      if (newArticle.status === 'published' && newArticle.slug) {
-        notifySearchEngines(newArticle.slug).catch(() => {});
+      // IndexNow ping (Bing/Yandex) for immediate indexing (fire-and-forget).
+      // Submit the canonical englishSlug URL — the Arabic slug 301-redirects.
+      if (newArticle.status === 'published' && (newArticle.englishSlug || newArticle.slug)) {
+        notifySearchEngines(newArticle.englishSlug || newArticle.slug).catch(() => {});
       }
 
       // Editorial push notification when an article is created directly
@@ -7661,8 +7662,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Check if article was just published - run notifications in background (fire-and-forget)
       if (updatedArticle.status === "published" && existingArticle.status !== "published") {
         console.log(`🔔 [UPDATE ARTICLE] Status changed to PUBLISHED - scheduling background notifications...`);
-        // IndexNow + Google sitemap ping for immediate indexing
-        if (updatedArticle.slug) notifySearchEngines(updatedArticle.slug).catch(() => {});
+        // IndexNow ping (Bing/Yandex). Submit the canonical englishSlug URL.
+        if (updatedArticle.englishSlug || updatedArticle.slug) notifySearchEngines(updatedArticle.englishSlug || updatedArticle.slug).catch(() => {});
 
         // Broadcast publish event to other editors via SSE (live toast)
         try {
@@ -7953,8 +7954,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Trigger notification for published article
       console.log(`🔔 [PUBLISH ARTICLE] Publishing article - ID: ${updatedArticle.id}, Title: ${updatedArticle.title}`);
-      // IndexNow + Google sitemap ping for immediate indexing
-      if (updatedArticle.slug) notifySearchEngines(updatedArticle.slug).catch(() => {});
+      // IndexNow ping (Bing/Yandex). Submit the canonical englishSlug URL.
+      if (updatedArticle.englishSlug || updatedArticle.slug) notifySearchEngines(updatedArticle.englishSlug || updatedArticle.slug).catch(() => {});
       
       // All notifications run in background (fire-and-forget for fast response)
       const articleForNotification = { ...updatedArticle };
@@ -15474,9 +15475,9 @@ Respond in valid JSON format only:
           summary: 'تم نشر الخبر',
         }).catch(err => console.error("[DASHBOARD CREATE] Failed to log publish event:", err));
       }
-      // IndexNow + Google sitemap ping for immediate indexing (fire-and-forget)
-      if (article.status === 'published' && article.slug) {
-        notifySearchEngines(article.slug).catch(() => {});
+      // IndexNow ping (Bing/Yandex). Submit the canonical englishSlug URL.
+      if (article.status === 'published' && (article.englishSlug || article.slug)) {
+        notifySearchEngines(article.englishSlug || article.slug).catch(() => {});
       }
 
       // Process async operations in background (non-blocking)
@@ -15679,9 +15680,9 @@ Respond in valid JSON format only:
           summary: 'تم إلغاء نشر الخبر',
         }).catch(err => console.error("[DASHBOARD UPDATE] Failed to log unpublish event:", err));
       }
-      // IndexNow + Google sitemap ping for immediate indexing (fire-and-forget)
-      if (updated.status === "published" && article.status !== "published" && updated.slug) {
-        notifySearchEngines(updated.slug).catch(() => {});
+      // IndexNow ping (Bing/Yandex). Submit the canonical englishSlug URL.
+      if (updated.status === "published" && article.status !== "published" && (updated.englishSlug || updated.slug)) {
+        notifySearchEngines(updated.englishSlug || updated.slug).catch(() => {});
       }
 
       // Process async operations in background (non-blocking)

@@ -29,9 +29,15 @@ export const INDEXNOW_KEY: string =
 /**
  * Ping IndexNow API to request immediate indexing of an article.
  * Fire-and-forget — errors are logged but never re-thrown.
+ *
+ * IMPORTANT: pass the CANONICAL slug (englishSlug), not the Arabic slug.
+ * The Arabic slug 301-redirects to /article/<englishSlug> (see
+ * server/middleware/slugRedirect.ts), and submitting a redirecting URL to
+ * IndexNow wastes the signal — Bing/Yandex have to follow the hop and may
+ * skip it. Always submit the final canonical URL.
  */
-export async function pingIndexNow(slug: string): Promise<void> {
-  const articleUrl = `${BASE_URL}/article/${encodeURIComponent(slug)}`;
+export async function pingIndexNow(canonicalSlug: string): Promise<void> {
+  const articleUrl = `${BASE_URL}/article/${encodeURIComponent(canonicalSlug)}`;
   try {
     const res = await fetch('https://api.indexnow.org/indexnow', {
       method: 'POST',
@@ -61,10 +67,11 @@ export async function pingIndexNow(slug: string): Promise<void> {
  * Currently IndexNow only (Bing/Yandex/Naver). See the file header for why
  * the Google sitemap ping was removed and what to use for Google instead.
  *
- * Call this fire-and-forget after any article is published.
+ * Call this fire-and-forget after any article is published. Pass the
+ * CANONICAL slug (englishSlug) so the submitted URL does not 301-redirect.
  * Example:
- *   notifySearchEngines(article.slug).catch(() => {});
+ *   notifySearchEngines(article.englishSlug || article.slug).catch(() => {});
  */
-export async function notifySearchEngines(slug: string): Promise<void> {
-  await pingIndexNow(slug);
+export async function notifySearchEngines(canonicalSlug: string): Promise<void> {
+  await pingIndexNow(canonicalSlug);
 }
