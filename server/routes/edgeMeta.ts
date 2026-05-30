@@ -27,7 +27,7 @@ import {
   worldDays,
   gulfEvents,
 } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, and, desc } from "drizzle-orm";
 
 const router = Router();
 const ARABIC_RE = /[؀-ۿ]/;
@@ -141,6 +141,25 @@ function buildSemanticHtml(opts: {
   return `<article style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>${safeTitle}</h1>${publishedIso ? `<time datetime="${publishedIso}">${publishedIso}</time>` : ""}<p>${safeExcerpt}</p><div>${safeBody}</div></article>`;
 }
 
+/**
+ * Crawler-visible hub of internal links, hidden from users (React replaces
+ * #root on hydrate). This is the fix for "Google can't discover new articles":
+ * the SPA shell exposes ZERO <a> links to crawlers, so Googlebot crawling "/"
+ * or a section page finds nothing to follow (GSC: "no referring pages").
+ * Injecting a real <a href="/article/…"> list gives it a link graph to crawl.
+ */
+function buildLinkListHtml(
+  heading: string,
+  links: { href: string; title: string }[],
+): string | undefined {
+  const items = links
+    .filter((l) => l.href && l.title)
+    .map((l) => `<li><a href="${escapeHtml(l.href)}">${escapeHtml(l.title)}</a></li>`)
+    .join("");
+  if (!items) return undefined;
+  return `<nav style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h2>${escapeHtml(heading)}</h2><ul>${items}</ul></nav>`;
+}
+
 function defaultMeta(path: string) {
   return {
     title: "سبق الذكية",
@@ -158,6 +177,34 @@ interface RouteHandler {
 }
 
 const ROUTE_HANDLERS: RouteHandler[] = [
+  // Homepage — inject a crawlable list of the most recent article links so
+  // Googlebot can DISCOVER new articles by crawling "/" (the SPA shell shows
+  // crawlers no links at all). Title/canonical stay the site defaults.
+  {
+    pattern: /^\/$/,
+    handle: async () => {
+      const rows = await db
+        .select({
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          title: articles.title,
+        })
+        .from(articles)
+        .where(eq(articles.status, "published"))
+        .orderBy(desc(articles.publishedAt))
+        .limit(60);
+      return {
+        ...defaultMeta("/"),
+        semanticHtml: buildLinkListHtml(
+          "أحدث الأخبار على سبق",
+          rows.map((r) => ({
+            href: `/article/${r.englishSlug || r.slug}`,
+            title: r.title || "",
+          })),
+        ),
+      };
+    },
+  },
   // Arabic article: /article/:slug
   {
     pattern: /^\/article\/([^/?#]+)/,
@@ -324,6 +371,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
       const [row] = await db
         .select({
+          id: categories.id,
           nameAr: categories.nameAr,
           nameEn: categories.nameEn,
           description: categories.description,
@@ -335,6 +383,18 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         .limit(1);
       if (!row) return null;
       const displayName = row.nameAr || row.nameEn;
+      // Crawlable list of this section's recent articles → a discovery hub so
+      // Googlebot reaches the section's new articles by following links.
+      const sectionArticles = await db
+        .select({
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          title: articles.title,
+        })
+        .from(articles)
+        .where(and(eq(articles.categoryId, row.id), eq(articles.status, "published")))
+        .orderBy(desc(articles.publishedAt))
+        .limit(40);
       return {
         title: `${displayName} | سبق`,
         description: trunc(row.description || `أحدث الأخبار في ${displayName}`, 220),
@@ -343,6 +403,13 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         robots: "index,follow",
         type: "website",
         locale: "ar_SA",
+        semanticHtml: buildLinkListHtml(
+          `أحدث الأخبار في ${displayName}`,
+          sectionArticles.map((r) => ({
+            href: `/article/${r.englishSlug || r.slug}`,
+            title: r.title || "",
+          })),
+        ),
       };
     },
   },
