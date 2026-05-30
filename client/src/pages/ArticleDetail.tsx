@@ -698,6 +698,21 @@ export default function ArticleDetail() {
     [],
   );
 
+  // After a like/save, refresh list-type article queries + the profile
+  // "liked" list so cards elsewhere reflect the new state. Deliberately
+  // EXCLUDES this page's own detail query and its string-slug sub-queries
+  // (comments/sidebar/ai-bullets) so a single tap doesn't trigger a refetch
+  // storm here — the detail card is already updated via setQueryData.
+  const refreshEngagementLists = useCallback(() => {
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        q.queryKey[0] === "/api/articles" &&
+        typeof q.queryKey[1] !== "string",
+    });
+    queryClient.invalidateQueries({ queryKey: ["/api/profile/liked"] });
+  }, []);
+
   const reactMutation = useMutation({
     mutationFn: async () => {
       if (!article) return;
@@ -735,6 +750,7 @@ export default function ArticleDetail() {
           : "أُلغي الإعجاب",
         nowReacted ? "like" : "off",
       );
+      refreshEngagementLists();
     },
     onError: (error: Error) => {
       console.log("React mutation error:", error.message);
@@ -780,6 +796,7 @@ export default function ArticleDetail() {
           : "أُزيل من المحفوظات",
         nowBookmarked ? "bookmark" : "off",
       );
+      refreshEngagementLists();
     },
     onError: (error: Error) => {
       console.log("Bookmark mutation error:", error.message);
