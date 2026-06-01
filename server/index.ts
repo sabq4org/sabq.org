@@ -306,14 +306,16 @@ app.use(compression({
 
 app.use(cookieParser());
 app.use(express.json({
-  limit: '10mb', // Increased for base64 image uploads
+  limit: '25mb', // base64 image uploads from mobile inflate ~33% over the
+                 // raw photo, so a couple of phone images need headroom.
+                 // Bumped 10mb → 25mb to stop /articles/submit 413s.
   verify: (req: any, _res: any, buf: Buffer) => {
     // Stash the exact raw bytes before JSON parsing so webhook handlers
     // can verify HMAC signatures against the original payload.
     req.rawBody = buf;
   },
 }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '25mb' }));
 
 // Direct proxy for /public-objects/ — uses searchPublicObject for dual-bucket fallback.
 // In production, /public-objects/ returns HTML (SPA fallback) instead of actual images.

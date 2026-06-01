@@ -4339,12 +4339,22 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
 
     // Upload images to CF Images. We treat the order client-side as the
     // intended display order: index 0 → hero, the rest → albumImages[].
+    //
+    // Images are validated first (cheap, synchronous), then uploaded in
+    // PARALLEL via Promise.all. The previous sequential await-in-loop made
+    // total time = sum of every upload, which combined with the mobile
+    // client's request timeout caused "انتهت مهلة الطلب" on multi-image
+    // submissions. Parallel upload makes total time ≈ the slowest single
+    // image instead of the sum.
     const uploadedUrls: string[] = [];
     if (imagePayload.length > 0) {
       if (!cloudflareImagesService.isCloudflareConfigured()) {
         return res.status(502).json({ success: false, message: "خدمة رفع الصور غير مهيأة حالياً" });
       }
 
+      // 1) Validate + decode every image up front so we fail fast with a
+      //    precise error before spending time on any upload.
+      const decoded: { buffer: Buffer; mimeType: string; ext: string }[] = [];
       for (let i = 0; i < imagePayload.length; i++) {
         const src = imagePayload[i];
         const matches = src.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
@@ -4354,7 +4364,8 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
             message: `صيغة الصورة ${i + 1} غير صحيحة`,
           });
         }
-        const mimeType = `image/${matches[1].toLowerCase() === "heif" ? "heic" : matches[1].toLowerCase()}`;
+        const ext = matches[1].toLowerCase();
+        const mimeType = `image/${ext === "heif" ? "heic" : ext}`;
         const buffer = Buffer.from(matches[2], "base64");
 
         // 20 MB per image cap — CF Images max is 10 MB for free, 20 MB Pro;
@@ -4366,14 +4377,25 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
             message: `حجم الصورة ${i + 1} كبير جداً (الحد الأقصى 20 ميجابايت)`,
           });
         }
+        decoded.push({ buffer, mimeType, ext });
+      }
 
-        const result = await cloudflareImagesService.uploadToCloudflare(
-          buffer,
-          `submission-${session.userId}-${Date.now()}-${i}.${matches[1]}`,
-          { type: "mobile-article-submission", userId: session.userId, slot: String(i) },
-          mimeType
-        );
+      // 2) Upload all images concurrently, preserving original order.
+      const batchStamp = Date.now();
+      const results = await Promise.all(
+        decoded.map((img, i) =>
+          cloudflareImagesService.uploadToCloudflare(
+            img.buffer,
+            `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
+            { type: "mobile-article-submission", userId: session.userId, slot: String(i) },
+            img.mimeType
+          )
+        )
+      );
 
+      // 3) Collect results in order; bail on the first failure.
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
         if (!result.success || !result.deliveryUrl) {
           console.error("[Mobile API] /articles/submit CF Images upload failed:", result.error);
           return res.status(502).json({
@@ -4381,7 +4403,6 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
             message: `تعذر رفع الصورة ${i + 1}. حاول لاحقاً.`,
           });
         }
-
         uploadedUrls.push(result.deliveryUrl);
       }
     }
