@@ -12394,6 +12394,17 @@ Respond in valid JSON format only:
       // heavy article query cached while guaranteeing the viewer always sees
       // their own like/bookmark and an up-to-date count (also keeps web + iOS
       // + Android consistent since they all read this endpoint).
+      // Always overlay the LIVE view count so the 5-10 boost shows immediately
+      // on refresh — the cached payload's `views` is up to 5 min stale. The
+      // heavy article query stays cached; this is just one PK-indexed lookup.
+      {
+        const [viewsRow] = await db.select({ views: articles.views }).from(articles)
+          .where(eq(articles.id, finalArticle.id)).limit(1);
+        if (viewsRow) {
+          finalArticle = { ...finalArticle, views: Number(viewsRow.views ?? (finalArticle as any).views ?? 0) };
+        }
+      }
+
       if (userId) {
         const articleId = finalArticle.id;
         const [reactionRow, bookmarkRow, [countRow]] = await Promise.all([
@@ -13214,9 +13225,13 @@ Respond in valid JSON format only:
       memoryCache.set(ipRateLimitKey, ipViewCount + 1, 60 * 1000); // 1 minute
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
       
-      // Buffer view count increment (flushed to DB every 30 seconds)
+      // Write the 5-10 boost DIRECTLY to the DB so the increase is visible
+      // immediately. (Was previously buffered + flushed every 60s, which —
+      // combined with the 5-min article cache — hid the bump on refresh.)
       const viewIncrement = Math.floor(Math.random() * 6) + 5;
-      viewBuffer.set(articleId, (viewBuffer.get(articleId) || 0) + viewIncrement);
+      await db.update(articles)
+        .set({ views: sql`${articles.views} + ${viewIncrement}` })
+        .where(eq(articles.id, articleId));
 
       const userId = req.user?.id;
       if (userId) {

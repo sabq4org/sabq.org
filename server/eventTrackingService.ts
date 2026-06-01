@@ -90,13 +90,10 @@ export async function trackUserEvent(params: {
 
   console.log(`✅ [EVENT TRACKING] Tracked event: ${eventType} for article ${articleId} (value: ${eventValue})`);
 
-  // Update article view count if event is 'view'
-  if (eventType === 'view') {
-    await db
-      .update(articles)
-      .set({ views: sql`${articles.views} + 1` })
-      .where(eq(articles.id, articleId));
-  }
+  // NOTE: view-count increments are owned solely by POST /api/articles/:id/view
+  // (random 5-10 boost). This path used to add an extra +1 here for logged-in
+  // users, which double-counted on top of the boost — removed intentionally.
+  // The userEvents row above is still recorded for the recommendation engine.
 
   // Trigger recommendation processing for high-value events (non-blocking)
   if (['like', 'bookmark', 'share'].includes(eventType)) {
