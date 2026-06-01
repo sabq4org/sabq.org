@@ -190,11 +190,18 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
-    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil, apiRoot: String? = nil) async throws -> T {
+    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil, apiRoot: String? = nil, timeout: TimeInterval? = nil) async throws -> T {
         let url = try buildURL(path: path, apiRoot: apiRoot)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         applyHeaders(&request)
+        // Per-request override for slow endpoints (e.g. image-heavy article
+        // submission). The shared session default is 15s which is fine for
+        // JSON reads but kills multi-image uploads mid-flight → "انتهت مهلة
+        // الطلب". Callers can pass a longer budget without slowing the rest.
+        if let timeout {
+            request.timeoutInterval = timeout
+        }
         if let body {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
@@ -974,10 +981,14 @@ actor APIClient {
             images: dataURIs
         )
 
+        // Image upload + sequential CF Images processing on the server can
+        // take well past the default 15s. Give submission a 90s budget so a
+        // couple of phone photos don't time out before the server replies.
         return try await post(
             ArticleSubmissionResponse.self,
             path: "/articles/submit",
-            body: body
+            body: body,
+            timeout: 90
         )
     }
 
