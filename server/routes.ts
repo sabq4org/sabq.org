@@ -13189,28 +13189,21 @@ Respond in valid JSON format only:
                        req.headers['x-real-ip'] || 
                        req.connection?.remoteAddress || 
                        'unknown';
-      const userAgent = req.headers['user-agent'] || 'unknown';
-      const clientFingerprint = `${clientIp}-${userAgent.slice(0, 50)}`;
-      
       // Rate limiting keys
-      const viewDedupeKey = `view:dedupe:${articleId}:${clientFingerprint}`;
       const ipRateLimitKey = `view:rate:${clientIp}`;
       const articleHourlyKey = `view:hourly:${articleId}`;
-      
-      // 1. Check deduplication (same client, same article, within 5 minutes)
-      const recentView = memoryCache.get<boolean>(viewDedupeKey);
-      if (recentView) {
-        // Dont increment, but still return success to not break client
-        return res.json({ success: true, deduplicated: true });
-      }
-      
-      // 2. Check IP rate limit (max 60 views per minute from same IP)
+
+      // NOTE: per-client 5-minute deduplication intentionally removed —
+      // every page view now counts (each visit adds the 5-10 random boost).
+      // The IP rate limit + hourly soft cap below remain as runaway guards.
+
+      // 1. Check IP rate limit (max 60 views per minute from same IP)
       const ipViewCount = memoryCache.get<number>(ipRateLimitKey) || 0;
       if (ipViewCount >= 60) {
         return res.json({ success: true, rateLimited: true });
       }
       
-      // 3. Check article hourly limit (max 500 views per hour per article to detect anomalies)
+      // 2. Check article hourly limit (max 500 views per hour per article to detect anomalies)
       const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
         // Log suspicious activity but still allow view (soft limit)
@@ -13218,7 +13211,6 @@ Respond in valid JSON format only:
       }
       
       // All checks passed - increment counters
-      memoryCache.set(viewDedupeKey, true, 5 * 60 * 1000); // 5 minutes
       memoryCache.set(ipRateLimitKey, ipViewCount + 1, 60 * 1000); // 1 minute
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
       
