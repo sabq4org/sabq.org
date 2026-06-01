@@ -350,7 +350,6 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
               const timeAgo = article.publishedAt
                 ? formatArticleTimestamp(article.publishedAt)
                 : null;
-              const match = matches.get(article.id);
 
               return (
                 <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
@@ -384,7 +383,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
 
                           {/* Content */}
                           <div className="flex-1 min-w-0 space-y-1.5">
-                            {/* Badges above title */}
+                            {/* Badges above title (note: match score % / reason intentionally hidden on phone) */}
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {/* AI Generated Image Badge (Featured or Thumbnail) */}
                               {((article as any).isAiGeneratedThumbnail || (article as any).isAiGeneratedImage) && (
@@ -464,11 +463,6 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                               )}
                             </div>
 
-                            {match && (
-                              <div className="pt-1">
-                                <MatchBadge match={match} articleId={article.id} size="sm" />
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
