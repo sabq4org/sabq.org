@@ -95,6 +95,16 @@ function PulseBar({
 
 type ViewMode = "grid" | "list";
 
+function categoryColorStyles(color?: string | null) {
+  const hex = color && /^#([0-9a-fA-F]{6})$/.test(color) ? color : null;
+  return {
+    background: hex ? `${hex}0F` : "hsl(var(--muted) / 0.4)",
+    border: hex ? `${hex}40` : "hsl(var(--border))",
+    iconBg: hex ? `${hex}1A` : "hsl(var(--muted))",
+    iconColor: hex ?? "hsl(var(--primary))",
+  };
+}
+
 export default function CategoriesListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -202,124 +212,37 @@ export default function CategoriesListPage() {
             </p>
           </div>
         ) : viewMode === "grid" ? (
-          /* Grid View - Visual Cards with Images */
+          /* Grid View - Clean cards with soft tinted backgrounds */
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredCategories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`}>
-                <Card
-                  className="group relative overflow-hidden rounded-xl cursor-pointer h-48 hover-elevate active-elevate-2"
-                  data-testid={`card-category-${category.id}`}
-                >
-                  {/* Background Image or Gradient */}
-                  {category.heroImageUrl ? (
-                    <img
-                      src={category.heroImageUrl}
-                      alt={category.nameAr}
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                  ) : (
-                    <div 
-                      className="absolute inset-0"
-                      style={{
-                        background: category.color 
-                          ? `linear-gradient(135deg, ${category.color}, ${category.color}88)`
-                          : 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))'
-                      }}
-                    />
-                  )}
-                  
-                  {/* Dark Overlay for text readability */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-                  
-                  {/* Content */}
-                  <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                    {/* Icon */}
-                    {category.icon && (
-                      <span className="text-3xl mb-2 drop-shadow-lg">
-                        {category.icon}
-                      </span>
-                    )}
-                    
+            {filteredCategories.map((category) => {
+              const styles = categoryColorStyles(category.color);
+              return (
+                <Link key={category.id} href={`/category/${category.slug}`}>
+                  <Card
+                    className="group relative flex h-full min-h-[160px] cursor-pointer flex-col rounded-xl border p-5 transition-colors hover-elevate active-elevate-2"
+                    style={{ backgroundColor: styles.background, borderColor: styles.border }}
+                    data-testid={`card-category-${category.id}`}
+                  >
+                    {/* Icon chip */}
+                    <div
+                      className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg text-2xl"
+                      style={{ backgroundColor: styles.iconBg, color: styles.iconColor }}
+                    >
+                      {category.icon || <Newspaper className="h-5 w-5" />}
+                    </div>
+
                     {/* Category Name */}
-                    <h3 
-                      className="text-lg font-bold text-white mb-1 drop-shadow-lg"
+                    <h3
+                      className="text-lg font-bold text-foreground leading-snug"
                       data-testid={`text-category-name-${category.id}`}
                     >
                       {category.nameAr}
                     </h3>
+                    {category.nameEn && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{category.nameEn}</p>
+                    )}
 
-                    {/* Pulse Bar */}
-                    <PulseBar
-                      percent={category.pulsePercent ?? null}
-                      level={category.pulseLevel ?? "calm"}
-                      hasData={category.hasPulseData ?? false}
-                      variant="overlay"
-                      testId={`pulse-category-${category.id}`}
-                    />
-
-                    {/* Article Count Badge */}
-                    <Badge 
-                      variant="secondary" 
-                      className="w-fit bg-white/20 backdrop-blur-sm text-white border-0 text-xs"
-                    >
-                      <FileText className="h-3 w-3 ml-1" />
-                      {(category.articleCount || 0).toLocaleString()} خبر
-                    </Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          /* List View - Compact Horizontal Cards */
-          <div className="space-y-3">
-            {filteredCategories.map((category) => (
-              <Link key={category.id} href={`/category/${category.slug}`}>
-                <Card
-                  className="group overflow-hidden cursor-pointer hover-elevate active-elevate-2"
-                  data-testid={`card-category-${category.id}`}
-                >
-                  <div className="flex items-center gap-4 p-4">
-                    {/* Image or Icon */}
-                    <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
-                      {category.heroImageUrl ? (
-                        <img
-                          src={category.heroImageUrl}
-                          alt={category.nameAr}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                        />
-                      ) : (
-                        <div 
-                          className="w-full h-full flex items-center justify-center text-3xl"
-                          style={{
-                            background: category.color 
-                              ? `linear-gradient(135deg, ${category.color}, ${category.color}88)`
-                              : 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))'
-                          }}
-                        >
-                          {category.icon || <Newspaper className="h-8 w-8 text-white" />}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <h3 
-                        className="text-lg font-bold text-foreground group-hover:text-primary transition-colors"
-                        data-testid={`text-category-name-${category.id}`}
-                      >
-                        {category.nameAr}
-                      </h3>
-                      {category.nameEn && (
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {category.nameEn}
-                        </p>
-                      )}
-                      <Badge variant="secondary" className="text-xs">
-                        <FileText className="h-3 w-3 ml-1" />
-                        {(category.articleCount || 0).toLocaleString()} خبر
-                      </Badge>
-
+                    <div className="mt-auto pt-3">
                       {/* Pulse Bar */}
                       <PulseBar
                         percent={category.pulsePercent ?? null}
@@ -328,11 +251,71 @@ export default function CategoriesListPage() {
                         variant="inline"
                         testId={`pulse-category-${category.id}`}
                       />
+
+                      {/* Article Count Badge */}
+                      <Badge variant="secondary" className="mt-2 w-fit text-xs">
+                        <FileText className="h-3 w-3 ml-1" />
+                        {(category.articleCount || 0).toLocaleString()} خبر
+                      </Badge>
                     </div>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          /* List View - Compact Horizontal Cards */
+          <div className="space-y-3">
+            {filteredCategories.map((category) => {
+              const styles = categoryColorStyles(category.color);
+              return (
+                <Link key={category.id} href={`/category/${category.slug}`}>
+                  <Card
+                    className="group cursor-pointer border hover-elevate active-elevate-2"
+                    style={{ backgroundColor: styles.background, borderColor: styles.border }}
+                    data-testid={`card-category-${category.id}`}
+                  >
+                    <div className="flex items-center gap-4 p-4">
+                      {/* Icon chip */}
+                      <div
+                        className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg text-2xl"
+                        style={{ backgroundColor: styles.iconBg, color: styles.iconColor }}
+                      >
+                        {category.icon || <Newspaper className="h-6 w-6" />}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <h3
+                          className="text-lg font-bold text-foreground group-hover:text-primary transition-colors"
+                          data-testid={`text-category-name-${category.id}`}
+                        >
+                          {category.nameAr}
+                        </h3>
+                        {category.nameEn && (
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {category.nameEn}
+                          </p>
+                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          <FileText className="h-3 w-3 ml-1" />
+                          {(category.articleCount || 0).toLocaleString()} خبر
+                        </Badge>
+
+                        {/* Pulse Bar */}
+                        <PulseBar
+                          percent={category.pulsePercent ?? null}
+                          level={category.pulseLevel ?? "calm"}
+                          hasData={category.hasPulseData ?? false}
+                          variant="inline"
+                          testId={`pulse-category-${category.id}`}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
