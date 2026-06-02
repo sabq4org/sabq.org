@@ -2,6 +2,16 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
+import { installDeployRecovery } from "./lib/deployRecovery";
+
+// Recover from "white page after deploy": if a lazily-loaded chunk 404s
+// because the edge-cached shell points at a rotated build, hard-reload once
+// (cache-busted) to fetch the current deploy. This is what makes edge-caching
+// the SPA shell in functions/_middleware.js safe. Production only — Vite's HMR
+// handles chunk rotation in dev.
+if (import.meta.env.PROD) {
+  installDeployRecovery();
+}
 
 // Suppress noisy errors from third-party ad scripts. They reach
 // `window.onerror` because of cross-origin script tags; nothing we can

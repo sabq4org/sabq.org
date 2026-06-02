@@ -14,6 +14,7 @@ import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
+import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -294,6 +295,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     }
   }
   const keywords = seoData.keywords || [];
+  const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -301,7 +303,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
-    "image": [image],
+    "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
     "author": { "@type": "Person", "name": authorName },
@@ -312,6 +314,9 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     },
     "articleSection": a.categoryName || undefined,
     "keywords": keywords.length > 0 ? keywords : undefined,
+    "speakable": schemaExtras.speakable,
+    ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
+    ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
 
   const safeTitle = escapeHtml(title);
@@ -358,6 +363,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         slug: enArticles.slug,
         englishSlug: enArticles.englishSlug,
         excerpt: enArticles.excerpt,
+        content: enArticles.content,
         imageUrl: enArticles.imageUrl,
         aiSummary: enArticles.aiSummary,
         publishedAt: enArticles.publishedAt,
@@ -398,6 +404,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     }
   }
   const keywords = seoData.keywords || [];
+  const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -405,7 +412,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
-    "image": [image],
+    "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
     "author": { "@type": "Person", "name": authorName },
@@ -415,6 +422,9 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
       "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` }
     },
     "keywords": keywords.length > 0 ? keywords : undefined,
+    "speakable": schemaExtras.speakable,
+    ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
+    ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
 
   const safeTitle = escapeHtml(title);
@@ -459,6 +469,7 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         slug: urArticles.slug,
         englishSlug: urArticles.englishSlug,
         excerpt: urArticles.excerpt,
+        content: urArticles.content,
         imageUrl: urArticles.imageUrl,
         aiSummary: urArticles.aiSummary,
         publishedAt: urArticles.publishedAt,
@@ -499,6 +510,7 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     }
   }
   const keywords = seoData.keywords || [];
+  const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -506,7 +518,7 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
     "headline": title,
     "description": description,
-    "image": [image],
+    "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
     "author": { "@type": "Person", "name": authorName },
@@ -516,6 +528,9 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
       "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` }
     },
     "keywords": keywords.length > 0 ? keywords : undefined,
+    "speakable": schemaExtras.speakable,
+    ...(schemaExtras.articleBody ? { articleBody: schemaExtras.articleBody } : {}),
+    ...(schemaExtras.wordCount ? { wordCount: schemaExtras.wordCount } : {}),
   };
 
   const safeTitle = escapeHtml(title);

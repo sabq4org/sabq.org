@@ -97,6 +97,39 @@ are decoupled via `EDGE_SEO` so they ship separately.
   is minutes. Edge cache of routing can be sticky — purge if needed.
 - **Do not** wire auto-CF-purge on deploy (that caused prior white-page-after-deploy).
 
+## P1 archiving — edge HTML cache (2026-06)
+
+Googlebot was seeing `cf-cache-status: DYNAMIC` and ~1.5s TTFB because Pages
+Functions do not auto-cache `text/html` from `Cache-Control` alone.
+
+**In code (this repo):**
+- `functions/_middleware.js` sets `public, max-age=120, s-maxage=300,
+  stale-while-revalidate=60` for indexable routes on `sabq.org`, and stores
+  fully-injected HTML in the Workers Cache API (keyed by `CF_PAGES_COMMIT_SHA`
+  so a new deploy never serves the previous build's hashed assets).
+- `client/src/lib/deployRecovery.ts` reloads once on chunk-load failure after
+  deploy (safety net for open tabs).
+- Requires **`EDGE_SEO=on`** for injection + in-function cache (Stage 2 handover).
+
+**Optional dashboard belt-and-suspenders (Cloudflare → sabq.org zone):**
+
+| Field | Value |
+|-------|--------|
+| Rule name | `Cache article HTML` |
+| When | URI Path contains `/article/` OR URI Path equals `/` OR URI Path starts with `/category/` |
+| Then | Cache eligibility = **Eligible for cache**, Edge TTL = **Respect origin** (or 5 min override) |
+
+Verify after deploy:
+```bash
+curl -sS -D - -o /dev/null -A "Googlebot" "https://sabq.org/article/<slug>" | grep -iE 'cache-control|x-edge-cache|cf-cache-status'
+# 2nd request: x-edge-cache: HIT (in-function) and/or cf-cache-status: HIT
+```
+
+**Google Indexing API (P2):** set on Railway `api.sabq.org`:
+`GOOGLE_INDEXING_CLIENT_EMAIL`, `GOOGLE_INDEXING_PRIVATE_KEY` (service account
+Owner on the `sabq.org` Search Console property). Publish already calls
+`notifySearchEngines()` → IndexNow + Indexing API when configured.
+
 ## Known gaps / notes
 
 - `*.pages.dev` previews are cross-site vs `api.sabq.org` → login won't persist on

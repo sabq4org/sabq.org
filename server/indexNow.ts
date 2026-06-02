@@ -7,13 +7,12 @@
  *
  * NOTE: There is intentionally NO Google "sitemap ping" here. Google
  * deprecated and removed the `https://www.google.com/ping?sitemap=` endpoint
- * in June 2023 — it now 404s and does nothing. Relying on it gave false
- * confidence that Google was being notified. The real Google levers are:
- *   - submitting the sitemap in Search Console, and
- *   - URL Inspection → Request Indexing for new URLs,
- *   - Google News Publisher Center for fast Top-stories inclusion.
- * (The Google Indexing API only supports JobPosting/BroadcastEvent, NOT news
- * articles, so it is also not used here.)
+ * in June 2023 — it now 404s and does nothing.
+ *
+ * For Google, this module also calls the Google Indexing API
+ * (services/googleIndexingService.ts) when GOOGLE_INDEXING_CLIENT_EMAIL +
+ * GOOGLE_INDEXING_PRIVATE_KEY are configured and the service account is added
+ * as Owner in Search Console. Without credentials the call is skipped silently.
  *
  * Key file is served publicly at /{key}.txt — this is how search engines
  * verify domain ownership (not a secret, just a unique token).
@@ -64,14 +63,37 @@ export async function pingIndexNow(canonicalSlug: string): Promise<void> {
 
 /**
  * Immediate-indexing notification after an article is published.
- * Currently IndexNow only (Bing/Yandex/Naver). See the file header for why
- * the Google sitemap ping was removed and what to use for Google instead.
+ * Fires IndexNow (Bing/Yandex/Naver) and, when configured, the Google
+ * Indexing API (URL_UPDATED). Both are best-effort — errors are logged only.
  *
  * Call this fire-and-forget after any article is published. Pass the
  * CANONICAL slug (englishSlug) so the submitted URL does not 301-redirect.
  * Example:
  *   notifySearchEngines(article.englishSlug || article.slug).catch(() => {});
  */
-export async function notifySearchEngines(canonicalSlug: string): Promise<void> {
-  await pingIndexNow(canonicalSlug);
+export async function notifySearchEngines(
+  canonicalSlug: string,
+  locale: 'ar' | 'en' | 'ur' = 'ar',
+): Promise<void> {
+  const tasks: Promise<unknown>[] = [pingIndexNow(canonicalSlug)];
+
+  try {
+    const { indexArticle, isGoogleIndexingConfigured } = await import(
+      './services/googleIndexingService'
+    );
+    if (isGoogleIndexingConfigured()) {
+      tasks.push(
+        indexArticle(canonicalSlug, locale).catch((err) => {
+          console.error(
+            `[Google Indexing] Failed for ${canonicalSlug}:`,
+            err instanceof Error ? err.message : err,
+          );
+        }),
+      );
+    }
+  } catch (err) {
+    console.error('[Google Indexing] Service load failed:', err);
+  }
+
+  await Promise.all(tasks);
 }

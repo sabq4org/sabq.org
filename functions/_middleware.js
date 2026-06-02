@@ -27,6 +27,9 @@
  *                deploy proxy-only first (worker still injects), then once stable
  *                flip EDGE_SEO=on AND remove the worker's sabq.org routes — never
  *                both injecting at once.
+ *   EDGE_HTML_CACHE — "on" (default) stores injected HTML in the Workers Cache
+ *                API (P1 TTFB fix). Set "off" only for debugging. Requires
+ *                EDGE_SEO=on. See docs/technical-seo-runbook-ar.md.
  *
  * NOTE: keep `VITE_API_URL` UNSET on the Pages build so the client uses relative
  * `/api/*` paths and THIS middleware proxies them (same as Vercel did). Setting
@@ -47,6 +50,31 @@ const HTML_NO_STORE_HEADERS = {
   "CDN-Cache-Control": "no-store, max-age=0, must-revalidate",
   Pragma: "no-cache",
   Expires: "0",
+};
+
+// Edge-cacheable HTML for indexable CONTENT routes (articles, categories,
+// homepage). This is the P1 archiving fix: instead of forcing Googlebot to
+// re-render the SPA shell from origin on every crawl (~1.5s TTFB, huge
+// crawl-budget drain), the injected shell is served from Cloudflare's edge in
+// <150ms for repeat hits, refreshed in the background.
+//   - max-age=120     : short browser cache so users still get fresh content.
+//   - s-maxage=300     : edge serves the cached, SEO-injected shell for 5 min.
+//   - stale-while-revalidate=60 : edge can serve a slightly-stale copy while it
+//     refreshes in the background → no cold-start tax for the next crawler.
+// CDN-Cache-Control governs Cloudflare's own tier independently of the browser.
+//
+// SAFETY: this is ONLY applied to indexable content on the canonical host
+// (sabq.org). noindex screens (dashboard/admin/auth/account), non-canonical
+// hosts (*.pages.dev, sabq.news), and any route whose resolved robots meta is
+// `noindex` always fall back to HTML_NO_STORE_HEADERS. A cached shell could
+// reference a rotated /assets/index-<hash>.js after a deploy; the client-side
+// deploy-recovery guard (client/src/lib/deployRecovery.ts) hard-reloads once on
+// a chunk-load error, so the short staleness window self-heals.
+const HTML_EDGE_CACHE_HEADERS = {
+  "Cache-Control":
+    "public, max-age=120, s-maxage=300, stale-while-revalidate=60",
+  "CDN-Cache-Control":
+    "public, max-age=300, stale-while-revalidate=60",
 };
 
 const STATIC_EXTENSIONS = [
@@ -107,11 +135,33 @@ function isHtml(res) {
   return (res.headers.get("content-type") || "").toLowerCase().includes("text/html");
 }
 
-function withHtmlNoStore(res) {
+function applyHtmlHeaders(res, headerSet) {
   if (!isHtml(res)) return res;
   const headers = new Headers(res.headers);
-  for (const [k, v] of Object.entries(HTML_NO_STORE_HEADERS)) headers.set(k, v);
+  // Clear stale freshness hints so a cacheable response never inherits a
+  // leftover Pragma:no-cache / Expires:0 from an earlier set (and vice versa).
+  headers.delete("Pragma");
+  headers.delete("Expires");
+  for (const [k, v] of Object.entries(headerSet)) headers.set(k, v);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+// Cloudflare does NOT auto-cache text/html from a Pages Function based on
+// Cache-Control alone (Function responses are "dynamic"). To actually serve the
+// injected shell from the edge — the part that turns the report's 1.5s TTFB
+// into <150ms — we cache it ourselves via the Workers Cache API.
+//
+// The key is namespaced by the deployment commit (CF_PAGES_COMMIT_SHA). A new
+// deploy = a brand-new keyspace, so a freshly-built shell can NEVER serve the
+// previous build's rotated /assets/index-<hash>.js — eliminating the
+// stale-shell-after-deploy class entirely (the reason HTML was no-store before).
+function htmlCacheKey(requestUrl, commit) {
+  const u = new URL(requestUrl);
+  // Drop the client deploy-recovery buster so recovery reloads don't fragment
+  // (or poison) the cache, and don't carry it into the cache key.
+  u.searchParams.delete("_dr");
+  u.searchParams.set("__b", commit || "dev");
+  return new Request(u.toString(), { method: "GET" });
 }
 
 async function proxyToApi(request, apiOrigin) {
@@ -290,14 +340,59 @@ export async function onRequest(context) {
     });
   }
 
-  // Adds no-store (always) + X-Robots-Tag: noindex (non-canonical hosts only)
-  // to an HTML response. Use for every HTML return below.
-  const finalizeHtml = (res) => {
-    const out = withHtmlNoStore(res);
+  // In-function edge cache (Workers Cache API). Default ON; set
+  // EDGE_HTML_CACHE=off to disable (e.g. once a zone-level "Cache Everything"
+  // Cache Rule is doing the job). Only active when SEO is injected HERE
+  // (EDGE_SEO=on) so we never cache a half-rendered shell that the standalone
+  // worker would otherwise enrich.
+  const edgeHtmlCacheEnabled =
+    String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" && seoEnabled;
+  const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+  const cacheKey =
+    request.method === "GET" ? htmlCacheKey(request.url, commit) : null;
+
+  // Finalizes an HTML response. `cacheable` opts the response into the edge
+  // cache (HTML_EDGE_CACHE_HEADERS) — only ever true for indexable content on
+  // the canonical host; everything else stays no-store. Non-canonical hosts
+  // additionally get X-Robots-Tag: noindex and are FORCED to no-store so a
+  // duplicate host can never poison the edge with a cacheable copy.
+  const finalizeHtml = (res, { cacheable = false } = {}) => {
+    const useCache = cacheable && !noindexHost;
+    const out = applyHtmlHeaders(
+      res,
+      useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
+    );
     if (!noindexHost || !isHtml(out)) return out;
     const headers = new Headers(out.headers);
     headers.set("X-Robots-Tag", "noindex, follow");
     return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
+  };
+
+  // Wraps finalizeHtml + the Cache API write. On a cacheable 200 HTML response
+  // it tags `x-edge-cache: MISS` and stores a clone for subsequent hits.
+  const deliverHtml = (res, { cacheable = false } = {}) => {
+    const out = finalizeHtml(res, { cacheable });
+    if (
+      !edgeHtmlCacheEnabled ||
+      !cacheable ||
+      noindexHost ||
+      !cacheKey ||
+      !isHtml(out) ||
+      out.status !== 200
+    ) {
+      return out;
+    }
+    const headers = new Headers(out.headers);
+    headers.set("x-edge-cache", "MISS");
+    const tagged = new Response(out.body, {
+      status: out.status,
+      statusText: out.statusText,
+      headers,
+    });
+    // Store a clone; the original stream is returned to the client. TTL is
+    // derived by the Cache API from the response's s-maxage (300s).
+    context.waitUntil(caches.default.put(cacheKey, tagged.clone()).catch(() => {}));
+    return tagged;
   };
 
   // Normalize trailing slashes on content routes: /article/x/ -> /article/x
@@ -328,27 +423,63 @@ export async function onRequest(context) {
   // 2) Non-GET/HEAD, static assets / noindex screens, or SEO handled elsewhere
   //    (EDGE_SEO off — the standalone worker injects) → serve the shell as-is.
   if (request.method !== "GET" && request.method !== "HEAD") return next();
-  if (!seoEnabled || !isInjectablePath(path)) return finalizeHtml(await next());
+
+  // Indexable content on the canonical host is edge-cacheable (P1 fix). This
+  // decision is based on the PATH (not on seoEnabled), so the cache speed-up
+  // applies whether SEO is injected here or by the standalone worker.
+  const injectable = isInjectablePath(path);
+  const htmlCacheable = injectable && !noindexHost;
+
+  // Edge HIT — serve the already-injected shell straight from the edge cache,
+  // skipping the origin shell+meta fetch entirely (the TTFB win). Safe because
+  // only fully-injected, redirect-free 200s are ever stored, keyed by deploy.
+  if (edgeHtmlCacheEnabled && htmlCacheable && cacheKey) {
+    const hit = await caches.default.match(cacheKey);
+    if (hit) {
+      const headers = new Headers(hit.headers);
+      headers.set("x-edge-cache", "HIT");
+      return new Response(hit.body, {
+        status: hit.status,
+        statusText: hit.statusText,
+        headers,
+      });
+    }
+  }
+
+  if (!seoEnabled || !injectable) {
+    return deliverHtml(await next(), { cacheable: htmlCacheable });
+  }
 
   // 3) Indexable HTML route → slug redirect + SEO meta/body injection.
   try {
-    const slug = await cachedJson(
-      `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
-      SLUG_REDIRECT_TTL,
-    );
+    // Fetch slug-redirect, the SPA shell, and SEO meta CONCURRENTLY (TTFB fix).
+    // Previously slug-redirect was awaited serially before the shell+meta,
+    // adding one edge→origin round-trip to every content-page crawl. The
+    // redirect is rare (Arabic/legacy slugs), so on the hot path we just
+    // discard the unused shell/meta; when a redirect IS present we 301 before
+    // touching them.
+    const [slug, shell, meta] = await Promise.all([
+      cachedJson(
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
+        SLUG_REDIRECT_TTL,
+      ),
+      next(),
+      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL),
+    ]);
     const redirectTo = slug && slug.redirect ? slug.redirect : null;
     if (redirectTo && redirectTo !== path) {
       return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
     }
 
-    // SPA shell (index.html, via the `/* /index.html 200` rule in _redirects)
-    // and SEO meta in parallel.
-    const [shell, meta] = await Promise.all([
-      next(),
-      cachedJson(`${apiOrigin}/api/edge/seo-meta?path=${encodeURIComponent(path)}`, SEO_META_TTL),
-    ]);
+    // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
+    // content URL; serve it no-store so the next crawl re-tries injection.
+    if (!isHtml(shell) || !meta) return finalizeHtml(shell, { cacheable: false });
 
-    if (!isHtml(shell) || !meta) return finalizeHtml(shell);
+    // A resolved `noindex` (e.g. missing row, unpublished, aged-out) must never
+    // be edge-cached as a 200 indexable page.
+    const metaNoindex =
+      typeof meta.robots === "string" && meta.robots.toLowerCase().includes("noindex");
+    const injectedCacheable = htmlCacheable && !metaNoindex;
 
     // Strip the shell's generic tags first so crawlers that read the FIRST
     // duplicate (Twitter, some Slack/Telegram) don't see homepage tags.
@@ -368,9 +499,9 @@ export async function onRequest(context) {
     if (meta.semanticHtml) {
       rewriter = rewriter.on("div#root", new RootInjector(meta.semanticHtml));
     }
-    return finalizeHtml(rewriter.transform(shell));
+    return deliverHtml(rewriter.transform(shell), { cacheable: injectedCacheable });
   } catch (err) {
     console.error("[pages-fn] html error:", err);
-    return finalizeHtml(await next());
+    return finalizeHtml(await next(), { cacheable: false });
   }
 }

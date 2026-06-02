@@ -50,8 +50,8 @@ import { requireAuth, requirePermission, requireAnyPermission, requireRole, logA
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { createNotification, notifyReporterArticlePublished, notifyReporterArticleScheduled, notifyOpinionAuthorArticleScheduled } from "./notificationEngine";
 import { notificationBus } from "./notificationBus";
-// Google Indexing API (services/googleIndexingService) intentionally NOT
-// imported for articles — it only supports JobPosting/BroadcastEvent, not news.
+// Google Indexing API is invoked via notifySearchEngines() in indexNow.ts when
+// GOOGLE_INDEXING_* credentials are configured (see googleIndexingService.ts).
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
 import { awardPoints } from "./services/loyalty";

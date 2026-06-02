@@ -183,7 +183,7 @@ export async function notifyUrlDeleted(url: string): Promise<IndexingResult> {
  * Call this when an article is published or updated
  */
 export async function indexArticle(slug: string, locale: 'ar' | 'en' | 'ur' = 'ar'): Promise<IndexingResult> {
-  const baseUrl = process.env.FRONTEND_URL || 'https://sabq.org';
+  const baseUrl = process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || 'https://sabq.org';
   
   let articleUrl: string;
   switch (locale) {

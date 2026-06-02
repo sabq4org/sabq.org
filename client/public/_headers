@@ -1,6 +1,10 @@
 # Cloudflare Pages headers — mirrors the `headers` block in vercel.json.
-# HTML cache-control (no-store) is handled in functions/_middleware.js so that
-# both injected article pages AND noindex dashboard/admin routes stay private.
+# HTML cache-control is handled per-route in functions/_middleware.js:
+#   - indexable content (articles/categories/home) on sabq.org → edge-cacheable
+#     (public, s-maxage=300, stale-while-revalidate) for fast Googlebot TTFB;
+#   - noindex screens (dashboard/admin/auth) + non-canonical hosts → no-store.
+# The client deploy-recovery guard (client/src/lib/deployRecovery.ts) reloads
+# once on a stale-chunk error, so caching the shell never strands an open tab.
 
 # Hashed, content-addressed bundle (Vite emits everything to /assets/).
 /assets/*

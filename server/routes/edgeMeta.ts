@@ -29,6 +29,7 @@ import {
   gulfEvents,
 } from "@shared/schema";
 import { eq, or, and, desc, aliasedTable } from "drizzle-orm";
+import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 
 const router = Router();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
@@ -277,6 +278,8 @@ function articleMetaPayload(opts: {
   section?: string | null;
   keywords?: string[];
   semanticHtml?: string;
+  /** Raw article HTML — used for articleBody / wordCount in JSON-LD. */
+  contentHtml?: string | null;
 }) {
   const b = ARTICLE_BRAND[opts.lang];
   const publishedTime = opts.publishedAt
@@ -322,13 +325,19 @@ function articleMetaPayload(opts: {
     }
   }
 
+  const schemaExtras = buildNewsArticleSchemaExtras(
+    opts.contentHtml,
+    opts.image,
+    SITE_URL,
+  );
+
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     mainEntityOfPage: { "@type": "WebPage", "@id": opts.canonical },
     headline: opts.title,
     description: opts.description,
-    image: [opts.image],
+    image: schemaExtras.image,
     datePublished: publishedTime,
     dateModified: modifiedTime,
     inLanguage: opts.lang,
@@ -338,7 +347,10 @@ function articleMetaPayload(opts: {
       name: b.name,
       logo: { "@type": "ImageObject", url: BRAND_OG_IMAGE },
     },
+    speakable: schemaExtras.speakable,
   };
+  if (schemaExtras.articleBody) jsonLd.articleBody = schemaExtras.articleBody;
+  if (schemaExtras.wordCount) jsonLd.wordCount = schemaExtras.wordCount;
   if (opts.section) jsonLd.articleSection = opts.section;
   if (keywords.length) jsonLd.keywords = keywords;
 
@@ -428,6 +440,7 @@ function buildArArticlePayload(
     author,
     section: row.categoryName,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+    contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
       title,
       excerpt: row.excerpt || row.aiSummary || "",
@@ -580,6 +593,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         updatedAt: row.updatedAt,
         author,
         keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+        contentHtml: row.content,
         semanticHtml: buildSemanticHtml({
           title,
           excerpt: row.excerpt || row.aiSummary || "",
@@ -631,6 +645,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         updatedAt: row.updatedAt,
         author,
         keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+        contentHtml: row.content,
         semanticHtml: buildSemanticHtml({
           title,
           excerpt: row.excerpt || row.aiSummary || "",

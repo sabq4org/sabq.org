@@ -1,6 +1,6 @@
 const CLOUDFLARE_ZONE_ID = process.env.CLOUDFLARE_ZONE_ID;
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const SITE_URL = process.env.FRONTEND_URL || 'https://sabq.org';
+const SITE_URL = process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || 'https://sabq.org';
 // API_URL is the backend's own CF-proxied origin. CF caches at api.sabq.org
 // independently from sabq.org (different zone-cache entries even if same
 // zone), AND Vercel's rewrite layer proxies sabq.org/api/* to here, so any
@@ -158,13 +158,23 @@ export async function purgeBreakingNews(opts?: { immediate?: boolean }): Promise
 }
 
 export async function purgeArticle(slug: string, opts?: { immediate?: boolean }): Promise<PurgeResult> {
+  const arPath = `/article/${slug}`;
+  const encodedArPath = encodeURIComponent(arPath);
   return purgeUrls([
-    `${SITE_URL}/article/${slug}`,
+    `${SITE_URL}${arPath}`,
+    `${SITE_URL}/en/article/${slug}`,
+    `${SITE_URL}/ur/article/${slug}`,
     // Article JSON + sidebar (bundles related + tags + mediaAssets) live at
     // /api/* — purge BOTH sabq.org and api.sabq.org so neither CF zone keeps
     // serving stale.
     ...bothHosts(`/api/articles/${slug}`),
     ...bothHosts(`/api/articles/${slug}/sidebar`),
+    // Edge SEO injection caches (functions/_middleware.js + edgeMeta TTL).
+    // Purging these makes the next crawl pick up fresh title/meta/JSON-LD
+    // immediately after publish instead of waiting for the 10s edge JSON TTL
+    // or the 300s HTML edge cache.
+    `${API_URL}/api/edge/seo-meta?path=${encodedArPath}`,
+    `${API_URL}/api/edge/slug-redirect?path=${encodedArPath}`,
   ], opts);
 }
 
