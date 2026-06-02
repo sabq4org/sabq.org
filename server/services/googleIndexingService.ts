@@ -25,6 +25,25 @@ interface IndexingResult {
 let authClient: any = null;
 let isConfigured = false;
 
+// Lightweight in-memory telemetry for the diagnostics endpoint. Resets on each
+// process restart (intentionally — it answers "is indexing working right now?").
+interface LastIndexEvent {
+  url: string;
+  success: boolean;
+  at: string;
+  error?: string;
+  status?: number;
+}
+let lastEvent: LastIndexEvent | null = null;
+let successCount = 0;
+let failCount = 0;
+
+function recordEvent(e: LastIndexEvent) {
+  lastEvent = e;
+  if (e.success) successCount++;
+  else failCount++;
+}
+
 /**
  * Normalize a service-account private key pasted into an env var. Handles the
  * common ways the PEM gets mangled by dashboards/shells, which otherwise surface
@@ -159,15 +178,14 @@ export async function notifyUrlUpdated(url: string): Promise<IndexingResult> {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error(`[Google Indexing] Failed to notify for ${url}:`, errorData);
-      return {
-        success: false,
-        url,
-        error: errorData.error?.message || `HTTP ${response.status}`
-      };
+      const error = errorData.error?.message || `HTTP ${response.status}`;
+      recordEvent({ url, success: false, at: new Date().toISOString(), error, status: response.status });
+      return { success: false, url, error };
     }
     
     const result = await response.json();
     console.log(`[Google Indexing] ✅ Notified Google: ${url}`);
+    recordEvent({ url, success: true, at: new Date().toISOString(), status: 200 });
     
     return {
       success: true,
@@ -177,12 +195,35 @@ export async function notifyUrlUpdated(url: string): Promise<IndexingResult> {
     };
   } catch (error) {
     console.error(`[Google Indexing] Error notifying ${url}:`, error);
-    return {
-      success: false,
-      url,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    recordEvent({ url, success: false, at: new Date().toISOString(), error: message });
+    return { success: false, url, error: message };
   }
+}
+
+/**
+ * No-secret diagnostics snapshot for the /api/edge/indexing-status endpoint.
+ * Reports whether credentials are present + valid, a masked client email, the
+ * private-key shape, and the last submission result + counts since boot. Never
+ * returns the key material itself.
+ */
+export function getIndexingDiagnostics() {
+  const clientEmail = process.env.GOOGLE_INDEXING_CLIENT_EMAIL || '';
+  const privateKey = process.env.GOOGLE_INDEXING_PRIVATE_KEY;
+  // Force an init attempt so `configured` reflects whether the JWT can build.
+  getAuthClient();
+  const maskedEmail = clientEmail
+    ? clientEmail.replace(/^(.{2}).*?(@.*)$/, '$1***$2')
+    : null;
+  return {
+    configured: isConfigured,
+    clientEmailPresent: !!clientEmail,
+    clientEmail: maskedEmail,
+    privateKey: describePrivateKeyShape(privateKey),
+    baseUrl: process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || 'https://sabq.org',
+    stats: { success: successCount, failed: failCount },
+    lastEvent,
+  };
 }
 
 /**

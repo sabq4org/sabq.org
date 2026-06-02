@@ -1163,6 +1163,25 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
   }
 });
 
+/**
+ * No-secret diagnostics for the Google Indexing API (the driver of instant
+ * archiving). Reports whether credentials are configured + valid, a masked
+ * client email, the private-key shape, and the last submission result + counts
+ * since boot. Use to confirm "is instant indexing actually working right now?"
+ */
+router.get("/api/edge/indexing-status", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const { getIndexingDiagnostics } = await import(
+      "../services/googleIndexingService"
+    );
+    return res.json(getIndexingDiagnostics());
+  } catch (err) {
+    console.error("[edge/indexing-status] error:", err);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
 router.get("/api/edge/seo-meta", async (req, res) => {
   res.set("Cache-Control", "public, max-age=60, s-maxage=60");
   try {
