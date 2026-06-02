@@ -1238,13 +1238,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Get current user
   app.get("/api/auth/user", async (req: any, res) => {
     try {
-      console.log('🔍 /api/auth/user check:', {
-        isAuthenticated: req.isAuthenticated(),
-        hasUser: !!req.user,
-        userId: req.user?.id,
-        sessionID: req.sessionID
-      });
-      
       if (!req.isAuthenticated() || !req.user?.id) {
         return res.status(401).json({ message: "Unauthorized" });
       }
