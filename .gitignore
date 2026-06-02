@@ -59,8 +59,6 @@ AUDIT_REPORT.md
 # Internal migration runbook — kept local; contains operational detail
 MIGRATION_RUNBOOK.md
 
-# Auto-generated middleware embed (regenerated each build)
-spa-index-html.generated.ts
 *.p12
 sabq-press.p12
 
