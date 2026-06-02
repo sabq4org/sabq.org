@@ -43,9 +43,21 @@ export default async function CategoryPage({
   return (
     <>
       <SiteHeader />
-      <main id="main-content" role="main" className="mx-auto max-w-5xl px-4 py-6">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground md:text-4xl">
+      <main
+        id="main-content"
+        role="main"
+        dir="rtl"
+        className="container mx-auto px-4 py-6 sm:px-6 lg:px-8"
+      >
+        <header className="mb-6 border-b pb-4">
+          <h1 className="flex items-center gap-2 text-3xl font-bold text-foreground md:text-4xl">
+            {bundle.color && (
+              <span
+                aria-hidden="true"
+                className="inline-block h-6 w-1.5 rounded-full"
+                style={{ backgroundColor: bundle.color }}
+              />
+            )}
             {bundle.name}
           </h1>
           {bundle.description && (
@@ -54,7 +66,7 @@ export default async function CategoryPage({
         </header>
 
         {bundle.articles.length > 0 ? (
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {bundle.articles.map((item, i) => (
               <ArticleCard key={item.href} item={item} priority={i === 0} />
             ))}

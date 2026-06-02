@@ -1049,6 +1049,7 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
         description: categories.description,
         slug: categories.slug,
         englishSlug: categories.englishSlug,
+        color: categories.color,
       })
       .from(categories)
       .where(where!)
@@ -1065,6 +1066,7 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
         excerpt: articles.excerpt,
         imageUrl: articles.imageUrl,
         publishedAt: articles.publishedAt,
+        newsType: articles.newsType,
       })
       .from(articles)
       .where(and(eq(articles.categoryId, cat.id), eq(articles.status, "published")))
@@ -1077,12 +1079,16 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
       name: displayName,
       description: trunc(cat.description || `أحدث الأخبار في ${displayName}`, 220),
       canonical: `${SITE_URL}/category/${canonicalSlug}`,
+      color: cat.color || null,
       articles: rows.map((r) => ({
         href: `/article/${r.englishSlug || r.slug}`,
         title: r.title || "",
         excerpt: trunc(r.excerpt || "", 160),
         imageUrl: r.imageUrl ? abs(r.imageUrl) : null,
         publishedAt: r.publishedAt,
+        newsType: r.newsType || null,
+        category: displayName,
+        categoryColor: cat.color || null,
       })),
     });
   } catch (err) {
@@ -1111,8 +1117,12 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
           publishedAt: articles.publishedAt,
+          newsType: articles.newsType,
+          categoryName: categories.nameAr,
+          categoryColor: categories.color,
         })
         .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
         .where(eq(articles.status, "published"))
         .orderBy(desc(articles.publishedAt))
         .limit(30),
@@ -1121,6 +1131,7 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
           nameAr: categories.nameAr,
           slug: categories.slug,
           englishSlug: categories.englishSlug,
+          color: categories.color,
         })
         .from(categories)
         .limit(40),
@@ -1134,12 +1145,16 @@ router.get("/api/edge/home-bundle", async (_req, res) => {
         excerpt: trunc(r.excerpt || "", 160),
         imageUrl: r.imageUrl ? abs(r.imageUrl) : null,
         publishedAt: r.publishedAt,
+        newsType: r.newsType || null,
+        category: r.categoryName || null,
+        categoryColor: r.categoryColor || null,
       })),
       sections: cats
         .filter((c) => c.nameAr)
         .map((c) => ({
           href: `/category/${c.englishSlug || c.slug}`,
           title: c.nameAr || "",
+          color: c.color || null,
         })),
     });
   } catch (err) {

@@ -41,6 +41,9 @@ export interface ArticleListItem {
   excerpt: string;
   imageUrl: string | null;
   publishedAt: string | null;
+  newsType?: string | null;
+  category?: string | null;
+  categoryColor?: string | null;
 }
 
 export interface CategoryBundle {
@@ -49,13 +52,14 @@ export interface CategoryBundle {
   name: string;
   description: string;
   canonical: string;
+  color?: string | null;
   articles: ArticleListItem[];
 }
 
 export interface HomeBundle {
   canonical: string;
   articles: ArticleListItem[];
-  sections: { href: string; title: string }[];
+  sections: { href: string; title: string; color?: string | null }[];
 }
 
 /**

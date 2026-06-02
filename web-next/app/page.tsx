@@ -34,16 +34,21 @@ export default async function HomePage() {
   return (
     <>
       <SiteHeader />
-      <main id="main-content" role="main" className="mx-auto max-w-5xl px-4 py-6">
+      <main
+        id="main-content"
+        role="main"
+        dir="rtl"
+        className="container mx-auto px-4 py-6 sm:px-6 lg:px-8"
+      >
         <h1 className="sr-only">سبق — أحدث الأخبار</h1>
 
         {bundle.sections.length > 0 && (
           <nav aria-label="الأقسام" className="mb-6 flex flex-wrap gap-2">
-            {bundle.sections.slice(0, 12).map((s) => (
+            {bundle.sections.slice(0, 14).map((s) => (
               <a
                 key={s.href}
                 href={s.href}
-                className="rounded-full border border-border px-3 py-1 text-sm hover:border-primary hover:text-primary"
+                className="rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 {s.title}
               </a>
@@ -51,13 +56,13 @@ export default async function HomePage() {
           </nav>
         )}
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {bundle.articles.map((item, i) => (
             <ArticleCard key={item.href} item={item} priority={i === 0} />
           ))}
         </section>
       </main>
-      <SiteFooter />
+      <SiteFooter sections={bundle.sections} />
     </>
   );
 }
