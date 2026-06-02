@@ -89,6 +89,9 @@ export function Footer() {
               alt="سبق" 
               className="h-10 w-auto"
               loading="lazy"
+              width={751}
+              height={681}
+              decoding="async"
             />
           </Link>
           <p className="text-xs text-muted-foreground text-center">
@@ -206,6 +209,9 @@ export function Footer() {
                 alt="سبق" 
                 className="h-8 w-auto"
                 loading="lazy"
+                width={751}
+                height={681}
+                decoding="async"
               />
             </Link>
             <p className="text-sm text-muted-foreground max-w-xs">

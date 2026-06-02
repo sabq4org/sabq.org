@@ -105,6 +105,10 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   src={currentLogo} 
                   alt="سبق - SABQ" 
                   className="h-12 w-auto object-contain"
+                  width={751}
+                  height={681}
+                  loading="eager"
+                  decoding="async"
                 />
               </span>
             </Link>
@@ -123,6 +127,10 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   src={currentLogo} 
                   alt="سبق - SABQ" 
                   className="h-11 w-auto object-contain"
+                  width={751}
+                  height={681}
+                  loading="eager"
+                  decoding="async"
                 />
               </span>
             </Link>
@@ -408,6 +416,9 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                   alt="سبق - SABQ" 
                   className="h-10 w-auto object-contain"
                   data-testid="img-mobile-menu-logo"
+                  width={751}
+                  height={681}
+                  decoding="async"
                 />
               </Link>
             </div>

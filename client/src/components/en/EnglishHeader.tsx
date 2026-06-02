@@ -91,6 +91,10 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
                   src={currentLogo} 
                   alt="SABQ - Sabq" 
                   className="h-10 w-auto object-contain"
+                  width={751}
+                  height={681}
+                  loading="eager"
+                  decoding="async"
                 />
               </span>
             </Link>
@@ -104,6 +108,10 @@ export function EnglishHeader({ user, onMenuClick }: EnglishHeaderProps) {
                   src={currentLogo} 
                   alt="SABQ - Sabq" 
                   className="h-10 w-auto object-contain"
+                  width={751}
+                  height={681}
+                  loading="eager"
+                  decoding="async"
                 />
               </span>
             </Link>
