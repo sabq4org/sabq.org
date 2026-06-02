@@ -17,12 +17,17 @@ import {
   isGoogleIndexingConfigured,
   notifyUrlUpdated,
   getUrlStatus,
+  describePrivateKeyShape,
 } from '../server/services/googleIndexingService';
 
 async function main() {
   const url = process.argv[2] || 'https://sabq.org/article/qzVBFf1';
   console.log('🔎 اختبار Google Indexing API');
   console.log('   الرابط:', url, '\n');
+
+  console.log('🔑 شكل المفتاح الخاص (بدون كشف المحتوى):');
+  console.log(JSON.stringify(describePrivateKeyShape(process.env.GOOGLE_INDEXING_PRIVATE_KEY), null, 2));
+  console.log('   البريد:', process.env.GOOGLE_INDEXING_CLIENT_EMAIL || '(غير موجود)', '\n');
 
   if (!isGoogleIndexingConfigured()) {
     console.error('❌ المفاتيح غير مُهيأة — تحقق من GOOGLE_INDEXING_CLIENT_EMAIL و GOOGLE_INDEXING_PRIVATE_KEY');
