@@ -36,8 +36,11 @@
  *                /category/:slug, /en/article/:slug, /ur/article/:slug) to
  *                NEXT_ORIGIN, which renders full meta+body server-side. Those
  *                paths then SKIP the EDGE_SEO shell injection (no double
- *                injection). Default OFF → 100% unchanged SPA behavior, so the
- *                rollout is staged and instantly reversible. P3 SSR migration.
+ *                injection). Also proxies /_next/* (Next's hashed CSS/JS build
+ *                assets) to NEXT_ORIGIN so the SSR pages load styled+hydrated;
+ *                without it those assets fall through to the SPA index.html and
+ *                pages render unstyled. Default OFF → 100% unchanged SPA
+ *                behavior, so the rollout is staged and instantly reversible.
  *
 
  * NOTE: keep `VITE_API_URL` UNSET on the Pages build so the client uses relative
@@ -444,6 +447,21 @@ export async function onRequest(context) {
     } catch (err) {
       console.error("[pages-fn] proxy error:", err);
       return new Response("Bad gateway", { status: 502 });
+    }
+  }
+
+  // 1b) Next.js build assets (/_next/*) → proxy to the SSR deployment. The SSR
+  // pages reference hashed /_next/static/<...>.css and .js. Those paths look
+  // like static assets, so without this they fall through to next() and Pages
+  // serves the SPA index.html (text/html) in their place — leaving every SSR
+  // page UNSTYLED and un-hydrated. Next sets immutable long-cache headers on
+  // these, which we pass through verbatim. Only when SSR is enabled.
+  if (ssrEnabled && path.startsWith("/_next/")) {
+    try {
+      return await proxyToApi(request, nextOrigin);
+    } catch (err) {
+      console.error("[pages-fn] next asset proxy failed:", err);
+      return next();
     }
   }
 
