@@ -10,7 +10,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import path from "path";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { isNoindexPath } from "./utils/noindexPaths";
 
 process.on('uncaughtException', (error) => {
@@ -423,6 +423,28 @@ function hasSessionCookie(req: Request): boolean {
   return !!(req.headers.cookie && req.headers.cookie.includes('connect.sid'));
 }
 
+// Per-identity rate-limit key so one client can't be throttled by — or throttle
+// — others. Order matters:
+//  1. Passport session users → `req.user.id` (web).
+//  2. Mobile apps authenticate with a Bearer token (appMemberSessions), NOT a
+//     Passport session, and `verifyMemberSession` only runs inside the route
+//     handler — so `req.user` is unset when the limiter runs. Without this branch
+//     every app user behind the same carrier-grade NAT public IP shares ONE
+//     write bucket and intermittently gets HTTP 429 (e.g. when posting a
+//     comment). Keying by the token (hashed) gives each session its own bucket.
+//  3. Anonymous requests → CDN/real client IP.
+function rateLimitKey(req: Request): string {
+  const userId = (req as any).user?.id;
+  if (userId) return `u:${userId}`;
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) {
+    return `b:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}`;
+  }
+  const cfIp = req.headers['cf-connecting-ip'] as string;
+  const xForwardedFor = req.headers['x-forwarded-for'] as string;
+  return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
+}
+
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10000, // 10000 requests per IP/user per window (high-traffic site behind CDN)
@@ -431,13 +453,7 @@ const generalApiLimiter = rateLimit({
   legacyHeaders: false,
   validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
   // Per-user keying when authenticated, IP otherwise (security audit H7).
-  keyGenerator: (req) => {
-    const userId = (req as any).user?.id;
-    if (userId) return `u:${userId}`;
-    const cfIp = req.headers['cf-connecting-ip'] as string;
-    const xForwardedFor = req.headers['x-forwarded-for'] as string;
-    return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
-  },
+  keyGenerator: rateLimitKey,
   skip: (req) => {
     if (req.path.startsWith("/health") || req.path.startsWith("/ready")) return true;
     if (req.method === "GET") return true;
@@ -473,13 +489,7 @@ const writeLimiter = rateLimit({
   // audit H7, 2026-05-11). The previous skip-on-session-cookie meant a
   // stolen session token bypassed every write limit; per-user keying
   // closes that path while keeping anonymous writes IP-limited.
-  keyGenerator: (req) => {
-    const userId = (req as any).user?.id;
-    if (userId) return `u:${userId}`;
-    const cfIp = req.headers['cf-connecting-ip'] as string;
-    const xForwardedFor = req.headers['x-forwarded-for'] as string;
-    return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
-  },
+  keyGenerator: rateLimitKey,
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
     return false;
