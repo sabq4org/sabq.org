@@ -13195,34 +13195,17 @@ Respond in valid JSON format only:
         return res.status(400).json({ message: "معرف المقال مطلوب" });
       }
 
-      const clientIp = req.headers['cf-connecting-ip'] as string ||
-                       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
-                       req.headers['x-real-ip'] || 
-                       req.connection?.remoteAddress || 
-                       'unknown';
-      // Rate limiting keys
-      const ipRateLimitKey = `view:rate:${clientIp}`;
       const articleHourlyKey = `view:hourly:${articleId}`;
 
-      // NOTE: per-client 5-minute deduplication intentionally removed —
-      // every page view now counts (each visit adds the 5-10 random boost).
-      // The IP rate limit + hourly soft cap below remain as runaway guards.
-
-      // 1. Check IP rate limit (max 60 views per minute from same IP)
-      const ipViewCount = memoryCache.get<number>(ipRateLimitKey) || 0;
-      if (ipViewCount >= 60) {
-        return res.json({ success: true, rateLimited: true });
-      }
-      
-      // 2. Check article hourly limit (max 500 views per hour per article to detect anomalies)
+      // NOTE: per-client 5-min dedup AND the 60/min-per-IP rate limit were both
+      // intentionally removed — every page view now counts (each visit adds the
+      // 5-10 random boost), with no throttling. The hourly counter below is kept
+      // as a monitoring SIGNAL ONLY (it logs an anomaly alert; it never blocks).
       const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
         // Log suspicious activity but still allow view (soft limit)
         console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
       }
-      
-      // All checks passed - increment counters
-      memoryCache.set(ipRateLimitKey, ipViewCount + 1, 60 * 1000); // 1 minute
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
       
       // Write the 5-10 boost DIRECTLY to the DB so the increase is visible
