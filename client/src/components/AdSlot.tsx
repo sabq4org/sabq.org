@@ -113,13 +113,26 @@ export function AdSlot({ slotId, className = "", reservedSize = "mpu" }: AdSlotP
       setCollapsed(false);
       return;
     }
-    // API resolved with no ad → collapse the 250px reservation
-    // immediately. The previous IntersectionObserver-based delayed
-    // collapse only fired when the slot was OUT of viewport, so any
-    // empty slot that stayed in the user's viewport (e.g. the
-    // header-banner near the top of Home) lingered as a visible empty
-    // box indefinitely.
-    setCollapsed(true);
+    // API resolved with no ad. Collapsing the reserved 250px box shifts
+    // everything beneath it — a direct CLS hit (measured 0.4 "Poor" on
+    // mobile category pages) whenever the slot sits at or above the
+    // current viewport. So only collapse when the slot is entirely BELOW
+    // the fold: there the upward shift happens off-screen and doesn't
+    // count toward CLS. Otherwise keep the reservation — the box has no
+    // background, so an unfilled in-view slot is invisible to readers
+    // anyway, and the layout stays perfectly stable.
+    if (typeof window === "undefined") {
+      setCollapsed(true);
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) {
+      setCollapsed(false);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const belowFold = rect.top >= (window.innerHeight || 0);
+    setCollapsed(belowFold);
   }, [isLoading, ad]);
 
   const handleClick = () => {

@@ -137,10 +137,13 @@ export function DmsAdSlot({ id, type, className = '', lazyLoad = false }: DmsAdS
   // (2026-05-20): the previous bg-card frame was visible as a white-ish
   // box around filled creatives in dark mode and as an empty card while
   // unfilled. Now there is no visible chrome in any state.
+  // Keep the wrapper spacing CONSTANT across all ad states. Previously the
+  // mb-8/mt-8 (32px) was dropped on 'empty', which moved everything below the
+  // slot by 32px the moment GPT reported no fill (~5s in) — a measurable CLS
+  // shift. The inner box already reserves its height, so a constant margin
+  // keeps the layout fully stable whether the ad fills or not.
   const wrapperSpacing = type === 'leaderboard' ? 'mb-8' : 'mt-8';
-  const wrapperClass = adState === 'empty'
-    ? (className ?? '').trim()
-    : `${wrapperSpacing} ${className ?? ''}`.trim();
+  const wrapperClass = `${wrapperSpacing} ${className ?? ''}`.trim();
 
   return (
     <div
