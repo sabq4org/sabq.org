@@ -118,11 +118,6 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
 // Lazy load non-critical components
 const VoiceCommandsHelp = lazy(() => retryImport(() => import("@/components/VoiceCommandsHelp").then(m => ({ default: m.VoiceCommandsHelp }))));
 
-// Vercel telemetry — non-critical for first paint, deferred out of the entry
-// chunk so it doesn't add JS to the always-loaded bundle on every page.
-const Analytics = lazy(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })));
-const SpeedInsights = lazy(() => import("@vercel/speed-insights/react").then(m => ({ default: m.SpeedInsights })));
-
 // === LAZY IMPORTS (Critical Path - Code split for faster initial load) ===
 const Home = lazy(() => retryImport(() => import("@/pages/Home")));
 const ArticleDetail = lazy(() => retryImport(() => import("@/pages/ArticleDetail")));
@@ -1069,10 +1064,6 @@ function App() {
                 <TooltipProvider>
                   <SkipLinks />
                   <Toaster />
-                  <Suspense fallback={null}>
-                    <Analytics />
-                    <SpeedInsights />
-                  </Suspense>
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
