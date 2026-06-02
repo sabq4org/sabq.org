@@ -472,50 +472,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
 
-  const viewBuffer = new Map<string, number>();
-  let viewFlushTimer: NodeJS.Timeout | null = null;
-  let isFlushingViews = false;
-
-  async function flushViewBuffer() {
-    if (viewBuffer.size === 0 || isFlushingViews) return;
-
-    isFlushingViews = true;
-    const batch = new Map(viewBuffer);
-    viewBuffer.clear();
-
-    try {
-      if (batch.size > 0) {
-        const entries = Array.from(batch.entries());
-        const paramValues: any[] = [];
-        const placeholders: string[] = [];
-        entries.forEach(([id, count], i) => {
-          placeholders.push(`($${i * 2 + 1}, $${i * 2 + 2}::integer)`);
-          paramValues.push(id, Number(count));
-        });
-        try {
-          await pool.query(
-            `UPDATE articles AS a
-             SET views = a.views + v.increment
-             FROM (VALUES ${placeholders.join(',')}) AS v(id, increment)
-             WHERE a.id = v.id`,
-            paramValues
-          );
-          console.log(`[ViewBuffer] Bulk flushed ${batch.size} articles view counts to DB`);
-        } catch (err) {
-          console.error('[ViewBuffer] Bulk flush failed, re-buffering:', err);
-          for (const [articleId, count] of entries) {
-            viewBuffer.set(articleId, (viewBuffer.get(articleId) || 0) + count);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[ViewBuffer] Flush error:', error);
-    } finally {
-      isFlushingViews = false;
-    }
-  }
-
-  viewFlushTimer = setInterval(flushViewBuffer, 60_000);
+  // Article view counts are written directly in POST /api/articles/:id/view
+  // (immediate 5-10 boost), so no view buffer/flush is needed here.
 
   const behaviorLogBuffer: Array<{ userId: string; eventType: string; metadata: any }> = [];
   let behaviorFlushTimer: NodeJS.Timeout | null = null;
@@ -552,11 +510,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   process.on('SIGTERM', async () => {
     console.log('[Buffers] SIGTERM received, flushing...');
-    await Promise.all([flushViewBuffer(), flushBehaviorBuffer()]);
+    await flushBehaviorBuffer();
   });
   process.on('SIGINT', async () => {
     console.log('[Buffers] SIGINT received, flushing...');
-    await Promise.all([flushViewBuffer(), flushBehaviorBuffer()]);
+    await flushBehaviorBuffer();
   });
 
   // Setup authentication
