@@ -396,6 +396,8 @@ async function fetchArArticle(slug: string) {
       updatedAt: articles.updatedAt,
       seo: articles.seo,
       categoryName: categories.nameAr,
+      categorySlug: categories.slug,
+      categoryEnglishSlug: categories.englishSlug,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
       reporterFirstName: reporterUsers.firstName,
@@ -439,6 +441,126 @@ function buildArArticlePayload(
     updatedAt: row.updatedAt,
     author,
     section: row.categoryName,
+    keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+    contentHtml: row.content,
+    semanticHtml: buildSemanticHtml({
+      title,
+      excerpt: row.excerpt || row.aiSummary || "",
+      content: row.content || "",
+      publishedAt: row.publishedAt,
+    }),
+  });
+}
+
+/** English-table article lookup with byline join. */
+async function fetchEnArticle(slug: string) {
+  const where = or(eq(enArticles.englishSlug, slug), eq(enArticles.slug, slug));
+  const [row] = await db
+    .select({
+      title: enArticles.title,
+      slug: enArticles.slug,
+      englishSlug: enArticles.englishSlug,
+      excerpt: enArticles.excerpt,
+      aiSummary: enArticles.aiSummary,
+      content: enArticles.content,
+      imageUrl: enArticles.imageUrl,
+      publishedAt: enArticles.publishedAt,
+      updatedAt: enArticles.updatedAt,
+      seo: enArticles.seo,
+      authorFirstName: users.firstName,
+      authorLastName: users.lastName,
+    })
+    .from(enArticles)
+    .leftJoin(users, eq(enArticles.authorId, users.id))
+    .where(where!)
+    .limit(1);
+  return row || null;
+}
+
+function buildEnArticlePayload(
+  row: NonNullable<Awaited<ReturnType<typeof fetchEnArticle>>>,
+  slug: string,
+) {
+  const seoData = (row.seo as any) || {};
+  const title = row.title || seoData.metaTitle || "";
+  const description = trunc(
+    seoData.metaDescription || row.aiSummary || row.excerpt || title,
+    220,
+  );
+  const author =
+    [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
+    ARTICLE_BRAND.en.name;
+  return articleMetaPayload({
+    lang: "en",
+    title,
+    description,
+    image: abs(row.imageUrl),
+    canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
+    englishSlug: row.englishSlug,
+    slug,
+    publishedAt: row.publishedAt,
+    updatedAt: row.updatedAt,
+    author,
+    keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+    contentHtml: row.content,
+    semanticHtml: buildSemanticHtml({
+      title,
+      excerpt: row.excerpt || row.aiSummary || "",
+      content: row.content || "",
+      publishedAt: row.publishedAt,
+    }),
+  });
+}
+
+/** Urdu-table article lookup with byline join. */
+async function fetchUrArticle(slug: string) {
+  const where = or(eq(urArticles.englishSlug, slug), eq(urArticles.slug, slug));
+  const [row] = await db
+    .select({
+      title: urArticles.title,
+      slug: urArticles.slug,
+      englishSlug: urArticles.englishSlug,
+      excerpt: urArticles.excerpt,
+      aiSummary: urArticles.aiSummary,
+      content: urArticles.content,
+      imageUrl: urArticles.imageUrl,
+      publishedAt: urArticles.publishedAt,
+      updatedAt: urArticles.updatedAt,
+      seo: urArticles.seo,
+      authorFirstName: users.firstName,
+      authorLastName: users.lastName,
+    })
+    .from(urArticles)
+    .leftJoin(users, eq(urArticles.authorId, users.id))
+    .where(where!)
+    .limit(1);
+  return row || null;
+}
+
+function buildUrArticlePayload(
+  row: NonNullable<Awaited<ReturnType<typeof fetchUrArticle>>>,
+  slug: string,
+) {
+  const seoData = (row.seo as any) || {};
+  const title = row.title || seoData.metaTitle || "";
+  const description = trunc(
+    seoData.metaDescription || row.aiSummary || row.excerpt || title,
+    220,
+  );
+  const author =
+    [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") ||
+    ARTICLE_BRAND.ur.name;
+  return articleMetaPayload({
+    lang: "ur",
+    title,
+    description,
+    image: abs(row.imageUrl),
+    canonical: `${SITE_URL}/ur/article/${row.englishSlug || slug}`,
+    englishSlug: row.englishSlug,
+    slug,
+    publishedAt: row.publishedAt,
+    updatedAt: row.updatedAt,
+    author,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
     semanticHtml: buildSemanticHtml({
@@ -556,51 +678,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/en\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = decodeURIComponent(m[1]);
-      const where = or(eq(enArticles.englishSlug, slug), eq(enArticles.slug, slug));
-      const [row] = await db
-        .select({
-          title: enArticles.title,
-          slug: enArticles.slug,
-          englishSlug: enArticles.englishSlug,
-          excerpt: enArticles.excerpt,
-          aiSummary: enArticles.aiSummary,
-          content: enArticles.content,
-          imageUrl: enArticles.imageUrl,
-          publishedAt: enArticles.publishedAt,
-          updatedAt: enArticles.updatedAt,
-          seo: enArticles.seo,
-          authorFirstName: users.firstName,
-          authorLastName: users.lastName,
-        })
-        .from(enArticles)
-        .leftJoin(users, eq(enArticles.authorId, users.id))
-        .where(where!)
-        .limit(1);
+      const row = await fetchEnArticle(slug);
       if (!row) return null;
-      const seoData = (row.seo as any) || {};
-      const title = row.title || seoData.metaTitle || "";
-      const description = trunc(seoData.metaDescription || row.aiSummary || row.excerpt || title, 220);
-      const author = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") || ARTICLE_BRAND.en.name;
-      return articleMetaPayload({
-        lang: "en",
-        title,
-        description,
-        image: abs(row.imageUrl),
-        canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
-        englishSlug: row.englishSlug,
-        slug,
-        publishedAt: row.publishedAt,
-        updatedAt: row.updatedAt,
-        author,
-        keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
-        contentHtml: row.content,
-        semanticHtml: buildSemanticHtml({
-          title,
-          excerpt: row.excerpt || row.aiSummary || "",
-          content: row.content || "",
-          publishedAt: row.publishedAt,
-        }),
-      });
+      return buildEnArticlePayload(row, slug);
     },
   },
   // Urdu article: /ur/article/:slug
@@ -608,51 +688,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     pattern: /^\/ur\/article\/([^/?#]+)/,
     handle: async (m) => {
       const slug = decodeURIComponent(m[1]);
-      const where = or(eq(urArticles.englishSlug, slug), eq(urArticles.slug, slug));
-      const [row] = await db
-        .select({
-          title: urArticles.title,
-          slug: urArticles.slug,
-          englishSlug: urArticles.englishSlug,
-          excerpt: urArticles.excerpt,
-          aiSummary: urArticles.aiSummary,
-          content: urArticles.content,
-          imageUrl: urArticles.imageUrl,
-          publishedAt: urArticles.publishedAt,
-          updatedAt: urArticles.updatedAt,
-          seo: urArticles.seo,
-          authorFirstName: users.firstName,
-          authorLastName: users.lastName,
-        })
-        .from(urArticles)
-        .leftJoin(users, eq(urArticles.authorId, users.id))
-        .where(where!)
-        .limit(1);
+      const row = await fetchUrArticle(slug);
       if (!row) return null;
-      const seoData = (row.seo as any) || {};
-      const title = row.title || seoData.metaTitle || "";
-      const description = trunc(seoData.metaDescription || row.aiSummary || row.excerpt || title, 220);
-      const author = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ") || ARTICLE_BRAND.ur.name;
-      return articleMetaPayload({
-        lang: "ur",
-        title,
-        description,
-        image: abs(row.imageUrl),
-        canonical: `${SITE_URL}/ur/article/${row.englishSlug || slug}`,
-        englishSlug: row.englishSlug,
-        slug,
-        publishedAt: row.publishedAt,
-        updatedAt: row.updatedAt,
-        author,
-        keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
-        contentHtml: row.content,
-        semanticHtml: buildSemanticHtml({
-          title,
-          excerpt: row.excerpt || row.aiSummary || "",
-          content: row.content || "",
-          publishedAt: row.publishedAt,
-        }),
-      });
+      return buildUrArticlePayload(row, slug);
     },
   },
   // Arabic category: /category/:slug
@@ -884,6 +922,231 @@ const ROUTE_HANDLERS: RouteHandler[] = [
     }),
   },
 ];
+
+/**
+ * Aggregated SSR bundle for the Next.js public frontend (web-next/).
+ *
+ * One request returns everything the Next `/article/[slug]` page needs to
+ * render the full article server-side: the rich meta payload (title, OG,
+ * hreflang, robots), the NewsArticle JSON-LD, AND the sanitized renderable
+ * body — so the LCP image + full text appear in the first byte of HTML without
+ * waiting for the SPA bundle. Reuses the exact same DB lookup and meta builder
+ * as the edge seo-meta endpoint, so structured data stays identical across
+ * surfaces. Arabic articles only for Phase 1; en/ur added in Phase 2.
+ */
+router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
+  res.set(
+    "Cache-Control",
+    "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+  );
+  try {
+    const slug = decodeURIComponent(String(req.params.slug || ""));
+    if (!slug) return res.status(400).json({ error: "missing slug" });
+    const langParam = String(req.query.lang || "ar").toLowerCase();
+    const lang: "ar" | "en" | "ur" =
+      langParam === "en" ? "en" : langParam === "ur" ? "ur" : "ar";
+
+    // Per-language lookup + meta build, reusing the exact functions that back
+    // the edge seo-meta handlers so structured data stays identical.
+    let row:
+      | NonNullable<Awaited<ReturnType<typeof fetchArArticle>>>
+      | NonNullable<Awaited<ReturnType<typeof fetchEnArticle>>>
+      | NonNullable<Awaited<ReturnType<typeof fetchUrArticle>>>
+      | null = null;
+    let meta: ReturnType<typeof articleMetaPayload> | null = null;
+    let category: string | null = null;
+    let categoryHref: string | null = null;
+
+    if (lang === "en") {
+      const r = await fetchEnArticle(slug);
+      if (r) {
+        row = r;
+        meta = buildEnArticlePayload(r, slug);
+      }
+    } else if (lang === "ur") {
+      const r = await fetchUrArticle(slug);
+      if (r) {
+        row = r;
+        meta = buildUrArticlePayload(r, slug);
+      }
+    } else {
+      const r = await fetchArArticle(slug);
+      if (r) {
+        row = r;
+        category = r.categoryName || null;
+        const catSlug = r.categoryEnglishSlug || r.categorySlug;
+        categoryHref = catSlug ? `/category/${catSlug}` : null;
+        meta = buildArArticlePayload(
+          r,
+          slug,
+          `${SITE_URL}/article/${r.englishSlug || r.slug}`,
+        );
+      }
+    }
+
+    if (!row || !meta) return res.status(404).json({ error: "not_found" });
+    const seoData = (row.seo as any) || {};
+
+    return res.json({
+      lang,
+      slug: row.slug,
+      englishSlug: row.englishSlug,
+      title: row.title,
+      excerpt: row.excerpt || row.aiSummary || "",
+      contentHtml: stripUnsafeHtml(row.content || ""),
+      imageUrl: abs(row.imageUrl),
+      publishedAt: row.publishedAt,
+      updatedAt: row.updatedAt,
+      author: meta.author,
+      category,
+      categoryHref,
+      keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
+      meta: {
+        title: meta.title,
+        description: meta.description,
+        canonical: meta.canonical,
+        image: meta.image,
+        robots: meta.robots,
+        googlebotNews: meta.googlebotNews,
+        locale: meta.locale,
+        siteName: meta.siteName,
+        hreflang: meta.hreflang,
+        publishedTime: meta.publishedTime,
+        modifiedTime: meta.modifiedTime,
+        section: meta.section,
+        tags: meta.tags,
+      },
+      jsonLd: meta.jsonLd,
+    });
+  } catch (err) {
+    console.error("[articles/seo-bundle] error:", err);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+/**
+ * Aggregated SSR bundle for the Next.js category page. Resolves the category by
+ * englishSlug or Arabic slug (matching the canonical URL the edge emits), then
+ * returns category meta + a renderable list of recent published articles
+ * (title, slug, image, excerpt) so the list paints server-side.
+ */
+router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
+  res.set(
+    "Cache-Control",
+    "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+  );
+  try {
+    const slug = decodeURIComponent(String(req.params.slug || ""));
+    if (!slug) return res.status(400).json({ error: "missing slug" });
+    const limit = Math.min(parseInt(String(req.query.limit || "30"), 10) || 30, 60);
+
+    const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
+    const [cat] = await db
+      .select({
+        id: categories.id,
+        nameAr: categories.nameAr,
+        nameEn: categories.nameEn,
+        description: categories.description,
+        slug: categories.slug,
+        englishSlug: categories.englishSlug,
+      })
+      .from(categories)
+      .where(where!)
+      .limit(1);
+    if (!cat) return res.status(404).json({ error: "not_found" });
+
+    const displayName = cat.nameAr || cat.nameEn || "";
+    const canonicalSlug = cat.englishSlug || cat.slug;
+    const rows = await db
+      .select({
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        title: articles.title,
+        excerpt: articles.excerpt,
+        imageUrl: articles.imageUrl,
+        publishedAt: articles.publishedAt,
+      })
+      .from(articles)
+      .where(and(eq(articles.categoryId, cat.id), eq(articles.status, "published")))
+      .orderBy(desc(articles.publishedAt))
+      .limit(limit);
+
+    return res.json({
+      slug: cat.slug,
+      englishSlug: cat.englishSlug,
+      name: displayName,
+      description: trunc(cat.description || `أحدث الأخبار في ${displayName}`, 220),
+      canonical: `${SITE_URL}/category/${canonicalSlug}`,
+      articles: rows.map((r) => ({
+        href: `/article/${r.englishSlug || r.slug}`,
+        title: r.title || "",
+        excerpt: trunc(r.excerpt || "", 160),
+        imageUrl: r.imageUrl ? abs(r.imageUrl) : null,
+        publishedAt: r.publishedAt,
+      })),
+    });
+  } catch (err) {
+    console.error("[categories/seo-bundle] error:", err);
+    return res.status(500).json({ error: "internal" });
+  }
+});
+
+/**
+ * Aggregated SSR bundle for the Next.js homepage: latest published articles
+ * (renderable cards) + the section list. Mirrors the homepage edge handler's
+ * queries but returns full card fields instead of a hidden link list.
+ */
+router.get("/api/edge/home-bundle", async (_req, res) => {
+  res.set(
+    "Cache-Control",
+    "public, max-age=60, s-maxage=180, stale-while-revalidate=600",
+  );
+  try {
+    const [rows, cats] = await Promise.all([
+      db
+        .select({
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          title: articles.title,
+          excerpt: articles.excerpt,
+          imageUrl: articles.imageUrl,
+          publishedAt: articles.publishedAt,
+        })
+        .from(articles)
+        .where(eq(articles.status, "published"))
+        .orderBy(desc(articles.publishedAt))
+        .limit(30),
+      db
+        .select({
+          nameAr: categories.nameAr,
+          slug: categories.slug,
+          englishSlug: categories.englishSlug,
+        })
+        .from(categories)
+        .limit(40),
+    ]);
+
+    return res.json({
+      canonical: SITE_URL,
+      articles: rows.map((r) => ({
+        href: `/article/${r.englishSlug || r.slug}`,
+        title: r.title || "",
+        excerpt: trunc(r.excerpt || "", 160),
+        imageUrl: r.imageUrl ? abs(r.imageUrl) : null,
+        publishedAt: r.publishedAt,
+      })),
+      sections: cats
+        .filter((c) => c.nameAr)
+        .map((c) => ({
+          href: `/category/${c.englishSlug || c.slug}`,
+          title: c.nameAr || "",
+        })),
+    });
+  } catch (err) {
+    console.error("[edge/home-bundle] error:", err);
+    return res.status(500).json({ error: "internal" });
+  }
+});
 
 router.get("/api/edge/seo-meta", async (req, res) => {
   res.set("Cache-Control", "public, max-age=60, s-maxage=60");

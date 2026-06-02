@@ -30,7 +30,16 @@
  *   EDGE_HTML_CACHE — "on" (default) stores injected HTML in the Workers Cache
  *                API (P1 TTFB fix). Set "off" only for debugging. Requires
  *                EDGE_SEO=on. See docs/technical-seo-runbook-ar.md.
+ *   NEXT_ORIGIN — origin of the Next.js SSR deployment (web-next on Railway),
+ *                e.g. "https://next.sabq.org". Required when SSR_ROUTES=on.
+ *   SSR_ROUTES — "on" routes the SSR content surfaces (/, /article/:slug,
+ *                /category/:slug, /en/article/:slug, /ur/article/:slug) to
+ *                NEXT_ORIGIN, which renders full meta+body server-side. Those
+ *                paths then SKIP the EDGE_SEO shell injection (no double
+ *                injection). Default OFF → 100% unchanged SPA behavior, so the
+ *                rollout is staged and instantly reversible. P3 SSR migration.
  *
+
  * NOTE: keep `VITE_API_URL` UNSET on the Pages build so the client uses relative
  * `/api/*` paths and THIS middleware proxies them (same as Vercel did). Setting
  * it would switch the client to DIRECT mode and break the ~243 raw fetch('/api')
@@ -121,6 +130,21 @@ function isStaticAsset(p) {
   if (p.startsWith("/assets/")) return true;
   for (const ext of STATIC_EXTENSIONS) if (p.endsWith(ext)) return true;
   return false;
+}
+
+// Content surfaces rendered server-side by the Next.js app (web-next). Only the
+// routes that web-next actually implements — Arabic/en/ur articles, Arabic
+// category, and the homepage. en/ur category + secondary routes stay on the SPA
+// until migrated (Phase 4). Trailing slashes are already 301'd away above, and
+// query strings live in url.search (not in `p`).
+function isSsrPath(p) {
+  if (p === "/") return true;
+  return (
+    /^\/article\/[^/]+$/.test(p) ||
+    /^\/category\/[^/]+$/.test(p) ||
+    /^\/en\/article\/[^/]+$/.test(p) ||
+    /^\/ur\/article\/[^/]+$/.test(p)
+  );
 }
 
 function isInjectablePath(p) {
@@ -321,6 +345,9 @@ export async function onRequest(context) {
   const path = url.pathname;
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
+  const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
+  const ssrEnabled =
+    String(env.SSR_ROUTES || "").toLowerCase() === "on" && !!nextOrigin;
 
   // Only sabq.org is the canonical, indexable frontend. Any OTHER host that
   // serves this same SPA — the sabq.news test domain, `*.pages.dev` preview
@@ -443,6 +470,33 @@ export async function onRequest(context) {
         statusText: hit.statusText,
         headers,
       });
+    }
+  }
+
+  // SSR content routes → proxy to the Next.js deployment (web-next). Next
+  // renders the full article/category/home HTML (meta + body) server-side, so
+  // we return its output directly and SKIP the EDGE_SEO shell injection below
+  // (never double-inject). Slug-redirect still runs first so Arabic/legacy
+  // slugs keep 301'ing to the English canonical before reaching Next. A failure
+  // falls through to the existing SPA-shell path, so SSR is fail-safe.
+  if (ssrEnabled && htmlCacheable && isSsrPath(path)) {
+    try {
+      const slug = await cachedJson(
+        `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
+        SLUG_REDIRECT_TTL,
+      );
+      const redirectTo = slug && slug.redirect ? slug.redirect : null;
+      if (redirectTo && redirectTo !== path) {
+        return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
+      }
+      const ssrRes = await proxyToApi(request, nextOrigin);
+      // Only edge-cache a successful HTML render; Next 404/5xx pass through
+      // no-store so a transient error is never cached as a 200.
+      const ok = ssrRes.status === 200 && isHtml(ssrRes);
+      return deliverHtml(ssrRes, { cacheable: ok });
+    } catch (err) {
+      console.error("[pages-fn] ssr proxy failed, falling back to SPA shell:", err);
+      // fall through to the SPA shell / SEO injection path below
     }
   }
 
