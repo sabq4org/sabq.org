@@ -3,11 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -25,9 +23,6 @@ import {
   TrendingUp,
   Bot,
   MessageSquare,
-  Eye,
-  Heart,
-  Newspaper,
   RefreshCw,
   SlidersHorizontal,
   FileText,
@@ -36,18 +31,12 @@ import {
   ArrowRight,
   Home,
   FolderOpen,
-  UserCircle2,
-  CheckCircle,
-  ArrowLeft,
 } from "lucide-react";
 import { Link } from "wouter";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
-import type { Category, ArticleWithDetails, User } from "@shared/schema";
-import { formatDistanceToNow } from "date-fns";
-import { arSA } from "date-fns/locale";
+import type { Category, ArticleWithDetails } from "@shared/schema";
 import { motion } from "framer-motion";
-import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -119,91 +108,6 @@ export default function CategoryPage() {
     enabled: !!category,
   });
   const allArticles = Array.isArray(allArticlesRaw) ? allArticlesRaw : [];
-
-  // Calculate statistics from articles data
-  const statistics = useMemo(() => {
-    if (allArticles.length === 0) {
-      return {
-        totalArticles: 0,
-        recentArticles: 0,
-        totalViews: 0,
-        avgEngagement: 0,
-        mostViewed: null,
-        latestArticle: null,
-      };
-    }
-
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    const recentArticles = allArticles.filter((a) =>
-      a.publishedAt && new Date(a.publishedAt) >= oneDayAgo
-    );
-
-    const totalViews = allArticles.reduce((sum, a) => sum + (a.views || 0), 0);
-    const totalEngagement = allArticles.reduce(
-      (sum, a) => sum + (a.reactionsCount || 0) + (a.commentsCount || 0),
-      0
-    );
-    const avgEngagement = allArticles.length > 0
-      ? Math.round(totalEngagement / allArticles.length)
-      : 0;
-
-    const mostViewed = allArticles.reduce(
-      (max, a) => ((a.views || 0) > (max?.views || 0) ? a : max),
-      allArticles[0]
-    );
-
-    const sortedByDate = [...allArticles].sort(
-      (a, b) =>
-        new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()
-    );
-    const latestArticle = sortedByDate[0];
-
-    return {
-      totalArticles: allArticles.length,
-      recentArticles: recentArticles.length,
-      totalViews,
-      avgEngagement,
-      mostViewed,
-      latestArticle,
-    };
-  }, [allArticles]);
-
-  // Calculate most active reporter
-  const mostActiveReporter = useMemo((): { author: User, count: number } | null => {
-    if (allArticles.length === 0) return null;
-    
-    // Count articles per author
-    const authorCounts = new Map<string, { author: User, count: number }>();
-    
-    allArticles.forEach(article => {
-      const author = article.author;
-      if (!author) return;
-      
-      const current = authorCounts.get(author.id);
-      if (current) {
-        current.count++;
-      } else {
-        authorCounts.set(author.id, { author, count: 1 });
-      }
-    });
-    
-    // Find author with most articles using Array.from and reduce
-    const authorsArray = Array.from(authorCounts.values());
-    if (authorsArray.length === 0) return null;
-    
-    return authorsArray.reduce((max, current) => 
-      current.count > max.count ? current : max
-    , authorsArray[0]);
-  }, [allArticles]);
-
-  // Calculate reporter total views in this category
-  const calculateReporterViews = useCallback((authorId: string) => {
-    return allArticles
-      .filter(a => a.author?.id === authorId)
-      .reduce((sum, a) => sum + (a.views || 0), 0);
-  }, [allArticles]);
 
   // Reset displayCount when filters change
   useEffect(() => {
@@ -503,166 +407,6 @@ export default function CategoryPage() {
       <div className="container mx-auto px-3 sm:px-6 lg:px-8 pt-4">
         <DmsLeaderboardAd />
       </div>
-
-      {/* Most Active Reporter Section - AFTER Category Header, BEFORE Statistics */}
-      {mostActiveReporter && (
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-6">
-          <Card 
-            className="overflow-hidden border-r-4 hover-elevate transition-all"
-            style={{ borderRightColor: category?.color || 'var(--primary)' }}
-            data-testid="card-most-active-reporter"
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <UserCircle2 className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-bold">المراسل الأكثر نشاطاً في التصنيف</h3>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                {/* Profile Image */}
-                <Avatar className="w-16 h-16">
-                  <AvatarImage src={mostActiveReporter.author.profileImageUrl || undefined} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xl">
-                    {mostActiveReporter.author.firstName?.[0] || 'م'}
-                  </AvatarFallback>
-                </Avatar>
-                
-                {/* Reporter Info */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h4 className="text-xl font-bold">
-                      {mostActiveReporter.author.firstName} {mostActiveReporter.author.lastName}
-                    </h4>
-                    {mostActiveReporter.author.verificationBadge !== 'none' && (
-                      <CheckCircle className="h-5 w-5 text-primary" />
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {mostActiveReporter.author.role === 'reporter' ? 'مراسل' : 
-                     mostActiveReporter.author.role === 'editor' ? 'محرر' : 
-                     mostActiveReporter.author.role === 'chief_editor' ? 'رئيس تحرير' : 'كاتب'}
-                  </p>
-                  
-                  {/* Statistics */}
-                  <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Newspaper className="h-4 w-4" />
-                      <span className="font-semibold text-foreground">{mostActiveReporter.count}</span>
-                      مقالة في هذا التصنيف
-                    </span>
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      <Eye className="h-4 w-4" />
-                      <span className="font-semibold text-foreground">
-                        {calculateReporterViews(mostActiveReporter.author.id).toLocaleString('en-US')}
-                      </span>
-                      مشاهدة
-                    </span>
-                  </div>
-                  
-                  {/* View Profile Button */}
-                  <Link href={`/reporter/${mostActiveReporter.author.id}`}>
-                    <Button variant="outline" size="sm" className="gap-2" data-testid="button-view-reporter-profile">
-                      عرض الملف الشخصي
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Enhanced Statistics Summary Section */}
-      {articlesLoading ? (
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Card key={i}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-4 rounded" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16 mb-2" />
-                  <Skeleton className="h-3 w-20" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 md:gap-4 mb-8">
-            {/* Total Articles */}
-            <MobileOptimizedKpiCard
-              label="إجمالي المقالات"
-              value={statistics.totalArticles.toLocaleString('en-US')}
-              icon={Newspaper}
-              iconColor="text-primary"
-              iconBgColor="bg-primary/10"
-              testId="stat-total-articles"
-            />
-
-            {/* Recent Articles (24h) */}
-            <MobileOptimizedKpiCard
-              label="المقالات الحديثة"
-              value={statistics.recentArticles.toLocaleString('en-US')}
-              icon={Clock}
-              iconColor="text-blue-600"
-              iconBgColor="bg-blue-600/10"
-              testId="stat-recent-articles"
-            />
-
-            {/* Total Views */}
-            <MobileOptimizedKpiCard
-              label="المشاهدات الكلية"
-              value={statistics.totalViews.toLocaleString('en-US')}
-              icon={Eye}
-              iconColor="text-purple-600"
-              iconBgColor="bg-purple-600/10"
-              testId="stat-total-views"
-            />
-
-            {/* Average Engagement */}
-            <MobileOptimizedKpiCard
-              label="معدل التفاعل"
-              value={statistics.avgEngagement.toLocaleString('en-US')}
-              icon={Heart}
-              iconColor="text-red-600"
-              iconBgColor="bg-red-600/10"
-              testId="stat-avg-engagement"
-            />
-
-            {/* Most Viewed Article */}
-            <MobileOptimizedKpiCard
-              label="أكثر المقالات مشاهدة"
-              value={statistics.mostViewed ? statistics.mostViewed.title : "لا توجد بيانات"}
-              icon={TrendingUp}
-              iconColor="text-green-600"
-              iconBgColor="bg-green-600/10"
-              testId="stat-most-viewed"
-            />
-
-            {/* Last Update */}
-            <MobileOptimizedKpiCard
-              label="آخر تحديث"
-              value={
-                statistics.latestArticle?.publishedAt
-                  ? formatDistanceToNow(new Date(statistics.latestArticle.publishedAt), {
-                      addSuffix: true,
-                      locale: arSA,
-                    })
-                  : "لا توجد بيانات"
-              }
-              icon={RefreshCw}
-              iconColor="text-orange-600"
-              iconBgColor="bg-orange-600/10"
-              testId="stat-last-update"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Advanced Filters Bar */}
       <div className="container mx-auto px-3 sm:px-6 lg:px-8 pb-6">
