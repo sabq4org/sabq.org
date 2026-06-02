@@ -16,6 +16,7 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { CategoryPills } from "@/components/CategoryPills";
 import { Footer } from "@/components/Footer";
 import { HeroCarousel } from "@/components/HeroCarousel";
+import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 
@@ -210,6 +211,18 @@ export default function Home() {
     });
     return cancel;
   }, [initialLoadComplete, isMobile]);
+
+  // LCP: preload the hero carousel's lead image (breaking news sorts first,
+  // matching HeroCarousel's own ordering) so the browser starts fetching it
+  // before React mounts the carousel.
+  const heroLeadImage = useMemo(() => {
+    const heroes = Array.isArray(homepage?.hero) ? homepage!.hero : [];
+    if (heroes.length === 0) return null;
+    const lead =
+      heroes.find((a) => a.newsType === "breaking") || heroes[0];
+    return lead?.imageUrl || lead?.thumbnailUrl || null;
+  }, [homepage]);
+  useHeroPreload(heroLeadImage);
 
   const feedTitle = useMemo(() => user ? "أخبارك الذكية" : "جميع الأخبار", [user]);
   const feedSubtitle = useMemo(() => user ? "محتوى مُختار بذكاء بناءً على اهتماماتك" : undefined, [user]);

@@ -11,6 +11,12 @@ import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { CategoryAnalytics } from "@/components/CategoryAnalytics";
 import { UrduFooter } from "@/components/ur/UrduFooter";
+import { useHeroPreload } from "@/hooks/useHeroPreload";
+import {
+  buildCloudflareUrl,
+  generateResponsiveSrcSet,
+  HERO_SIZES_ATTR,
+} from "@/lib/cdnImage";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -61,6 +67,9 @@ export default function UrduCategoryPage() {
     enabled: !!category,
   });
 
+  // LCP: preload the hero image once the category data is known.
+  useHeroPreload(category?.heroImageUrl);
+
   if (categoryLoading) {
     return (
       <UrduLayout>
@@ -94,9 +103,16 @@ export default function UrduCategoryPage() {
         {category.heroImageUrl ? (
           <div className="relative h-48 sm:h-64 md:h-80 overflow-hidden">
             <img
-              src={category.heroImageUrl}
+              src={buildCloudflareUrl(category.heroImageUrl, { width: 1280, quality: 80 }) || category.heroImageUrl}
+              srcSet={generateResponsiveSrcSet(category.heroImageUrl, 80) || undefined}
+              sizes={HERO_SIZES_ATTR}
               alt={category.name}
               className="w-full h-full object-cover"
+              width={1280}
+              height={320}
+              loading="eager"
+              decoding="async"
+              {...{ fetchpriority: "high" }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-black/30 dark:from-black/80 dark:via-black/40 dark:to-transparent" />
             <div className="absolute inset-0 flex items-end">
