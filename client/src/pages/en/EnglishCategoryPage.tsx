@@ -10,12 +10,6 @@ import type { EnCategory, EnArticle } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { CategoryAnalytics } from "@/components/CategoryAnalytics";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
-import { useHeroPreload } from "@/hooks/useHeroPreload";
-import {
-  buildCloudflareUrl,
-  generateResponsiveSrcSet,
-  HERO_SIZES_ATTR,
-} from "@/lib/cdnImage";
 
 // Helper function to check if article is new (published within last 3 hours)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -66,9 +60,6 @@ export default function EnglishCategoryPage() {
     enabled: !!category,
   });
 
-  // LCP: preload the hero image once the category data is known.
-  useHeroPreload(category?.heroImageUrl);
-
   if (categoryLoading) {
     return (
       <EnglishLayout>
@@ -98,52 +89,24 @@ export default function EnglishCategoryPage() {
   return (
     <EnglishLayout>
 
-      {/* Hero Section */}
-      {category.heroImageUrl ? (
-        <div className="relative h-48 sm:h-64 md:h-80 overflow-hidden">
-          <img
-            src={buildCloudflareUrl(category.heroImageUrl, { width: 1280, quality: 80 }) || category.heroImageUrl}
-            srcSet={generateResponsiveSrcSet(category.heroImageUrl, 80) || undefined}
-            sizes={HERO_SIZES_ATTR}
-            alt={category.name}
-            className="w-full h-full object-cover"
-            width={1280}
-            height={320}
-            loading="eager"
-            decoding="async"
-            {...{ fetchpriority: "high" }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-black/30 dark:from-black/80 dark:via-black/40 dark:to-transparent" />
-          <div className="absolute inset-0 flex items-end">
-            <div className="container mx-auto px-3 sm:px-6 lg:px-8 pb-6 sm:pb-8">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 sm:mb-3">
-                {category.name}
-              </h1>
-              {category.description && (
-                <p className="text-sm sm:text-base md:text-lg text-white/90 max-w-3xl">
-                  {category.description}
-                </p>
-              )}
-            </div>
+      {/* Category Header (text + gradient). The hero cover image was removed
+          from category pages because it was the LCP element and slowed mobile
+          LCP; a text header paints almost instantly. */}
+      <div className="bg-gradient-to-br from-primary/10 to-primary/5 py-12 sm:py-16">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4 mb-4">
+            <Newspaper className="h-12 w-12 sm:h-16 sm:w-16 text-primary" />
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">
+              {category.name}
+            </h1>
           </div>
+          {category.description && (
+            <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
+              {category.description}
+            </p>
+          )}
         </div>
-      ) : (
-        <div className="bg-gradient-to-br from-primary/10 to-primary/5 py-12 sm:py-16">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4 mb-4">
-              <Newspaper className="h-12 w-12 sm:h-16 sm:w-16 text-primary" />
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">
-                {category.name}
-              </h1>
-            </div>
-            {category.description && (
-              <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
-                {category.description}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Category Analytics */}
       {analyticsLoading ? (

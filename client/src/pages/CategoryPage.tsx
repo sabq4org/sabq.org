@@ -43,12 +43,6 @@ import {
 import { Link } from "wouter";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
-import { useHeroPreload } from "@/hooks/useHeroPreload";
-import {
-  buildCloudflareUrl,
-  generateResponsiveSrcSet,
-  HERO_SIZES_ATTR,
-} from "@/lib/cdnImage";
 import type { Category, ArticleWithDetails, User } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -119,21 +113,6 @@ export default function CategoryPage() {
 
   // DMS Ad tracking for category page
   useAdTracking(category?.nameAr || '');
-
-  // LCP optimization: preload the hero image as soon as the category data is
-  // known so the browser starts fetching it before React paints the <img>.
-  useHeroPreload(category?.heroImageUrl);
-  const heroSrc = useMemo(
-    () =>
-      category?.heroImageUrl
-        ? buildCloudflareUrl(category.heroImageUrl, { width: 1280, quality: 80 })
-        : "",
-    [category?.heroImageUrl],
-  );
-  const heroSrcSet = useMemo(
-    () => (category?.heroImageUrl ? generateResponsiveSrcSet(category.heroImageUrl, 80) : ""),
-    [category?.heroImageUrl],
-  );
 
   const { data: allArticlesRaw, isLoading: articlesLoading } = useQuery<ArticleWithDetails[]>({
     queryKey: ["/api/categories", slug, "articles"],
@@ -367,75 +346,19 @@ export default function CategoryPage() {
     <div className="min-h-screen bg-background" dir="rtl">
       <Header user={user} />
 
-      {/* Hero Section with Text Overlay */}
-      {category.heroImageUrl ? (
-        <div className="relative h-96 overflow-hidden">
-          <img
-            src={heroSrc || category.heroImageUrl}
-            srcSet={heroSrcSet || undefined}
-            sizes={HERO_SIZES_ATTR}
-            alt={category.nameAr}
-            className="w-full h-full object-cover"
-            width={1280}
-            height={384}
-            loading="eager"
-            decoding="async"
-            {...{ fetchpriority: "high" }}
-          />
-          {/* Dark gradient overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
-          
-          {/* Text Overlay Content - Right aligned to match logo */}
-          <div className="absolute inset-0 flex items-end pb-12">
-            <div className="container mx-auto px-3 sm:px-6 lg:px-8">
-              {/* Icon */}
-              {category.icon && (
-                <span className="text-5xl sm:text-6xl mb-4 block">{category.icon}</span>
-              )}
-              
-              {/* Title */}
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 drop-shadow-lg">
-                {category.nameAr}
-              </h1>
-              
-              {/* Description */}
-              {category.description && (
-                <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-3xl leading-relaxed drop-shadow-md">
-                  {category.description}
-                </p>
-              )}
-              
-              {/* Smart Category Badge */}
-              {isSmartCategory && (
-                <motion.div
-                  animate={{ opacity: [1, 0.7, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="mt-4"
-                >
-                  <Badge
-                    className="flex items-center gap-1.5 min-h-8 px-4 py-2 text-sm bg-gradient-to-r from-primary to-accent text-primary-foreground border-0 shadow-lg w-fit"
-                    data-testid="badge-category-type"
-                  >
-                    <Brain className="h-4 w-4" />
-                    اختيار ذكي
-                  </Badge>
-                </motion.div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Hero image intentionally removed from category pages: the large
+          cover image was the LCP element and dragged mobile LCP to ~3.7s.
+          A lightweight text + gradient header paints almost instantly, so
+          the category title becomes a fast text LCP instead. */}
 
-      {/* Breadcrumb Navigation Section - Below Hero */}
+      {/* Category Header Section (text + gradient, no hero image) */}
       <div className={`${
-        !category.heroImageUrl 
-          ? isSmartCategory
-            ? "bg-gradient-to-br from-primary/15 via-accent/10 to-primary/5 dark:from-primary/8 dark:via-accent/5 dark:to-primary/3 border-b"
-            : "bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 border-b"
-          : "border-b bg-background/95 backdrop-blur-sm"
+        isSmartCategory
+          ? "bg-gradient-to-br from-primary/15 via-accent/10 to-primary/5 dark:from-primary/8 dark:via-accent/5 dark:to-primary/3 border-b"
+          : "bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 dark:from-primary/10 dark:to-primary/5 border-b"
       } relative overflow-hidden`}>
-        {/* Animated AI Grid Pattern for Smart Categories (no hero image) */}
-        {!category.heroImageUrl && isSmartCategory && (
+        {/* Animated AI Grid Pattern for Smart Categories */}
+        {isSmartCategory && (
           <div className="absolute inset-0 opacity-20 dark:opacity-10">
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
           </div>
@@ -460,8 +383,8 @@ export default function CategoryPage() {
             <span className="font-semibold text-foreground">{category.nameAr}</span>
           </nav>
 
-          {/* Category Header for NO HERO IMAGE cases */}
-          {!category.heroImageUrl && (
+          {/* Category Header (title + description) */}
+          {(
             <div className="mt-4">
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                 {isSmartCategory && (
@@ -913,7 +836,7 @@ export default function CategoryPage() {
                       article={article}
                       viewMode="grid"
                       hideCategory={true}
-                      priority={index === 0 && !category.heroImageUrl}
+                      priority={index === 0}
                     />
                   </div>
                   {/* MPU Ad after 2nd article on mobile - separate grid item */}
