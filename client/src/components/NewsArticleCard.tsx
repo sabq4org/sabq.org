@@ -29,6 +29,12 @@ interface NewsArticleCardProps {
   article: ArticleWithDetails;
   viewMode: ViewMode;
   hideCategory?: boolean;
+  /**
+   * When true the card image loads eagerly with high fetch priority. Set this
+   * on the first card of a grid/list so it can serve as a fast LCP element on
+   * pages that have no hero image (e.g. most category pages).
+   */
+  priority?: boolean;
 }
 
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -46,7 +52,7 @@ const getReadingTime = (content?: string) => {
   return Math.ceil(wordCount / wordsPerMinute);
 };
 
-export function NewsArticleCard({ article, viewMode, hideCategory = false }: NewsArticleCardProps) {
+export function NewsArticleCard({ article, viewMode, hideCategory = false, priority = false }: NewsArticleCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   if (article.articleType === 'infographic') {
@@ -105,6 +111,8 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false }: New
                       className="w-full h-full object-cover rounded-lg transition-transform duration-500 group-hover:scale-110"
                       wrapperClassName="w-full h-full"
                       objectPosition={getObjectPosition(article)}
+                      priority={priority}
+                      fetchPriority={priority ? "high" : "auto"}
                     />
                     {(article.isAiGeneratedThumbnail || article.isAiGeneratedImage) && (
                       <Badge 
@@ -172,6 +180,8 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false }: New
                     isHovered ? 'scale-110' : 'scale-100'
                   }`}
                   objectPosition={getObjectPosition(article)}
+                  priority={priority}
+                  fetchPriority={priority ? "high" : "auto"}
                 />
               ) : (
                 renderImagePlaceholder()

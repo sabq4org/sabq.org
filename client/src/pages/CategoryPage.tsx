@@ -43,6 +43,12 @@ import {
 import { Link } from "wouter";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
+import { useHeroPreload } from "@/hooks/useHeroPreload";
+import {
+  buildCloudflareUrl,
+  generateResponsiveSrcSet,
+  HERO_SIZES_ATTR,
+} from "@/lib/cdnImage";
 import type { Category, ArticleWithDetails, User } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -113,6 +119,21 @@ export default function CategoryPage() {
 
   // DMS Ad tracking for category page
   useAdTracking(category?.nameAr || '');
+
+  // LCP optimization: preload the hero image as soon as the category data is
+  // known so the browser starts fetching it before React paints the <img>.
+  useHeroPreload(category?.heroImageUrl);
+  const heroSrc = useMemo(
+    () =>
+      category?.heroImageUrl
+        ? buildCloudflareUrl(category.heroImageUrl, { width: 1280, quality: 80 })
+        : "",
+    [category?.heroImageUrl],
+  );
+  const heroSrcSet = useMemo(
+    () => (category?.heroImageUrl ? generateResponsiveSrcSet(category.heroImageUrl, 80) : ""),
+    [category?.heroImageUrl],
+  );
 
   const { data: allArticlesRaw, isLoading: articlesLoading } = useQuery<ArticleWithDetails[]>({
     queryKey: ["/api/categories", slug, "articles"],
@@ -350,9 +371,16 @@ export default function CategoryPage() {
       {category.heroImageUrl ? (
         <div className="relative h-96 overflow-hidden">
           <img
-            src={category.heroImageUrl}
+            src={heroSrc || category.heroImageUrl}
+            srcSet={heroSrcSet || undefined}
+            sizes={HERO_SIZES_ATTR}
             alt={category.nameAr}
             className="w-full h-full object-cover"
+            width={1280}
+            height={384}
+            loading="eager"
+            decoding="async"
+            {...{ fetchpriority: "high" }}
           />
           {/* Dark gradient overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-black/30" />
@@ -885,6 +913,7 @@ export default function CategoryPage() {
                       article={article}
                       viewMode="grid"
                       hideCategory={true}
+                      priority={index === 0 && !category.heroImageUrl}
                     />
                   </div>
                   {/* MPU Ad after 2nd article on mobile - separate grid item */}
