@@ -445,6 +445,21 @@ function rateLimitKey(req: Request): string {
   return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
 }
 
+// Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)
+// are high-frequency, anonymous, and harmless to over-count — they must NOT be
+// throttled. Critically, behind the Cloudflare Pages proxy every anonymous
+// visitor shares ONE cf-connecting-ip (the Pages egress), so without this skip
+// the whole site's view tracking collapses into a single write bucket and 429s
+// (symptom: article views frozen at 0). Keep this list to telemetry only.
+function isTelemetryWrite(req: Request): boolean {
+  const p = req.path;
+  return (
+    /^\/api\/articles\/[^/]+\/view$/.test(p) || // article view counter
+    p === "/api/behavior/log" ||                // behavior beacon
+    p === "/api/accessibility/track"            // accessibility beacon
+  );
+}
+
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10000, // 10000 requests per IP/user per window (high-traffic site behind CDN)
@@ -457,6 +472,7 @@ const generalApiLimiter = rateLimit({
   skip: (req) => {
     if (req.path.startsWith("/health") || req.path.startsWith("/ready")) return true;
     if (req.method === "GET") return true;
+    if (isTelemetryWrite(req)) return true;
     return false;
   },
 });
@@ -492,6 +508,7 @@ const writeLimiter = rateLimit({
   keyGenerator: rateLimitKey,
   skip: (req) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return true;
+    if (isTelemetryWrite(req)) return true;
     return false;
   },
 });
