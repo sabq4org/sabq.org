@@ -32,15 +32,20 @@
  *                EDGE_SEO=on. See docs/technical-seo-runbook-ar.md.
  *   NEXT_ORIGIN — origin of the Next.js SSR deployment (web-next on Railway),
  *                e.g. "https://next.sabq.org". Required when SSR_ROUTES=on.
- *   SSR_ROUTES — "on" routes the SSR content surfaces (/, /article/:slug,
- *                /category/:slug, /en/article/:slug, /ur/article/:slug) to
- *                NEXT_ORIGIN, which renders full meta+body server-side. Those
- *                paths then SKIP the EDGE_SEO shell injection (no double
- *                injection). Also proxies /_next/* (Next's hashed CSS/JS build
- *                assets) to NEXT_ORIGIN so the SSR pages load styled+hydrated;
- *                without it those assets fall through to the SPA index.html and
- *                pages render unstyled. Default OFF → 100% unchanged SPA
- *                behavior, so the rollout is staged and instantly reversible.
+ *   SSR_ROUTES — "on" enables DYNAMIC RENDERING on the SSR content surfaces
+ *                (/, /article/:slug, /category/:slug, /en|ur/article/:slug):
+ *                  • Human visitors ALWAYS get the original SPA (unchanged
+ *                    design + the EDGE_SEO injected shell, exactly as before
+ *                    SSR existed). Their experience is literally untouched.
+ *                  • Search/social crawlers (Googlebot, bingbot, Applebot,
+ *                    facebookexternalhit, …) are proxied to NEXT_ORIGIN, which
+ *                    renders the full meta+body server-side (skipping EDGE_SEO
+ *                    injection so there's no double injection).
+ *                The edge cache key is namespaced by audience (crawler vs
+ *                human) so the two renderings of the same URL never poison each
+ *                other. /_next/* (Next's hashed CSS/JS) is proxied to
+ *                NEXT_ORIGIN so crawler-rendered pages load styled. Default OFF
+ *                → 100% unchanged SPA behavior; instantly reversible.
  *
 
  * NOTE: keep `VITE_API_URL` UNSET on the Pages build so the client uses relative
@@ -150,6 +155,18 @@ function isSsrPath(p) {
   );
 }
 
+// Search-engine + social-preview crawlers. Dynamic rendering serves these the
+// SSR (full server-rendered) HTML, while human visitors keep the original SPA.
+// The SSR body is the same article content a human sees after hydration, so
+// this is equivalent-content dynamic rendering (not cloaking). Kept focused on
+// indexing/preview bots; ordinary headless Chrome / Lighthouse is intentionally
+// excluded so PageSpeed reflects the real (SPA) user experience.
+const CRAWLER_RE =
+  /(googlebot|google-inspectiontool|storebot-google|google-site-verification|bingbot|bingpreview|applebot|yandex(bot)?|duckduckbot|baiduspider|sogou|naverbot|petalbot|facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest(bot)?|redditbot|embedly|vkshare|skypeuripreview|nuzzel|qwantify|googleweblight)/i;
+function isCrawler(ua) {
+  return !!ua && CRAWLER_RE.test(ua);
+}
+
 function isInjectablePath(p) {
   for (const prefix of NOINDEX_PREFIXES) {
     if (p === prefix || p.startsWith(prefix + "/") || p.startsWith(prefix)) return false;
@@ -182,12 +199,16 @@ function applyHtmlHeaders(res, headerSet) {
 // deploy = a brand-new keyspace, so a freshly-built shell can NEVER serve the
 // previous build's rotated /assets/index-<hash>.js — eliminating the
 // stale-shell-after-deploy class entirely (the reason HTML was no-store before).
-function htmlCacheKey(requestUrl, commit) {
+function htmlCacheKey(requestUrl, commit, variant) {
   const u = new URL(requestUrl);
   // Drop the client deploy-recovery buster so recovery reloads don't fragment
   // (or poison) the cache, and don't carry it into the cache key.
   u.searchParams.delete("_dr");
   u.searchParams.set("__b", commit || "dev");
+  // Audience namespace for dynamic rendering: on SSR paths the crawler gets a
+  // different rendering (full SSR) than humans (SPA shell), so they must NOT
+  // share a cache entry. Empty for all other paths to avoid fragmentation.
+  if (variant) u.searchParams.set("__v", variant);
   return new Request(u.toString(), { method: "GET" });
 }
 
@@ -378,8 +399,18 @@ export async function onRequest(context) {
   const edgeHtmlCacheEnabled =
     String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" && seoEnabled;
   const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+
+  // Dynamic rendering: only search/social crawlers get the SSR rendering on SSR
+  // paths; humans always get the original SPA. The cache is namespaced by
+  // audience on SSR paths so the two renderings never collide.
+  const userAgent = request.headers.get("user-agent") || "";
+  const ssrPath = ssrEnabled && isSsrPath(path);
+  const wantsSsr = ssrPath && isCrawler(userAgent);
+  const cacheVariant = ssrPath ? (wantsSsr ? "b" : "h") : "";
   const cacheKey =
-    request.method === "GET" ? htmlCacheKey(request.url, commit) : null;
+    request.method === "GET"
+      ? htmlCacheKey(request.url, commit, cacheVariant)
+      : null;
 
   // Finalizes an HTML response. `cacheable` opts the response into the edge
   // cache (HTML_EDGE_CACHE_HEADERS) — only ever true for indexable content on
@@ -491,13 +522,15 @@ export async function onRequest(context) {
     }
   }
 
-  // SSR content routes → proxy to the Next.js deployment (web-next). Next
-  // renders the full article/category/home HTML (meta + body) server-side, so
-  // we return its output directly and SKIP the EDGE_SEO shell injection below
-  // (never double-inject). Slug-redirect still runs first so Arabic/legacy
-  // slugs keep 301'ing to the English canonical before reaching Next. A failure
-  // falls through to the existing SPA-shell path, so SSR is fail-safe.
-  if (ssrEnabled && htmlCacheable && isSsrPath(path)) {
+  // SSR content routes (CRAWLERS ONLY → dynamic rendering) → proxy to the
+  // Next.js deployment (web-next). Next renders the full article/category/home
+  // HTML (meta + body) server-side, so we return its output directly and SKIP
+  // the EDGE_SEO shell injection below (never double-inject). Human visitors
+  // never reach here — they fall through to the SPA shell path below and keep
+  // the original design. Slug-redirect still runs first so Arabic/legacy slugs
+  // keep 301'ing to the English canonical before reaching Next. A failure falls
+  // through to the existing SPA-shell path, so SSR is fail-safe.
+  if (wantsSsr && htmlCacheable) {
     try {
       const slug = await cachedJson(
         `${apiOrigin}/api/edge/slug-redirect?path=${encodeURIComponent(path)}`,
