@@ -28,7 +28,7 @@ import {
   worldDays,
   gulfEvents,
 } from "@shared/schema";
-import { eq, or, and, desc, aliasedTable } from "drizzle-orm";
+import { eq, or, and, desc, ne, aliasedTable } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 
 const router = Router();
@@ -386,6 +386,8 @@ async function fetchArArticle(slug: string) {
   const [row] = await db
     .select({
       title: articles.title,
+      categoryId: articles.categoryId,
+      id: articles.id,
       slug: articles.slug,
       englishSlug: articles.englishSlug,
       excerpt: articles.excerpt,
@@ -956,6 +958,16 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
     let meta: ReturnType<typeof articleMetaPayload> | null = null;
     let category: string | null = null;
     let categoryHref: string | null = null;
+    let categoryLatest: Array<{
+      href: string;
+      title: string;
+      excerpt: string;
+      imageUrl: string | null;
+      publishedAt: Date | string | null;
+      newsType?: string | null;
+      category?: string | null;
+      categoryColor?: string | null;
+    }> = [];
 
     if (lang === "en") {
       const r = await fetchEnArticle(slug);
@@ -981,6 +993,40 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
           slug,
           `${SITE_URL}/article/${r.englishSlug || r.slug}`,
         );
+        if (r.categoryId) {
+          const latestRows = await db
+            .select({
+              slug: articles.slug,
+              englishSlug: articles.englishSlug,
+              title: articles.title,
+              excerpt: articles.excerpt,
+              imageUrl: articles.imageUrl,
+              publishedAt: articles.publishedAt,
+              newsType: articles.newsType,
+              categoryColor: categories.color,
+            })
+            .from(articles)
+            .leftJoin(categories, eq(articles.categoryId, categories.id))
+            .where(and(
+              eq(articles.categoryId, r.categoryId),
+              eq(articles.status, "published"),
+              ne(articles.id, r.id),
+            ))
+            .orderBy(desc(articles.publishedAt))
+            .limit(8);
+          categoryLatest = latestRows
+            .filter((item) => item.title && (item.englishSlug || item.slug))
+            .map((item) => ({
+              href: `/article/${item.englishSlug || item.slug}`,
+              title: item.title || "",
+              excerpt: trunc(item.excerpt || "", 160),
+              imageUrl: item.imageUrl ? abs(item.imageUrl) : null,
+              publishedAt: item.publishedAt,
+              newsType: item.newsType || null,
+              category,
+              categoryColor: item.categoryColor || null,
+            }));
+        }
       }
     }
 
@@ -1000,6 +1046,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       author: meta.author,
       category,
       categoryHref,
+      categoryLatest,
       keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
       meta: {
         title: meta.title,

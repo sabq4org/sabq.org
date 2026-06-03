@@ -126,6 +126,41 @@ export function ArticleView({
           />
 
           <ShareButtons url={bundle.meta.canonical} title={bundle.title} />
+
+          {bundle.categoryLatest && bundle.categoryLatest.length > 0 && (
+            <section
+              aria-labelledby="category-latest-heading"
+              className="mt-10 border-t pt-6"
+            >
+              <h2
+                id="category-latest-heading"
+                className="text-xl font-bold text-foreground"
+              >
+                {bundle.category
+                  ? `آخر أخبار ${bundle.category}`
+                  : "آخر الأخبار ذات الصلة"}
+              </h2>
+              <ul className="mt-4 space-y-3">
+                {bundle.categoryLatest.map((item) => (
+                  <li key={item.href}>
+                    <a
+                      href={item.href}
+                      className="block rounded-lg border border-border bg-card p-3 transition-colors hover:border-primary hover:text-primary"
+                    >
+                      <span className="font-semibold leading-relaxed">
+                        {item.title}
+                      </span>
+                      {item.excerpt && (
+                        <span className="mt-1 block text-sm text-muted-foreground">
+                          {item.excerpt}
+                        </span>
+                      )}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </article>
       </main>
       <SiteFooter />

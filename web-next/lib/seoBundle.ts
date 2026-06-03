@@ -28,6 +28,7 @@ export interface SeoBundle {
   author: string;
   category: string | null;
   categoryHref: string | null;
+  categoryLatest?: ArticleListItem[];
   keywords: string[];
   meta: SeoBundleMeta;
   jsonLd: Record<string, unknown>;
