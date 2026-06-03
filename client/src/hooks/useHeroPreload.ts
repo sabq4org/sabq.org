@@ -10,9 +10,13 @@ export function useHeroPreload(imageUrl: string | null | undefined): void {
   useEffect(() => {
     if (!imageUrl || typeof document === "undefined") return;
 
+    // Keep quality in lockstep with HeroCarousel's HERO_QUALITY. If the
+    // preloaded srcset uses a different quality than the rendered <img>, the
+    // browser treats them as different resources and downloads the hero twice.
+    const HERO_QUALITY = 72;
     const normalized = normalizeImageSrc(imageUrl);
-    const srcset = generateResponsiveSrcSet(normalized);
-    const fallbackHref = buildCloudflareUrl(normalized, { width: 960, quality: 80 }) || normalized;
+    const srcset = generateResponsiveSrcSet(normalized, HERO_QUALITY);
+    const fallbackHref = buildCloudflareUrl(normalized, { width: 960, quality: HERO_QUALITY }) || normalized;
 
     const link = document.createElement("link");
     link.rel = "preload";

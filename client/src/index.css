@@ -7,6 +7,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Metric-adjusted fallback for IBM Plex Sans Arabic.
+ *
+ * The web font loads asynchronously (index.html swaps the stylesheet from
+ * media="print" to "all" + display=swap), so Arabic text first paints in the
+ * system fallback and then reflows when IBM Plex arrives — the main driver of
+ * the "Needs Improvement" CLS on the homepage (the html/body + main.container
+ * entries in Cloudflare Web Analytics).
+ *
+ * This @font-face re-shapes a local system font (Arial — ships with Arabic
+ * glyphs on every target OS) so it occupies the SAME vertical/horizontal space
+ * as IBM Plex Sans Arabic. Inserted right after the web font in the stack, it
+ * makes the swap shift-free. It is ONLY used while the web font is loading
+ * (or if it never loads), so it can never change the final, fully-loaded
+ * typography. Override values derived from IBM Plex Sans Arabic metrics
+ * (UPM 1000, ascent 1025, descent 275, xHeight 491) vs Arial (UPM 2048,
+ * xHeight 1062): size-adjust = 491/1000 ÷ 1062/2048.
+ */
+@font-face {
+  font-family: "IBM Plex Sans Arabic Fallback";
+  src: local("Arial"), local("ArialMT");
+  size-adjust: 94.69%;
+  ascent-override: 108.25%;
+  descent-override: 29.04%;
+  line-gap-override: 0%;
+}
+
 /* Safari iOS zoom prevention + prevent horizontal overflow on Android Chrome.
  * `overflow-x: clip` instead of `hidden` so `position: sticky` continues to
  * work on descendants — `hidden` creates a new containing block that
@@ -341,7 +368,7 @@ input, select, textarea {
 :root,
 [data-variant="ai-first"] {
   --variant-primary: 203.7736 87.6033% 52.5490%;
-  --variant-font-family: "IBM Plex Sans Arabic", "Open Sans", sans-serif;
+  --variant-font-family: "IBM Plex Sans Arabic", "IBM Plex Sans Arabic Fallback", "Open Sans", sans-serif;
   --variant-radius: 0.75rem;
 }
 

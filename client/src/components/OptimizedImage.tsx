@@ -176,8 +176,12 @@ export function OptimizedImage({
   const autoSrcSet = useMemo(() => {
     if (srcSet) return srcSet;
     if (useFallback) return '';
-    return generateResponsiveSrcSet(normalizedSrc);
-  }, [normalizedSrc, srcSet, useFallback]);
+    // Thread the quality prop through so the responsive <source> candidates
+    // match the quality used by the hero preload (<link rel=preload>). A
+    // mismatch makes the browser pick a different candidate for the preload vs
+    // the rendered <img>, causing a double download of the LCP image.
+    return generateResponsiveSrcSet(normalizedSrc, quality);
+  }, [normalizedSrc, srcSet, useFallback, quality]);
   
   // Use provided blurDataUrl (base64) or generate lightweight CSS gradient
   const gradientPlaceholder = useMemo(() => generateGradientPlaceholder(src), [src]);
@@ -254,10 +258,16 @@ export function OptimizedImage({
     objectPosition: style?.objectPosition ?? objectPosition,
   };
 
-  // Build the final className for the img element, including opacity transition
-  const imgClassName = `${className} transition-opacity duration-300 ${
-    isLoaded ? "opacity-100" : "opacity-0"
-  }`;
+  // Build the final className for the img element. Priority (LCP / above-the-
+  // fold) images paint at full opacity immediately — the opacity-0 → opacity-100
+  // fade was delaying the LCP paint by (network load + a React re-render + the
+  // 300ms transition), which is exactly what Cloudflare RUM was capturing on
+  // the hero. Only non-priority (lazy, below-the-fold) images fade in.
+  const imgClassName = priority
+    ? className
+    : `${className} transition-opacity duration-300 ${
+        isLoaded ? "opacity-100" : "opacity-0"
+      }`;
 
   return (
     <div 

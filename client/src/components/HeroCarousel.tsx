@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Volume2, TrendingUp, Bell, Zap, Star, Flame, Brain, Camera, Clock } from "lucide-react";
 import { OptimizedImage } from "./OptimizedImage";
+import { HERO_SIZES_ATTR } from "@/lib/cdnImage";
 import type { ArticleWithDetails } from "@shared/schema";
+
+// Hero LCP image tuning. `sizes` MUST match the <link rel=preload imagesizes>
+// emitted by useHeroPreload (HERO_SIZES_ATTR) so the browser selects the same
+// srcset candidate for the preload and the rendered <img> — otherwise it
+// downloads the hero twice. Quality 72 keeps the largest contentful paint
+// light without a visible drop on the gradient-overlaid hero.
+const HERO_QUALITY = 72;
 import { formatArticleTimestamp, formatDateOnly } from "@/lib/formatTime";
 import { getObjectPosition } from "@/lib/imageUtils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -92,6 +100,8 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   className="w-full h-full object-cover"
                   objectPosition={heroArticle.objectPosition}
                   priority={isMobile}
+                  sizes={HERO_SIZES_ATTR}
+                  quality={HERO_QUALITY}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
@@ -246,6 +256,8 @@ function SafariHeroCarousel({ articles }: HeroCarouselProps) {
                   objectPosition={heroArticle.objectPosition}
                   priority={!isMobile}
                   preferSize="large"
+                  sizes={HERO_SIZES_ATTR}
+                  quality={HERO_QUALITY}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
@@ -469,6 +481,8 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   priority={isMobile}
                   preferSize="medium"
                   aspectRatio="16/9"
+                  sizes={HERO_SIZES_ATTR}
+                  quality={HERO_QUALITY}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
@@ -623,6 +637,8 @@ function EmblaHeroCarousel({ articles }: HeroCarouselProps) {
                   objectPosition={heroArticle.objectPosition}
                   priority={!isMobile}
                   preferSize="large"
+                  sizes={HERO_SIZES_ATTR}
+                  quality={HERO_QUALITY}
                 />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/5" />
