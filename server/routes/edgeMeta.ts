@@ -27,6 +27,8 @@ import {
   deepAnalyses,
   worldDays,
   gulfEvents,
+  tags,
+  articleTags,
 } from "@shared/schema";
 import { eq, or, and, desc, ne, aliasedTable } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
@@ -590,6 +592,78 @@ interface RouteHandler {
   handle: (match: RegExpMatchArray) => Promise<any | null>;
 }
 
+/**
+ * Keyword/tag landing meta. Parity port of seoInjector.ts handleKeywordPage:
+ * resolves the tag by slug, and — crucially — returns `noindex, follow` when no
+ * PUBLISHED article carries the tag. Without this the edge fallback marked every
+ * /keyword/* (even nonexistent ones) `index,follow`, minting thin/soft-404
+ * indexable pages. Title prefers the real tag name when content exists.
+ */
+async function buildKeywordMeta(slug: string, isEn: boolean) {
+  const rows = await db
+    .select({ nameAr: tags.nameAr, nameEn: tags.nameEn })
+    .from(articleTags)
+    .innerJoin(tags, eq(tags.id, articleTags.tagId))
+    .innerJoin(articles, eq(articles.id, articleTags.articleId))
+    .where(and(eq(tags.slug, slug), eq(articles.status, "published")))
+    .limit(1);
+  const hasContent = rows.length > 0;
+  const display =
+    (isEn ? rows[0]?.nameEn : rows[0]?.nameAr) ||
+    slug.replace(/[-_]+/g, " ");
+  return {
+    title: isEn ? `${display} — Sabq` : `${display} — سبق`,
+    description: isEn
+      ? `Latest news and articles tagged with ${display} on Sabq News.`
+      : `أحدث الأخبار والمقالات المتعلقة بـ ${display} على صحيفة سبق الإلكترونية.`,
+    image: BRAND_OG_IMAGE,
+    canonical: `${SITE_URL}${isEn ? "/en" : ""}/keyword/${encodeURIComponent(slug)}`,
+    robots: hasContent ? "index,follow" : "noindex, follow",
+    type: "website",
+    locale: isEn ? "en_US" : "ar_SA",
+  };
+}
+
+/**
+ * Reporter/author profile meta. Parity port of seoInjector.ts
+ * handleReporterPage: looked up by users.id. Returns `noindex, follow` when the
+ * id doesn't resolve (was `index,follow` on the generic edge fallback).
+ */
+async function buildReporterMeta(idOrSlug: string, isEn: boolean) {
+  const [reporter] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, idOrSlug))
+    .limit(1);
+  const canonical = `${SITE_URL}${isEn ? "/en" : ""}/reporter/${encodeURIComponent(idOrSlug)}`;
+  if (!reporter) {
+    return {
+      title: isEn ? "Reporter — Sabq" : "كاتب — سبق",
+      description: isEn
+        ? "Reporter profile on Sabq News."
+        : "صفحة كاتب على صحيفة سبق الإلكترونية.",
+      image: BRAND_OG_IMAGE,
+      canonical,
+      robots: "noindex, follow",
+      type: "profile",
+      locale: isEn ? "en_US" : "ar_SA",
+    };
+  }
+  const fullName =
+    [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") || idOrSlug;
+  return {
+    title: isEn ? `${fullName} — Sabq` : `${fullName} — سبق`,
+    description: isEn
+      ? `Articles by ${fullName} on Sabq News.`
+      : `مقالات وأخبار الكاتب ${fullName} على صحيفة سبق الإلكترونية.`,
+    image: BRAND_OG_IMAGE,
+    canonical,
+    robots: "index,follow",
+    type: "profile",
+    locale: isEn ? "en_US" : "ar_SA",
+  };
+}
+
 const ROUTE_HANDLERS: RouteHandler[] = [
   // Homepage — inject a crawlable list of the most recent article links so
   // Googlebot can DISCOVER new articles by crawling "/" (the SPA shell shows
@@ -896,6 +970,24 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         locale: "ar_SA",
       };
     },
+  },
+  // Keyword/tag landing: /keyword/:slug + /en/keyword/:slug
+  {
+    pattern: /^\/keyword\/([^/?#]+)/,
+    handle: async (m) => buildKeywordMeta(decodeURIComponent(m[1]), false),
+  },
+  {
+    pattern: /^\/en\/keyword\/([^/?#]+)/,
+    handle: async (m) => buildKeywordMeta(decodeURIComponent(m[1]), true),
+  },
+  // Reporter/author profile: /reporter/:idOrSlug + /en/reporter/:idOrSlug
+  {
+    pattern: /^\/reporter\/([^/?#]+)/,
+    handle: async (m) => buildReporterMeta(decodeURIComponent(m[1]), false),
+  },
+  {
+    pattern: /^\/en\/reporter\/([^/?#]+)/,
+    handle: async (m) => buildReporterMeta(decodeURIComponent(m[1]), true),
   },
   // Gulf live coverage landing
   {
