@@ -440,9 +440,23 @@ function rateLimitKey(req: Request): string {
   if (auth && auth.startsWith('Bearer ')) {
     return `b:${createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 32)}`;
   }
+  // Real visitor IP resolution. When traffic is proxied through our Cloudflare
+  // Worker (frontend-edge-worker.js, route sabq.org/*), the worker re-issues
+  // the request with `fetch(request)`, which makes Cloudflare REWRITE
+  // `cf-connecting-ip` on the origin subrequest to the worker's single egress
+  // IP. The result: every visitor collapses into ONE rate-limit bucket and the
+  // whole site's anonymous writes (logins, comments, reactions) share the
+  // writeLimiter's 1000/15min ceiling → permanent HTTP 429 for everyone.
+  //
+  // Fix: the worker forwards the genuine client IP it sees in a trusted custom
+  // header (`x-sabq-client-ip`; `true-client-ip` is also honored for parity
+  // with Cloudflare Enterprise). We prefer that, then fall back to
+  // `cf-connecting-ip` (correct for DIRECT origin pulls like api.sabq.org),
+  // then the leftmost X-Forwarded-For, then req.ip.
+  const forwardedReal = (req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined;
   const cfIp = req.headers['cf-connecting-ip'] as string;
   const xForwardedFor = req.headers['x-forwarded-for'] as string;
-  return cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
+  return forwardedReal?.split(',')[0]?.trim() || cfIp || xForwardedFor?.split(',')[0]?.trim() || req.ip || 'unknown';
 }
 
 // Fire-and-forget TELEMETRY beacons (view counter, behavior/accessibility logs)

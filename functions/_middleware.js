@@ -215,9 +215,18 @@ function htmlCacheKey(requestUrl, commit, variant) {
 async function proxyToApi(request, apiOrigin) {
   const url = new URL(request.url);
   const target = apiOrigin + url.pathname + url.search;
+  // Pages Functions re-issue the request with `fetch()` to API_ORIGIN. Cloudflare
+  // rewrites `cf-connecting-ip` on that subrequest to this function's single
+  // egress IP, so every visitor collapses into ONE backend rate-limit bucket
+  // (symptom: HTTP 429 on login/comments for the whole site). Capture the real
+  // client IP from the inbound request (still correct here) and forward it in a
+  // trusted header the backend reads first in rateLimitKey() (server/index.ts).
+  const headers = new Headers(request.headers);
+  const realIp = request.headers.get("cf-connecting-ip");
+  if (realIp) headers.set("X-Sabq-Client-IP", realIp);
   const init = {
     method: request.method,
-    headers: request.headers,
+    headers,
     // Pass redirects (e.g. /s/:code short links return 301) straight to the
     // browser instead of following them server-side.
     redirect: "manual",

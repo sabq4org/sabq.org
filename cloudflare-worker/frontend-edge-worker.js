@@ -75,8 +75,24 @@ function withHtmlNoStore(response) {
   });
 }
 
+// Re-issuing a request from a Worker with `fetch(request)` makes Cloudflare
+// REWRITE `cf-connecting-ip` on the origin subrequest to this worker's single
+// egress IP — so the backend can no longer tell visitors apart and collapses
+// them all into ONE rate-limit bucket (symptom: HTTP 429 "تم تجاوز حد الطلبات"
+// on every login/comment once the shared 1000/15min write bucket drains).
+// We capture the REAL client IP (which the worker still sees correctly in the
+// inbound request) and forward it in a trusted header the backend reads first
+// in rateLimitKey() (server/index.ts).
+function withClientIp(request) {
+  const realIp = request.headers.get("cf-connecting-ip");
+  if (!realIp) return request;
+  const headers = new Headers(request.headers);
+  headers.set("X-Sabq-Client-IP", realIp);
+  return new Request(request, { headers });
+}
+
 function fetchOrigin(request) {
-  return fetch(request, ORIGIN_FETCH);
+  return fetch(withClientIp(request), ORIGIN_FETCH);
 }
 
 // Backend-owned, non-HTML resources that must NEVER be served as the SPA HTML
@@ -355,7 +371,10 @@ export default {
     const url = new URL(request.url);
 
     if (request.method !== "GET" && request.method !== "HEAD") {
-      return fetch(request);
+      // All writes (login, register, OAuth, comments, reactions) pass straight
+      // through to origin — but forward the real client IP so the backend
+      // rate limiter keys per-visitor instead of per-worker-egress.
+      return fetch(withClientIp(request), ORIGIN_FETCH);
     }
 
     // Sitemaps + robots.txt: straight to the API origin (bypass Vercel's SPA
