@@ -355,7 +355,7 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 -
 
 - تعذر تشغيل dry-run من جلسة Codex الحالية لأن `DATABASE_URL`/`NEON_DATABASE_URL` غير متوفرين في البيئة المحلية. شغّله من بيئة تملك اتصال قاعدة البيانات، وراجع التقرير قبل `--apply`.
 
-### Commit pending
+### Commit `8c23963`
 
 الهدف: تشديد dry-run للـ Topic Hubs بعد أول تقرير فعلي.
 
@@ -380,7 +380,7 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 -
 - `npm run check` نجح.
 - `npm run build` داخل `web-next` نجح.
 
-### Commit pending
+### Commit `f577e40`
 
 الهدف: منع تطبيق backfill لكل الـ hubs دفعة واحدة.
 
@@ -410,7 +410,7 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --apply --i-understand --l
 npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 --days=90
 ```
 
-### Commit pending
+### Commit `e93d22b`
 
 الهدف: جعل صفحات `/keyword/:slug` المؤهلة تحتوي روابط مقالات قابلة للزحف في HTML الأولي.
 
@@ -431,7 +431,7 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 -
 npx tsx scripts/seo-topic-hubs-backfill.ts --limit=1000 --days=90
 ```
 
-### Commit pending
+### Commit `31b1b5b`
 
 الهدف: تشديد إضافي بعد تقرير dry-run الثاني.
 
@@ -452,3 +452,125 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --limit=1000 --days=90
 
 - `npm run check` نجح.
 - `npm run build` داخل `web-next` نجح.
+
+## 10) سجل تشغيل Topic Hubs الفعلي
+
+> تاريخ التشغيل: 2026-06-03. تم التشغيل يدوياً من بيئة محلية تحتوي اتصال قاعدة البيانات. لا تُرسل `DATABASE_URL` في أي محادثة أو تقرير؛ في حال انكشف الرابط يجب تدوير كلمة المرور فوراً.
+
+### قاعدة التشغيل الآمنة
+
+- ممنوع تطبيق كل الـ hubs دفعة واحدة.
+- أي `--apply` يجب أن يحتوي `--hub=<key>` صراحة.
+- قبل التطبيق يجب تشغيل dry-run لنفس الـ hub ومراجعة العينات.
+- بعد التطبيق يجب تشغيل dry-run مرة ثانية للتأكد أن `existingLinks` زاد و`proposed=0`.
+- بعدها يتم اختبار صفحة `/keyword/<slug>` كـ Googlebot.
+
+### Hub `الوظائف`
+
+الأوامر المستخدمة:
+
+```bash
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --limit=1000 --days=90
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --apply --i-understand --limit=1000 --days=90
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --limit=1000 --days=90
+```
+
+نتيجة التطبيق:
+
+- تم إنشاء tag: `الوظائف`.
+- تم ربط `6` مقالات منشورة.
+- تحقق ما بعد التطبيق:
+  - `tag=exists`
+  - `matched=6`
+  - `existingLinks=6`
+  - `proposed=0`
+  - `indexableAfterApply=yes`
+
+تحقق Googlebot:
+
+- `/keyword/الوظائف`
+- `robots: index,follow`
+- canonical صحيح.
+- HTML الأولي يحتوي 6 روابط `/article/...`.
+
+### Hub `الذكاء الاصطناعي`
+
+الأوامر المستخدمة:
+
+```bash
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=artificial-intelligence --limit=1000 --days=90
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=artificial-intelligence --apply --i-understand --limit=1000 --days=90
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=artificial-intelligence --limit=1000 --days=90
+```
+
+نتيجة التطبيق:
+
+- tag كان موجوداً: `الذكاء-الاصطناعي`.
+- تم ربط `15` مقالاً منشوراً.
+- تحقق ما بعد التطبيق:
+  - `tag=exists`
+  - `matched=15`
+  - `existingLinks=15`
+  - `proposed=0`
+  - `indexableAfterApply=yes`
+
+تحقق Googlebot:
+
+- `/keyword/الذكاء-الاصطناعي`
+- `robots: index,follow`
+- canonical صحيح.
+- HTML الأولي يحتوي 15 رابط `/article/...`.
+
+ملاحظة جودة:
+
+- بعض المقالات ليست AI خالصة لكنها مقبولة كبداية لأنها تتعلق بتقنيات ذكاء/خدمات رقمية ضمن سياق تحريري واضح. لا توسّع هذا hub حالياً قبل مراقبة GSC.
+
+### Hub `الرياضة السعودية`
+
+الأوامر المستخدمة:
+
+```bash
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=saudi-sports --limit=1000 --days=90
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=saudi-sports --apply --i-understand --limit=1000 --days=90
+```
+
+نتيجة التطبيق:
+
+- تم إنشاء tag: `الرياضة-السعودية`.
+- تم ربط `35` مقالاً منشوراً.
+- dry-run قبل التطبيق:
+  - `matched=35`
+  - `proposed=35`
+  - `indexableAfterApply=yes`
+
+تحقق Googlebot:
+
+- `/keyword/الرياضة-السعودية`
+- `robots: index,follow`
+- canonical صحيح.
+- HTML الأولي يحتوي روابط مقالات رياضية سعودية واضحة، منها المنتخب السعودي، الأخضر، دوري روشن، والأندية السعودية.
+
+### حالة الـ hubs بعد التشغيل
+
+مفعلة ومؤهلة للفهرسة:
+
+- `الوظائف`
+- `الذكاء الاصطناعي`
+- `الرياضة السعودية`
+
+لا تُطبق الآن دون مراجعة أوسع:
+
+- `الحج`: واسع جداً وموسمي، dry-run السابق اقترح مئات الروابط.
+- `الصحة`: يحتاج فرزاً لأن بعض المقالات الصحية عالمية/إنسانية وليست hub سعودي واضح.
+- `المرور`: فيه false positives بسبب كلمات الطرق/المرور في سياقات غير مرورية.
+- `التعليم`: يحتاج تضييقاً بسبب ظهور مقالات خارج سياق التعليم المحلي.
+- `الطقس`: جيد جزئياً، لكن يحتاج مراجعة لأن بعض المقالات الجوية العالمية أو العلمية قد تدخل.
+
+الخطوة التالية:
+
+- التوقف عن تطبيق hubs جديدة مؤقتاً.
+- مراقبة GSC خلال 48-72 ساعة:
+  - هل صفحات `/keyword/الوظائف` و`/keyword/الذكاء-الاصطناعي` و`/keyword/الرياضة-السعودية` تظهر في الزحف؟
+  - هل تظهر كـ `Indexed` لا `Crawled - currently not indexed`؟
+  - هل يظهر أي `Soft 404` أو `Duplicate, Google chose different canonical`؟
+- بعد المراقبة، نختار hub صغيراً واحداً فقط للتوسع، وليس `الحج`.
