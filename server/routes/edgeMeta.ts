@@ -616,6 +616,7 @@ interface RouteHandler {
 async function buildKeywordMeta(slug: string, isEn: boolean) {
   const [row] = await db
     .select({
+      id: tags.id,
       nameAr: tags.nameAr,
       nameEn: tags.nameEn,
       publishedCount: sql<number>`count(${articles.id})::int`,
@@ -637,6 +638,32 @@ async function buildKeywordMeta(slug: string, isEn: boolean) {
   const display =
     (isEn ? row?.nameEn : row?.nameAr) ||
     slug.replace(/[-_]+/g, " ");
+  let semanticHtml: string | undefined;
+  if (hasContent && row?.id) {
+    const latestRows = await db
+      .select({
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        title: articles.title,
+      })
+      .from(articleTags)
+      .innerJoin(tags, eq(tags.id, articleTags.tagId))
+      .innerJoin(articles, eq(articles.id, articleTags.articleId))
+      .where(and(
+        eq(tags.id, row.id),
+        eq(tags.status, "active"),
+        eq(articles.status, "published"),
+      ))
+      .orderBy(desc(articles.publishedAt))
+      .limit(20);
+    semanticHtml = buildLinkListHtml(
+      isEn ? `Latest ${display} articles` : `أحدث أخبار ${display}`,
+      latestRows.map((article) => ({
+        href: `/article/${article.englishSlug || article.slug}`,
+        title: article.title || "",
+      })),
+    );
+  }
   return {
     title: isEn ? `${display} — Sabq` : `${display} — سبق`,
     description: isEn
@@ -647,6 +674,7 @@ async function buildKeywordMeta(slug: string, isEn: boolean) {
     robots: hasContent ? "index,follow" : "noindex, follow",
     type: "website",
     locale: isEn ? "en_US" : "ar_SA",
+    semanticHtml,
   };
 }
 

@@ -410,6 +410,21 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --apply --i-understand --l
 npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 --days=90
 ```
 
+### Commit pending
+
+الهدف: جعل صفحات `/keyword/:slug` المؤهلة تحتوي روابط مقالات قابلة للزحف في HTML الأولي.
+
+سبب التغيير:
+
+- بعد تطبيق hub `الوظائف` أصبحت الصفحة `index,follow`، لكن HTML الذي يراه Googlebot لم يكن يحتوي روابط مقالات.
+- `/api/keyword/الوظائف` كان يرجع 6 مقالات، لكن الـ edge meta لم يحقن `semanticHtml` للوسوم.
+
+الإصلاح:
+
+- عند تحقق الحد الأدنى للمقالات المنشورة، `buildKeywordMeta` يجلب أحدث 20 مقالاً منشوراً للوسم.
+- يحقن `semanticHtml` عبر `buildLinkListHtml` بنفس نمط الرئيسية والتصنيفات.
+- النتيجة المتوقعة: `/keyword/الوظائف` كـ Googlebot يبقى `index,follow` ويظهر فيه روابط `/article/...`.
+
 أعد تشغيل dry-run بعد نشر هذا التصحيح:
 
 ```bash
