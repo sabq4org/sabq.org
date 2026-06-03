@@ -7,9 +7,11 @@ import { getHomeBundle, type HomeBundle } from "@/lib/seoBundle";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "سبق",
-  description: "منصة إخبارية ذكية مدعومة بالذكاء الاصطناعي",
+  title: { absolute: "سبق الذكية - صحيفة سبق الإلكترونية" },
+  description:
+    "سبق الذكية - منصة الأخبار السعودية الأولى المدعومة بالذكاء الاصطناعي. أخبار عاجلة ومحلية ورياضية وعالمية على مدار الساعة.",
   alternates: { canonical: "https://sabq.org" },
+  robots: { index: true, follow: true },
 };
 
 const EMPTY_HOME: HomeBundle = {
@@ -30,6 +32,32 @@ export default async function HomePage() {
     console.error("[home] bundle fetch failed, rendering empty shell:", err);
     bundle = EMPTY_HOME;
   }
+
+  const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "سبق الذكية",
+      url: siteUrl,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${siteUrl}/search?q={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "أحدث الأخبار على سبق",
+      itemListElement: bundle.articles.slice(0, 30).map((item, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: `${siteUrl}${item.href}`,
+        name: item.title,
+      })),
+    },
+  ];
 
   return (
     <>
@@ -63,6 +91,17 @@ export default async function HomePage() {
         </section>
       </main>
       <SiteFooter sections={bundle.sections} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
+      />
     </>
   );
+}
+
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
 }

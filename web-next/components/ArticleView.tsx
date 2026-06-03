@@ -35,6 +35,36 @@ export function ArticleView({
 }) {
   const dir = lang === "en" ? "ltr" : "rtl";
   const published = formatDate(bundle.publishedAt, lang);
+  const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
+  const breadcrumbItems = [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: lang === "en" ? "Home" : lang === "ur" ? "سرورق" : "الرئيسية",
+      item: siteUrl,
+    },
+    ...(bundle.category && bundle.categoryHref
+      ? [
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: bundle.category,
+            item: `${siteUrl}${bundle.categoryHref}`,
+          },
+        ]
+      : []),
+    {
+      "@type": "ListItem",
+      position: bundle.category && bundle.categoryHref ? 3 : 2,
+      name: bundle.title,
+      item: bundle.meta.canonical,
+    },
+  ];
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: breadcrumbItems,
+  };
 
   return (
     <>
@@ -102,8 +132,19 @@ export function ArticleView({
 
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(bundle.jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(bundle.jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumbJsonLd) }}
       />
     </>
   );
+}
+
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
 }

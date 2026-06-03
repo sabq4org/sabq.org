@@ -15,7 +15,7 @@ function alternatesFrom(meta: SeoBundleMeta) {
 /** Build Next Metadata from a seo-bundle meta payload (shared ar/en/ur). */
 export function articleMetadata(m: SeoBundleMeta): Metadata {
   return {
-    title: m.title,
+    title: { absolute: m.title },
     description: m.description,
     alternates: alternatesFrom(m),
     robots: m.robots,

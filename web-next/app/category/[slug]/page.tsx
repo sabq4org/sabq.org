@@ -18,9 +18,10 @@ export async function generateMetadata({
     return { title: "غير موجود", robots: { index: false, follow: true } };
   }
   return {
-    title: bundle.name,
+    title: { absolute: `${bundle.name} | سبق` },
     description: bundle.description,
     alternates: { canonical: bundle.canonical },
+    robots: { index: true, follow: true },
     openGraph: {
       type: "website",
       title: `${bundle.name} | سبق`,
@@ -39,6 +40,51 @@ export default async function CategoryPage({
 }) {
   const bundle = await getCategoryBundle(params.slug);
   if (!bundle) notFound();
+  const siteUrl = process.env.PUBLIC_SITE_URL || "https://sabq.org";
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: bundle.name,
+      description: bundle.description,
+      url: bundle.canonical,
+      inLanguage: "ar",
+      isPartOf: {
+        "@type": "WebSite",
+        name: "سبق الذكية",
+        url: siteUrl,
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: `أحدث الأخبار في ${bundle.name}`,
+      itemListElement: bundle.articles.slice(0, 30).map((item, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: `${siteUrl}${item.href}`,
+        name: item.title,
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "الرئيسية",
+          item: siteUrl,
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: bundle.name,
+          item: bundle.canonical,
+        },
+      ],
+    },
+  ];
 
   return (
     <>
@@ -76,6 +122,17 @@ export default async function CategoryPage({
         )}
       </main>
       <SiteFooter />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
+      />
     </>
   );
+}
+
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
 }
