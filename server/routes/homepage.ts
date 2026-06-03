@@ -8,6 +8,21 @@ import { CACHE_TTL, withSWR } from "../memoryCache";
 
 const router: Router = Router();
 
+/**
+ * Detects an explicit "give me fresh data, skip the server cache" request.
+ * The native iOS app's pull-to-refresh issues the request through an ephemeral
+ * URLSession with cache-buster query params (`_t`/`_nc`) plus
+ * `Cache-Control: no-cache, no-store`. Normal browser + CDN traffic never sets
+ * these, so honoring them lets a deliberate refresh bypass the 10-min SWR
+ * cache (and any stale autoscale pod) without weakening the cache that shields
+ * the origin from the 2200-concurrent firehose.
+ */
+function wantsFreshFeed(req: any): boolean {
+  if (req?.query?._nc !== undefined || req?.query?._t !== undefined) return true;
+  const cc = String(req?.headers?.["cache-control"] ?? "").toLowerCase();
+  return cc.includes("no-cache") || cc.includes("no-store");
+}
+
 router.get("/api/homepage", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (req: any, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 50);
@@ -73,7 +88,8 @@ router.get("/api/homepage", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (req: 
           deepDive: addHasPollFlag(deepDiveArticles),
           trending: trendingTopics,
         };
-      }
+      },
+      wantsFreshFeed(req)
     );
 
     res.json(response);
@@ -263,7 +279,8 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
           deepDive: deepDiveResults.map(formatArticle),
           trending: trendingTopics,
         };
-      }
+      },
+      wantsFreshFeed(req)
     );
 
     res.json(response);

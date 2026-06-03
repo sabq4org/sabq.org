@@ -594,8 +594,39 @@ export async function withSWR<T>(
   cacheKey: string,
   ttl: number,
   staleWhileRevalidate: number,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
+  forceFresh: boolean = false
 ): Promise<T> {
+  // Explicit force-refresh (e.g. the native iOS pull-to-refresh, which sends a
+  // cache-buster query param + `Cache-Control: no-cache`). Recompute past the
+  // cache so a just-published/featured carousel item shows on the FIRST pull
+  // instead of waiting out the TTL. Critically this also fixes the autoscale
+  // case: a publish only clears the SWR copy on the pod that handled it, so
+  // pull-to-refresh routed to another pod kept getting the stale homepage for
+  // up to CACHE_TTL.HOMEPAGE (10 min) — the reported "must kill & relaunch the
+  // app" bug. Concurrent force-refreshes are coalesced via the refreshing flag
+  // so a burst of pulls never stampedes the DB.
+  if (forceFresh) {
+    if (swrCache.isRefreshing(cacheKey)) {
+      for (let attempt = 0; attempt < 30; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        if (!swrCache.isRefreshing(cacheKey)) break;
+      }
+      const after = swrCache.get<T>(cacheKey);
+      if (after.data !== null && !after.isStale) return after.data;
+    }
+    swrCache.markRefreshing(cacheKey);
+    try {
+      const data = await fetcher();
+      swrCache.set(cacheKey, data, ttl, staleWhileRevalidate);
+      return data;
+    } catch (err) {
+      console.error(`[SWR] Force-fresh fetch failed for ${cacheKey}:`, err);
+      swrCache.clearRefreshing(cacheKey);
+      throw err;
+    }
+  }
+
   const cached = swrCache.get<T>(cacheKey);
 
   // Fresh cache hit - return immediately
