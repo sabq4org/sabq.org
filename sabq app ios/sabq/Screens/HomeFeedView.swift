@@ -22,12 +22,19 @@ struct LoyaltyBannerState: Equatable {
 
 struct HomeFeedView: View {
     private static let scrollTopID = "home-feed-top"
+    /// مرساة قسم "آخر الأخبار" — شريط "أخبار جديدة" يقفز إليها كي يرى
+    /// المستخدم الأخبار الطازجة فوراً بدل القفز لأعلى الصفحة (الهيدر).
+    private static let latestSectionID = "home-feed-latest"
     /// Ignore scroll-to-top when the reader is already near the header.
     private static let scrollToTopThreshold: CGFloat = 120
 
     @Environment(ArticlesStore.self) private var articlesStore
     @Environment(BookmarksStore.self) private var bookmarksStore
     @Environment(AuthStore.self) private var authStore
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// فترة الفحص الصامت للأخبار الجديدة (بالثواني)
+    private let newArticlesPollInterval: TimeInterval = 60
     /// Mirror of the dark-mode flag in `sabqApp` so the header toggle flips
     /// the scene-level `.preferredColorScheme`. The setting also lives in the
     /// in-app preferences screen; both write to the same UserDefaults key.
@@ -203,6 +210,7 @@ struct HomeFeedView: View {
                     // intact in case we re-introduce them in a sheet later.
 
                     latestArticlesSection
+                        .id(Self.latestSectionID)
                         .animatedAppear(index: 10)
                 }
                 .padding(.horizontal, 16)
@@ -229,6 +237,28 @@ struct HomeFeedView: View {
             .refreshable {
                 SabqHaptics.medium()
                 await articlesStore.loadArticles(ignoreCache: true)
+                // الخبر الجديد في الكاروسيل يُدرج في الموضع 0 — نرجع المؤشر
+                // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
+                featuredIndex = 0
+            }
+            // شريط "⬆️ X أخبار جديدة" عائم فوق القائمة — بديل السحب المتكرر
+            .overlay(alignment: .top) {
+                newArticlesBanner(proxy: scrollProxy)
+            }
+            // فحص دوري صامت للأخبار الجديدة طوال ظهور الشاشة وتفعيل
+            // التطبيق. نفحص فوراً عند التفعيل (خصوصاً عند العودة من
+            // الخلفية) حتى يظهر الشريط بسرعة لو نزلت أخبار والمستخدم
+            // برّا. تأخير أولي 3ث يترك شبكة الإقلاع تخلّص أولاً دون تزاحم.
+            .task(id: scenePhase) {
+                guard scenePhase == .active else { return }
+                try? await Task.sleep(for: .seconds(3))
+                if Task.isCancelled { return }
+                await articlesStore.checkForNewArticles()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(newArticlesPollInterval))
+                    if Task.isCancelled { break }
+                    await articlesStore.checkForNewArticles()
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
                 guard scrollOffsetRef.value > Self.scrollToTopThreshold else { return }
@@ -292,6 +322,56 @@ struct HomeFeedView: View {
                         }
                     }
             }
+        }
+    }
+
+    // MARK: - New Articles Banner ("⬆️ X أخبار جديدة")
+
+    @ViewBuilder
+    private func newArticlesBanner(proxy: ScrollViewProxy) -> some View {
+        if articlesStore.newArticlesCount > 0 {
+            Button {
+                SabqHaptics.medium()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    articlesStore.applyPendingArticles()
+                    // ننزل لقسم "آخر الأخبار" حيث أُدرجت الأخبار الطازجة في
+                    // الأعلى — لا للهيدر. هكذا يرى المستخدم الجديد مباشرة.
+                    proxy.scrollTo(Self.latestSectionID, anchor: .top)
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .bold))
+                    Text(newArticlesBannerText)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule().fill(
+                        LinearGradient(
+                            colors: [SabqTheme.primaryStart, SabqTheme.primaryEnd],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                )
+                .shadow(color: SabqTheme.primaryEnd.opacity(0.35), radius: 10, x: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private var newArticlesBannerText: String {
+        let count = articlesStore.newArticlesCount
+        switch count {
+        case 1:  return "خبر جديد"
+        case 2:  return "خبران جديدان"
+        case 3...10: return "\(count) أخبار جديدة"
+        default: return "\(count) خبرًا جديدًا"
         }
     }
 
@@ -573,6 +653,7 @@ struct HomeFeedView: View {
             // TabView so the indicator hugs the card instead of floating at
             // the bottom of the TabView frame with a Spacer-sized gap above.
             .tabViewStyle(.page(indexDisplayMode: .never))
+            .id(articlesStore.featuredCarouselRevision)
             // 470pt covers the worst-case featured card. Hero is now a
             // 16:10 aspect frame (≈234pt on iPhone std, up to ~269pt on
             // Pro Max-class widths) instead of the previous fixed 200pt,
@@ -882,7 +963,8 @@ struct HomeFeedView: View {
                             CompactArticleRow(
                                 article: article,
                                 onBookmark: { bookmarksStore.toggle(article.id, article: article) },
-                                isBookmarked: bookmarksStore.isBookmarked(article.id)
+                                isBookmarked: bookmarksStore.isBookmarked(article.id),
+                                isNew: articlesStore.isRecentlyAdded(article.id)
                             )
                         }
                         .buttonStyle(.plain)

@@ -15,20 +15,48 @@ final class ArticlesStore {
     private(set) var hasMore = true
     var selectedCategory: ArticleCategory?
 
+    /// الأخبار الجديدة المكتشفة بصمت ولم تُعرض بعد (تنتظر ضغط المستخدم على الشريط)
+    private(set) var pendingNewArticles: [Article] = []
+    /// عدد الأخبار الجديدة المنتظرة — يُستخدم لإظهار شريط "X أخبار جديدة"
+    var newArticlesCount: Int { pendingNewArticles.count }
+    private(set) var isCheckingForNew = false
+
+    /// معرفات الأخبار التي دخلت القائمة للتو عبر شريط "أخبار جديدة" —
+    /// تُستخدم لعرض شارة "جديد" الخضراء عليها. تُمسح عند أي تحديث كامل
+    /// للقائمة (سحب التحديث/إعادة التحميل).
+    private(set) var recentlyAddedIDs: Set<String> = []
+
+    func isRecentlyAdded(_ id: String) -> Bool { recentlyAddedIDs.contains(id) }
+
     private var allFetchedArticles: [Article] = []
     private var displayedCount = 0
     private var nextArticlesPage = 1
     private var hasMoreFromAPI = true
     private let pageSize = 15
     private let remotePageSize = 50
+    /// يزداد مع كل استدعاء `loadArticles` — الطلبات المتداخلة (إقلاع +
+    /// سحب تحديث) لا تُطبّق نتيجتها إلا إذا كانت الأحدث، وإلا يكتب الطلب
+    /// الكاشي البطيء فوق استجابة السحب الطازجة (الكاروسيل لا يتحدّث إلا بعد
+    /// إعادة تشغيل التطبيق).
+    private var loadGeneration: UInt = 0
+    /// يتغيّر عند تغيّر قائمة الكاروسيل — يُجبر TabView على إعادة البناء.
+    private(set) var featuredCarouselRevision: UInt = 0
 
     init() {
         Task { await loadArticles() }
     }
 
+    private func applyFeaturedCarousel(_ featured: [Article]) {
+        let changed = featured.map(\.id) != featuredArticles.map(\.id)
+        featuredArticles = featured
+        if changed { featuredCarouselRevision &+= 1 }
+    }
+
     /// - Parameter ignoreCache: `false` للاستفادة من التخزين المؤقت لـ HTTP (تشغيل أسرع). `true` عند سحب التحديث لإجبار جلب بيانات حديثة.
     @MainActor
     func loadArticles(ignoreCache: Bool = false) async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         isLoading = true
         errorMessage = nil
 
@@ -43,9 +71,28 @@ final class ArticlesStore {
         // يصبح true هنا فيختفي الـskeleton مبكّراً — وهذا أهم مكسب
         // لسرعة الإقلاع لأن الرئيسية هي أول شاشة بعد التشغيل.
         let result = await homepageTask
+        guard generation == loadGeneration else { return }
+
+        // سحب التحديث: حدّث الكاروسيل/العاجل/القصص حتى لو لم تتغيّر قائمة
+        // «آخر الأخبار» — كان الفحص الصامت يحدّث latest فقط.
+        if ignoreCache {
+            if !result.featured.isEmpty {
+                applyFeaturedCarousel(result.featured)
+            }
+            if !result.breaking.isEmpty {
+                breakingNews = result.breaking
+            }
+            if !result.stories.isEmpty {
+                stories = result.stories
+            }
+            if !result.trending.isEmpty {
+                trendingKeywords = result.trending
+            }
+        }
+
         if !result.latest.isEmpty || !result.featured.isEmpty {
             allFetchedArticles = result.latest
-            featuredArticles = result.featured
+            applyFeaturedCarousel(result.featured)
             breakingNews = result.breaking
             stories = result.stories
             trendingKeywords = result.trending
@@ -54,6 +101,10 @@ final class ArticlesStore {
             displayedCount = min(pageSize, allFetchedArticles.count)
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
+            // التحديث الكامل يلغي أي أخبار منتظرة (صارت معروضة الآن)
+            pendingNewArticles.removeAll()
+            // التحديث الكامل يلغي شارات "جديد" — المحتوى كله أصبح طازجاً
+            recentlyAddedIDs.removeAll()
 
             // سخّن صور أعلى الرئيسية فور توفّر البيانات حتى تظهر الصور
             // فوراً عند الرسم بدل تحميلها كسولاً عند ظهور كل بطاقة.
@@ -66,6 +117,7 @@ final class ArticlesStore {
             if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 2000) }
             if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 1200) }
         }
+        guard generation == loadGeneration else { return }
         // الخلاصة الأساسية ظاهرة الآن — لا تُبقِ زر "تحميل المزيد"
         // معطّلاً بينما تكمّل الأقسام الثانوية تحميلها أدناه.
         isLoading = false
@@ -76,6 +128,7 @@ final class ArticlesStore {
         liveData = await liveTask
         opinions = await opinionsTask
 
+        guard generation == loadGeneration else { return }
         // امسح كاش التصنيفات فقط عند سحب التحديث (ignoreCache). في
         // التحميل الكاشي (الإقلاع/العودة للتبويب) أبقِه حيّاً ليكون
         // التنقّل بين التصنيفات والرئيسية فورياً — لا يلاحظ المتابع
@@ -83,6 +136,60 @@ final class ArticlesStore {
         if ignoreCache {
             await NewsService.clearCategoryCache()
         }
+    }
+
+    /// فحص صامت للأخبار الجديدة دون تعطيل القائمة الحالية أو إظهار مؤشر تحميل.
+    /// يقارن أحدث الأخبار بما هو معروض، ويخزّن الجديد في `pendingNewArticles`.
+    @MainActor
+    func checkForNewArticles() async {
+        guard !isCheckingForNew, !isLoading else { return }
+        isCheckingForNew = true
+        defer { isCheckingForNew = false }
+
+        let result = await NewsService.fetchHomepage(ignoreCache: true)
+        guard !result.latest.isEmpty || !result.featured.isEmpty else { return }
+
+        // الكاروسيل (hero) والعاجل — يتحدّثان فوراً عند اكتشاف تغيّر، لا ينتظر
+        // المستخدم إعادة تشغيل التطبيق أو سحباً يُكتب فوقه طلب إقلاع قديم.
+        if !result.featured.isEmpty {
+            applyFeaturedCarousel(result.featured)
+        }
+        if !result.breaking.isEmpty, result.breaking.map(\.id) != breakingNews.map(\.id) {
+            breakingNews = result.breaking
+        }
+
+        // المعرفات المعروضة حالياً + المنتظرة (لتفادي العدّ المكرر)
+        let knownIDs = Set(allFetchedArticles.map(\.id))
+            .union(pendingNewArticles.map(\.id))
+
+        let fresh = result.latest.filter { !knownIDs.contains($0.id) }
+        guard !fresh.isEmpty else { return }
+
+        // ندمج الجديد في أعلى قائمة المنتظرين ونرتّب بالأحدث
+        pendingNewArticles.insert(contentsOf: fresh, at: 0)
+        pendingNewArticles.sort { $0.publishDate > $1.publishDate }
+    }
+
+    /// دمج الأخبار المنتظرة في القائمة المعروضة (عند ضغط المستخدم على الشريط).
+    @MainActor
+    func applyPendingArticles() {
+        guard !pendingNewArticles.isEmpty else { return }
+
+        let existingIDs = Set(allFetchedArticles.map(\.id))
+        let toInsert = pendingNewArticles.filter { !existingIDs.contains($0.id) }
+
+        allFetchedArticles.insert(contentsOf: toInsert, at: 0)
+        allFetchedArticles.sort { $0.publishDate > $1.publishDate }
+
+        // نوسّع نافذة العرض لتشمل الأخبار الجديدة في الأعلى
+        displayedCount = min(max(displayedCount + toInsert.count, pageSize), allFetchedArticles.count)
+        allArticles = Array(allFetchedArticles.prefix(displayedCount))
+        hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
+
+        // علّم الأخبار المُدرجة للتو حتى تظهر عليها شارة "جديد" الخضراء
+        recentlyAddedIDs = Set(toInsert.map(\.id))
+
+        pendingNewArticles.removeAll()
     }
 
     @MainActor
