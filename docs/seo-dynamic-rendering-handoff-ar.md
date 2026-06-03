@@ -47,7 +47,7 @@
 2. `49ddbd3 add category latest links to ssr article pages`
 3. `f093693 fix(seo): add edge keyword/reporter handlers with noindex-when-empty`
 4. `3a8cab8 fix(seo): link only qualified article tags in SSR`
-5. `798a38a fix(seo): noindex unpublished article payloads`
+5. `0a2f730 fix(seo): noindex unpublished article payloads`
 
 **نتيجة القياس الحي على المقال `https://sabq.org/article/qzVBFf1` كـ Googlebot بعد النشر:**
 
@@ -274,7 +274,7 @@ curl -s "https://api.sabq.org/api/edge/indexing-status" | python3 -m json.tool
 - `npm run check` من جذر المشروع نجح.
 - `npm run build` داخل `web-next` نجح.
 
-### Commit `798a38a`
+### Commit `0a2f730`
 
 الهدف: منع فهرسة المقالات غير المنشورة في نسخة SSR/edge.
 
