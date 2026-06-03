@@ -30,8 +30,9 @@ import {
   tags,
   articleTags,
 } from "@shared/schema";
-import { eq, or, and, desc, ne, aliasedTable } from "drizzle-orm";
+import { eq, or, and, desc, ne, aliasedTable, sql } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
+import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 
 const router = Router();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
@@ -613,16 +614,28 @@ interface RouteHandler {
  * indexable pages. Title prefers the real tag name when content exists.
  */
 async function buildKeywordMeta(slug: string, isEn: boolean) {
-  const rows = await db
-    .select({ nameAr: tags.nameAr, nameEn: tags.nameEn })
+  const [row] = await db
+    .select({
+      nameAr: tags.nameAr,
+      nameEn: tags.nameEn,
+      publishedCount: sql<number>`count(${articles.id})::int`,
+    })
     .from(articleTags)
     .innerJoin(tags, eq(tags.id, articleTags.tagId))
     .innerJoin(articles, eq(articles.id, articleTags.articleId))
-    .where(and(eq(tags.slug, slug), eq(articles.status, "published")))
+    .where(and(
+      eq(tags.slug, slug),
+      eq(tags.status, "active"),
+      eq(articles.status, "published"),
+    ))
+    .groupBy(tags.id, tags.nameAr, tags.nameEn)
     .limit(1);
-  const hasContent = rows.length > 0;
+  const minPublishedArticles =
+    TOPIC_HUBS.find((hub) => hub.slug === slug)?.minPublishedArticles ?? 3;
+  const publishedCount = row?.publishedCount || 0;
+  const hasContent = publishedCount >= minPublishedArticles;
   const display =
-    (isEn ? rows[0]?.nameEn : rows[0]?.nameAr) ||
+    (isEn ? row?.nameEn : row?.nameAr) ||
     slug.replace(/[-_]+/g, " ");
   return {
     title: isEn ? `${display} — Sabq` : `${display} — سبق`,

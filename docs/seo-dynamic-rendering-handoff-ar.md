@@ -48,6 +48,7 @@
 3. `f093693 fix(seo): add edge keyword/reporter handlers with noindex-when-empty`
 4. `3a8cab8 fix(seo): link only qualified article tags in SSR`
 5. `0a2f730 fix(seo): noindex unpublished article payloads`
+6. `pending fix(seo): prepare curated topic hubs`
 
 **نتيجة القياس الحي على المقال `https://sabq.org/article/qzVBFf1` كـ Googlebot بعد النشر:**
 
@@ -300,3 +301,56 @@ curl -s "https://api.sabq.org/api/edge/indexing-status" | python3 -m json.tool
 
 - `/article/kpvgA0V` كـ Googlebot يجب أن يرجع `noindex, follow`.
 - مقال منشور حديث مثل `/article/qzVBFf1` يجب أن يبقى `index, follow, max-image-preview:large`.
+
+### Commit pending
+
+الهدف: بدء معالجة فجوة الوسوم الحقيقية عبر Topic Hubs مستهدفة، وليس ترحيل `seo.keywords` كلها.
+
+الملفات:
+
+- `shared/seo/topicHubs.ts`
+- `scripts/seo-topic-hubs-backfill.ts`
+- `server/routes.ts`
+- `server/routes/edgeMeta.ts`
+
+التغييرات:
+
+- إضافة قائمة hubs استراتيجية أولية:
+  - الطقس
+  - الحج
+  - التعليم
+  - الوظائف
+  - حساب المواطن
+  - الرياضة السعودية
+  - المرور
+  - الصحة
+  - الاقتصاد السعودي
+  - الذكاء الاصطناعي
+- إضافة سكربت dry-run افتراضي يقترح روابط `articleTags` للمقالات العربية المنشورة فقط.
+- السكربت لا يكتب إلا مع `--apply`، ويرفض الكتابة على DATABASE_URL يبدو إنتاجياً دون `--i-understand`.
+- تعديل `/api/keyword/:keyword` ليقرأ من `articleTags -> tags` للمقالات المنشورة فقط، بدلاً من `seo.keywords`.
+- تعديل robots لصفحات `/keyword/:slug`:
+  - hubs الاستراتيجية تستخدم `minPublishedArticles` من المواصفات.
+  - باقي الوسوم تحتاج 3 مقالات منشورة على الأقل قبل `index`.
+
+أوامر التشغيل:
+
+```bash
+# Dry-run فقط، بلا كتابة
+npx tsx scripts/seo-topic-hubs-backfill.ts --limit=1000 --days=90
+
+# Dry-run لهب واحد
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=weather --limit=1000 --days=90
+
+# كتابة فعلية بعد مراجعة التقرير ووجود نسخة احتياطية
+npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 --days=90
+```
+
+التحقق المحلي:
+
+- `npm run check` من جذر المشروع نجح.
+- `npm run build` داخل `web-next` نجح.
+
+ملاحظة تشغيلية:
+
+- تعذر تشغيل dry-run من جلسة Codex الحالية لأن `DATABASE_URL`/`NEON_DATABASE_URL` غير متوفرين في البيئة المحلية. شغّله من بيئة تملك اتصال قاعدة البيانات، وراجع التقرير قبل `--apply`.

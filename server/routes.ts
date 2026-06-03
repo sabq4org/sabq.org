@@ -13091,7 +13091,7 @@ Respond in valid JSON format only:
     try {
       const keyword = decodeURIComponent(req.params.keyword);
 
-      const cacheKey = `keyword:${keyword}`;
+      const cacheKey = `keyword-tag:${keyword}`;
       const cached = memoryCache.get(cacheKey);
       if (cached) return res.json(cached);
 
@@ -13102,8 +13102,11 @@ Respond in valid JSON format only:
                a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
                a.article_type AS "articleType"
         FROM articles a
+        INNER JOIN article_tags at ON at.article_id = a.id
+        INNER JOIN tags t ON t.id = at.tag_id
         WHERE a.status = 'published'
-          AND a.seo->'keywords' @> to_jsonb(${keyword}::text)
+          AND t.status = 'active'
+          AND (t.slug = ${keyword} OR t.name_ar = ${keyword})
         ORDER BY a.published_at DESC
         LIMIT 20
       `);
