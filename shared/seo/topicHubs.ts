@@ -7,6 +7,7 @@ export interface TopicHubSpec {
   minPublishedArticles: number;
   minScore?: number;
   maxLinksPerArticle?: number;
+  anchorAny?: string[];
   includeAny: string[];
   includeAll?: string[];
   excludeAny?: string[];
@@ -21,6 +22,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "تغطية مستمرة لأخبار الطقس والأرصاد والحالة الجوية في السعودية.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الطقس", "الأرصاد", "الحالة الجوية"],
     includeAny: [
       "الطقس",
       "الأرصاد",
@@ -45,6 +47,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الحج وخدمات ضيوف الرحمن والجهات المشاركة في موسم الحج.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الحج", "حجاج", "ضيوف الرحمن", "موسم حج", "مناسك الحج"],
     includeAny: [
       "الحج",
       "حجاج",
@@ -66,6 +69,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار التعليم والمدارس والجامعات والاختبارات في السعودية.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["التعليم", "وزارة التعليم", "المدارس", "الجامعات", "التقويم الدراسي"],
     includeAny: [
       "التعليم",
       "وزارة التعليم",
@@ -87,6 +91,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الوظائف والتوظيف وفرص العمل والموارد البشرية في السعودية.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["وظائف", "الوظائف", "توظيف", "فرص عمل", "سوق العمل"],
     includeAny: [
       "وظائف",
       "الوظائف",
@@ -107,6 +112,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار برنامج حساب المواطن والدعم والأهلية ومواعيد الصرف.",
     minPublishedArticles: 5,
     minScore: 1,
+    anchorAny: ["حساب المواطن", "برنامج حساب المواطن"],
     includeAny: [
       "حساب المواطن",
       "برنامج حساب المواطن",
@@ -124,6 +130,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الرياضة السعودية والمنتخبات والأندية والمسابقات المحلية.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الرياضة السعودية", "المنتخب السعودي", "الدوري السعودي", "دوري روشن"],
     includeAny: [
       "الرياضة السعودية",
       "المنتخب السعودي",
@@ -145,6 +152,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار المرور والسلامة المرورية والتنقل والطرق في السعودية.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["المرور", "السلامة المرورية", "الحركة المرورية", "المخالفات المرورية"],
     includeAny: [
       "المرور",
       "السلامة المرورية",
@@ -163,6 +171,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الصحة والوقاية والخدمات الصحية في السعودية والعالم.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الصحة", "وزارة الصحة", "الصحة العالمية", "القطاع الصحي", "الخدمات الصحية"],
     includeAny: [
       "الصحة",
       "وزارة الصحة",
@@ -183,6 +192,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الاقتصاد السعودي والأسواق والاستثمار والشركات.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الاقتصاد السعودي", "السوق المالية", "سوق الأسهم", "أسعار النفط"],
     includeAny: [
       "الاقتصاد السعودي",
       "السوق المالية",
@@ -205,6 +215,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     description: "أخبار الذكاء الاصطناعي والتقنيات الناشئة وتطبيقاتها.",
     minPublishedArticles: 5,
     minScore: 2,
+    anchorAny: ["الذكاء الاصطناعي", "ذكاء اصطناعي", "تقنيات الذكاء"],
     includeAny: [
       "الذكاء الاصطناعي",
       "ذكاء اصطناعي",

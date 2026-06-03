@@ -385,3 +385,25 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 -
 ```bash
 npx tsx scripts/seo-topic-hubs-backfill.ts --limit=1000 --days=90
 ```
+
+### Commit pending
+
+الهدف: تشديد إضافي بعد تقرير dry-run الثاني.
+
+المشكلة:
+
+- بعض hubs ما زالت تلتقط مقالات بعيدة لأنها تحقق `minScore` من كلمات عامة داخل نفس المجال.
+- عداد `proposed new links` كان لا يحتسب روابط hubs التي لا يوجد لها tag بعد، فيظهر الرقم العام أقل من مجموع تفاصيل hubs.
+
+الإصلاح:
+
+- إضافة `anchorAny` لكل hub: لا يكفي تحقق كلمات مساعدة؛ يجب وجود كلمة ارتكاز قوية مثل `الطقس` أو `الأرصاد` للطقس، و`الحج` أو `ضيوف الرحمن` للحج.
+- تقرير dry-run صار يفرّق بين:
+  - tag موجود.
+  - tag مفقود وسيُنشأ عند `--apply`.
+  - إجمالي الروابط المقترحة فعلياً بما فيها روابط tags المفقودة.
+
+التحقق:
+
+- `npm run check` نجح.
+- `npm run build` داخل `web-next` نجح.

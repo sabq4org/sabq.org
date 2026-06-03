@@ -120,6 +120,11 @@ function matchHub(article: ArticleRow, hub: TopicHubSpec): Match | null {
   const required = hub.includeAll || [];
   if (required.some((term) => !hasTerm(text, term))) return null;
 
+  const anchors = hub.anchorAny || [];
+  if (anchors.length > 0 && anchors.every((term) => !hasTerm(text, term))) {
+    return null;
+  }
+
   const terms = hub.includeAny.filter((term) => hasTerm(text, term));
   const minScore = Math.max(MIN_SCORE, hub.minScore || 1);
   if (terms.length < minScore) return null;
@@ -222,16 +227,24 @@ async function main() {
     string,
     {
       hub: TopicHubSpec;
+      tagExists: boolean;
       matched: number;
       existingLinks: number;
       proposedLinks: Array<{ article: ArticleRow; score: number; terms: string[] }>;
     }
   >();
   for (const hub of HUBS) {
-    hubStats.set(hub.key, { hub, matched: 0, existingLinks: 0, proposedLinks: [] });
+    hubStats.set(hub.key, {
+      hub,
+      tagExists: existingTags.has(hub.slug),
+      matched: 0,
+      existingLinks: 0,
+      proposedLinks: [],
+    });
   }
 
   const linksToInsert: Array<{ articleId: string; tagId: string; hubKey: string }> = [];
+  let proposedLinksTotal = 0;
 
   for (const article of articlesRows) {
     const matches = HUBS
@@ -246,6 +259,7 @@ async function main() {
       const tagId = tagIds.get(match.hub.key) || existingTags.get(match.hub.slug)?.id;
       if (!tagId) {
         stat.proposedLinks.push({ article, score: match.score, terms: match.terms });
+        proposedLinksTotal++;
         continue;
       }
       const key = `${article.id}:${tagId}`;
@@ -254,6 +268,7 @@ async function main() {
         continue;
       }
       stat.proposedLinks.push({ article, score: match.score, terms: match.terms });
+      proposedLinksTotal++;
       linksToInsert.push({ articleId: article.id, tagId, hubKey: match.hub.key });
     }
   }
@@ -278,11 +293,21 @@ async function main() {
   }
 
   console.log(`\n[topic-hubs] scanned published articles=${articlesRows.length}`);
-  console.log(`[topic-hubs] proposed new links=${linksToInsert.length}${APPLY ? " (written)" : ""}`);
+  console.log(`[topic-hubs] proposed new links=${proposedLinksTotal}${APPLY ? " (written)" : ""}`);
+  const missingTagHubs = [...hubStats.values()].filter(
+    (stat) => !stat.tagExists && stat.proposedLinks.length > 0,
+  );
+  if (missingTagHubs.length > 0) {
+    console.log(
+      `[topic-hubs] missing hub tags that ${APPLY ? "were created" : "would be created on --apply"}=${missingTagHubs
+        .map((stat) => stat.hub.slug)
+        .join(",")}`,
+    );
+  }
 
   for (const stat of hubStats.values()) {
     const indexable = stat.matched >= stat.hub.minPublishedArticles;
-    const tagState = existingTags.has(stat.hub.slug) ? "exists" : APPLY ? "created" : "missing";
+    const tagState = stat.tagExists ? "exists" : APPLY ? "created" : "missing";
     console.log(
       `\n[hub:${stat.hub.key}] ${stat.hub.nameAr} slug=${stat.hub.slug} tag=${tagState}`,
     );
