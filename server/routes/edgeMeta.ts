@@ -398,10 +398,12 @@ async function fetchArArticle(slug: string) {
       imageUrl: articles.imageUrl,
       publishedAt: articles.publishedAt,
       updatedAt: articles.updatedAt,
+      status: articles.status,
       seo: articles.seo,
       categoryName: categories.nameAr,
       categorySlug: categories.slug,
       categoryEnglishSlug: categories.englishSlug,
+      reporterId: articles.reporterId,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
       reporterFirstName: reporterUsers.firstName,
@@ -1060,6 +1062,14 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       category?: string | null;
       categoryColor?: string | null;
     }> = [];
+    let articleTagLinks: Array<{
+      id: string;
+      slug: string;
+      nameAr: string;
+      nameEn: string | null;
+      href: string;
+    }> = [];
+    let reporterHref: string | null = null;
 
     if (lang === "en") {
       const r = await fetchEnArticle(slug);
@@ -1080,11 +1090,41 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
         category = r.categoryName || null;
         const catSlug = r.categoryEnglishSlug || r.categorySlug;
         categoryHref = catSlug ? `/category/${catSlug}` : null;
+        const reporterName = [r.reporterFirstName, r.reporterLastName]
+          .filter(Boolean)
+          .join(" ");
+        reporterHref = r.reporterId && reporterName ? `/reporter/${r.reporterId}` : null;
         meta = buildArArticlePayload(
           r,
           slug,
           `${SITE_URL}/article/${r.englishSlug || r.slug}`,
         );
+        if (r.status === "published") {
+          const tagRows = await db
+            .select({
+              id: tags.id,
+              slug: tags.slug,
+              nameAr: tags.nameAr,
+              nameEn: tags.nameEn,
+            })
+            .from(articleTags)
+            .innerJoin(tags, eq(tags.id, articleTags.tagId))
+            .where(and(
+              eq(articleTags.articleId, r.id),
+              eq(tags.status, "active"),
+            ))
+            .orderBy(desc(tags.usageCount), tags.nameAr)
+            .limit(12);
+          articleTagLinks = tagRows
+            .filter((tag) => tag.slug && tag.nameAr)
+            .map((tag) => ({
+              id: tag.id,
+              slug: tag.slug,
+              nameAr: tag.nameAr,
+              nameEn: tag.nameEn || null,
+              href: `/keyword/${encodeURIComponent(tag.slug)}`,
+            }));
+        }
         if (r.categoryId) {
           const latestRows = await db
             .select({
@@ -1136,9 +1176,11 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
       author: meta.author,
+      reporterHref,
       category,
       categoryHref,
       categoryLatest,
+      articleTags: articleTagLinks,
       keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
       meta: {
         title: meta.title,

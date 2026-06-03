@@ -26,9 +26,11 @@ export interface SeoBundle {
   publishedAt: string | null;
   updatedAt: string | null;
   author: string;
+  reporterHref?: string | null;
   category: string | null;
   categoryHref: string | null;
   categoryLatest?: ArticleListItem[];
+  articleTags?: ArticleTagLink[];
   keywords: string[];
   meta: SeoBundleMeta;
   jsonLd: Record<string, unknown>;
@@ -45,6 +47,14 @@ export interface ArticleListItem {
   newsType?: string | null;
   category?: string | null;
   categoryColor?: string | null;
+}
+
+export interface ArticleTagLink {
+  id: string;
+  slug: string;
+  nameAr: string;
+  nameEn: string | null;
+  href: string;
 }
 
 export interface CategoryBundle {

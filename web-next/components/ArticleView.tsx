@@ -91,7 +91,14 @@ export function ArticleView({
           </h1>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            {bundle.author && <span>{bundle.author}</span>}
+            {bundle.author &&
+              (bundle.reporterHref ? (
+                <a href={bundle.reporterHref} className="hover:text-primary">
+                  {bundle.author}
+                </a>
+              ) : (
+                <span>{bundle.author}</span>
+              ))}
             {published && (
               <time dateTime={bundle.publishedAt ?? undefined}>{published}</time>
             )}
@@ -124,6 +131,25 @@ export function ArticleView({
             // contentHtml is sanitized server-side (stripUnsafeHtml in edgeMeta.ts).
             dangerouslySetInnerHTML={{ __html: bundle.contentHtml }}
           />
+
+          {bundle.articleTags && bundle.articleTags.length > 0 && (
+            <section aria-label="الكلمات المفتاحية" className="mt-8">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                الكلمات المفتاحية
+              </h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {bundle.articleTags.map((tag) => (
+                  <a
+                    key={tag.id}
+                    href={tag.href}
+                    className="rounded-md border border-border bg-muted px-3 py-1.5 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
+                  >
+                    {lang === "en" ? tag.nameEn || tag.nameAr : tag.nameAr}
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           <ShareButtons url={bundle.meta.canonical} title={bundle.title} />
 
