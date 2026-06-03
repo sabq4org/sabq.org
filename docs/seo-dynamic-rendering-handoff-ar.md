@@ -380,6 +380,36 @@ npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 -
 - `npm run check` نجح.
 - `npm run build` داخل `web-next` نجح.
 
+### Commit pending
+
+الهدف: منع تطبيق backfill لكل الـ hubs دفعة واحدة.
+
+سبب التغيير:
+
+- تقرير dry-run الثالث أعطى `607` روابط مقترحة، وهذا رقم كبير لا يطبّق جماعياً.
+- بعض hubs مثل `hajj` موسمية وواسعة جداً، وبعض hubs تحتاج مراجعة عينات أكثر.
+
+الإصلاح:
+
+- `--apply` صار يتطلب `--hub=<key>` صراحة.
+- لا يمكن تشغيل `--apply` على كل hubs مرة واحدة.
+
+أوامر آمنة:
+
+```bash
+# مراجعة hub واحد
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --limit=1000 --days=90
+
+# تطبيق hub واحد بعد مراجعة عيناته
+npx tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --apply --i-understand --limit=1000 --days=90
+```
+
+لا تستخدم:
+
+```bash
+npx tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand --limit=1000 --days=90
+```
+
 أعد تشغيل dry-run بعد نشر هذا التصحيح:
 
 ```bash

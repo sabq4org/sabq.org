@@ -9,6 +9,7 @@
  *   tsx scripts/seo-topic-hubs-backfill.ts --limit=1000 --days=90
  *   tsx scripts/seo-topic-hubs-backfill.ts --hub=weather,hajj
  *   tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand
+ *   tsx scripts/seo-topic-hubs-backfill.ts --hub=jobs --apply --i-understand
  */
 
 import { articleTags, articles, tags } from "@shared/schema";
@@ -51,6 +52,12 @@ const HUBS = TOPIC_HUBS.filter(
 
 if (HUBS.length === 0) {
   console.error("[topic-hubs] ABORT: no hubs selected.");
+  process.exit(2);
+}
+
+if (APPLY && HUB_FILTER.size === 0) {
+  console.error("[topic-hubs] ABORT: --apply requires an explicit --hub=<key[,key]> filter.");
+  console.error("             Never apply all hubs in one run; review and apply one small set at a time.");
   process.exit(2);
 }
 
