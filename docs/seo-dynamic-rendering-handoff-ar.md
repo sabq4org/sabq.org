@@ -48,7 +48,7 @@
 3. `f093693 fix(seo): add edge keyword/reporter handlers with noindex-when-empty`
 4. `3a8cab8 fix(seo): link only qualified article tags in SSR`
 5. `0a2f730 fix(seo): noindex unpublished article payloads`
-6. `pending fix(seo): prepare curated topic hubs`
+6. `e476155 fix(seo): prepare curated topic hubs`
 
 **نتيجة القياس الحي على المقال `https://sabq.org/article/qzVBFf1` كـ Googlebot بعد النشر:**
 
@@ -302,7 +302,7 @@ curl -s "https://api.sabq.org/api/edge/indexing-status" | python3 -m json.tool
 - `/article/kpvgA0V` كـ Googlebot يجب أن يرجع `noindex, follow`.
 - مقال منشور حديث مثل `/article/qzVBFf1` يجب أن يبقى `index, follow, max-image-preview:large`.
 
-### Commit pending
+### Commit `e476155`
 
 الهدف: بدء معالجة فجوة الوسوم الحقيقية عبر Topic Hubs مستهدفة، وليس ترحيل `seo.keywords` كلها.
 
