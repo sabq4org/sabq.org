@@ -11735,7 +11735,14 @@ Respond in valid JSON format only:
   // LITE FEED - Optimized endpoint for swipe cards
   // ============================================================
   
-  app.get("/api/lite-feed", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, staleWhileRevalidate: CACHE_DURATIONS.SHORT }), async (req, res) => {
+  // maxAge:0 → the browser / iOS WKWebView always revalidates against the edge
+  // instead of serving its own HTTP cache. Without this (max-age=120) the iOS
+  // Lite app's WKWebView would keep returning a cached feed for ~2-4 min, so
+  // pull-to-refresh showed no newly-published hero/carousel articles until the
+  // app was killed and relaunched. The edge (s-maxage) still absorbs load and
+  // is purged on publish via purgeHomepage(), so freshness is immediate.
+  // Mirrors the /api/homepage-lite pattern, which never had this bug.
+  app.get("/api/lite-feed", cacheControl({ maxAge: 0, sMaxAge: CACHE_DURATIONS.SHORT, staleWhileRevalidate: CACHE_DURATIONS.SHORT }), async (req, res) => {
     try {
       const cacheKey = 'lite-feed';
       const cached = memoryCache.get(cacheKey);

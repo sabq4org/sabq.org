@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { apiRequest, trackBeacon } from "@/lib/queryClient";
+import { apiRequest, apiUrl, trackBeacon } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import type { Article, Category, User } from "@shared/schema";
 import sabqLogo from "@assets/sabq-logo.png";
@@ -125,6 +125,19 @@ export default function LiteFeedPage() {
 
   const { data: articlesRaw, isLoading, refetch } = useQuery<ArticleWithDetails[]>({
     queryKey: ["/api/lite-feed"],
+    // `cache: "no-store"` forces the iOS WKWebView to skip its own HTTP cache
+    // and revalidate against the edge on every (re)fetch. Without it, a plain
+    // fetch() honors the response's cache headers and pull-to-refresh could be
+    // served a stale feed by the webview — the carousel/hero would only update
+    // after killing and relaunching the app.
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/lite-feed"), {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`lite-feed ${res.status}`);
+      return res.json();
+    },
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
   });
