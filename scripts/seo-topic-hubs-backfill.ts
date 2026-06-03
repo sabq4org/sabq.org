@@ -11,10 +11,12 @@
  *   tsx scripts/seo-topic-hubs-backfill.ts --apply --i-understand
  */
 
-import { db, pool } from "../server/db";
 import { articleTags, articles, tags } from "@shared/schema";
 import { TOPIC_HUBS, type TopicHubSpec } from "@shared/seo/topicHubs";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+
+let db: Awaited<typeof import("../server/db")>["db"];
+let pool: Awaited<typeof import("../server/db")>["pool"] | undefined;
 
 const argv = process.argv.slice(2);
 const has = (flag: string) => argv.includes(flag);
@@ -27,7 +29,7 @@ const APPLY = has("--apply");
 const ACK = has("--i-understand");
 const LIMIT = parseInt(val("--limit") || "1000", 10) || 1000;
 const DAYS = parseInt(val("--days") || "90", 10) || 90;
-const MIN_SCORE = parseInt(val("--min-score") || "1", 10) || 1;
+const MIN_SCORE = parseInt(val("--min-score") || "0", 10) || 0;
 const MAX_HUBS_PER_ARTICLE = parseInt(val("--max-hubs-per-article") || "3", 10) || 3;
 const HUB_FILTER = new Set(
   (val("--hub") || "")
@@ -81,6 +83,18 @@ function normalize(input: unknown): string {
     .trim();
 }
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasTerm(normalizedText: string, term: string): boolean {
+  const normalizedTerm = normalize(term);
+  if (!normalizedTerm) return false;
+  return new RegExp(`(^|\\s)${escapeRegExp(normalizedTerm)}(?=\\s|$)`).test(
+    normalizedText,
+  );
+}
+
 function seoKeywords(seo: unknown): string[] {
   const keywords = (seo as { keywords?: unknown } | null)?.keywords;
   return Array.isArray(keywords)
@@ -100,14 +114,15 @@ function articleText(article: ArticleRow): string {
 
 function matchHub(article: ArticleRow, hub: TopicHubSpec): Match | null {
   const text = articleText(article);
-  const exclude = (hub.excludeAny || []).some((term) => text.includes(normalize(term)));
+  const exclude = (hub.excludeAny || []).some((term) => hasTerm(text, term));
   if (exclude) return null;
 
   const required = hub.includeAll || [];
-  if (required.some((term) => !text.includes(normalize(term)))) return null;
+  if (required.some((term) => !hasTerm(text, term))) return null;
 
-  const terms = hub.includeAny.filter((term) => text.includes(normalize(term)));
-  if (terms.length < MIN_SCORE) return null;
+  const terms = hub.includeAny.filter((term) => hasTerm(text, term));
+  const minScore = Math.max(MIN_SCORE, hub.minScore || 1);
+  if (terms.length < minScore) return null;
 
   return { hub, score: terms.length, terms };
 }
@@ -184,6 +199,11 @@ async function loadExistingArticleLinks(articleIds: string[]) {
 }
 
 async function main() {
+  process.env.SKIP_DB_MAINTENANCE ||= "true";
+  const dbModule = await import("../server/db");
+  db = dbModule.db;
+  pool = dbModule.pool;
+
   console.log(
     `[topic-hubs] mode=${APPLY ? "APPLY" : "DRY-RUN"} hubs=${HUBS.length} days=${DAYS} limit=${LIMIT} minScore=${MIN_SCORE}`,
   );
@@ -277,11 +297,11 @@ async function main() {
     }
   }
 
-  await pool.end().catch(() => {});
+  await pool?.end().catch(() => {});
 }
 
 main().catch(async (error) => {
   console.error("[topic-hubs] FATAL:", error);
-  await pool.end().catch(() => {});
+  await pool?.end().catch(() => {});
   process.exit(1);
 });

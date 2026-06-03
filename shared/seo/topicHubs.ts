@@ -5,6 +5,7 @@ export interface TopicHubSpec {
   slug: string;
   description: string;
   minPublishedArticles: number;
+  minScore?: number;
   maxLinksPerArticle?: number;
   includeAny: string[];
   includeAll?: string[];
@@ -19,6 +20,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الطقس",
     description: "تغطية مستمرة لأخبار الطقس والأرصاد والحالة الجوية في السعودية.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الطقس",
       "الأرصاد",
@@ -42,6 +44,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الحج",
     description: "أخبار الحج وخدمات ضيوف الرحمن والجهات المشاركة في موسم الحج.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الحج",
       "حجاج",
@@ -62,6 +65,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "التعليم",
     description: "أخبار التعليم والمدارس والجامعات والاختبارات في السعودية.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "التعليم",
       "وزارة التعليم",
@@ -82,6 +86,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الوظائف",
     description: "أخبار الوظائف والتوظيف وفرص العمل والموارد البشرية في السعودية.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "وظائف",
       "الوظائف",
@@ -101,13 +106,14 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "حساب-المواطن",
     description: "أخبار برنامج حساب المواطن والدعم والأهلية ومواعيد الصرف.",
     minPublishedArticles: 5,
+    minScore: 1,
     includeAny: [
       "حساب المواطن",
       "برنامج حساب المواطن",
-      "الدعم",
-      "الأهلية",
       "دفعة حساب المواطن",
       "مستفيدي حساب المواطن",
+      "أهلية حساب المواطن",
+      "دعم حساب المواطن",
     ],
   },
   {
@@ -117,6 +123,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الرياضة-السعودية",
     description: "أخبار الرياضة السعودية والمنتخبات والأندية والمسابقات المحلية.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الرياضة السعودية",
       "المنتخب السعودي",
@@ -125,7 +132,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
       "دوري روشن",
       "الهلال",
       "النصر",
-      "الاتحاد",
+      "نادي الاتحاد",
       "الأهلي",
       "كأس الملك",
     ],
@@ -137,13 +144,13 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "المرور",
     description: "أخبار المرور والسلامة المرورية والتنقل والطرق في السعودية.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "المرور",
       "السلامة المرورية",
       "الحركة المرورية",
       "الازدحام",
       "الطرق",
-      "النقل",
       "المخالفات المرورية",
       "الحوادث المرورية",
     ],
@@ -155,6 +162,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الصحة",
     description: "أخبار الصحة والوقاية والخدمات الصحية في السعودية والعالم.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الصحة",
       "وزارة الصحة",
@@ -174,6 +182,7 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الاقتصاد-السعودي",
     description: "أخبار الاقتصاد السعودي والأسواق والاستثمار والشركات.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الاقتصاد السعودي",
       "السوق المالية",
@@ -184,6 +193,8 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
       "الشركات السعودية",
       "رؤية 2030",
       "القطاع الخاص",
+      "أسعار النفط",
+      "سوق الأسهم",
     ],
   },
   {
@@ -193,14 +204,15 @@ export const TOPIC_HUBS: TopicHubSpec[] = [
     slug: "الذكاء-الاصطناعي",
     description: "أخبار الذكاء الاصطناعي والتقنيات الناشئة وتطبيقاتها.",
     minPublishedArticles: 5,
+    minScore: 2,
     includeAny: [
       "الذكاء الاصطناعي",
       "ذكاء اصطناعي",
       "تقنيات الذكاء",
       "النماذج اللغوية",
       "تعلم الآلة",
-      "البيانات",
-      "تقنية",
+      "بيانات الذكاء الاصطناعي",
+      "تقنيات ناشئة",
     ],
   },
 ];
