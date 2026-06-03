@@ -241,8 +241,10 @@ function clampModified(
  */
 function computeArticleRobots(
   publishedAt?: Date | string | null,
+  status?: string | null,
 ): { robots: string; googlebotNews?: string } {
   const base = "index, follow, max-image-preview:large";
+  if (status !== "published") return { robots: "noindex, follow" };
   if (!publishedAt) return { robots: base };
   const ageMs = Date.now() - new Date(publishedAt).getTime();
   const day = 24 * 60 * 60 * 1000;
@@ -276,6 +278,7 @@ function articleMetaPayload(opts: {
   slug: string;
   publishedAt?: Date | string | null;
   updatedAt?: Date | string | null;
+  status?: string | null;
   author: string;
   section?: string | null;
   keywords?: string[];
@@ -356,7 +359,10 @@ function articleMetaPayload(opts: {
   if (opts.section) jsonLd.articleSection = opts.section;
   if (keywords.length) jsonLd.keywords = keywords;
 
-  const { robots, googlebotNews } = computeArticleRobots(opts.publishedAt);
+  const { robots, googlebotNews } = computeArticleRobots(
+    opts.publishedAt,
+    opts.status,
+  );
 
   return {
     title: `${opts.title} | ${b.suffix}`,
@@ -445,6 +451,7 @@ function buildArArticlePayload(
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
+    status: row.status,
     author,
     section: row.categoryName,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
@@ -472,6 +479,7 @@ async function fetchEnArticle(slug: string) {
       imageUrl: enArticles.imageUrl,
       publishedAt: enArticles.publishedAt,
       updatedAt: enArticles.updatedAt,
+      status: enArticles.status,
       seo: enArticles.seo,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
@@ -506,6 +514,7 @@ function buildEnArticlePayload(
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
+    status: row.status,
     author,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
@@ -532,6 +541,7 @@ async function fetchUrArticle(slug: string) {
       imageUrl: urArticles.imageUrl,
       publishedAt: urArticles.publishedAt,
       updatedAt: urArticles.updatedAt,
+      status: urArticles.status,
       seo: urArticles.seo,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
@@ -566,6 +576,7 @@ function buildUrArticlePayload(
     slug,
     publishedAt: row.publishedAt,
     updatedAt: row.updatedAt,
+    status: row.status,
     author,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,

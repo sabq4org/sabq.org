@@ -47,6 +47,7 @@
 2. `49ddbd3 add category latest links to ssr article pages`
 3. `f093693 fix(seo): add edge keyword/reporter handlers with noindex-when-empty`
 4. `3a8cab8 fix(seo): link only qualified article tags in SSR`
+5. `798a38a fix(seo): noindex unpublished article payloads`
 
 **نتيجة القياس الحي على المقال `https://sabq.org/article/qzVBFf1` كـ Googlebot بعد النشر:**
 
@@ -272,3 +273,30 @@ curl -s "https://api.sabq.org/api/edge/indexing-status" | python3 -m json.tool
 
 - `npm run check` من جذر المشروع نجح.
 - `npm run build` داخل `web-next` نجح.
+
+### Commit `798a38a`
+
+الهدف: منع فهرسة المقالات غير المنشورة في نسخة SSR/edge.
+
+الملف:
+
+- `server/routes/edgeMeta.ts`
+
+المشكلة:
+
+- `fetchArArticle` كان يرجع المقال بأي حالة (`published`, `archived`, `draft`, `scheduled`) لأنه يبحث بالـ slug فقط.
+- `articleMetaPayload` كان يحسب robots حسب عمر المقال فقط، وليس حسب `status`.
+- النتيجة الحية التي كشفت الخطأ: مقال `archived` على `/article/kpvgA0V` كان يظهر لـ Googlebot كـ `index, follow`.
+
+الإصلاح:
+
+- تمرير `status` إلى `articleMetaPayload`.
+- تمرير `status` من جداول المقالات الثلاثة: عربي/إنجليزي/أردو.
+- قاعدة robots أصبحت:
+  - `status === "published"` ⇒ منطق الفهرسة المعتاد حسب العمر.
+  - أي حالة أخرى أو حالة مفقودة ⇒ `noindex, follow`.
+
+التحقق المطلوب بعد النشر:
+
+- `/article/kpvgA0V` كـ Googlebot يجب أن يرجع `noindex, follow`.
+- مقال منشور حديث مثل `/article/qzVBFf1` يجب أن يبقى `index, follow, max-image-preview:large`.
