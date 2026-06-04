@@ -1596,6 +1596,15 @@ extension APIUser {
         "content_manager",
     ]
 
+    /// Strict subset of `adminLikeRoleIdentifiers` — top-level platform admins
+    /// only (no editors). Gates the in-app admin dashboard entry.
+    static let platformAdminRoleIdentifiers: Set<String> = [
+        "admin",
+        "system_admin",
+        "system.admin",
+        "superadmin",
+    ]
+
     private var allRoleKeys: [String] {
         var keys: [String] = []
         if let r = role { keys.append(r.lowercased()) }
@@ -1613,6 +1622,12 @@ extension APIUser {
 
     var isAdminLike: Bool {
         allRoleKeys.contains { APIUser.adminLikeRoleIdentifiers.contains($0) }
+    }
+
+    /// True only for top-level platform admins (admin / system_admin /
+    /// superadmin) — excludes editors. Gates the in-app admin dashboard.
+    var isPlatformAdmin: Bool {
+        allRoleKeys.contains { APIUser.platformAdminRoleIdentifiers.contains($0) }
     }
 
     /// True when the user has a role that lets them submit content from the

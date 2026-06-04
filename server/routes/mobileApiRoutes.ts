@@ -38,7 +38,7 @@ import {
   socialFollows,
   articleDailyStats,
 } from "@shared/schema";
-import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray } from "drizzle-orm";
+import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -6425,6 +6425,269 @@ router.delete("/bookmarks/:articleId", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] DELETE /bookmarks error:", error);
     res.status(500).json({ success: false, message: "تعذر إزالة المحفوظة" });
+  }
+});
+
+// ==========================================
+// Admin Dashboard (platform admins only)
+// ==========================================
+//
+// Real, mobile-session-backed admin surface for the in-app iOS dashboard.
+// The web CMS endpoints (/api/admin/*) are Passport-session + RBAC gated and
+// unreachable from the mobile Bearer token, so these thin wrappers re-expose
+// the same data through `verifyMemberSession` + a strict platform-admin role
+// check. Editors are intentionally excluded (matches the iOS `isPlatformAdmin`
+// gate) — only admin / system_admin / superadmin.
+
+const PLATFORM_ADMIN_ROLES = ["admin", "system_admin", "system.admin", "superadmin"];
+
+/// Resolves the Bearer session AND confirms the member is a platform admin.
+/// Checks both RBAC `user_roles` and the legacy `users.role` text column,
+/// because some admins only carry the text-column signal (no user_roles row).
+async function verifyAdminSession(req: Request): Promise<{ userId: string } | null> {
+  const session = await verifyMemberSession(req);
+  if (!session) return null;
+
+  const roleRows = await db
+    .select({ roleName: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(userRoles.userId, session.userId));
+  const roleNames = roleRows.map(r => r.roleName);
+
+  const [u] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .limit(1);
+  if (u?.role) roleNames.push(u.role);
+
+  const isAdmin = roleNames.some(r => PLATFORM_ADMIN_ROLES.includes(r));
+  return isAdmin ? { userId: session.userId } : null;
+}
+
+/// Collapse the DB's (status, reviewStatus) pair into the three buckets the
+/// iOS dashboard understands: draft / review / published.
+function mapArticleClientStatus(a: { status: string | null; reviewStatus: string | null }): "draft" | "review" | "published" {
+  if (a.status === "published") return "published";
+  if (a.reviewStatus === "pending_review" || a.status === "pending") return "review";
+  return "draft";
+}
+
+/// WHERE clause for a given client-side status bucket.
+function articleStatusWhere(status: string) {
+  if (status === "published") {
+    return eq(articles.status, "published");
+  }
+  if (status === "review") {
+    return or(eq(articles.reviewStatus, "pending_review"), eq(articles.status, "pending"));
+  }
+  // draft: genuine drafts that aren't awaiting review
+  return and(
+    eq(articles.status, "draft"),
+    or(isNull(articles.reviewStatus), ne(articles.reviewStatus, "pending_review")),
+  );
+}
+
+const adminArticleColumns = {
+  id: articles.id,
+  title: articles.title,
+  excerpt: articles.excerpt,
+  content: articles.content,
+  status: articles.status,
+  reviewStatus: articles.reviewStatus,
+  views: articles.views,
+  publishedAt: articles.publishedAt,
+  updatedAt: articles.updatedAt,
+  authorFirst: users.firstName,
+  authorLast: users.lastName,
+  reporterFirst: reporterUsers.firstName,
+  reporterLast: reporterUsers.lastName,
+};
+
+function mapAdminArticleRow(r: any) {
+  const reporterName = [r.reporterFirst, r.reporterLast].filter(Boolean).join(" ").trim();
+  const authorName = [r.authorFirst, r.authorLast].filter(Boolean).join(" ").trim();
+  const updated = r.updatedAt ?? r.publishedAt ?? new Date();
+  return {
+    id: r.id,
+    title: r.title || "",
+    excerpt: r.excerpt || "",
+    body: r.content || "",
+    status: mapArticleClientStatus(r),
+    author: reporterName || authorName || "فريق سبق",
+    views: r.views || 0,
+    updatedAt: (updated instanceof Date ? updated : new Date(updated)).toISOString(),
+  };
+}
+
+/// Re-fetch a single article in the client shape (used by publish + edit so
+/// the response carries the joined author name, which `.returning()` lacks).
+async function fetchAdminArticleItem(id: string) {
+  const [r] = await db
+    .select(adminArticleColumns)
+    .from(articles)
+    .leftJoin(users, eq(articles.authorId, users.id))
+    .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+    .where(eq(articles.id, id))
+    .limit(1);
+  return r ? mapAdminArticleRow(r) : null;
+}
+
+// GET /api/v1/admin/dashboard/stats — real KPI snapshot
+router.get("/admin/dashboard/stats", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [publishedTodayRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(and(eq(articles.status, "published"), gte(articles.publishedAt, todayStart)));
+
+    const [totalViewsRow] = await db
+      .select({ v: sql<number>`coalesce(sum(${articles.views}), 0)::int` })
+      .from(articles)
+      .where(eq(articles.status, "published"));
+
+    const [draftsRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere("draft"));
+
+    const [reviewRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere("review"));
+
+    res.json({
+      success: true,
+      publishedToday: publishedTodayRow?.c || 0,
+      totalViews: totalViewsRow?.v || 0,
+      pendingDrafts: draftsRow?.c || 0,
+      underReview: reviewRow?.c || 0,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/dashboard/stats error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحميل الإحصائيات" });
+  }
+});
+
+// GET /api/v1/admin/articles?status=draft|review|published — real lists
+router.get("/admin/articles", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+
+    const statusParam = String(req.query.status || "draft");
+    const status = ["draft", "review", "published"].includes(statusParam) ? statusParam : "draft";
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20));
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select(adminArticleColumns)
+      .from(articles)
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+      .where(articleStatusWhere(status))
+      .orderBy(desc(articles.updatedAt), desc(articles.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({ success: true, items: rows.map(mapAdminArticleRow) });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/articles error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحميل الأخبار" });
+  }
+});
+
+// POST /api/v1/admin/articles/:id/publish — real publish
+router.post("/admin/articles/:id/publish", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+
+    const id = req.params.id;
+    const [existing] = await db
+      .select({ id: articles.id, publishedAt: articles.publishedAt })
+      .from(articles)
+      .where(eq(articles.id, id))
+      .limit(1);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+
+    await db
+      .update(articles)
+      .set({
+        status: "published",
+        reviewStatus: "approved",
+        publishedAt: existing.publishedAt ?? new Date(),
+        reviewedBy: admin.userId,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(articles.id, id));
+
+    res.json({ success: true, item: await fetchAdminArticleItem(id) });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/articles/:id/publish error:", error);
+    res.status(500).json({ success: false, message: "تعذر نشر الخبر" });
+  }
+});
+
+// PATCH /api/v1/admin/articles/:id — real edit
+router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+
+    const id = req.params.id;
+    const [existing] = await db
+      .select({ id: articles.id, publishedAt: articles.publishedAt })
+      .from(articles)
+      .where(eq(articles.id, id))
+      .limit(1);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+
+    const { title, excerpt, body, status } = req.body || {};
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (typeof title === "string") updates.title = title;
+    if (typeof excerpt === "string") updates.excerpt = excerpt;
+    if (typeof body === "string") updates.content = body;
+
+    if (status === "draft") {
+      updates.status = "draft";
+      updates.reviewStatus = null;
+    } else if (status === "review") {
+      updates.status = "draft";
+      updates.reviewStatus = "pending_review";
+    } else if (status === "published") {
+      updates.status = "published";
+      updates.reviewStatus = "approved";
+      if (!existing.publishedAt) updates.publishedAt = new Date();
+    }
+
+    await db.update(articles).set(updates).where(eq(articles.id, id));
+
+    res.json({ success: true, item: await fetchAdminArticleItem(id) });
+  } catch (error) {
+    console.error("[Mobile API] PATCH /admin/articles/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذر حفظ التعديلات" });
   }
 });
 

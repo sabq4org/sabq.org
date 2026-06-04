@@ -53,6 +53,9 @@ struct SettingsView: View {
 
                 profileSection
                 if authStore.isLoggedIn {
+                    if let user = authStore.currentUser, user.isPlatformAdmin {
+                        adminDashboardEntrySection
+                    }
                     if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
                         contributorDashboardEntrySection
                     }
@@ -711,6 +714,47 @@ struct SettingsView: View {
     }
 
     // MARK: - Loyalty entry
+
+    // MARK: - Admin Dashboard entry
+
+    /// Platform-admin-only shortcut into the streamlined in-app newsroom
+    /// dashboard. Mirrors `contributorDashboardEntrySection`'s row styling.
+    private var adminDashboardEntrySection: some View {
+        NavigationLink(value: AdminDashboardRoute()) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(SabqTheme.sky.opacity(0.14))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(SabqTheme.sky)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("لوحة التحكم")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("إدارة الأخبار والمؤشّرات")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 
     // MARK: - Contributor Dashboard entry
 

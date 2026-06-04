@@ -98,6 +98,9 @@ struct ContentView: View {
                 .navigationDestination(for: ContributorDashboardRoute.self) { _ in
                     ContributorDashboardView()
                 }
+                .navigationDestination(for: AdminDashboardRoute.self) { _ in
+                    AdminDashboardView()
+                }
                 .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                     LoyaltyAccountView()
                 }
