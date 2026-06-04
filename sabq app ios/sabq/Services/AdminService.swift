@@ -32,6 +32,14 @@ protocol AdminServicing: Sendable {
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO
     /// رفع صورة — base64 data URI → Cloudflare Images, returns the URL.
     func uploadImage(dataURI: String) async throws -> String
+
+    // Editorial workflow
+    /// أرشفة (حذف ناعم) بسبب — يُشعر الكاتب.
+    func archive(id: String, reason: String) async throws
+    /// طلب تعديل بملاحظات — يعيد للمسودات ويُشعر الكاتب.
+    func requestRevision(id: String, notes: String) async throws
+    /// حذف نهائي (للمؤرشفة فقط).
+    func permanentDelete(id: String, reason: String) async throws
 }
 
 enum AdminServiceError: LocalizedError {
@@ -69,6 +77,8 @@ private struct AdminUploadResponse: Decodable { let url: String? }
 private struct AdminSummaryBody: Encodable { let text: String }
 private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
 private struct AdminUploadBody: Encodable { let image: String }
+private struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
+private struct AdminDeletionBody: Encodable { let deletionReason: String }
 
 // MARK: - Live implementation
 
@@ -153,5 +163,28 @@ struct LiveAdminService: AdminServicing {
         )
         guard let url = response.url, !url.isEmpty else { throw AdminServiceError.missingItem }
         return url
+    }
+
+    func archive(id: String, reason: String) async throws {
+        _ = try await APIClient.shared.post(
+            AdminNewsItemResponse.self,
+            path: "/admin/articles/\(id)/archive",
+            body: AdminReviewNotesBody(reviewNotes: reason)
+        )
+    }
+
+    func requestRevision(id: String, notes: String) async throws {
+        _ = try await APIClient.shared.post(
+            AdminNewsItemResponse.self,
+            path: "/admin/articles/\(id)/request-revision",
+            body: AdminReviewNotesBody(reviewNotes: notes)
+        )
+    }
+
+    func permanentDelete(id: String, reason: String) async throws {
+        try await APIClient.shared.deleteRaw(
+            path: "/admin/articles/\(id)/permanent",
+            body: AdminDeletionBody(deletionReason: reason)
+        )
     }
 }

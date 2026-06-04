@@ -70,9 +70,16 @@ struct AdminNewsItem: Identifiable, Hashable, Decodable {
     var author: String
     var updatedAt: Date
     var views: Int
+    /// Editorial review state — "needs_changes" drives the amber revision cue.
+    var reviewStatus: String?
+    /// Editor's note (revision request / archive reason).
+    var reviewNotes: String?
+
+    /// True when an editor sent this back to the author for changes.
+    var awaitingRevision: Bool { reviewStatus == "needs_changes" }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, excerpt, body, status, author, updatedAt, views
+        case id, title, excerpt, body, status, author, updatedAt, views, reviewStatus, reviewNotes
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +91,8 @@ struct AdminNewsItem: Identifiable, Hashable, Decodable {
         status = (try? c.decode(AdminArticleStatus.self, forKey: .status)) ?? .draft
         author = (try? c.decode(String.self, forKey: .author)) ?? ""
         views = (try? c.decode(Int.self, forKey: .views)) ?? 0
+        reviewStatus = try? c.decodeIfPresent(String.self, forKey: .reviewStatus)
+        reviewNotes = try? c.decodeIfPresent(String.self, forKey: .reviewNotes)
         // Backend sends an ISO-8601 string; reuse the app's tolerant parser.
         let dateString = (try? c.decode(String.self, forKey: .updatedAt)) ?? ""
         updatedAt = SabqFormatters.parseISO8601(dateString) ?? Date()

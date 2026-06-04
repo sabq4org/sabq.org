@@ -95,6 +95,41 @@ final class AdminDashboardViewModel: ObservableObject {
         await refreshFirstPageAndMetrics()
     }
 
+    // MARK: Editorial workflow
+
+    func archive(_ item: AdminNewsItem, reason: String) async -> Bool {
+        do {
+            try await service.archive(id: item.id, reason: reason)
+            await refreshFirstPageAndMetrics()
+            return true
+        } catch {
+            self.error = "تعذّر أرشفة الخبر"
+            return false
+        }
+    }
+
+    func requestRevision(_ item: AdminNewsItem, notes: String) async -> Bool {
+        do {
+            try await service.requestRevision(id: item.id, notes: notes)
+            await refreshFirstPageAndMetrics()
+            return true
+        } catch {
+            self.error = "تعذّر إرسال طلب التعديل"
+            return false
+        }
+    }
+
+    func permanentDelete(_ item: AdminNewsItem, reason: String) async -> Bool {
+        do {
+            try await service.permanentDelete(id: item.id, reason: reason)
+            await refreshFirstPageAndMetrics()
+            return true
+        } catch {
+            self.error = "تعذّر الحذف النهائي"
+            return false
+        }
+    }
+
     private func reloadFirstPage() async {
         do {
             let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
@@ -128,6 +163,7 @@ final class AdminDashboardViewModel: ObservableObject {
 /// profile screen and pushed onto the shared `NavigationStack`.
 struct AdminDashboardView: View {
     @StateObject private var vm = AdminDashboardViewModel()
+    @State private var pendingAction: AdminWorkflowAction?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -151,6 +187,15 @@ struct AdminDashboardView: View {
         .navigationDestination(for: AdminArticleEditorRoute.self) { route in
             AdminArticleEditorView(articleId: route.item.id, title: route.item.title) {
                 Task { await vm.refreshAfterEdit() }
+            }
+        }
+        .sheet(item: $pendingAction) { action in
+            AdminReasonSheet(action: action) { reason in
+                switch action {
+                case .requestRevision(let item): return await vm.requestRevision(item, notes: reason)
+                case .archive(let item):         return await vm.archive(item, reason: reason)
+                case .permanentDelete(let item): return await vm.permanentDelete(item, reason: reason)
+                }
             }
         }
         .task { await vm.load() }
@@ -206,7 +251,10 @@ struct AdminDashboardView: View {
                     AdminNewsRow(
                         item: item,
                         isPublishing: vm.publishingIds.contains(item.id),
-                        onPublish: { Task { await vm.publish(item) } }
+                        onPublish: { Task { await vm.publish(item) } },
+                        onRequestRevision: { pendingAction = .requestRevision(item) },
+                        onArchive: { pendingAction = .archive(item) },
+                        onPermanentDelete: { pendingAction = .permanentDelete(item) }
                     )
                 }
                 if vm.canLoadMore {

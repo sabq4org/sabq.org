@@ -109,6 +109,9 @@ struct AdminNewsRow: View {
     let item: AdminNewsItem
     let isPublishing: Bool
     let onPublish: () -> Void
+    var onRequestRevision: () -> Void = {}
+    var onArchive: () -> Void = {}
+    var onPermanentDelete: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -125,6 +128,10 @@ struct AdminNewsRow: View {
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
+
+            if item.awaitingRevision {
+                revisionCue
+            }
 
             if !item.excerpt.isEmpty {
                 Text(item.excerpt)
@@ -147,7 +154,7 @@ struct AdminNewsRow: View {
                 }
                 .buttonStyle(.plain)
 
-                if item.status != .published {
+                if item.status != .published && item.status != .archived {
                     Button(action: onPublish) {
                         if isPublishing {
                             HStack(spacing: 7) {
@@ -170,6 +177,8 @@ struct AdminNewsRow: View {
                 }
 
                 Spacer(minLength: 0)
+
+                overflowMenu
             }
         }
         .padding(16)
@@ -183,6 +192,60 @@ struct AdminNewsRow: View {
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
         )
+    }
+
+    /// Amber "awaiting author revision" banner — mirrors the web's
+    /// EditorialDraftReviewCue, showing the editor's note inline.
+    private var revisionCue: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: "exclamationmark.bubble.fill")
+                .font(.system(size: 12, weight: .bold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("بانتظار تعديل الكاتب")
+                    .font(.system(size: 12, weight: .heavy))
+                if let notes = item.reviewNotes, !notes.isEmpty {
+                    Text(notes)
+                        .font(.system(size: 12, weight: .regular))
+                        .multilineTextAlignment(.leading)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(SabqTheme.gold)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.gold.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.gold.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    /// Overflow (•••) menu with the editorial-workflow actions.
+    private var overflowMenu: some View {
+        Menu {
+            if item.status == .archived {
+                Button(role: .destructive, action: onPermanentDelete) {
+                    Label("حذف نهائي", systemImage: "trash")
+                }
+            } else {
+                Button(action: onRequestRevision) {
+                    Label("طلب تعديل", systemImage: "exclamationmark.bubble")
+                }
+                Button(role: .destructive, action: onArchive) {
+                    Label("أرشفة (عدم النشر)", systemImage: "archivebox")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(SabqTheme.background.opacity(0.6)))
+        }
     }
 
     private func metaLabel(icon: String, text: String) -> some View {
@@ -233,5 +296,143 @@ struct AdminNewsRowSkeleton: View {
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
         )
+    }
+}
+
+// MARK: - Editorial workflow action + reason sheet
+
+/// A pending editorial action awaiting a reason/note before it runs.
+enum AdminWorkflowAction: Identifiable {
+    case requestRevision(AdminNewsItem)
+    case archive(AdminNewsItem)
+    case permanentDelete(AdminNewsItem)
+
+    var id: String {
+        switch self {
+        case .requestRevision(let i): return "rev-\(i.id)"
+        case .archive(let i):         return "arc-\(i.id)"
+        case .permanentDelete(let i): return "del-\(i.id)"
+        }
+    }
+
+    var item: AdminNewsItem {
+        switch self {
+        case .requestRevision(let i), .archive(let i), .permanentDelete(let i): return i
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .requestRevision: return "طلب تعديل"
+        case .archive:         return "أرشفة (عدم النشر)"
+        case .permanentDelete: return "حذف نهائي"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .requestRevision:
+            return "يُرسل للكاتب/المراسل مع الملاحظات، ويعود المحتوى لمسوداته ليعدّله ثم يُرسله."
+        case .archive:
+            return "قرار نهائي بعدم النشر — يُرسل للكاتب/المراسل مع السبب (إشعار + إيميل). ليس طلب تعديل."
+        case .permanentDelete:
+            return "حذف نهائي للمحتوى من قبل فريق التحرير، ويُشعر الكاتب/المراسل بالسبب."
+        }
+    }
+
+    var fieldLabel: String {
+        switch self {
+        case .requestRevision: return "الملاحظات"
+        default:               return "السبب"
+        }
+    }
+
+    var confirmTitle: String {
+        switch self {
+        case .requestRevision: return "إرسال طلب التعديل"
+        case .archive:         return "تأكيد الأرشفة"
+        case .permanentDelete: return "حذف نهائي"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .requestRevision: return SabqTheme.gold
+        case .archive:         return SabqTheme.coral
+        case .permanentDelete: return SabqTheme.coral
+        }
+    }
+}
+
+/// Captures the mandatory reason/note (≥5 chars) for a workflow action.
+struct AdminReasonSheet: View {
+    let action: AdminWorkflowAction
+    /// Returns true on success so the sheet can dismiss.
+    let onSubmit: (String) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var submitting = false
+
+    private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var isValid: Bool { trimmed.count >= 5 }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(action.explanation)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .multilineTextAlignment(.leading)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(action.fieldLabel)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                        TextEditor(text: $text)
+                            .font(.system(size: 15))
+                            .foregroundStyle(SabqTheme.ink)
+                            .frame(minHeight: 140)
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                        Text("5 أحرف على الأقل")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(!trimmed.isEmpty && !isValid ? SabqTheme.coral : SabqTheme.tertiaryInk)
+                    }
+
+                    Button {
+                        Task {
+                            submitting = true
+                            if await onSubmit(trimmed) { dismiss() } else { submitting = false }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if submitting { ProgressView().controlSize(.small) }
+                            Text(action.confirmTitle).font(.system(size: 16, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous).fill(action.tint))
+                        .opacity(isValid ? 1 : 0.5)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!isValid || submitting)
+                }
+                .padding(16)
+            }
+            .background(SabqTheme.background)
+            .navigationTitle(action.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء") { dismiss() }
+                }
+            }
+            .sabqRTL()
+        }
     }
 }

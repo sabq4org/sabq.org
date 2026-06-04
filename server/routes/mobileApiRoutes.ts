@@ -51,6 +51,7 @@ import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
 import { summarizeText } from "../ai-content-tools";
 import { generateSeoMetadata } from "../seo-generator";
+import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import oauthMobileRouter from "./v1/oauthMobile";
 
 const router = Router();
@@ -6491,6 +6492,7 @@ const adminArticleColumns = {
   content: articles.content,
   status: articles.status,
   reviewStatus: articles.reviewStatus,
+  reviewNotes: articles.reviewNotes,
   views: articles.views,
   publishedAt: articles.publishedAt,
   updatedAt: articles.updatedAt,
@@ -6510,10 +6512,36 @@ function mapAdminArticleRow(r: any) {
     excerpt: r.excerpt || "",
     body: r.content || "",
     status: normalizeAdminStatus(r.status || "draft"),
+    reviewStatus: r.reviewStatus || null,
+    reviewNotes: r.reviewNotes || null,
     author: reporterName || authorName || "فريق سبق",
     views: r.views || 0,
     updatedAt: (updated instanceof Date ? updated : new Date(updated)).toISOString(),
   };
+}
+
+/// Minimal row for the editorial notification fan-out (author/reporter push +
+/// email). Selected fresh before each workflow action.
+async function fetchArticleForNotify(id: string) {
+  const [a] = await db
+    .select({
+      id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      englishSlug: articles.englishSlug,
+      articleType: articles.articleType,
+      scheduledAt: articles.scheduledAt,
+      publishedAt: articles.publishedAt,
+      authorId: articles.authorId,
+      reporterId: articles.reporterId,
+      submitterId: articles.submitterId,
+      status: articles.status,
+      reviewNotes: articles.reviewNotes,
+    })
+    .from(articles)
+    .where(eq(articles.id, id))
+    .limit(1);
+  return a || null;
 }
 
 /// Re-fetch a single article in the client shape (used by publish + edit so
@@ -6927,6 +6955,108 @@ router.post("/admin/media/upload", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] POST /admin/media/upload error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في رفع الصورة" });
+  }
+});
+
+// ---- Admin editorial workflow (archive / request-revision / permanent delete) ----
+//
+// Mobile mirrors of the web CMS actions. Each fires the SAME
+// `notifyArticleStakeholders` fan-out the web uses, so the author/reporter
+// gets the identical push + email + deep link.
+
+// POST /api/v1/admin/articles/:id/archive — "حذف" (أرشفة بسبب، soft delete)
+router.post("/admin/articles/:id/archive", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const reason = (req.body?.reviewNotes ?? "").toString().trim();
+    if (reason.length < 5) {
+      return res.status(400).json({ success: false, message: "سبب الأرشفة مطلوب (5 أحرف على الأقل)", field: "reviewNotes" });
+    }
+    const article = await fetchArticleForNotify(req.params.id);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+
+    await db
+      .update(articles)
+      .set({ status: "archived", reviewStatus: null, reviewNotes: reason, updatedAt: new Date() })
+      .where(eq(articles.id, req.params.id));
+
+    await notifyArticleStakeholders(article, "archived", reason);
+
+    res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/articles/:id/archive error:", error);
+    res.status(500).json({ success: false, message: "تعذّر أرشفة الخبر" });
+  }
+});
+
+// POST /api/v1/admin/articles/:id/request-revision — طلب تعديل بملاحظات
+router.post("/admin/articles/:id/request-revision", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const notes = (req.body?.reviewNotes ?? "").toString().trim();
+    if (notes.length < 5) {
+      return res.status(400).json({ success: false, message: "الملاحظات مطلوبة (5 أحرف على الأقل)", field: "reviewNotes" });
+    }
+    const article = await fetchArticleForNotify(req.params.id);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+
+    await db
+      .update(articles)
+      .set({
+        status: "draft",
+        reviewStatus: "needs_changes",
+        reviewedBy: admin.userId,
+        reviewedAt: new Date(),
+        reviewNotes: notes,
+        updatedAt: new Date(),
+      })
+      .where(eq(articles.id, req.params.id));
+
+    await notifyArticleStakeholders(article, "needs_revision", notes);
+
+    res.json({ success: true, item: await fetchAdminArticleItem(req.params.id) });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/articles/:id/request-revision error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إرسال طلب التعديل" });
+  }
+});
+
+// DELETE /api/v1/admin/articles/:id/permanent — حذف نهائي (للمؤرشفة فقط)
+router.delete("/admin/articles/:id/permanent", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const article = await fetchArticleForNotify(req.params.id);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+    if (article.status !== "archived") {
+      return res.status(400).json({ success: false, message: "الحذف النهائي متاح فقط للأخبار المؤرشفة" });
+    }
+    const reason = (req.body?.deletionReason ?? "").toString().trim()
+      || (article.reviewNotes ?? "").toString().trim()
+      || "تم حذف المحتوى نهائياً من قبل فريق التحرير";
+
+    await db.delete(articles).where(eq(articles.id, req.params.id));
+
+    await notifyArticleStakeholders(article, "deleted", reason);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /admin/articles/:id/permanent error:", error);
+    res.status(500).json({ success: false, message: "تعذّر حذف الخبر نهائياً" });
   }
 });
 
