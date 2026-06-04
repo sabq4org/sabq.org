@@ -13118,7 +13118,32 @@ Respond in valid JSON format only:
         LIMIT 20
       `);
 
-      const filteredArticles = (result as any).rows || result;
+      let filteredArticles = (result as any).rows || result;
+
+      // Fallback: many articles carry only free-text SEO keywords
+      // (articles.seo->'keywords') with no matching row in the `tags` table.
+      // The article page still renders those as clickable badges, so without
+      // this lookup the keyword page comes back empty. Only runs when the
+      // indexed tag join found nothing, keeping the common path fast.
+      if (!filteredArticles || filteredArticles.length === 0) {
+        const seoResult = await db.execute(sql`
+          SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
+                 a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
+                 a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
+                 a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
+                 a.article_type AS "articleType"
+          FROM articles a
+          WHERE a.status = 'published'
+            AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
+              WHERE lower(kw) = lower(${keyword})
+            )
+          ORDER BY a.published_at DESC
+          LIMIT 20
+        `);
+        filteredArticles = (seoResult as any).rows || seoResult;
+      }
+
       memoryCache.set(cacheKey, filteredArticles, CACHE_TTL.MEDIUM);
       res.json(filteredArticles);
     } catch (error) {
