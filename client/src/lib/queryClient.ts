@@ -316,6 +316,65 @@ async function throwIfResNotOk(res: Response, silent = false) {
   }
 }
 
+/**
+ * Is this error worth a transparent retry?
+ *
+ * The classic case: a Safari tab is frozen while backgrounded, the user
+ * returns, `refetchOnWindowFocus` fires, and the first request after resume
+ * dies at the network layer with `TypeError: Load failed` (Chrome:
+ * "Failed to fetch", Firefox: "NetworkError"). The request never reached the
+ * server, so retrying a moment later — once the socket/network stack is back —
+ * succeeds. Without this, one idle-resume blip flips the whole homepage to the
+ * "حدث خطأ في تحميل الصفحة الرئيسية / Load failed" dead screen.
+ *
+ * We retry: rate-limit throttling, network-layer failures, and 5xx / timeouts.
+ * We do NOT retry 4xx (bad request, auth, not-found) — those won't fix
+ * themselves on a second try.
+ */
+export function isRetriableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message || "";
+
+  // Anonymous rate-limit throttling (mapped in throwIfResNotOk).
+  if (msg === "RATE_LIMITED") return true;
+
+  // Network-layer failures — request never completed. These are the
+  // idle-tab-resume failures this whole change exists to recover from.
+  //   Safari:  "Load failed"
+  //   Chrome:  "Failed to fetch"
+  //   Firefox: "NetworkError when attempting to fetch resource"
+  //   iOS/misc: "The network connection was lost", "...appears to be offline"
+  if (
+    /load failed|failed to fetch|network ?error|networkerror|the network connection was lost|connection appears to be offline/i.test(
+      msg,
+    )
+  ) {
+    return true;
+  }
+
+  // 502/503/504 get mapped to this Arabic string in throwIfResNotOk.
+  if (msg.includes("الخادم غير متاح مؤقتاً")) return true;
+
+  // Generic "<status>: <body>" fallthrough — retry only 5xx and 408/425/429.
+  const statusMatch = msg.match(/^(\d{3}):/);
+  if (statusMatch) {
+    const code = parseInt(statusMatch[1], 10);
+    return code >= 500 || code === 408 || code === 425 || code === 429;
+  }
+
+  return false;
+}
+
+/**
+ * Exponential backoff with jitter: 1s, 2s, 4s … capped at 10s, plus up to
+ * +25% random jitter so a wave of clients resuming at once (e.g. everyone
+ * unlocking their phone in the morning) doesn't stampede the origin in lockstep.
+ */
+export function retryDelayWithJitter(attemptIndex: number): number {
+  const base = Math.min(1000 * 2 ** attemptIndex, 10000);
+  return base + base * 0.25 * Math.random();
+}
+
 function formatApiErrorMessage(message: string, errors: any): string {
   const fieldErrors = errors?.fieldErrors ?? errors;
   if (!fieldErrors || typeof fieldErrors !== "object") {
@@ -560,13 +619,14 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       staleTime: 300000,
       gcTime: 600000,
+      // Transparently retry recoverable failures (network-layer "Load failed"
+      // after an idle-tab resume, 5xx, rate-limit) up to 3 times with backoff.
+      // 4xx and other terminal errors still fail fast. See isRetriableError.
       retry: (failureCount, error) => {
-        if (error instanceof Error && error.message === "RATE_LIMITED") {
-          return failureCount < 3;
-        }
-        return false;
+        if (!isRetriableError(error)) return false;
+        return failureCount < 3;
       },
-      retryDelay: (attemptIndex) => Math.min(2000 * (attemptIndex + 1), 10000),
+      retryDelay: retryDelayWithJitter,
     },
     mutations: {
       retry: false,

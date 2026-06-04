@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, ReactNode, startTransition, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, ReactNode, startTransition, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
@@ -123,6 +123,30 @@ interface HomepageData {
   trending: Array<{ topic: string; count: number; views: number; articles: number; comments: number }>;
 }
 
+/**
+ * Lightweight telemetry for the idle-tab-resume recovery path, via the existing
+ * GA4 gtag (no new endpoint). Fire-and-forget — never throws into render.
+ *   - homepage_feed_degraded: a background refetch failed but we kept showing
+ *     cached/last-good content instead of the dead error screen.
+ *   - homepage_feed_recovered: a later refetch succeeded and cleared the error.
+ */
+function reportHomepageEvent(event: "homepage_feed_degraded" | "homepage_feed_recovered", error?: unknown) {
+  try {
+    const message = error instanceof Error ? error.message : undefined;
+    if (event === "homepage_feed_degraded") {
+      console.warn("[homepage] feed refetch failed — showing cached content", message);
+    } else {
+      console.info("[homepage] feed auto-recovered");
+    }
+    const gtag = (window as any).gtag;
+    if (typeof gtag === "function") {
+      gtag("event", event, message ? { error_message: String(message).slice(0, 100) } : {});
+    }
+  } catch {
+    // Telemetry must never break the page.
+  }
+}
+
 export default function Home() {
   // Track when initial load is complete to defer non-critical queries
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -159,18 +183,37 @@ export default function Home() {
       .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   }, [categoriesWithStats]);
 
-  const { data: homepage, isLoading, isPlaceholderData, error, refetch: refetchHomepage } = useQuery<HomepageData>({
+  const { data: homepage, isLoading, isPlaceholderData, isFetching, error, refetch: refetchHomepage } = useQuery<HomepageData>({
     queryKey: ["/api/homepage-lite"],
     staleTime: 60 * 1000, // Data becomes stale after 1 minute (so focus refetch works)
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchInterval: 60 * 1000, // Poll every 60 seconds for new articles (SSE was removed)
     refetchIntervalInBackground: false, // Don't waste resources when tab hidden
     refetchOnWindowFocus: true, // Refetch when user returns to tab
+    // Inherits the global retry policy (isRetriableError + backoff/jitter in
+    // queryClient.ts): a transient "Load failed" when the focus refetch fires
+    // on an idle-tab resume is retried up to 3× and self-heals before any error
+    // ever reaches the UI.
     // Paint the last-known feed instantly on reload (HTML is no-store, so the
     // in-memory cache is empty after a refresh) while we revalidate in the
     // background. Eliminates the full-screen skeleton flash on every refresh.
     placeholderData: () => readHomepageCache<HomepageData>(),
   });
+
+  // Telemetry: track when a background refetch failed but we kept rendering
+  // cached content (degraded) and when it later recovered. Measures how often
+  // the idle-resume path self-heals vs. strands the user.
+  const wasDegradedRef = useRef(false);
+  useEffect(() => {
+    const degraded = Boolean(error) && Boolean(homepage);
+    if (degraded && !wasDegradedRef.current) {
+      wasDegradedRef.current = true;
+      reportHomepageEvent("homepage_feed_degraded", error);
+    } else if (!error && wasDegradedRef.current) {
+      wasDegradedRef.current = false;
+      reportHomepageEvent("homepage_feed_recovered");
+    }
+  }, [error, homepage]);
 
   // Snapshot fresh (non-placeholder) homepage data for the next reload.
   useEffect(() => {
@@ -278,7 +321,12 @@ export default function Home() {
     );
   }
 
-  if (error) {
+  // Only show the full-screen error when we have NOTHING to render. If a
+  // refetch (e.g. the idle-tab-resume focus refetch) failed but we still hold
+  // the last-good feed, we fall through and keep showing it with a small
+  // non-blocking "retry" pill — see FeedStatusBanner in the main return below.
+  // This is the core fix: a transient blip must never blank a populated page.
+  if (error && !homepage) {
     return (
       <div className="min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user || undefined} />
@@ -288,9 +336,17 @@ export default function Home() {
             <p className="text-destructive text-lg mb-4">
               حدث خطأ في تحميل الصفحة الرئيسية
             </p>
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-sm mb-6">
               {error instanceof Error ? error.message : "خطأ غير معروف"}
             </p>
+            <button
+              type="button"
+              onClick={() => refetchHomepage()}
+              disabled={isFetching}
+              className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-60"
+            >
+              {isFetching ? "جارٍ المحاولة…" : "إعادة المحاولة"}
+            </button>
           </div>
         </main>
         <Footer />
@@ -318,6 +374,32 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
+      {/* Non-blocking "refresh failed / retrying" pill. Only appears when a
+          background refetch errored while we keep showing the last-good feed —
+          so the user sees content + a recovery affordance instead of a dead
+          screen. Auto-clears the moment a refetch (focus / 60s poll / manual)
+          succeeds. */}
+      {error && homepage && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full border bg-card/95 px-4 py-2 shadow-lg backdrop-blur"
+          dir="rtl"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="text-sm text-muted-foreground">
+            {isFetching ? "جارٍ تحديث الأخبار…" : "تعذّر تحديث الأخبار"}
+          </span>
+          {!isFetching && (
+            <button
+              type="button"
+              onClick={() => refetchHomepage()}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              إعادة المحاولة
+            </button>
+          )}
+        </div>
+      )}
       {visibleCategories.length > 0 && (
         <div className="hidden md:block">
         <CategoryPills
