@@ -8,12 +8,13 @@ import SwiftUI
 
 // MARK: Article status
 
-/// The three editorial states the dashboard surfaces. Drives the segmented
-/// control, the per-item badge, and the metric tiles.
+/// The four real editorial states on `articles.status`, matching the web CMS.
+/// Drives the segmented control, the per-item badge, and the metric tiles.
 enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
     case draft
-    case review
+    case scheduled
     case published
+    case archived
 
     var id: String { rawValue }
 
@@ -21,8 +22,9 @@ enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
     var label: String {
         switch self {
         case .draft:     return "المسودات"
-        case .review:    return "قيد المراجعة"
+        case .scheduled: return "المجدولة"
         case .published: return "المنشورة"
+        case .archived:  return "المؤرشفة"
         }
     }
 
@@ -30,24 +32,27 @@ enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
     var badgeLabel: String {
         switch self {
         case .draft:     return "مسودة"
-        case .review:    return "قيد المراجعة"
+        case .scheduled: return "مجدول"
         case .published: return "منشور"
+        case .archived:  return "مؤرشف"
         }
     }
 
     var icon: String {
         switch self {
         case .draft:     return "doc.text"
-        case .review:    return "clock.badge.checkmark"
+        case .scheduled: return "clock.fill"
         case .published: return "checkmark.seal.fill"
+        case .archived:  return "archivebox.fill"
         }
     }
 
     var tint: Color {
         switch self {
         case .draft:     return SabqTheme.gold
-        case .review:    return SabqTheme.sky
+        case .scheduled: return SabqTheme.sky
         case .published: return SabqTheme.teal
+        case .archived:  return SabqTheme.coral
         }
     }
 }
@@ -91,8 +96,9 @@ struct AdminNewsItem: Identifiable, Hashable, Decodable {
 struct AdminOverview: Decodable, Hashable {
     var publishedToday: Int
     var totalViews: Int
-    var pendingDrafts: Int
-    var underReview: Int
+    var draft: Int
+    var scheduled: Int
+    var archived: Int
 
     /// Maps the snapshot into the cards rendered by the horizontal metrics
     /// strip. Kept here (not in the view) so the labels/formatting live next
@@ -109,15 +115,15 @@ struct AdminOverview: Decodable, Hashable {
                         value: SabqFormatters.compactViewCount(totalViews),
                         icon: "eye.fill",
                         tint: SabqTheme.sky),
-            AdminMetric(key: "pending_drafts",
-                        title: "مسودات معلّقة",
-                        value: "\(pendingDrafts)",
+            AdminMetric(key: "draft",
+                        title: "المسودات",
+                        value: "\(draft)",
                         icon: "doc.text",
                         tint: SabqTheme.gold),
-            AdminMetric(key: "under_review",
-                        title: "قيد المراجعة",
-                        value: "\(underReview)",
-                        icon: "clock.badge.checkmark",
+            AdminMetric(key: "scheduled",
+                        title: "المجدولة",
+                        value: "\(scheduled)",
+                        icon: "clock.fill",
                         tint: SabqTheme.coral),
         ]
     }
@@ -132,4 +138,92 @@ struct AdminMetric: Identifiable, Hashable {
     let tint: Color
 
     var id: String { key }
+}
+
+// MARK: - Full editor detail
+
+/// SEO sub-object stored in `articles.seo` jsonb.
+struct AdminSEO: Codable, Hashable {
+    var metaTitle: String = ""
+    var metaDescription: String = ""
+    var keywords: [String] = []
+}
+
+/// Complete editor payload decoded from `GET /api/v1/admin/articles/:id`.
+struct AdminArticleDetail: Decodable, Hashable {
+    let id: String
+    var title: String
+    var subtitle: String
+    var excerpt: String
+    var content: String          // HTML
+    var slug: String
+    var status: AdminArticleStatus
+    var articleType: String
+    var newsType: String
+    var categoryId: String?
+    var categoryName: String?
+    var reporterId: String?
+    var reporterName: String?
+    var isFeatured: Bool
+    var hideFromHomepage: Bool
+    var aiSummary: String
+    var imageUrl: String
+    var thumbnailUrl: String
+    var seo: AdminSEO
+    var scheduledAt: Date?
+    var publishedAt: Date?
+    var views: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, excerpt, content, slug, status, articleType, newsType
+        case categoryId, categoryName, reporterId, reporterName, isFeatured, hideFromHomepage
+        case aiSummary, imageUrl, thumbnailUrl, seo, scheduledAt, publishedAt, views
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        func str(_ k: CodingKeys) -> String { (try? c.decode(String.self, forKey: k)) ?? "" }
+        title = str(.title)
+        subtitle = str(.subtitle)
+        excerpt = str(.excerpt)
+        content = str(.content)
+        slug = str(.slug)
+        status = (try? c.decode(AdminArticleStatus.self, forKey: .status)) ?? .draft
+        articleType = (try? c.decode(String.self, forKey: .articleType)) ?? "news"
+        newsType = (try? c.decode(String.self, forKey: .newsType)) ?? "regular"
+        categoryId = try? c.decodeIfPresent(String.self, forKey: .categoryId)
+        categoryName = try? c.decodeIfPresent(String.self, forKey: .categoryName)
+        reporterId = try? c.decodeIfPresent(String.self, forKey: .reporterId)
+        reporterName = try? c.decodeIfPresent(String.self, forKey: .reporterName)
+        isFeatured = (try? c.decode(Bool.self, forKey: .isFeatured)) ?? false
+        hideFromHomepage = (try? c.decode(Bool.self, forKey: .hideFromHomepage)) ?? false
+        aiSummary = str(.aiSummary)
+        imageUrl = str(.imageUrl)
+        thumbnailUrl = str(.thumbnailUrl)
+        seo = (try? c.decode(AdminSEO.self, forKey: .seo)) ?? AdminSEO()
+        views = (try? c.decode(Int.self, forKey: .views)) ?? 0
+        let sched = (try? c.decode(String.self, forKey: .scheduledAt)) ?? ""
+        scheduledAt = SabqFormatters.parseISO8601(sched)
+        let pub = (try? c.decode(String.self, forKey: .publishedAt)) ?? ""
+        publishedAt = SabqFormatters.parseISO8601(pub)
+    }
+}
+
+/// Body sent to PATCH /api/v1/admin/articles/:id. Nil optionals are omitted
+/// by JSONEncoder, so the backend treats them as "no change".
+struct AdminArticleEditPayload: Encodable {
+    var title: String
+    var subtitle: String
+    var excerpt: String
+    var content: String
+    var status: String
+    var newsType: String
+    var isFeatured: Bool
+    var hideFromHomepage: Bool
+    var aiSummary: String
+    var imageUrl: String
+    var categoryId: String?
+    var scheduledAt: String?
+    var seo: AdminSEO
 }

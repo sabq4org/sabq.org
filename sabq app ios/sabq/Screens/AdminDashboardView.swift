@@ -13,9 +13,17 @@ final class AdminDashboardViewModel: ObservableObject {
     @Published var items: [AdminNewsItem] = []
     @Published var selectedStatus: AdminArticleStatus = .draft
     @Published var isLoading = true
+    @Published var isLoadingMore = false
     @Published var error: String?
     /// Ids currently being published — drives the per-row spinner.
     @Published var publishingIds: Set<String> = []
+
+    /// Total items behind the current tab (for the "load more" affordance).
+    @Published private(set) var total = 0
+    private var page = 1
+
+    /// True when there are more pages to fetch for the current tab.
+    var canLoadMore: Bool { items.count < total }
 
     private let service: AdminServicing
 
@@ -23,28 +31,50 @@ final class AdminDashboardViewModel: ObservableObject {
         self.service = service
     }
 
-    /// Initial / pull-to-refresh load: metrics + the selected section's list.
+    /// Initial / pull-to-refresh load: metrics + the selected section's first page.
     func load() async {
         isLoading = true
         error = nil
+        page = 1
         do {
             async let overviewResult = service.fetchOverview()
-            async let listResult = service.fetchNews(status: selectedStatus)
+            async let listResult = service.fetchNews(status: selectedStatus, page: 1)
             overview = try await overviewResult
-            items = try await listResult
+            let pageResult = try await listResult
+            items = pageResult.items
+            total = pageResult.total
         } catch {
             self.error = "تعذّر تحميل البيانات"
         }
         isLoading = false
     }
 
-    /// Switch the active section and reload just its list.
+    /// Switch the active section and reload its first page.
     func select(_ status: AdminArticleStatus) async {
         guard status != selectedStatus else { return }
         selectedStatus = status
         isLoading = true
-        await reloadList()
+        page = 1
+        await reloadFirstPage()
         isLoading = false
+    }
+
+    /// Append the next page of the current tab.
+    func loadMore() async {
+        guard !isLoadingMore, canLoadMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        do {
+            let next = page + 1
+            let pageResult = try await service.fetchNews(status: selectedStatus, page: next)
+            // De-dupe defensively in case rows shifted between pages.
+            let existing = Set(items.map(\.id))
+            items.append(contentsOf: pageResult.items.filter { !existing.contains($0.id) })
+            total = pageResult.total
+            page = next
+        } catch {
+            self.error = "تعذّر جلب المزيد"
+        }
     }
 
     /// Publish an item, then refresh the visible list + metrics so the change
@@ -54,36 +84,37 @@ final class AdminDashboardViewModel: ObservableObject {
         defer { publishingIds.remove(item.id) }
         do {
             _ = try await service.publish(id: item.id)
-            await refreshListAndMetrics()
+            await refreshFirstPageAndMetrics()
         } catch {
             self.error = "تعذّر نشر الخبر"
         }
     }
 
-    /// Persist edits returned from the simplified editor, then refresh.
-    func applyEdit(_ updated: AdminNewsItem) async {
-        do {
-            _ = try await service.saveEdit(updated)
-            await refreshListAndMetrics()
-        } catch {
-            self.error = "تعذّر حفظ التعديلات"
-        }
+    /// Called after the editor saves — refresh the visible list + metrics.
+    func refreshAfterEdit() async {
+        await refreshFirstPageAndMetrics()
     }
 
-    private func reloadList() async {
+    private func reloadFirstPage() async {
         do {
-            items = try await service.fetchNews(status: selectedStatus)
+            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
+            items = pageResult.items
+            total = pageResult.total
+            page = 1
             error = nil
         } catch {
             self.error = "تعذّر تحميل البيانات"
         }
     }
 
-    private func refreshListAndMetrics() async {
+    private func refreshFirstPageAndMetrics() async {
         do {
-            async let listResult = service.fetchNews(status: selectedStatus)
+            async let listResult = service.fetchNews(status: selectedStatus, page: 1)
             async let overviewResult = service.fetchOverview()
-            items = try await listResult
+            let pageResult = try await listResult
+            items = pageResult.items
+            total = pageResult.total
+            page = 1
             overview = try await overviewResult
         } catch {
             self.error = "تعذّر تحديث البيانات"
@@ -118,8 +149,8 @@ struct AdminDashboardView: View {
         // Registered here (not in ContentView) so the editor's save callback
         // can reach this screen's view model directly.
         .navigationDestination(for: AdminArticleEditorRoute.self) { route in
-            AdminArticleEditorView(item: route.item) { updated in
-                Task { await vm.applyEdit(updated) }
+            AdminArticleEditorView(articleId: route.item.id, title: route.item.title) {
+                Task { await vm.refreshAfterEdit() }
             }
         }
         .task { await vm.load() }
@@ -178,8 +209,38 @@ struct AdminDashboardView: View {
                         onPublish: { Task { await vm.publish(item) } }
                     )
                 }
+                if vm.canLoadMore {
+                    loadMoreButton
+                }
             }
         }
+    }
+
+    private var loadMoreButton: some View {
+        Button {
+            Task { await vm.loadMore() }
+        } label: {
+            HStack(spacing: 8) {
+                if vm.isLoadingMore {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundStyle(SabqTheme.sky)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
+                    .fill(SabqTheme.sky.opacity(0.10))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(vm.isLoadingMore)
+        .padding(.top, 4)
     }
 
     // MARK: Empty / error states

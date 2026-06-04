@@ -49,6 +49,8 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import { summarizeText } from "../ai-content-tools";
+import { generateSeoMetadata } from "../seo-generator";
 import oauthMobileRouter from "./v1/oauthMobile";
 
 const router = Router();
@@ -6466,27 +6468,20 @@ async function verifyAdminSession(req: Request): Promise<{ userId: string } | nu
   return isAdmin ? { userId: session.userId } : null;
 }
 
-/// Collapse the DB's (status, reviewStatus) pair into the three buckets the
-/// iOS dashboard understands: draft / review / published.
-function mapArticleClientStatus(a: { status: string | null; reviewStatus: string | null }): "draft" | "review" | "published" {
-  if (a.status === "published") return "published";
-  if (a.reviewStatus === "pending_review" || a.status === "pending") return "review";
-  return "draft";
+/// The real editorial statuses on `articles.status`, matching the web CMS.
+/// The iOS dashboard tabs map 1:1 to these — no `reviewStatus` mapping.
+const ADMIN_ARTICLE_STATUSES = ["draft", "scheduled", "published", "archived"] as const;
+type AdminArticleStatusValue = (typeof ADMIN_ARTICLE_STATUSES)[number];
+
+function normalizeAdminStatus(raw: string): AdminArticleStatusValue {
+  return (ADMIN_ARTICLE_STATUSES as readonly string[]).includes(raw)
+    ? (raw as AdminArticleStatusValue)
+    : "draft";
 }
 
-/// WHERE clause for a given client-side status bucket.
-function articleStatusWhere(status: string) {
-  if (status === "published") {
-    return eq(articles.status, "published");
-  }
-  if (status === "review") {
-    return or(eq(articles.reviewStatus, "pending_review"), eq(articles.status, "pending"));
-  }
-  // draft: genuine drafts that aren't awaiting review
-  return and(
-    eq(articles.status, "draft"),
-    or(isNull(articles.reviewStatus), ne(articles.reviewStatus, "pending_review")),
-  );
+/// WHERE clause for a given status tab — a direct column match.
+function articleStatusWhere(status: AdminArticleStatusValue) {
+  return eq(articles.status, status);
 }
 
 const adminArticleColumns = {
@@ -6514,7 +6509,7 @@ function mapAdminArticleRow(r: any) {
     title: r.title || "",
     excerpt: r.excerpt || "",
     body: r.content || "",
-    status: mapArticleClientStatus(r),
+    status: normalizeAdminStatus(r.status || "draft"),
     author: reporterName || authorName || "فريق سبق",
     views: r.views || 0,
     updatedAt: (updated instanceof Date ? updated : new Date(updated)).toISOString(),
@@ -6532,6 +6527,81 @@ async function fetchAdminArticleItem(id: string) {
     .where(eq(articles.id, id))
     .limit(1);
   return r ? mapAdminArticleRow(r) : null;
+}
+
+// Full editor payload — every field the iOS editor reads/writes, plus the
+// joined category + reporter display names.
+const adminArticleDetailColumns = {
+  id: articles.id,
+  title: articles.title,
+  subtitle: articles.subtitle,
+  excerpt: articles.excerpt,
+  content: articles.content,
+  slug: articles.slug,
+  status: articles.status,
+  articleType: articles.articleType,
+  newsType: articles.newsType,
+  categoryId: articles.categoryId,
+  reporterId: articles.reporterId,
+  isFeatured: articles.isFeatured,
+  hideFromHomepage: articles.hideFromHomepage,
+  aiSummary: articles.aiSummary,
+  imageUrl: articles.imageUrl,
+  thumbnailUrl: articles.thumbnailUrl,
+  seo: articles.seo,
+  scheduledAt: articles.scheduledAt,
+  publishedAt: articles.publishedAt,
+  updatedAt: articles.updatedAt,
+  views: articles.views,
+  categoryName: categories.nameAr,
+  reporterFirst: reporterUsers.firstName,
+  reporterLast: reporterUsers.lastName,
+};
+
+function mapAdminArticleDetail(r: any) {
+  const seo = (r.seo && typeof r.seo === "object") ? r.seo : {};
+  const reporterName = [r.reporterFirst, r.reporterLast].filter(Boolean).join(" ").trim();
+  const toISO = (v: any) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
+  return {
+    id: r.id,
+    title: r.title || "",
+    subtitle: r.subtitle || "",
+    excerpt: r.excerpt || "",
+    content: r.content || "",
+    slug: r.slug || "",
+    status: normalizeAdminStatus(r.status || "draft"),
+    articleType: r.articleType || "news",
+    newsType: r.newsType || "regular",
+    categoryId: r.categoryId || null,
+    categoryName: r.categoryName || null,
+    reporterId: r.reporterId || null,
+    reporterName: reporterName || null,
+    isFeatured: !!r.isFeatured,
+    hideFromHomepage: !!r.hideFromHomepage,
+    aiSummary: r.aiSummary || "",
+    imageUrl: r.imageUrl || "",
+    thumbnailUrl: r.thumbnailUrl || "",
+    seo: {
+      metaTitle: seo.metaTitle || "",
+      metaDescription: seo.metaDescription || "",
+      keywords: Array.isArray(seo.keywords) ? seo.keywords : [],
+    },
+    scheduledAt: toISO(r.scheduledAt),
+    publishedAt: toISO(r.publishedAt),
+    updatedAt: toISO(r.updatedAt) || new Date().toISOString(),
+    views: r.views || 0,
+  };
+}
+
+async function fetchAdminArticleDetail(id: string) {
+  const [r] = await db
+    .select(adminArticleDetailColumns)
+    .from(articles)
+    .leftJoin(categories, eq(articles.categoryId, categories.id))
+    .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+    .where(eq(articles.id, id))
+    .limit(1);
+  return r ? mapAdminArticleDetail(r) : null;
 }
 
 // GET /api/v1/admin/dashboard/stats — real KPI snapshot
@@ -6560,17 +6630,23 @@ router.get("/admin/dashboard/stats", async (req: Request, res: Response) => {
       .from(articles)
       .where(articleStatusWhere("draft"));
 
-    const [reviewRow] = await db
+    const [scheduledRow] = await db
       .select({ c: sql<number>`count(*)::int` })
       .from(articles)
-      .where(articleStatusWhere("review"));
+      .where(articleStatusWhere("scheduled"));
+
+    const [archivedRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere("archived"));
 
     res.json({
       success: true,
       publishedToday: publishedTodayRow?.c || 0,
       totalViews: totalViewsRow?.v || 0,
-      pendingDrafts: draftsRow?.c || 0,
-      underReview: reviewRow?.c || 0,
+      draft: draftsRow?.c || 0,
+      scheduled: scheduledRow?.c || 0,
+      archived: archivedRow?.c || 0,
     });
   } catch (error) {
     console.error("[Mobile API] GET /admin/dashboard/stats error:", error);
@@ -6578,7 +6654,9 @@ router.get("/admin/dashboard/stats", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/admin/articles?status=draft|review|published — real lists
+// GET /api/v1/admin/articles?status=draft|scheduled|published|archived&page=&limit=
+// Paginated list for one status tab. Returns total/totalPages so the client
+// can show a "load more" button.
 router.get("/admin/articles", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
@@ -6586,11 +6664,16 @@ router.get("/admin/articles", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
 
-    const statusParam = String(req.query.status || "draft");
-    const status = ["draft", "review", "published"].includes(statusParam) ? statusParam : "draft";
+    const status = normalizeAdminStatus(String(req.query.status || "draft"));
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-    const limit = Math.max(1, Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20));
+    const limit = Math.max(1, Math.min(50, parseInt(String(req.query.limit || "10"), 10) || 10));
     const offset = (page - 1) * limit;
+
+    const [countRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere(status));
+    const total = countRow?.c || 0;
 
     const rows = await db
       .select(adminArticleColumns)
@@ -6602,10 +6685,35 @@ router.get("/admin/articles", async (req: Request, res: Response) => {
       .limit(limit)
       .offset(offset);
 
-    res.json({ success: true, items: rows.map(mapAdminArticleRow) });
+    res.json({
+      success: true,
+      items: rows.map(mapAdminArticleRow),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
   } catch (error) {
     console.error("[Mobile API] GET /admin/articles error:", error);
     res.status(500).json({ success: false, message: "تعذر تحميل الأخبار" });
+  }
+});
+
+// GET /api/v1/admin/articles/:id — full article for the editor
+router.get("/admin/articles/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const article = await fetchAdminArticleDetail(req.params.id);
+    if (!article) {
+      return res.status(404).json({ success: false, message: "الخبر غير موجود" });
+    }
+    res.json({ success: true, article });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/articles/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحميل الخبر" });
   }
 });
 
@@ -6656,7 +6764,7 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
 
     const id = req.params.id;
     const [existing] = await db
-      .select({ id: articles.id, publishedAt: articles.publishedAt })
+      .select({ id: articles.id, publishedAt: articles.publishedAt, seo: articles.seo })
       .from(articles)
       .where(eq(articles.id, id))
       .limit(1);
@@ -6664,30 +6772,161 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "الخبر غير موجود" });
     }
 
-    const { title, excerpt, body, status } = req.body || {};
+    const b = req.body || {};
     const updates: Record<string, any> = { updatedAt: new Date() };
-    if (typeof title === "string") updates.title = title;
-    if (typeof excerpt === "string") updates.excerpt = excerpt;
-    if (typeof body === "string") updates.content = body;
 
-    if (status === "draft") {
-      updates.status = "draft";
-      updates.reviewStatus = null;
-    } else if (status === "review") {
-      updates.status = "draft";
-      updates.reviewStatus = "pending_review";
-    } else if (status === "published") {
-      updates.status = "published";
-      updates.reviewStatus = "approved";
-      if (!existing.publishedAt) updates.publishedAt = new Date();
+    // Text fields
+    if (typeof b.title === "string") updates.title = b.title;
+    if (typeof b.subtitle === "string") updates.subtitle = b.subtitle;
+    if (typeof b.excerpt === "string") updates.excerpt = b.excerpt;
+    // `content` is the article HTML; accept legacy `body` alias too.
+    if (typeof b.content === "string") updates.content = b.content;
+    else if (typeof b.body === "string") updates.content = b.body;
+    if (typeof b.slug === "string" && b.slug.trim()) updates.slug = b.slug.trim();
+    if (typeof b.aiSummary === "string") updates.aiSummary = b.aiSummary;
+    if (typeof b.imageUrl === "string") updates.imageUrl = b.imageUrl;
+
+    // Relations (allow explicit null to clear)
+    if (b.categoryId === null || typeof b.categoryId === "string") updates.categoryId = b.categoryId || null;
+    if (b.reporterId === null || typeof b.reporterId === "string") updates.reporterId = b.reporterId || null;
+
+    // Enums / flags
+    if (typeof b.articleType === "string") updates.articleType = b.articleType;
+    if (typeof b.newsType === "string") updates.newsType = b.newsType;
+    if (typeof b.isFeatured === "boolean") updates.isFeatured = b.isFeatured;
+    if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
+
+    // Scheduling
+    if (b.scheduledAt === null) {
+      updates.scheduledAt = null;
+    } else if (typeof b.scheduledAt === "string" && b.scheduledAt) {
+      const d = new Date(b.scheduledAt);
+      if (!isNaN(d.getTime())) updates.scheduledAt = d;
+    }
+
+    // SEO (merge over existing jsonb so partial updates don't wipe fields)
+    if (b.seo && typeof b.seo === "object") {
+      const prev = (existing.seo && typeof existing.seo === "object") ? (existing.seo as any) : {};
+      updates.seo = {
+        ...prev,
+        metaTitle: typeof b.seo.metaTitle === "string" ? b.seo.metaTitle : (prev.metaTitle ?? ""),
+        metaDescription: typeof b.seo.metaDescription === "string" ? b.seo.metaDescription : (prev.metaDescription ?? ""),
+        keywords: Array.isArray(b.seo.keywords) ? b.seo.keywords : (prev.keywords ?? []),
+      };
+    }
+
+    // Status (the four real values)
+    if (typeof b.status === "string" && (ADMIN_ARTICLE_STATUSES as readonly string[]).includes(b.status)) {
+      updates.status = b.status;
+      if (b.status === "published" && !existing.publishedAt) {
+        updates.publishedAt = new Date();
+      }
     }
 
     await db.update(articles).set(updates).where(eq(articles.id, id));
 
-    res.json({ success: true, item: await fetchAdminArticleItem(id) });
+    res.json({ success: true, item: await fetchAdminArticleItem(id), article: await fetchAdminArticleDetail(id) });
   } catch (error) {
     console.error("[Mobile API] PATCH /admin/articles/:id error:", error);
     res.status(500).json({ success: false, message: "تعذر حفظ التعديلات" });
+  }
+});
+
+// ---- Admin AI tools (thin wrappers over existing services) ----
+
+// POST /api/v1/admin/ai/summarize — الموجز الذكي
+router.post("/admin/ai/summarize", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    if (text.trim().length < 20) {
+      return res.status(400).json({ success: false, message: "النص قصير جداً للتلخيص" });
+    }
+    const result = await summarizeText(text, "ar");
+    res.json({ success: true, summary: result.summary });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/ai/summarize error:", error);
+    res.status(500).json({ success: false, message: "تعذّر توليد الموجز" });
+  }
+});
+
+// POST /api/v1/admin/seo/generate — توليد SEO + الكلمات المفتاحية
+router.post("/admin/seo/generate", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const b = req.body || {};
+    const title = typeof b.title === "string" ? b.title : "";
+    const content = typeof b.content === "string" ? b.content : "";
+    if (!title.trim() || content.trim().length < 20) {
+      return res.status(400).json({ success: false, message: "العنوان والمحتوى مطلوبان" });
+    }
+    const result = await generateSeoMetadata(
+      {
+        id: typeof b.id === "string" ? b.id : "draft",
+        title,
+        content,
+        excerpt: typeof b.excerpt === "string" ? b.excerpt : undefined,
+      },
+      "ar",
+    );
+    res.json({
+      success: true,
+      seo: {
+        metaTitle: result.content.metaTitle || "",
+        metaDescription: result.content.metaDescription || "",
+        keywords: Array.isArray(result.content.keywords) ? result.content.keywords : [],
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/seo/generate error:", error);
+    res.status(500).json({ success: false, message: "تعذّر توليد SEO" });
+  }
+});
+
+// POST /api/v1/admin/media/upload — رفع صورة (base64 → Cloudflare Images)
+router.post("/admin/media/upload", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const image = req.body?.image;
+    if (typeof image !== "string" || !image) {
+      return res.status(400).json({ success: false, message: "الصورة مطلوبة (base64)" });
+    }
+    const matches = image.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
+    if (!matches) {
+      return res.status(400).json({ success: false, message: "صيغة الصورة غير صحيحة" });
+    }
+    const ext = matches[1].toLowerCase() === "jpg" ? "jpeg" : matches[1].toLowerCase();
+    const buffer = Buffer.from(matches[2], "base64");
+    if (buffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: "حجم الصورة يجب أن يكون أقل من 10 ميجابايت" });
+    }
+    if (!cloudflareImagesService.isCloudflareConfigured()) {
+      return res.status(502).json({ success: false, message: "خدمة رفع الصورة غير مهيأة حالياً" });
+    }
+    const filename = `admin-article-${admin.userId}-${Date.now()}.${ext}`;
+    const cfResult = await cloudflareImagesService.uploadToCloudflare(
+      buffer,
+      filename,
+      { type: "article-image", userId: admin.userId },
+      `image/${ext}`,
+    );
+    if (!cfResult.success || !cfResult.deliveryUrl) {
+      console.error("[Mobile API] CF Images admin upload failed:", cfResult.error);
+      return res.status(502).json({ success: false, message: "تعذر رفع الصورة" });
+    }
+    res.json({ success: true, url: cfResult.deliveryUrl });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/media/upload error:", error);
+    res.status(500).json({ success: false, message: "حدث خطأ في رفع الصورة" });
   }
 });
 
