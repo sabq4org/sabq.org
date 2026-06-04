@@ -219,6 +219,51 @@ struct AdminArticleDetail: Decodable, Hashable {
     }
 }
 
+// MARK: - AI tool results
+
+/// Unified result from توليد ذكي شامل / تحرير وتوليد شامل. Only the present
+/// fields are applied to the editor (content is set only by edit-and-generate).
+struct AdminGenerationResult: Decodable {
+    var title: String?
+    var subtitle: String?
+    var summary: String?
+    var keywords: [String]?
+    var seoTitle: String?
+    var seoDescription: String?
+    var categoryId: String?
+    var categoryName: String?
+    var content: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case title, subtitle, summary, keywords, seo, categoryId, categoryName, content
+    }
+    private enum SEOKeys: String, CodingKey { case metaTitle, metaDescription }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try? c.decodeIfPresent(String.self, forKey: .title)
+        subtitle = try? c.decodeIfPresent(String.self, forKey: .subtitle)
+        summary = try? c.decodeIfPresent(String.self, forKey: .summary)
+        keywords = try? c.decodeIfPresent([String].self, forKey: .keywords)
+        categoryId = try? c.decodeIfPresent(String.self, forKey: .categoryId)
+        categoryName = try? c.decodeIfPresent(String.self, forKey: .categoryName)
+        content = try? c.decodeIfPresent(String.self, forKey: .content)
+        if let seo = try? c.nestedContainer(keyedBy: SEOKeys.self, forKey: .seo) {
+            seoTitle = try? seo.decodeIfPresent(String.self, forKey: .metaTitle)
+            seoDescription = try? seo.decodeIfPresent(String.self, forKey: .metaDescription)
+        }
+    }
+}
+
+/// One proofreading issue (original → suggestion).
+struct AdminProofIssue: Decodable, Identifiable, Hashable {
+    let original: String
+    let suggestion: String
+    var type: String?
+    var explanation: String?
+    var id: String { "\(original)→\(suggestion)" }
+}
+
 /// Body sent to PATCH /api/v1/admin/articles/:id. Nil optionals are omitted
 /// by JSONEncoder, so the backend treats them as "no change".
 struct AdminArticleEditPayload: Encodable {

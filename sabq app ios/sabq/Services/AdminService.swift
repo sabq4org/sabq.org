@@ -32,6 +32,14 @@ protocol AdminServicing: Sendable {
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO
     /// رفع صورة — base64 data URI → Cloudflare Images, returns the URL.
     func uploadImage(dataURI: String) async throws -> String
+    /// توليد ذكي شامل — fills fields, keeps content.
+    func generateAll(content: String) async throws -> AdminGenerationResult
+    /// تحرير وتوليد شامل — rewrites content + fills fields.
+    func editAndGenerate(content: String) async throws -> AdminGenerationResult
+    /// تدقيق لغوي — returns spelling issues.
+    func proofread(content: String) async throws -> [AdminProofIssue]
+    /// توليد الصور — AI image (nano-banana) → returns hosted URL.
+    func generateImage(prompt: String, aspectRatio: String, imageSize: String) async throws -> String
 
     // Editorial workflow
     /// أرشفة (حذف ناعم) بسبب — يُشعر الكاتب.
@@ -73,10 +81,14 @@ private struct AdminArticleDetailResponse: Decodable {
 private struct AdminSummaryResponse: Decodable { let summary: String? }
 private struct AdminSEOResponse: Decodable { let seo: AdminSEO? }
 private struct AdminUploadResponse: Decodable { let url: String? }
+private struct AdminGenerationResponse: Decodable { let result: AdminGenerationResult? }
+private struct AdminProofreadResponse: Decodable { let issues: [AdminProofIssue]? }
+private struct AdminImageGenResponse: Decodable { let imageUrl: String? }
 
-private struct AdminSummaryBody: Encodable { let text: String }
+private struct AdminContentBody: Encodable { let content: String }
 private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
 private struct AdminUploadBody: Encodable { let image: String }
+private struct AdminImageGenBody: Encodable { let prompt: String; let aspectRatio: String; let imageSize: String }
 private struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
 private struct AdminDeletionBody: Encodable { let deletionReason: String }
 
@@ -138,10 +150,53 @@ struct LiveAdminService: AdminServicing {
         let response = try await APIClient.shared.post(
             AdminSummaryResponse.self,
             path: "/admin/ai/summarize",
-            body: AdminSummaryBody(text: text),
+            body: AdminContentBody(content: text),
             timeout: 60
         )
         return response.summary ?? ""
+    }
+
+    func generateAll(content: String) async throws -> AdminGenerationResult {
+        let response = try await APIClient.shared.post(
+            AdminGenerationResponse.self,
+            path: "/admin/ai/generate-all",
+            body: AdminContentBody(content: content),
+            timeout: 90
+        )
+        guard let result = response.result else { throw AdminServiceError.missingItem }
+        return result
+    }
+
+    func editAndGenerate(content: String) async throws -> AdminGenerationResult {
+        let response = try await APIClient.shared.post(
+            AdminGenerationResponse.self,
+            path: "/admin/ai/edit-and-generate",
+            body: AdminContentBody(content: content),
+            timeout: 120
+        )
+        guard let result = response.result else { throw AdminServiceError.missingItem }
+        return result
+    }
+
+    func proofread(content: String) async throws -> [AdminProofIssue] {
+        let response = try await APIClient.shared.post(
+            AdminProofreadResponse.self,
+            path: "/admin/ai/proofread",
+            body: AdminContentBody(content: content),
+            timeout: 90
+        )
+        return response.issues ?? []
+    }
+
+    func generateImage(prompt: String, aspectRatio: String, imageSize: String) async throws -> String {
+        let response = try await APIClient.shared.post(
+            AdminImageGenResponse.self,
+            path: "/admin/ai/image-generate",
+            body: AdminImageGenBody(prompt: prompt, aspectRatio: aspectRatio, imageSize: imageSize),
+            timeout: 180
+        )
+        guard let url = response.imageUrl, !url.isEmpty else { throw AdminServiceError.missingItem }
+        return url
     }
 
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO {

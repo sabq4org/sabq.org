@@ -41,6 +41,14 @@ final class SabqHTMLEditorController: ObservableObject {
         exec("insertImage", value: url)
     }
 
+    /// Replace the editor's content (used after AI rewrite / proofread apply).
+    func setHTML(_ html: String) {
+        let json = (try? JSONSerialization.data(withJSONObject: [html]))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+        // json is a 1-element JSON array; take [0] to get a safely-escaped string literal.
+        webView?.evaluateJavaScript("document.getElementById('sabq-editor').innerHTML = (\(json))[0];", completionHandler: nil)
+    }
+
     /// Pull the latest HTML out of the editable body.
     func currentHTML() async -> String {
         await withCheckedContinuation { continuation in

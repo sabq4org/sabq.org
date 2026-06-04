@@ -51,6 +51,10 @@ import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
 import { summarizeText } from "../ai-content-tools";
 import { generateSeoMetadata } from "../seo-generator";
+import { summarizeArticle, generateSmartContent } from "../openai";
+import { analyzeAndEditWithSabqStyle } from "../ai/contentAnalyzer";
+import { classifyArticle } from "../ai-classifier";
+import { generateAndUploadImage } from "../services/nanoBananaService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import oauthMobileRouter from "./v1/oauthMobile";
 
@@ -6863,18 +6867,22 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
 // ---- Admin AI tools (thin wrappers over existing services) ----
 
 // POST /api/v1/admin/ai/summarize — الموجز الذكي
+// Uses the SAME OpenAI service the web summary button uses (summarizeArticle),
+// not the Anthropic summarizeText — the Anthropic key may be absent on Railway.
 router.post("/admin/ai/summarize", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
     if (!admin) {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
-    const text = typeof req.body?.text === "string" ? req.body.text : "";
-    if (text.trim().length < 20) {
+    const content = typeof req.body?.content === "string"
+      ? req.body.content
+      : (typeof req.body?.text === "string" ? req.body.text : "");
+    if (content.trim().length < 20) {
       return res.status(400).json({ success: false, message: "النص قصير جداً للتلخيص" });
     }
-    const result = await summarizeText(text, "ar");
-    res.json({ success: true, summary: result.summary });
+    const summary = await summarizeArticle(content);
+    res.json({ success: true, summary });
   } catch (error) {
     console.error("[Mobile API] POST /admin/ai/summarize error:", error);
     res.status(500).json({ success: false, message: "تعذّر توليد الموجز" });
@@ -6955,6 +6963,198 @@ router.post("/admin/media/upload", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] POST /admin/media/upload error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في رفع الصورة" });
+  }
+});
+
+// Categories for AI classification + name→id resolution.
+async function fetchCategoriesForAI() {
+  return await db
+    .select({ id: categories.id, slug: categories.slug, nameAr: categories.nameAr, nameEn: categories.nameEn })
+    .from(categories);
+}
+
+function resolveCategoryIdByName(cats: Array<{ id: string; nameAr: string | null; nameEn: string | null }>, name?: string | null): string | null {
+  if (!name) return null;
+  const n = name.trim();
+  if (!n) return null;
+  let m = cats.find(c => c.nameAr === n || c.nameEn === n);
+  if (!m) m = cats.find(c => (c.nameAr && (n.includes(c.nameAr) || c.nameAr.includes(n))) || (c.nameEn && c.nameEn.toLowerCase() === n.toLowerCase()));
+  return m?.id ?? null;
+}
+
+// POST /api/v1/admin/ai/generate-all — توليد ذكي شامل (يملأ الحقول، لا يغيّر النص)
+router.post("/admin/ai/generate-all", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    if (content.trim().length < 100) {
+      return res.status(400).json({ success: false, message: "يجب كتابة المحتوى أولاً (100 حرف على الأقل)" });
+    }
+    const sc = await generateSmartContent(content, "ar");
+    const cats = await fetchCategoriesForAI();
+    let categoryId: string | null = null;
+    let categoryName: string | null = sc.suggestedCategory ?? null;
+    try {
+      const cls = await classifyArticle(sc.mainTitle || "خبر", content, cats as any);
+      categoryId = cls.primaryCategory?.categoryId ?? null;
+      categoryName = cls.primaryCategory?.categoryName ?? categoryName;
+    } catch (e) {
+      console.warn("[Mobile API] generate-all classify failed:", (e as any)?.message);
+      categoryId = resolveCategoryIdByName(cats, categoryName);
+    }
+    res.json({
+      success: true,
+      result: {
+        title: sc.mainTitle || "",
+        subtitle: sc.subTitle || "",
+        summary: sc.smartSummary || "",
+        keywords: Array.isArray(sc.keywords) ? sc.keywords : [],
+        seo: { metaTitle: sc.seo?.metaTitle || "", metaDescription: sc.seo?.metaDescription || "" },
+        categoryId,
+        categoryName,
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/ai/generate-all error:", error);
+    res.status(500).json({ success: false, message: "تعذّر التوليد الذكي الشامل" });
+  }
+});
+
+// POST /api/v1/admin/ai/edit-and-generate — تحرير وتوليد شامل (يعيد صياغة النص + الحقول)
+router.post("/admin/ai/edit-and-generate", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    if (content.trim().length < 100) {
+      return res.status(400).json({ success: false, message: "يجب كتابة المحتوى أولاً (100 حرف على الأقل)" });
+    }
+    const cats = await fetchCategoriesForAI();
+    const [edited, sc] = await Promise.all([
+      analyzeAndEditWithSabqStyle(content, "ar", cats.map(c => ({ nameAr: c.nameAr || "", nameEn: c.nameEn || "" }))),
+      generateSmartContent(content, "ar"),
+    ]);
+    const categoryId = resolveCategoryIdByName(cats, edited.detectedCategory);
+    res.json({
+      success: true,
+      result: {
+        content: edited.optimized?.content || content,
+        title: sc.mainTitle || edited.optimized?.title || "",
+        subtitle: sc.subTitle || "",
+        summary: sc.smartSummary || "",
+        keywords: (sc.keywords && sc.keywords.length ? sc.keywords : edited.optimized?.seoKeywords) || [],
+        seo: { metaTitle: sc.seo?.metaTitle || "", metaDescription: sc.seo?.metaDescription || "" },
+        categoryId,
+        categoryName: edited.detectedCategory || null,
+      },
+    });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/ai/edit-and-generate error:", error);
+    res.status(500).json({ success: false, message: "تعذّر التحرير والتوليد الشامل" });
+  }
+});
+
+// POST /api/v1/admin/ai/proofread — تدقيق لغوي (مطابق لمنطق الويب /api/ai/proofread)
+router.post("/admin/ai/proofread", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    const cleanText = content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    if (cleanText.length < 10) {
+      return res.json({ success: true, issues: [] });
+    }
+    const truncated = cleanText.length > 8000 ? cleanText.substring(0, 8000) : cleanText;
+
+    const { default: OpenAI } = await import("openai");
+    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const { withRetry } = await import("../openai");
+
+    const response = await withRetry(
+      () => openaiClient.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [
+          {
+            role: "system",
+            content: `أنت مدقق إملائي صارم للنصوص العربية الصحفية. مهمتك الوحيدة هي اكتشاف الأخطاء الإملائية الحقيقية فقط (حروف خاطئة، همزات، التاء المربوطة/المفتوحة، الألف المقصورة/الياء). ارفض رفضاً قاطعاً علامات التشكيل والترقيم والمسافات والنحو والأسلوب وأسماء الأعلام. إن كان الفرق مجرد تشكيل أو ترقيم أو مسافة فلا تُرجِعه. أعد JSON بهذا الشكل: { "issues": [ { "original": "الكلمة الخاطئة بدون تشكيل", "suggestion": "الكلمة الصحيحة بدون تشكيل", "type": "إملائي", "explanation": "سبب موجز" } ] }. إن لم تجد خطأً حقيقياً أعد { "issues": [] }`,
+          },
+          { role: "user", content: `دقّق هذا النص إملائياً فقط دون تعديل المعنى:\n\n${truncated}` },
+        ],
+        response_format: { type: "json_object" },
+        max_completion_tokens: 2048,
+      }),
+      3,
+      "AdminProofread",
+    );
+
+    const raw = response.choices?.[0]?.message?.content || '{"issues":[]}';
+    let parsed: { issues: Array<{ original: string; suggestion: string; type?: string; explanation?: string }> } = { issues: [] };
+    try { parsed = JSON.parse(raw); } catch { parsed = { issues: [] }; }
+
+    const normalize = (t: string) =>
+      t.replace(/[ً-ٰٟـ]/g, "")
+        .replace(/[​-‏‪-‮﻿]/g, "")
+        .replace(/[.,،;؛:!؟?\(\)\[\]"'«»“”]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const seen = new Set<string>();
+    const issues = (Array.isArray(parsed.issues) ? parsed.issues : [])
+      .filter(i => i && typeof i.original === "string" && typeof i.suggestion === "string")
+      .filter(i => i.original.trim() !== i.suggestion.trim())
+      .filter(i => normalize(i.original) !== normalize(i.suggestion))
+      .filter(i => normalize(i.original).length >= 2)
+      .filter(i => cleanText.includes(i.original))
+      .filter(i => {
+        const key = `${i.original}→${i.suggestion}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 50);
+
+    res.json({ success: true, issues });
+  } catch (error: any) {
+    console.error("[Mobile API] POST /admin/ai/proofread error:", error?.message || error);
+    const isRateLimit = error?.status === 429 || error?.message?.includes("429");
+    res.status(isRateLimit ? 429 : 500).json({ success: false, message: isRateLimit ? "تم تجاوز حد الطلبات، حاول بعد قليل" : "تعذّر التدقيق اللغوي" });
+  }
+});
+
+// POST /api/v1/admin/ai/image-generate — توليد الصور (nano-banana / Gemini → Cloudflare)
+router.post("/admin/ai/image-generate", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const prompt = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+    if (!prompt) {
+      return res.status(400).json({ success: false, message: "وصف الصورة مطلوب" });
+    }
+    const allowedRatios = ["1:1", "16:9", "4:3", "9:16", "21:9", "3:4"];
+    const allowedSizes = ["1K", "2K", "4K"];
+    const aspectRatio = allowedRatios.includes(req.body?.aspectRatio) ? req.body.aspectRatio : "16:9";
+    const imageSize = allowedSizes.includes(req.body?.imageSize) ? req.body.imageSize : "2K";
+
+    const result = await generateAndUploadImage(
+      { prompt, aspectRatio, imageSize, enableThinking: true },
+      admin.userId,
+    );
+    if (!result.success || !result.imageUrl) {
+      return res.status(502).json({ success: false, message: result.error || "تعذّر توليد الصورة (تحقق من تهيئة Gemini)" });
+    }
+    res.json({ success: true, imageUrl: result.imageUrl });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/ai/image-generate error:", error);
+    res.status(500).json({ success: false, message: "تعذّر توليد الصورة" });
   }
 });
 

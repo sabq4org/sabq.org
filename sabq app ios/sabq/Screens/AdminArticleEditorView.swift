@@ -32,6 +32,9 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var seoTitle = ""
     @Published var seoDescription = ""
     @Published var keywords: [String] = []
+    @Published var articleType = "news"
+    /// Live HTML length from the editor — gates the AI buttons (web parity).
+    @Published var liveHTMLLength = 0
 
     @Published var categories: [APICategory] = []
 
@@ -39,6 +42,13 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var isSummarizing = false
     @Published var isGeneratingSEO = false
     @Published var isUploadingImage = false
+    @Published var isGeneratingAll = false
+    @Published var isEditGenerating = false
+    @Published var isProofreading = false
+    @Published var isGeneratingImage = false
+
+    /// Opinion articles hide subtitle + news-type (mirrors the web).
+    var isOpinion: Bool { articleType == "opinion" }
 
     let articleId: String
     private let service: AdminServicing
@@ -58,8 +68,10 @@ final class AdminEditorViewModel: ObservableObject {
             subtitle = d.subtitle
             excerpt = d.excerpt
             contentHTML = d.content
+            liveHTMLLength = d.content.count
             status = d.status
             newsType = d.newsType
+            articleType = d.articleType
             isFeatured = d.isFeatured
             hideFromHomepage = d.hideFromHomepage
             aiSummary = d.aiSummary
@@ -85,10 +97,14 @@ final class AdminEditorViewModel: ObservableObject {
         let scheduledISO: String? = (status == .scheduled && hasSchedule)
             ? SabqFormatters.iso8601Basic.string(from: scheduledAt)
             : nil
+        // The excerpt field was removed from the UI — the "smart summary" now
+        // doubles as the excerpt (matches the web), falling back to the
+        // original excerpt when no summary is set.
+        let effectiveExcerpt = aiSummary.isEmpty ? excerpt : aiSummary
         let payload = AdminArticleEditPayload(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             subtitle: subtitle,
-            excerpt: excerpt,
+            excerpt: effectiveExcerpt,
             content: html,
             status: status.rawValue,
             newsType: newsType,
@@ -145,6 +161,66 @@ final class AdminEditorViewModel: ObservableObject {
         }
     }
 
+    // MARK: Comprehensive AI
+
+    /// توليد ذكي شامل — fills fields, keeps the content.
+    func runGenerateAll(content: String) async {
+        isGeneratingAll = true
+        defer { isGeneratingAll = false }
+        do { apply(try await service.generateAll(content: content)) }
+        catch { self.error = "تعذّر التوليد الذكي الشامل" }
+    }
+
+    /// تحرير وتوليد شامل — fills fields AND returns rewritten content (for the
+    /// view to load into the editor), or nil on failure.
+    func runEditAndGenerate(content: String) async -> String? {
+        isEditGenerating = true
+        defer { isEditGenerating = false }
+        do {
+            let r = try await service.editAndGenerate(content: content)
+            apply(r)
+            return r.content
+        } catch {
+            self.error = "تعذّر التحرير والتوليد الشامل"
+            return nil
+        }
+    }
+
+    /// تدقيق لغوي — returns the spelling issues for the review sheet.
+    func runProofread(content: String) async -> [AdminProofIssue] {
+        isProofreading = true
+        defer { isProofreading = false }
+        do { return try await service.proofread(content: content) }
+        catch { self.error = "تعذّر التدقيق اللغوي"; return [] }
+    }
+
+    /// توليد الصور — sets the hero image to the generated URL.
+    func runImageGenerate(prompt: String, aspectRatio: String, imageSize: String) async -> Bool {
+        isGeneratingImage = true
+        defer { isGeneratingImage = false }
+        do {
+            imageUrl = try await service.generateImage(prompt: prompt, aspectRatio: aspectRatio, imageSize: imageSize)
+            return true
+        } catch {
+            self.error = "تعذّر توليد الصورة (تحقق من تهيئة الخدمة)"
+            return false
+        }
+    }
+
+    /// Apply the non-content fields from a generation result.
+    private func apply(_ r: AdminGenerationResult) {
+        if let t = r.title, !t.isEmpty { title = t }
+        if let s = r.subtitle, !s.isEmpty { subtitle = s }
+        if let sum = r.summary, !sum.isEmpty { aiSummary = sum }
+        if let kw = r.keywords, !kw.isEmpty { keywords = kw }
+        if let st = r.seoTitle, !st.isEmpty { seoTitle = st }
+        if let sd = r.seoDescription, !sd.isEmpty { seoDescription = sd }
+        if let cid = r.categoryId, !cid.isEmpty {
+            categoryId = cid
+            categoryName = r.categoryName
+        }
+    }
+
     func addKeyword(_ raw: String) {
         let k = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !k.isEmpty, !keywords.contains(k) else { return }
@@ -177,6 +253,9 @@ struct AdminArticleEditorView: View {
     @State private var showLinkPrompt = false
     @State private var linkURL = ""
     @State private var imagePickerItem: PhotosPickerItem?
+    @State private var proofIssues: [AdminProofIssue] = []
+    @State private var showProofSheet = false
+    @State private var showImageGenSheet = false
 
     init(articleId: String, title: String, onSaved: @escaping () -> Void) {
         self.articleId = articleId
@@ -198,10 +277,18 @@ struct AdminArticleEditorView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle("تعديل الخبر")
+        .navigationTitle(vm.isOpinion ? "تعديل مقال رأي" : "تعديل خبر")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { saveButton }
+        }
+        .sheet(isPresented: $showProofSheet) {
+            AdminProofIssuesSheet(issues: proofIssues) { applyProofreadAll() }
+        }
+        .sheet(isPresented: $showImageGenSheet) {
+            AdminAIImageSheet(isGenerating: vm.isGeneratingImage) { prompt, ratio, size in
+                await vm.runImageGenerate(prompt: prompt, aspectRatio: ratio, imageSize: size)
+            }
         }
         .task { await vm.load() }
         .sabqScreen("AdminArticleEditor")
@@ -212,12 +299,14 @@ struct AdminArticleEditorView: View {
     private var form: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
+                if vm.isOpinion { opinionPill }
                 basicSection
+                aiToolsSection
                 contentSection
+                summarySection
                 categorySection
                 imageSection
                 seoSection
-                summarySection
                 publishSection
             }
             .padding(.horizontal, 16)
@@ -229,28 +318,84 @@ struct AdminArticleEditorView: View {
 
     // MARK: Sections
 
+    private var opinionPill: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "text.quote").font(.system(size: 12, weight: .bold))
+            Text("مقال رأي").font(.system(size: 13, weight: .heavy))
+        }
+        .foregroundStyle(SabqTheme.primaryEnd)
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.12)))
+    }
+
     private var basicSection: some View {
         sectionCard("الأساسي", icon: "textformat") {
             field("العنوان") {
                 TextField("عنوان الخبر", text: $vm.title, axis: .vertical)
                     .font(.system(size: 16, weight: .bold))
             }
-            field("العنوان الفرعي") {
-                TextField("اختياري", text: $vm.subtitle, axis: .vertical)
-                    .font(.system(size: 14))
-            }
-            field("المقتطف") {
-                TextField("مقتطف موجز", text: $vm.excerpt, axis: .vertical)
-                    .font(.system(size: 14))
-                    .lineLimit(2...5)
+            if !vm.isOpinion {
+                field("العنوان الفرعي") {
+                    TextField("اختياري", text: $vm.subtitle, axis: .vertical)
+                        .font(.system(size: 14))
+                }
             }
         }
+    }
+
+    // MARK: AI tools toolbar (توليد ذكي شامل / تدقيق لغوي / تحرير وتوليد شامل)
+
+    private var aiToolsSection: some View {
+        sectionCard("أدوات الذكاء", icon: "sparkles") {
+            aiToolButton(
+                title: "توليد ذكي شامل", systemImage: "wand.and.stars",
+                loading: vm.isGeneratingAll, minLength: 100
+            ) {
+                let html = await htmlController.currentHTML()
+                await vm.runGenerateAll(content: html.isEmpty ? vm.contentHTML : html)
+            }
+            aiToolButton(
+                title: "تحرير وتوليد شامل", systemImage: "wand.and.rays",
+                loading: vm.isEditGenerating, minLength: 100
+            ) {
+                let html = await htmlController.currentHTML()
+                if let newContent = await vm.runEditAndGenerate(content: html.isEmpty ? vm.contentHTML : html) {
+                    vm.contentHTML = newContent
+                    htmlController.setHTML(newContent)
+                    vm.liveHTMLLength = newContent.count
+                }
+            }
+            aiToolButton(
+                title: "تدقيق لغوي", systemImage: "text.magnifyingglass",
+                loading: vm.isProofreading, minLength: 20
+            ) {
+                let html = await htmlController.currentHTML()
+                let issues = await vm.runProofread(content: html.isEmpty ? vm.contentHTML : html)
+                proofIssues = issues
+                showProofSheet = true
+            }
+            Text("اكتب المحتوى أولاً لتفعيل التوليد")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+                .opacity(vm.liveHTMLLength < 100 ? 1 : 0)
+        }
+    }
+
+    private func aiToolButton(title: String, systemImage: String, loading: Bool, minLength: Int, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            toolLabel(loading ? "جارٍ التنفيذ…" : title, systemImage: systemImage, loading: loading)
+        }
+        .buttonStyle(.plain)
+        .disabled(loading || vm.liveHTMLLength < minLength)
+        .opacity(vm.liveHTMLLength < minLength ? 0.5 : 1)
     }
 
     private var contentSection: some View {
         sectionCard("المحتوى", icon: "doc.richtext") {
             SabqEditorToolbar(controller: htmlController) { showLinkPrompt = true }
-            SabqHTMLEditor(initialHTML: vm.contentHTML, controller: htmlController)
+            SabqHTMLEditor(initialHTML: vm.contentHTML, controller: htmlController, onChange: { vm.liveHTMLLength = $0.count })
                 .frame(height: 340)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
@@ -307,6 +452,12 @@ struct AdminArticleEditorView: View {
                 .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
+            Button {
+                showImageGenSheet = true
+            } label: {
+                toolLabel("توليد صورة بالذكاء", systemImage: "wand.and.stars", loading: false)
+            }
+            .buttonStyle(.plain)
             PhotosPicker(selection: $imagePickerItem, matching: .images) {
                 toolLabel(vm.isUploadingImage ? "جارٍ الرفع…" : "رفع صورة",
                           systemImage: "arrow.up.circle.fill",
@@ -430,13 +581,15 @@ struct AdminArticleEditorView: View {
                         .environment(\.locale, Locale(identifier: "ar"))
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                fieldLabel("نوع الخبر")
-                Picker("", selection: $vm.newsType) {
-                    Text("عادي").tag("regular")
-                    Text("عاجل").tag("breaking")
+            if !vm.isOpinion {
+                VStack(alignment: .leading, spacing: 8) {
+                    fieldLabel("نوع الخبر")
+                    Picker("", selection: $vm.newsType) {
+                        Text("عادي").tag("regular")
+                        Text("عاجل").tag("breaking")
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
             }
             Toggle("خبر مميّز", isOn: $vm.isFeatured)
                 .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.gold)
@@ -531,6 +684,21 @@ struct AdminArticleEditorView: View {
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Apply every proofreading suggestion to the live HTML, then reload it.
+    private func applyProofreadAll() {
+        Task {
+            var html = await htmlController.currentHTML()
+            if html.isEmpty { html = vm.contentHTML }
+            for issue in proofIssues where !issue.original.isEmpty {
+                html = html.replacingOccurrences(of: issue.original, with: issue.suggestion)
+            }
+            vm.contentHTML = html
+            htmlController.setHTML(html)
+            vm.liveHTMLLength = html.count
+            showProofSheet = false
+        }
     }
 
     /// Downscale to ≤2000px longest edge + JPEG 0.8 before upload.
@@ -652,6 +820,157 @@ struct AdminFlowLayout: Layout {
             sub.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y), proposal: ProposedViewSize(size))
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+// MARK: - Proofread issues sheet
+
+/// Lists the spelling issues from تدقيق لغوي with an "apply all" action.
+struct AdminProofIssuesSheet: View {
+    let issues: [AdminProofIssue]
+    let onApplyAll: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if issues.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 42, weight: .light))
+                            .foregroundStyle(SabqTheme.teal)
+                        Text("لا توجد أخطاء إملائية")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(SabqTheme.ink)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 10) {
+                            ForEach(issues) { issue in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Text(issue.original)
+                                            .strikethrough()
+                                            .foregroundStyle(SabqTheme.coral)
+                                        Image(systemName: "arrow.left")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(SabqTheme.secondaryInk)
+                                        Text(issue.suggestion)
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(SabqTheme.teal)
+                                    }
+                                    .font(.system(size: 14))
+                                    if let ex = issue.explanation, !ex.isEmpty {
+                                        Text(ex)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(SabqTheme.secondaryInk)
+                                    }
+                                }
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+                            }
+                        }
+                        .padding(16)
+                    }
+                }
+            }
+            .background(SabqTheme.background)
+            .navigationTitle(issues.isEmpty ? "تدقيق لغوي" : "تدقيق لغوي (\(issues.count))")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("إغلاق") { dismiss() } }
+                if !issues.isEmpty {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("تطبيق الكل") { onApplyAll() }.fontWeight(.bold)
+                    }
+                }
+            }
+            .sabqRTL()
+        }
+    }
+}
+
+// MARK: - AI image generation sheet
+
+/// Prompt + aspect/size for توليد الصور بالذكاء.
+struct AdminAIImageSheet: View {
+    let isGenerating: Bool
+    /// Returns true on success (sheet dismisses).
+    let onGenerate: (String, String, String) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var prompt = ""
+    @State private var ratio = "16:9"
+    @State private var size = "2K"
+
+    private let ratios = ["16:9", "1:1", "4:3", "9:16", "3:4"]
+    private let sizes = ["1K", "2K", "4K"]
+    private var trimmed: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("وصف الصورة")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                        TextEditor(text: $prompt)
+                            .font(.system(size: 15))
+                            .foregroundStyle(SabqTheme.ink)
+                            .frame(minHeight: 120)
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                    }
+
+                    pickerRow(title: "النسبة", options: ratios, selection: $ratio)
+                    pickerRow(title: "الحجم", options: sizes, selection: $size)
+
+                    Button {
+                        Task { if await onGenerate(trimmed, ratio, size) { dismiss() } }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isGenerating { ProgressView().controlSize(.small) }
+                            Text(isGenerating ? "جارٍ التوليد…" : "توليد الصورة")
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous).fill(SabqTheme.brandGradient))
+                        .opacity(trimmed.isEmpty ? 0.5 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(trimmed.isEmpty || isGenerating)
+                }
+                .padding(16)
+            }
+            .background(SabqTheme.background)
+            .navigationTitle("توليد صورة بالذكاء")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } }
+            }
+            .sabqRTL()
+        }
+    }
+
+    private func pickerRow(title: String, options: [String], selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(SabqTheme.secondaryInk)
+            Picker(title, selection: selection) {
+                ForEach(options, id: \.self) { Text($0).tag($0) }
+            }
+            .pickerStyle(.segmented)
         }
     }
 }
