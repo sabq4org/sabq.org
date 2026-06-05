@@ -1191,7 +1191,15 @@ if (!(globalThis as any).__sabqServer) {
         const filePath = path.join(distPath, safePath);
         
         if (!fs.existsSync(filePath)) {
-          if (urlPath !== '/service-worker.js') {
+          // Skip noisy warnings for paths we intentionally never serve as files.
+          // /sitemap*.xml: sitemaps are dynamic Express routes; only the numbered
+          // buckets exist (/sitemap-articles-1.xml ...). robots.txt + the sitemap
+          // index reference ONLY those, so bare /sitemap-articles.xml or
+          // /sitemap-index.xml are never linked — a 404 is correct, and the log is
+          // just noise from bots/stale URLs. Indexing is unaffected.
+          const isNoisy404 =
+            urlPath === '/service-worker.js' || /^\/sitemap[\w-]*\.xml$/i.test(urlPath);
+          if (!isNoisy404) {
             console.warn(`[Static 404] Missing asset: ${urlPath}`);
           }
           return res.status(404).type('text/plain').send('Not found');

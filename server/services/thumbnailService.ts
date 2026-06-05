@@ -10,6 +10,7 @@ import { articles } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import fetch from 'node-fetch';
 import path from 'path';
+import { cloudflareImagesService } from './cloudflareImagesService';
 
 interface FocalPoint {
   x: number;
@@ -313,32 +314,49 @@ async function uploadThumbnailToStorage(
   buffer: Buffer,
   filename: string
 ): Promise<string> {
-  // Import the centralized bucket config helper
+  // Determine content type from filename
+  const ext = filename.split('.').pop()?.toLowerCase() || 'jpeg';
+  const contentType = ext === 'webp' ? 'image/webp' : ext === 'png' ? 'image/png' : 'image/jpeg';
+
+  // Primary: Cloudflare Images (canonical image backend in production).
+  // The GCS path below relies on Replit's credential sidecar (127.0.0.1:1106),
+  // which doesn't exist on Railway — so prefer CF Images whenever it's configured.
+  if (cloudflareImagesService.isCloudflareConfigured()) {
+    const res = await cloudflareImagesService.uploadToCloudflare(
+      buffer,
+      filename,
+      { source: 'thumbnail' },
+      contentType
+    );
+    if (res.success && res.deliveryUrl) {
+      console.log(`[Thumbnail Service] Thumbnail uploaded to Cloudflare Images: ${res.deliveryUrl}`);
+      return res.deliveryUrl;
+    }
+    console.warn(`[Thumbnail Service] Cloudflare upload failed (${res.error}); falling back to object storage`);
+  }
+
+  // Fallback: GCS / object storage (Replit + local dev). Uses the centralized bucket config.
   const { objectStorageClient, getBucketConfig } = await import('../objectStorage');
-  
+
   // Get the correct bucket configuration (prioritizes DEFAULT_OBJECT_STORAGE_BUCKET_ID)
   const { bucketName, publicPrefix } = getBucketConfig();
-  
+
   console.log(`[Thumbnail Service] Using bucket: ${bucketName}, prefix: ${publicPrefix}`);
-  
+
   const bucket = objectStorageClient.bucket(bucketName);
   // Store in prefix/thumbnails/filename (e.g., "public/thumbnails/thumbnail_123.jpeg")
   const thumbnailPath = `${publicPrefix}/thumbnails/${filename}`;
   const file = bucket.file(thumbnailPath);
-  
-  // Determine content type from filename
-  const ext = filename.split('.').pop()?.toLowerCase() || 'jpeg';
-  const contentType = ext === 'webp' ? 'image/webp' : ext === 'png' ? 'image/png' : 'image/jpeg';
-  
+
   await file.save(buffer, {
     metadata: {
       contentType,
       cacheControl: 'public, max-age=31536000, immutable'
     }
   });
-  
+
   console.log(`[Thumbnail Service] Thumbnail uploaded to GCS: ${thumbnailPath}`);
-  
+
   // Return public-objects URL matching the path structure
   // The /public-objects endpoint searches under PUBLIC_OBJECT_SEARCH_PATHS
   return `/public-objects/thumbnails/${filename}`;

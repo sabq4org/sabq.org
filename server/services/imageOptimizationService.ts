@@ -361,7 +361,20 @@ export async function generateLiteOptimizedImage(
 ): Promise<string | null> {
   try {
     if (!imageUrl) return null;
-    
+
+    // Cloudflare Images is the canonical image store and the source is already an
+    // imagedelivery.net URL. Produce the "lite" rendition as a flexible-variant URL
+    // (1080px, WebP, q70) — no download/process/upload needed. This also avoids the
+    // object-storage path that throws "PUBLIC_OBJECT_SEARCH_PATHS not set" on Railway.
+    // Requires CF Images "Flexible variants" to be enabled (it is, in production).
+    if (/imagedelivery\.net\//.test(imageUrl)) {
+      const liteUrl = imageUrl
+        .split('?')[0]
+        .replace(/\/[^/]+$/, '/w=1080,quality=70,format=webp,fit=cover');
+      console.log(`[Lite Image] CF flexible-variant: ${liteUrl}`);
+      return liteUrl;
+    }
+
     // Normalize path - handle both /public-objects/ URLs and direct paths
     let imagePath = imageUrl;
     if (imageUrl.includes('/public-objects/')) {
