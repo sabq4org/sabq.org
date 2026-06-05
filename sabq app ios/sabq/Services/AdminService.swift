@@ -14,8 +14,8 @@ struct AdminNewsPage {
 }
 
 protocol AdminServicing: Sendable {
-    /// KPI snapshot for the metrics strip.
-    func fetchOverview() async throws -> AdminOverview
+    /// KPI groups for the overview cards (mirrors the web /dashboard).
+    func fetchFullStats() async throws -> AdminFullStats
     /// One page of news for a status tab (newest first), with the total count.
     func fetchNews(status: AdminArticleStatus, page: Int) async throws -> AdminNewsPage
     /// Flip an item to `.published` and return the updated record.
@@ -109,10 +109,10 @@ private struct AdminDeletionBody: Encodable { let deletionReason: String }
 /// Talks to the real backend via the shared, Bearer-authenticated `APIClient`.
 /// All paths are relative to the mobile API root (`/api/v1`).
 struct LiveAdminService: AdminServicing {
-    func fetchOverview() async throws -> AdminOverview {
+    func fetchFullStats() async throws -> AdminFullStats {
         try await APIClient.shared.get(
-            AdminOverview.self,
-            path: "/admin/dashboard/stats",
+            AdminFullStats.self,
+            path: "/admin/dashboard/full-stats",
             ignoreCache: true
         )
     }

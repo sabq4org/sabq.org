@@ -103,50 +103,73 @@ struct AdminNewsItem: Identifiable, Hashable, Decodable {
     }
 }
 
-// MARK: Overview metrics
+// MARK: Overview stats (mirrors the web /dashboard cards)
 
-/// Top-of-dashboard KPI snapshot. Decoded from `/api/v1/admin/dashboard/stats`.
-struct AdminOverview: Decodable, Hashable {
-    var publishedToday: Int
-    var totalViews: Int
-    var draft: Int
-    var scheduled: Int
-    var archived: Int
+/// KPI groups decoded from `/api/v1/admin/dashboard/full-stats`. One tolerant
+/// `Group` shape (all-optional) covers every card so missing keys never throw.
+struct AdminFullStats: Decodable {
+    struct Group: Decodable {
+        var total: Int?
+        var published: Int?
+        var draft: Int?
+        var scheduled: Int?
+        var active24h: Int?
+        var newThisWeek: Int?
+        var pending: Int?
+        var approved: Int?
+        var completed: Int?
+        var thisWeek: Int?
+        var totalFiles: Int?
+        var totalSize: Int?
+    }
 
-    /// Maps the snapshot into the cards rendered by the horizontal metrics
-    /// strip. Kept here (not in the view) so the labels/formatting live next
-    /// to the data they describe.
-    func metrics() -> [AdminMetric] {
-        [
-            AdminMetric(key: "published_today",
-                        title: "منشورات اليوم",
-                        value: "\(publishedToday)",
-                        icon: "checkmark.seal.fill",
-                        tint: SabqTheme.teal),
-            AdminMetric(key: "total_views",
-                        title: "إجمالي المشاهدات",
-                        value: SabqFormatters.compactViewCount(totalViews),
-                        icon: "eye.fill",
-                        tint: SabqTheme.sky),
-            AdminMetric(key: "draft",
-                        title: "المسودات",
-                        value: "\(draft)",
-                        icon: "doc.text",
-                        tint: SabqTheme.gold),
-            AdminMetric(key: "scheduled",
-                        title: "المجدولة",
-                        value: "\(scheduled)",
-                        icon: "clock.fill",
-                        tint: SabqTheme.coral),
+    var articles: Group?
+    var users: Group?
+    var comments: Group?
+    var mediaLibrary: Group?
+    var aiTasks: Group?
+    var aiImages: Group?
+    var smartBlocks: Group?
+
+    /// The 7 cards the user selected, built here so labels/formatting live
+    /// next to the data.
+    func cards() -> [AdminStatCard] {
+        func n(_ v: Int?) -> String { SabqFormatters.compactViewCount(v ?? 0) }
+        func mb(_ bytes: Int?) -> String {
+            let m = Double(bytes ?? 0) / (1024 * 1024)
+            return m >= 1024 ? String(format: "%.1f GB", m / 1024) : String(format: "%.0f MB", m)
+        }
+        return [
+            AdminStatCard(key: "articles", title: "المقالات", value: n(articles?.total),
+                          breakdown: "\(articles?.published ?? 0) منشور · \(articles?.draft ?? 0) مسودة · \(articles?.scheduled ?? 0) مجدولة",
+                          icon: "doc.text.fill", tint: SabqTheme.sky),
+            AdminStatCard(key: "users", title: "المستخدمون", value: n(users?.total),
+                          breakdown: "\(users?.active24h ?? 0) نشط اليوم · \(users?.newThisWeek ?? 0) جديد",
+                          icon: "person.2.fill", tint: SabqTheme.teal),
+            AdminStatCard(key: "comments", title: "التعليقات", value: n(comments?.total),
+                          breakdown: "\(comments?.pending ?? 0) قيد المراجعة · \(comments?.approved ?? 0) موافق",
+                          icon: "bubble.left.and.bubble.right.fill", tint: SabqTheme.gold),
+            AdminStatCard(key: "media", title: "مكتبة الوسائط", value: n(mediaLibrary?.totalFiles),
+                          breakdown: "\(mb(mediaLibrary?.totalSize)) إجمالي",
+                          icon: "externaldrive.fill", tint: SabqTheme.coral),
+            AdminStatCard(key: "aiTasks", title: "مهام الذكاء", value: n(aiTasks?.total),
+                          breakdown: "\(aiTasks?.pending ?? 0) معلّقة · \(aiTasks?.completed ?? 0) مكتملة",
+                          icon: "cpu.fill", tint: SabqTheme.teal),
+            AdminStatCard(key: "aiImages", title: "صور الذكاء", value: n(aiImages?.total),
+                          breakdown: "\(aiImages?.thisWeek ?? 0) هذا الأسبوع",
+                          icon: "photo.fill", tint: SabqTheme.sky),
+            AdminStatCard(key: "smartBlocks", title: "القوالب الذكية", value: n(smartBlocks?.total),
+                          breakdown: nil, icon: "square.grid.2x2.fill", tint: SabqTheme.gold),
         ]
     }
 }
 
-/// View-model for a single KPI tile.
-struct AdminMetric: Identifiable, Hashable {
+/// One compact KPI tile.
+struct AdminStatCard: Identifiable {
     let key: String
     let title: String
     let value: String
+    let breakdown: String?
     let icon: String
     let tint: Color
 

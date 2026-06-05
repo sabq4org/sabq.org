@@ -6698,6 +6698,43 @@ router.get("/admin/dashboard/stats", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v1/admin/dashboard/full-stats — بطاقات النظرة العامة (نفس مصدر الويب)
+// Returns the subset of the web dashboard's KPI groups the iOS cards need.
+router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const { storage } = await import("../storage");
+    const s = await storage.getAdminDashboardStats();
+    res.json({
+      success: true,
+      articles: {
+        total: s.articles.total, published: s.articles.published,
+        draft: s.articles.draft, scheduled: s.articles.scheduled,
+      },
+      users: {
+        total: s.users.total, active24h: s.users.active24h, newThisWeek: s.users.newThisWeek,
+      },
+      comments: {
+        total: s.comments.total, pending: s.comments.pending, approved: s.comments.approved,
+      },
+      mediaLibrary: {
+        totalFiles: s.mediaLibrary.totalFiles, totalSize: s.mediaLibrary.totalSize,
+      },
+      aiTasks: {
+        total: s.aiTasks.total, pending: s.aiTasks.pending, completed: s.aiTasks.completed,
+      },
+      aiImages: { total: s.aiImages.total, thisWeek: s.aiImages.thisWeek },
+      smartBlocks: { total: s.smartBlocks.total },
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/dashboard/full-stats error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحميل الإحصائيات" });
+  }
+});
+
 // GET /api/v1/admin/articles?status=draft|scheduled|published|archived&page=&limit=
 // Paginated list for one status tab. Returns total/totalPages so the client
 // can show a "load more" button.

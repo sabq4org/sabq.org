@@ -9,7 +9,7 @@ import Combine
 /// store can be swapped for a live API without touching the view.
 @MainActor
 final class AdminDashboardViewModel: ObservableObject {
-    @Published var overview: AdminOverview?
+    @Published var fullStats: AdminFullStats?
     @Published var items: [AdminNewsItem] = []
     @Published var selectedStatus: AdminArticleStatus = .draft
     @Published var isLoading = true
@@ -37,9 +37,9 @@ final class AdminDashboardViewModel: ObservableObject {
         error = nil
         page = 1
         do {
-            async let overviewResult = service.fetchOverview()
+            async let overviewResult = service.fetchFullStats()
             async let listResult = service.fetchNews(status: selectedStatus, page: 1)
-            overview = try await overviewResult
+            fullStats = try await overviewResult
             let pageResult = try await listResult
             items = pageResult.items
             total = pageResult.total
@@ -145,12 +145,12 @@ final class AdminDashboardViewModel: ObservableObject {
     private func refreshFirstPageAndMetrics() async {
         do {
             async let listResult = service.fetchNews(status: selectedStatus, page: 1)
-            async let overviewResult = service.fetchOverview()
+            async let overviewResult = service.fetchFullStats()
             let pageResult = try await listResult
             items = pageResult.items
             total = pageResult.total
             page = 1
-            overview = try await overviewResult
+            fullStats = try await overviewResult
         } catch {
             self.error = "تعذّر تحديث البيانات"
         }
@@ -212,22 +212,18 @@ struct AdminDashboardView: View {
                 .font(.system(size: 18, weight: .heavy, design: .rounded))
                 .foregroundStyle(SabqTheme.ink)
 
-            if vm.overview == nil && vm.isLoading {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(0..<3, id: \.self) { _ in
-                            SkeletonBox(width: 152, height: 124, radius: SabqTheme.tileRadius)
-                        }
+            let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+            if vm.fullStats == nil && vm.isLoading {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        SkeletonBox(height: 78, radius: SabqTheme.tileRadius)
                     }
                 }
-            } else if let overview = vm.overview {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(overview.metrics()) { metric in
-                            AdminMetricCard(metric: metric)
-                        }
+            } else if let stats = vm.fullStats {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(stats.cards()) { card in
+                        AdminStatGridCard(card: card)
                     }
-                    .padding(.vertical, 2)
                 }
             }
         }

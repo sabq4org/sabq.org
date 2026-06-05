@@ -6,38 +6,50 @@ import SwiftUI
 // shared `SabqTheme` palette + radii so they match the rest of the app and
 // flip correctly under `.sabqRTL()`.
 
-// MARK: Metric tile
+// MARK: Stat tile
 
-/// A single KPI card in the horizontal "نظرة عامة" strip.
-struct AdminMetricCard: View {
-    let metric: AdminMetric
+/// Compact KPI card for the 2-column "نظرة عامة" grid (icon + number + title +
+/// a small breakdown line). Smaller than the old horizontal strip cards.
+struct AdminStatGridCard: View {
+    let card: AdminStatCard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        HStack(alignment: .top, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(metric.tint.opacity(0.14))
-                    .frame(width: 44, height: 44)
-                Image(systemName: metric.icon)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(metric.tint)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(card.tint.opacity(0.14))
+                    .frame(width: 34, height: 34)
+                Image(systemName: card.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(card.tint)
             }
-            Text(metric.value)
-                .font(.system(size: 26, weight: .heavy, design: .rounded))
-                .foregroundStyle(SabqTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(metric.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.value)
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(card.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(1)
+                if let breakdown = card.breakdown {
+                    Text(breakdown)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
         }
-        .padding(16)
-        .frame(width: 152, alignment: .leading)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 5)
+                .shadow(color: SabqTheme.shadow, radius: 10, x: 0, y: 4)
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
