@@ -5,6 +5,7 @@ import { eq, or, and, desc } from "drizzle-orm";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import path from "path";
 import fs from "fs/promises";
+import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
 
 /**
  * Social Media Crawler Middleware
@@ -1238,9 +1239,14 @@ export async function socialCrawlerMiddleware(
           .slice(0, 220),
       );
       const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`;
-      const rawImg = seoMeta.ogImage || row.heroImageUrl || row.angleCover || "";
-      prepareSocialImage(rawImg).catch(() => {});
-      const ogImage = escapeHtml(ensureAbsoluteUrl(rawImg, baseUrl));
+      const { raw: rawImg, absolute: resolvedOg } = await resolveMuqtarabOgImage(
+        baseUrl,
+        seoMeta.ogImage,
+        row.heroImageUrl,
+        row.angleCover,
+      );
+      if (rawImg) prepareSocialImage(rawImg).catch(() => {});
+      const ogImage = escapeHtml(resolvedOg);
       const safeTitle = escapeHtml(`${title} — مُقترب — سبق`);
 
       const html = generateMetaHTML({
@@ -1292,9 +1298,12 @@ export async function socialCrawlerMiddleware(
       const description = escapeHtml(
         (ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`).slice(0, 220),
       );
-      const rawImg = ang.coverImageUrl || "";
-      prepareSocialImage(rawImg).catch(() => {});
-      const ogImage = escapeHtml(ensureAbsoluteUrl(rawImg, baseUrl));
+      const { raw: rawImg, absolute: resolvedOg } = await resolveMuqtarabOgImage(
+        baseUrl,
+        ang.coverImageUrl,
+      );
+      if (rawImg) prepareSocialImage(rawImg).catch(() => {});
+      const ogImage = escapeHtml(resolvedOg);
       const safeTitle = escapeHtml(`${ang.nameAr} — مُقترب — سبق`);
 
       const html = generateMetaHTML({

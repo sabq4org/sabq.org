@@ -46,6 +46,7 @@ import {
 } from "../utils/creatorSchema";
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { memoryCache, CACHE_TTL } from "../memoryCache";
+import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
 
 const router = Router();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
@@ -915,11 +916,16 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         plain ||
         `${row.title} — زاوية ${row.angleNameAr} على مُقترب من صحيفة سبق الإلكترونية.`
       ).slice(0, 220);
-      const shareImageRaw = (seoMeta.ogImage as string | undefined) || row.heroImageUrl || row.angleCover;
+      const { absolute: shareImage } = await resolveMuqtarabOgImage(
+        SITE_URL,
+        seoMeta.ogImage as string | undefined,
+        row.heroImageUrl,
+        row.angleCover,
+      );
       return {
         title: `${title} — مُقترب — سبق`,
         description,
-        image: abs(shareImageRaw),
+        image: shareImage,
         canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`,
         robots: row.status === "published" ? "index,follow" : "noindex, follow",
         type: "article",
@@ -958,7 +964,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       const description = (
         ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`
       ).slice(0, 220);
-      const image = abs(ang.coverImageUrl);
+      const { absolute: image } = await resolveMuqtarabOgImage(SITE_URL, ang.coverImageUrl);
       const writerName = ang.managerStaffNameAr
         || [ang.managerFirstName, ang.managerLastName].filter(Boolean).join(" ")
         || ang.nameAr;
