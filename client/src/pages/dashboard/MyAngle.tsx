@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lightbulb,
+  Sparkles,
+  Wand2,
+  SpellCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +99,15 @@ function isEditable(status: string) {
   return status === "draft" || status === "needs_revision";
 }
 
+function plainTextToHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p>${p}</p>`)
+    .join("");
+}
+
 export default function MyAngle() {
   const { user } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
@@ -108,6 +120,12 @@ export default function MyAngle() {
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [editorContent, setEditorContent] = useState("");
   const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [aiLoading, setAiLoading] = useState<"titles" | "proofread" | "excerpt" | null>(null);
+  const [suggestedTitles, setSuggestedTitles] = useState<string[]>([]);
+  const [proofreadPreview, setProofreadPreview] = useState<{ correctedText: string; notes: string } | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedSnapshotRef = useRef("");
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -140,6 +158,11 @@ export default function MyAngle() {
       content: { blocks: [], rawHtml: editorContent, plainText },
     };
   };
+
+  const buildSnapshot = useCallback(
+    () => JSON.stringify({ title, excerpt, heroImageUrl, editorContent }),
+    [title, excerpt, heroImageUrl, editorContent],
+  );
 
   const createMutation = useMutation({
     mutationFn: async () =>
@@ -192,6 +215,11 @@ export default function MyAngle() {
     setExcerpt("");
     setHeroImageUrl("");
     setEditorContent("");
+    setSuggestedTitles([]);
+    setProofreadPreview(null);
+    setAiLoading(null);
+    setAutoSaveStatus("idle");
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
   }
 
   function openCreate() {
@@ -209,8 +237,45 @@ export default function MyAngle() {
     setExcerpt(topic.excerpt || "");
     setHeroImageUrl(topic.heroImageUrl || "");
     setEditorContent(topic.content?.rawHtml || "");
+    lastSavedSnapshotRef.current = JSON.stringify({
+      title: topic.title,
+      excerpt: topic.excerpt || "",
+      heroImageUrl: topic.heroImageUrl || "",
+      editorContent: topic.content?.rawHtml || "",
+    });
+    setAutoSaveStatus("idle");
     setDialogOpen(true);
   }
+
+  // حفظ تلقائي للمسودات المفتوحة للتعديل (كل 3 ثوانٍ بعد آخر تغيير)
+  useEffect(() => {
+    if (!dialogOpen || !editingTopic || !isEditable(editingTopic.status)) return;
+
+    const snapshot = buildSnapshot();
+    if (snapshot === lastSavedSnapshotRef.current) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (!title.trim()) return;
+      setAutoSaveStatus("saving");
+      try {
+        await apiRequest(`/api/muqtarab/my-angle/topics/${editingTopic.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(buildPayload()),
+        });
+        lastSavedSnapshotRef.current = snapshot;
+        setAutoSaveStatus("saved");
+        queryClient.invalidateQueries({ queryKey: ["/api/muqtarab/my-angle/topics"] });
+      } catch {
+        setAutoSaveStatus("error");
+      }
+    }, 3000);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [dialogOpen, editingTopic, title, excerpt, heroImageUrl, editorContent, buildSnapshot]);
 
   async function handleHeroUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -259,6 +324,58 @@ export default function MyAngle() {
     }
     if (editingTopic) updateMutation.mutate(editingTopic.id);
     else createMutation.mutate();
+  }
+
+  async function runAiAction(action: "titles" | "proofread" | "excerpt") {
+    const content = editorContent.trim();
+    if (!content && action !== "excerpt") {
+      toast({ title: "اكتب المحتوى أولاً", variant: "destructive" });
+      return;
+    }
+    if (action === "excerpt" && !title.trim()) {
+      toast({ title: "أدخل العنوان أولاً", variant: "destructive" });
+      return;
+    }
+
+    setAiLoading(action);
+    try {
+      if (action === "titles") {
+        const res = await apiRequest<{ titles: string[] }>("/api/muqtarab/my-angle/ai/suggest-titles", {
+          method: "POST",
+          body: JSON.stringify({ content, currentTitle: title.trim() || undefined }),
+        });
+        setSuggestedTitles(Array.isArray(res.titles) ? res.titles : []);
+        toast({ title: "اقتراحات جاهزة", description: "اضغط على عنوان لتطبيقه." });
+      } else if (action === "proofread") {
+        const res = await apiRequest<{ correctedText: string; notes: string }>("/api/muqtarab/my-angle/ai/proofread", {
+          method: "POST",
+          body: JSON.stringify({ content, title: title.trim() || undefined }),
+        });
+        setProofreadPreview(res);
+      } else {
+        const res = await apiRequest<{ excerpt: string }>("/api/muqtarab/my-angle/ai/suggest-excerpt", {
+          method: "POST",
+          body: JSON.stringify({ content, title: title.trim() }),
+        });
+        setExcerpt(res.excerpt || "");
+        toast({ title: "تم توليد الوصف المختصر" });
+      }
+    } catch (e) {
+      toast({
+        title: "خطأ في المساعد الذكي",
+        description: e instanceof Error ? e.message : "حاول مرة أخرى",
+        variant: "destructive",
+      });
+    } finally {
+      setAiLoading(null);
+    }
+  }
+
+  function applyProofread() {
+    if (!proofreadPreview) return;
+    setEditorContent(plainTextToHtml(proofreadPreview.correctedText));
+    setProofreadPreview(null);
+    toast({ title: "تم تطبيق التصحيحات" });
   }
 
   // لا توجد زاوية مخصّصة (مثلاً أدمن دخل الرابط مباشرة)
@@ -418,15 +535,105 @@ export default function MyAngle() {
         <Dialog open={dialogOpen} onOpenChange={(o) => !o && closeDialog()}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
             <DialogHeader>
-              <DialogTitle>{editingTopic ? "تعديل الموضوع" : "موضوع جديد"}</DialogTitle>
-              <DialogDescription>
-                {editingTopic
-                  ? "عدّل موضوعك ثم أرسله للمراجعة"
-                  : "اكتب موضوعك. سيُحفظ كمسودة حتى ترسله للمراجعة"}
-              </DialogDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <DialogTitle>{editingTopic ? "تعديل الموضوع" : "موضوع جديد"}</DialogTitle>
+                  <DialogDescription>
+                    {editingTopic
+                      ? "عدّل موضوعك ثم أرسله للمراجعة"
+                      : "اكتب موضوعك. سيُحفظ كمسودة حتى ترسله للمراجعة"}
+                  </DialogDescription>
+                </div>
+                {editingTopic && isEditable(editingTopic.status) && (
+                  <span className="text-xs text-muted-foreground shrink-0 pt-1" data-testid="text-autosave-status">
+                    {autoSaveStatus === "saving" && "جاري الحفظ…"}
+                    {autoSaveStatus === "saved" && "✓ حُفظ تلقائياً"}
+                    {autoSaveStatus === "error" && "تعذّر الحفظ التلقائي"}
+                  </span>
+                )}
+              </div>
             </DialogHeader>
 
             <div className="space-y-4">
+              {/* مساعد الكاتب الذكي */}
+              <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Sparkles className="h-4 w-4 text-indigo-500" />
+                  مساعد الكاتب الذكي
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={!!aiLoading}
+                    onClick={() => runAiAction("titles")}
+                    data-testid="button-ai-titles"
+                  >
+                    {aiLoading === "titles" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                    اقتراح عناوين
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={!!aiLoading}
+                    onClick={() => runAiAction("proofread")}
+                    data-testid="button-ai-proofread"
+                  >
+                    {aiLoading === "proofread" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SpellCheck className="h-3.5 w-3.5" />}
+                    تدقيق لغوي
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={!!aiLoading}
+                    onClick={() => runAiAction("excerpt")}
+                    data-testid="button-ai-excerpt"
+                  >
+                    {aiLoading === "excerpt" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    وصف مختصر
+                  </Button>
+                </div>
+
+                {suggestedTitles.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedTitles.map((t, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="rounded-full border bg-background px-3 py-1 text-sm hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors text-right"
+                        onClick={() => setTitle(t)}
+                        data-testid={`chip-title-${i}`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {proofreadPreview && (
+                  <div className="rounded-md border bg-background p-3 space-y-2 text-sm">
+                    <p className="text-muted-foreground">{proofreadPreview.notes}</p>
+                    <p className="leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                      {proofreadPreview.correctedText}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={applyProofread} data-testid="button-apply-proofread">
+                        تطبيق التصحيحات
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setProofreadPreview(null)}>
+                        تجاهل
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-sm font-medium">العنوان *</label>
                 <Input

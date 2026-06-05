@@ -6,7 +6,9 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, ChevronRight, Share2, Calendar, Home } from "lucide-react";
+import { ArrowRight, ChevronRight, Share2, Calendar, Home, Circle } from "lucide-react";
+import { getLucideIcon } from "@/lib/lucideIconMap";
+import { angleTheme, withAlpha } from "@/lib/angleTheme";
 import type { Topic, Angle } from "@shared/schema";
 
 function formatDate(date: Date | string | null | undefined): string {
@@ -80,7 +82,7 @@ function renderContentBlock(block: {
       return (
         <blockquote 
           key={index} 
-          className="border-r-4 border-primary pr-4 my-6 italic text-muted-foreground"
+          className="border-r-4 border-[color:var(--angle,#6366f1)] pr-4 my-6 italic text-muted-foreground"
           data-testid={`content-quote-${index}`}
         >
           {block.content}
@@ -112,7 +114,7 @@ function renderContentBlock(block: {
           href={block.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-primary hover:underline inline-block my-2"
+          className="text-[color:var(--angle,#6366f1)] hover:underline inline-block my-2"
           data-testid={`content-link-${index}`}
         >
           {block.content || block.url}
@@ -294,9 +296,23 @@ export default function TopicDetail() {
 
   const contentBlocks = topic.content?.blocks || [];
   const hasContent = contentBlocks.length > 0 || topic.content?.rawHtml || topic.content?.plainText;
+  const theme = angleTheme(angle.colorHex);
+  const AngleIcon = getLucideIcon(angle.iconKey, Circle);
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="relative min-h-screen bg-background" dir="rtl" style={theme.vars}>
+      {/* Glassmorphism — هالة ملوّنة بلون الزاوية خلف المحتوى */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div
+          className="absolute -top-32 -left-24 h-96 w-96 rounded-full blur-3xl opacity-30"
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+        />
+      </div>
+
+      {/* شريط هوية الزاوية العلوي */}
+      <div className="h-1.5 w-full" style={{ background: theme.gradient }} />
+
+      <div className="relative z-10">
       <Header user={user} />
 
       <div className="border-b bg-muted/30">
@@ -315,7 +331,7 @@ export default function TopicDetail() {
             </Link>
             <ChevronRight className="h-4 w-4" />
             <Link href={`/muqtarab/${angleSlug}`}>
-              <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-angle">
+              <a className="transition-colors hover:text-[color:var(--angle)]" data-testid="link-breadcrumb-angle">
                 {angle.nameAr}
               </a>
             </Link>
@@ -337,6 +353,16 @@ export default function TopicDetail() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
             <div className="container mx-auto max-w-4xl">
+              <Link href={`/muqtarab/${angleSlug}`}>
+                <a
+                  className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium text-white backdrop-blur-sm"
+                  style={{ backgroundColor: withAlpha(angle.colorHex, 0.85) }}
+                  data-testid="chip-angle"
+                >
+                  <AngleIcon className="h-4 w-4" />
+                  {angle.nameAr}
+                </a>
+              </Link>
               <h1 
                 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4"
                 data-testid="heading-topic-title"
@@ -360,6 +386,16 @@ export default function TopicDetail() {
         <div className="max-w-4xl mx-auto">
           {!topic.heroImageUrl && (
             <div className="mb-8">
+              <Link href={`/muqtarab/${angleSlug}`}>
+                <a
+                  className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
+                  style={{ backgroundColor: theme.soft, color: theme.color }}
+                  data-testid="chip-angle"
+                >
+                  <AngleIcon className="h-4 w-4" />
+                  {angle.nameAr}
+                </a>
+              </Link>
               <h1 
                 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"
                 data-testid="heading-topic-title"
@@ -379,7 +415,7 @@ export default function TopicDetail() {
                   variant="outline"
                   size="sm"
                   onClick={handleShare}
-                  className="gap-2"
+                  className="gap-2 border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
                   data-testid="button-share"
                 >
                   <Share2 className="h-4 w-4" />
@@ -397,7 +433,7 @@ export default function TopicDetail() {
                 variant="outline"
                 size="sm"
                 onClick={handleShare}
-                className="gap-2"
+                className="gap-2 border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
                 data-testid="button-share"
               >
                 <Share2 className="h-4 w-4" />
@@ -435,7 +471,12 @@ export default function TopicDetail() {
           <Separator className="my-8" />
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <Button variant="ghost" asChild className="gap-2" data-testid="button-back-to-angle">
+            <Button
+              variant="ghost"
+              asChild
+              className="gap-2 text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
+              data-testid="button-back-to-angle"
+            >
               <Link href={`/muqtarab/${angleSlug}`}>
                 <a className="flex items-center gap-2">
                   <ArrowRight className="h-4 w-4" />
@@ -451,6 +492,7 @@ export default function TopicDetail() {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }
