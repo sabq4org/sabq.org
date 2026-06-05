@@ -51,6 +51,7 @@ import {
   Mountain,
   Waves,
   HelpCircle,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -123,29 +124,26 @@ interface Section {
   slug: string;
 }
 
-// Auto-generate slug from Arabic name
-function generateSlug(nameAr: string): string {
-  const transliterationMap: Record<string, string> = {
-    'ا': 'a', 'أ': 'a', 'إ': 'i', 'آ': 'a',
-    'ب': 'b', 'ت': 't', 'ث': 'th', 'ج': 'j',
-    'ح': 'h', 'خ': 'kh', 'د': 'd', 'ذ': 'dh',
-    'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 'sh',
-    'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z',
-    'ع': 'a', 'غ': 'gh', 'ف': 'f', 'ق': 'q',
-    'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n',
-    'ه': 'h', 'و': 'w', 'ي': 'y', 'ى': 'a',
-    'ة': 'h', 'ئ': 'e', 'ء': 'a',
-    ' ': '-', '_': '-',
-  };
-
-  return nameAr
-    .split('')
-    .map(char => transliterationMap[char] || char)
-    .join('')
+/**
+ * توليد المعرّف (slug) — يأخذ الأحرف اللاتينية والأرقام فقط ويتجاهل العربية تماماً.
+ * لا تحويل صوتي للكلمات العربية (لا نريد كلمات مثل rydkast/alshaar في المعرّف).
+ *
+ * يُفضّل الاسم الإنجليزي إن وُجد، وإلا يستخرج الجزء اللاتيني من الاسم العربي
+ * (مثل "READCAST | ريدكاست" → "readcast"). إن لم يكن في الاسمين أي حرف لاتيني،
+ * يُترك فارغاً ليُدخله المستخدم يدوياً.
+ */
+function latinSlug(value: string): string {
+  return value
     .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+    .replace(/[^a-z0-9]+/g, "-") // أي شيء غير لاتيني/رقم (عربي، |، مسافات...) → شرطة
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function generateSlug(nameAr: string, nameEn?: string): string {
+  const fromEn = nameEn ? latinSlug(nameEn) : "";
+  if (fromEn.length >= 2) return fromEn;
+  return latinSlug(nameAr);
 }
 
 // Available icons for the picker
@@ -636,13 +634,22 @@ export default function DashboardMuqtarab() {
     toggleActiveMutation.mutate({ id: angle.id, isActive: !angle.isActive });
   };
 
-  // Auto-generate slug from nameAr
+  // Auto-generate slug from nameEn/nameAr (latin-only) — للزوايا الجديدة فقط
   const nameAr = form.watch("nameAr");
+  const nameEn = form.watch("nameEn");
   useEffect(() => {
     if (nameAr && !editingAngle) {
-      form.setValue("slug", generateSlug(nameAr));
+      form.setValue("slug", generateSlug(nameAr, nameEn));
     }
-  }, [nameAr, editingAngle, form]);
+  }, [nameAr, nameEn, editingAngle, form]);
+
+  // إعادة توليد المعرّف يدوياً (يعمل في وضعي الإنشاء والتعديل)
+  const handleRegenerateSlug = () => {
+    const generated = generateSlug(form.getValues("nameAr") || "", form.getValues("nameEn") || "");
+    if (generated) {
+      form.setValue("slug", generated, { shouldValidate: true, shouldDirty: true });
+    }
+  };
 
   // Get icon component
   const getIconComponent = (iconKey: string) => {
@@ -914,16 +921,29 @@ export default function DashboardMuqtarab() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>المعرف (Slug) *</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="digital-publishing"
-                          dir="ltr"
-                          data-testid="input-slug"
-                        />
-                      </FormControl>
+                      <div className="flex items-center gap-2">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="digital-publishing"
+                            dir="ltr"
+                            data-testid="input-slug"
+                          />
+                        </FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          onClick={handleRegenerateSlug}
+                          title="إعادة توليد من الاسم (إنجليزي فقط)"
+                          data-testid="button-regenerate-slug"
+                        >
+                          <Wand2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <FormDescription>
-                        يتم توليده تلقائياً من الاسم العربي ويمكن تعديله
+                        يُولَّد من الجزء الإنجليزي للاسم (بلا أحرف عربية). عدّله يدوياً أو أعد توليده بالزر.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
