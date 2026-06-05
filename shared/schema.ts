@@ -659,6 +659,12 @@ export const users = pgTable("users", {
 }, (table) => [
   // Unique index on pressIdNumber (only for non-null values)
   uniqueIndex("users_press_id_number_idx").on(table.pressIdNumber).where(sql`press_id_number IS NOT NULL`),
+  // Case-insensitive uniqueness on email. The column-level .unique() above is
+  // case-sensitive, which let "Ahmad@x.com" and "ahmad@x.com" coexist as two
+  // accounts (the reader-vs-writer duplicate bug). This index forbids that.
+  // NOTE: db:push / the migration that creates it will FAIL until existing
+  // case-only duplicates are merged first — run scripts/merge-duplicate-accounts.ts.
+  uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`),
 ]);
 
 // Password reset tokens

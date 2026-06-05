@@ -20270,7 +20270,11 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   
   async createCorrespondentApplication(data: InsertCorrespondentApplication): Promise<CorrespondentApplication> {
-    const [application] = await db.insert(correspondentApplications).values(data).returning();
+    // Normalize email so the approval-time lookup (which matches against the
+    // lowercased users.email) always finds an existing reader account. Without
+    // this, a capitalization/whitespace difference creates a duplicate user row.
+    const normalized = { ...data, email: data.email?.toLowerCase().trim() };
+    const [application] = await db.insert(correspondentApplications).values(normalized).returning();
     return application;
   }
 
@@ -20334,9 +20338,13 @@ export class DatabaseStorage implements IStorage {
     const [application] = await db.select().from(correspondentApplications).where(eq(correspondentApplications.id, id));
     if (!application) throw new Error("Application not found");
     if (application.status !== 'pending') throw new Error("Application already processed");
-    
-    // Check if user with this email already exists
-    const [existingUser] = await db.select().from(users).where(eq(users.email, application.email));
+
+    // Check if user with this email already exists.
+    // Match case-insensitively: registration/login lowercase the email, so a
+    // case/whitespace difference here would otherwise miss the existing reader
+    // and create a duplicate user row with the same email.
+    const applicantEmail = application.email.toLowerCase().trim();
+    const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
     
     let finalUser: User;
     let temporaryPassword = '';
@@ -20372,7 +20380,7 @@ export class DatabaseStorage implements IStorage {
       
       const [newUser] = await db.insert(users).values({
         id: nanoid(),
-        email: application.email,
+        email: applicantEmail,
         firstName: application.arabicName.split(' ')[0] || application.arabicName,
         lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
         profileImageUrl: application.profilePhotoUrl,
@@ -20433,8 +20441,11 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   
   async createOpinionAuthorApplication(data: InsertOpinionAuthorApplication): Promise<OpinionAuthorApplication> {
+    // Normalize email (see createCorrespondentApplication) so approval matches
+    // the existing reader account instead of minting a second user row.
     const [application] = await db.insert(opinionAuthorApplications).values({
       ...data,
+      email: data.email?.toLowerCase().trim(),
       id: nanoid(),
     }).returning();
     return application;
@@ -20502,9 +20513,11 @@ export class DatabaseStorage implements IStorage {
     const [application] = await db.select().from(opinionAuthorApplications).where(eq(opinionAuthorApplications.id, id));
     if (!application) throw new Error("Application not found");
     if (application.status !== 'pending') throw new Error("Application already processed");
-    
-    // Check if user with this email already exists
-    const [existingUser] = await db.select().from(users).where(eq(users.email, application.email));
+
+    // Check if user with this email already exists (case-insensitive — see
+    // approveCorrespondentApplication for why this matters).
+    const applicantEmail = application.email.toLowerCase().trim();
+    const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
     
     let finalUser: User;
     let temporaryPassword = '';
@@ -20540,7 +20553,7 @@ export class DatabaseStorage implements IStorage {
       
       const [newUser] = await db.insert(users).values({
         id: nanoid(),
-        email: application.email,
+        email: applicantEmail,
         firstName: application.arabicName.split(' ')[0] || application.arabicName,
         lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
         profileImageUrl: application.profilePhotoUrl,
