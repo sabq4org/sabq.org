@@ -2,6 +2,11 @@
  * مُقترب — مساعد الكاتب الذكي (اقتراح عناوين، تدقيق لغوي، وصف مختصر).
  */
 import { aiManager } from "../ai-manager";
+import { generateNewsImage } from "./visualAiService";
+import {
+  getAutoGenerationSettings,
+  updateAutoGenerationSettings,
+} from "./autoImageGenerationService";
 
 const MODEL = { provider: "openai" as const, model: "gpt-4o-mini", jsonMode: true };
 
@@ -172,6 +177,72 @@ ${plain}
   }
 
   return { keywords, metaDescription, metaTitle };
+}
+
+// ============================================================
+// توليد صورة الغلاف (Hero) — مسؤول النظام فقط، مرتبط بإعدادات التوليد التلقائي
+// ============================================================
+
+const HERO_STYLES = ["photorealistic", "illustration", "abstract", "infographic"] as const;
+
+/**
+ * يولّد صورة غلاف لموضوع مُقترب بالاعتماد على نفس بنية التوليد المستخدمة في المقالات
+ * (Nano Banana / Gemini عبر generateNewsImage)، ويحترم «إعدادات التوليد التلقائي للصور»
+ * (التفعيل، النمط الافتراضي، الحد الشهري) المحفوظة في system_settings.
+ */
+export async function generateTopicHero(opts: {
+  title: string;
+  excerpt?: string;
+  content?: string;
+}): Promise<{ imageUrl: string; thumbnailUrl?: string }> {
+  const title = String(opts.title || "").trim();
+  if (!title) throw new Error("العنوان مطلوب لتوليد صورة الغلاف");
+
+  const settings = await getAutoGenerationSettings();
+
+  if (!settings.enabled) {
+    throw new Error(
+      "توليد الصور بالذكاء الاصطناعي معطّل — فعّله من «إعدادات التوليد التلقائي للصور» في لوحة التحكم",
+    );
+  }
+
+  const max = settings.maxMonthlyGenerations ?? 0;
+  const used = settings.currentMonthGenerations ?? 0;
+  if (max > 0 && used >= max) {
+    throw new Error(
+      `تم بلوغ الحد الشهري لتوليد الصور (${max}). عدّل الحد من إعدادات التوليد.`,
+    );
+  }
+
+  const summary =
+    opts.excerpt?.trim() || stripHtml(opts.content || "").slice(0, 400) || undefined;
+  const style = (HERO_STYLES.includes(settings.defaultStyle as any)
+    ? settings.defaultStyle
+    : "photorealistic") as (typeof HERO_STYLES)[number];
+
+  const result = await generateNewsImage({
+    articleTitle: title,
+    articleSummary: summary,
+    category: "مُقترب",
+    language: "ar",
+    style,
+  });
+
+  if (!result.success || !result.imageUrl) {
+    throw new Error(result.error || "فشل توليد صورة الغلاف");
+  }
+
+  // تحديث عدّاد الاستخدام الشهري ضمن إعدادات التوليد
+  try {
+    await updateAutoGenerationSettings({
+      currentMonthGenerations: used + 1,
+      lastResetMonth: new Date().getMonth(),
+    });
+  } catch {
+    // عدم منع نجاح التوليد بسبب فشل تحديث العدّاد
+  }
+
+  return { imageUrl: result.imageUrl, thumbnailUrl: result.thumbnailUrl };
 }
 
 // ============================================================
