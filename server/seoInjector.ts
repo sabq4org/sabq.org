@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
-import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags, angles, topics } from "@shared/schema";
-import { eq, or, desc, and, sql, aliasedTable } from "drizzle-orm";
+import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags, angles, topics, staff } from "@shared/schema";
+import { eq, or, desc, and, sql, aliasedTable, inArray } from "drizzle-orm";
 
 // Pulled into a module-level alias so we can join the `users` table twice in
 // the same query — once for `authorId` (the staff member who entered the
@@ -9,12 +9,24 @@ import { eq, or, desc, and, sql, aliasedTable } from "drizzle-orm";
 // chosen from a dropdown). The SEO `article:author` meta tag should reflect
 // the reporter whenever one is set.
 const reporterUsers = aliasedTable(users, "reporter_user");
+const reporterStaff = aliasedTable(staff, "reporter_staff");
+const authorStaff = aliasedTable(staff, "author_staff");
+const angleManagerStaff = aliasedTable(staff, "angle_manager_staff");
 import fs from "fs";
 import path from "path";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
 import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
+import {
+  buildPersonJsonLd,
+  buildProfilePageJsonLd,
+  buildArticleAuthorPerson,
+  reporterProfileUrl,
+  muqtarabAngleUrl,
+  SABQ_ORG_AR,
+  SABQ_ORG_EN,
+} from "./utils/creatorSchema";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -250,15 +262,21 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
         seo: articles.seo,
         status: articles.status,
         categoryName: categories.nameAr,
+        authorId: articles.authorId,
+        reporterId: articles.reporterId,
         authorFirstName: users.firstName,
         authorLastName: users.lastName,
         reporterFirstName: reporterUsers.firstName,
         reporterLastName: reporterUsers.lastName,
+        reporterStaffSlug: reporterStaff.slug,
+        authorStaffSlug: authorStaff.slug,
       })
       .from(articles)
       .leftJoin(categories, eq(articles.categoryId, categories.id))
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+      .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
+      .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
       .where(or(eq(articles.slug, slug), eq(articles.englishSlug, slug)))
       .limit(1)
   );
@@ -296,6 +314,14 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   }
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
+  const authorPerson = buildArticleAuthorPerson(baseUrl, {
+    reporterName,
+    editorName,
+    reporterId: a.reporterId,
+    reporterStaffSlug: a.reporterStaffSlug,
+    authorId: a.authorId,
+    authorStaffSlug: a.authorStaffSlug,
+  });
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -306,7 +332,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
-    "author": { "@type": "Person", "name": authorName },
+    "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "صحيفة سبق الإلكترونية",
@@ -369,11 +395,20 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         publishedAt: enArticles.publishedAt,
         updatedAt: enArticles.updatedAt,
         seo: enArticles.seo,
+        authorId: enArticles.authorId,
+        reporterId: enArticles.reporterId,
         authorFirstName: users.firstName,
         authorLastName: users.lastName,
+        reporterFirstName: reporterUsers.firstName,
+        reporterLastName: reporterUsers.lastName,
+        reporterStaffSlug: reporterStaff.slug,
+        authorStaffSlug: authorStaff.slug,
       })
       .from(enArticles)
       .leftJoin(users, eq(enArticles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(enArticles.reporterId, reporterUsers.id))
+      .leftJoin(reporterStaff, eq(enArticles.reporterId, reporterStaff.userId))
+      .leftJoin(authorStaff, eq(enArticles.authorId, authorStaff.userId))
       .where(or(eq(enArticles.slug, slug), eq(enArticles.englishSlug, slug)))
       .limit(1)
   );
@@ -391,7 +426,9 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/en/article/${articleSlug}`;
-  const authorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ') || 'Sabq News';
+  const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
+  const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
+  const authorName = reporterName || editorName || 'Sabq News';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
   let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
   if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
@@ -405,6 +442,15 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   }
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
+  const authorPerson = buildArticleAuthorPerson(baseUrl, {
+    reporterName,
+    editorName,
+    reporterId: a.reporterId,
+    reporterStaffSlug: a.reporterStaffSlug,
+    authorId: a.authorId,
+    authorStaffSlug: a.authorStaffSlug,
+    lang: "en",
+  });
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -415,7 +461,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
-    "author": { "@type": "Person", "name": authorName },
+    "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "Sabq News",
@@ -475,11 +521,20 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
         publishedAt: urArticles.publishedAt,
         updatedAt: urArticles.updatedAt,
         seo: urArticles.seo,
+        authorId: urArticles.authorId,
+        reporterId: urArticles.reporterId,
         authorFirstName: users.firstName,
         authorLastName: users.lastName,
+        reporterFirstName: reporterUsers.firstName,
+        reporterLastName: reporterUsers.lastName,
+        reporterStaffSlug: reporterStaff.slug,
+        authorStaffSlug: authorStaff.slug,
       })
       .from(urArticles)
       .leftJoin(users, eq(urArticles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(urArticles.reporterId, reporterUsers.id))
+      .leftJoin(reporterStaff, eq(urArticles.reporterId, reporterStaff.userId))
+      .leftJoin(authorStaff, eq(urArticles.authorId, authorStaff.userId))
       .where(or(eq(urArticles.slug, slug), eq(urArticles.englishSlug, slug)))
       .limit(1)
   );
@@ -497,7 +552,9 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/ur/article/${articleSlug}`;
-  const authorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ') || 'سبق نیوز';
+  const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
+  const editorName = [a.authorFirstName, a.authorLastName].filter(Boolean).join(' ');
+  const authorName = reporterName || editorName || 'سبق نیوز';
   const publishedTime = a.publishedAt ? new Date(a.publishedAt).toISOString() : undefined;
   let modifiedTime = a.updatedAt ? new Date(a.updatedAt).toISOString() : publishedTime;
   if (publishedTime && modifiedTime && a.publishedAt && a.updatedAt) {
@@ -511,6 +568,14 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   }
   const keywords = seoData.keywords || [];
   const schemaExtras = buildNewsArticleSchemaExtras(a.content, image, baseUrl);
+  const authorPerson = buildArticleAuthorPerson(baseUrl, {
+    reporterName,
+    editorName,
+    reporterId: a.reporterId,
+    reporterStaffSlug: a.reporterStaffSlug,
+    authorId: a.authorId,
+    authorStaffSlug: a.authorStaffSlug,
+  });
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -521,7 +586,7 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
     "image": schemaExtras.image,
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
-    "author": { "@type": "Person", "name": authorName },
+    "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "سبق نیوز",
@@ -952,20 +1017,37 @@ async function handleKeywordPage(slug: string, baseUrl: string, lang: 'ar' | 'en
 }
 
 async function handleReporterPage(idOrSlug: string, baseUrl: string, lang: 'ar' | 'en'): Promise<SeoData> {
-  const reporter = await withCache(`seo:reporter:${idOrSlug}`, CACHE_TTL.LONG, async () =>
+  const isEn = lang === 'en';
+  const rows = await withCache(`seo:reporter:${lang}:${idOrSlug}`, CACHE_TTL.LONG, async () =>
     db
       .select({
-        id: users.id,
+        slug: staff.slug,
+        userId: staff.userId,
+        name: staff.name,
+        nameAr: staff.nameAr,
+        title: staff.title,
+        titleAr: staff.titleAr,
+        bio: staff.bio,
+        bioAr: staff.bioAr,
+        profileImage: staff.profileImage,
+        userProfileImage: users.profileImageUrl,
         firstName: users.firstName,
         lastName: users.lastName,
       })
-      .from(users)
-      .where(eq(users.id, idOrSlug))
+      .from(staff)
+      .leftJoin(users, eq(staff.userId, users.id))
+      .where(and(
+        or(eq(staff.slug, idOrSlug), eq(staff.userId, idOrSlug)),
+        eq(staff.isActive, true),
+        inArray(staff.staffType, ['reporter', 'writer', 'opinion_author', 'content_creator']),
+      ))
       .limit(1)
   );
-  const isEn = lang === 'en';
-  const canonicalUrl = `${baseUrl}${isEn ? '/en' : ''}/reporter/${encodeURIComponent(idOrSlug)}`;
-  if (!reporter.length) {
+
+  const profileSlug = rows[0]?.slug || rows[0]?.userId || idOrSlug;
+  const canonicalUrl = reporterProfileUrl(baseUrl, profileSlug, lang);
+
+  if (!rows.length) {
     return {
       title: isEn ? 'Reporter — Sabq' : 'كاتب — سبق',
       description: isEn
@@ -980,19 +1062,48 @@ async function handleReporterPage(idOrSlug: string, baseUrl: string, lang: 'ar' 
       robots: 'noindex, follow',
     };
   }
-  const r = reporter[0];
-  const fullName = [r.firstName, r.lastName].filter(Boolean).join(' ') || idOrSlug;
+
+  const r = rows[0];
+  const fullName = (isEn ? r.name : r.nameAr)
+    || [r.firstName, r.lastName].filter(Boolean).join(' ')
+    || profileSlug;
+  const bioText = truncate((isEn ? r.bio : r.bioAr) || '', 220);
+  const description = isEn
+    ? (bioText || `Articles by ${fullName} on Sabq News.`)
+    : (bioText || `مقالات وأخبار الكاتب ${fullName} على صحيفة سبق الإلكترونية.`);
+  const rawImage = r.profileImage || r.userProfileImage || '';
+  const ogImage = rawImage
+    ? ensureAbsoluteUrl(rawImage, baseUrl)
+    : `${baseUrl}/branding/sabq-og-image.png`;
+  const jobTitle = (isEn ? r.title : r.titleAr) || (isEn ? 'Sabq Contributor' : 'كاتب — سبق');
+
+  const person = buildPersonJsonLd({
+    name: fullName,
+    url: canonicalUrl,
+    image: ogImage,
+    description,
+    jobTitle,
+    worksFor: isEn ? SABQ_ORG_EN : SABQ_ORG_AR,
+  });
+
   return {
     title: isEn ? `${fullName} — Sabq` : `${fullName} — سبق`,
-    description: isEn
-      ? `Articles by ${fullName} on Sabq News.`
-      : `مقالات وأخبار الكاتب ${fullName} على صحيفة سبق الإلكترونية.`,
+    description,
     canonicalUrl,
     ogType: 'profile',
-    ogImage: `${baseUrl}/branding/sabq-og-image.png`,
+    ogImage,
     ogLocale: isEn ? 'en_US' : 'ar_SA',
     ogSiteName: isEn ? 'Sabq News' : 'صحيفة سبق الإلكترونية',
     twitterSite: '@sabq',
+    robots: 'index, follow, max-image-preview:large',
+    jsonLd: buildProfilePageJsonLd({
+      name: fullName,
+      url: canonicalUrl,
+      description,
+      image: ogImage,
+      person,
+    }),
+    preloadImage: ogImage !== `${baseUrl}/branding/sabq-og-image.png` ? ogImage : undefined,
   };
 }
 
@@ -1006,14 +1117,24 @@ async function handleMuqtarabAnglePage(slug: string, baseUrl: string): Promise<S
         shortDesc: angles.shortDesc,
         coverImageUrl: angles.coverImageUrl,
         isActive: angles.isActive,
+        managerFirstName: users.firstName,
+        managerLastName: users.lastName,
+        managerBio: users.bio,
+        managerImage: users.profileImageUrl,
+        managerStaffSlug: angleManagerStaff.slug,
+        managerStaffNameAr: angleManagerStaff.nameAr,
+        managerStaffBioAr: angleManagerStaff.bioAr,
+        managerStaffImage: angleManagerStaff.profileImage,
       })
       .from(angles)
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(angleManagerStaff, eq(angles.managerUserId, angleManagerStaff.userId))
       .where(eq(angles.slug, slug))
       .limit(1)
   );
   if (!rows.length || !rows[0].isActive) return null;
   const ang = rows[0];
-  const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(ang.slug)}`;
+  const canonicalUrl = muqtarabAngleUrl(baseUrl, ang.slug);
   const description = truncate(
     ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`,
     220,
@@ -1021,15 +1142,43 @@ async function handleMuqtarabAnglePage(slug: string, baseUrl: string): Promise<S
   const image = ang.coverImageUrl
     ? ensureAbsoluteUrl(ang.coverImageUrl, baseUrl)
     : `${baseUrl}/branding/sabq-og-image.png`;
+
+  const writerName = ang.managerStaffNameAr
+    || [ang.managerFirstName, ang.managerLastName].filter(Boolean).join(' ')
+    || ang.nameAr;
+  const writerBio = truncate(ang.managerStaffBioAr || ang.managerBio || description, 220);
+  const writerImageRaw = ang.managerStaffImage || ang.managerImage || ang.coverImageUrl || '';
+  const writerImage = writerImageRaw ? ensureAbsoluteUrl(writerImageRaw, baseUrl) : image;
+  const writerProfileUrl = ang.managerStaffSlug
+    ? reporterProfileUrl(baseUrl, ang.managerStaffSlug, 'ar')
+    : canonicalUrl;
+
+  const person = buildPersonJsonLd({
+    name: writerName,
+    url: writerProfileUrl,
+    image: writerImage,
+    description: writerBio,
+    jobTitle: `كاتب زاوية ${ang.nameAr} — مُقترب`,
+    worksFor: SABQ_ORG_AR,
+  });
+
   return {
     title: `${ang.nameAr} — مُقترب — سبق`,
     description,
     canonicalUrl,
-    ogType: 'website',
+    ogType: 'profile',
     ogImage: image,
     ogLocale: 'ar_SA',
     ogSiteName: 'صحيفة سبق الإلكترونية',
     twitterSite: '@sabq',
+    robots: 'index, follow, max-image-preview:large',
+    jsonLd: buildProfilePageJsonLd({
+      name: `${ang.nameAr} — مُقترب`,
+      url: canonicalUrl,
+      description,
+      image,
+      person,
+    }),
     preloadImage: image,
   };
 }
@@ -1055,6 +1204,7 @@ async function handleMuqtarabTopicPage(
         angleNameAr: angles.nameAr,
         angleSlug: angles.slug,
         angleCover: angles.coverImageUrl,
+        writerSignature: angles.writerSignature,
       })
       .from(topics)
       .innerJoin(angles, eq(topics.angleId, angles.id))
@@ -1094,6 +1244,14 @@ async function handleMuqtarabTopicPage(
     };
   }
 
+  const anglePageUrl = muqtarabAngleUrl(baseUrl, t.angleSlug);
+  const authorPerson = buildPersonJsonLd({
+    name: t.writerSignature || t.angleNameAr,
+    url: anglePageUrl,
+    jobTitle: `كاتب زاوية ${t.angleNameAr} — مُقترب`,
+    worksFor: SABQ_ORG_AR,
+  });
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "NewsArticle",
@@ -1103,6 +1261,7 @@ async function handleMuqtarabTopicPage(
     "image": [image],
     "datePublished": publishedTime,
     "dateModified": modifiedTime,
+    "author": authorPerson,
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "صحيفة سبق الإلكترونية",
