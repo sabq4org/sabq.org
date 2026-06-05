@@ -134,17 +134,25 @@ export default function AngleSubmissionsManagement() {
         body: JSON.stringify({ status, reviewerNotes: notes }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/angle-submissions"] });
       setReviewDialogOpen(false);
       setSelectedSubmission(null);
       setReviewNotes("");
-      toast({
-        title: reviewAction === "approved" ? "تمت الموافقة" : "تم الرفض",
-        description: reviewAction === "approved" 
-          ? "يمكنك الآن إنشاء الزاوية من زر 'إنشاء الزاوية'" 
-          : "تم رفض الطلب بنجاح",
-      });
+      if (reviewAction === "approved") {
+        // الموافقة الآن تنشئ الحساب + الزاوية + تُرسل بيانات الدخول تلقائياً
+        const prov = data?._provision;
+        toast({
+          title: "تمت الموافقة وإنشاء الزاوية",
+          description: prov?.alreadyProvisioned
+            ? "الزاوية مُنشأة مسبقاً لهذا الطلب"
+            : prov?.isNewUser
+              ? "أُنشئت الزاوية والحساب وأُرسلت بيانات الدخول بالبريد"
+              : "أُنشئت الزاوية ورُبطت بالحساب الموجود وأُرسل بريد الدخول",
+        });
+      } else {
+        toast({ title: "تم الرفض", description: "تم رفض الطلب بنجاح" });
+      }
     },
     onError: (error) => {
       toast({
@@ -595,7 +603,7 @@ export default function AngleSubmissionsManagement() {
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {reviewAction === "approved"
-                  ? "سيتم إنشاء زاوية جديدة باسم المقترح وربطها بهذا الطلب"
+                  ? "سيتم تلقائياً: إنشاء الزاوية + حساب الكاتب (دور كاتب زاوية) + إرسال بيانات الدخول له بالبريد."
                   : "سيتم رفض هذا الطلب"}
               </AlertDialogDescription>
             </AlertDialogHeader>

@@ -61,6 +61,11 @@ export async function seedRBAC() {
     // Muqtarab permissions
     { code: "muqtarab.manage", label: "Manage Muqtarab Angles", labelAr: "إدارة زوايا مُقترب", module: "muqtarab" },
     { code: "muqtarab.publish", label: "Publish Muqtarab Angles", labelAr: "نشر زوايا مُقترب", module: "muqtarab" },
+    // Muqtarab - Self-Service Angle Writer (كاتب زاوية مُقترب)
+    { code: "muqtarab.own.view", label: "View Own Angle", labelAr: "عرض زاويتي في مُقترب", module: "muqtarab" },
+    { code: "muqtarab.own.topic.create", label: "Create Own Angle Topic", labelAr: "إضافة موضوع في زاويتي", module: "muqtarab" },
+    { code: "muqtarab.own.topic.edit", label: "Edit Own Angle Topic", labelAr: "تعديل مواضيع زاويتي", module: "muqtarab" },
+    { code: "muqtarab.own.topic.submit", label: "Submit Own Angle Topic For Review", labelAr: "إرسال موضوع لمراجعة الإدارة", module: "muqtarab" },
 
     // Shorts permissions (سبق قصير - Vertical Video Reels)
     { code: "shorts:view", label: "View Shorts", labelAr: "عرض الشورتس", module: "shorts" },
@@ -145,6 +150,12 @@ export async function seedRBAC() {
       isSystem: false,
     },
     {
+      name: "angle_writer",
+      nameAr: "كاتب زاوية",
+      description: "Muqtarab angle owner: manages own angle and submits topics for admin review",
+      isSystem: false,
+    },
+    {
       name: "reader",
       nameAr: "قارئ",
       description: "Basic reader access",
@@ -218,7 +229,17 @@ export async function seedRBAC() {
       "categories.view",
       "tasks.view_own", "tasks.create", "tasks.edit_own",
     ],
-    
+
+    // كاتب زاوية مُقترب: صلاحيات محدودة على زاويته الخاصة فقط (الملكية تُفرض
+    // في الخلفية). لا يملك muqtarab.manage — تلك للأدمن/المحرر.
+    angle_writer: [
+      "muqtarab.own.view",
+      "muqtarab.own.topic.create",
+      "muqtarab.own.topic.edit",
+      "muqtarab.own.topic.submit",
+      "media.view", "media.upload", "media_library.view", "media_library.upload",
+    ],
+
     reader: [
       "articles.view",
       "categories.view",

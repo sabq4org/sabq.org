@@ -58,6 +58,7 @@ import {
   Wrench,
   Trophy,
   Moon,
+  Inbox,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -114,6 +115,20 @@ export const navConfig: NavItem[] = [
     path: "/dashboard/articles/new",
     icon: PlusCircle,
     roles: ["opinion_author"],
+  },
+
+  // ===== كاتب الزاوية / Angle Writer (مُقترب) =====
+  // قائمة مبسّطة: "زاويتي" فقط. permission-first يُظهرها لمن يملك muqtarab.own.view،
+  // وُيخفيها عن الأدمن/المحرر (يديرون عبر صفحات مُقترب الإدارية).
+  {
+    id: "my_angle",
+    labelKey: "nav.my_angle",
+    labelAr: "زاويتي",
+    path: "/dashboard/my-angle",
+    icon: Lightbulb,
+    roles: ["angle_writer"],
+    excludeRoles: ["admin", "system_admin", "editor"],
+    permissions: ["muqtarab.own.view"],
   },
 
   // ===== الناشر / Publisher Staff =====
@@ -269,6 +284,15 @@ export const navConfig: NavItem[] = [
         labelAr: "مُقترب",
         path: "/dashboard/muqtarab",
         icon: Boxes,
+        roles: ["admin", "editor"],
+        permissions: ["muqtarab.manage", "muqtarab.publish"],
+      },
+      {
+        id: "muqtarab_review",
+        labelKey: "nav.muqtarab_review",
+        labelAr: "مراجعة مواضيع مُقترب",
+        path: "/dashboard/muqtarab/review",
+        icon: Inbox,
         roles: ["admin", "editor"],
         permissions: ["muqtarab.manage", "muqtarab.publish"],
       },
