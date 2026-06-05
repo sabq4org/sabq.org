@@ -15,6 +15,7 @@ import {
   suggestTitles,
   proofreadContent,
   suggestExcerpt,
+  suggestSeo,
   assistReview,
   classifySubmission,
 } from "../services/muqtarabAI";
@@ -88,6 +89,24 @@ router.post("/api/muqtarab/my-angle/ai/suggest-excerpt", requireAuth, async (req
     console.error("[muqtarab-ai] suggest-excerpt:", err);
     res.status(400).json({
       message: err instanceof Error ? err.message : "فشل في توليد الوصف",
+    });
+  }
+});
+
+router.post("/api/muqtarab/my-angle/ai/seo", requireAuth, async (req: any, res) => {
+  try {
+    if (!(await requireOwnedAngle(req, res))) return;
+
+    const content = String(req.body?.content || "");
+    const title = String(req.body?.title || "").trim();
+    if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
+
+    const result = await suggestSeo({ content, title });
+    res.json(result);
+  } catch (err) {
+    console.error("[muqtarab-ai] seo:", err);
+    res.status(400).json({
+      message: err instanceof Error ? err.message : "فشل في اقتراح بيانات SEO",
     });
   }
 });

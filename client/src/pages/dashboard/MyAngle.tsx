@@ -21,6 +21,7 @@ import {
   Sparkles,
   Wand2,
   SpellCheck,
+  Search,
   Eye,
   TrendingUp,
   BarChart3,
@@ -66,6 +67,7 @@ interface MyTopic {
   excerpt?: string | null;
   content?: { blocks?: any[]; rawHtml?: string; plainText?: string } | null;
   heroImageUrl?: string | null;
+  seoMeta?: { metaTitle?: string; metaDescription?: string; keywords?: string[] } | null;
   status: "draft" | "pending_review" | "published" | "needs_revision" | "archived";
   reviewNotes?: string | null;
   publishedAt?: string | null;
@@ -131,9 +133,12 @@ export default function MyAngle() {
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [editorContent, setEditorContent] = useState("");
   const [isUploadingHero, setIsUploadingHero] = useState(false);
-  const [aiLoading, setAiLoading] = useState<"titles" | "proofread" | "excerpt" | null>(null);
+  const [aiLoading, setAiLoading] = useState<"titles" | "proofread" | "excerpt" | "seo" | null>(null);
   const [suggestedTitles, setSuggestedTitles] = useState<string[]>([]);
   const [proofreadPreview, setProofreadPreview] = useState<{ correctedText: string; notes: string } | null>(null);
+  const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedSnapshotRef = useRef("");
@@ -190,6 +195,16 @@ export default function MyAngle() {
       toast({ title: "خطأ", description: e instanceof Error ? e.message : "فشل في حفظ التوقيع", variant: "destructive" }),
   });
 
+  const hasSeo = seoKeywords.length > 0 || !!seoDescription.trim() || !!seoTitle.trim();
+  const buildSeoMeta = () =>
+    hasSeo
+      ? {
+          keywords: seoKeywords,
+          metaTitle: seoTitle.trim() || undefined,
+          metaDescription: seoDescription.trim() || undefined,
+        }
+      : undefined;
+
   const buildPayload = () => {
     const plainText = editorContent.replace(/<[^>]*>/g, "").trim();
     return {
@@ -197,12 +212,13 @@ export default function MyAngle() {
       excerpt: excerpt.trim() || undefined,
       heroImageUrl: heroImageUrl || undefined,
       content: { blocks: [], rawHtml: editorContent, plainText },
+      seoMeta: buildSeoMeta(),
     };
   };
 
   const buildSnapshot = useCallback(
-    () => JSON.stringify({ title, excerpt, heroImageUrl, editorContent }),
-    [title, excerpt, heroImageUrl, editorContent],
+    () => JSON.stringify({ title, excerpt, heroImageUrl, editorContent, seoKeywords, seoTitle, seoDescription }),
+    [title, excerpt, heroImageUrl, editorContent, seoKeywords, seoTitle, seoDescription],
   );
 
   const createMutation = useMutation({
@@ -258,6 +274,9 @@ export default function MyAngle() {
     setEditorContent("");
     setSuggestedTitles([]);
     setProofreadPreview(null);
+    setSeoKeywords([]);
+    setSeoTitle("");
+    setSeoDescription("");
     setAiLoading(null);
     setAutoSaveStatus("idle");
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -269,6 +288,11 @@ export default function MyAngle() {
     setExcerpt("");
     setHeroImageUrl("");
     setEditorContent("");
+    setSeoKeywords([]);
+    setSeoTitle("");
+    setSeoDescription("");
+    setSuggestedTitles([]);
+    setProofreadPreview(null);
     setDialogOpen(true);
   }
 
@@ -278,11 +302,22 @@ export default function MyAngle() {
     setExcerpt(topic.excerpt || "");
     setHeroImageUrl(topic.heroImageUrl || "");
     setEditorContent(topic.content?.rawHtml || "");
+    const kw = Array.isArray(topic.seoMeta?.keywords) ? topic.seoMeta!.keywords! : [];
+    const mt = topic.seoMeta?.metaTitle || "";
+    const md = topic.seoMeta?.metaDescription || "";
+    setSeoKeywords(kw);
+    setSeoTitle(mt);
+    setSeoDescription(md);
+    setSuggestedTitles([]);
+    setProofreadPreview(null);
     lastSavedSnapshotRef.current = JSON.stringify({
       title: topic.title,
       excerpt: topic.excerpt || "",
       heroImageUrl: topic.heroImageUrl || "",
       editorContent: topic.content?.rawHtml || "",
+      seoKeywords: kw,
+      seoTitle: mt,
+      seoDescription: md,
     });
     setAutoSaveStatus("idle");
     setDialogOpen(true);
@@ -367,13 +402,13 @@ export default function MyAngle() {
     else createMutation.mutate();
   }
 
-  async function runAiAction(action: "titles" | "proofread" | "excerpt") {
+  async function runAiAction(action: "titles" | "proofread" | "excerpt" | "seo") {
     const content = editorContent.trim();
-    if (!content && action !== "excerpt") {
+    if (!content) {
       toast({ title: "اكتب المحتوى أولاً", variant: "destructive" });
       return;
     }
-    if (action === "excerpt" && !title.trim()) {
+    if ((action === "excerpt" || action === "seo") && !title.trim()) {
       toast({ title: "أدخل العنوان أولاً", variant: "destructive" });
       return;
     }
@@ -393,13 +428,25 @@ export default function MyAngle() {
           body: JSON.stringify({ content, title: title.trim() || undefined }),
         });
         setProofreadPreview(res);
-      } else {
+      } else if (action === "excerpt") {
         const res = await apiRequest<{ excerpt: string }>("/api/muqtarab/my-angle/ai/suggest-excerpt", {
           method: "POST",
           body: JSON.stringify({ content, title: title.trim() }),
         });
         setExcerpt(res.excerpt || "");
         toast({ title: "تم توليد الوصف المختصر" });
+      } else {
+        const res = await apiRequest<{ keywords: string[]; metaTitle: string; metaDescription: string }>(
+          "/api/muqtarab/my-angle/ai/seo",
+          {
+            method: "POST",
+            body: JSON.stringify({ content, title: title.trim() }),
+          },
+        );
+        setSeoKeywords(Array.isArray(res.keywords) ? res.keywords : []);
+        setSeoTitle(res.metaTitle || "");
+        setSeoDescription(res.metaDescription || "");
+        toast({ title: "اقتراحات SEO جاهزة", description: "ستُحفظ مع الموضوع." });
       }
     } catch (e) {
       toast({
@@ -722,6 +769,18 @@ export default function MyAngle() {
                     {aiLoading === "excerpt" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                     وصف مختصر
                   </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={!!aiLoading}
+                    onClick={() => runAiAction("seo")}
+                    data-testid="button-ai-seo"
+                  >
+                    {aiLoading === "seo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                    تحسين SEO
+                  </Button>
                 </div>
 
                 {suggestedTitles.length > 0 && (
@@ -754,6 +813,74 @@ export default function MyAngle() {
                         تجاهل
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {hasSeo && (
+                  <div className="rounded-md border bg-background p-3 space-y-3 text-sm" data-testid="seo-preview">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                      <Search className="h-3.5 w-3.5" />
+                      بيانات SEO (تُحفظ مع الموضوع)
+                    </div>
+                    {seoTitle && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">عنوان الميتا</label>
+                        <Input
+                          value={seoTitle}
+                          onChange={(e) => setSeoTitle(e.target.value)}
+                          className="h-8 text-sm"
+                          data-testid="input-seo-title"
+                        />
+                      </div>
+                    )}
+                    {seoDescription && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">وصف الميتا ({seoDescription.length} حرفاً)</label>
+                        <Textarea
+                          value={seoDescription}
+                          onChange={(e) => setSeoDescription(e.target.value)}
+                          rows={2}
+                          className="text-sm"
+                          data-testid="input-seo-description"
+                        />
+                      </div>
+                    )}
+                    {seoKeywords.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">الكلمات المفتاحية</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {seoKeywords.map((kw, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs"
+                              data-testid={`chip-keyword-${i}`}
+                            >
+                              {kw}
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => setSeoKeywords((prev) => prev.filter((_, idx) => idx !== i))}
+                                aria-label="إزالة"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSeoKeywords([]);
+                        setSeoTitle("");
+                        setSeoDescription("");
+                      }}
+                    >
+                      مسح بيانات SEO
+                    </Button>
                   </div>
                 )}
               </div>

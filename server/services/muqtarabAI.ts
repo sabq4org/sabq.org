@@ -130,6 +130,50 @@ ${plain}
   return { excerpt };
 }
 
+/** يقترح كلمات مفتاحية ووصف ميتا لتحسين ظهور الموضوع في محركات البحث (SEO). */
+export async function suggestSeo(opts: {
+  title: string;
+  content: string;
+}): Promise<{ keywords: string[]; metaDescription: string; metaTitle: string }> {
+  const plain = truncate(stripHtml(opts.content));
+  if (plain.length < 30) {
+    throw new Error("المحتوى قصير جداً لاقتراح بيانات SEO");
+  }
+
+  const prompt = `أنت خبير SEO عربي. حلّل الموضوع التالي واقترح بيانات تحسين محركات البحث.
+
+المتطلبات:
+- "keywords": من 5 إلى 8 كلمات/عبارات مفتاحية عربية دقيقة يبحث بها الناس فعلاً (بلا تكرار، بلا وسوم #).
+- "metaTitle": عنوان ميتا جذّاب (50–60 حرفاً) يتضمن أهم كلمة مفتاحية.
+- "metaDescription": وصف ميتا (140–160 حرفاً) يلخّص الموضوع ويحفّز النقر.
+
+العنوان: ${opts.title}
+المحتوى:
+${plain}
+
+أعد JSON فقط:
+{"keywords":["..."],"metaTitle":"...","metaDescription":"..."}`;
+
+  const res = await aiManager.generate(prompt, MODEL);
+  if (res.error) throw new Error(res.error);
+
+  const parsed = extractJson(res.content || "") as
+    | { keywords?: string[]; metaTitle?: string; metaDescription?: string }
+    | null;
+
+  const keywords = Array.isArray(parsed?.keywords)
+    ? parsed!.keywords.map((k) => String(k).trim().replace(/^#/, "")).filter(Boolean).slice(0, 8)
+    : [];
+  const metaDescription = String(parsed?.metaDescription || "").trim();
+  const metaTitle = String(parsed?.metaTitle || "").trim();
+
+  if (keywords.length === 0 && !metaDescription) {
+    throw new Error("لم يُرجع الذكاء الاصطناعي بيانات SEO صالحة");
+  }
+
+  return { keywords, metaDescription, metaTitle };
+}
+
 // ============================================================
 // مساعد الإدارة (AI Gatekeeper) — ملخص + فحص سياسات + تصنيف
 // ============================================================
