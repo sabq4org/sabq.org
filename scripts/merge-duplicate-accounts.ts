@@ -24,10 +24,10 @@
  *   users_email_lower_unique index can be created afterwards.
  *
  * SAFETY
- *   - DRY-RUN by default. Prints the full plan and row counts. Pass --apply to
- *     write. Run against the BACKUP database first.
- *   - REJECTS a DATABASE_URL containing "prod"/"production" unless
- *     --i-understand is also passed.
+ *   - DRY-RUN by default. Prints the full plan and row counts and writes NOTHING,
+ *     so it is safe to point at production just to inspect. Pass --apply to write.
+ *   - --apply REJECTS a DATABASE_URL containing "prod"/"production" unless
+ *     --i-understand is also passed. Run against the BACKUP database first.
  *   - Groups that are ambiguous (no writer row, or more than one writer row) are
  *     SKIPPED and reported for manual handling — never guessed.
  *   - Each table repoint runs in a savepoint; a unique-constraint collision
@@ -100,10 +100,13 @@ function isReaderRow(u: UserRow): boolean {
 }
 
 function abortOnProd() {
+  // Dry-run is read-only (no UPDATE/DELETE), so it is always allowed — inspect
+  // production freely. Only the writing path (--apply) is gated on prod URLs.
+  if (!APPLY) return;
   const url = process.env.DATABASE_URL || "";
   if (/prod|production/i.test(url) && !I_UNDERSTAND) {
-    console.error("[merge] ABORT: DATABASE_URL looks like production.");
-    console.error("        Run against the BACKUP db. Pass --i-understand to override (NOT recommended).");
+    console.error("[merge] ABORT: --apply against a DATABASE_URL that looks like production.");
+    console.error("        Run against the BACKUP db first. Pass --i-understand to override (NOT recommended).");
     process.exit(2);
   }
 }
