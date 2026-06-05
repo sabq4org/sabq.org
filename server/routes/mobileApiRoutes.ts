@@ -6706,9 +6706,17 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
     if (!admin) {
       return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
     }
+    // Global stats are heavy (~18 aggregate queries over 900k+ articles).
+    // Cache 60s so repeat dashboard opens are instant (mirrors the web route).
+    const { memoryCache } = await import("../memoryCache");
+    const cacheKey = "mobile:admin:fullstats";
+    const cached = memoryCache.get<any>(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
     const { storage } = await import("../storage");
     const s = await storage.getAdminDashboardStats();
-    res.json({
+    const payload = {
       success: true,
       articles: {
         total: s.articles.total, published: s.articles.published,
@@ -6723,12 +6731,11 @@ router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) =>
       mediaLibrary: {
         totalFiles: s.mediaLibrary.totalFiles, totalSize: s.mediaLibrary.totalSize,
       },
-      aiTasks: {
-        total: s.aiTasks.total, pending: s.aiTasks.pending, completed: s.aiTasks.completed,
-      },
       aiImages: { total: s.aiImages.total, thisWeek: s.aiImages.thisWeek },
       smartBlocks: { total: s.smartBlocks.total },
-    });
+    };
+    memoryCache.set(cacheKey, payload, 60000);
+    res.json(payload);
   } catch (error) {
     console.error("[Mobile API] GET /admin/dashboard/full-stats error:", error);
     res.status(500).json({ success: false, message: "تعذر تحميل الإحصائيات" });

@@ -13,6 +13,9 @@ final class AdminDashboardViewModel: ObservableObject {
     @Published var items: [AdminNewsItem] = []
     @Published var selectedStatus: AdminArticleStatus = .draft
     @Published var isLoading = true
+    /// Stats load independently of the list (they're heavy) so the news list
+    /// shows immediately while the cards fill in.
+    @Published var isStatsLoading = true
     @Published var isLoadingMore = false
     @Published var error: String?
     /// Ids currently being published — drives the per-row spinner.
@@ -31,22 +34,28 @@ final class AdminDashboardViewModel: ObservableObject {
         self.service = service
     }
 
-    /// Initial / pull-to-refresh load: metrics + the selected section's first page.
+    /// Initial / pull-to-refresh load. The (slow) stats fetch runs in its own
+    /// task so it doesn't block the news list from appearing.
     func load() async {
         isLoading = true
         error = nil
         page = 1
+        Task { await refreshStats() }
         do {
-            async let overviewResult = service.fetchFullStats()
-            async let listResult = service.fetchNews(status: selectedStatus, page: 1)
-            fullStats = try await overviewResult
-            let pageResult = try await listResult
+            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
             items = pageResult.items
             total = pageResult.total
         } catch {
             self.error = "تعذّر تحميل البيانات"
         }
         isLoading = false
+    }
+
+    /// Fetch the overview stats (independent of the list).
+    private func refreshStats() async {
+        isStatsLoading = true
+        defer { isStatsLoading = false }
+        fullStats = (try? await service.fetchFullStats()) ?? fullStats
     }
 
     /// Switch the active section and reload its first page.
@@ -143,14 +152,12 @@ final class AdminDashboardViewModel: ObservableObject {
     }
 
     private func refreshFirstPageAndMetrics() async {
+        Task { await refreshStats() }
         do {
-            async let listResult = service.fetchNews(status: selectedStatus, page: 1)
-            async let overviewResult = service.fetchFullStats()
-            let pageResult = try await listResult
+            let pageResult = try await service.fetchNews(status: selectedStatus, page: 1)
             items = pageResult.items
             total = pageResult.total
             page = 1
-            fullStats = try await overviewResult
         } catch {
             self.error = "تعذّر تحديث البيانات"
         }
@@ -213,16 +220,16 @@ struct AdminDashboardView: View {
                 .foregroundStyle(SabqTheme.ink)
 
             let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
-            if vm.fullStats == nil && vm.isLoading {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(0..<6, id: \.self) { _ in
-                        SkeletonBox(height: 78, radius: SabqTheme.tileRadius)
-                    }
-                }
-            } else if let stats = vm.fullStats {
+            if let stats = vm.fullStats {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(stats.cards()) { card in
                         AdminStatGridCard(card: card)
+                    }
+                }
+            } else if vm.isStatsLoading {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(0..<6, id: \.self) { _ in
+                        SkeletonBox(height: 78, radius: SabqTheme.tileRadius)
                     }
                 }
             }
