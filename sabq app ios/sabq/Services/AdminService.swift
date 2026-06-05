@@ -38,8 +38,8 @@ protocol AdminServicing: Sendable {
     func editAndGenerate(content: String) async throws -> AdminGenerationResult
     /// تدقيق لغوي — returns spelling issues.
     func proofread(content: String) async throws -> [AdminProofIssue]
-    /// توليد الصور — AI image (nano-banana) with the full template payload.
-    func generateImage(_ params: AdminImageGenParams) async throws -> String
+    /// توليد صورة بضغطة واحدة — يستخدم إعدادات auto-image المحفوظة + المحتوى.
+    func autoGenerateImage(articleId: String, title: String, content: String, excerpt: String, category: String, articleType: String) async throws -> String
     /// قائمة المراسلين / كتّاب الرأي للمنتقي.
     func fetchUsers(role: String, query: String) async throws -> [AdminUser]
 
@@ -92,23 +92,14 @@ private struct AdminContentBody: Encodable { let content: String }
 private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
 private struct AdminUploadBody: Encodable { let image: String }
 
-/// Text-overlay options for the "خبر مميز" template.
-struct AdminImageOverlay: Encodable, Equatable {
-    var fontSize: Int = 72
-    var fontColor: String = "#FFFFFF"
-    var backgroundColor: String = "rgba(0, 0, 0, 0.6)"
-    var position: String = "center"
-}
-
-/// Full nano-banana payload built from the image-template picker.
-struct AdminImageGenParams: Encodable {
-    var prompt: String
-    var aspectRatio: String = "16:9"
-    var imageSize: String = "2K"
-    var enableThinking: Bool = true
-    var enableSearchGrounding: Bool = false
-    var overlayText: String?
-    var overlayOptions: AdminImageOverlay?
+/// Body for the one-click auto-image generation.
+private struct AdminAutoImageBody: Encodable {
+    let articleId: String
+    let title: String
+    let content: String
+    let excerpt: String
+    let category: String
+    let articleType: String
 }
 private struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
 private struct AdminDeletionBody: Encodable { let deletionReason: String }
@@ -209,11 +200,14 @@ struct LiveAdminService: AdminServicing {
         return response.issues ?? []
     }
 
-    func generateImage(_ params: AdminImageGenParams) async throws -> String {
+    func autoGenerateImage(articleId: String, title: String, content: String, excerpt: String, category: String, articleType: String) async throws -> String {
         let response = try await APIClient.shared.post(
             AdminImageGenResponse.self,
-            path: "/admin/ai/image-generate",
-            body: params,
+            path: "/admin/auto-image/generate",
+            body: AdminAutoImageBody(
+                articleId: articleId, title: title, content: content,
+                excerpt: excerpt, category: category, articleType: articleType
+            ),
             timeout: 180
         )
         guard let url = response.imageUrl, !url.isEmpty else { throw AdminServiceError.missingItem }

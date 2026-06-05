@@ -206,16 +206,21 @@ final class AdminEditorViewModel: ObservableObject {
         catch { self.error = "تعذّر التدقيق اللغوي"; return [] }
     }
 
-    /// توليد الصور — sets the hero image to the generated URL.
-    func runImageGenerate(_ params: AdminImageGenParams) async -> Bool {
+    /// توليد صورة بضغطة واحدة — يستخدم إعدادات auto-image المحفوظة + المحتوى.
+    func runAutoImage(content: String) async {
         isGeneratingImage = true
         defer { isGeneratingImage = false }
         do {
-            imageUrl = try await service.generateImage(params)
-            return true
+            imageUrl = try await service.autoGenerateImage(
+                articleId: articleId,
+                title: title,
+                content: content,
+                excerpt: aiSummary,
+                category: categoryName ?? "",
+                articleType: articleType
+            )
         } catch {
-            self.error = "تعذّر توليد الصورة (تحقق من تهيئة الخدمة)"
-            return false
+            self.error = "تعذّر توليد الصورة (تحقق من إعدادات الصور وتهيئة الخدمة)"
         }
     }
 
@@ -272,7 +277,6 @@ struct AdminArticleEditorView: View {
     @State private var imagePickerItem: PhotosPickerItem?
     @State private var proofIssues: [AdminProofIssue] = []
     @State private var showProofSheet = false
-    @State private var showImageGenSheet = false
     @State private var showUserPicker = false
 
     init(articleId: String, title: String, onSaved: @escaping () -> Void) {
@@ -302,11 +306,6 @@ struct AdminArticleEditorView: View {
         }
         .sheet(isPresented: $showProofSheet) {
             AdminProofIssuesSheet(issues: proofIssues) { applyProofreadAll() }
-        }
-        .sheet(isPresented: $showImageGenSheet) {
-            AdminAIImageSheet(articleTitle: vm.title, isGenerating: vm.isGeneratingImage) { params in
-                await vm.runImageGenerate(params)
-            }
         }
         .sheet(isPresented: $showUserPicker) {
             AdminUserPickerSheet(
@@ -510,11 +509,16 @@ struct AdminArticleEditorView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             Button {
-                showImageGenSheet = true
+                Task {
+                    let html = await htmlController.currentHTML()
+                    await vm.runAutoImage(content: html.isEmpty ? vm.contentHTML : html)
+                }
             } label: {
-                toolLabel("توليد صورة بالذكاء", systemImage: "wand.and.stars", loading: false)
+                toolLabel(vm.isGeneratingImage ? "جارٍ التوليد…" : "توليد صورة بالذكاء الاصطناعي",
+                          systemImage: "wand.and.stars", loading: vm.isGeneratingImage)
             }
             .buttonStyle(.plain)
+            .disabled(vm.isGeneratingImage)
             PhotosPicker(selection: $imagePickerItem, matching: .images) {
                 toolLabel(vm.isUploadingImage ? "جارٍ الرفع…" : "رفع صورة",
                           systemImage: "arrow.up.circle.fill",
@@ -948,225 +952,6 @@ struct AdminProofIssuesSheet: View {
                 }
             }
             .sabqRTL()
-        }
-    }
-}
-
-// MARK: - AI image generation sheet (web-parity templates)
-
-enum AdminImageTemplate: String, CaseIterable, Identifiable {
-    case custom, featured, breaking, infographic, comparison
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .custom:      return "مخصص"
-        case .featured:    return "صورة بارزة"
-        case .breaking:    return "خبر مميز"
-        case .infographic: return "انفوجرافيك"
-        case .comparison:  return "مقارنة"
-        }
-    }
-}
-
-private struct AdminImageColorStyle: Identifiable {
-    let id: String
-    let label: String
-    let prompt: String
-}
-
-/// Mirrors the web AIImageGeneratorDialog: type templates + settings, builds
-/// the prompt from the template fields, pre-filled from the article title.
-struct AdminAIImageSheet: View {
-    let articleTitle: String
-    let isGenerating: Bool
-    /// Returns true on success (sheet dismisses).
-    let onGenerate: (AdminImageGenParams) async -> Bool
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var template: AdminImageTemplate = .featured
-    @State private var customPrompt = ""
-    @State private var subject = ""
-    @State private var headline = ""
-    @State private var data = ""
-    @State private var item1 = ""
-    @State private var item2 = ""
-    @State private var colorStyleIndex = 0
-    @State private var ratio = "16:9"
-    @State private var size = "2K"
-    @State private var enableThinking = true
-    @State private var enableSearch = false
-    @State private var seeded = false
-
-    private let ratios = ["16:9", "1:1", "4:3", "3:4", "9:16"]
-    private let sizes = ["1K", "2K", "4K"]
-    private let colorStyles: [AdminImageColorStyle] = [
-        .init(id: "red", label: "أحمر - عاجل", prompt: "تدرج لوني أحمر هادئ وأنيق، تصميم بسيط ونظيف بدون زخارف، خلفية متدرجة من الأحمر الداكن للأسود، أسلوب مينيمالستي عصري"),
-        .init(id: "blue", label: "أزرق - خاص", prompt: "تدرج لوني أزرق هادئ واحترافي، تصميم نظيف وبسيط، خلفية متدرجة من الأزرق الداكن، أسلوب مينيمالستي أنيق بدون زخارف"),
-        .init(id: "gold", label: "ذهبي - حصري", prompt: "تدرج لوني ذهبي ناعم وراقي، تصميم بسيط وأنيق، خلفية متدرجة من الذهبي الداكن للأسود، أسلوب مينيمالستي فاخر بدون زخارف"),
-        .init(id: "green", label: "أخضر - اقتصاد", prompt: "تدرج لوني أخضر هادئ ومهني، تصميم نظيف وبسيط، خلفية متدرجة من الأخضر الداكن، أسلوب مينيمالستي احترافي بدون زخارف"),
-    ]
-
-    private func t(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    private func buildParams() -> AdminImageGenParams? {
-        var prompt = ""
-        var overlayText: String?
-        var overlayOptions: AdminImageOverlay?
-        switch template {
-        case .custom:
-            prompt = t(customPrompt)
-        case .featured:
-            guard !t(subject).isEmpty else { return nil }
-            prompt = "صورة صحفية احترافية عالية الجودة تُظهر \(t(subject))، إضاءة طبيعية ناعمة، تكوين متوازن، صورة واقعية بدون نصوص أو شعارات، بدقة عالية"
-        case .breaking:
-            guard !t(headline).isEmpty else { return nil }
-            let cs = colorStyles[colorStyleIndex].prompt
-            prompt = "خلفية هادئة وأنيقة، \(cs)، تصميم مينيمالستي بسيط بدون نصوص أو كلمات أو شعارات، فقط تدرجات لونية ناعمة، مناسبة لوضع النص فوقها لاحقاً"
-            overlayText = t(headline)
-            overlayOptions = AdminImageOverlay()
-        case .infographic:
-            guard !t(data).isEmpty else { return nil }
-            prompt = "انفوجرافيك بسيط ونظيف يعرض \(t(data))، تصميم مينيمالستي، خلفية بيضاء أو رمادية فاتحة، أيقونات بسيطة، بدون زخارف أو نصوص إضافية، نمط flat design عصري"
-        case .comparison:
-            guard !t(item1).isEmpty, !t(item2).isEmpty else { return nil }
-            prompt = "انفوجرافيك مقارنة بسيط بين \(t(item1)) و \(t(item2))، تصميم نظيف وهادئ، أيقونات بسيطة، ألوان متناسقة وهادئة، بدون زخارف أو تفاصيل زائدة"
-        }
-        guard !prompt.isEmpty else { return nil }
-        return AdminImageGenParams(
-            prompt: prompt, aspectRatio: ratio, imageSize: size,
-            enableThinking: enableThinking, enableSearchGrounding: enableSearch,
-            overlayText: overlayText, overlayOptions: overlayOptions
-        )
-    }
-
-    private var isValid: Bool { buildParams() != nil }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    label("نوع الصورة")
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(AdminImageTemplate.allCases) { tpl in
-                                let active = tpl == template
-                                Button { template = tpl } label: {
-                                    Text(tpl.label)
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(active ? .white : SabqTheme.secondaryInk)
-                                        .padding(.horizontal, 14).padding(.vertical, 9)
-                                        .background {
-                                            if active { Capsule().fill(SabqTheme.brandGradient) }
-                                            else { Capsule().fill(SabqTheme.surface).overlay(Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)) }
-                                        }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    typeFields
-
-                    settingRow(title: "النسبة", options: ratios, selection: $ratio)
-                    settingRow(title: "الحجم", options: sizes, selection: $size)
-                    Toggle("التفكير العميق", isOn: $enableThinking)
-                        .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.sky)
-                    Toggle("البحث الداعم", isOn: $enableSearch)
-                        .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.sky)
-
-                    Button {
-                        if let p = buildParams() { Task { if await onGenerate(p) { dismiss() } } }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if isGenerating { ProgressView().controlSize(.small) }
-                            Text(isGenerating ? "جارٍ التوليد…" : "توليد الصورة").font(.system(size: 16, weight: .bold))
-                        }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous).fill(SabqTheme.brandGradient))
-                        .opacity(isValid ? 1 : 0.5)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!isValid || isGenerating)
-                }
-                .padding(16)
-            }
-            .background(SabqTheme.background)
-            .navigationTitle("توليد صورة بالذكاء")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } } }
-            .sabqRTL()
-            .onAppear {
-                guard !seeded else { return }
-                seeded = true
-                if !articleTitle.isEmpty {
-                    customPrompt = "صورة بارزة احترافية لمقال بعنوان: \(articleTitle)"
-                    subject = articleTitle
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var typeFields: some View {
-        switch template {
-        case .custom:
-            editorField("وصف الصورة", text: $customPrompt)
-        case .featured:
-            editorField("موضوع الصورة", text: $subject)
-        case .breaking:
-            editorField("العنوان (يُكتب فوق الصورة)", text: $headline)
-            label("نمط اللون")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Array(colorStyles.enumerated()), id: \.element.id) { idx, cs in
-                        let active = idx == colorStyleIndex
-                        Button { colorStyleIndex = idx } label: {
-                            Text(cs.label)
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(active ? .white : SabqTheme.secondaryInk)
-                                .padding(.horizontal, 12).padding(.vertical, 7)
-                                .background {
-                                    if active { Capsule().fill(SabqTheme.sky) }
-                                    else { Capsule().fill(SabqTheme.surface).overlay(Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)) }
-                                }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        case .infographic:
-            editorField("البيانات الإحصائية", text: $data)
-        case .comparison:
-            editorField("العنصر الأول", text: $item1)
-            editorField("العنصر الثاني", text: $item2)
-        }
-    }
-
-    private func label(_ s: String) -> some View {
-        Text(s).font(.system(size: 13, weight: .bold)).foregroundStyle(SabqTheme.secondaryInk)
-    }
-
-    private func editorField(_ title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            label(title)
-            TextEditor(text: text)
-                .font(.system(size: 15)).foregroundStyle(SabqTheme.ink)
-                .frame(minHeight: 80)
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
-        }
-    }
-
-    private func settingRow(title: String, options: [String], selection: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            label(title)
-            Picker(title, selection: selection) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
-            }
-            .pickerStyle(.segmented)
         }
     }
 }

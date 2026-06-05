@@ -57,6 +57,7 @@ import { summarizeArticle, generateSmartContent } from "../openai";
 import { analyzeAndEditWithSabqStyle } from "../ai/contentAnalyzer";
 import { classifyArticle } from "../ai-classifier";
 import { generateAndUploadImage } from "../services/nanoBananaService";
+import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import oauthMobileRouter from "./v1/oauthMobile";
 
@@ -7183,6 +7184,46 @@ router.post("/admin/ai/image-generate", async (req: Request, res: Response) => {
     res.json({ success: true, imageUrl: result.imageUrl });
   } catch (error) {
     console.error("[Mobile API] POST /admin/ai/image-generate error:", error);
+    res.status(500).json({ success: false, message: "تعذّر توليد الصورة" });
+  }
+});
+
+// POST /api/v1/admin/auto-image/generate — توليد صورة بضغطة واحدة
+// Uses the SAME service as the web's one-click AutoImageGenerator: reads the
+// saved global settings (style/provider) and builds the prompt from content.
+router.post("/admin/auto-image/generate", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const b = req.body || {};
+    const articleId = typeof b.articleId === "string" ? b.articleId : "";
+    const title = typeof b.title === "string" ? b.title.trim() : "";
+    if (!articleId || !title) {
+      return res.status(400).json({ success: false, message: "الخبر والعنوان مطلوبان" });
+    }
+    const result = await autoGenerateImage(
+      {
+        articleId,
+        title,
+        content: typeof b.content === "string" ? b.content : undefined,
+        excerpt: typeof b.excerpt === "string" ? b.excerpt : undefined,
+        category: typeof b.category === "string" ? b.category : undefined,
+        language: "ar",
+        articleType: typeof b.articleType === "string" ? b.articleType : undefined,
+        // Manual one-click → bypass the auto-enable / type / category / limit
+        // gates, but still use the saved style + provider.
+        forceGeneration: true,
+      },
+      admin.userId,
+    );
+    if (!result.success || !result.imageUrl) {
+      return res.status(502).json({ success: false, message: result.message || "تعذّر توليد الصورة (تحقق من الإعدادات وتهيئة Gemini)" });
+    }
+    res.json({ success: true, imageUrl: result.imageUrl });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/auto-image/generate error:", error);
     res.status(500).json({ success: false, message: "تعذّر توليد الصورة" });
   }
 });
