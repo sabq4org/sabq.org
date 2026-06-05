@@ -59,6 +59,8 @@ import { classifyArticle } from "../ai-classifier";
 import { generateAndUploadImage } from "../services/nanoBananaService";
 import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
+import { invalidateArticleWrite } from "../services/contentInvalidation";
+import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
 
 const router = Router();
@@ -6546,11 +6548,31 @@ async function fetchArticleForNotify(id: string) {
       submitterId: articles.submitterId,
       status: articles.status,
       reviewNotes: articles.reviewNotes,
+      newsType: articles.newsType,
     })
     .from(articles)
     .where(eq(articles.id, id))
     .limit(1);
   return a || null;
+}
+
+/// SEO/indexing parity with the web publish flow: purge CDN + memory cache for
+/// the article + homepage, and ping IndexNow (Bing/Yandex). Without this an
+/// iOS-published article stays stale on the edge for up to ~1h and is
+/// discovered later. Fire-and-forget; never blocks the response.
+function triggerPublishSeo(
+  article: { slug?: string | null; englishSlug?: string | null; newsType?: string | null },
+  reason: string,
+): void {
+  try {
+    invalidateArticleWrite(article as any, { reason });
+  } catch (e) {
+    console.error("[Mobile API] invalidateArticleWrite failed:", (e as any)?.message);
+  }
+  const target = article.englishSlug || article.slug;
+  if (target) {
+    notifySearchEngines(target).catch(() => {});
+  }
 }
 
 /// Re-fetch a single article in the client shape (used by publish + edit so
@@ -6894,6 +6916,11 @@ router.post("/admin/articles", async (req: Request, res: Response) => {
       memoryCache.delete("mobile:admin:counts");
     } catch {}
 
+    // If created already published, match the web's SEO/indexing side-effects.
+    if (created.status === "published") {
+      triggerPublishSeo(created as any, "mobile-create-publish");
+    }
+
     res.status(201).json({ success: true, id: created.id, item: await fetchAdminArticleItem(created.id) });
   } catch (error) {
     console.error("[Mobile API] POST /admin/articles error:", error);
@@ -6948,6 +6975,10 @@ router.post("/admin/articles/:id/publish", async (req: Request, res: Response) =
         updatedAt: new Date(),
       })
       .where(eq(articles.id, id));
+
+    // SEO/indexing parity with the web: purge edge cache + ping IndexNow.
+    const forSeo = await fetchArticleForNotify(id);
+    if (forSeo) triggerPublishSeo(forSeo, "mobile-publish");
 
     res.json({ success: true, item: await fetchAdminArticleItem(id) });
   } catch (error) {
@@ -7028,6 +7059,11 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
     }
 
     await db.update(articles).set(updates).where(eq(articles.id, id));
+
+    // Editing/publishing a published article must purge the edge cache (+ ping)
+    // so crawlers/readers see the change, matching the web PATCH flow.
+    const forSeo = await fetchArticleForNotify(id);
+    if (forSeo?.status === "published") triggerPublishSeo(forSeo, "mobile-edit");
 
     res.json({ success: true, item: await fetchAdminArticleItem(id), article: await fetchAdminArticleDetail(id) });
   } catch (error) {
