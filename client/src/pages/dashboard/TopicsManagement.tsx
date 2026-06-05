@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasRole } from "@/hooks/useAuth";
 import { getCsrfToken } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +17,7 @@ import {
   Upload,
   Archive,
   X,
+  Sparkles,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -138,6 +139,8 @@ export default function TopicsManagement() {
   const [seoExpanded, setSeoExpanded] = useState(false);
   const [heroImagePreview, setHeroImagePreview] = useState<string>("");
   const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [isGeneratingHero, setIsGeneratingHero] = useState(false);
+  const canGenerateHero = hasRole(user, "system_admin");
   const [editorContent, setEditorContent] = useState<string>("");
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -430,6 +433,38 @@ export default function TopicsManagement() {
     });
   };
 
+  const handleGenerateHero = async () => {
+    const title = (form.getValues("title") || "").trim();
+    if (!title) {
+      toast({ title: "أدخل العنوان أولاً", variant: "destructive" });
+      return;
+    }
+    setIsGeneratingHero(true);
+    try {
+      const excerpt = (form.getValues("excerpt") || "").trim() || undefined;
+      const content = form.getValues("content")?.plainText || undefined;
+      const result = await apiRequest<{ imageUrl: string; thumbnailUrl?: string }>(
+        "/api/admin/muqtarab/ai/generate-hero",
+        { method: "POST", body: JSON.stringify({ title, excerpt, content }) },
+      );
+      if (result?.imageUrl) {
+        form.setValue("heroImageUrl", result.imageUrl);
+        setHeroImagePreview(result.imageUrl);
+        toast({ title: "تم توليد صورة الغلاف", description: "يمكنك استبدالها أو التوليد مجدداً." });
+      } else {
+        throw new Error("لم تُرجع الخدمة صورة");
+      }
+    } catch (error) {
+      toast({
+        title: "خطأ في التوليد",
+        description: error instanceof Error ? error.message : "فشل توليد صورة الغلاف",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingHero(false);
+    }
+  };
+
   const handleSubmit = form.handleSubmit((data) => {
     if (editingTopic) {
       updateMutation.mutate({ id: editingTopic.id, data });
@@ -708,7 +743,31 @@ export default function TopicsManagement() {
                             className="hidden"
                             data-testid="input-hero-file"
                           />
-                          
+
+                          {canGenerateHero && (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5"
+                                disabled={isGeneratingHero || isUploadingHero}
+                                onClick={handleGenerateHero}
+                                data-testid="button-generate-hero-ai"
+                              >
+                                {isGeneratingHero ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                                )}
+                                {heroImagePreview ? "إعادة التوليد بالذكاء الاصطناعي" : "توليد بالذكاء الاصطناعي"}
+                              </Button>
+                              <span className="text-xs text-muted-foreground">
+                                مرتبط بإعدادات التوليد التلقائي للصور
+                              </span>
+                            </div>
+                          )}
+
                           {heroImagePreview ? (
                             <div className="relative inline-block">
                               <img

@@ -7,7 +7,7 @@
  */
 import { Router } from "express";
 import { asc, eq } from "drizzle-orm";
-import { requireAuth, requirePermission } from "../rbac";
+import { requireAuth, requirePermission, requireRole } from "../rbac";
 import { db } from "../db";
 import { angles } from "@shared/schema";
 import { storage } from "../storage";
@@ -16,6 +16,7 @@ import {
   proofreadContent,
   suggestExcerpt,
   suggestSeo,
+  generateTopicHero,
   assistReview,
   classifySubmission,
 } from "../services/muqtarabAI";
@@ -110,6 +111,33 @@ router.post("/api/muqtarab/my-angle/ai/seo", requireAuth, async (req: any, res) 
     });
   }
 });
+
+// ============================================================
+// توليد صورة الغلاف بالذكاء الاصطناعي — مسؤول النظام فقط
+// ============================================================
+
+router.post(
+  "/api/admin/muqtarab/ai/generate-hero",
+  requireAuth,
+  requireRole("system_admin"),
+  async (req: any, res) => {
+    try {
+      const title = String(req.body?.title || "").trim();
+      if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
+
+      const excerpt = req.body?.excerpt ? String(req.body.excerpt) : undefined;
+      const content = req.body?.content ? String(req.body.content) : undefined;
+
+      const result = await generateTopicHero({ title, excerpt, content });
+      res.json(result);
+    } catch (err) {
+      console.error("[muqtarab-ai] generate-hero:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في توليد صورة الغلاف",
+      });
+    }
+  },
+);
 
 // ============================================================
 // مساعد الإدارة (muqtarab.manage)
