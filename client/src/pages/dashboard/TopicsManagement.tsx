@@ -137,6 +137,22 @@ function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
+function topicContentToEditorHtml(
+  content: { blocks?: any[]; rawHtml?: string; plainText?: string } | null | undefined,
+): string {
+  if (!content) return "";
+  if (content.rawHtml?.trim()) return content.rawHtml;
+  if (content.plainText?.trim()) {
+    return content.plainText
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p>${p}</p>`)
+      .join("");
+  }
+  return "";
+}
+
 export default function TopicsManagement() {
   const { angleId } = useParams<{ angleId: string }>();
   const { user } = useAuth({ redirectToLogin: true });
@@ -154,6 +170,7 @@ export default function TopicsManagement() {
   const [keywordDraft, setKeywordDraft] = useState("");
   const canGenerateHero = hasRole(user, "system_admin");
   const [editorContent, setEditorContent] = useState<string>("");
+  const [isLoadingTopicDetail, setIsLoadingTopicDetail] = useState(false);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<TopicFormValues>({
@@ -343,22 +360,54 @@ export default function TopicsManagement() {
     setIsCreateDialogOpen(true);
   };
 
-  const handleEdit = (topic: Topic) => {
-    setEditingTopic(topic);
-    setSeoExpanded(false);
-    setKeywordDraft("");
+  const populateEditForm = (topic: Topic) => {
     const contentData = topic.content as { blocks?: any[]; rawHtml?: string; plainText?: string } | null;
-    const rawHtml = contentData?.rawHtml || "";
-    setEditorContent(rawHtml);
+    const editorHtml = topicContentToEditorHtml(contentData);
+    const seoMeta = topic.seoMeta || {
+      metaTitle: "",
+      metaDescription: "",
+      keywords: [] as string[],
+      ogImage: "",
+      canonicalUrl: "",
+    };
+
+    setEditorContent(editorHtml);
     setHeroImagePreview(topic.heroImageUrl || "");
+    setSeoExpanded(
+      Boolean(
+        seoMeta.metaTitle ||
+          seoMeta.metaDescription ||
+          (Array.isArray(seoMeta.keywords) && seoMeta.keywords.length > 0) ||
+          seoMeta.ogImage,
+      ),
+    );
     form.reset({
       angleId: topic.angleId,
       title: topic.title,
       slug: normalizeTopicSlug(topic.slug),
       excerpt: topic.excerpt || "",
-      content: topic.content || { blocks: [], rawHtml: "", plainText: "" },
+      content: contentData
+        ? { ...contentData, rawHtml: editorHtml, plainText: contentData.plainText || "" }
+        : { blocks: [], rawHtml: editorHtml, plainText: "" },
       heroImageUrl: topic.heroImageUrl || "",
-      seoMeta: topic.seoMeta || {
+      seoMeta,
+      createdBy: topic.createdBy,
+    });
+  };
+
+  const handleEdit = async (topic: Topic) => {
+    setEditingTopic(topic);
+    setKeywordDraft("");
+    setIsLoadingTopicDetail(true);
+    setEditorContent("");
+    form.reset({
+      angleId: topic.angleId,
+      title: topic.title,
+      slug: normalizeTopicSlug(topic.slug),
+      excerpt: topic.excerpt || "",
+      content: { blocks: [], rawHtml: "", plainText: "" },
+      heroImageUrl: topic.heroImageUrl || "",
+      seoMeta: {
         metaTitle: "",
         metaDescription: "",
         keywords: [],
@@ -367,6 +416,21 @@ export default function TopicsManagement() {
       },
       createdBy: topic.createdBy,
     });
+
+    try {
+      const fullTopic = await apiRequest<Topic>(`/api/admin/muqtarab/topics/${topic.id}`);
+      setEditingTopic(fullTopic);
+      populateEditForm(fullTopic);
+    } catch (error) {
+      toast({
+        title: "تعذّر تحميل المحتوى",
+        description: error instanceof Error ? error.message : "حاول مرة أخرى",
+        variant: "destructive",
+      });
+      setEditingTopic(null);
+    } finally {
+      setIsLoadingTopicDetail(false);
+    }
   };
 
   const handleHeroImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -743,6 +807,8 @@ export default function TopicsManagement() {
             if (!open) {
               setIsCreateDialogOpen(false);
               setEditingTopic(null);
+              setIsLoadingTopicDetail(false);
+              setEditorContent("");
               form.reset();
             }
           }}
@@ -760,7 +826,16 @@ export default function TopicsManagement() {
             </DialogHeader>
 
             <Form {...form}>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4 relative">
+                {isLoadingTopicDetail && (
+                  <div
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-lg bg-background/80 backdrop-blur-sm"
+                    data-testid="topic-detail-loading"
+                  >
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">جاري تحميل المحتوى...</p>
+                  </div>
+                )}
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Sparkles className="h-4 w-4 text-indigo-500" />
@@ -888,10 +963,16 @@ export default function TopicsManagement() {
                   <FormLabel>المحتوى</FormLabel>
                   <div className="border rounded-md" data-testid="editor-content">
                     <RichTextEditor
+                      key={
+                        editingTopic
+                          ? `edit-${editingTopic.id}-${isLoadingTopicDetail ? "loading" : "ready"}`
+                          : "create"
+                      }
                       content={editorContent}
                       onChange={handleEditorChange}
                       placeholder="اكتب محتوى الموضوع هنا..."
                       dir="rtl"
+                      disabled={isLoadingTopicDetail}
                     />
                   </div>
                   <FormDescription>
@@ -1171,7 +1252,7 @@ export default function TopicsManagement() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={createMutation.isPending || updateMutation.isPending}
+                    disabled={createMutation.isPending || updateMutation.isPending || isLoadingTopicDetail}
                     data-testid="button-submit"
                   >
                     {(createMutation.isPending || updateMutation.isPending) && (
