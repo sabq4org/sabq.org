@@ -480,6 +480,27 @@ export default function TopicDetail() {
             )}
           </article>
 
+          {angle.writerSignature && (
+            <div
+              className="mt-10 rounded-xl border p-5 flex items-start gap-3"
+              style={{ backgroundColor: theme.softer, borderColor: theme.border }}
+              data-testid="writer-signature"
+            >
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: theme.soft, color: theme.color }}
+              >
+                <AngleIcon className="h-5 w-5" />
+              </span>
+              <p
+                className="text-base font-medium leading-relaxed whitespace-pre-wrap"
+                style={{ color: theme.color }}
+              >
+                {angle.writerSignature}
+              </p>
+            </div>
+          )}
+
           <Separator className="my-8" />
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
