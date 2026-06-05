@@ -14,7 +14,7 @@ import StoryTimeline from "@/components/StoryTimeline";
 import FollowStoryButton from "@/components/FollowStoryButton";
 import { AdSlot } from "@/components/AdSlot";
 import { NativeAdsSection } from "@/components/NativeAdsSection";
-import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
+import { DmsLeaderboardAd, useAdTracking } from "@/components/DmsAdSlot";
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
 import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
@@ -1406,10 +1406,13 @@ export default function ArticleDetail() {
               </Collapsible>
             )}
 
-            {/* DMS MPU Ad - Mobile only, between الموجز and التحليل */}
-            {/* Lazy loaded for performance - loads when 200px from viewport */}
-            {/* Ad hidden when no real ad available via DmsMpuAd component */}
-            <DmsMpuAd id="MPU" lazyLoad={true} />
+            {/*
+              DMS MPU Ad (mobile, under الموجز) DISABLED 2026-06-05 per user
+              request — clears the ad that sat right below the AI summary box
+              on the MOBILE web article view. Only this mobile slot is removed;
+              DMS tracking + the desktop Leaderboard stay intact. Re-add
+              <DmsMpuAd id="MPU" lazyLoad={true} /> (and its import) to restore.
+            */}
 
             {/* Smart AI Insights - secondary trigger (visible only for authenticated users) */}
             {article.status === "published" && user && (
