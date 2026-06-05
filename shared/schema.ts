@@ -269,7 +269,17 @@ export const voiceSettingsSchema = z.object({
 }).optional();
 
 // Topic (Muqtarab) schemas
-export const topicStatusEnum = z.enum(["draft", "published", "archived"]);
+// سير عمل مواضيع كتّاب الزوايا:
+//   draft → pending_review → published (موافقة الإدارة)
+//                          → needs_revision (إرجاع للتعديل) → pending_review مجدداً
+// المحرر/الأدمن قد ينشر مباشرة (draft → published) كما السابق.
+export const topicStatusEnum = z.enum([
+  "draft",
+  "pending_review",
+  "published",
+  "needs_revision",
+  "archived",
+]);
 
 export const topicContentBlockSchema = z.object({
   type: z.enum(["text", "image", "video", "link", "embed", "quote", "heading"]),
@@ -1862,12 +1872,18 @@ export const topics = pgTable("topics", {
   publishedAt: timestamp("published_at"),
   createdBy: varchar("created_by").references(() => users.id).notNull(),
   updatedBy: varchar("updated_by").references(() => users.id),
+  // مراجعة الإدارة لمواضيع كتّاب الزوايا (سير pending_review → published/needs_revision)
+  submittedAt: timestamp("submitted_at"), // متى أرسله الكاتب للمراجعة
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"), // ملاحظات الإدارة عند الإرجاع
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_topics_angle_status").on(table.angleId, table.status),
   index("idx_topics_slug").on(table.slug),
   index("idx_topics_published").on(table.publishedAt),
+  index("idx_topics_status_submitted").on(table.status, table.submittedAt), // طابور المراجعة
   uniqueIndex("idx_topics_angle_slug").on(table.angleId, table.slug),
 ]);
 
@@ -2667,6 +2683,11 @@ export const insertTopicSchema = createInsertSchema(topics).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  // حقول المراجعة تُدار حصراً عبر مسارات الإرسال/المراجعة في الخادم
+  submittedAt: true,
+  reviewedBy: true,
+  reviewedAt: true,
+  reviewNotes: true,
 }).extend({
   status: topicStatusEnum.default("draft"),
   content: topicContentSchema,

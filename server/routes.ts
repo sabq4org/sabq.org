@@ -67,6 +67,8 @@ import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
+import { provisionAngleFromSubmission } from "./services/muqtarabProvisioning";
+import { sendSubmissionReceivedEmail } from "./services/muqtarabEmails";
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
@@ -19735,6 +19737,14 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       }
       
       const submission = await storage.createAngleSubmission(parsed.data);
+
+      // بريد تأكيد للمتقدّم "استلمنا طلبك" (غير حاجب)
+      sendSubmissionReceivedEmail({
+        email: submission.email,
+        fullName: submission.fullName,
+        angleName: submission.angleName,
+      }).catch((err) => console.error("[AngleSubmissions] فشل بريد استلام الطلب:", err));
+
       res.status(201).json(submission);
     } catch (error) {
       console.error("Error creating angle submission:", error);
@@ -19792,10 +19802,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       const updated = await storage.updateAngleSubmission(id, updateData);
       
-      // Send email notification to applicant
-      if (status === "approved" || status === "rejected") {
+      // Send rejection email here. The approval path provisions the angle +
+      // account and sends its own credentials email via provisionAngleFromSubmission.
+      if (status === "rejected") {
         const firstName = submission.fullName.split(' ')[0];
-        const isApproved = status === "approved";
+        const isApproved = status === "approved"; // always false here (rejected branch)
         
         const emailSubject = isApproved 
           ? `🎉 مبروك ${firstName}! تمت الموافقة على زاويتك في سبق` 
@@ -19878,205 +19889,44 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         entityId: id,
         newValue: { status, reviewerNotes },
       });
-      
-      res.json(updated);
+
+      // موافقة بنقرة واحدة: عند الاعتماد ننشئ الحساب + الزاوية + نُسند دور
+      // angle_writer + نرسل بريد الدخول — كل ذلك في خطوة واحدة (idempotent).
+      let provisionResult: any = null;
+      if (status === "approved") {
+        try {
+          provisionResult = await provisionAngleFromSubmission(id, req.user.id);
+        } catch (e) {
+          console.error("[AngleSubmissions] one-click provisioning failed:", e);
+        }
+      }
+
+      // إعادة جلب الطلب بعد التزويد ليعكس createdAngleId
+      const finalSubmission =
+        status === "approved" ? (await storage.getAngleSubmission(id)) || updated : updated;
+      res.json({ ...finalSubmission, _provision: provisionResult });
     } catch (error) {
       console.error("Error updating angle submission:", error);
       res.status(500).json({ message: "فشل في تحديث الطلب" });
     }
   });
 
-  // POST /api/angle-submissions/:id/create-angle - Create angle and user account from approved submission
+  // POST /api/angle-submissions/:id/create-angle - Create angle and user account from approved submission.
+  // مُبسّط: يفوّض لخدمة التزويد الموحّدة provisionAngleFromSubmission (نفس مسار
+  // «النقرة الواحدة»). المنطق القديم اعتمد على 3 دوال storage غير موجودة
+  // (getUserByEmail / getAllSections / createUser) فكان يتعطّل وقت التشغيل دائماً.
   app.post("/api/angle-submissions/:id/create-angle", requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
-      const { id } = req.params;
-      
-      const submission = await storage.getAngleSubmission(id);
-      if (!submission) {
-        return res.status(404).json({ message: "الطلب غير موجود" });
+      const result = await provisionAngleFromSubmission(req.params.id, req.user.id);
+      if (!result.ok) {
+        return res.status(400).json({ message: result.message });
       }
-      
-      if (submission.status !== "approved") {
-        return res.status(400).json({ message: "يجب الموافقة على الطلب أولاً قبل إنشاء الزاوية" });
-      }
-      
-      if (submission.createdAngleId) {
-        return res.status(400).json({ message: "تم إنشاء الزاوية مسبقاً لهذا الطلب" });
-      }
-      
-      // Get default section (Muqtarab)
-      const sections = await (storage as any).getAllSections();
-      const defaultSection = sections[0];
-      if (!defaultSection) {
-        return res.status(400).json({ message: "لا يوجد قسم افتراضي لإنشاء الزاوية" });
-      }
-      
-      // Generate slug
-      const slugBase = submission.angleName.toLowerCase().replace(/\s+/g, '-').replace(/[^\w\u0600-\u06FF-]/g, '');
-      const timestamp = Date.now().toString(36);
-      const angleSlug = `${slugBase}-${timestamp}`;
-      
-      // Generate random password
-      const generatePassword = () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-        let password = '';
-        for (let i = 0; i < 10; i++) {
-          password += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return password;
-      };
-      const tempPassword = generatePassword();
-      
-      // Check if user with this email exists
-      let user = await (storage as any).getUserByEmail(submission.email);
-      let isNewUser = false;
-      
-      if (!user) {
-        // Create new user account
-        isNewUser = true;
-        const bcrypt = await import('bcryptjs' as any);
-        // Bumped from 10 → 12 to match every other bcrypt.hash() call in
-        // the codebase (security audit H4, 2026-05-11). Existing weaker
-        // hashes from this codepath stay valid (bcrypt-verify works
-        // across rounds), but new accounts get the canonical strength.
-        const hashedPassword = await bcrypt.hash(tempPassword, 12);
-        
-        user = await (storage as any).createUser({
-          email: submission.email,
-          password: hashedPassword,
-          fullName: submission.fullName,
-          role: "staff",
-          isActive: true,
-        });
-      }
-      
-      // Create the angle with user as manager
-      const newAngle = await storage.createAngle({
-        nameAr: submission.angleName,
-        slug: angleSlug,
-        shortDesc: submission.angleDescription,
-        sectionId: defaultSection.id,
-        colorHex: "#6366f1",
-        iconKey: "Lightbulb",
-        isActive: true,
-        sortOrder: 999,
-        managerUserId: user.id,
-      });
-      
-      // Add angle-specific permission for this user
-      // Using RBAC system - add custom permission for managing this specific angle
-      const existingPermissions = user.customPermissions || [];
-      const anglePermission = `muqtarab.angle.${newAngle.id}`;
-      
-      // Build unique permissions set (avoid duplicates)
-      const newPermissions = new Set(existingPermissions);
-      newPermissions.add(anglePermission);
-      newPermissions.add('muqtarab.topics.create');
-      newPermissions.add('muqtarab.topics.edit');
-      
-      await storage.updateUser(user.id, {
-        customPermissions: Array.from(newPermissions),
-      } as any);
-      
-      // Update submission with created angle ID
-      await storage.updateAngleSubmission(id, {
-        createdAngleId: newAngle.id,
-      });
-      
-      // Log activity
-      await logActivity({
-        userId: req.user.id,
-        action: "create",
-        entityType: "angle",
-        entityId: newAngle.id,
-        newValue: { angleId: newAngle.id, slug: newAngle.slug, fromSubmission: id, userId: user.id },
-      });
-      
-      // Send email with login credentials
-      const firstName = submission.fullName.split(' ')[0];
-      const loginUrl = "https://sabq.org/login";
-      const dashboardUrl = `https://sabq.org/dashboard/muqtarab`;
-      
-      const emailHtml = `
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head><meta charset="UTF-8"></head>
-<body style="font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0; padding: 40px 20px;">
-  <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
-      <div style="font-size: 60px; margin-bottom: 15px;">🚀</div>
-      <h1 style="color: white; margin: 0; font-size: 28px;">زاويتك جاهزة ${firstName}!</h1>
-      <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0; font-size: 18px;">حان وقت الإبداع</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <p style="color: #1f2937; font-size: 18px; line-height: 1.8; margin: 0 0 20px;">أهلاً <strong>${firstName}</strong> 👋</p>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.8; margin: 0 0 20px;">
-        تم إنشاء زاويتك <strong style="color: #10b981;">"${submission.angleName}"</strong> بنجاح! 🎉
-      </p>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.8; margin: 0 0 25px;">
-        يمكنك الآن تسجيل الدخول والبدء بإضافة مواضيع ومقالات في زاويتك الخاصة.
-      </p>
-      
-      <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px solid #0ea5e9; padding: 25px; border-radius: 15px; margin-bottom: 25px;">
-        <h3 style="color: #0369a1; margin: 0 0 15px; font-size: 18px;">🔐 بيانات الدخول</h3>
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 8px 0; color: #64748b; font-size: 14px;">البريد الإلكتروني:</td>
-            <td style="padding: 8px 0; color: #1e293b; font-size: 16px; font-weight: bold; direction: ltr; text-align: right;">${submission.email}</td>
-          </tr>
-          ${isNewUser ? `<tr>
-            <td style="padding: 8px 0; color: #64748b; font-size: 14px;">كلمة المرور المؤقتة:</td>
-            <td style="padding: 8px 0; color: #1e293b; font-size: 16px; font-weight: bold; font-family: monospace; direction: ltr; text-align: right; background: #fef3c7; padding: 5px 10px; border-radius: 5px;">${tempPassword}</td>
-          </tr>` : `<tr>
-            <td colspan="2" style="padding: 8px 0; color: #059669; font-size: 14px;">✅ لديك حساب بالفعل - استخدم كلمة المرور الحالية</td>
-          </tr>`}
-        </table>
-      </div>
-      
-      <div style="text-align: center; margin-bottom: 25px;">
-        <a href="${loginUrl}" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; text-decoration: none; padding: 15px 40px; border-radius: 10px; font-size: 16px; font-weight: bold;">تسجيل الدخول الآن</a>
-      </div>
-      
-      ${isNewUser ? `<div style="background: #fef3c7; border-right: 4px solid #f59e0b; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-        <p style="color: #92400e; margin: 0; font-size: 14px;">⚠️ <strong>مهم:</strong> قم بتغيير كلمة المرور فور تسجيل الدخول من صفحة الملف الشخصي.</p>
-      </div>` : ''}
-      
-      <div style="background: #f0fdf4; border-right: 4px solid #10b981; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <p style="color: #166534; margin: 0; font-size: 15px;">
-          <strong>💡 صلاحياتك:</strong> يمكنك إدارة زاويتك فقط - إضافة مواضيع ومقالات وتعديلها.
-        </p>
-      </div>
-      
-      <p style="color: #6b7280; font-size: 14px; line-height: 1.8; margin: 0;">نتطلع لرؤية إبداعاتك! 🌟</p>
-    </div>
-    <div style="background: #f9fafb; padding: 25px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
-      <p style="color: #9ca3af; font-size: 13px; margin: 0;">مع تحيات فريق <strong style="color: #6366f1;">سبق</strong> | منصة مُقترب</p>
-    </div>
-  </div>
-</body>
-</html>
-      `;
-      
-      sendEmailNotification({
-        to: submission.email,
-        subject: `🚀 زاويتك "${submission.angleName}" جاهزة - بيانات الدخول`,
-        html: emailHtml,
-      }).then(result => {
-        if (result.success) {
-          console.log(`[AngleSubmissions] Creation email sent to ${submission.email}`);
-        } else {
-          console.error(`[AngleSubmissions] Failed to send creation email: ${result.error}`);
-        }
-      });
-      
-      res.json({ 
-        success: true, 
-        angle: newAngle, 
-        user: { id: user.id, email: user.email },
-        isNewUser,
-        message: isNewUser 
-          ? "تم إنشاء الزاوية والحساب وإرسال بيانات الدخول"
-          : "تم إنشاء الزاوية وربطها بالحساب الموجود"
+      res.json({
+        success: true,
+        angle: result.angle,
+        user: result.user,
+        isNewUser: result.isNewUser,
+        message: result.message,
       });
     } catch (error) {
       console.error("Error creating angle from submission:", error);

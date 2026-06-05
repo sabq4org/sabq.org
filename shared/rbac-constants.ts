@@ -10,6 +10,7 @@ export const ROLE_NAMES = {
   OPINION_AUTHOR: "opinion_author",
   COMMENTS_MODERATOR: "comments_moderator",
   MEDIA_MANAGER: "media_manager",
+  ANGLE_WRITER: "angle_writer",
   READER: "reader",
 } as const;
 
@@ -35,6 +36,7 @@ export const ROLE_LABELS_AR = {
   [ROLE_NAMES.OPINION_AUTHOR]: "كاتب مقال رأي",
   [ROLE_NAMES.COMMENTS_MODERATOR]: "مشرف تعليقات",
   [ROLE_NAMES.MEDIA_MANAGER]: "مدير وسائط",
+  [ROLE_NAMES.ANGLE_WRITER]: "كاتب زاوية",
   [ROLE_NAMES.READER]: "قارئ",
 } as const;
 
@@ -47,6 +49,7 @@ export const ROLE_LABELS_EN = {
   [ROLE_NAMES.OPINION_AUTHOR]: "Opinion Author",
   [ROLE_NAMES.COMMENTS_MODERATOR]: "Comments Moderator",
   [ROLE_NAMES.MEDIA_MANAGER]: "Media Manager",
+  [ROLE_NAMES.ANGLE_WRITER]: "Angle Writer",
   [ROLE_NAMES.READER]: "Reader",
 } as const;
 
@@ -59,6 +62,7 @@ export const ROLE_DESCRIPTIONS_AR = {
   [ROLE_NAMES.OPINION_AUTHOR]: "كتابة وتحرير مقالات الرأي الخاصة فقط وإرسالها للمراجعة، دون صلاحيات النشر المباشر",
   [ROLE_NAMES.COMMENTS_MODERATOR]: "إدارة التعليقات: الموافقة والرفض والتعديل والحذف والحظر",
   [ROLE_NAMES.MEDIA_MANAGER]: "إدارة المكتبة الإعلامية والألبومات",
+  [ROLE_NAMES.ANGLE_WRITER]: "كاتب زاوية في مُقترب: يدير زاويته الخاصة ويضيف مواضيع ويرسلها لمراجعة الإدارة قبل النشر",
   [ROLE_NAMES.READER]: "مستخدم عادي بدون صلاحيات تحريرية",
 } as const;
 
@@ -186,6 +190,14 @@ export const PERMISSION_CODES = {
   
   // Staff Productivity - إنتاجية الموظفين
   VIEW_STAFF_PRODUCTIVITY: "staff.view_productivity",
+
+  // Muqtarab - Self-Service Angle Writer (كاتب زاوية مُقترب)
+  // صلاحيات خاصة بكاتب الزاوية لإدارة زاويته الخاصة فقط (ليست muqtarab.manage
+  // التي تخص الأدمن/المحرر). يُفرض ملكية الزاوية على مستوى المسار في الخلفية.
+  MUQTARAB_OWN_VIEW: "muqtarab.own.view",
+  MUQTARAB_OWN_TOPIC_CREATE: "muqtarab.own.topic.create",
+  MUQTARAB_OWN_TOPIC_EDIT: "muqtarab.own.topic.edit",
+  MUQTARAB_OWN_TOPIC_SUBMIT: "muqtarab.own.topic.submit",
 } as const;
 
 // Role to permissions mapping (for UI display)
@@ -342,7 +354,24 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_DELETE,
     PERMISSION_CODES.CHAT_USE,
   ],
-  
+
+  // كاتب زاوية مُقترب: لوحة "زاويتي" + إضافة/تعديل/إرسال مواضيع زاويته فقط.
+  // ملكية الزاوية والمواضيع تُفرض في الخلفية (managerUserId / createdBy)، أما
+  // هذه الصلاحيات فلإظهار عناصر الواجهة وتمرير حُرّاس المسارات.
+  [ROLE_NAMES.ANGLE_WRITER]: [
+    PERMISSION_CODES.MUQTARAB_OWN_VIEW,
+    PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE,
+    PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT,
+    PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT,
+    PERMISSION_CODES.MEDIA_VIEW,
+    PERMISSION_CODES.MEDIA_UPLOAD,
+    PERMISSION_CODES.ANALYTICS_VIEW_OWN,
+    // Dashboard - بدون dashboard.view يختفي رابط "لوحة التحكم" من قائمة الهيدر
+    PERMISSION_CODES.DASHBOARD_VIEW,
+    PERMISSION_CODES.DASHBOARD_VIEW_STATS,
+    PERMISSION_CODES.CHAT_USE,
+  ],
+
   [ROLE_NAMES.READER]: [],
 };
 
@@ -454,6 +483,12 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   
   // Staff Productivity - إنتاجية الموظفين
   [PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY]: "عرض إنتاجية الموظفين",
+
+  // Muqtarab - كاتب زاوية مُقترب
+  [PERMISSION_CODES.MUQTARAB_OWN_VIEW]: "عرض زاويتي في مُقترب",
+  [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE]: "إضافة موضوع في زاويتي",
+  [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT]: "تعديل مواضيع زاويتي",
+  [PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT]: "إرسال موضوع لمراجعة الإدارة",
 };
 
 // Helper function to get all permissions for given roles.

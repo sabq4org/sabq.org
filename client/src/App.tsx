@@ -207,6 +207,8 @@ const TopicDetail = lazy(() => retryImport(() => import("@/pages/TopicDetail")))
 const DashboardMuqtarab = lazy(() => retryImport(() => import("@/pages/dashboard/DashboardMuqtarab")));
 const TopicsManagement = lazy(() => retryImport(() => import("@/pages/dashboard/TopicsManagement")));
 const AngleSubmissionsManagement = lazy(() => retryImport(() => import("@/pages/dashboard/AngleSubmissionsManagement")));
+const MyAngle = lazy(() => retryImport(() => import("@/pages/dashboard/MyAngle")));
+const MuqtarabReview = lazy(() => retryImport(() => import("@/pages/dashboard/MuqtarabReview")));
 
 // === LAZY IMPORTS (Smart Features) ===
 const SmartLinksManagement = lazy(() => retryImport(() => import("@/pages/dashboard/SmartLinksManagement")));
@@ -710,6 +712,8 @@ function Router() {
         <Route path="/dashboard/muqtarab">{() => <LazyRoute component={DashboardMuqtarab} />}</Route>
         <Route path="/dashboard/muqtarab/angles/:angleId/topics">{() => <LazyRoute component={TopicsManagement} />}</Route>
         <Route path="/dashboard/muqtarab/submissions">{() => <LazyRoute component={AngleSubmissionsManagement} />}</Route>
+        <Route path="/dashboard/muqtarab/review">{() => <LazyRoute component={MuqtarabReview} />}</Route>
+        <Route path="/dashboard/my-angle">{() => <LazyRoute component={MyAngle} />}</Route>
         <Route path="/dashboard/smart-blocks">{() => <LazyRoute component={SmartBlocksPage} />}</Route>
         
         {/* Audio Newsletters dashboard */}
