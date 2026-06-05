@@ -176,6 +176,35 @@ router.get("/api/muqtarab/my-angle", requireAuth, async (req: any, res) => {
   }
 });
 
+// تحديث ملف الزاوية من الكاتب (التوقيع + الوصف المختصر) — ملكية مطلوبة
+router.patch("/api/muqtarab/my-angle/profile", requireAuth, async (req: any, res) => {
+  try {
+    const angle = await getOwnedAngle(req.user.id);
+    if (!angle) return res.status(404).json({ message: "لا توجد زاوية مخصّصة لحسابك" });
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if ("writerSignature" in (req.body || {})) {
+      const sig = String(req.body.writerSignature ?? "").trim();
+      updates.writerSignature = sig ? sig.slice(0, 500) : null;
+    }
+    if ("shortDesc" in (req.body || {})) {
+      const desc = String(req.body.shortDesc ?? "").trim();
+      updates.shortDesc = desc ? desc.slice(0, 1000) : null;
+    }
+
+    const [updated] = await db
+      .update(angles)
+      .set(updates)
+      .where(eq(angles.id, angle.id))
+      .returning();
+
+    res.json(updated);
+  } catch (err) {
+    console.error("[my-angle] profile update error:", err);
+    res.status(500).json({ message: "فشل في تحديث ملف الزاوية" });
+  }
+});
+
 router.get("/api/muqtarab/my-angle/topics", requireAuth, async (req: any, res) => {
   try {
     const angle = await getOwnedAngle(req.user.id);
