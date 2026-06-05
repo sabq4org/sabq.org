@@ -1870,6 +1870,7 @@ export const topics = pgTable("topics", {
   }>(),
   status: text("status").default("draft").notNull(),
   publishedAt: timestamp("published_at"),
+  viewCount: integer("view_count").default(0).notNull(), // عدّاد المشاهدات (تحليلات الكاتب)
   createdBy: varchar("created_by").references(() => users.id).notNull(),
   updatedBy: varchar("updated_by").references(() => users.id),
   // مراجعة الإدارة لمواضيع كتّاب الزوايا (سير pending_review → published/needs_revision)

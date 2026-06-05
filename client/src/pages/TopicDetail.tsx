@@ -1,6 +1,6 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -164,6 +164,18 @@ export default function TopicDetail() {
 
   const topic = topicData?.topic;
   const angle = topicData?.angle;
+
+  // تسجيل مشاهدة مرة واحدة لكل موضوع (الخادم يَعُدّ المنشور فقط؛ عام بلا CSRF)
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (topic?.id && viewedRef.current !== topic.id) {
+      viewedRef.current = topic.id;
+      fetch(`/api/muqtarab/topics/${topic.id}/view`, {
+        method: "POST",
+        credentials: "include",
+      }).catch(() => {});
+    }
+  }, [topic?.id]);
 
   useEffect(() => {
     if (topic && angle) {
