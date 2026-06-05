@@ -931,6 +931,7 @@ export interface IStorage {
   getAllAngles(activeOnly?: boolean): Promise<Angle[]>;
   getAnglesWithStats(activeOnly?: boolean): Promise<Array<Angle & { topicCount: number; writerName: string | null; writerAvatar: string | null }>>;
   getAngleBySlug(slug: string): Promise<Angle | undefined>;
+  getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null>;
   getAngleById(id: string): Promise<Angle | undefined>;
   createAngle(angle: InsertAngle): Promise<Angle>;
   updateAngle(id: string, angle: Partial<InsertAngle>): Promise<Angle>;
@@ -10034,6 +10035,33 @@ export class DatabaseStorage implements IStorage {
       .from(angles)
       .where(eq(angles.slug, slug));
     return angle;
+  }
+
+  async getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null> {
+    if (!managerUserId) return null;
+
+    const [row] = await db
+      .select({
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        staffSlug: staff.slug,
+        staffNameAr: staff.nameAr,
+        staffProfileImage: staff.profileImage,
+      })
+      .from(users)
+      .leftJoin(staff, eq(staff.userId, users.id))
+      .where(eq(users.id, managerUserId))
+      .limit(1);
+
+    if (!row) return null;
+
+    const name = (row.staffNameAr || [row.firstName, row.lastName].filter(Boolean).join(" ").trim()) || "كاتب الزاوية";
+    return {
+      name,
+      avatar: row.staffProfileImage || row.profileImageUrl || null,
+      slug: row.staffSlug || null,
+    };
   }
 
   async getAngleById(id: string): Promise<Angle | undefined> {

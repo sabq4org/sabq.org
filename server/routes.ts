@@ -19547,9 +19547,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!angle) {
         return res.status(404).json({ message: "Angle not found" });
       }
-      
+
+      const writer = await storage.getAngleWriter(angle.managerUserId);
       const articles = await storage.getArticlesByAngle(slug, limit);
-      res.json({ ...angle, articles });
+      res.json({ ...angle, articles, writer });
     } catch (error) {
       console.error("Error fetching angle:", error);
       res.status(500).json({ message: "Failed to fetch angle" });
@@ -19595,9 +19596,11 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (!topic || topic.status !== 'published') {
         return res.status(404).json({ message: "Topic not found" });
       }
-      
-      // Return both angle info and topic for breadcrumb building
-      res.json({ topic, angle });
+
+      const writer = await storage.getAngleWriter(angle.managerUserId);
+
+      // Return angle, topic, and writer for breadcrumb + byline
+      res.json({ topic, angle, writer });
     } catch (error) {
       console.error("Error fetching topic:", error);
       res.status(500).json({ message: "Internal server error" });

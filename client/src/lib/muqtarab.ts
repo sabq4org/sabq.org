@@ -13,10 +13,17 @@ export type Angle = typeof angles.$inferSelect;
 export type ArticleAngle = typeof articleAngles.$inferSelect;
 export type ImageAsset = typeof imageAssets.$inferSelect;
 
+export type AngleWriter = {
+  name: string;
+  avatar: string | null;
+  slug: string | null;
+};
+
 // Extended types for API responses
 export type AngleWithArticles = Angle & {
   articles?: (typeof articles.$inferSelect)[];
   articleCount?: number;
+  writer?: AngleWriter | null;
 };
 
 // Query key constants for TanStack Query
