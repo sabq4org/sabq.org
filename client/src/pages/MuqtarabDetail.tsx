@@ -217,7 +217,7 @@ export default function MuqtarabDetail() {
 
       {/* Hero Section */}
       <div 
-        className="relative overflow-hidden"
+        className={`relative overflow-hidden${angle.coverImageUrl ? "" : " angle-animated-cover"}`}
         style={{ 
           backgroundColor: angle.colorHex,
         }}
@@ -233,15 +233,15 @@ export default function MuqtarabDetail() {
           />
         )}
         
-        {/* Gradient overlay for text readability */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: angle.coverImageUrl 
-              ? `linear-gradient(135deg, ${angle.colorHex}cc 0%, ${angle.colorHex}99 50%, rgba(0,0,0,0.7) 100%)`
-              : `linear-gradient(135deg, ${angle.colorHex} 0%, ${angle.colorHex}dd 100%)`
-          }}
-        />
+        {/* Gradient overlay for text readability (للصور فقط؛ التدرّج المتحرّك يكفي بلا صورة) */}
+        {angle.coverImageUrl && (
+          <div 
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(135deg, ${angle.colorHex}cc 0%, ${angle.colorHex}99 50%, rgba(0,0,0,0.7) 100%)`
+            }}
+          />
+        )}
         
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 relative z-10">
           <div className="max-w-4xl mx-auto text-center text-white">

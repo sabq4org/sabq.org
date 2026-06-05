@@ -19620,7 +19620,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.get("/api/muqtarab/angles", async (req, res) => {
     try {
       const activeOnly = req.query.active === "1" || req.query.active === "true";
-      const angles = await storage.getAllAngles(activeOnly);
+      const withStats = req.query.withStats === "1" || req.query.withStats === "true";
+      const angles = withStats
+        ? await storage.getAnglesWithStats(activeOnly)
+        : await storage.getAllAngles(activeOnly);
       res.json(angles);
     } catch (error) {
       console.error("Error fetching angles:", error);
