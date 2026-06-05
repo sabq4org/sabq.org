@@ -52,7 +52,6 @@ import {
   CreditCard,
   Store,
   Bell,
-  PenLine,
   TrendingUp,
   Mic,
   FileAudio,
@@ -106,30 +105,15 @@ export const navConfig: NavItem[] = [
   },
 
   // ===== كاتب الرأي / Opinion Author =====
+  // قائمة مبسّطة: نظرة عامة + مقال جديد فقط. "مركز المهام" و"المحتوى" مُخفيان
+  // عبر excludeRoles أدناه، و"لوحة التحكم" أُزيلت من هنا بطلب التحرير.
   {
-    id: "opinion_author_section",
-    labelKey: "nav.my_articles",
-    labelAr: "مقالاتي",
-    icon: PenLine,
+    id: "opinion_author_new_article",
+    labelKey: "nav.new_article",
+    labelAr: "مقال جديد",
+    path: "/dashboard/articles/new",
+    icon: PlusCircle,
     roles: ["opinion_author"],
-    children: [
-      {
-        id: "opinion_author_dashboard",
-        labelKey: "nav.opinion_dashboard",
-        labelAr: "لوحة التحكم",
-        path: "/dashboard/opinion-author",
-        icon: LayoutDashboard,
-        roles: ["opinion_author"],
-      },
-      {
-        id: "opinion_author_new_article",
-        labelKey: "nav.new_article",
-        labelAr: "مقال جديد",
-        path: "/dashboard/articles/new",
-        icon: PlusCircle,
-        roles: ["opinion_author"],
-      },
-    ],
   },
 
   // ===== الناشر / Publisher Staff =====
@@ -183,6 +167,7 @@ export const navConfig: NavItem[] = [
     path: "/dashboard/tasks",
     icon: ListTodo,
     roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter"],
+    excludeRoles: ["opinion_author"],
     permissions: ["tasks.view_all", "tasks.view_own", "tasks.create"],
   },
 
@@ -193,6 +178,9 @@ export const navConfig: NavItem[] = [
     labelAr: "المحتوى",
     icon: Newspaper,
     roles: ["admin", "editor", "author", "reviewer", "comments_moderator", "reporter"],
+    // كاتب الرأي يكتب من عنصر "مقال جديد" المخصّص أعلاه؛ نخفي قسم المحتوى عنه
+    // كاملاً (excludeRoles على الحاوية يلغي كل الأبناء) لإزالة التكرار والضجيج.
+    excludeRoles: ["opinion_author"],
     // No parent permissions - each child validates independently and parent shows if any child is accessible
     children: [
       {
