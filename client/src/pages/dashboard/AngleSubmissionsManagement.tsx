@@ -24,6 +24,7 @@ import {
   Filter,
   Search,
   Rocket,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,12 +111,17 @@ export default function AngleSubmissionsManagement() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [cityFilter, setCityFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [experienceFilter, setExperienceFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubmission, setSelectedSubmission] = useState<AngleSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [reviewAction, setReviewAction] = useState<"approved" | "rejected">("approved");
+  const [classifying, setClassifying] = useState(false);
+  const [classifyResult, setClassifyResult] = useState<{ category: string; confidence: number } | null>(null);
 
   const { data: submissions, isLoading } = useQuery<AngleSubmission[]>({
     queryKey: ["/api/angle-submissions", statusFilter],
@@ -204,7 +210,26 @@ export default function AngleSubmissionsManagement() {
     },
   });
 
+  // قيم المدن المتاحة (من الطلبات نفسها) لبناء قائمة الفلترة
+  const cityOptions = Array.from(
+    new Set((submissions || []).map((s) => (s.city || "").trim()).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, "ar"));
+
+  // فلترة الخبرة حسب عدد المقالات المتوقعة شهرياً
+  function matchesExperience(s: AngleSubmission): boolean {
+    if (experienceFilter === "all") return true;
+    const n = s.expectedArticlesPerMonth || 0;
+    if (experienceFilter === "low") return n > 0 && n <= 2;
+    if (experienceFilter === "mid") return n >= 3 && n <= 6;
+    if (experienceFilter === "high") return n >= 7;
+    if (experienceFilter === "unknown") return !s.expectedArticlesPerMonth;
+    return true;
+  }
+
   const filteredSubmissions = submissions?.filter((s) => {
+    if (cityFilter !== "all" && (s.city || "").trim() !== cityFilter) return false;
+    if (categoryFilter !== "all" && s.angleCategory !== categoryFilter) return false;
+    if (!matchesExperience(s)) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -225,6 +250,30 @@ export default function AngleSubmissionsManagement() {
     setSelectedSubmission(submission);
     setDeleteDialogOpen(true);
   };
+
+  async function runClassify(submission: AngleSubmission) {
+    setClassifying(true);
+    setClassifyResult(null);
+    try {
+      const text = [submission.angleName, submission.angleDescription, submission.uniquePoints]
+        .filter(Boolean)
+        .join("\n");
+      const categories = Object.entries(categoryLabels).map(([value, label]) => ({ value, label }));
+      const res = await apiRequest<{ category: string; confidence: number }>(
+        "/api/admin/muqtarab/ai/classify",
+        { method: "POST", body: JSON.stringify({ text, categories }) },
+      );
+      setClassifyResult(res);
+    } catch (e) {
+      toast({
+        title: "خطأ في التصنيف الذكي",
+        description: e instanceof Error ? e.message : "حاول مرة أخرى",
+        variant: "destructive",
+      });
+    } finally {
+      setClassifying(false);
+    }
+  }
 
   const submitReview = () => {
     if (!selectedSubmission) return;
@@ -295,7 +344,7 @@ export default function AngleSubmissionsManagement() {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full md:w-48" data-testid="select-status-filter">
+                <SelectTrigger className="w-full md:w-40" data-testid="select-status-filter">
                   <Filter className="w-4 h-4 ml-2" />
                   <SelectValue placeholder="الحالة" />
                 </SelectTrigger>
@@ -304,6 +353,43 @@ export default function AngleSubmissionsManagement() {
                   <SelectItem value="pending">قيد المراجعة</SelectItem>
                   <SelectItem value="approved">تمت الموافقة</SelectItem>
                   <SelectItem value="rejected">مرفوض</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full md:w-40" data-testid="select-category-filter">
+                  <PenTool className="w-4 h-4 ml-2" />
+                  <SelectValue placeholder="التخصص" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل التخصصات</SelectItem>
+                  {Object.entries(categoryLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={cityFilter} onValueChange={setCityFilter}>
+                <SelectTrigger className="w-full md:w-40" data-testid="select-city-filter">
+                  <MapPin className="w-4 h-4 ml-2" />
+                  <SelectValue placeholder="المدينة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل المدن</SelectItem>
+                  {cityOptions.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={experienceFilter} onValueChange={setExperienceFilter}>
+                <SelectTrigger className="w-full md:w-44" data-testid="select-experience-filter">
+                  <Briefcase className="w-4 h-4 ml-2" />
+                  <SelectValue placeholder="الخبرة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل المستويات</SelectItem>
+                  <SelectItem value="low">مبتدئ (1–2 شهرياً)</SelectItem>
+                  <SelectItem value="mid">متوسط (3–6 شهرياً)</SelectItem>
+                  <SelectItem value="high">نشط (7+ شهرياً)</SelectItem>
+                  <SelectItem value="unknown">غير محدّد</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -441,7 +527,7 @@ export default function AngleSubmissionsManagement() {
         </Card>
 
         {/* View Details Dialog */}
-        <Dialog open={!!selectedSubmission && !reviewDialogOpen && !deleteDialogOpen} onOpenChange={() => setSelectedSubmission(null)}>
+        <Dialog open={!!selectedSubmission && !reviewDialogOpen && !deleteDialogOpen} onOpenChange={() => { setSelectedSubmission(null); setClassifyResult(null); }}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
             <DialogHeader>
               <DialogTitle>تفاصيل الطلب</DialogTitle>
@@ -495,9 +581,28 @@ export default function AngleSubmissionsManagement() {
                         <span className="text-sm text-muted-foreground">اسم الزاوية:</span>
                         <p className="font-medium text-lg">{selectedSubmission.angleName}</p>
                       </div>
-                      <Badge variant="outline">
-                        {categoryLabels[selectedSubmission.angleCategory] || selectedSubmission.angleCategory}
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <Badge variant="outline">
+                          {categoryLabels[selectedSubmission.angleCategory] || selectedSubmission.angleCategory}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 gap-1 text-indigo-600 hover:text-indigo-700"
+                          onClick={() => runClassify(selectedSubmission)}
+                          disabled={classifying}
+                          data-testid="button-ai-classify"
+                        >
+                          {classifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          تصنيف ذكي
+                        </Button>
+                        {classifyResult && (
+                          <span className="text-xs text-muted-foreground">
+                            مقترح: <span className="font-medium text-foreground">{categoryLabels[classifyResult.category] || classifyResult.category}</span>
+                            {" "}({Math.round(classifyResult.confidence * 100)}%)
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <span className="text-sm text-muted-foreground">وصف الفكرة:</span>

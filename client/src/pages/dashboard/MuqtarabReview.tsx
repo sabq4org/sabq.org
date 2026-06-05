@@ -12,6 +12,10 @@ import {
   Clock,
   FileText,
   Inbox,
+  Sparkles,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +69,17 @@ interface FullTopic {
   content?: { rawHtml?: string; plainText?: string } | null;
 }
 
+interface ReviewAssist {
+  summary: string;
+  policy: { risk: "low" | "medium" | "high"; flags: string[]; note: string };
+}
+
+const riskConfig = {
+  low: { label: "منخفض", color: "text-green-700 dark:text-green-400", Icon: ShieldCheck },
+  medium: { label: "متوسط", color: "text-amber-700 dark:text-amber-400", Icon: ShieldAlert },
+  high: { label: "مرتفع", color: "text-red-700 dark:text-red-400", Icon: ShieldX },
+};
+
 export default function MuqtarabReview() {
   const { toast } = useToast();
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -73,6 +88,8 @@ export default function MuqtarabReview() {
   const [returnNotes, setReturnNotes] = useState("");
   const [rejectItem, setRejectItem] = useState<ReviewItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [assist, setAssist] = useState<ReviewAssist | null>(null);
+  const [assistLoadingId, setAssistLoadingId] = useState<string | null>(null);
 
   const { data: queueRaw, isLoading } = useQuery<ReviewItem[]>({
     queryKey: ["/api/admin/muqtarab/review-queue"],
@@ -89,6 +106,27 @@ export default function MuqtarabReview() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/muqtarab/review-queue"] });
   };
+
+  async function runAssist(item: ReviewItem) {
+    setAssist(null);
+    setPreviewId(item.id);
+    setAssistLoadingId(item.id);
+    try {
+      const res = await apiRequest<ReviewAssist>(
+        `/api/admin/muqtarab/topics/${item.id}/ai/review-assist`,
+        { method: "POST" },
+      );
+      setAssist(res);
+    } catch (e) {
+      toast({
+        title: "خطأ في المساعد الذكي",
+        description: e instanceof Error ? e.message : "حاول مرة أخرى",
+        variant: "destructive",
+      });
+    } finally {
+      setAssistLoadingId(null);
+    }
+  }
 
   const approveMutation = useMutation({
     mutationFn: async (id: string) =>
@@ -204,10 +242,28 @@ export default function MuqtarabReview() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => setPreviewId(item.id)}
+                            onClick={() => {
+                              setAssist(null);
+                              setPreviewId(item.id);
+                            }}
                             data-testid={`button-preview-${item.id}`}
                           >
                             <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-indigo-600 hover:text-indigo-700"
+                            onClick={() => runAssist(item)}
+                            disabled={assistLoadingId === item.id}
+                            title="ملخص + فحص سياسات ذكي"
+                            data-testid={`button-ai-assist-${item.id}`}
+                          >
+                            {assistLoadingId === item.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-4 h-4" />
+                            )}
                           </Button>
                           <Button
                             size="sm"
@@ -256,7 +312,7 @@ export default function MuqtarabReview() {
         </Card>
 
         {/* Preview dialog */}
-        <Dialog open={!!previewId} onOpenChange={(o) => !o && setPreviewId(null)}>
+        <Dialog open={!!previewId} onOpenChange={(o) => { if (!o) { setPreviewId(null); setAssist(null); } }}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir="rtl">
             <DialogHeader>
               <DialogTitle>{preview?.title || "معاينة الموضوع"}</DialogTitle>
@@ -267,6 +323,47 @@ export default function MuqtarabReview() {
               </div>
             ) : preview ? (
               <div className="space-y-4">
+                {(assist || assistLoadingId === previewId) && (
+                  <div className="rounded-lg border bg-indigo-50/60 dark:bg-indigo-950/20 p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Sparkles className="w-4 h-4 text-indigo-500" />
+                      مساعد المراجعة الذكي
+                    </div>
+                    {assistLoadingId === previewId ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        جاري التحليل…
+                      </div>
+                    ) : assist ? (
+                      <>
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">ملخص</div>
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap">{assist.summary}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {(() => {
+                            const rc = riskConfig[assist.policy.risk];
+                            const RiskIcon = rc.Icon;
+                            return (
+                              <span className={`inline-flex items-center gap-1 text-sm font-medium ${rc.color}`}>
+                                <RiskIcon className="w-4 h-4" />
+                                خطورة السياسات: {rc.label}
+                              </span>
+                            );
+                          })()}
+                          {assist.policy.flags.map((f, i) => (
+                            <Badge key={i} variant="outline" className="text-red-700 border-red-300">
+                              {f}
+                            </Badge>
+                          ))}
+                        </div>
+                        {assist.policy.note && (
+                          <p className="text-xs text-muted-foreground">{assist.policy.note}</p>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                )}
                 {preview.heroImageUrl && (
                   <img
                     src={preview.heroImageUrl}
