@@ -146,16 +146,24 @@ export default function AngleSubmissionsManagement() {
       setSelectedSubmission(null);
       setReviewNotes("");
       if (reviewAction === "approved") {
-        // الموافقة الآن تنشئ الحساب + الزاوية + تُرسل بيانات الدخول تلقائياً
         const prov = data?._provision;
-        toast({
-          title: "تمت الموافقة وإنشاء الزاوية",
-          description: prov?.alreadyProvisioned
-            ? "الزاوية مُنشأة مسبقاً لهذا الطلب"
-            : prov?.isNewUser
-              ? "أُنشئت الزاوية والحساب وأُرسلت بيانات الدخول بالبريد"
-              : "أُنشئت الزاوية ورُبطت بالحساب الموجود وأُرسل بريد الدخول",
-        });
+        if (prov?.emailSent === false) {
+          toast({
+            title: "تمت الموافقة لكن البريد لم يُرسَل",
+            description: prov?.emailError || prov?.message || "استخدم «إعادة إرسال بيانات الدخول» من قائمة الطلبات",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "تمت الموافقة وإنشاء الزاوية",
+            description: prov?.alreadyProvisioned
+              ? "الزاوية مُنشأة مسبقاً لهذا الطلب"
+              : prov?.message ||
+                (prov?.isNewUser
+                  ? "أُنشئت الزاوية والحساب وأُرسلت بيانات الدخول بالبريد"
+                  : "أُنشئت الزاوية ورُبطت بالحساب الموجود وأُرسل بريد الدخول"),
+          });
+        }
       } else {
         toast({ title: "تم الرفض", description: "تم رفض الطلب بنجاح" });
       }
@@ -188,17 +196,44 @@ export default function AngleSubmissionsManagement() {
     },
   });
 
+  const resendCredentialsMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/angle-submissions/${id}/resend-credentials`, { method: "POST" });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "تم إرسال بيانات الدخول",
+        description: data?.message || "أُرسل بريد جديد بكلمة مرور مؤقتة",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "فشل إرسال البريد",
+        description: error instanceof Error ? error.message : "تعذر إعادة إرسال بيانات الدخول",
+        variant: "destructive",
+      });
+    },
+  });
+
   const createAngleMutation = useMutation({
     mutationFn: async (id: string) => {
       return apiRequest(`/api/angle-submissions/${id}/create-angle`, { method: "POST" });
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/angle-submissions"] });
-      toast({ 
-        title: "تم إنشاء الزاوية", 
-        description: data.isNewUser 
-          ? "تم إنشاء الزاوية والحساب وإرسال بيانات الدخول بالبريد" 
-          : "تم إنشاء الزاوية وربطها بالحساب الموجود",
+      if (data.emailSent === false) {
+        toast({
+          title: "تم إنشاء الزاوية لكن البريد لم يُرسَل",
+          description: data.emailError || "استخدم «إعادة إرسال بيانات الدخول»",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "تم إنشاء الزاوية",
+        description: data.message || (data.isNewUser
+          ? "تم إنشاء الزاوية والحساب وإرسال بيانات الدخول بالبريد"
+          : "تم إنشاء الزاوية وربطها بالحساب الموجود"),
       });
     },
     onError: (error) => {
@@ -501,10 +536,27 @@ export default function AngleSubmissionsManagement() {
                               </Button>
                             )}
                             {submission.createdAngleId && (
-                              <Badge variant="outline" className="text-green-600 border-green-300">
-                                <CheckCircle2 className="w-3 h-3 ml-1" />
-                                تم الإنشاء
-                              </Badge>
+                              <>
+                                <Badge variant="outline" className="text-green-600 border-green-300">
+                                  <CheckCircle2 className="w-3 h-3 ml-1" />
+                                  تم الإنشاء
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1"
+                                  onClick={() => resendCredentialsMutation.mutate(submission.id)}
+                                  disabled={resendCredentialsMutation.isPending}
+                                  data-testid={`button-resend-credentials-${submission.id}`}
+                                >
+                                  {resendCredentialsMutation.isPending ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Mail className="w-3 h-3" />
+                                  )}
+                                  إعادة إرسال الدخول
+                                </Button>
+                              </>
                             )}
                             <Button
                               size="icon"

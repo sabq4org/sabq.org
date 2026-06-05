@@ -66,7 +66,7 @@ import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
-import { provisionAngleFromSubmission } from "./services/muqtarabProvisioning";
+import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
 import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, sendTopicRejectedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
 import { notifyAuthorTopicPublished, notifyAuthorTopicRejected } from "./services/muqtarabNotifications";
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
@@ -19843,6 +19843,23 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // مُبسّط: يفوّض لخدمة التزويد الموحّدة provisionAngleFromSubmission (نفس مسار
   // «النقرة الواحدة»). المنطق القديم اعتمد على 3 دوال storage غير موجودة
   // (getUserByEmail / getAllSections / createUser) فكان يتعطّل وقت التشغيل دائماً.
+  app.post("/api/angle-submissions/:id/resend-credentials", requirePermission("muqtarab.manage"), async (req: any, res) => {
+    try {
+      const result = await resendAngleWriterCredentials(req.params.id, true);
+      if (!result.ok) {
+        return res.status(400).json({ message: result.message, emailError: result.emailError });
+      }
+      res.json({
+        success: true,
+        message: result.message,
+        emailSent: result.emailSent,
+      });
+    } catch (error) {
+      console.error("Error resending angle writer credentials:", error);
+      res.status(500).json({ message: "فشل في إعادة إرسال بيانات الدخول" });
+    }
+  });
+
   app.post("/api/angle-submissions/:id/create-angle", requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
       const result = await provisionAngleFromSubmission(req.params.id, req.user.id);
@@ -19854,6 +19871,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         angle: result.angle,
         user: result.user,
         isNewUser: result.isNewUser,
+        emailSent: result.emailSent,
+        emailError: result.emailError,
         message: result.message,
       });
     } catch (error) {

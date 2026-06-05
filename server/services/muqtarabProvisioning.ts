@@ -35,6 +35,15 @@ export interface ProvisionResult {
   angle?: Angle;
   user?: { id: string; email: string };
   isNewUser?: boolean;
+  emailSent?: boolean;
+  emailError?: string;
+  message: string;
+}
+
+export interface ResendCredentialsResult {
+  ok: boolean;
+  emailSent?: boolean;
+  emailError?: string;
   message: string;
 }
 
@@ -164,19 +173,96 @@ export async function provisionAngleFromSubmission(
     },
   });
 
-  // إرسال بيانات الدخول (غير حاجب)
-  void sendCredentialsEmail(submission, email, isNewUser, tempPassword).catch((err) =>
-    console.error("[muqtarab] فشل إرسال بريد بيانات الدخول:", err),
-  );
+  const emailResult = await sendCredentialsEmail(submission, email, isNewUser, tempPassword);
+  if (!emailResult.success) {
+    console.error("[muqtarab] فشل إرسال بريد بيانات الدخول:", emailResult.error);
+  }
 
+  const emailOk = !!emailResult.success;
   return {
     ok: true,
     angle,
     user: { id: user.id, email: user.email },
     isNewUser,
-    message: isNewUser
-      ? "تم إنشاء الزاوية والحساب وإرسال بيانات الدخول"
-      : "تم إنشاء الزاوية وربطها بالحساب الموجود",
+    emailSent: emailOk,
+    emailError: emailResult.error,
+    message: emailOk
+      ? isNewUser
+        ? "تم إنشاء الزاوية والحساب وإرسال بيانات الدخول"
+        : "تم إنشاء الزاوية وربطها بالحساب الموجود وأُرسل بريد الدخول"
+      : isNewUser
+        ? "تم إنشاء الزاوية والحساب لكن فشل إرسال البريد — أعد الإرسال من لوحة الطلبات"
+        : "تم إنشاء الزاوية لكن فشل إرسال البريد — أعد الإرسال من لوحة الطلبات",
+  };
+}
+
+/**
+ * إعادة إرسال بيانات الدخول لكاتب زاوية مُزوَّد مسبقاً.
+ * يُعيد تعيين كلمة مرور مؤقتة افتراضياً حتى يصل بريد قابل للاستخدام.
+ */
+export async function resendAngleWriterCredentials(
+  submissionId: string,
+  resetPassword = true,
+): Promise<ResendCredentialsResult> {
+  const submission = await storage.getAngleSubmission(submissionId);
+  if (!submission) {
+    return { ok: false, message: "الطلب غير موجود" };
+  }
+  if (submission.status !== "approved") {
+    return { ok: false, message: "الطلب غير معتمد" };
+  }
+  if (!submission.createdAngleId) {
+    return { ok: false, message: "لم تُنشأ الزاوية بعد — استخدم «إنشاء الزاوية» أولاً" };
+  }
+
+  const email = submission.email.trim().toLowerCase();
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (!user) {
+    return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  let tempPassword: string | null = null;
+  let showAsNewCredentials = false;
+
+  if (resetPassword) {
+    tempPassword = generatePassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    await db
+      .update(users)
+      .set({
+        passwordHash: hashedPassword,
+        mustChangePassword: true,
+        status: "active",
+        emailVerified: true,
+      })
+      .where(eq(users.id, user.id));
+    invalidateUserSessionCache(user.id);
+    showAsNewCredentials = true;
+  }
+
+  const emailResult = await sendCredentialsEmail(
+    submission,
+    email,
+    showAsNewCredentials,
+    tempPassword,
+  );
+
+  if (!emailResult.success) {
+    console.error("[muqtarab] فشل إعادة إرسال بريد الدخول:", emailResult.error);
+    return {
+      ok: false,
+      emailSent: false,
+      emailError: emailResult.error,
+      message: emailResult.error || "فشل إرسال البريد",
+    };
+  }
+
+  return {
+    ok: true,
+    emailSent: true,
+    message: resetPassword
+      ? "تم إعادة تعيين كلمة المرور وإرسال بيانات الدخول بالبريد"
+      : "تم إرسال بيانات الدخول بالبريد",
   };
 }
 
@@ -185,7 +271,7 @@ async function sendCredentialsEmail(
   email: string,
   isNewUser: boolean,
   tempPassword: string | null,
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   const firstName = submission.fullName.split(" ")[0];
   const html = `
 <!DOCTYPE html>
@@ -254,7 +340,7 @@ async function sendCredentialsEmail(
 </body>
 </html>`;
 
-  await sendEmailNotification({
+  return sendEmailNotification({
     to: email,
     subject: `🚀 زاويتك "${submission.angleName}" جاهزة - بيانات الدخول`,
     html,
