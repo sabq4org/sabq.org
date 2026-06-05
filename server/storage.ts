@@ -929,6 +929,7 @@ export interface IStorage {
   // Muqtarab Angles operations
   getSectionBySlug(slug: string): Promise<Section | undefined>;
   getAllAngles(activeOnly?: boolean): Promise<Angle[]>;
+  getAnglesWithStats(activeOnly?: boolean): Promise<Array<Angle & { topicCount: number; writerName: string | null; writerAvatar: string | null }>>;
   getAngleBySlug(slug: string): Promise<Angle | undefined>;
   getAngleById(id: string): Promise<Angle | undefined>;
   createAngle(angle: InsertAngle): Promise<Angle>;
@@ -9991,6 +9992,38 @@ export class DatabaseStorage implements IStorage {
       .from(angles)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(angles.sortOrder, angles.nameAr);
+  }
+
+  async getAnglesWithStats(activeOnly?: boolean): Promise<Array<Angle & { topicCount: number; writerName: string | null; writerAvatar: string | null }>> {
+    const conditions = [];
+    if (activeOnly) {
+      conditions.push(eq(angles.isActive, true));
+    }
+
+    const rows = await db
+      .select({
+        angle: angles,
+        writerFirst: users.firstName,
+        writerLast: users.lastName,
+        writerAvatar: users.profileImageUrl,
+        topicCount: sql<number>`count(case when ${topics.status} = 'published' then ${topics.id} end)`,
+      })
+      .from(angles)
+      .leftJoin(users, eq(angles.managerUserId, users.id))
+      .leftJoin(topics, eq(topics.angleId, angles.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .groupBy(angles.id, users.firstName, users.lastName, users.profileImageUrl)
+      .orderBy(angles.sortOrder, angles.nameAr);
+
+    return rows.map((r) => {
+      const name = [r.writerFirst, r.writerLast].filter(Boolean).join(" ").trim();
+      return {
+        ...r.angle,
+        topicCount: Number(r.topicCount) || 0,
+        writerName: name || null,
+        writerAvatar: r.writerAvatar ?? null,
+      };
+    });
   }
 
   async getAngleBySlug(slug: string): Promise<Angle | undefined> {

@@ -1411,6 +1411,27 @@ input, select, textarea {
     }
   }
 
+  /* مُقترب — غلاف الزاوية: تدرّج لوني متحرّك مشتقّ من لون الزاوية */
+  .angle-animated-cover {
+    background: linear-gradient(
+      130deg,
+      var(--angle-grad-1, #818cf8),
+      var(--angle-grad-2, #6366f1),
+      var(--angle-grad-3, #312e81),
+      var(--angle-grad-2, #6366f1),
+      var(--angle-grad-1, #818cf8)
+    );
+    background-size: 300% 300%;
+    animation: gradient-shift 16s ease infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .angle-animated-cover {
+      animation: none;
+      background: var(--angle-grad-2, #6366f1);
+    }
+  }
+
   /* ============================================
    * ACCESSIBILITY SETTINGS
    * ============================================ */

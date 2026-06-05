@@ -34,6 +34,20 @@ export function withAlpha(hex: string, alpha: number): string {
   return `${base}${a}`;
 }
 
+/** يعتّم (amount<0) أو يفتّح (amount>0) اللون بنسبة (-1..1) بالمزج نحو الأسود/الأبيض. */
+export function shade(hex: string, amount: number): string {
+  const base = normalizeHex(hex).slice(1);
+  const target = amount < 0 ? 0 : 255;
+  const t = Math.min(1, Math.abs(amount));
+  const ch = (i: number) => {
+    const v = parseInt(base.slice(i, i + 2), 16);
+    return Math.round(v + (target - v) * t)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${ch(0)}${ch(2)}${ch(4)}`;
+}
+
 export interface AngleTheme {
   /** اللون الأساسي #RRGGBB */
   color: string;
@@ -65,6 +79,10 @@ export function angleTheme(colorHex?: string | null): AngleTheme {
       ["--angle" as any]: color,
       ["--angle-soft" as any]: withAlpha(color, 0.12),
       ["--angle-border" as any]: withAlpha(color, 0.28),
+      // درجات التدرّج المتحرّك للغلاف (فاتح → اللون → داكن)
+      ["--angle-grad-1" as any]: shade(color, 0.18),
+      ["--angle-grad-2" as any]: color,
+      ["--angle-grad-3" as any]: shade(color, -0.4),
     } as CSSProperties,
   };
 }
