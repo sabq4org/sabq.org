@@ -133,6 +133,10 @@ struct AdminNewsRow: View {
                 revisionCue
             }
 
+            if item.status == .scheduled, let scheduled = item.scheduledAt {
+                scheduledCue(scheduled)
+            }
+
             if !item.excerpt.isEmpty {
                 Text(item.excerpt)
                     .font(.system(size: 13))
@@ -221,6 +225,29 @@ struct AdminNewsRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(SabqTheme.gold.opacity(0.35), lineWidth: 0.5)
+        )
+    }
+
+    /// Sky-tinted banner showing the scheduled publish date + time.
+    private func scheduledCue(_ date: Date) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 12, weight: .bold))
+            Text("مجدول للنشر: \(SabqFormatters.arabicDate.string(from: date)) — \(SabqFormatters.riyadhTime.string(from: date))")
+                .font(.system(size: 12, weight: .bold))
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(SabqTheme.sky)
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SabqTheme.sky.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(SabqTheme.sky.opacity(0.35), lineWidth: 0.5)
         )
     }
 

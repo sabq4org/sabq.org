@@ -6501,6 +6501,7 @@ const adminArticleColumns = {
   reviewNotes: articles.reviewNotes,
   views: articles.views,
   publishedAt: articles.publishedAt,
+  scheduledAt: articles.scheduledAt,
   updatedAt: articles.updatedAt,
   authorFirst: users.firstName,
   authorLast: users.lastName,
@@ -6522,6 +6523,7 @@ function mapAdminArticleRow(r: any) {
     reviewNotes: r.reviewNotes || null,
     author: reporterName || authorName || "فريق سبق",
     views: r.views || 0,
+    scheduledAt: r.scheduledAt ? (r.scheduledAt instanceof Date ? r.scheduledAt : new Date(r.scheduledAt)).toISOString() : null,
     updatedAt: (updated instanceof Date ? updated : new Date(updated)).toISOString(),
   };
 }
