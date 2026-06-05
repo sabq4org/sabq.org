@@ -12,8 +12,15 @@ import SwiftUI
 /// a small breakdown line). Smaller than the old horizontal strip cards.
 struct AdminStatGridCard: View {
     let card: AdminStatCard
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
+        Button { onTap?() } label: { cardBody }
+            .buttonStyle(.plain)
+            .disabled(onTap == nil)
+    }
+
+    private var cardBody: some View {
         HStack(alignment: .top, spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)

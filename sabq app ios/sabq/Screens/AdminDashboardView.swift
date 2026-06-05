@@ -9,7 +9,7 @@ import Combine
 /// store can be swapped for a live API without touching the view.
 @MainActor
 final class AdminDashboardViewModel: ObservableObject {
-    @Published var fullStats: AdminFullStats?
+    @Published var counts: AdminCounts?
     @Published var items: [AdminNewsItem] = []
     @Published var selectedStatus: AdminArticleStatus = .draft
     @Published var isLoading = true
@@ -51,11 +51,11 @@ final class AdminDashboardViewModel: ObservableObject {
         isLoading = false
     }
 
-    /// Fetch the overview stats (independent of the list).
+    /// Fetch the lightweight counts (independent of the list).
     private func refreshStats() async {
         isStatsLoading = true
         defer { isStatsLoading = false }
-        fullStats = (try? await service.fetchFullStats()) ?? fullStats
+        counts = (try? await service.fetchCounts()) ?? counts
     }
 
     /// Switch the active section and reload its first page.
@@ -171,6 +171,9 @@ final class AdminDashboardViewModel: ObservableObject {
 struct AdminDashboardView: View {
     @StateObject private var vm = AdminDashboardViewModel()
     @State private var pendingAction: AdminWorkflowAction?
+    @State private var showNewArticleChoice = false
+    /// Drives the push into the editor in "new article" mode ("news"/"opinion").
+    @State private var newArticleType: String?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -189,10 +192,28 @@ struct AdminDashboardView: View {
         .sabqRTL()
         .navigationTitle("لوحة التحكم")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showNewArticleChoice = true } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                }
+            }
+        }
+        .confirmationDialog("نوع المحتوى", isPresented: $showNewArticleChoice, titleVisibility: .visible) {
+            Button("خبر") { newArticleType = "news" }
+            Button("مقال رأي") { newArticleType = "opinion" }
+            Button("إلغاء", role: .cancel) {}
+        }
         // Registered here (not in ContentView) so the editor's save callback
         // can reach this screen's view model directly.
         .navigationDestination(for: AdminArticleEditorRoute.self) { route in
             AdminArticleEditorView(articleId: route.item.id, title: route.item.title) {
+                Task { await vm.refreshAfterEdit() }
+            }
+        }
+        .navigationDestination(item: $newArticleType) { type in
+            AdminArticleEditorView(articleId: nil, articleType: type, title: "") {
                 Task { await vm.refreshAfterEdit() }
             }
         }
@@ -220,15 +241,20 @@ struct AdminDashboardView: View {
                 .foregroundStyle(SabqTheme.ink)
 
             let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
-            if let stats = vm.fullStats {
+            if let counts = vm.counts {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(stats.cards()) { card in
-                        AdminStatGridCard(card: card)
-                    }
+                    AdminStatGridCard(
+                        card: AdminStatCard(key: "draft", title: "المسودات", value: "\(counts.draft)",
+                                            breakdown: "اضغط للعرض", icon: "doc.text", tint: SabqTheme.gold)
+                    ) { Task { await vm.select(.draft) } }
+                    AdminStatGridCard(
+                        card: AdminStatCard(key: "scheduled", title: "المجدولة", value: "\(counts.scheduled)",
+                                            breakdown: "اضغط للعرض", icon: "clock.fill", tint: SabqTheme.sky)
+                    ) { Task { await vm.select(.scheduled) } }
                 }
             } else if vm.isStatsLoading {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(0..<6, id: \.self) { _ in
+                    ForEach(0..<2, id: \.self) { _ in
                         SkeletonBox(height: 78, radius: SabqTheme.tileRadius)
                     }
                 }

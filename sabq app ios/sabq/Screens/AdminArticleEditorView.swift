@@ -54,45 +54,56 @@ final class AdminEditorViewModel: ObservableObject {
     /// Opinion articles hide subtitle + news-type (mirrors the web).
     var isOpinion: Bool { articleType == "opinion" }
 
-    let articleId: String
+    let articleId: String?
+    let isNew: Bool
     private let service: AdminServicing
 
-    init(articleId: String, service: AdminServicing = LiveAdminService()) {
+    init(articleId: String?, newArticleType: String? = nil, service: AdminServicing = LiveAdminService()) {
         self.articleId = articleId
+        self.isNew = (articleId == nil)
         self.service = service
+        if articleId == nil {
+            self.articleType = newArticleType ?? "news"
+            self.status = .draft
+        }
     }
 
     func load() async {
         isLoading = true
         error = nil
         async let cats = Self.loadCategories()
-        do {
-            let d = try await service.fetchDetail(id: articleId)
-            title = d.title
-            subtitle = d.subtitle
-            excerpt = d.excerpt
-            contentHTML = d.content
-            liveHTMLLength = d.content.count
-            status = d.status
-            newsType = d.newsType
-            articleType = d.articleType
-            isFeatured = d.isFeatured
-            hideFromHomepage = d.hideFromHomepage
-            aiSummary = d.aiSummary
-            imageUrl = d.imageUrl
-            categoryId = d.categoryId
-            categoryName = d.categoryName
-            reporterId = d.reporterId
-            reporterName = d.reporterName
-            authorId = d.authorId
-            authorName = d.authorName
-            if let s = d.scheduledAt { scheduledAt = s; hasSchedule = true }
-            seoTitle = d.seo.metaTitle
-            seoDescription = d.seo.metaDescription
-            keywords = d.seo.keywords
+        if let id = articleId {
+            do {
+                let d = try await service.fetchDetail(id: id)
+                title = d.title
+                subtitle = d.subtitle
+                excerpt = d.excerpt
+                contentHTML = d.content
+                liveHTMLLength = d.content.count
+                status = d.status
+                newsType = d.newsType
+                articleType = d.articleType
+                isFeatured = d.isFeatured
+                hideFromHomepage = d.hideFromHomepage
+                aiSummary = d.aiSummary
+                imageUrl = d.imageUrl
+                categoryId = d.categoryId
+                categoryName = d.categoryName
+                reporterId = d.reporterId
+                reporterName = d.reporterName
+                authorId = d.authorId
+                authorName = d.authorName
+                if let s = d.scheduledAt { scheduledAt = s; hasSchedule = true }
+                seoTitle = d.seo.metaTitle
+                seoDescription = d.seo.metaDescription
+                keywords = d.seo.keywords
+                loaded = true
+            } catch {
+                self.error = "تعذّر تحميل الخبر"
+            }
+        } else {
+            // New article — fields start blank (configured in init).
             loaded = true
-        } catch {
-            self.error = "تعذّر تحميل الخبر"
         }
         categories = await cats
         isLoading = false
@@ -109,6 +120,36 @@ final class AdminEditorViewModel: ObservableObject {
         // doubles as the excerpt (matches the web), falling back to the
         // original excerpt when no summary is set.
         let effectiveExcerpt = aiSummary.isEmpty ? excerpt : aiSummary
+        let seo = AdminSEO(metaTitle: seoTitle, metaDescription: seoDescription, keywords: keywords)
+
+        if isNew {
+            let body = AdminCreateBody(
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                subtitle: subtitle,
+                excerpt: effectiveExcerpt,
+                content: html,
+                status: status.rawValue,
+                articleType: articleType,
+                newsType: newsType,
+                isFeatured: isFeatured,
+                hideFromHomepage: hideFromHomepage,
+                aiSummary: aiSummary,
+                imageUrl: imageUrl,
+                categoryId: categoryId,
+                reporterId: isOpinion ? nil : reporterId,
+                opinionAuthorId: isOpinion ? authorId : nil,
+                scheduledAt: scheduledISO,
+                seo: seo
+            )
+            do {
+                _ = try await service.createArticle(body)
+                return true
+            } catch {
+                self.error = "تعذّر إنشاء الخبر"
+                return false
+            }
+        }
+
         let payload = AdminArticleEditPayload(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             subtitle: subtitle,
@@ -126,10 +167,10 @@ final class AdminEditorViewModel: ObservableObject {
             reporterId: isOpinion ? nil : reporterId,
             authorId: isOpinion ? authorId : nil,
             scheduledAt: scheduledISO,
-            seo: AdminSEO(metaTitle: seoTitle, metaDescription: seoDescription, keywords: keywords)
+            seo: seo
         )
         do {
-            try await service.saveArticle(id: articleId, payload: payload)
+            try await service.saveArticle(id: articleId ?? "", payload: payload)
             return true
         } catch {
             self.error = "تعذّر حفظ التعديلات"
@@ -207,12 +248,17 @@ final class AdminEditorViewModel: ObservableObject {
     }
 
     /// توليد صورة بضغطة واحدة — يستخدم إعدادات auto-image المحفوظة + المحتوى.
+    /// يتطلب خبراً محفوظاً (له معرّف)؛ للخبر الجديد استخدم "توليد صورة بالذكاء".
     func runAutoImage(content: String) async {
+        guard let id = articleId else {
+            self.error = "احفظ الخبر أولاً للتوليد التلقائي، أو استخدم \"توليد صورة بالذكاء\""
+            return
+        }
         isGeneratingImage = true
         defer { isGeneratingImage = false }
         do {
             imageUrl = try await service.autoGenerateImage(
-                articleId: articleId,
+                articleId: id,
                 title: title,
                 content: content,
                 excerpt: aiSummary,
@@ -263,7 +309,8 @@ final class AdminEditorViewModel: ObservableObject {
 /// Full admin article editor: fetches every field, edits the body as rich
 /// HTML (`SabqHTMLEditor`), and saves through `PATCH /api/v1/admin/articles/:id`.
 struct AdminArticleEditorView: View {
-    let articleId: String
+    let articleId: String?
+    let newArticleType: String?
     let initialTitle: String
     let onSaved: () -> Void
 
@@ -279,11 +326,12 @@ struct AdminArticleEditorView: View {
     @State private var showProofSheet = false
     @State private var showUserPicker = false
 
-    init(articleId: String, title: String, onSaved: @escaping () -> Void) {
+    init(articleId: String?, articleType: String? = nil, title: String = "", onSaved: @escaping () -> Void) {
         self.articleId = articleId
+        self.newArticleType = articleType
         self.initialTitle = title
         self.onSaved = onSaved
-        _vm = StateObject(wrappedValue: AdminEditorViewModel(articleId: articleId))
+        _vm = StateObject(wrappedValue: AdminEditorViewModel(articleId: articleId, newArticleType: articleType))
     }
 
     var body: some View {
@@ -299,7 +347,9 @@ struct AdminArticleEditorView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle(vm.isOpinion ? "تعديل مقال رأي" : "تعديل خبر")
+        .navigationTitle(vm.isNew
+            ? (vm.isOpinion ? "مقال رأي جديد" : "خبر جديد")
+            : (vm.isOpinion ? "تعديل مقال رأي" : "تعديل خبر"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { saveButton }
@@ -724,7 +774,7 @@ struct AdminArticleEditorView: View {
     }
 
     private func fieldLabel(_ text: String) -> some View {
-        Text(text).font(.system(size: 13, weight: .bold)).foregroundStyle(SabqTheme.secondaryInk)
+        Text(text).font(.system(size: 13, weight: .heavy)).foregroundStyle(SabqTheme.ink)
     }
 
     /// Pill label for an AI/upload action button (with optional spinner).
@@ -784,14 +834,17 @@ struct AdminArticleEditorView: View {
 
     @ViewBuilder
     private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             fieldLabel(label)
             content()
                 .foregroundStyle(SabqTheme.ink)
-                .padding(12)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.background.opacity(0.5)))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                // Inputs use the page background (distinct from the white card)
+                // for a clear, high-contrast boundary.
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.background))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline, lineWidth: 1))
         }
     }
 }

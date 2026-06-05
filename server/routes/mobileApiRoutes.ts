@@ -6698,6 +6698,38 @@ router.get("/admin/dashboard/stats", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v1/admin/dashboard/counts — ultra-light: just draft + scheduled
+// counts (two indexed COUNTs). Powers the simplified 2-card overview without
+// the heavy full-stats fan-out. Cached 30s.
+router.get("/admin/dashboard/counts", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const { memoryCache } = await import("../memoryCache");
+    const cacheKey = "mobile:admin:counts";
+    const cached = memoryCache.get<any>(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    const [draftRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere("draft"));
+    const [scheduledRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(articleStatusWhere("scheduled"));
+    const payload = { success: true, draft: draftRow?.c || 0, scheduled: scheduledRow?.c || 0 };
+    memoryCache.set(cacheKey, payload, 30000);
+    res.json(payload);
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/dashboard/counts error:", error);
+    res.status(500).json({ success: false, message: "تعذر تحميل العدّادات" });
+  }
+});
+
 // GET /api/v1/admin/dashboard/full-stats — بطاقات النظرة العامة (نفس مصدر الويب)
 // Returns the subset of the web dashboard's KPI groups the iOS cards need.
 router.get("/admin/dashboard/full-stats", async (req: Request, res: Response) => {
@@ -6784,6 +6816,88 @@ router.get("/admin/articles", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /admin/articles error:", error);
     res.status(500).json({ success: false, message: "تعذر تحميل الأخبار" });
+  }
+});
+
+// POST /api/v1/admin/articles — create a new article (خبر جديد / مقال رأي)
+router.post("/admin/articles", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const b = req.body || {};
+    const title = typeof b.title === "string" ? b.title.trim() : "";
+    if (!title) {
+      return res.status(400).json({ success: false, message: "العنوان مطلوب" });
+    }
+    const articleType = b.articleType === "opinion" ? "opinion" : "news";
+
+    // Arabic-friendly slug + timestamp (same shape as /articles/submit).
+    const baseSlug = title
+      .toLowerCase()
+      .trim()
+      .replace(/[\s_]+/g, "-")
+      .replace(/[^؀-ۿa-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    const slug = `${baseSlug || "article"}-${Date.now()}`;
+
+    // authorId: opinion → chosen author (or creator); news → creator.
+    const authorId = (articleType === "opinion" && typeof b.opinionAuthorId === "string" && b.opinionAuthorId)
+      ? b.opinionAuthorId
+      : admin.userId;
+
+    const status = (typeof b.status === "string" && (ADMIN_ARTICLE_STATUSES as readonly string[]).includes(b.status))
+      ? b.status
+      : "draft";
+
+    const articleData: any = {
+      title,
+      content: typeof b.content === "string" ? b.content : "",
+      excerpt: typeof b.excerpt === "string" ? b.excerpt : null,
+      subtitle: typeof b.subtitle === "string" ? b.subtitle : null,
+      slug,
+      status,
+      articleType,
+      newsType: typeof b.newsType === "string" ? b.newsType : "regular",
+      categoryId: typeof b.categoryId === "string" && b.categoryId ? b.categoryId : null,
+      reporterId: articleType === "news" && typeof b.reporterId === "string" && b.reporterId ? b.reporterId : null,
+      authorId,
+      submitterId: admin.userId,
+      isFeatured: typeof b.isFeatured === "boolean" ? b.isFeatured : false,
+      hideFromHomepage: typeof b.hideFromHomepage === "boolean" ? b.hideFromHomepage : false,
+      aiSummary: typeof b.aiSummary === "string" ? b.aiSummary : null,
+      imageUrl: typeof b.imageUrl === "string" && b.imageUrl ? b.imageUrl : null,
+    };
+    if (b.seo && typeof b.seo === "object") {
+      articleData.seo = {
+        metaTitle: typeof b.seo.metaTitle === "string" ? b.seo.metaTitle : "",
+        metaDescription: typeof b.seo.metaDescription === "string" ? b.seo.metaDescription : "",
+        keywords: Array.isArray(b.seo.keywords) ? b.seo.keywords : [],
+      };
+    }
+    if (status === "scheduled" && typeof b.scheduledAt === "string" && b.scheduledAt) {
+      const d = new Date(b.scheduledAt);
+      if (!isNaN(d.getTime())) articleData.scheduledAt = d;
+    }
+    if (status === "published") {
+      articleData.publishedAt = new Date();
+    }
+
+    const { storage } = await import("../storage");
+    const created = await storage.createArticle(articleData);
+
+    // Bust the counts cache so the new draft/scheduled shows immediately.
+    try {
+      const { memoryCache } = await import("../memoryCache");
+      memoryCache.delete("mobile:admin:counts");
+    } catch {}
+
+    res.status(201).json({ success: true, id: created.id, item: await fetchAdminArticleItem(created.id) });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/articles error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إنشاء الخبر" });
   }
 });
 

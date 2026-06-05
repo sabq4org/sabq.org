@@ -173,6 +173,12 @@ struct AdminStatCard: Identifiable {
     var id: String { key }
 }
 
+/// Lightweight overview — just the two counts the simplified dashboard shows.
+struct AdminCounts: Decodable {
+    var draft: Int
+    var scheduled: Int
+}
+
 // MARK: - Full editor detail
 
 /// SEO sub-object stored in `articles.seo` jsonb.
@@ -308,6 +314,27 @@ struct AdminArticleEditPayload: Encodable {
     var categoryId: String?
     var reporterId: String?
     var authorId: String?
+    var scheduledAt: String?
+    var seo: AdminSEO
+}
+
+/// Body sent to POST /api/v1/admin/articles (create). Carries `articleType`
+/// and `opinionAuthorId` (opinion byline) which the edit payload doesn't.
+struct AdminCreateBody: Encodable {
+    var title: String
+    var subtitle: String
+    var excerpt: String
+    var content: String
+    var status: String
+    var articleType: String
+    var newsType: String
+    var isFeatured: Bool
+    var hideFromHomepage: Bool
+    var aiSummary: String
+    var imageUrl: String
+    var categoryId: String?
+    var reporterId: String?
+    var opinionAuthorId: String?
     var scheduledAt: String?
     var seo: AdminSEO
 }

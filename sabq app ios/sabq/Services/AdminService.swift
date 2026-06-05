@@ -16,8 +16,12 @@ struct AdminNewsPage {
 protocol AdminServicing: Sendable {
     /// KPI groups for the overview cards (mirrors the web /dashboard).
     func fetchFullStats() async throws -> AdminFullStats
+    /// Lightweight draft + scheduled counts for the simplified overview.
+    func fetchCounts() async throws -> AdminCounts
     /// One page of news for a status tab (newest first), with the total count.
     func fetchNews(status: AdminArticleStatus, page: Int) async throws -> AdminNewsPage
+    /// Create a new article (خبر جديد / مقال رأي); returns the new id.
+    func createArticle(_ body: AdminCreateBody) async throws -> String
     /// Flip an item to `.published` and return the updated record.
     func publish(id: String) async throws -> AdminNewsItem
     /// Full article for the editor.
@@ -87,6 +91,7 @@ private struct AdminGenerationResponse: Decodable { let result: AdminGenerationR
 private struct AdminProofreadResponse: Decodable { let issues: [AdminProofIssue]? }
 private struct AdminImageGenResponse: Decodable { let imageUrl: String? }
 private struct AdminUsersResponse: Decodable { let items: [AdminUser]? }
+private struct AdminCreateResponse: Decodable { let id: String? }
 
 private struct AdminContentBody: Encodable { let content: String }
 private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
@@ -115,6 +120,25 @@ struct LiveAdminService: AdminServicing {
             path: "/admin/dashboard/full-stats",
             ignoreCache: true
         )
+    }
+
+    func fetchCounts() async throws -> AdminCounts {
+        try await APIClient.shared.get(
+            AdminCounts.self,
+            path: "/admin/dashboard/counts",
+            ignoreCache: true
+        )
+    }
+
+    func createArticle(_ body: AdminCreateBody) async throws -> String {
+        let response = try await APIClient.shared.post(
+            AdminCreateResponse.self,
+            path: "/admin/articles",
+            body: body,
+            timeout: 30
+        )
+        guard let id = response.id, !id.isEmpty else { throw AdminServiceError.missingItem }
+        return id
     }
 
     func fetchNews(status: AdminArticleStatus, page: Int) async throws -> AdminNewsPage {
