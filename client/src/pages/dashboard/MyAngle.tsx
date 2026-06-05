@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, ensureCsrfToken } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import {
   Plus,
@@ -485,7 +486,7 @@ export default function MyAngle() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6" dir="rtl">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <Lightbulb className="w-6 h-6 text-indigo-500" />
@@ -495,10 +496,13 @@ export default function MyAngle() {
               أضف مواضيعك وأرسلها لمراجعة الإدارة قبل النشر
             </p>
           </div>
-          <Button onClick={openCreate} disabled={!angle} data-testid="button-create-topic">
-            <Plus className="w-4 h-4 ml-2" />
-            موضوع جديد
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <WriterInquiriesButton />
+            <Button onClick={openCreate} disabled={!angle} data-testid="button-create-topic" className="gap-2">
+              <Plus className="w-4 h-4" />
+              موضوع جديد
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}

@@ -130,6 +130,14 @@ export const navConfig: NavItem[] = [
     excludeRoles: ["admin", "system_admin", "editor"],
     permissions: ["muqtarab.own.view"],
   },
+  {
+    id: "writer_inquiries",
+    labelKey: "nav.writer_inquiries",
+    labelAr: "استفساراتي",
+    path: "/dashboard/opinion-author/tickets",
+    icon: MessageSquare,
+    roles: ["opinion_author", "angle_writer"],
+  },
 
   // ===== الناشر / Publisher Staff =====
   {

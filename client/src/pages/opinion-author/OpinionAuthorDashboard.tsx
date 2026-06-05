@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
+import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
 import {
   markArticleSubmittedInAnalyticsCache,
@@ -29,7 +30,6 @@ import {
   FileText,
   Edit,
   PlusCircle,
-  MessageSquare,
   AlertCircle,
   Eye,
   ThumbsUp,
@@ -116,12 +116,6 @@ export default function OpinionAuthorDashboard() {
   const needsChangesList =
     analytics?.articles?.filter((a) => a.reviewStatus === "needs_changes") ?? [];
 
-  const { data: ticketsUnread } = useQuery<{ unreadCount: number }>({
-    queryKey: ["/api/opinion-tickets/unread-count"],
-    refetchInterval: 60_000,
-  });
-  const unreadTickets = ticketsUnread?.unreadCount ?? 0;
-
   const handleEditArticle = (articleId: string) => {
     navigate(`/dashboard/articles/${articleId}/edit`);
   };
@@ -170,26 +164,7 @@ export default function OpinionAuthorDashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => navigate("/dashboard/opinion-author/tickets")}
-              data-testid="button-my-tickets"
-              className="gap-2 relative bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900 dark:bg-amber-500/10 dark:hover:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-100"
-            >
-              <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              استفساراتي
-              {unreadTickets > 0 && (
-                <>
-                  <Badge className="ms-1 bg-amber-500 hover:bg-amber-500 text-white text-[10px] px-1.5 h-5 min-w-[20px] justify-center">
-                    {unreadTickets}
-                  </Badge>
-                  <span
-                    aria-hidden
-                    className="absolute -top-0.5 -end-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background animate-pulse"
-                  />
-                </>
-              )}
-            </Button>
+            <WriterInquiriesButton />
             <Button
               onClick={handleNewArticle}
               data-testid="button-new-article"

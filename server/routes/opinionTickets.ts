@@ -9,7 +9,7 @@
  *   PATCH  /api/opinion-tickets/:id/status            admin only: change ticket status
  *
  * Access model:
- *   - Writers (role: opinion_author) can only see and act on their own tickets.
+ *   - Writers (roles: opinion_author, angle_writer) can only see and act on their own tickets.
  *   - Admins (SUPERUSER_ROLE_NAMES, or editor) can see and act on every ticket.
  *
  * The same writer-side / admin-side branching used elsewhere
@@ -55,6 +55,8 @@ function requireAuth(req: any, res: Response, next: NextFunction) {
  * column with no user_roles entry, or have opinion_author granted only via
  * user_roles while users.role is still "admin"/"reader".
  */
+const WRITER_ROLE_NAMES = new Set(["opinion_author", "angle_writer"]);
+
 async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isWriter: boolean }> {
   const userId = req.user?.id;
   if (!userId) return { isAdmin: false, isWriter: false };
@@ -71,7 +73,8 @@ async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isWriter: b
 
   let isAdmin = false;
   for (const r of all) if (ADMIN_ROLE_NAMES.has(r)) { isAdmin = true; break; }
-  const isWriter = all.has("opinion_author");
+  let isWriter = false;
+  for (const r of all) if (WRITER_ROLE_NAMES.has(r)) { isWriter = true; break; }
   return { isAdmin, isWriter };
 }
 
@@ -194,7 +197,7 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
   try {
     const { isWriter } = await getViewerRoles(req);
     if (!isWriter) {
-      return res.status(403).json({ message: "هذه الميزة متاحة لكتّاب الرأي فقط" });
+      return res.status(403).json({ message: "هذه الميزة متاحة لكتّاب الرأي وكتّاب الزوايا فقط" });
     }
     const parsed = insertOpinionTicketSchema.safeParse(req.body);
     if (!parsed.success) {
