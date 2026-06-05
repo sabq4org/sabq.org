@@ -355,21 +355,19 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.CHAT_USE,
   ],
 
-  // كاتب زاوية مُقترب: لوحة "زاويتي" + إضافة/تعديل/إرسال مواضيع زاويته فقط.
-  // ملكية الزاوية والمواضيع تُفرض في الخلفية (managerUserId / createdBy)، أما
-  // هذه الصلاحيات فلإظهار عناصر الواجهة وتمرير حُرّاس المسارات.
+  // كاتب زاوية مُقترب: يرى "زاويتي" فقط في القائمة. صلاحياته الحد الأدنى عمداً —
+  // لا media/chat/analytics حتى لا تظهر أي عناصر أخرى (مكتبة الوسائط/الدردشة/...).
+  // ملاحظات:
+  //  - رفع صور الموضوع يعمل بلا media.* لأن /api/media/upload يتطلب مصادقة فقط.
+  //  - مسارات الكاتب تُحرَس بالملكية (managerUserId/createdBy)، لا بصلاحية.
+  //  - dashboard.view فقط ليظهر رابط "لوحة التحكم" في الهيدر ويصل للوحة؛ لا يُظهر
+  //    "نظرة عامة" لأن ذلك العنصر role-gated (والكاتب ليس ضمن أدواره).
   [ROLE_NAMES.ANGLE_WRITER]: [
     PERMISSION_CODES.MUQTARAB_OWN_VIEW,
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE,
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT,
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT,
-    PERMISSION_CODES.MEDIA_VIEW,
-    PERMISSION_CODES.MEDIA_UPLOAD,
-    PERMISSION_CODES.ANALYTICS_VIEW_OWN,
-    // Dashboard - بدون dashboard.view يختفي رابط "لوحة التحكم" من قائمة الهيدر
     PERMISSION_CODES.DASHBOARD_VIEW,
-    PERMISSION_CODES.DASHBOARD_VIEW_STATS,
-    PERMISSION_CODES.CHAT_USE,
   ],
 
   [ROLE_NAMES.READER]: [],

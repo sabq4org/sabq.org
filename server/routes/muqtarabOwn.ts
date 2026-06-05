@@ -21,7 +21,7 @@
 
 import { Router } from "express";
 import { asc, desc, eq, sql } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { db } from "../db";
 import { storage } from "../storage";
 import {
@@ -56,18 +56,6 @@ const WRITER_EDITABLE_FIELDS = [
   "attachments",
   "seoMeta",
 ] as const;
-
-function slugify(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w؀-ۿ-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60) || "topic"
-  );
-}
 
 /** أوّل زاوية يملكها المستخدم (managerUserId). الكاتب يملك زاوية واحدة عادةً. */
 async function getOwnedAngle(userId: string) {
@@ -160,7 +148,8 @@ router.post("/api/muqtarab/my-angle/topics", requireAuth, async (req: any, res) 
     const title = String(req.body?.title || "").trim();
     if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
 
-    const slug = `${slugify(title)}-${nanoid(6)}`;
+    // سلق إنجليزي قصير مثل المقالات (/muqtarab/<angle>/topic/XXXXXXXX)
+    const slug = generateEnglishSlug();
 
     const parsed = insertTopicSchema.safeParse({
       angleId: angle.id,

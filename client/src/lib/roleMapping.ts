@@ -16,6 +16,7 @@ export const roleMapping: Record<string, UserRole> = {
   'agency': 'author',
   'reporter': 'reporter',
   'opinion_author': 'opinion_author',
+  'angle_writer': 'angle_writer',
   'moderator': 'reviewer',
   'comments_moderator': 'comments_moderator',
   'analyst': 'analyst',

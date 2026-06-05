@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { queryClient, apiRequest, ensureCsrfToken } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import {
@@ -228,14 +228,19 @@ export default function MyAngle() {
     const fd = new FormData();
     fd.append("file", file);
     try {
-      const csrf = getCsrfToken();
+      // ضمان توكن CSRF — الرفع أول إجراء للكاتب غالباً، فالتوكن قد لا يكون مجلوباً بعد
+      // (/api/media/upload محمي بـ CSRF). بدونه يرجع 403.
+      const csrf = await ensureCsrfToken();
       const res = await fetch("/api/media/upload", {
         method: "POST",
         body: fd,
         credentials: "include",
         headers: csrf ? { "X-CSRF-Token": csrf } : undefined,
       });
-      if (!res.ok) throw new Error("فشل في رفع الصورة");
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.message || `فشل في رفع الصورة (${res.status})`);
+      }
       const result = await res.json();
       setHeroImageUrl(result.proxyUrl || result.url);
       toast({ title: "تم رفع الصورة" });

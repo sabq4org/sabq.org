@@ -230,14 +230,14 @@ export async function seedRBAC() {
       "tasks.view_own", "tasks.create", "tasks.edit_own",
     ],
 
-    // كاتب زاوية مُقترب: صلاحيات محدودة على زاويته الخاصة فقط (الملكية تُفرض
-    // في الخلفية). لا يملك muqtarab.manage — تلك للأدمن/المحرر.
+    // كاتب زاوية مُقترب: الحد الأدنى — صلاحيات زاويته فقط (الملكية تُفرض في
+    // الخلفية). عمداً بلا media.* حتى لا تظهر "مكتبة الوسائط" في قائمته؛ رفع
+    // الصور يعمل لأن /api/media/upload يتطلب مصادقة فقط. لا muqtarab.manage.
     angle_writer: [
       "muqtarab.own.view",
       "muqtarab.own.topic.create",
       "muqtarab.own.topic.edit",
       "muqtarab.own.topic.submit",
-      "media.view", "media.upload", "media_library.view", "media_library.upload",
     ],
 
     reader: [
