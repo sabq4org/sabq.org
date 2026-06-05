@@ -24,10 +24,10 @@
  *   users_email_lower_unique index can be created afterwards.
  *
  * SAFETY
- *   - DRY-RUN by default. Prints the full plan and row counts. Pass --apply to
- *     write. Run against the BACKUP database first.
- *   - REJECTS a DATABASE_URL containing "prod"/"production" unless
- *     --i-understand is also passed.
+ *   - DRY-RUN by default. Prints the full plan and row counts and writes NOTHING,
+ *     so it is safe to point at production just to inspect. Pass --apply to write.
+ *   - --apply REJECTS a DATABASE_URL containing "prod"/"production" unless
+ *     --i-understand is also passed. Run against the BACKUP database first.
  *   - Groups that are ambiguous (no writer row, or more than one writer row) are
  *     SKIPPED and reported for manual handling — never guessed.
  *   - Each table repoint runs in a savepoint; a unique-constraint collision
@@ -41,8 +41,16 @@
  *   npx tsx scripts/merge-duplicate-accounts.ts --apply --no-carry-auth
  *
  * ENV
- *   DATABASE_URL   target database (backup!).
- *   DB_DRIVER      "pg" for Railway PG, "neon" (default) for Neon — same as the app.
+ *   DATABASE_URL           target database.
+ *   DB_DRIVER              "pg" for Railway PG, "neon" (default) for Neon.
+ *   SKIP_DB_MAINTENANCE    ALWAYS set this to "true" when running this script.
+ *                          Importing server/db otherwise runs startup
+ *                          maintenance (index builds, reading_history dedup,
+ *                          ANALYZE/VACUUM) against the target DB and competes
+ *                          with the script for the connection.
+ *
+ * Recommended invocation:
+ *   SKIP_DB_MAINTENANCE=true DATABASE_URL='...' npx tsx scripts/merge-duplicate-accounts.ts
  *
  * AFTER a successful --apply run, create the case-insensitive unique index:
  *   psql "$DATABASE_URL" -f migrations/0006_users_email_lower_unique.sql
@@ -100,10 +108,13 @@ function isReaderRow(u: UserRow): boolean {
 }
 
 function abortOnProd() {
+  // Dry-run is read-only (no UPDATE/DELETE), so it is always allowed — inspect
+  // production freely. Only the writing path (--apply) is gated on prod URLs.
+  if (!APPLY) return;
   const url = process.env.DATABASE_URL || "";
   if (/prod|production/i.test(url) && !I_UNDERSTAND) {
-    console.error("[merge] ABORT: DATABASE_URL looks like production.");
-    console.error("        Run against the BACKUP db. Pass --i-understand to override (NOT recommended).");
+    console.error("[merge] ABORT: --apply against a DATABASE_URL that looks like production.");
+    console.error("        Run against the BACKUP db first. Pass --i-understand to override (NOT recommended).");
     process.exit(2);
   }
 }
@@ -183,17 +194,46 @@ function planAuthCarry(keeper: UserRow, losers: UserRow[]) {
   return Object.keys(updates).length ? updates : null;
 }
 
-async function countLoserRows(fks: FkRef[], loserId: string): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  for (const fk of fks) {
-    const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM "${fk.table}" WHERE "${fk.column}" = $1`,
-      [loserId]
-    );
-    const n = rows[0]?.n ?? 0;
-    if (n > 0) counts.set(`${fk.table}.${fk.column}`, n);
+interface LoserCount {
+  table: string;
+  column: string;
+  n: number;
+}
+
+// Retry transient connection drops (Neon serverless WS auto-suspend / pooler
+// rotation). Only used for pool reads, never inside a transaction.
+async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastErr = e;
+      const msg = String(e?.message || e);
+      if (!/terminated|ECONNRESET|Connection|timeout|socket/i.test(msg)) throw e;
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
   }
-  return counts;
+  throw lastErr;
+}
+
+// Count, for one loser, how many rows each users.id foreign key holds — batched
+// into chunked UNION ALL queries (a few round-trips instead of 224) so the
+// serverless connection survives. Only non-zero columns are returned.
+async function countLoserRows(q: any, fks: FkRef[], loserId: string): Promise<LoserCount[]> {
+  const out: LoserCount[] = [];
+  const CHUNK = 40;
+  for (let i = 0; i < fks.length; i += CHUNK) {
+    const slice = fks.slice(i, i + CHUNK);
+    const text = slice
+      .map((fk, j) => `SELECT ${i + j} AS idx, count(*)::int AS n FROM "${fk.table}" WHERE "${fk.column}" = $1`)
+      .join(" UNION ALL ");
+    const { rows } = await withRetry<any>(() => q.query(text, [loserId]));
+    for (const r of rows as any[]) {
+      if (r.n > 0) out.push({ table: fks[r.idx].table, column: fks[r.idx].column, n: r.n });
+    }
+  }
+  return out;
 }
 
 async function mergeGroup(
@@ -202,14 +242,22 @@ async function mergeGroup(
   losers: UserRow[],
   fks: FkRef[]
 ): Promise<void> {
+  // Pre-compute which FK columns actually hold loser rows, resiliently and
+  // OUTSIDE the transaction (this is the chatty part). The transaction then
+  // only touches the handful of tables that have data → short and robust.
+  const loserPlans: { loser: UserRow; cols: LoserCount[] }[] = [];
+  for (const loser of losers) {
+    loserPlans.push({ loser, cols: await countLoserRows(pool, fks, loser.id) });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     let movedTotal = 0;
     const dropped: { ref: string; n: number }[] = [];
 
-    for (const loser of losers) {
-      for (const fk of fks) {
+    for (const { loser, cols } of loserPlans) {
+      for (const fk of cols) {
         await client.query("SAVEPOINT sp");
         try {
           const r = await client.query(
@@ -304,9 +352,9 @@ async function main() {
       console.log(`  • ${key}`);
       console.log(`      KEEP   ${keeper.id}  role=${keeper.role}  rbac=${keeper.rbac_count}  mustChangePw=${keeper.must_change_password}`);
       for (const loser of losers) {
-        const counts = await countLoserRows(fks, loser.id);
-        const detail = counts.size
-          ? [...counts.entries()].map(([k, n]) => `${k}=${n}`).join(", ")
+        const counts = await countLoserRows(pool, fks, loser.id);
+        const detail = counts.length
+          ? counts.map((c) => `${c.table}.${c.column}=${c.n}`).join(", ")
           : "(no child rows)";
         console.log(`      DELETE ${loser.id}  role=${loser.role}  → repoint: ${detail}`);
       }
