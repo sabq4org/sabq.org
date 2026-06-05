@@ -41,7 +41,6 @@ import { registerGulfEventRoutes } from "./routes/gulfEvents";
 import { registerTestEmailTemplatesRoutes } from "./routes/testEmailTemplates";
 import { getObjectAclPolicy, setObjectAclPolicy, canAccessObject, ObjectPermission } from "./objectAcl";
 import { summarizeArticle, generateTitle, chatWithAssistant, analyzeCredibility, generateDailyActivityInsights, analyzeSEO, generateSmartContent, rewriteAndEnhanceContent, detectImageFocalPoint, FocalPointResult } from "./openai";
-import { chatWithMultilingualAssistant, chatWithAssistantFallback, chatWithSuggestions, type ChatLanguage } from "./multilingual-chatbot";
 import { summarizeText, generateSocialPost, suggestImageQuery, translateContent, checkFactAccuracy, analyzeTrends } from "./ai-content-tools";
 import { importFromRssFeed } from "./rssImporter";
 import { generateCalendarEventIdeas, generateArticleDraft } from "./services/calendarAi";
@@ -17170,128 +17169,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       res.status(500).json({ message: "فشل في تفريغ المقطع" });
     }
   });
-
-  // News Analytics Endpoint - Smart statistics and insights
-  // AI Chat Assistant - Arabic (Enhanced with multilingual support)
-  app.post("/api/ai/chat", async (req: any, res) => {
-    try {
-      const { message } = req.body;
-      if (!message) {
-        return res.status(400).json({ message: "الرسالة مطلوبة" });
-      }
-
-      // Get last 10 published articles for context
-      const recentArticles = await (db as any)
-        .select({
-          title: articles.title,
-        subtitle: articles.subtitle,
-          summary: articles.aiSummary,
-          categoryName: categories.nameAr,
-        })
-        .from(articles)
-        .leftJoin(categories, eq(articles.categoryId, categories.id))
-        .where(eq(articles.status, "published"))
-        .orderBy(desc(articles.publishedAt))
-        .orderBy(desc(articles.publishedAt)).limit(10);
-
-      const articlesForContext = recentArticles.map((article: any) => ({
-        title: article.title,
-        summary: article.summary || undefined,
-        categoryName: article.categoryName || undefined,
-      }));
-
-      const result = await chatWithSuggestions(message, 'ar', {
-        recentArticles: articlesForContext,
-      });
-      
-      res.json({ response: result.content, suggestions: result.suggestions, model: result.modelUsed });
-    } catch (error) {
-      console.error("Error in AI chat (Arabic):", error);
-      res.status(500).json({ message: "فشل في معالجة الرسالة" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // AI Chat Assistant - English
-  app.post("/api/en/chat", async (req: any, res) => {
-    try {
-      const { message } = req.body;
-      if (!message) {
-        return res.status(400).json({ message: "Message is required" });
-      }
-
-      // Get last 10 published English articles for context
-      const recentArticles = await (db as any)
-        .select({
-          title: enArticles.title,
-          summary: enArticles.aiSummary,
-          categoryName: enCategories.name,
-        })
-        .from(enArticles)
-        .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
-        .where(eq(enArticles.status, "published"))
-        .orderBy(desc(enArticles.publishedAt))
-        .orderBy(desc(articles.publishedAt)).limit(10);
-
-      const articlesForContext = recentArticles.map((article: any) => ({
-        title: article.title,
-        summary: article.summary || undefined,
-        categoryName: article.categoryName || undefined,
-      }));
-
-      const result = await chatWithSuggestions(message, 'en', {
-        recentArticles: articlesForContext,
-      });
-      
-      res.json({ response: result.content, suggestions: result.suggestions, model: result.modelUsed });
-    } catch (error) {
-      console.error("Error in AI chat (English):", error);
-      res.status(500).json({ message: "Failed to process message" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // AI Chat Assistant - Urdu
-  app.post("/api/ur/chat", async (req: any, res) => {
-    try {
-      const { message } = req.body;
-      if (!message) {
-        return res.status(400).json({ message: "پیغام ضروری ہے" });
-      }
-
-      // Get last 10 published Urdu articles for context
-      const recentArticles = await (db as any)
-        .select({
-          title: urArticles.title,
-          summary: urArticles.aiSummary,
-          categoryName: urCategories.name,
-        })
-        .from(urArticles)
-        .leftJoin(urCategories, eq(urArticles.categoryId, urCategories.id))
-        .where(eq(urArticles.status, "published"))
-        .orderBy(desc(urArticles.publishedAt))
-        .orderBy(desc(articles.publishedAt)).limit(10);
-
-      const articlesForContext = recentArticles.map((article: any) => ({
-        title: article.title,
-        summary: article.summary || undefined,
-        categoryName: article.categoryName || undefined,
-      }));
-
-      const result = await chatWithSuggestions(message, 'ur', {
-        recentArticles: articlesForContext,
-      });
-      
-      res.json({ response: result.content, suggestions: result.suggestions, model: result.modelUsed });
-    } catch (error) {
-      console.error("Error in AI chat (Urdu):", error);
-      res.status(500).json({ message: "پیغام پر کارروائی ناکام" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // USER MANAGEMENT ROUTES (Admin Dashboard)
