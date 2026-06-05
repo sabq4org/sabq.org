@@ -192,7 +192,8 @@ export async function sendArticleNotification(
         });
 
         sentCount++;
-        console.log(`✅ Notification sent to user ${userId}`);
+        // Per-user success line removed — it produced 500+ log lines per article.
+        // The aggregate count below ("Successfully sent N notifications") covers it.
 
       } catch (error) {
         console.error(`❌ Failed to send notification to user ${userId}:`, error);
