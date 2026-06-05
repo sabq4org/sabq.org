@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { ImageWithCaption } from "@/components/ImageWithCaption";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -20,7 +21,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
-import { angleTheme, withAlpha } from "@/lib/angleTheme";
+import { angleTheme } from "@/lib/angleTheme";
 import type { Topic, Angle } from "@shared/schema";
 
 type AngleWriter = {
@@ -96,31 +97,18 @@ function prepareTopicContent(topic: Topic) {
 function WriterByline({
   writer,
   angleName,
-  publishedAt,
-  variant = "default",
 }: {
   writer: AngleWriter | null;
   angleName: string;
-  publishedAt?: Date | string | null;
-  variant?: "default" | "hero";
 }) {
   if (!writer) return null;
 
-  const isHero = variant === "hero";
   const avatar = (
-    <Avatar
-      className={`${isHero ? "h-11 w-11 ring-2 ring-white/30" : "h-12 w-12"} shrink-0`}
-    >
+    <Avatar className="h-12 w-12 shrink-0">
       {writer.avatar && (
         <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
       )}
-      <AvatarFallback
-        className={
-          isHero
-            ? "bg-white/20 text-white text-sm font-bold"
-            : "bg-[color:var(--angle-soft)] text-[color:var(--angle)] text-sm font-bold"
-        }
-      >
+      <AvatarFallback className="bg-[color:var(--angle-soft)] text-[color:var(--angle)] text-sm font-bold">
         {writer.name.charAt(0)}
       </AvatarFallback>
     </Avatar>
@@ -129,45 +117,26 @@ function WriterByline({
   const nameEl = writer.slug ? (
     <Link href={`/reporter/${writer.slug}`}>
       <a
-        className={`font-bold text-base transition-colors ${
-          isHero
-            ? "text-white hover:text-white/90"
-            : "text-foreground hover:text-[color:var(--angle)]"
-        }`}
+        className="font-bold text-base text-foreground hover:text-[color:var(--angle)] transition-colors"
         data-testid="text-writer-name"
       >
         {writer.name}
       </a>
     </Link>
   ) : (
-    <p
-      className={`font-bold text-base ${isHero ? "text-white" : "text-foreground"}`}
-      data-testid="text-writer-name"
-    >
+    <p className="font-bold text-base text-foreground" data-testid="text-writer-name">
       {writer.name}
     </p>
   );
 
   return (
-    <div
-      className={`flex items-center gap-3 ${isHero ? "mt-3" : "mt-4"}`}
-      data-testid="writer-byline"
-    >
+    <div className="flex items-center gap-3 mt-4" data-testid="writer-byline">
       {writer.slug ? <Link href={`/reporter/${writer.slug}`}>{avatar}</Link> : avatar}
       <div className="min-w-0">
         {nameEl}
-        <p
-          className={`text-sm ${isHero ? "text-white/75" : "text-muted-foreground"}`}
-          data-testid="text-writer-role"
-        >
+        <p className="text-sm text-muted-foreground" data-testid="text-writer-role">
           كاتب زاوية {angleName}
         </p>
-        {publishedAt && isHero && (
-          <div className="mt-1 flex items-center gap-1.5 text-white/70 text-xs">
-            <Calendar className="h-3.5 w-3.5" />
-            <span data-testid="text-published-date-hero">{formatDate(publishedAt)}</span>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -395,12 +364,13 @@ export default function TopicDetail() {
             <Skeleton className="h-4 w-64" />
           </div>
         </div>
-        <Skeleton className="w-full h-64 md:h-96" />
         <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="max-w-3xl mx-auto space-y-6">
+            <Skeleton className="h-6 w-24 rounded-full" />
             <Skeleton className="h-10 w-3/4" />
             <Skeleton className="h-14 w-1/2" />
             <Skeleton className="h-24 w-full rounded-2xl" />
+            <Skeleton className="w-full aspect-[16/9] rounded-xl" />
             <div className="space-y-4">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-full" />
@@ -519,87 +489,33 @@ export default function TopicDetail() {
           </div>
         </div>
 
-        {topic.heroImageUrl ? (
-          <div className="relative w-full h-72 md:h-[28rem] overflow-hidden" data-testid="section-hero-image">
-            <img
-              src={topic.heroImageUrl}
-              alt={topic.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
-              <div className="container mx-auto max-w-3xl">
-                <Link href={`/muqtarab/${angleSlug}`}>
-                  <a
-                    className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium text-white backdrop-blur-sm"
-                    style={{ backgroundColor: withAlpha(angle.colorHex, 0.85) }}
-                    data-testid="chip-angle"
-                  >
-                    <AngleIcon className="h-4 w-4" />
-                    {angle.nameAr}
-                  </a>
-                </Link>
-                <h1
-                  className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold text-white leading-tight"
-                  data-testid="heading-topic-title"
-                >
-                  {topic.title}
-                </h1>
-                <WriterByline
-                  writer={writer}
-                  angleName={angle.nameAr}
-                  publishedAt={topic.publishedAt}
-                  variant="hero"
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
           <div className="max-w-3xl mx-auto">
-            {!topic.heroImageUrl && (
-              <header className="mb-8">
-                <Link href={`/muqtarab/${angleSlug}`}>
-                  <a
-                    className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
-                    style={{ backgroundColor: theme.soft, color: theme.color }}
-                    data-testid="chip-angle"
-                  >
-                    <AngleIcon className="h-4 w-4" />
-                    {angle.nameAr}
-                  </a>
-                </Link>
-                <h1
-                  className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold leading-tight text-foreground"
-                  data-testid="heading-topic-title"
+            <header className="mb-8">
+              <Link href={`/muqtarab/${angleSlug}`}>
+                <a
+                  className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
+                  style={{ backgroundColor: theme.soft, color: theme.color }}
+                  data-testid="chip-angle"
                 >
-                  {topic.title}
-                </h1>
-                <WriterByline writer={writer} angleName={angle.nameAr} />
-                <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
-                  {topic.publishedAt && (
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                      <Calendar className="h-4 w-4" />
-                      <span data-testid="text-published-date">{formatDate(topic.publishedAt)}</span>
-                    </div>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleShare}
-                    className="gap-2 border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
-                    data-testid="button-share"
-                  >
-                    <Share2 className="h-4 w-4" />
-                    مشاركة
-                  </Button>
-                </div>
-              </header>
-            )}
-
-            {topic.heroImageUrl && (
-              <div className="flex items-center justify-end gap-4 mb-8">
+                  <AngleIcon className="h-4 w-4" />
+                  {angle.nameAr}
+                </a>
+              </Link>
+              <h1
+                className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold leading-tight text-foreground"
+                data-testid="heading-topic-title"
+              >
+                {topic.title}
+              </h1>
+              <WriterByline writer={writer} angleName={angle.nameAr} />
+              <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
+                {topic.publishedAt && (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span data-testid="text-published-date">{formatDate(topic.publishedAt)}</span>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -611,7 +527,7 @@ export default function TopicDetail() {
                   مشاركة
                 </Button>
               </div>
-            )}
+            </header>
 
             {topic.excerpt && (
               <aside
@@ -635,6 +551,16 @@ export default function TopicDetail() {
                   {topic.excerpt}
                 </p>
               </aside>
+            )}
+
+            {topic.heroImageUrl && (
+              <div className="mb-10" data-testid="section-featured-image">
+                <ImageWithCaption
+                  imageUrl={topic.heroImageUrl}
+                  altText={topic.title}
+                  priority
+                />
+              </div>
             )}
 
             <article

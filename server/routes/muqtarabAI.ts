@@ -144,6 +144,78 @@ router.post(
 // ============================================================
 
 router.post(
+  "/api/admin/muqtarab/ai/suggest-excerpt",
+  requireAuth,
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const content = String(req.body?.content || "");
+      const title = String(req.body?.title || "").trim();
+      if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
+
+      const result = await suggestExcerpt({ content, title });
+      res.json(result);
+    } catch (err) {
+      console.error("[muqtarab-ai] admin suggest-excerpt:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في توليد الموجز",
+      });
+    }
+  },
+);
+
+router.post(
+  "/api/admin/muqtarab/ai/seo",
+  requireAuth,
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const content = String(req.body?.content || "");
+      const title = String(req.body?.title || "").trim();
+      if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
+
+      const result = await suggestSeo({ content, title });
+      res.json(result);
+    } catch (err) {
+      console.error("[muqtarab-ai] admin seo:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في توليد بيانات SEO",
+      });
+    }
+  },
+);
+
+router.post(
+  "/api/admin/muqtarab/ai/generate-metadata",
+  requireAuth,
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const content = String(req.body?.content || "");
+      const title = String(req.body?.title || "").trim();
+      if (!title) return res.status(400).json({ message: "العنوان مطلوب" });
+
+      const [excerptResult, seoResult] = await Promise.all([
+        suggestExcerpt({ content, title }),
+        suggestSeo({ content, title }),
+      ]);
+
+      res.json({
+        excerpt: excerptResult.excerpt,
+        keywords: seoResult.keywords,
+        metaTitle: seoResult.metaTitle,
+        metaDescription: seoResult.metaDescription,
+      });
+    } catch (err) {
+      console.error("[muqtarab-ai] admin generate-metadata:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في التوليد الشامل",
+      });
+    }
+  },
+);
+
+router.post(
   "/api/admin/muqtarab/topics/:id/ai/review-assist",
   requirePermission("muqtarab.manage"),
   async (req: any, res) => {

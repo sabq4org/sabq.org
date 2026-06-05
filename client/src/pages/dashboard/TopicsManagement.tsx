@@ -18,6 +18,8 @@ import {
   Archive,
   X,
   Sparkles,
+  Search,
+  Wand2,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
@@ -148,6 +150,8 @@ export default function TopicsManagement() {
   const [heroImagePreview, setHeroImagePreview] = useState<string>("");
   const [isUploadingHero, setIsUploadingHero] = useState(false);
   const [isGeneratingHero, setIsGeneratingHero] = useState(false);
+  const [aiLoading, setAiLoading] = useState<"excerpt" | "seo" | "all" | null>(null);
+  const [keywordDraft, setKeywordDraft] = useState("");
   const canGenerateHero = hasRole(user, "system_admin");
   const [editorContent, setEditorContent] = useState<string>("");
   const heroFileInputRef = useRef<HTMLInputElement>(null);
@@ -335,12 +339,14 @@ export default function TopicsManagement() {
     setSeoExpanded(false);
     setEditorContent("");
     setHeroImagePreview("");
+    setKeywordDraft("");
     setIsCreateDialogOpen(true);
   };
 
   const handleEdit = (topic: Topic) => {
     setEditingTopic(topic);
     setSeoExpanded(false);
+    setKeywordDraft("");
     const contentData = topic.content as { blocks?: any[]; rawHtml?: string; plainText?: string } | null;
     const rawHtml = contentData?.rawHtml || "";
     setEditorContent(rawHtml);
@@ -434,6 +440,77 @@ export default function TopicsManagement() {
       rawHtml: html,
       plainText: plainText,
     });
+  };
+
+  const applySeoResult = (result: {
+    keywords?: string[];
+    metaTitle?: string;
+    metaDescription?: string;
+  }) => {
+    if (result.metaTitle) form.setValue("seoMeta.metaTitle", result.metaTitle);
+    if (result.metaDescription) form.setValue("seoMeta.metaDescription", result.metaDescription);
+    if (Array.isArray(result.keywords) && result.keywords.length > 0) {
+      form.setValue("seoMeta.keywords", result.keywords);
+    }
+    setSeoExpanded(true);
+  };
+
+  const runAdminAi = async (action: "excerpt" | "seo" | "all") => {
+    const title = (form.getValues("title") || "").trim();
+    const content = editorContent.trim() || form.getValues("content")?.plainText || "";
+
+    if (!content) {
+      toast({ title: "اكتب المحتوى أولاً", variant: "destructive" });
+      return;
+    }
+    if (!title) {
+      toast({ title: "أدخل العنوان أولاً", variant: "destructive" });
+      return;
+    }
+
+    setAiLoading(action);
+    try {
+      if (action === "excerpt") {
+        const res = await apiRequest<{ excerpt: string }>("/api/admin/muqtarab/ai/suggest-excerpt", {
+          method: "POST",
+          body: JSON.stringify({ content, title }),
+        });
+        form.setValue("excerpt", res.excerpt || "");
+        toast({ title: "تم توليد الموجز" });
+      } else if (action === "seo") {
+        const res = await apiRequest<{
+          keywords: string[];
+          metaTitle: string;
+          metaDescription: string;
+        }>("/api/admin/muqtarab/ai/seo", {
+          method: "POST",
+          body: JSON.stringify({ content, title }),
+        });
+        applySeoResult(res);
+        toast({ title: "تم توليد بيانات SEO" });
+      } else {
+        const res = await apiRequest<{
+          excerpt: string;
+          keywords: string[];
+          metaTitle: string;
+          metaDescription: string;
+        }>("/api/admin/muqtarab/ai/generate-metadata", {
+          method: "POST",
+          body: JSON.stringify({ content, title }),
+        });
+        form.setValue("excerpt", res.excerpt || "");
+        applySeoResult(res);
+        toast({ title: "تم التوليد الشامل", description: "الموجز وبيانات SEO جاهزة للمراجعة." });
+      }
+    } catch (error) {
+      toast({
+        title: "خطأ في المساعد الذكي",
+        description: error instanceof Error ? error.message : "حاول مرة أخرى",
+        variant: "destructive",
+      });
+    } finally {
+      setAiLoading(null);
+    }
   };
 
   const handleGenerateHero = async () => {
@@ -658,6 +735,66 @@ export default function TopicsManagement() {
 
             <Form {...form}>
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                    مساعد المراجعة الذكي
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    يولّد الموجز وبيانات SEO من العنوان والمحتوى — مفيد قبل الموافقة على مواضيع الكتّاب.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="gap-1.5"
+                      disabled={!!aiLoading}
+                      onClick={() => runAdminAi("all")}
+                      data-testid="button-ai-generate-all"
+                    >
+                      {aiLoading === "all" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-3.5 w-3.5" />
+                      )}
+                      توليد شامل
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={!!aiLoading}
+                      onClick={() => runAdminAi("excerpt")}
+                      data-testid="button-ai-excerpt"
+                    >
+                      {aiLoading === "excerpt" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      توليد الموجز
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={!!aiLoading}
+                      onClick={() => runAdminAi("seo")}
+                      data-testid="button-ai-seo"
+                    >
+                      {aiLoading === "seo" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Search className="h-3.5 w-3.5" />
+                      )}
+                      توليد SEO
+                    </Button>
+                  </div>
+                </div>
+
                 <FormField
                   control={form.control}
                   name="title"
@@ -704,15 +841,18 @@ export default function TopicsManagement() {
                   name="excerpt"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>الوصف المختصر</FormLabel>
+                      <FormLabel>الموجز</FormLabel>
                       <FormControl>
                         <Textarea
                           {...field}
-                          placeholder="وصف مختصر للموضوع يظهر في قائمة المواضيع"
-                          rows={2}
+                          placeholder="موجز الموضوع — يظهر في صفحة التفاصيل وقوائم المواضيع"
+                          rows={3}
                           data-testid="input-excerpt"
                         />
                       </FormControl>
+                      <FormDescription>
+                        يمكن توليده تلقائياً من المحتوى عبر «توليد الموجز» أو «توليد شامل».
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -875,6 +1015,83 @@ export default function TopicsManagement() {
                           <FormMessage />
                         </FormItem>
                       )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="seoMeta.keywords"
+                      render={({ field }) => {
+                        const keywords = Array.isArray(field.value) ? field.value : [];
+                        return (
+                          <FormItem>
+                            <FormLabel>الكلمات المفتاحية</FormLabel>
+                            <FormControl>
+                              <div className="space-y-2">
+                                {keywords.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {keywords.map((kw, i) => (
+                                      <span
+                                        key={`${kw}-${i}`}
+                                        className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs"
+                                        data-testid={`chip-keyword-${i}`}
+                                      >
+                                        {kw}
+                                        <button
+                                          type="button"
+                                          className="text-muted-foreground hover:text-destructive"
+                                          onClick={() =>
+                                            field.onChange(keywords.filter((_, idx) => idx !== i))
+                                          }
+                                          aria-label="إزالة"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex gap-2">
+                                  <Input
+                                    value={keywordDraft}
+                                    onChange={(e) => setKeywordDraft(e.target.value)}
+                                    placeholder="أضف كلمة مفتاحية واضغط Enter"
+                                    data-testid="input-seo-keyword-draft"
+                                    onKeyDown={(e) => {
+                                      if (e.key !== "Enter") return;
+                                      e.preventDefault();
+                                      const next = keywordDraft.trim().replace(/^#/, "");
+                                      if (!next || keywords.includes(next)) {
+                                        setKeywordDraft("");
+                                        return;
+                                      }
+                                      field.onChange([...keywords, next]);
+                                      setKeywordDraft("");
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      const next = keywordDraft.trim().replace(/^#/, "");
+                                      if (!next || keywords.includes(next)) {
+                                        setKeywordDraft("");
+                                        return;
+                                      }
+                                      field.onChange([...keywords, next]);
+                                      setKeywordDraft("");
+                                    }}
+                                    data-testid="button-add-keyword"
+                                  >
+                                    إضافة
+                                  </Button>
+                                </div>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
                     />
 
                     <FormField
