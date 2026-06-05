@@ -204,11 +204,13 @@ export default function Login() {
                           disabled={isLoading}
                           data-testid="input-password"
                           dir="ltr"
+                          className="pl-11"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground pointer-events-auto"
+                          aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                           data-testid="button-toggle-password"
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}

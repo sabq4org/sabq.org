@@ -142,6 +142,7 @@ export default function AdvertiserLogin() {
                               disabled={loginMutation.isPending}
                               data-testid="input-password"
                               dir="ltr"
+                              className="pl-11"
                             />
                             <button
                               type="button"

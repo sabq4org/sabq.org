@@ -233,6 +233,7 @@ export default function AdvertiserRegister() {
                               disabled={registerMutation.isPending}
                               data-testid="input-password"
                               dir="ltr"
+                              className="pl-11"
                             />
                             <button
                               type="button"

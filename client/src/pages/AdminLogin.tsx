@@ -264,7 +264,7 @@ export default function AdminLogin() {
                         placeholder="admin@sabq.sa"
                         disabled={isLoading}
                         data-testid="input-admin-email"
-                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600"
+                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600 hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:text-white"
                         dir="ltr"
                       />
                     </FormControl>
@@ -296,7 +296,7 @@ export default function AdminLogin() {
                         placeholder="••••••••"
                         disabled={isLoading}
                         data-testid="input-admin-password"
-                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600"
+                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-600 hover:bg-slate-800 focus-visible:bg-slate-800 focus-visible:text-white"
                         dir="ltr"
                       />
                     </FormControl>
