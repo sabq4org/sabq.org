@@ -377,7 +377,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           <AutoPublishBanner />
-          {role !== 'opinion_author' && (
+          {role !== 'opinion_author' && role !== 'angle_writer' && (
             <div className="px-3 md:px-6 pt-3">
               <EditorPresenceBar />
             </div>
