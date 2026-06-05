@@ -18,7 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
-import { attemptChunkRecoveryReload } from "@/lib/deployRecovery";
+import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "@/lib/deployRecovery";
+import { isChunkErrorMessage, retryImport } from "@/lib/retryImport";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -42,70 +43,6 @@ function FocusSessionSync() {
     void syncGuestFocusSessionsToUser();
   }, [isAuthenticated, isLoading]);
   return null;
-}
-
-function isChunkErrorMessage(message: string | undefined | null): boolean {
-  if (!message) return false;
-  const m = message.toLowerCase();
-  return (
-    m.includes('failed to fetch dynamically imported module') ||
-    m.includes('importing a module script failed') ||
-    m.includes('loading chunk') ||
-    m.includes('loading css chunk') ||
-    m.includes('chunkloaderror') ||
-    m.includes('is not found') ||
-    m.includes('unable to preload css') ||
-    // React.lazy poisoned-payload render error after a failed dynamic import.
-    // Safari: "undefined is not an object (evaluating 'f._result.default')".
-    // Chrome: "Cannot read properties of undefined (reading 'default')".
-    m.includes('_result.default') ||
-    m.includes("reading 'default'") ||
-    m.includes('تعذر تحميل الصفحة')
-  );
-}
-
-function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): Promise<T> {
-  return new Promise((resolve, reject) => {
-    importFn()
-      .then(resolve)
-      .catch((error: Error) => {
-        const isModuleError = isChunkErrorMessage(error.message);
-
-        if (retries > 0 && isModuleError) {
-          console.warn(`[LazyLoad] Retrying import, ${retries} attempts left...`);
-          setTimeout(() => {
-            retryImport(importFn, retries - 1, delay)
-              .then(resolve)
-              .catch(reject);
-          }, delay);
-          return;
-        }
-        if (isModuleError) {
-          // Out of retries on a chunk-load failure. Almost always means
-          // the user is holding stale HTML from a prior Vercel deploy
-          // that points at chunk hashes the new deploy no longer ships
-          // (404 on `/assets/ArticleDetail-{oldHash}.js`). Force a full
-          // reload so the browser fetches fresh index.html and the new
-          // chunk names. Guarded by sessionStorage so a deploy bug
-          // doesn't trap the user in a reload loop — second failure
-          // shows the manual instruction.
-          // Unified recovery: one cache-busting reload sharing a single
-          // cooldown with the window-level deployRecovery listener and the
-          // route ErrorBoundary, so a transient failure can surface through
-          // any of those paths without ever triggering more than one reload.
-          // The cache-buster (?_dr=) also misses any stale edge-cached shell —
-          // strictly better than the old plain reload. On the second failure
-          // inside the cooldown (a genuinely broken build), fall through to the
-          // manual-refresh message instead of looping.
-          if (attemptChunkRecoveryReload('lazy-import')) {
-            return; // page is reloading — resolve never fires
-          }
-          reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
-        } else {
-          reject(error);
-        }
-      });
-  });
 }
 
 // Lazy load non-critical components
@@ -461,18 +398,15 @@ class ErrorBoundary extends Component<
           </p>
           <div className="flex gap-3 flex-wrap justify-center">
             <button
-              onClick={() => this.setState({ hasError: false, error: null })}
+              onClick={() =>
+                isChunkError
+                  ? forceDeployRecoveryReload()
+                  : this.setState({ hasError: false, error: null })
+              }
               className="px-4 py-2 bg-primary text-primary-foreground rounded"
-              data-testid="button-error-retry"
+              data-testid={isChunkError ? "button-error-reload" : "button-error-retry"}
             >
-              إعادة المحاولة
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-muted text-muted-foreground rounded"
-              data-testid="button-error-reload"
-            >
-              إعادة تحميل الصفحة
+              {isChunkError ? "إعادة تحميل الصفحة" : "إعادة المحاولة"}
             </button>
           </div>
         </div>

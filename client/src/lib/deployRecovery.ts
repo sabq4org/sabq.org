@@ -14,6 +14,8 @@
 // fetch the CURRENT shell + assets from origin. A short cooldown in
 // sessionStorage prevents reload loops if the failure is not deploy-related.
 
+import { isChunkErrorMessage } from "./retryImport";
+
 const RELOAD_FLAG = "sabq:deploy-reload-at";
 const RELOAD_COOLDOWN_MS = 30_000;
 const CACHE_BUST_PARAM = "_dr";
@@ -81,6 +83,17 @@ function reloadOnce(reason: string): void {
   attemptChunkRecoveryReload(reason);
 }
 
+/** User-initiated hard refresh — bypasses the auto-reload cooldown. */
+export function forceDeployRecoveryReload(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set(CACHE_BUST_PARAM, String(Date.now()));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+
 let installed = false;
 
 export function installDeployRecovery(): void {
@@ -111,7 +124,7 @@ export function installDeployRecovery(): void {
   window.addEventListener("unhandledrejection", (event) => {
     const reason = (event as PromiseRejectionEvent).reason;
     const msg = String((reason && (reason.message ?? reason)) || "");
-    if (DYNAMIC_IMPORT_FAILURE_RE.test(msg)) {
+    if (DYNAMIC_IMPORT_FAILURE_RE.test(msg) || isChunkErrorMessage(msg)) {
       reloadOnce("dynamic-import-failure");
     }
   });

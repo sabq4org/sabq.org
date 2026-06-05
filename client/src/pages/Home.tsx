@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback, useMemo, ReactNode, startTransition, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, ReactNode, startTransition, Suspense } from "react";
+import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
 import { useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
@@ -20,40 +21,20 @@ import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 
-// === LAZY LOADED - Below the fold content (code-split chunks) ===
-const AIInsightsBlock = lazy(() => 
-  import("@/components/AIInsightsBlock").then(module => ({ default: module.AIInsightsBlock }))
-);
-const TrendingKeywords = lazy(() => 
-  import("@/components/TrendingKeywords").then(module => ({ default: module.TrendingKeywords }))
-);
-const SmartSummaryBlock = lazy(() => 
-  import("@/components/SmartSummaryBlock").then(module => ({ default: module.SmartSummaryBlock }))
-);
-const PersonalizedFeed = lazy(() => 
-  import("@/components/PersonalizedFeed").then(module => ({ default: module.PersonalizedFeed }))
-);
-const ContinueReadingWidget = lazy(() => 
-  import("@/components/ContinueReadingWidget").then(module => ({ default: module.ContinueReadingWidget }))
-);
-const TrendingTopics = lazy(() => 
-  import("@/components/TrendingTopics").then(module => ({ default: module.TrendingTopics }))
-);
-const OpinionArticlesBlock = lazy(() => 
-  import("@/components/OpinionArticlesBlock").then(module => ({ default: module.OpinionArticlesBlock }))
-);
-const TrendingWeekSection = lazy(() => 
-  import("@/components/TrendingWeekSection").then(module => ({ default: module.TrendingWeekSection }))
-);
-const MuqtarabTopicsShowcase = lazy(() => 
-  import("@/components/MuqtarabTopicsShowcase").then(module => ({ default: module.MuqtarabTopicsShowcase }))
-);
-const QuadCategoriesBlock = lazy(() => 
-  import("@/components/QuadCategoriesBlock").then(module => ({ default: module.QuadCategoriesBlock }))
-);
-const GulfLiveBlock = lazy(() => import("@/components/GulfLiveBlock"));
-const HajjBlock = lazy(() => import("@/components/HajjBlock").then(m => ({ default: m.HajjBlock })));
-const NewsMap = lazy(() => import("@/components/NewsMap"));
+// === LAZY LOADED - Below the fold content (retryImport + deploy recovery) ===
+const AIInsightsBlock = lazyNamed(() => import("@/components/AIInsightsBlock"), "AIInsightsBlock");
+const TrendingKeywords = lazyNamed(() => import("@/components/TrendingKeywords"), "TrendingKeywords");
+const SmartSummaryBlock = lazyNamed(() => import("@/components/SmartSummaryBlock"), "SmartSummaryBlock");
+const PersonalizedFeed = lazyNamed(() => import("@/components/PersonalizedFeed"), "PersonalizedFeed");
+const ContinueReadingWidget = lazyNamed(() => import("@/components/ContinueReadingWidget"), "ContinueReadingWidget");
+const TrendingTopics = lazyNamed(() => import("@/components/TrendingTopics"), "TrendingTopics");
+const OpinionArticlesBlock = lazyNamed(() => import("@/components/OpinionArticlesBlock"), "OpinionArticlesBlock");
+const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSection"), "TrendingWeekSection");
+const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
+const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
+const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
+const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
+const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
 function SectionSkeleton({ height = 200 }: { height?: number }) {
   return <div className="animate-pulse bg-muted/30 rounded-lg" style={{ height }} />;
