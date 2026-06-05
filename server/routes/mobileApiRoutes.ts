@@ -44,6 +44,8 @@ import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, 
 // entered the article) AND reporterId (the actual byline) in the same query.
 // The byline shown to readers must always be the reporter when one is set.
 const reporterUsers = aliasedTable(users, "reporter_user");
+// Separate alias for the opinion author (articles.authorId) in the editor detail.
+const authorUsers = aliasedTable(users, "author_user");
 import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -6585,14 +6587,18 @@ const adminArticleDetailColumns = {
   publishedAt: articles.publishedAt,
   updatedAt: articles.updatedAt,
   views: articles.views,
+  authorId: articles.authorId,
   categoryName: categories.nameAr,
   reporterFirst: reporterUsers.firstName,
   reporterLast: reporterUsers.lastName,
+  authorFirst: authorUsers.firstName,
+  authorLast: authorUsers.lastName,
 };
 
 function mapAdminArticleDetail(r: any) {
   const seo = (r.seo && typeof r.seo === "object") ? r.seo : {};
   const reporterName = [r.reporterFirst, r.reporterLast].filter(Boolean).join(" ").trim();
+  const authorName = [r.authorFirst, r.authorLast].filter(Boolean).join(" ").trim();
   const toISO = (v: any) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
   return {
     id: r.id,
@@ -6608,6 +6614,8 @@ function mapAdminArticleDetail(r: any) {
     categoryName: r.categoryName || null,
     reporterId: r.reporterId || null,
     reporterName: reporterName || null,
+    authorId: r.authorId || null,
+    authorName: authorName || null,
     isFeatured: !!r.isFeatured,
     hideFromHomepage: !!r.hideFromHomepage,
     aiSummary: r.aiSummary || "",
@@ -6631,6 +6639,7 @@ async function fetchAdminArticleDetail(id: string) {
     .from(articles)
     .leftJoin(categories, eq(articles.categoryId, categories.id))
     .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+    .leftJoin(authorUsers, eq(articles.authorId, authorUsers.id))
     .where(eq(articles.id, id))
     .limit(1);
   return r ? mapAdminArticleDetail(r) : null;
@@ -6821,6 +6830,8 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
     // Relations (allow explicit null to clear)
     if (b.categoryId === null || typeof b.categoryId === "string") updates.categoryId = b.categoryId || null;
     if (b.reporterId === null || typeof b.reporterId === "string") updates.reporterId = b.reporterId || null;
+    // Opinion author → articles.authorId (the editor sends authorId for opinion).
+    if (b.authorId === null || typeof b.authorId === "string") updates.authorId = b.authorId || null;
 
     // Enums / flags
     if (typeof b.articleType === "string") updates.articleType = b.articleType;
@@ -7144,8 +7155,24 @@ router.post("/admin/ai/image-generate", async (req: Request, res: Response) => {
     const aspectRatio = allowedRatios.includes(req.body?.aspectRatio) ? req.body.aspectRatio : "16:9";
     const imageSize = allowedSizes.includes(req.body?.imageSize) ? req.body.imageSize : "2K";
 
+    // Optional text overlay (the "خبر مميز" template) + generation flags.
+    const overlayText = typeof req.body?.overlayText === "string" && req.body.overlayText.trim()
+      ? req.body.overlayText.trim()
+      : undefined;
+    const ov = req.body?.overlayOptions;
+    const overlayOptions = (ov && typeof ov === "object")
+      ? {
+          fontSize: typeof ov.fontSize === "number" ? ov.fontSize : 72,
+          fontColor: typeof ov.fontColor === "string" ? ov.fontColor : "#FFFFFF",
+          backgroundColor: typeof ov.backgroundColor === "string" ? ov.backgroundColor : "rgba(0, 0, 0, 0.6)",
+          position: ["center", "top", "bottom"].includes(ov.position) ? ov.position : "center",
+        }
+      : undefined;
+    const enableThinking = req.body?.enableThinking !== false;
+    const enableSearchGrounding = req.body?.enableSearchGrounding === true;
+
     const result = await generateAndUploadImage(
-      { prompt, aspectRatio, imageSize, enableThinking: true },
+      { prompt, aspectRatio, imageSize, enableThinking, enableSearchGrounding, overlayText, overlayOptions },
       admin.userId,
     );
     if (!result.success || !result.imageUrl) {
@@ -7155,6 +7182,57 @@ router.post("/admin/ai/image-generate", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] POST /admin/ai/image-generate error:", error);
     res.status(500).json({ success: false, message: "تعذّر توليد الصورة" });
+  }
+});
+
+// GET /api/v1/admin/users?role=reporter|opinion_author&query=&limit=
+// Lists staff by role for the reporter / opinion-author pickers.
+router.get("/admin/users", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) {
+      return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    }
+    const role = String(req.query.role || "").trim();
+    if (!["reporter", "opinion_author"].includes(role)) {
+      return res.status(400).json({ success: false, message: "الدور غير مدعوم" });
+    }
+    const q = String(req.query.query || "").trim();
+    const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit || "100"), 10) || 100));
+
+    const conditions = [eq(roles.name, role)];
+    if (q) {
+      conditions.push(or(
+        ilike(users.firstName, `%${q}%`),
+        ilike(users.lastName, `%${q}%`),
+        ilike(users.email, `%${q}%`),
+      ) as any);
+    }
+
+    const rows = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        avatarUrl: users.profileImageUrl,
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .innerJoin(users, eq(userRoles.userId, users.id))
+      .where(and(...conditions))
+      .limit(limit);
+
+    const items = rows.map(r => ({
+      id: r.id,
+      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || (r.email ?? "بدون اسم"),
+      email: r.email ?? null,
+      avatarUrl: r.avatarUrl ?? null,
+    }));
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/users error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل القائمة" });
   }
 });
 

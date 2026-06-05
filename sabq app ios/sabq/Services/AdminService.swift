@@ -38,8 +38,10 @@ protocol AdminServicing: Sendable {
     func editAndGenerate(content: String) async throws -> AdminGenerationResult
     /// تدقيق لغوي — returns spelling issues.
     func proofread(content: String) async throws -> [AdminProofIssue]
-    /// توليد الصور — AI image (nano-banana) → returns hosted URL.
-    func generateImage(prompt: String, aspectRatio: String, imageSize: String) async throws -> String
+    /// توليد الصور — AI image (nano-banana) with the full template payload.
+    func generateImage(_ params: AdminImageGenParams) async throws -> String
+    /// قائمة المراسلين / كتّاب الرأي للمنتقي.
+    func fetchUsers(role: String, query: String) async throws -> [AdminUser]
 
     // Editorial workflow
     /// أرشفة (حذف ناعم) بسبب — يُشعر الكاتب.
@@ -84,11 +86,30 @@ private struct AdminUploadResponse: Decodable { let url: String? }
 private struct AdminGenerationResponse: Decodable { let result: AdminGenerationResult? }
 private struct AdminProofreadResponse: Decodable { let issues: [AdminProofIssue]? }
 private struct AdminImageGenResponse: Decodable { let imageUrl: String? }
+private struct AdminUsersResponse: Decodable { let items: [AdminUser]? }
 
 private struct AdminContentBody: Encodable { let content: String }
 private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
 private struct AdminUploadBody: Encodable { let image: String }
-private struct AdminImageGenBody: Encodable { let prompt: String; let aspectRatio: String; let imageSize: String }
+
+/// Text-overlay options for the "خبر مميز" template.
+struct AdminImageOverlay: Encodable, Equatable {
+    var fontSize: Int = 72
+    var fontColor: String = "#FFFFFF"
+    var backgroundColor: String = "rgba(0, 0, 0, 0.6)"
+    var position: String = "center"
+}
+
+/// Full nano-banana payload built from the image-template picker.
+struct AdminImageGenParams: Encodable {
+    var prompt: String
+    var aspectRatio: String = "16:9"
+    var imageSize: String = "2K"
+    var enableThinking: Bool = true
+    var enableSearchGrounding: Bool = false
+    var overlayText: String?
+    var overlayOptions: AdminImageOverlay?
+}
 private struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
 private struct AdminDeletionBody: Encodable { let deletionReason: String }
 
@@ -188,15 +209,27 @@ struct LiveAdminService: AdminServicing {
         return response.issues ?? []
     }
 
-    func generateImage(prompt: String, aspectRatio: String, imageSize: String) async throws -> String {
+    func generateImage(_ params: AdminImageGenParams) async throws -> String {
         let response = try await APIClient.shared.post(
             AdminImageGenResponse.self,
             path: "/admin/ai/image-generate",
-            body: AdminImageGenBody(prompt: prompt, aspectRatio: aspectRatio, imageSize: imageSize),
+            body: params,
             timeout: 180
         )
         guard let url = response.imageUrl, !url.isEmpty else { throw AdminServiceError.missingItem }
         return url
+    }
+
+    func fetchUsers(role: String, query: String) async throws -> [AdminUser] {
+        var q = ["role": role]
+        if !query.isEmpty { q["query"] = query }
+        let response = try await APIClient.shared.get(
+            AdminUsersResponse.self,
+            path: "/admin/users",
+            query: q,
+            ignoreCache: true
+        )
+        return response.items ?? []
     }
 
     func generateSEO(title: String, content: String, excerpt: String) async throws -> AdminSEO {

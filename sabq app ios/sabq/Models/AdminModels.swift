@@ -173,6 +173,8 @@ struct AdminArticleDetail: Decodable, Hashable {
     var categoryName: String?
     var reporterId: String?
     var reporterName: String?
+    var authorId: String?
+    var authorName: String?
     var isFeatured: Bool
     var hideFromHomepage: Bool
     var aiSummary: String
@@ -185,7 +187,7 @@ struct AdminArticleDetail: Decodable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, title, subtitle, excerpt, content, slug, status, articleType, newsType
-        case categoryId, categoryName, reporterId, reporterName, isFeatured, hideFromHomepage
+        case categoryId, categoryName, reporterId, reporterName, authorId, authorName, isFeatured, hideFromHomepage
         case aiSummary, imageUrl, thumbnailUrl, seo, scheduledAt, publishedAt, views
     }
 
@@ -205,6 +207,8 @@ struct AdminArticleDetail: Decodable, Hashable {
         categoryName = try? c.decodeIfPresent(String.self, forKey: .categoryName)
         reporterId = try? c.decodeIfPresent(String.self, forKey: .reporterId)
         reporterName = try? c.decodeIfPresent(String.self, forKey: .reporterName)
+        authorId = try? c.decodeIfPresent(String.self, forKey: .authorId)
+        authorName = try? c.decodeIfPresent(String.self, forKey: .authorName)
         isFeatured = (try? c.decode(Bool.self, forKey: .isFeatured)) ?? false
         hideFromHomepage = (try? c.decode(Bool.self, forKey: .hideFromHomepage)) ?? false
         aiSummary = str(.aiSummary)
@@ -278,6 +282,16 @@ struct AdminArticleEditPayload: Encodable {
     var aiSummary: String
     var imageUrl: String
     var categoryId: String?
+    var reporterId: String?
+    var authorId: String?
     var scheduledAt: String?
     var seo: AdminSEO
+}
+
+/// A staff member shown in the reporter / opinion-author picker.
+struct AdminUser: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    var email: String?
+    var avatarUrl: String?
 }

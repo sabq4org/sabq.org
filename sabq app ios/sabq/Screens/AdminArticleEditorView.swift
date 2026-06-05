@@ -27,6 +27,10 @@ final class AdminEditorViewModel: ObservableObject {
     @Published var imageUrl = ""
     @Published var categoryId: String?
     @Published var categoryName: String?
+    @Published var reporterId: String?
+    @Published var reporterName: String?
+    @Published var authorId: String?
+    @Published var authorName: String?
     @Published var scheduledAt = Date()
     @Published var hasSchedule = false
     @Published var seoTitle = ""
@@ -78,6 +82,10 @@ final class AdminEditorViewModel: ObservableObject {
             imageUrl = d.imageUrl
             categoryId = d.categoryId
             categoryName = d.categoryName
+            reporterId = d.reporterId
+            reporterName = d.reporterName
+            authorId = d.authorId
+            authorName = d.authorName
             if let s = d.scheduledAt { scheduledAt = s; hasSchedule = true }
             seoTitle = d.seo.metaTitle
             seoDescription = d.seo.metaDescription
@@ -113,6 +121,10 @@ final class AdminEditorViewModel: ObservableObject {
             aiSummary: aiSummary,
             imageUrl: imageUrl,
             categoryId: categoryId,
+            // News sends reporterId; opinion sends authorId — avoid clobbering
+            // the other column.
+            reporterId: isOpinion ? nil : reporterId,
+            authorId: isOpinion ? authorId : nil,
             scheduledAt: scheduledISO,
             seo: AdminSEO(metaTitle: seoTitle, metaDescription: seoDescription, keywords: keywords)
         )
@@ -195,16 +207,21 @@ final class AdminEditorViewModel: ObservableObject {
     }
 
     /// توليد الصور — sets the hero image to the generated URL.
-    func runImageGenerate(prompt: String, aspectRatio: String, imageSize: String) async -> Bool {
+    func runImageGenerate(_ params: AdminImageGenParams) async -> Bool {
         isGeneratingImage = true
         defer { isGeneratingImage = false }
         do {
-            imageUrl = try await service.generateImage(prompt: prompt, aspectRatio: aspectRatio, imageSize: imageSize)
+            imageUrl = try await service.generateImage(params)
             return true
         } catch {
             self.error = "تعذّر توليد الصورة (تحقق من تهيئة الخدمة)"
             return false
         }
+    }
+
+    /// Fetch the staff list for the reporter / opinion-author picker.
+    func fetchUsers(role: String, query: String) async -> [AdminUser] {
+        (try? await service.fetchUsers(role: role, query: query)) ?? []
     }
 
     /// Apply the non-content fields from a generation result.
@@ -256,6 +273,7 @@ struct AdminArticleEditorView: View {
     @State private var proofIssues: [AdminProofIssue] = []
     @State private var showProofSheet = false
     @State private var showImageGenSheet = false
+    @State private var showUserPicker = false
 
     init(articleId: String, title: String, onSaved: @escaping () -> Void) {
         self.articleId = articleId
@@ -286,8 +304,23 @@ struct AdminArticleEditorView: View {
             AdminProofIssuesSheet(issues: proofIssues) { applyProofreadAll() }
         }
         .sheet(isPresented: $showImageGenSheet) {
-            AdminAIImageSheet(isGenerating: vm.isGeneratingImage) { prompt, ratio, size in
-                await vm.runImageGenerate(prompt: prompt, aspectRatio: ratio, imageSize: size)
+            AdminAIImageSheet(articleTitle: vm.title, isGenerating: vm.isGeneratingImage) { params in
+                await vm.runImageGenerate(params)
+            }
+        }
+        .sheet(isPresented: $showUserPicker) {
+            AdminUserPickerSheet(
+                role: vm.isOpinion ? "opinion_author" : "reporter",
+                title: vm.isOpinion ? "اختيار الكاتب" : "اختيار المراسل",
+                fetch: { q in await vm.fetchUsers(role: vm.isOpinion ? "opinion_author" : "reporter", query: q) }
+            ) { picked in
+                if vm.isOpinion {
+                    vm.authorId = picked.id
+                    vm.authorName = picked.name
+                } else {
+                    vm.reporterId = picked.id
+                    vm.reporterName = picked.name
+                }
             }
         }
         .task { await vm.load() }
@@ -305,6 +338,7 @@ struct AdminArticleEditorView: View {
                 contentSection
                 summarySection
                 categorySection
+                bylineSection
                 imageSection
                 seoSection
                 publishSection
@@ -438,6 +472,29 @@ struct AdminArticleEditorView: View {
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
             }
+        }
+    }
+
+    private var bylineSection: some View {
+        sectionCard(vm.isOpinion ? "كاتب المقال" : "المراسل", icon: "person.crop.circle") {
+            Button {
+                showUserPicker = true
+            } label: {
+                HStack {
+                    let name = vm.isOpinion ? vm.authorName : vm.reporterName
+                    Text(name ?? (vm.isOpinion ? "اختر الكاتب" : "اختر المراسل"))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(((vm.isOpinion ? vm.authorName : vm.reporterName) == nil) ? SabqTheme.secondaryInk : SabqTheme.ink)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -895,82 +952,301 @@ struct AdminProofIssuesSheet: View {
     }
 }
 
-// MARK: - AI image generation sheet
+// MARK: - AI image generation sheet (web-parity templates)
 
-/// Prompt + aspect/size for توليد الصور بالذكاء.
+enum AdminImageTemplate: String, CaseIterable, Identifiable {
+    case custom, featured, breaking, infographic, comparison
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .custom:      return "مخصص"
+        case .featured:    return "صورة بارزة"
+        case .breaking:    return "خبر مميز"
+        case .infographic: return "انفوجرافيك"
+        case .comparison:  return "مقارنة"
+        }
+    }
+}
+
+private struct AdminImageColorStyle: Identifiable {
+    let id: String
+    let label: String
+    let prompt: String
+}
+
+/// Mirrors the web AIImageGeneratorDialog: type templates + settings, builds
+/// the prompt from the template fields, pre-filled from the article title.
 struct AdminAIImageSheet: View {
+    let articleTitle: String
     let isGenerating: Bool
     /// Returns true on success (sheet dismisses).
-    let onGenerate: (String, String, String) async -> Bool
+    let onGenerate: (AdminImageGenParams) async -> Bool
 
     @Environment(\.dismiss) private var dismiss
-    @State private var prompt = ""
+    @State private var template: AdminImageTemplate = .featured
+    @State private var customPrompt = ""
+    @State private var subject = ""
+    @State private var headline = ""
+    @State private var data = ""
+    @State private var item1 = ""
+    @State private var item2 = ""
+    @State private var colorStyleIndex = 0
     @State private var ratio = "16:9"
     @State private var size = "2K"
+    @State private var enableThinking = true
+    @State private var enableSearch = false
+    @State private var seeded = false
 
-    private let ratios = ["16:9", "1:1", "4:3", "9:16", "3:4"]
+    private let ratios = ["16:9", "1:1", "4:3", "3:4", "9:16"]
     private let sizes = ["1K", "2K", "4K"]
-    private var trimmed: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private let colorStyles: [AdminImageColorStyle] = [
+        .init(id: "red", label: "أحمر - عاجل", prompt: "تدرج لوني أحمر هادئ وأنيق، تصميم بسيط ونظيف بدون زخارف، خلفية متدرجة من الأحمر الداكن للأسود، أسلوب مينيمالستي عصري"),
+        .init(id: "blue", label: "أزرق - خاص", prompt: "تدرج لوني أزرق هادئ واحترافي، تصميم نظيف وبسيط، خلفية متدرجة من الأزرق الداكن، أسلوب مينيمالستي أنيق بدون زخارف"),
+        .init(id: "gold", label: "ذهبي - حصري", prompt: "تدرج لوني ذهبي ناعم وراقي، تصميم بسيط وأنيق، خلفية متدرجة من الذهبي الداكن للأسود، أسلوب مينيمالستي فاخر بدون زخارف"),
+        .init(id: "green", label: "أخضر - اقتصاد", prompt: "تدرج لوني أخضر هادئ ومهني، تصميم نظيف وبسيط، خلفية متدرجة من الأخضر الداكن، أسلوب مينيمالستي احترافي بدون زخارف"),
+    ]
+
+    private func t(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func buildParams() -> AdminImageGenParams? {
+        var prompt = ""
+        var overlayText: String?
+        var overlayOptions: AdminImageOverlay?
+        switch template {
+        case .custom:
+            prompt = t(customPrompt)
+        case .featured:
+            guard !t(subject).isEmpty else { return nil }
+            prompt = "صورة صحفية احترافية عالية الجودة تُظهر \(t(subject))، إضاءة طبيعية ناعمة، تكوين متوازن، صورة واقعية بدون نصوص أو شعارات، بدقة عالية"
+        case .breaking:
+            guard !t(headline).isEmpty else { return nil }
+            let cs = colorStyles[colorStyleIndex].prompt
+            prompt = "خلفية هادئة وأنيقة، \(cs)، تصميم مينيمالستي بسيط بدون نصوص أو كلمات أو شعارات، فقط تدرجات لونية ناعمة، مناسبة لوضع النص فوقها لاحقاً"
+            overlayText = t(headline)
+            overlayOptions = AdminImageOverlay()
+        case .infographic:
+            guard !t(data).isEmpty else { return nil }
+            prompt = "انفوجرافيك بسيط ونظيف يعرض \(t(data))، تصميم مينيمالستي، خلفية بيضاء أو رمادية فاتحة، أيقونات بسيطة، بدون زخارف أو نصوص إضافية، نمط flat design عصري"
+        case .comparison:
+            guard !t(item1).isEmpty, !t(item2).isEmpty else { return nil }
+            prompt = "انفوجرافيك مقارنة بسيط بين \(t(item1)) و \(t(item2))، تصميم نظيف وهادئ، أيقونات بسيطة، ألوان متناسقة وهادئة، بدون زخارف أو تفاصيل زائدة"
+        }
+        guard !prompt.isEmpty else { return nil }
+        return AdminImageGenParams(
+            prompt: prompt, aspectRatio: ratio, imageSize: size,
+            enableThinking: enableThinking, enableSearchGrounding: enableSearch,
+            overlayText: overlayText, overlayOptions: overlayOptions
+        )
+    }
+
+    private var isValid: Bool { buildParams() != nil }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("وصف الصورة")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                        TextEditor(text: $prompt)
-                            .font(.system(size: 15))
-                            .foregroundStyle(SabqTheme.ink)
-                            .frame(minHeight: 120)
-                            .scrollContentBackground(.hidden)
-                            .padding(10)
-                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
-                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                    label("نوع الصورة")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(AdminImageTemplate.allCases) { tpl in
+                                let active = tpl == template
+                                Button { template = tpl } label: {
+                                    Text(tpl.label)
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(active ? .white : SabqTheme.secondaryInk)
+                                        .padding(.horizontal, 14).padding(.vertical, 9)
+                                        .background {
+                                            if active { Capsule().fill(SabqTheme.brandGradient) }
+                                            else { Capsule().fill(SabqTheme.surface).overlay(Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)) }
+                                        }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
 
-                    pickerRow(title: "النسبة", options: ratios, selection: $ratio)
-                    pickerRow(title: "الحجم", options: sizes, selection: $size)
+                    typeFields
+
+                    settingRow(title: "النسبة", options: ratios, selection: $ratio)
+                    settingRow(title: "الحجم", options: sizes, selection: $size)
+                    Toggle("التفكير العميق", isOn: $enableThinking)
+                        .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.sky)
+                    Toggle("البحث الداعم", isOn: $enableSearch)
+                        .font(.system(size: 14, weight: .semibold)).tint(SabqTheme.sky)
 
                     Button {
-                        Task { if await onGenerate(trimmed, ratio, size) { dismiss() } }
+                        if let p = buildParams() { Task { if await onGenerate(p) { dismiss() } } }
                     } label: {
                         HStack(spacing: 8) {
                             if isGenerating { ProgressView().controlSize(.small) }
-                            Text(isGenerating ? "جارٍ التوليد…" : "توليد الصورة")
-                                .font(.system(size: 16, weight: .bold))
+                            Text(isGenerating ? "جارٍ التوليد…" : "توليد الصورة").font(.system(size: 16, weight: .bold))
                         }
                         .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
                         .background(RoundedRectangle(cornerRadius: SabqTheme.buttonRadius, style: .continuous).fill(SabqTheme.brandGradient))
-                        .opacity(trimmed.isEmpty ? 0.5 : 1)
+                        .opacity(isValid ? 1 : 0.5)
                     }
                     .buttonStyle(.plain)
-                    .disabled(trimmed.isEmpty || isGenerating)
+                    .disabled(!isValid || isGenerating)
                 }
                 .padding(16)
             }
             .background(SabqTheme.background)
             .navigationTitle("توليد صورة بالذكاء")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } }
-            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("إلغاء") { dismiss() } } }
             .sabqRTL()
+            .onAppear {
+                guard !seeded else { return }
+                seeded = true
+                if !articleTitle.isEmpty {
+                    customPrompt = "صورة بارزة احترافية لمقال بعنوان: \(articleTitle)"
+                    subject = articleTitle
+                }
+            }
         }
     }
 
-    private func pickerRow(title: String, options: [String], selection: Binding<String>) -> some View {
+    @ViewBuilder
+    private var typeFields: some View {
+        switch template {
+        case .custom:
+            editorField("وصف الصورة", text: $customPrompt)
+        case .featured:
+            editorField("موضوع الصورة", text: $subject)
+        case .breaking:
+            editorField("العنوان (يُكتب فوق الصورة)", text: $headline)
+            label("نمط اللون")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(colorStyles.enumerated()), id: \.element.id) { idx, cs in
+                        let active = idx == colorStyleIndex
+                        Button { colorStyleIndex = idx } label: {
+                            Text(cs.label)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(active ? .white : SabqTheme.secondaryInk)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background {
+                                    if active { Capsule().fill(SabqTheme.sky) }
+                                    else { Capsule().fill(SabqTheme.surface).overlay(Capsule().stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5)) }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        case .infographic:
+            editorField("البيانات الإحصائية", text: $data)
+        case .comparison:
+            editorField("العنصر الأول", text: $item1)
+            editorField("العنصر الثاني", text: $item2)
+        }
+    }
+
+    private func label(_ s: String) -> some View {
+        Text(s).font(.system(size: 13, weight: .bold)).foregroundStyle(SabqTheme.secondaryInk)
+    }
+
+    private func editorField(_ title: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
+            label(title)
+            TextEditor(text: text)
+                .font(.system(size: 15)).foregroundStyle(SabqTheme.ink)
+                .frame(minHeight: 80)
+                .scrollContentBackground(.hidden)
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+        }
+    }
+
+    private func settingRow(title: String, options: [String], selection: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            label(title)
             Picker(title, selection: selection) {
                 ForEach(options, id: \.self) { Text($0).tag($0) }
             }
             .pickerStyle(.segmented)
         }
+    }
+}
+
+// MARK: - Reporter / opinion-author picker
+
+/// Searchable list of staff (reporters / opinion authors) for the byline.
+struct AdminUserPickerSheet: View {
+    let role: String
+    let title: String
+    let fetch: (String) async -> [AdminUser]
+    let onPick: (AdminUser) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+    @State private var users: [AdminUser] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(SabqTheme.secondaryInk)
+                    TextField("بحث بالاسم", text: $query)
+                        .font(.system(size: 15))
+                        .onSubmit { Task { await reload() } }
+                }
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.6), lineWidth: 0.5))
+                .padding(16)
+
+                if isLoading {
+                    ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+                } else if users.isEmpty {
+                    Text("لا توجد نتائج")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 8) {
+                            ForEach(users) { user in
+                                Button { onPick(user); dismiss() } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 26)).foregroundStyle(SabqTheme.secondaryInk)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(user.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(SabqTheme.ink)
+                                            if let e = user.email, !e.isEmpty {
+                                                Text(e).font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
+                                            }
+                                        }
+                                        Spacer(minLength: 0)
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.surface))
+                                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 24)
+                    }
+                }
+            }
+            .background(SabqTheme.background)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("إغلاق") { dismiss() } } }
+            .sabqRTL()
+            .task { await reload() }
+        }
+    }
+
+    private func reload() async {
+        isLoading = true
+        users = await fetch(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        isLoading = false
     }
 }
