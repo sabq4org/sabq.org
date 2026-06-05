@@ -970,6 +970,8 @@ export const articles = pgTable("articles", {
   index("idx_articles_homepage_order").on(table.status, table.hideFromHomepage, table.displayOrder.desc(), table.publishedAt.desc()),
   index("idx_articles_views").on(table.views.desc()),
   index("idx_articles_slug").on(table.slug),
+  // Edge slug-redirect does OR(englishSlug, slug); englishSlug was unindexed → full scan.
+  index("idx_articles_english_slug").on(table.englishSlug),
   index("idx_articles_featured").on(table.isFeatured, table.status, table.publishedAt.desc()),
   // Database cost optimization: indexes for common filter combinations
   index("idx_articles_breaking").on(table.status, table.hideFromHomepage, table.newsType, table.publishedAt.desc()),
@@ -5117,6 +5119,7 @@ export const enArticles = pgTable("en_articles", {
   index("idx_en_articles_author_status").on(table.authorId, table.status),
   index("idx_en_articles_type").on(table.articleType),
   index("idx_en_articles_published_at").on(table.publishedAt.desc()),
+  index("idx_en_articles_english_slug").on(table.englishSlug),
 ]);
 
 // English Comments
@@ -5323,6 +5326,7 @@ export const urArticles = pgTable("ur_articles", {
   index("idx_ur_articles_author_status").on(table.authorId, table.status),
   index("idx_ur_articles_type").on(table.articleType),
   index("idx_ur_articles_published_at").on(table.publishedAt.desc()),
+  index("idx_ur_articles_english_slug").on(table.englishSlug),
 ]);
 
 // Urdu Comments

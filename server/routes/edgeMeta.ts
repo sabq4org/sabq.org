@@ -33,6 +33,7 @@ import {
 import { eq, or, and, desc, ne, aliasedTable, sql } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
+import { memoryCache, CACHE_TTL } from "../memoryCache";
 
 const router = Router();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
@@ -63,75 +64,92 @@ function abs(url: string | null | undefined): string {
   return `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
+// Resolve the 301 target (or null) for a path. Pure DB logic — wrapped by the
+// route below with an in-process cache. Returns the canonical redirect path.
+async function computeSlugRedirect(path: string): Promise<string | null> {
+  const articleMatch = path.match(/^\/(article|news)\/([^/?#]+)/);
+  if (articleMatch) {
+    const [, routeType, rawSlug] = articleMatch;
+    const decodedSlug = decodeURIComponent(rawSlug);
+    const needsLookup = containsArabic(decodedSlug) || routeType === "news";
+    if (needsLookup) {
+      const where = containsArabic(decodedSlug)
+        ? eq(articles.slug, decodedSlug)
+        : or(eq(articles.englishSlug, decodedSlug), eq(articles.slug, decodedSlug));
+      const [row] = await db
+        .select({ englishSlug: articles.englishSlug })
+        .from(articles)
+        .where(where!)
+        .limit(1);
+      if (row?.englishSlug) {
+        return `/article/${row.englishSlug}`;
+      }
+      if (routeType === "news") {
+        return `/article/${rawSlug}`;
+      }
+    }
+  }
+
+  const categoryMatch = path.match(/^\/category\/([^/?#]+)/);
+  if (categoryMatch) {
+    const [, rawSlug] = categoryMatch;
+    const decodedSlug = decodeURIComponent(rawSlug);
+    if (containsArabic(decodedSlug)) {
+      const [row] = await db
+        .select({ englishSlug: categories.englishSlug })
+        .from(categories)
+        .where(eq(categories.slug, decodedSlug))
+        .limit(1);
+      if (row?.englishSlug) {
+        return `/category/${row.englishSlug}`;
+      }
+    }
+  }
+
+  // Legacy pre-migration article URLs: /saudia/<legacySlug>,
+  // /world/<legacySlug>, /saudia/community/<legacySlug>, etc. These still
+  // return 200 today (a self-canonical DUPLICATE of /article/<englishSlug>)
+  // because the DB-backed legacyRedirects middleware runs on Express, which
+  // edge-served HTML never reaches. That duplicate URL structure (every
+  // migrated article reachable at TWO self-canonical URLs) is a major
+  // crawl-budget + duplicate-content drag. Resolve the trailing segment via
+  // the indexed `articles.legacySlug` and 301 to the canonical /article/ URL.
+  // Excludes CURRENT features that share a /<x>/<id> shape (gulf, omq).
+  const legacyMatch = path.match(/^\/([a-z]+)(?:\/[a-z0-9-]+)*\/([^/?#]+)\/?$/i);
+  if (legacyMatch && LEGACY_ARTICLE_PREFIXES.has(legacyMatch[1].toLowerCase())) {
+    const legacySlug = decodeURIComponent(legacyMatch[2]);
+    const [row] = await db
+      .select({ englishSlug: articles.englishSlug, slug: articles.slug })
+      .from(articles)
+      .where(eq(articles.legacySlug, legacySlug))
+      .limit(1);
+    const canonical = row?.englishSlug || row?.slug;
+    if (canonical) {
+      return `/article/${canonical}`;
+    }
+  }
+
+  return null;
+}
+
 router.get("/api/edge/slug-redirect", async (req, res) => {
   res.set("Cache-Control", "public, max-age=60, s-maxage=60");
   try {
     const path = String(req.query.path || "");
     if (!path.startsWith("/")) return res.json({ redirect: null });
 
-    const articleMatch = path.match(/^\/(article|news)\/([^/?#]+)/);
-    if (articleMatch) {
-      const [, routeType, rawSlug] = articleMatch;
-      const decodedSlug = decodeURIComponent(rawSlug);
-      const needsLookup = containsArabic(decodedSlug) || routeType === "news";
-      if (needsLookup) {
-        const where = containsArabic(decodedSlug)
-          ? eq(articles.slug, decodedSlug)
-          : or(eq(articles.englishSlug, decodedSlug), eq(articles.slug, decodedSlug));
-        const [row] = await db
-          .select({ englishSlug: articles.englishSlug })
-          .from(articles)
-          .where(where!)
-          .limit(1);
-        if (row?.englishSlug) {
-          return res.json({ redirect: `/article/${row.englishSlug}` });
-        }
-        if (routeType === "news") {
-          return res.json({ redirect: `/article/${rawSlug}` });
-        }
-      }
-    }
+    // In-process cache: this endpoint is hit on (nearly) every HTML pageview by
+    // the CF worker, but the redirect decision for a given path is stable. Cache
+    // both positive AND negative ({redirect:null}) results for 5 min to avoid a
+    // DB round-trip on the hot path. 301 targets are semantically stable, so a
+    // short cache is safe for crawlers/indexing.
+    const cacheKey = `edge:slug-redirect:${path}`;
+    const cached = memoryCache.get<{ redirect: string | null }>(cacheKey);
+    if (cached !== null) return res.json(cached);
 
-    const categoryMatch = path.match(/^\/category\/([^/?#]+)/);
-    if (categoryMatch) {
-      const [, rawSlug] = categoryMatch;
-      const decodedSlug = decodeURIComponent(rawSlug);
-      if (containsArabic(decodedSlug)) {
-        const [row] = await db
-          .select({ englishSlug: categories.englishSlug })
-          .from(categories)
-          .where(eq(categories.slug, decodedSlug))
-          .limit(1);
-        if (row?.englishSlug) {
-          return res.json({ redirect: `/category/${row.englishSlug}` });
-        }
-      }
-    }
-
-    // Legacy pre-migration article URLs: /saudia/<legacySlug>,
-    // /world/<legacySlug>, /saudia/community/<legacySlug>, etc. These still
-    // return 200 today (a self-canonical DUPLICATE of /article/<englishSlug>)
-    // because the DB-backed legacyRedirects middleware runs on Express, which
-    // edge-served HTML never reaches. That duplicate URL structure (every
-    // migrated article reachable at TWO self-canonical URLs) is a major
-    // crawl-budget + duplicate-content drag. Resolve the trailing segment via
-    // the indexed `articles.legacySlug` and 301 to the canonical /article/ URL.
-    // Excludes CURRENT features that share a /<x>/<id> shape (gulf, omq).
-    const legacyMatch = path.match(/^\/([a-z]+)(?:\/[a-z0-9-]+)*\/([^/?#]+)\/?$/i);
-    if (legacyMatch && LEGACY_ARTICLE_PREFIXES.has(legacyMatch[1].toLowerCase())) {
-      const legacySlug = decodeURIComponent(legacyMatch[2]);
-      const [row] = await db
-        .select({ englishSlug: articles.englishSlug, slug: articles.slug })
-        .from(articles)
-        .where(eq(articles.legacySlug, legacySlug))
-        .limit(1);
-      const canonical = row?.englishSlug || row?.slug;
-      if (canonical) {
-        return res.json({ redirect: `/article/${canonical}` });
-      }
-    }
-
-    return res.json({ redirect: null });
+    const payload = { redirect: await computeSlugRedirect(path) };
+    memoryCache.set(cacheKey, payload, CACHE_TTL.MEDIUM);
+    return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
     return res.json({ redirect: null });
