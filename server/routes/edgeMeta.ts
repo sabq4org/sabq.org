@@ -29,6 +29,8 @@ import {
   gulfEvents,
   tags,
   articleTags,
+  angles,
+  topics,
 } from "@shared/schema";
 import { eq, or, and, desc, ne, aliasedTable, sql } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
@@ -133,22 +135,35 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
 }
 
 router.get("/api/edge/slug-redirect", async (req, res) => {
-  res.set("Cache-Control", "public, max-age=60, s-maxage=60");
+  // Redirect decisions for a path are semantically stable (a published
+  // article's canonical slug doesn't change), so let the edge absorb repeats:
+  // 5 min fresh + 10 min stale-while-revalidate keeps the CF worker from
+  // hitting origin on most repeat pageviews (was s-maxage=60 → ~1s DB scans on
+  // every miss, [APM] Slow request warnings 2026-06-05).
+  res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
   try {
-    const path = String(req.query.path || "");
-    if (!path.startsWith("/")) return res.json({ redirect: null });
+    const raw = String(req.query.path || "");
+    if (!raw.startsWith("/")) return res.json({ redirect: null });
+
+    // Normalize to the pathname only — drop ?query/#hash. The redirect rules
+    // already ignore them, but an un-normalized key splits the cache per
+    // tracking param (?utm_*), AND the legacy-prefix regex in
+    // computeSlugRedirect fails outright on a trailing query string. One
+    // canonical key per path → far higher hit rate + correct legacy redirects.
+    const path = raw.replace(/[?#].*$/, "");
 
     // In-process cache: this endpoint is hit on (nearly) every HTML pageview by
     // the CF worker, but the redirect decision for a given path is stable. Cache
-    // both positive AND negative ({redirect:null}) results for 5 min to avoid a
-    // DB round-trip on the hot path. 301 targets are semantically stable, so a
-    // short cache is safe for crawlers/indexing.
+    // both positive AND negative ({redirect:null}) results to avoid a DB
+    // round-trip on the hot path. 15 min keeps the DB off the hot path even
+    // across the 5-min edge window; 301 targets are stable so this is safe for
+    // crawlers/indexing.
     const cacheKey = `edge:slug-redirect:${path}`;
     const cached = memoryCache.get<{ redirect: string | null }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
     const payload = { redirect: await computeSlugRedirect(path) };
-    memoryCache.set(cacheKey, payload, CACHE_TTL.MEDIUM);
+    memoryCache.set(cacheKey, payload, CACHE_TTL.LONG);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
@@ -790,6 +805,82 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       return {
         ...defaultMeta("/"),
         semanticHtml,
+      };
+    },
+  },
+  // Muqtarab topic: /muqtarab/:angleSlug/topic/:topicSlug — share meta + OG image.
+  // MUST precede the angle handler below (its pattern would also match this URL).
+  {
+    pattern: /^\/muqtarab\/([^/?#]+)\/topic\/([^/?#]+)/,
+    handle: async (m) => {
+      const angleSlug = decodeURIComponent(m[1]);
+      const topicSlug = decodeURIComponent(m[2]);
+      const [row] = await db
+        .select({
+          title: topics.title,
+          excerpt: topics.excerpt,
+          content: topics.content,
+          heroImageUrl: topics.heroImageUrl,
+          status: topics.status,
+          seoMeta: topics.seoMeta,
+          topicSlug: topics.slug,
+          angleNameAr: angles.nameAr,
+          angleSlug: angles.slug,
+          angleCover: angles.coverImageUrl,
+        })
+        .from(topics)
+        .innerJoin(angles, eq(topics.angleId, angles.id))
+        .where(and(eq(angles.slug, angleSlug), eq(topics.slug, topicSlug)))
+        .limit(1);
+      if (!row) return null;
+      const seoMeta = (row.seoMeta as any) || {};
+      const plain = (row.content as any)?.plainText as string | undefined;
+      const title = seoMeta.metaTitle || row.title || "";
+      const description = (
+        seoMeta.metaDescription ||
+        row.excerpt ||
+        plain ||
+        `${row.title} — زاوية ${row.angleNameAr} على مُقترب من صحيفة سبق الإلكترونية.`
+      ).slice(0, 220);
+      return {
+        title: `${title} — مُقترب — سبق`,
+        description,
+        image: abs(row.heroImageUrl || row.angleCover),
+        canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`,
+        robots: row.status === "published" ? "index,follow" : "noindex, follow",
+        type: "article",
+        locale: "ar_SA",
+      };
+    },
+  },
+  // Muqtarab angle: /muqtarab/:angleSlug
+  {
+    pattern: /^\/muqtarab\/([^/?#]+)/,
+    handle: async (m) => {
+      const slug = decodeURIComponent(m[1]);
+      const [ang] = await db
+        .select({
+          nameAr: angles.nameAr,
+          slug: angles.slug,
+          shortDesc: angles.shortDesc,
+          coverImageUrl: angles.coverImageUrl,
+          isActive: angles.isActive,
+        })
+        .from(angles)
+        .where(eq(angles.slug, slug))
+        .limit(1);
+      if (!ang || !ang.isActive) return null;
+      const description = (
+        ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`
+      ).slice(0, 220);
+      return {
+        title: `${ang.nameAr} — مُقترب — سبق`,
+        description,
+        image: abs(ang.coverImageUrl),
+        canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(ang.slug)}`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
       };
     },
   },
