@@ -213,6 +213,14 @@ function Dashboard() {
     }
   }, [user, navigate]);
 
+  // كاتب الزاوية: صفحته الرئيسية هي «زاويتي» — لا تظهر له نظرة عامة الإدارة
+  const isAngleWriter = hasRole(user, 'angle_writer');
+  useEffect(() => {
+    if (user && isAngleWriter) {
+      navigate('/dashboard/my-angle', { replace: true });
+    }
+  }, [user, isAngleWriter, navigate]);
+
   // Check if user has dashboard view permission (base permission for accessing dashboard data)
   const canViewDashboard = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW) || 
     hasRole(user, "admin", "system_admin", "editor");
@@ -283,7 +291,7 @@ function Dashboard() {
     { name: "مرفوض", value: stats.comments.rejected, color: COLORS[2] },
   ] : [];
 
-  if (isUserLoading || !user) {
+  if (isUserLoading || !user || isAngleWriter) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
