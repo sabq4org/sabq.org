@@ -181,10 +181,6 @@ export const PERMISSION_CODES = {
   // Communications - التواصل
   COMMUNICATIONS_STAFF: "communications.staff",
 
-  // Realtime Chat - الدردشة اللحظية
-  CHAT_USE: "chat.use",        // can open + reply in chat
-  CHAT_MANAGE: "chat.manage",  // can initiate a new conversation with any staff member
-
   // Breaking News Ticker - شريط الأخبار العاجلة
   BREAKING_TICKER_MANAGE: "breaking_ticker.manage",
   
@@ -267,9 +263,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
     // Breaking News Ticker
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
-    // Chat
-    PERMISSION_CODES.CHAT_USE,
-    PERMISSION_CODES.CHAT_MANAGE,
   ],
 
   [ROLE_NAMES.CONTENT_MANAGER]: [
@@ -299,8 +292,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.VIEW_STAFF_PRODUCTIVITY,
     PERMISSION_CODES.BREAKING_TICKER_MANAGE,
-    PERMISSION_CODES.CHAT_USE,
-    PERMISSION_CODES.CHAT_MANAGE,
   ],
 
   [ROLE_NAMES.REPORTER]: [
@@ -317,7 +308,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW_STATS,
     PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
-    PERMISSION_CODES.CHAT_USE,
   ],
 
   [ROLE_NAMES.OPINION_AUTHOR]: [
@@ -334,7 +324,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     // hidden (it gates on dashboard.view), so writers couldn't find their panel.
     PERMISSION_CODES.DASHBOARD_VIEW,
     PERMISSION_CODES.DASHBOARD_VIEW_STATS,
-    PERMISSION_CODES.CHAT_USE,
   ],
 
   [ROLE_NAMES.COMMENTS_MODERATOR]: [
@@ -344,7 +333,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.COMMENTS_REJECT,
     PERMISSION_CODES.COMMENTS_DELETE,
     PERMISSION_CODES.COMMENTS_BAN_USER,
-    PERMISSION_CODES.CHAT_USE,
   ],
 
   [ROLE_NAMES.MEDIA_MANAGER]: [
@@ -352,7 +340,6 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.MEDIA_EDIT,
     PERMISSION_CODES.MEDIA_DELETE,
-    PERMISSION_CODES.CHAT_USE,
   ],
 
   // كاتب زاوية مُقترب: يرى "زاويتي" فقط في القائمة. صلاحياته الحد الأدنى عمداً —
@@ -475,8 +462,6 @@ export const PERMISSION_LABELS_AR: Record<string, string> = {
   
   // Communications - التواصل
   [PERMISSION_CODES.COMMUNICATIONS_STAFF]: "مراسلة الزملاء",
-  [PERMISSION_CODES.CHAT_USE]: "استخدام الدردشة اللحظية",
-  [PERMISSION_CODES.CHAT_MANAGE]: "بدء محادثات جديدة مع الفريق",
   [PERMISSION_CODES.BREAKING_TICKER_MANAGE]: "إدارة شريط الأخبار العاجلة",
   
   // Staff Productivity - إنتاجية الموظفين
