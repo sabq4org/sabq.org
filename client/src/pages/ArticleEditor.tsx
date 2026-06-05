@@ -1710,12 +1710,23 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       
       // Determine the correct success message
       const isUpdate = !isNewArticle && status === "published";
-      const successTitle = variables.publishNow 
-        ? (isUpdate ? "تم التحديث بنجاح" : "تم النشر بنجاح")
-        : "تم الحفظ بنجاح";
-      const successDescription = variables.publishNow
-        ? (isUpdate ? "تم تحديث الخبر بنجاح" : "تم نشر المقال بنجاح")
-        : "تم حفظ المقال كمسودة";
+      const isScheduled = variables.publishNow && publishType === "scheduled";
+      const scheduledLabel = isScheduled && scheduledAt
+        ? new Date(scheduledAt).toLocaleString("ar-SA-u-ca-gregory", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })
+        : "";
+      const successTitle = isScheduled
+        ? "تمت الجدولة بنجاح"
+        : variables.publishNow
+          ? (isUpdate ? "تم التحديث بنجاح" : "تم النشر بنجاح")
+          : "تم الحفظ بنجاح";
+      const successDescription = isScheduled
+        ? (scheduledLabel ? `تمت جدولة المقال للنشر في ${scheduledLabel}` : "تمت جدولة المقال للنشر")
+        : variables.publishNow
+          ? (isUpdate ? "تم تحديث الخبر بنجاح" : "تم نشر المقال بنجاح")
+          : "تم حفظ المقال كمسودة";
       
       if (!variables.skipToast) {
         toast({

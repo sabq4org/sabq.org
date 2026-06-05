@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
+import { attemptChunkRecoveryReload } from "@/lib/deployRecovery";
 
 function WebMCPProvider() {
   useWebMCP();
@@ -54,6 +55,11 @@ function isChunkErrorMessage(message: string | undefined | null): boolean {
     m.includes('chunkloaderror') ||
     m.includes('is not found') ||
     m.includes('unable to preload css') ||
+    // React.lazy poisoned-payload render error after a failed dynamic import.
+    // Safari: "undefined is not an object (evaluating 'f._result.default')".
+    // Chrome: "Cannot read properties of undefined (reading 'default')".
+    m.includes('_result.default') ||
+    m.includes("reading 'default'") ||
     m.includes('تعذر تحميل الصفحة')
   );
 }
@@ -83,29 +89,16 @@ function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): P
           // chunk names. Guarded by sessionStorage so a deploy bug
           // doesn't trap the user in a reload loop — second failure
           // shows the manual instruction.
-          // Time-throttled, NOT once-per-session. The previous version
-          // set a boolean that was never cleared, so after the first
-          // auto-reload the guard stayed set for the whole browser
-          // session — every *subsequent* deploy's chunk error then went
-          // straight to the dead error screen instead of auto-recovering
-          // (the exact repeat-white-page pattern seen while testing
-          // back-to-back deploys). A cooldown timestamp lets each new
-          // deploy get a fresh auto-reload while still breaking a tight
-          // reload loop from a genuinely broken build (which fails again
-          // within seconds, inside the cooldown).
-          const RELOAD_KEY = 'sabq:chunk-reload-at';
-          const RELOAD_COOLDOWN_MS = 30_000;
-          try {
-            const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
-            if (!last || Date.now() - last > RELOAD_COOLDOWN_MS) {
-              sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-              window.location.reload();
-              return; // page is reloading — resolve never fires
-            }
-          } catch {
-            // sessionStorage can throw in private-mode Safari; fall
-            // through to the manual-refresh message rather than risk
-            // an infinite reload.
+          // Unified recovery: one cache-busting reload sharing a single
+          // cooldown with the window-level deployRecovery listener and the
+          // route ErrorBoundary, so a transient failure can surface through
+          // any of those paths without ever triggering more than one reload.
+          // The cache-buster (?_dr=) also misses any stale edge-cached shell —
+          // strictly better than the old plain reload. On the second failure
+          // inside the cooldown (a genuinely broken build), fall through to the
+          // manual-refresh message instead of looping.
+          if (attemptChunkRecoveryReload('lazy-import')) {
+            return; // page is reloading — resolve never fires
           }
           reject(new Error('تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)'));
         } else {
@@ -446,6 +439,15 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary] Caught error:", error, errorInfo);
+    // A failed lazy chunk can surface HERE as a React.lazy render error
+    // (Safari: "undefined is not an object (evaluating 'f._result.default')")
+    // rather than as an import rejection — the case that previously left a
+    // permanent white screen (only a tab close recovered it). Attempt one
+    // cache-busting reload; the shared cooldown prevents loops, and if it's
+    // already spent, render() falls back to the friendly manual-refresh UI.
+    if (isChunkErrorMessage(error?.message)) {
+      attemptChunkRecoveryReload('errorboundary-chunk');
+    }
   }
 
   render() {
