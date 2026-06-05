@@ -186,10 +186,6 @@ const MyKeywords = lazy(() => retryImport(() => import("@/pages/MyKeywords")));
 const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAccount")));
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
-const ChatPage = lazy(() => retryImport(() => import("@/pages/dashboard/Chat")));
-const FloatingChatWidget = lazy(() =>
-  retryImport(() => import("@/components/chat/FloatingChatWidget")).then((m) => ({ default: m.FloatingChatWidget })),
-);
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
 const ThemeSwitcher = lazy(() => retryImport(() => import("@/pages/dashboard/ThemeSwitcher")));
@@ -850,7 +846,6 @@ function Router() {
         <Route path="/dashboard/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
-        <Route path="/dashboard/chat">{() => <LazyRoute component={ChatPage} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
         <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
@@ -1078,13 +1073,6 @@ function App() {
                     <div id="main-content" tabIndex={-1}>
                       <Router />
                     </div>
-                  </ErrorBoundary>
-                  {/* عزل widget الدردشة (غير حرج) في ErrorBoundary خاص بـ fallback صامت:
-                      فشل تحميل chunk الخاص به بعد النشر لا يجب أن يُسقط كامل الصفحة. */}
-                  <ErrorBoundary fallback={null}>
-                    <Suspense fallback={null}>
-                      <FloatingChatWidget />
-                    </Suspense>
                   </ErrorBoundary>
                 </TooltipProvider>
               </VoiceAssistantProvider>

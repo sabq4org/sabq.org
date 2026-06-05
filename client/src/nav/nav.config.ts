@@ -671,23 +671,6 @@ export const navConfig: NavItem[] = [
         permissions: ["communications.staff"],
       },
       {
-        id: "chat",
-        labelKey: "nav.chat",
-        labelAr: "الدردشة",
-        path: "/dashboard/chat",
-        icon: MessageSquare,
-        roles: [
-          "admin",
-          "system_admin",
-          "editor",
-          "content_manager",
-          "reporter",
-          "opinion_author",
-          "comments_moderator",
-        ],
-        permissions: ["chat.use"],
-      },
-      {
         id: "staff-productivity",
         labelKey: "nav.staffProductivity",
         labelAr: "إنتاجية الموظفين",

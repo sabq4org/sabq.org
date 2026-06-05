@@ -21,7 +21,6 @@ import edgeMetaRouter from "./edgeMeta";
 import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
 import deployWebhooksRouter from "./deployWebhooks";
-import chatRouter from "./chat";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
@@ -54,7 +53,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(articleEditLocksRouter);
   app.use(opinionTicketsRouter);
   app.use(deployWebhooksRouter);
-  app.use(chatRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
