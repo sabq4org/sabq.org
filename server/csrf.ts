@@ -96,6 +96,10 @@ const EXEMPT_PATHS = [
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
   "/api/v1/",  // Mobile API (iOS/Android apps)
   "/api/angle-submissions",  // Public angle submission form (Muqtarab)
+  // Muqtarab public topic view counter (anonymous, idempotent-ish increment).
+  // Only public /topics/:id/view lives here; authenticated writer routes are
+  // under /api/muqtarab/my-angle/* and remain CSRF-protected.
+  "/api/muqtarab/topics/",
   "/api/admin/moderator/disconnect",  // sendBeacon on tab close can't send headers
   "/api/editor-presence/",  // Live editor presence heartbeat/leave (session-auth gated, sendBeacon on unload)
   // Behavior telemetry — fire-and-forget analytics sent via sendBeacon

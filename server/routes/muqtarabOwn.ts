@@ -20,7 +20,7 @@
  */
 
 import { Router } from "express";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { generateEnglishSlug } from "../utils/slugTransliterator";
 import { db } from "../db";
 import { storage } from "../storage";
@@ -88,6 +88,61 @@ async function checkOwnership(
 // ============================================================
 // مسارات كاتب الزاوية
 // ============================================================
+
+// تسجيل مشاهدة لموضوع منشور (عام، بلا مصادقة) — عدّاد بسيط
+router.post("/api/muqtarab/topics/:id/view", async (req, res) => {
+  try {
+    const [updated] = await db
+      .update(topics)
+      .set({ viewCount: sql`${topics.viewCount} + 1` })
+      .where(and(eq(topics.id, req.params.id), eq(topics.status, "published")))
+      .returning({ viewCount: topics.viewCount });
+
+    if (!updated) return res.status(404).json({ message: "الموضوع غير موجود" });
+    res.json({ viewCount: updated.viewCount });
+  } catch (err) {
+    console.error("[muqtarab] record view error:", err);
+    res.status(500).json({ message: "فشل في تسجيل المشاهدة" });
+  }
+});
+
+// تحليلات مصغّرة لكاتب الزاوية: إجمالي المشاهدات + الأكثر انتشاراً
+router.get("/api/muqtarab/my-angle/analytics", requireAuth, async (req: any, res) => {
+  try {
+    const angle = await getOwnedAngle(req.user.id);
+    if (!angle) return res.status(404).json({ message: "لا توجد زاوية مخصّصة لحسابك" });
+
+    const [totals] = await db
+      .select({
+        totalViews: sql<number>`coalesce(sum(${topics.viewCount}), 0)`,
+        publishedCount: sql<number>`count(*) filter (where ${topics.status} = 'published')`,
+      })
+      .from(topics)
+      .where(eq(topics.angleId, angle.id));
+
+    const topTopics = await db
+      .select({
+        id: topics.id,
+        title: topics.title,
+        slug: topics.slug,
+        viewCount: topics.viewCount,
+        publishedAt: topics.publishedAt,
+      })
+      .from(topics)
+      .where(and(eq(topics.angleId, angle.id), eq(topics.status, "published")))
+      .orderBy(desc(topics.viewCount))
+      .limit(5);
+
+    res.json({
+      totalViews: Number(totals?.totalViews ?? 0),
+      publishedCount: Number(totals?.publishedCount ?? 0),
+      topTopics: topTopics.map((t) => ({ ...t, viewCount: Number(t.viewCount ?? 0) })),
+    });
+  } catch (err) {
+    console.error("[my-angle] analytics error:", err);
+    res.status(500).json({ message: "فشل في جلب التحليلات" });
+  }
+});
 
 router.get("/api/muqtarab/my-angle", requireAuth, async (req: any, res) => {
   try {

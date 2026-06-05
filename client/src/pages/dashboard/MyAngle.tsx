@@ -21,6 +21,9 @@ import {
   Sparkles,
   Wand2,
   SpellCheck,
+  Eye,
+  TrendingUp,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,6 +80,12 @@ interface MyAngleData {
     archived: number;
     total: number;
   };
+}
+
+interface AnalyticsData {
+  totalViews: number;
+  publishedCount: number;
+  topTopics: { id: string; title: string; slug: string; viewCount: number; publishedAt?: string | null }[];
 }
 
 function statusBadge(status: string) {
@@ -148,6 +157,13 @@ export default function MyAngle() {
     retry: false,
   });
   const topics = Array.isArray(topicsRaw?.topics) ? topicsRaw!.topics : [];
+
+  const { data: analytics } = useQuery<AnalyticsData>({
+    queryKey: ["/api/muqtarab/my-angle/analytics"],
+    queryFn: async () => apiRequest("/api/muqtarab/my-angle/analytics"),
+    enabled: !!angle,
+    retry: false,
+  });
 
   const buildPayload = () => {
     const plainText = editorContent.replace(/<[^>]*>/g, "").trim();
@@ -437,6 +453,50 @@ export default function MyAngle() {
             <CardContent className="p-4 text-center">
               <div className="text-3xl font-bold text-amber-600">{stats?.needs_revision ?? 0}</div>
               <div className="text-sm text-muted-foreground">يحتاج تعديلاً</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* تحليلات مصغّرة */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="lg:col-span-1">
+            <CardContent className="p-6 flex flex-col items-center justify-center text-center h-full">
+              <Eye className="w-7 h-7 text-indigo-500 mb-2" />
+              <div className="text-4xl font-bold">{(analytics?.totalViews ?? 0).toLocaleString("ar-SA")}</div>
+              <div className="text-sm text-muted-foreground mt-1">إجمالي المشاهدات</div>
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+                المواضيع الأكثر انتشاراً
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {analytics && analytics.topTopics.length > 0 ? (
+                <ol className="space-y-2">
+                  {analytics.topTopics.map((t, i) => (
+                    <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                          {i + 1}
+                        </span>
+                        <span className="truncate">{t.title}</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-muted-foreground shrink-0">
+                        <Eye className="w-3.5 h-3.5" />
+                        {t.viewCount.toLocaleString("ar-SA")}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 text-muted-foreground text-sm">
+                  <BarChart3 className="w-7 h-7 mb-2 opacity-50" />
+                  لا توجد مشاهدات بعد — انشر مواضيع لتظهر هنا
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
