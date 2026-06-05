@@ -89,9 +89,6 @@ const EXEMPT_PATHS = [
   "/api/native-ads/",  // Native ads tracking (impressions/clicks) for anonymous users
   "/api/store/auth/",  // Store customer authentication (login, register, etc.)
   "/api/store/cart",  // Store cart operations
-  "/api/ai/chat",  // AI chatbot for public users
-  "/api/en/chat",  // English AI chatbot
-  "/api/ur/chat",  // Urdu AI chatbot
   "/api/test/",  // Test endpoints for development
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
   "/api/v1/",  // Mobile API (iOS/Android apps)

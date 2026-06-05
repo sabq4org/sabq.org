@@ -10352,9 +10352,6 @@ export type EmployeeEmailTemplate = typeof employeeEmailTemplates.$inferSelect;
 export type InsertEmployeeEmailTemplate = z.infer<typeof insertEmployeeEmailTemplateSchema>;
 export type UpdateEmployeeEmailTemplate = z.infer<typeof updateEmployeeEmailTemplateSchema>;
 
-// Chat module exports
-export * from "./models/chat";
-
 // ============================================
 // نظام المحتوى المدفوع - Paid Content / Tap Payment System
 // ============================================
