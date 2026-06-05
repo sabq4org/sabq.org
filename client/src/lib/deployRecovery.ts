@@ -38,14 +38,27 @@ function markReloaded(): void {
   }
 }
 
-function reloadOnce(reason: string): void {
+/**
+ * Attempt a single cache-busting reload to recover from a chunk-load failure.
+ * Returns `true` if a reload was triggered, `false` if blocked by the cooldown
+ * (we already reloaded recently → the failure is likely genuine, so the caller
+ * should surface a manual-refresh message instead of looping).
+ *
+ * Exported so App.tsx's `retryImport` and the route ErrorBoundary share ONE
+ * cooldown + ONE recovery strategy with the window-level listeners below — a
+ * single transient chunk failure can then surface through any of those paths
+ * (import rejection, vite:preloadError, or a React.lazy render error like
+ * Safari's "undefined is not an object (evaluating 'f._result.default')")
+ * without ever triggering more than one reload.
+ */
+export function attemptChunkRecoveryReload(reason: string): boolean {
   if (recentlyReloaded()) {
     console.error(
       `[deployRecovery] Reloaded within the last ${RELOAD_COOLDOWN_MS}ms; ` +
         `not looping (reason=${reason}). The failing chunk is likely a genuine ` +
         `404, not a stale deploy.`,
     );
-    return;
+    return false;
   }
   markReloaded();
   console.warn(
@@ -61,6 +74,11 @@ function reloadOnce(reason: string): void {
   } catch {
     window.location.reload();
   }
+  return true;
+}
+
+function reloadOnce(reason: string): void {
+  attemptChunkRecoveryReload(reason);
 }
 
 let installed = false;
