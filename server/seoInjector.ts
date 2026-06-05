@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
-import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags } from "@shared/schema";
+import { articles, categories, users, enArticles, urArticles, gulfEvents, deepAnalyses, worldDays, tags, articleTags, angles, topics } from "@shared/schema";
 import { eq, or, desc, and, sql, aliasedTable } from "drizzle-orm";
 
 // Pulled into a module-level alias so we can join the `users` table twice in
@@ -725,7 +725,7 @@ function firstSegmentOf(pathname: string): string {
   return pathname.split('/').filter(Boolean)[0]?.toLowerCase() ?? '';
 }
 
-function matchRoute(pathname: string): { type: string; slug?: string; pathname: string } | null {
+function matchRoute(pathname: string): { type: string; slug?: string; angleSlug?: string; pathname: string } | null {
   if (pathname === '/' || pathname === '') return { type: 'homepage', pathname };
   if (pathname === '/en' || pathname === '/ar' || pathname === '/ur') return { type: 'homepage', pathname };
 
@@ -761,6 +761,10 @@ function matchRoute(pathname: string): { type: string; slug?: string; pathname: 
 
   match = pathname.match(/^\/en\/reporter\/([^/]+)$/);
   if (match) return { type: 'reporter-en', slug: match[1], pathname };
+
+  // Muqtarab topic (3 segments) — must be checked before the single-segment angle route
+  match = pathname.match(/^\/muqtarab\/([^/]+)\/topic\/([^/]+)$/);
+  if (match) return { type: 'muqtarab-topic', angleSlug: decodeURIComponent(match[1]), slug: decodeURIComponent(match[2]), pathname };
 
   match = pathname.match(/^\/muqtarab\/([^/]+)$/);
   if (match) return { type: 'muqtarab', slug: decodeURIComponent(match[1]), pathname };
@@ -992,44 +996,135 @@ async function handleReporterPage(idOrSlug: string, baseUrl: string, lang: 'ar' 
   };
 }
 
-async function handleMuqtarabPage(slug: string, baseUrl: string): Promise<SeoData> {
-  const writer = await withCache(`seo:muqtarab:${slug}`, CACHE_TTL.LONG, async () =>
+// صفحة الزاوية: /muqtarab/:angleSlug — تقرأ جدول angles الجديد.
+async function handleMuqtarabAnglePage(slug: string, baseUrl: string): Promise<SeoData | null> {
+  const rows = await withCache(`seo:muqtarab-angle:${slug}`, CACHE_TTL.LONG, async () =>
     db
       .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        role: users.role,
+        nameAr: angles.nameAr,
+        slug: angles.slug,
+        shortDesc: angles.shortDesc,
+        coverImageUrl: angles.coverImageUrl,
+        isActive: angles.isActive,
       })
-      .from(users)
-      .where(eq(users.id, slug))
+      .from(angles)
+      .where(eq(angles.slug, slug))
       .limit(1)
   );
-  const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(slug)}`;
-  if (!writer.length || writer[0].role !== 'opinion_writer') {
+  if (!rows.length || !rows[0].isActive) return null;
+  const ang = rows[0];
+  const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(ang.slug)}`;
+  const description = truncate(
+    ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`,
+    220,
+  );
+  const image = ang.coverImageUrl
+    ? ensureAbsoluteUrl(ang.coverImageUrl, baseUrl)
+    : `${baseUrl}/branding/sabq-og-image.png`;
+  return {
+    title: `${ang.nameAr} — مُقترب — سبق`,
+    description,
+    canonicalUrl,
+    ogType: 'website',
+    ogImage: image,
+    ogLocale: 'ar_SA',
+    ogSiteName: 'صحيفة سبق الإلكترونية',
+    twitterSite: '@sabq',
+    preloadImage: image,
+  };
+}
+
+// صفحة الموضوع: /muqtarab/:angleSlug/topic/:topicSlug — ميتا مشاركة + OG + NewsArticle.
+async function handleMuqtarabTopicPage(
+  angleSlug: string,
+  topicSlug: string,
+  baseUrl: string,
+): Promise<SeoData | null> {
+  const rows = await withCache(`seo:muqtarab-topic:${angleSlug}:${topicSlug}`, CACHE_TTL.LONG, async () =>
+    db
+      .select({
+        title: topics.title,
+        excerpt: topics.excerpt,
+        content: topics.content,
+        heroImageUrl: topics.heroImageUrl,
+        status: topics.status,
+        publishedAt: topics.publishedAt,
+        updatedAt: topics.updatedAt,
+        seoMeta: topics.seoMeta,
+        topicSlug: topics.slug,
+        angleNameAr: angles.nameAr,
+        angleSlug: angles.slug,
+        angleCover: angles.coverImageUrl,
+      })
+      .from(topics)
+      .innerJoin(angles, eq(topics.angleId, angles.id))
+      .where(and(eq(angles.slug, angleSlug), eq(topics.slug, topicSlug)))
+      .limit(1)
+  );
+  if (!rows.length) return null;
+  const t = rows[0];
+  const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(t.angleSlug)}/topic/${encodeURIComponent(t.topicSlug)}`;
+  const seoMeta = (t.seoMeta as any) || {};
+  const plain = (t.content as any)?.plainText as string | undefined;
+  const title = seoMeta.metaTitle || t.title || '';
+  const description = truncate(
+    seoMeta.metaDescription || t.excerpt || plain || `${t.title} — زاوية ${t.angleNameAr} على مُقترب من صحيفة سبق الإلكترونية.`,
+    220,
+  );
+  const image = t.heroImageUrl
+    ? ensureAbsoluteUrl(t.heroImageUrl, baseUrl)
+    : t.angleCover
+      ? ensureAbsoluteUrl(t.angleCover, baseUrl)
+      : `${baseUrl}/branding/sabq-og-image.png`;
+  const publishedTime = t.publishedAt ? new Date(t.publishedAt).toISOString() : undefined;
+  const modifiedTime = t.updatedAt ? new Date(t.updatedAt).toISOString() : publishedTime;
+
+  // المواضيع غير المنشورة: noindex (قد تُنشر لاحقاً) لكن نُبقي ميتا المشاركة.
+  if (t.status !== 'published') {
     return {
-      title: 'مقترب — سبق',
-      description: 'منصة مقترب على صحيفة سبق الإلكترونية.',
+      title: `${title} — مُقترب — سبق`,
+      description,
       canonicalUrl,
-      ogType: 'website',
-      ogImage: `${baseUrl}/branding/sabq-og-image.png`,
+      ogType: 'article',
+      ogImage: image,
       ogLocale: 'ar_SA',
       ogSiteName: 'صحيفة سبق الإلكترونية',
       twitterSite: '@sabq',
       robots: 'noindex, follow',
     };
   }
-  const w = writer[0];
-  const fullName = [w.firstName, w.lastName].filter(Boolean).join(' ') || slug;
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
+    "headline": title,
+    "description": description,
+    "image": [image],
+    "datePublished": publishedTime,
+    "dateModified": modifiedTime,
+    "publisher": {
+      "@type": "NewsMediaOrganization",
+      "name": "صحيفة سبق الإلكترونية",
+      "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` },
+    },
+    "articleSection": t.angleNameAr || undefined,
+  };
+
   return {
-    title: `${fullName} — مقترب — سبق`,
-    description: `صفحة الكاتب ${fullName} على منصة مقترب من صحيفة سبق الإلكترونية.`,
+    title: `${title} — مُقترب — سبق`,
+    description,
     canonicalUrl,
-    ogType: 'profile',
-    ogImage: `${baseUrl}/branding/sabq-og-image.png`,
+    ogType: 'article',
+    ogImage: image,
     ogLocale: 'ar_SA',
     ogSiteName: 'صحيفة سبق الإلكترونية',
+    publishedTime,
+    modifiedTime,
+    articleSection: t.angleNameAr || undefined,
     twitterSite: '@sabq',
+    jsonLd,
+    preloadImage: image,
   };
 }
 
@@ -1152,7 +1247,7 @@ async function handleLocalizedCategoryPage(slug: string, baseUrl: string, pathna
   };
 }
 
-async function resolveSeoData(route: { type: string; slug?: string; mvi?: string; pathname?: string }, baseUrl: string): Promise<SeoData | null> {
+async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: string; mvi?: string; pathname?: string }, baseUrl: string): Promise<SeoData | null> {
   switch (route.type) {
     case 'article':
       return handleArticlePage(route.slug!, baseUrl, 'article');
@@ -1175,7 +1270,9 @@ async function resolveSeoData(route: { type: string; slug?: string; mvi?: string
     case 'reporter-en':
       return handleReporterPage(route.slug!, baseUrl, 'en');
     case 'muqtarab':
-      return handleMuqtarabPage(route.slug!, baseUrl);
+      return handleMuqtarabAnglePage(route.slug!, baseUrl);
+    case 'muqtarab-topic':
+      return handleMuqtarabTopicPage(route.angleSlug!, route.slug!, baseUrl);
     case 'omq':
       return handleOmqPage(route.slug!, baseUrl);
     case 'world-day':
@@ -1271,7 +1368,7 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       const ARTICLE_LIKE = new Set([
         "article", "opinion", "en-article", "ur-article",
         "keyword", "keyword-en", "reporter", "reporter-en",
-        "muqtarab", "omq", "world-day", "category", "category-localized",
+        "muqtarab", "muqtarab-topic", "omq", "world-day", "category", "category-localized",
       ]);
       if (ARTICLE_LIKE.has(route.type)) {
         console.log(`[SEO/404] Unknown ${route.type}: ${route.slug || pathname} — returning 404`);

@@ -22,6 +22,7 @@ import { users, roles, userRoles, type AngleSubmission, type Angle, type User } 
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import bcrypt from "bcrypt";
+import { transliterateToEnglish, generateEnglishSlug } from "../utils/slugTransliterator";
 import { logActivity, invalidateUserPermissionCache } from "../rbac";
 import { invalidateUserSessionCache } from "../auth";
 import { sendEmailNotification } from "./email";
@@ -47,12 +48,17 @@ function generatePassword(): string {
   return password;
 }
 
+// سلق إنجليزي قابل للقراءة من الاسم العربي (تحويل صوتي) + لاحقة فريدة قصيرة.
+// مثل المقالات: لا عربي في الرابط. fallback لـ nanoid لو التحويل فارغ.
 function buildAngleSlug(angleName: string): string {
-  const base = angleName
-    .toLowerCase()
+  const base = transliterateToEnglish(angleName)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
     .replace(/\s+/g, "-")
-    .replace(/[^\w؀-ۿ-]/g, "");
-  return `${base}-${Date.now().toString(36)}`;
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return base ? `${base}-${nanoid(5)}` : generateEnglishSlug();
 }
 
 /**
