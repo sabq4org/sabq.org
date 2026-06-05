@@ -2,11 +2,12 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAngleDetail } from "@/lib/muqtarab";
 import { ArrowRight, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
@@ -103,7 +104,7 @@ export default function MuqtarabDetail() {
   // Loading state
   if (isLoadingAngle) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
         
         {/* Breadcrumbs skeleton */}
@@ -121,7 +122,7 @@ export default function MuqtarabDetail() {
         </div>
 
         {/* Content skeleton */}
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="space-y-6">
             <Skeleton className="h-8 w-48" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -131,6 +132,7 @@ export default function MuqtarabDetail() {
             </div>
           </div>
         </main>
+        <Footer />
       </div>
     );
   }
@@ -138,7 +140,7 @@ export default function MuqtarabDetail() {
   // Error or not found state
   if (angleError || !angle) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
         
         {/* Breadcrumbs */}
@@ -156,7 +158,7 @@ export default function MuqtarabDetail() {
           </div>
         </div>
 
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-4" data-testid="text-error-title">
               الزاوية غير موجودة
@@ -174,15 +176,17 @@ export default function MuqtarabDetail() {
             </Button>
           </div>
         </main>
+        <Footer />
       </div>
     );
   }
 
   const Icon = getIconComponent(angle.iconKey || 'Circle');
   const theme = angleTheme(angle.colorHex);
+  const writer = angle.writer ?? null;
 
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl" style={theme.vars}>
+    <div className="relative min-h-screen bg-background flex flex-col" dir="rtl" style={theme.vars}>
       {/* Glassmorphism — هالات ملوّنة بلون الزاوية في خلفية الصفحة */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div
@@ -195,7 +199,7 @@ export default function MuqtarabDetail() {
         />
       </div>
 
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-col flex-1">
       <Header user={user} />
 
       {/* Breadcrumbs */}
@@ -262,6 +266,55 @@ export default function MuqtarabDetail() {
               {angle.nameAr}
             </h1>
 
+            {/* Writer */}
+            {writer && (
+              <div
+                className="flex items-center justify-center gap-3 mb-5"
+                data-testid="writer-byline"
+              >
+                {writer.slug ? (
+                  <Link href={`/reporter/${writer.slug}`}>
+                    <Avatar className="h-12 w-12 ring-2 ring-white/30 cursor-pointer hover:ring-white/50 transition-all">
+                      {writer.avatar && (
+                        <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
+                      )}
+                      <AvatarFallback className="bg-white/20 text-white text-sm font-bold">
+                        {writer.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Link>
+                ) : (
+                  <Avatar className="h-12 w-12 ring-2 ring-white/30">
+                    {writer.avatar && (
+                      <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
+                    )}
+                    <AvatarFallback className="bg-white/20 text-white text-sm font-bold">
+                      {writer.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="text-right">
+                  {writer.slug ? (
+                    <Link href={`/reporter/${writer.slug}`}>
+                      <a
+                        className="font-bold text-lg text-white hover:text-white/90 transition-colors"
+                        data-testid="text-writer-name"
+                      >
+                        {writer.name}
+                      </a>
+                    </Link>
+                  ) : (
+                    <p className="font-bold text-lg text-white" data-testid="text-writer-name">
+                      {writer.name}
+                    </p>
+                  )}
+                  <p className="text-sm text-white/75" data-testid="text-writer-role">
+                    كاتب الزاوية
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             {angle.shortDesc && (
               <p className="text-lg md:text-xl text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed" data-testid="text-angle-description">
@@ -313,7 +366,7 @@ export default function MuqtarabDetail() {
       </div>
 
       {/* Topics Section */}
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2" data-testid="heading-topics">
             <span
@@ -422,6 +475,8 @@ export default function MuqtarabDetail() {
           </div>
         )}
       </main>
+
+      <Footer />
       </div>
     </div>
   );

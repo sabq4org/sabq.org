@@ -931,6 +931,7 @@ export interface IStorage {
   getAllAngles(activeOnly?: boolean): Promise<Angle[]>;
   getAnglesWithStats(activeOnly?: boolean): Promise<Array<Angle & { topicCount: number; writerName: string | null; writerAvatar: string | null }>>;
   getAngleBySlug(slug: string): Promise<Angle | undefined>;
+  getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null>;
   getAngleById(id: string): Promise<Angle | undefined>;
   createAngle(angle: InsertAngle): Promise<Angle>;
   updateAngle(id: string, angle: Partial<InsertAngle>): Promise<Angle>;
@@ -945,6 +946,8 @@ export interface IStorage {
     status?: 'draft' | 'published' | 'archived';
     limit?: number;
     offset?: number;
+    /** Omit heavy jsonb columns (content, attachments, seoMeta) for admin list views. */
+    listOnly?: boolean;
   }): Promise<{ topics: Topic[]; total: number }>;
   getTopicBySlug(angleId: string, slug: string): Promise<Topic | undefined>;
   getTopicById(id: string): Promise<Topic | undefined>;
@@ -10034,6 +10037,33 @@ export class DatabaseStorage implements IStorage {
     return angle;
   }
 
+  async getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null> {
+    if (!managerUserId) return null;
+
+    const [row] = await db
+      .select({
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        staffSlug: staff.slug,
+        staffNameAr: staff.nameAr,
+        staffProfileImage: staff.profileImage,
+      })
+      .from(users)
+      .leftJoin(staff, eq(staff.userId, users.id))
+      .where(eq(users.id, managerUserId))
+      .limit(1);
+
+    if (!row) return null;
+
+    const name = (row.staffNameAr || [row.firstName, row.lastName].filter(Boolean).join(" ").trim()) || "كاتب الزاوية";
+    return {
+      name,
+      avatar: row.staffProfileImage || row.profileImageUrl || null,
+      slug: row.staffSlug || null,
+    };
+  }
+
   async getAngleById(id: string): Promise<Angle | undefined> {
     const [angle] = await db
       .select()
@@ -10147,6 +10177,7 @@ export class DatabaseStorage implements IStorage {
     status?: 'draft' | 'published' | 'archived';
     limit?: number;
     offset?: number;
+    listOnly?: boolean;
   }): Promise<{ topics: Topic[]; total: number }> {
     const conditions = [eq(topics.angleId, angleId)];
     
@@ -10160,10 +10191,30 @@ export class DatabaseStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(topics)
       .where(whereClause);
+
+    const listColumns = {
+      id: topics.id,
+      angleId: topics.angleId,
+      title: topics.title,
+      slug: topics.slug,
+      excerpt: topics.excerpt,
+      heroImageUrl: topics.heroImageUrl,
+      status: topics.status,
+      publishedAt: topics.publishedAt,
+      viewCount: topics.viewCount,
+      createdBy: topics.createdBy,
+      updatedBy: topics.updatedBy,
+      submittedAt: topics.submittedAt,
+      reviewedBy: topics.reviewedBy,
+      reviewedAt: topics.reviewedAt,
+      reviewNotes: topics.reviewNotes,
+      createdAt: topics.createdAt,
+      updatedAt: topics.updatedAt,
+    };
     
-    let query = db
-      .select()
-      .from(topics)
+    let query = (options?.listOnly
+      ? db.select(listColumns).from(topics)
+      : db.select().from(topics))
       .where(whereClause)
       .orderBy(desc(topics.createdAt));
     
@@ -10177,7 +10228,7 @@ export class DatabaseStorage implements IStorage {
     const topicsList = await query;
     
     return {
-      topics: topicsList,
+      topics: topicsList as Topic[],
       total: Number(totalCount),
     };
   }

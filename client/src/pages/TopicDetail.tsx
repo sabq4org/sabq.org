@@ -3,13 +3,37 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { ArrowRight, ChevronRight, Share2, Calendar, Home, Circle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  ArrowRight,
+  ChevronRight,
+  Share2,
+  Calendar,
+  Home,
+  Circle,
+  User,
+  Sparkles,
+} from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme, withAlpha } from "@/lib/angleTheme";
 import type { Topic, Angle } from "@shared/schema";
+
+type AngleWriter = {
+  name: string;
+  avatar: string | null;
+  slug: string | null;
+};
+
+type TopicDetailResponse = {
+  topic: Topic;
+  angle: Angle;
+  writer: AngleWriter | null;
+};
 
 function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "";
@@ -21,55 +45,183 @@ function formatDate(date: Date | string | null | undefined): string {
   });
 }
 
-function renderContentBlock(block: {
-  type: "text" | "image" | "video" | "link" | "embed" | "quote" | "heading";
-  content?: string;
-  url?: string;
-  alt?: string;
-  caption?: string;
-  level?: number;
-  metadata?: Record<string, any>;
-}, index: number) {
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function stripDuplicateExcerptFromHtml(html: string, excerpt: string): string {
+  const normalized = normalizeText(excerpt);
+  if (!normalized) return html;
+
+  return html.replace(/^<p[^>]*>([\s\S]*?)<\/p>\s*/i, (match, inner) => {
+    const text = inner.replace(/<[^>]+>/g, " ");
+    return normalizeText(text) === normalized ? "" : match;
+  });
+}
+
+function prepareTopicContent(topic: Topic) {
+  const excerpt = topic.excerpt?.trim();
+  const content = topic.content;
+  if (!content || !excerpt) return content;
+
+  if (content.blocks?.length) {
+    const first = content.blocks[0];
+    if (
+      first.type === "text" &&
+      first.content &&
+      normalizeText(first.content) === normalizeText(excerpt)
+    ) {
+      return { ...content, blocks: content.blocks.slice(1) };
+    }
+  }
+
+  if (content.plainText) {
+    const plain = content.plainText.trim();
+    if (normalizeText(plain).startsWith(normalizeText(excerpt))) {
+      const remainder = plain.slice(excerpt.length).trim();
+      return { ...content, plainText: remainder || null };
+    }
+  }
+
+  if (content.rawHtml) {
+    const cleaned = stripDuplicateExcerptFromHtml(content.rawHtml, excerpt);
+    if (cleaned !== content.rawHtml) {
+      return { ...content, rawHtml: cleaned };
+    }
+  }
+
+  return content;
+}
+
+function WriterByline({
+  writer,
+  angleName,
+  publishedAt,
+  variant = "default",
+}: {
+  writer: AngleWriter | null;
+  angleName: string;
+  publishedAt?: Date | string | null;
+  variant?: "default" | "hero";
+}) {
+  if (!writer) return null;
+
+  const isHero = variant === "hero";
+  const avatar = (
+    <Avatar
+      className={`${isHero ? "h-11 w-11 ring-2 ring-white/30" : "h-12 w-12"} shrink-0`}
+    >
+      {writer.avatar && (
+        <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
+      )}
+      <AvatarFallback
+        className={
+          isHero
+            ? "bg-white/20 text-white text-sm font-bold"
+            : "bg-[color:var(--angle-soft)] text-[color:var(--angle)] text-sm font-bold"
+        }
+      >
+        {writer.name.charAt(0)}
+      </AvatarFallback>
+    </Avatar>
+  );
+
+  const nameEl = writer.slug ? (
+    <Link href={`/reporter/${writer.slug}`}>
+      <a
+        className={`font-bold text-base transition-colors ${
+          isHero
+            ? "text-white hover:text-white/90"
+            : "text-foreground hover:text-[color:var(--angle)]"
+        }`}
+        data-testid="text-writer-name"
+      >
+        {writer.name}
+      </a>
+    </Link>
+  ) : (
+    <p
+      className={`font-bold text-base ${isHero ? "text-white" : "text-foreground"}`}
+      data-testid="text-writer-name"
+    >
+      {writer.name}
+    </p>
+  );
+
+  return (
+    <div
+      className={`flex items-center gap-3 ${isHero ? "mt-3" : "mt-4"}`}
+      data-testid="writer-byline"
+    >
+      {writer.slug ? <Link href={`/reporter/${writer.slug}`}>{avatar}</Link> : avatar}
+      <div className="min-w-0">
+        {nameEl}
+        <p
+          className={`text-sm ${isHero ? "text-white/75" : "text-muted-foreground"}`}
+          data-testid="text-writer-role"
+        >
+          كاتب زاوية {angleName}
+        </p>
+        {publishedAt && isHero && (
+          <div className="mt-1 flex items-center gap-1.5 text-white/70 text-xs">
+            <Calendar className="h-3.5 w-3.5" />
+            <span data-testid="text-published-date-hero">{formatDate(publishedAt)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function renderContentBlock(
+  block: {
+    type: "text" | "image" | "video" | "link" | "embed" | "quote" | "heading";
+    content?: string;
+    url?: string;
+    alt?: string;
+    caption?: string;
+    level?: number;
+    metadata?: Record<string, unknown>;
+  },
+  index: number
+) {
   switch (block.type) {
-    case "heading":
+    case "heading": {
       const HeadingTag = `h${block.level || 2}` as keyof JSX.IntrinsicElements;
       const headingClasses = {
-        1: "text-3xl font-bold mb-4",
-        2: "text-2xl font-bold mb-3",
-        3: "text-xl font-semibold mb-2",
-        4: "text-lg font-semibold mb-2",
-        5: "text-base font-semibold mb-2",
-        6: "text-sm font-semibold mb-2",
+        1: "text-3xl font-bold mb-4 mt-8",
+        2: "text-2xl font-bold mb-3 mt-7",
+        3: "text-xl font-semibold mb-2 mt-6",
+        4: "text-lg font-semibold mb-2 mt-5",
+        5: "text-base font-semibold mb-2 mt-4",
+        6: "text-sm font-semibold mb-2 mt-4",
       };
       return (
-        <HeadingTag 
-          key={index} 
+        <HeadingTag
+          key={index}
           className={headingClasses[block.level as keyof typeof headingClasses || 2]}
           data-testid={`content-heading-${index}`}
         >
           {block.content}
         </HeadingTag>
       );
-    
+    }
+
     case "text":
       return (
-        <p 
-          key={index} 
-          className="text-foreground leading-relaxed mb-4"
+        <p
+          key={index}
+          className="text-foreground leading-[1.9] mb-5 text-lg"
           data-testid={`content-text-${index}`}
         >
           {block.content}
         </p>
       );
-    
+
     case "image":
       return (
-        <figure key={index} className="my-6" data-testid={`content-image-${index}`}>
-          <img 
-            src={block.url} 
-            alt={block.alt || ""} 
-            className="w-full rounded-lg"
-          />
+        <figure key={index} className="my-8" data-testid={`content-image-${index}`}>
+          <img src={block.url} alt={block.alt || ""} className="w-full rounded-xl" />
           {block.caption && (
             <figcaption className="text-sm text-muted-foreground mt-2 text-center">
               {block.caption}
@@ -77,39 +229,33 @@ function renderContentBlock(block: {
           )}
         </figure>
       );
-    
+
     case "quote":
       return (
-        <blockquote 
-          key={index} 
-          className="border-r-4 border-[color:var(--angle,#6366f1)] pr-4 my-6 italic text-muted-foreground"
+        <blockquote
+          key={index}
+          className="border-r-4 border-[color:var(--angle,#6366f1)] pr-5 my-8 italic text-lg text-muted-foreground leading-relaxed"
           data-testid={`content-quote-${index}`}
         >
           {block.content}
         </blockquote>
       );
-    
+
     case "video":
       return (
-        <div key={index} className="my-6" data-testid={`content-video-${index}`}>
-          <video 
-            src={block.url} 
-            controls 
-            className="w-full rounded-lg"
-          >
+        <div key={index} className="my-8" data-testid={`content-video-${index}`}>
+          <video src={block.url} controls className="w-full rounded-xl">
             Your browser does not support the video tag.
           </video>
           {block.caption && (
-            <p className="text-sm text-muted-foreground mt-2 text-center">
-              {block.caption}
-            </p>
+            <p className="text-sm text-muted-foreground mt-2 text-center">{block.caption}</p>
           )}
         </div>
       );
-    
+
     case "link":
       return (
-        <a 
+        <a
           key={index}
           href={block.url}
           target="_blank"
@@ -120,20 +266,20 @@ function renderContentBlock(block: {
           {block.content || block.url}
         </a>
       );
-    
+
     case "embed":
       return (
-        <div 
+        <div
           key={index}
-          className="my-6"
+          className="my-8"
           data-testid={`content-embed-${index}`}
           dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(block.content || "") }}
         />
       );
-    
+
     default:
       return (
-        <p key={index} className="mb-4" data-testid={`content-default-${index}`}>
+        <p key={index} className="mb-5 text-lg leading-[1.9]" data-testid={`content-default-${index}`}>
           {block.content}
         </p>
       );
@@ -148,11 +294,11 @@ export default function TopicDetail() {
     retry: false,
   });
 
-  const { 
-    data: topicData, 
-    isLoading: isLoadingTopic, 
-    error: topicError 
-  } = useQuery<{ topic: Topic; angle: Angle }>({
+  const {
+    data: topicData,
+    isLoading: isLoadingTopic,
+    error: topicError,
+  } = useQuery<TopicDetailResponse>({
     queryKey: ["/api/muqtarab/angles", angleSlug, "topics", topicSlug],
     queryFn: async () => {
       const res = await fetch(`/api/muqtarab/angles/${angleSlug}/topics/${topicSlug}`);
@@ -162,10 +308,22 @@ export default function TopicDetail() {
     enabled: !!angleSlug && !!topicSlug,
   });
 
+  const { data: relatedData } = useQuery<{ topics: Topic[] }>({
+    queryKey: ["/api/muqtarab/angles", angleSlug, "topics", "related"],
+    queryFn: async () => {
+      const res = await fetch(`/api/muqtarab/angles/${angleSlug}/topics?limit=5`);
+      if (!res.ok) throw new Error("Failed to fetch related topics");
+      return res.json();
+    },
+    enabled: !!angleSlug && !!topicData?.topic?.id,
+  });
+
   const topic = topicData?.topic;
   const angle = topicData?.angle;
+  const writer = topicData?.writer ?? null;
 
-  // تسجيل مشاهدة مرة واحدة لكل موضوع (الخادم يَعُدّ المنشور فقط؛ عام بلا CSRF)
+  const relatedTopics = (relatedData?.topics ?? []).filter((t) => t.id !== topic?.id).slice(0, 3);
+
   const viewedRef = useRef<string | null>(null);
   useEffect(() => {
     if (topic?.id && viewedRef.current !== topic.id) {
@@ -228,26 +386,21 @@ export default function TopicDetail() {
     }
   };
 
-  const isLoading = isLoadingTopic;
-
-  if (isLoading) {
+  if (isLoadingTopic) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
-
         <div className="border-b bg-muted/30">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <Skeleton className="h-4 w-64" />
           </div>
         </div>
-
         <Skeleton className="w-full h-64 md:h-96" />
-
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="max-w-4xl mx-auto space-y-6">
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-3xl mx-auto space-y-6">
             <Skeleton className="h-10 w-3/4" />
-            <Skeleton className="h-6 w-1/3" />
-            <Separator />
+            <Skeleton className="h-14 w-1/2" />
+            <Skeleton className="h-24 w-full rounded-2xl" />
             <div className="space-y-4">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-full" />
@@ -255,15 +408,15 @@ export default function TopicDetail() {
             </div>
           </div>
         </main>
+        <Footer />
       </div>
     );
   }
 
   if (topicError || !topic || !angle) {
     return (
-      <div className="min-h-screen bg-background" dir="rtl">
+      <div className="min-h-screen bg-background flex flex-col" dir="rtl">
         <Header user={user} />
-
         <div className="border-b bg-muted/30">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -283,8 +436,7 @@ export default function TopicDetail() {
             </div>
           </div>
         </div>
-
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-4" data-testid="text-error-title">
               الموضوع غير موجود
@@ -302,127 +454,152 @@ export default function TopicDetail() {
             </Button>
           </div>
         </main>
+        <Footer />
       </div>
     );
   }
 
-  const contentBlocks = topic.content?.blocks || [];
-  const hasContent = contentBlocks.length > 0 || topic.content?.rawHtml || topic.content?.plainText;
+  const displayContent = prepareTopicContent(topic);
+  const contentBlocks = displayContent?.blocks || [];
+  const hasContent =
+    contentBlocks.length > 0 || displayContent?.rawHtml || displayContent?.plainText;
   const theme = angleTheme(angle.colorHex);
   const AngleIcon = getLucideIcon(angle.iconKey, Circle);
 
   return (
-    <div className="relative min-h-screen bg-background" dir="rtl" style={theme.vars}>
-      {/* Glassmorphism — هالة ملوّنة بلون الزاوية خلف المحتوى */}
+    <div
+      className="relative min-h-screen bg-background flex flex-col"
+      dir="rtl"
+      style={theme.vars}
+    >
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div
-          className="absolute -top-32 -left-24 h-96 w-96 rounded-full blur-3xl opacity-30"
+          className="absolute -top-32 -left-24 h-96 w-96 rounded-full blur-3xl opacity-25"
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+        />
+        <div
+          className="absolute bottom-0 right-0 h-80 w-80 rounded-full blur-3xl opacity-15"
           style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
         />
       </div>
 
-      {/* شريط هوية الزاوية العلوي */}
-      <div className="h-1.5 w-full" style={{ background: theme.gradient }} />
+      <div className="h-1.5 w-full shrink-0" style={{ background: theme.gradient }} />
 
-      <div className="relative z-10">
-      <Header user={user} />
+      <div className="relative z-10 flex flex-col flex-1">
+        <Header user={user} />
 
-      <div className="border-b bg-muted/30">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-            <Link href="/">
-              <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-home">
-                <Home className="h-4 w-4" />
-              </a>
-            </Link>
-            <ChevronRight className="h-4 w-4" />
-            <Link href="/muqtarab">
-              <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
-                مُقترب
-              </a>
-            </Link>
-            <ChevronRight className="h-4 w-4" />
-            <Link href={`/muqtarab/${angleSlug}`}>
-              <a className="transition-colors hover:text-[color:var(--angle)]" data-testid="link-breadcrumb-angle">
-                {angle.nameAr}
-              </a>
-            </Link>
-            <ChevronRight className="h-4 w-4" />
-            <span className="text-foreground line-clamp-1" data-testid="text-breadcrumb-topic">
-              {topic.title}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {topic.heroImageUrl && (
-        <div className="relative w-full h-64 md:h-96 overflow-hidden" data-testid="section-hero-image">
-          <img
-            src={topic.heroImageUrl}
-            alt={topic.title}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
-            <div className="container mx-auto max-w-4xl">
+        <div className="border-b bg-muted/30">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+              <Link href="/">
+                <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-home">
+                  <Home className="h-4 w-4" />
+                </a>
+              </Link>
+              <ChevronRight className="h-4 w-4" />
+              <Link href="/muqtarab">
+                <a className="hover:text-foreground transition-colors" data-testid="link-breadcrumb-muqtarab">
+                  مُقترب
+                </a>
+              </Link>
+              <ChevronRight className="h-4 w-4" />
               <Link href={`/muqtarab/${angleSlug}`}>
                 <a
-                  className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium text-white backdrop-blur-sm"
-                  style={{ backgroundColor: withAlpha(angle.colorHex, 0.85) }}
-                  data-testid="chip-angle"
+                  className="transition-colors hover:text-[color:var(--angle)]"
+                  data-testid="link-breadcrumb-angle"
                 >
-                  <AngleIcon className="h-4 w-4" />
                   {angle.nameAr}
                 </a>
               </Link>
-              <h1 
-                className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4"
-                data-testid="heading-topic-title"
-              >
+              <ChevronRight className="h-4 w-4" />
+              <span className="text-foreground line-clamp-1" data-testid="text-breadcrumb-topic">
                 {topic.title}
-              </h1>
-              {topic.publishedAt && (
-                <div className="flex items-center gap-2 text-white/80 text-sm">
-                  <Calendar className="h-4 w-4" />
-                  <span data-testid="text-published-date">
-                    {formatDate(topic.publishedAt)}
-                  </span>
-                </div>
-              )}
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="max-w-4xl mx-auto">
-          {!topic.heroImageUrl && (
-            <div className="mb-8">
-              <Link href={`/muqtarab/${angleSlug}`}>
-                <a
-                  className="mb-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
-                  style={{ backgroundColor: theme.soft, color: theme.color }}
-                  data-testid="chip-angle"
+        {topic.heroImageUrl ? (
+          <div className="relative w-full h-72 md:h-[28rem] overflow-hidden" data-testid="section-hero-image">
+            <img
+              src={topic.heroImageUrl}
+              alt={topic.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
+              <div className="container mx-auto max-w-3xl">
+                <Link href={`/muqtarab/${angleSlug}`}>
+                  <a
+                    className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium text-white backdrop-blur-sm"
+                    style={{ backgroundColor: withAlpha(angle.colorHex, 0.85) }}
+                    data-testid="chip-angle"
+                  >
+                    <AngleIcon className="h-4 w-4" />
+                    {angle.nameAr}
+                  </a>
+                </Link>
+                <h1
+                  className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold text-white leading-tight"
+                  data-testid="heading-topic-title"
                 >
-                  <AngleIcon className="h-4 w-4" />
-                  {angle.nameAr}
-                </a>
-              </Link>
-              <h1 
-                className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"
-                data-testid="heading-topic-title"
-              >
-                {topic.title}
-              </h1>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                {topic.publishedAt && (
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Calendar className="h-4 w-4" />
-                    <span data-testid="text-published-date">
-                      {formatDate(topic.publishedAt)}
-                    </span>
-                  </div>
-                )}
+                  {topic.title}
+                </h1>
+                <WriterByline
+                  writer={writer}
+                  angleName={angle.nameAr}
+                  publishedAt={topic.publishedAt}
+                  variant="hero"
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+          <div className="max-w-3xl mx-auto">
+            {!topic.heroImageUrl && (
+              <header className="mb-8">
+                <Link href={`/muqtarab/${angleSlug}`}>
+                  <a
+                    className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
+                    style={{ backgroundColor: theme.soft, color: theme.color }}
+                    data-testid="chip-angle"
+                  >
+                    <AngleIcon className="h-4 w-4" />
+                    {angle.nameAr}
+                  </a>
+                </Link>
+                <h1
+                  className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold leading-tight text-foreground"
+                  data-testid="heading-topic-title"
+                >
+                  {topic.title}
+                </h1>
+                <WriterByline writer={writer} angleName={angle.nameAr} />
+                <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
+                  {topic.publishedAt && (
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                      <Calendar className="h-4 w-4" />
+                      <span data-testid="text-published-date">{formatDate(topic.publishedAt)}</span>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleShare}
+                    className="gap-2 border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
+                    data-testid="button-share"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    مشاركة
+                  </Button>
+                </div>
+              </header>
+            )}
+
+            {topic.heroImageUrl && (
+              <div className="flex items-center justify-end gap-4 mb-8">
                 <Button
                   variant="outline"
                   size="sm"
@@ -434,97 +611,148 @@ export default function TopicDetail() {
                   مشاركة
                 </Button>
               </div>
-              <Separator className="mt-6" />
-            </div>
-          )}
+            )}
 
-          {topic.heroImageUrl && (
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleShare}
-                className="gap-2 border-[color:var(--angle-border)] text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
-                data-testid="button-share"
+            {topic.excerpt && (
+              <aside
+                className="mb-10 rounded-2xl border p-6 md:p-7"
+                style={{ backgroundColor: theme.softer, borderColor: theme.border }}
+                data-testid="section-excerpt"
               >
-                <Share2 className="h-4 w-4" />
-                مشاركة
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="h-4 w-4" style={{ color: theme.color }} />
+                  <p
+                    className="text-xs font-semibold tracking-wide uppercase"
+                    style={{ color: theme.color }}
+                  >
+                    الموجز
+                  </p>
+                </div>
+                <p
+                  className="text-lg md:text-xl leading-relaxed text-foreground/90"
+                  data-testid="text-excerpt"
+                >
+                  {topic.excerpt}
+                </p>
+              </aside>
+            )}
+
+            <article
+              className="prose prose-lg max-w-none prose-headings:text-foreground prose-p:text-lg prose-p:leading-[1.9] prose-p:mb-5 prose-a:text-[color:var(--angle)]"
+              data-testid="section-content"
+            >
+              {contentBlocks.length > 0 ? (
+                contentBlocks.map((block, index) => renderContentBlock(block, index))
+              ) : displayContent?.rawHtml ? (
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(displayContent.rawHtml),
+                  }}
+                  data-testid="content-raw-html"
+                />
+              ) : displayContent?.plainText ? (
+                <p className="text-lg leading-[1.9]" data-testid="content-plain-text">
+                  {displayContent.plainText}
+                </p>
+              ) : (
+                !hasContent && (
+                  <p className="text-muted-foreground text-center py-12" data-testid="text-no-content">
+                    لا يوجد محتوى متاح لهذا الموضوع
+                  </p>
+                )
+              )}
+            </article>
+
+            {angle.writerSignature && (
+              <div
+                className="mt-12 rounded-2xl border p-6 flex items-start gap-4"
+                style={{ backgroundColor: theme.softer, borderColor: theme.border }}
+                data-testid="writer-signature"
+              >
+                <span
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.soft, color: theme.color }}
+                >
+                  <User className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold mb-1" style={{ color: theme.color }}>
+                    توقيع الكاتب
+                  </p>
+                  <p
+                    className="text-base font-medium leading-relaxed whitespace-pre-wrap text-foreground"
+                  >
+                    {angle.writerSignature}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {relatedTopics.length > 0 && (
+              <section className="mt-14" data-testid="section-related-topics">
+                <h2
+                  className="text-xl font-bold mb-5 flex items-center gap-2"
+                  style={{ color: theme.color }}
+                >
+                  <AngleIcon className="h-5 w-5" />
+                  المزيد من {angle.nameAr}
+                </h2>
+                <div className="grid gap-4">
+                  {relatedTopics.map((related) => (
+                    <Link
+                      key={related.id}
+                      href={`/muqtarab/${angleSlug}/topic/${related.slug}`}
+                    >
+                      <Card className="group hover:shadow-md transition-shadow border-[color:var(--angle-border)]/40 hover:border-[color:var(--angle-border)]">
+                        <CardContent className="p-4">
+                          <h3 className="font-semibold text-foreground group-hover:text-[color:var(--angle)] transition-colors line-clamp-2">
+                            {related.title}
+                          </h3>
+                          {related.excerpt && (
+                            <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
+                              {related.excerpt}
+                            </p>
+                          )}
+                          {related.publishedAt && (
+                            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {formatDate(related.publishedAt)}
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <Separator className="my-10" />
+
+            <div className="flex items-center justify-between gap-4 flex-wrap pb-4">
+              <Button
+                variant="ghost"
+                asChild
+                className="gap-2 text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
+                data-testid="button-back-to-angle"
+              >
+                <Link href={`/muqtarab/${angleSlug}`}>
+                  <a className="flex items-center gap-2">
+                    <ArrowRight className="h-4 w-4" />
+                    العودة إلى {angle.nameAr}
+                  </a>
+                </Link>
+              </Button>
+              <Button variant="outline" asChild className="gap-2" data-testid="button-explore-angles">
+                <Link href="/muqtarab">
+                  <a>استكشف المزيد من الزوايا</a>
+                </Link>
               </Button>
             </div>
-          )}
-
-          {topic.excerpt && (
-            <p 
-              className="text-xl text-muted-foreground mb-8 leading-relaxed"
-              data-testid="text-excerpt"
-            >
-              {topic.excerpt}
-            </p>
-          )}
-
-          <article className="prose prose-lg max-w-none" data-testid="section-content">
-            {contentBlocks.length > 0 ? (
-              contentBlocks.map((block, index) => renderContentBlock(block, index))
-            ) : topic.content?.rawHtml ? (
-              <div 
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(topic.content.rawHtml) }} 
-                data-testid="content-raw-html"
-              />
-            ) : topic.content?.plainText ? (
-              <p data-testid="content-plain-text">{topic.content.plainText}</p>
-            ) : !hasContent && (
-              <p className="text-muted-foreground text-center py-8" data-testid="text-no-content">
-                لا يوجد محتوى متاح لهذا الموضوع
-              </p>
-            )}
-          </article>
-
-          {angle.writerSignature && (
-            <div
-              className="mt-10 rounded-xl border p-5 flex items-start gap-3"
-              style={{ backgroundColor: theme.softer, borderColor: theme.border }}
-              data-testid="writer-signature"
-            >
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                style={{ backgroundColor: theme.soft, color: theme.color }}
-              >
-                <AngleIcon className="h-5 w-5" />
-              </span>
-              <p
-                className="text-base font-medium leading-relaxed whitespace-pre-wrap"
-                style={{ color: theme.color }}
-              >
-                {angle.writerSignature}
-              </p>
-            </div>
-          )}
-
-          <Separator className="my-8" />
-
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <Button
-              variant="ghost"
-              asChild
-              className="gap-2 text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
-              data-testid="button-back-to-angle"
-            >
-              <Link href={`/muqtarab/${angleSlug}`}>
-                <a className="flex items-center gap-2">
-                  <ArrowRight className="h-4 w-4" />
-                  العودة إلى {angle.nameAr}
-                </a>
-              </Link>
-            </Button>
-            <Button variant="outline" asChild className="gap-2" data-testid="button-explore-angles">
-              <Link href="/muqtarab">
-                <a>استكشف المزيد من الزوايا</a>
-              </Link>
-            </Button>
           </div>
-        </div>
-      </main>
+        </main>
+
+        <Footer />
       </div>
     </div>
   );
