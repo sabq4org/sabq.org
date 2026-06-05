@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { 
   Clock, Tag, Flame, Zap, Eye, BarChart3,
   Bell, BellOff, Filter, SortDesc, Newspaper, FileText,
-  PenTool, Brain
+  PenTool, Brain, Sparkles
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -42,6 +42,24 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
 type SortOption = 'newest' | 'oldest' | 'views' | 'comments';
 type FilterOption = 'all' | 'news' | 'opinion' | 'analysis' | 'infographic';
 
+type MuqtarabKeywordTopic = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  heroImageUrl: string | null;
+  publishedAt: string | null;
+  viewCount: number;
+  angleSlug: string;
+  angleNameAr: string;
+  angleColorHex: string | null;
+};
+
+type KeywordResponse = {
+  articles: ArticleWithDetails[];
+  muqtarabTopics: MuqtarabKeywordTopic[];
+};
+
 export default function KeywordPage() {
   const params = useParams();
   const keyword = decodeURIComponent(params.keyword || "");
@@ -55,16 +73,26 @@ export default function KeywordPage() {
     retry: false,
   });
 
-  const { data: articles, isLoading } = useQuery<ArticleWithDetails[]>({
+  const { data: keywordData, isLoading } = useQuery<KeywordResponse>({
     queryKey: ["/api/keyword", keyword],
     queryFn: async () => {
       const res = await fetch(`/api/keyword/${encodeURIComponent(keyword)}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch articles");
-      return res.json();
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return { articles: data, muqtarabTopics: [] };
+      }
+      return {
+        articles: Array.isArray(data.articles) ? data.articles : [],
+        muqtarabTopics: Array.isArray(data.muqtarabTopics) ? data.muqtarabTopics : [],
+      };
     },
   });
+
+  const articles = keywordData?.articles ?? [];
+  const muqtarabTopics = keywordData?.muqtarabTopics ?? [];
 
   const { data: followedKeywords } = useQuery<any[]>({
     queryKey: ["/api/keywords/followed"],
@@ -110,14 +138,26 @@ export default function KeywordPage() {
   });
 
   const stats = useMemo(() => {
-    if (!articles) return { total: 0, views: 0, latest: null, breaking: 0 };
+    const articleViews = articles.reduce((sum, a) => sum + (a.views || 0), 0);
+    const topicViews = muqtarabTopics.reduce((sum, t) => sum + (t.viewCount || 0), 0);
+    const latestArticle = articles[0]?.publishedAt;
+    const latestTopic = muqtarabTopics[0]?.publishedAt;
+    const latest =
+      latestArticle && latestTopic
+        ? new Date(latestArticle) > new Date(latestTopic)
+          ? latestArticle
+          : latestTopic
+        : latestArticle || latestTopic || null;
+
     return {
-      total: articles.length,
-      views: articles.reduce((sum, a) => sum + (a.views || 0), 0),
-      latest: articles.length > 0 ? articles[0].publishedAt : null,
-      breaking: articles.filter(a => a.newsType === 'breaking').length,
+      total: articles.length + muqtarabTopics.length,
+      articleCount: articles.length,
+      topicCount: muqtarabTopics.length,
+      views: articleViews + topicViews,
+      latest,
+      breaking: articles.filter((a) => a.newsType === "breaking").length,
     };
-  }, [articles]);
+  }, [articles, muqtarabTopics]);
 
   const filteredAndSortedArticles = useMemo(() => {
     if (!articles) return [];
@@ -194,8 +234,14 @@ export default function KeywordPage() {
                   <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1.5">
                       <Newspaper className="h-4 w-4" />
-                      <strong className="text-foreground">{formatNumber(stats.total)}</strong> مقال
+                      <strong className="text-foreground">{formatNumber(stats.articleCount)}</strong> مقال
                     </span>
+                    {stats.topicCount > 0 && (
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4" />
+                        <strong className="text-foreground">{formatNumber(stats.topicCount)}</strong> موضوع مُقترب
+                      </span>
+                    )}
                     <span className="flex items-center gap-1.5">
                       <Eye className="h-4 w-4" />
                       <strong className="text-foreground">{formatNumber(stats.views)}</strong> مشاهدة
@@ -543,24 +589,99 @@ export default function KeywordPage() {
             </>
           )}
 
+          {/* Muqtarab Topics */}
+          {!isLoading && filterBy === "all" && muqtarabTopics.length > 0 && (
+            <section className="mt-12" data-testid="keyword-muqtarab-topics">
+              <div className="flex items-center gap-2 mb-6">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h2 className="text-xl font-bold">مواضيع مُقترب</h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {muqtarabTopics.map((topic) => {
+                  const timeAgo = topic.publishedAt
+                    ? formatDistanceToNow(new Date(topic.publishedAt), {
+                        addSuffix: true,
+                        locale: arSA,
+                      })
+                    : null;
+
+                  return (
+                    <Link
+                      key={topic.id}
+                      href={`/muqtarab/${topic.angleSlug}/topic/${topic.slug}`}
+                    >
+                      <Card
+                        className="h-full hover-elevate active-elevate-2 cursor-pointer group border-0 dark:border dark:border-card-border"
+                        data-testid={`card-keyword-muqtarab-${topic.id}`}
+                      >
+                        {topic.heroImageUrl && (
+                          <div className="relative aspect-[16/9] overflow-hidden">
+                            <OptimizedImage
+                              src={topic.heroImageUrl}
+                              alt={topic.title}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              priority={false}
+                            />
+                          </div>
+                        )}
+                        <CardContent className="p-5 space-y-3">
+                          <Badge
+                            variant="secondary"
+                            className="text-xs h-5 shrink-0"
+                            style={{
+                              borderRight: `3px solid ${topic.angleColorHex || "hsl(var(--primary))"}`,
+                              backgroundColor: "#e5e5e6",
+                            }}
+                          >
+                            {topic.angleNameAr}
+                          </Badge>
+                          <h3 className="text-lg font-bold line-clamp-2 group-hover:text-primary transition-colors">
+                            {topic.title}
+                          </h3>
+                          {topic.excerpt && (
+                            <p className="text-sm text-muted-foreground line-clamp-3">
+                              {topic.excerpt}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
+                            {timeAgo && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {timeAgo}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Eye className="h-3 w-3" />
+                              {formatNumber(topic.viewCount || 0)}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* Empty State */}
-          {!isLoading && filteredAndSortedArticles.length === 0 && (
+          {!isLoading && filteredAndSortedArticles.length === 0 && muqtarabTopics.length === 0 && (
             <div className="text-center py-20">
               <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-muted/50 flex items-center justify-center">
                 <Tag className="h-12 w-12 text-muted-foreground" />
               </div>
               <h2 className="text-2xl font-bold mb-3" data-testid="text-no-articles">
-                {filterBy !== 'all' ? 'لا توجد نتائج' : 'لا توجد مقالات'}
+                {filterBy !== 'all' ? 'لا توجد نتائج' : 'لا توجد نتائج'}
               </h2>
               <p className="text-muted-foreground max-w-md mx-auto mb-6">
                 {filterBy !== 'all' 
                   ? `لم نجد مقالات من نوع "${filterLabels[filterBy].label}" للكلمة المفتاحية "${keyword}"`
-                  : `لم نجد أي مقالات تحتوي على الكلمة المفتاحية "${keyword}"`
+                  : `لم نجد أي مقالات أو مواضيع مُقترب تحتوي على الكلمة المفتاحية "${keyword}"`
                 }
               </p>
               {filterBy !== 'all' && (
                 <Button variant="outline" onClick={() => setFilterBy('all')}>
-                  عرض جميع المقالات
+                  عرض جميع النتائج
                 </Button>
               )}
             </div>

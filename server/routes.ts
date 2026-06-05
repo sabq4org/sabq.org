@@ -13106,7 +13106,7 @@ Respond in valid JSON format only:
     try {
       const keyword = decodeURIComponent(req.params.keyword);
 
-      const cacheKey = `keyword-tag:${keyword}`;
+      const cacheKey = `keyword-tag-v2:${keyword}`;
       const cached = memoryCache.get(cacheKey);
       if (cached) return res.json(cached);
 
@@ -13152,8 +13152,25 @@ Respond in valid JSON format only:
         filteredArticles = (seoResult as any).rows || seoResult;
       }
 
-      memoryCache.set(cacheKey, filteredArticles, CACHE_TTL.MEDIUM);
-      res.json(filteredArticles);
+      const topicsResult = await db.execute(sql`
+        SELECT t.id, t.title, t.slug, t.excerpt, t.hero_image_url AS "heroImageUrl",
+               t.published_at AS "publishedAt", t.view_count AS "viewCount",
+               a.slug AS "angleSlug", a.name_ar AS "angleNameAr", a.color_hex AS "angleColorHex"
+        FROM topics t
+        INNER JOIN angles a ON a.id = t.angle_id
+        WHERE t.status = 'published'
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(t.seo_meta -> 'keywords') AS kw
+            WHERE lower(kw) = lower(${keyword})
+          )
+        ORDER BY t.published_at DESC
+        LIMIT 20
+      `);
+      const muqtarabTopics = (topicsResult as any).rows || topicsResult;
+
+      const payload = { articles: filteredArticles || [], muqtarabTopics: muqtarabTopics || [] };
+      memoryCache.set(cacheKey, payload, CACHE_TTL.MEDIUM);
+      res.json(payload);
     } catch (error) {
       console.error("Error fetching articles by keyword:", error);
       res.status(500).json({ message: "Failed to fetch articles" });

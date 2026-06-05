@@ -1,10 +1,11 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ImageWithCaption } from "@/components/ImageWithCaption";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
@@ -257,6 +258,7 @@ function renderContentBlock(
 
 export default function TopicDetail() {
   const { angleSlug, topicSlug } = useParams<{ angleSlug: string; topicSlug: string }>();
+  const [, setLocation] = useLocation();
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string }>({
     queryKey: ["/api/auth/user"],
@@ -444,6 +446,8 @@ export default function TopicDetail() {
     contentBlocks.length > 0 || displayContent?.rawHtml || displayContent?.plainText;
   const theme = angleTheme(angle.colorHex);
   const AngleIcon = getLucideIcon(angle.iconKey, Circle);
+  const keywords =
+    (topic.seoMeta as { keywords?: string[] } | null)?.keywords?.filter(Boolean) ?? [];
 
   return (
     <div
@@ -597,6 +601,25 @@ export default function TopicDetail() {
                 )
               )}
             </article>
+
+            {keywords.length > 0 && (
+              <div className="mt-10 space-y-3" data-testid="section-keywords">
+                <h3 className="text-sm font-semibold text-muted-foreground">الكلمات المفتاحية</h3>
+                <div className="flex flex-wrap gap-2">
+                  {keywords.map((keyword, index) => (
+                    <Badge
+                      key={`${keyword}-${index}`}
+                      variant="secondary"
+                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
+                      onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)}
+                      data-testid={`badge-keyword-${index}`}
+                    >
+                      {keyword}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {angle.writerSignature && (
               <div

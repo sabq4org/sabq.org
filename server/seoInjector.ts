@@ -986,8 +986,8 @@ async function handleKeywordPage(slug: string, baseUrl: string, lang: 'ar' | 'en
     ? `${display} — Sabq`
     : `${display} — سبق`;
   const description = isEn
-    ? `Latest news and articles tagged with ${display} on Sabq News.`
-    : `أحدث الأخبار والمقالات المتعلقة بـ ${display} على صحيفة سبق الإلكترونية.`;
+    ? `Latest news, articles, and Muqtarab topics tagged with ${display} on Sabq News.`
+    : `أحدث الأخبار والمقالات ومواضيع مُقترب المتعلقة بـ ${display} على صحيفة سبق الإلكترونية.`;
   const canonicalUrl = `${baseUrl}${isEn ? '/en' : ''}/keyword/${encodeURIComponent(slug)}`;
 
   const hasContent = await withCache(`seo:keyword-exists:${slug}`, CACHE_TTL.MEDIUM, async () => {
@@ -1001,7 +1001,29 @@ async function handleKeywordPage(slug: string, baseUrl: string, lang: 'ar' | 'en
         eq(articles.status, 'published'),
       ))
       .limit(1);
-    return rows.length > 0;
+    if (rows.length > 0) return true;
+
+    const seoRows = await db.execute(sql`
+      SELECT a.id FROM articles a
+      WHERE a.status = 'published'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
+          WHERE lower(kw) = lower(${slug})
+        )
+      LIMIT 1
+    `);
+    if (((seoRows as any).rows || seoRows).length > 0) return true;
+
+    const topicRows = await db.execute(sql`
+      SELECT t.id FROM topics t
+      WHERE t.status = 'published'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(t.seo_meta -> 'keywords') AS kw
+          WHERE lower(kw) = lower(${slug})
+        )
+      LIMIT 1
+    `);
+    return ((topicRows as any).rows || topicRows).length > 0;
   });
 
   return {
@@ -1269,6 +1291,7 @@ async function handleMuqtarabTopicPage(
       "logo": { "@type": "ImageObject", "url": `${baseUrl}/branding/sabq-og-image.png` },
     },
     "articleSection": t.angleNameAr || undefined,
+    "keywords": seoMeta.keywords?.length ? seoMeta.keywords.join(", ") : undefined,
   };
 
   return {
@@ -1277,6 +1300,7 @@ async function handleMuqtarabTopicPage(
     canonicalUrl,
     ogType: 'article',
     ogImage: image,
+    articleTags: seoMeta.keywords?.length ? seoMeta.keywords : undefined,
     ogLocale: 'ar_SA',
     ogSiteName: 'صحيفة سبق الإلكترونية',
     publishedTime,
