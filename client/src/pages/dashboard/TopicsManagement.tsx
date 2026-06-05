@@ -174,22 +174,17 @@ export default function TopicsManagement() {
 
   const { data: angle, isLoading: isAngleLoading } = useQuery<Angle>({
     queryKey: ["/api/admin/muqtarab/angles", angleId],
-    queryFn: async () => {
-      const res = await fetch(`/api/muqtarab/angles/${angleId}`);
-      if (!res.ok) throw new Error("Failed to fetch angle");
-      return res.json();
-    },
+    queryFn: () => apiRequest(`/api/admin/muqtarab/angles/${angleId}`),
     enabled: !!angleId,
+    staleTime: 60_000,
+    retry: 1,
   });
 
   const { data: topicsData, isLoading: isTopicsLoading } = useQuery<{ topics: Topic[]; total: number }>({
     queryKey: ["/api/admin/muqtarab/angles", angleId, "topics"],
-    queryFn: async () => {
-      const res = await fetch(`/api/admin/muqtarab/angles/${angleId}/topics`);
-      if (!res.ok) throw new Error("Failed to fetch topics");
-      return res.json();
-    },
+    queryFn: () => apiRequest(`/api/admin/muqtarab/angles/${angleId}/topics?limit=200`),
     enabled: !!angleId,
+    staleTime: 30_000,
   });
   
   const topics = topicsData?.topics || [];
@@ -496,7 +491,9 @@ export default function TopicsManagement() {
     }
   }, [title, editingTopic, form]);
 
-  const isLoading = isAngleLoading || isTopicsLoading;
+  // لا نربط جدول المواضيع بتحميل بيانات الزاوية — كان يُبقي الـ spinner indefinitely
+  // لأن الطلب القديم كان يمرّر UUID لمسار يتوقع slug.
+  const isTableLoading = isTopicsLoading;
 
   return (
     <DashboardLayout>
@@ -541,7 +538,7 @@ export default function TopicsManagement() {
             <CardTitle>المواضيع ({topics.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {isTableLoading ? (
               <div className="flex justify-center py-8" data-testid="loader-topics">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
@@ -618,7 +615,7 @@ export default function TopicsManagement() {
                                 data-testid={`button-view-${topic.id}`}
                               >
                                 <a
-                                  href={`/muqtarab/${angle?.slug}/${topic.slug}`}
+                                  href={`/muqtarab/${angle?.slug}/topic/${topic.slug}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >

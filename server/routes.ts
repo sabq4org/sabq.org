@@ -19948,6 +19948,20 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // GET /api/admin/muqtarab/angles/:id - Get angle by ID (admin dashboard)
+  app.get("/api/admin/muqtarab/angles/:id", requireAuth, requirePermission("muqtarab.manage"), async (req: any, res) => {
+    try {
+      const angle = await storage.getAngleById(req.params.id);
+      if (!angle) {
+        return res.status(404).json({ message: "الزاوية غير موجودة" });
+      }
+      res.json(angle);
+    } catch (error) {
+      console.error("Error fetching angle:", error);
+      res.status(500).json({ message: "فشل في جلب الزاوية" });
+    }
+  });
+
   // ============================================================
   // MUQTARAB TOPICS ADMIN ROUTES
   // ============================================================
@@ -19960,8 +19974,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       
       const result = await storage.getTopicsByAngle(angleId, {
         status: status as 'draft' | 'published' | 'archived' | undefined,
-        limit: limit ? Number(limit) : 20,
+        limit: limit ? Number(limit) : 200,
         offset: offset ? Number(offset) : 0,
+        listOnly: true,
       });
       
       res.json(result);
