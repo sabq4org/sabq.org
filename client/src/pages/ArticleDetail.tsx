@@ -414,16 +414,44 @@ export default function ArticleDetail() {
     };
   }, [article?.title]);
 
-  // Track article view via POST request on every page load
-  // Empty dependency array ensures this runs once per component mount (including refreshes)
+  // Track article view ONLY after a genuine read: the reader must stay on the
+  // page, with the tab visible, for at least READ_DWELL_MS. Mashing the refresh
+  // button never reaches this threshold (each reload unmounts the page and clears
+  // the timer), so it can no longer inflate the view counter. Fires at most once
+  // per mount; the server also de-dupes per visitor as a second layer.
   useEffect(() => {
     if (!article?.id) return;
-    
-    // POST view count - runs on every page load/refresh
-    fetch(`/api/articles/${article.id}/view`, { method: 'POST' })
-      .then(r => r.json())
-      .then(data => console.log('[View] Tracked:', data))
-      .catch(err => console.error('[View] Error:', err));
+
+    const READ_DWELL_MS = 10000; // 10s of foreground reading
+    const articleId = article.id;
+    let elapsed = 0;
+    let lastTick = Date.now();
+    let fired = false;
+
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      clearInterval(intervalId);
+      fetch(`/api/articles/${articleId}/view`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => console.log('[View] Tracked:', data))
+        .catch(err => console.error('[View] Error:', err));
+    };
+
+    // Accumulate only FOREGROUND time: while the tab is hidden we reset the
+    // checkpoint so background/preloaded tabs never cross the threshold.
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (document.visibilityState !== 'visible') {
+        lastTick = now;
+        return;
+      }
+      elapsed += now - lastTick;
+      lastTick = now;
+      if (elapsed >= READ_DWELL_MS) fire();
+    }, 1000);
+
+    return () => clearInterval(intervalId);
   }, [article?.id]);
 
   // Load Twitter widgets script and render embedded tweets with theme support

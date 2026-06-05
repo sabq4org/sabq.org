@@ -132,6 +132,12 @@ function getRealIp(req: any): string {
     req.ip || 'unknown';
 }
 
+// A genuine article view counts ONCE per visitor per article within this window.
+// Rapid repeats (refresh-mashing, scripted replays of POST /api/articles/:id/view)
+// are accepted but not counted, so they can no longer inflate the view counter.
+// Tunable: lower it to allow legitimate re-reads to recount sooner.
+const VIEW_DEDUP_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+
 const cfKeyGenerator = (req: any) => getRealIp(req);
 const cfValidate = { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false };
 
@@ -13186,20 +13192,41 @@ Respond in valid JSON format only:
 
       const articleHourlyKey = `view:hourly:${articleId}`;
 
-      // NOTE: per-client 5-min dedup AND the 60/min-per-IP rate limit were both
-      // intentionally removed — every page view now counts (each visit adds the
-      // 5-10 random boost), with no throttling. The hourly counter below is kept
-      // as a monitoring SIGNAL ONLY (it logs an anomaly alert; it never blocks).
+      // Hourly counter is a monitoring SIGNAL ONLY (logs an anomaly alert; never
+      // blocks). It counts RAW POST volume — including the de-duped repeats below
+      // — so a refresh/scripted burst still surfaces in the logs even though it
+      // no longer inflates the stored view count.
       const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
         // Log suspicious activity but still allow view (soft limit)
         console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
       }
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
-      
+
+      // "Real read" gate (server side). One genuine view per visitor (logged-in
+      // user, else real client IP) per article within VIEW_DEDUP_WINDOW_MS. The
+      // 5-10 "morale" boost is preserved for every DISTINCT visitor/session, but
+      // one person mashing the refresh button — or scripting this endpoint —
+      // can no longer pump the counter: repeats inside the window return 200 with
+      // counted:false and add nothing. The Arabic article/opinion pages ALSO gate
+      // the POST behind ~10s of foreground dwell, so rapid refreshes never even
+      // reach this handler. IP precedence mirrors rateLimitKey() so the Cloudflare
+      // Pages egress doesn't collapse every anonymous visitor into one bucket.
+      const viewerKey = req.user?.id
+        ? `u:${req.user.id}`
+        : ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
+          || (req.headers['cf-connecting-ip'] as string)
+          || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+          || req.ip
+          || 'unknown';
+      const viewDedupKey = `view:seen:${articleId}:${viewerKey}`;
+      if (memoryCache.get<boolean>(viewDedupKey)) {
+        return res.json({ success: true, counted: false });
+      }
+      memoryCache.set(viewDedupKey, true, VIEW_DEDUP_WINDOW_MS);
+
       // Write the 5-10 boost DIRECTLY to the DB so the increase is visible
-      // immediately. (Was previously buffered + flushed every 60s, which —
-      // combined with the 5-min article cache — hid the bump on refresh.)
+      // immediately on the reader's first genuine view.
       const viewIncrement = Math.floor(Math.random() * 6) + 5;
       await db.update(articles)
         .set({ views: sql`${articles.views} + ${viewIncrement}` })
@@ -13210,7 +13237,7 @@ Respond in valid JSON format only:
         behaviorLogBuffer.push({ userId, eventType: "article_view", metadata: { articleId } });
       }
 
-      res.json({ success: true });
+      res.json({ success: true, counted: true });
     } catch (error) {
       console.error("Error tracking article view:", error);
       res.status(500).json({ message: "فشل تسجيل المشاهدة" });

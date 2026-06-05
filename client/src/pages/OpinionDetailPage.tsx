@@ -118,20 +118,51 @@ export default function OpinionDetailPage() {
     }
   }, [article?.id, user?.id]);
 
-  // Track article view via POST request on every page load (works for all visitors, not just logged in)
+  // GA analytics view — fire immediately (separate from the inflated DB counter).
   useEffect(() => {
     if (!article?.id) return;
-
-    fetch(`/api/articles/${article.id}/view`, { method: 'POST' })
-      .then(r => r.json())
-      .then(data => console.log('[OpinionView] Tracked:', data))
-      .catch(err => console.error('[OpinionView] Error:', err));
-
     const author = article.author
       ? `${article.author.firstName || ""} ${article.author.lastName || ""}`.trim()
       : "";
     trackOpinionView(article.id, article.title || "", author);
   }, [article?.id, article?.title, article?.author?.firstName, article?.author?.lastName]);
+
+  // Count the view ONLY after a genuine read: ≥10s of foreground dwell on the
+  // page. Mashing the refresh button never reaches the threshold (each reload
+  // clears the timer), so it can't inflate the counter. The server also de-dupes
+  // per visitor as a second layer.
+  useEffect(() => {
+    if (!article?.id) return;
+
+    const READ_DWELL_MS = 10000; // 10s of foreground reading
+    const articleId = article.id;
+    let elapsed = 0;
+    let lastTick = Date.now();
+    let fired = false;
+
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      clearInterval(intervalId);
+      fetch(`/api/articles/${articleId}/view`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => console.log('[OpinionView] Tracked:', data))
+        .catch(err => console.error('[OpinionView] Error:', err));
+    };
+
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (document.visibilityState !== 'visible') {
+        lastTick = now;
+        return;
+      }
+      elapsed += now - lastTick;
+      lastTick = now;
+      if (elapsed >= READ_DWELL_MS) fire();
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [article?.id]);
 
   // DMS Ad tracking for opinion article page
   useEffect(() => {
