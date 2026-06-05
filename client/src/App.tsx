@@ -1078,6 +1078,10 @@ function App() {
                     <div id="main-content" tabIndex={-1}>
                       <Router />
                     </div>
+                  </ErrorBoundary>
+                  {/* عزل widget الدردشة (غير حرج) في ErrorBoundary خاص بـ fallback صامت:
+                      فشل تحميل chunk الخاص به بعد النشر لا يجب أن يُسقط كامل الصفحة. */}
+                  <ErrorBoundary fallback={null}>
                     <Suspense fallback={null}>
                       <FloatingChatWidget />
                     </Suspense>
