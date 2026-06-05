@@ -66,9 +66,12 @@ export default function Login() {
         return;
       }
 
-      // Fetch user data to determine redirect path
+      // Fetch user data to determine redirect path. staleTime:0 forces a fresh
+      // request: the cached value here is the pre-login one (often null), and a
+      // stale read sends staff to "/" instead of "/dashboard".
       const userData = await queryClient.fetchQuery<User>({
         queryKey: ["/api/auth/user"],
+        staleTime: 0,
       });
 
       toast({
