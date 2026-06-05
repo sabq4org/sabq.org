@@ -24,6 +24,7 @@ import deployWebhooksRouter from "./deployWebhooks";
 import chatRouter from "./chat";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
+import muqtarabAIRouter from "./muqtarabAI";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -56,4 +57,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(chatRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
+  app.use(muqtarabAIRouter);
 }

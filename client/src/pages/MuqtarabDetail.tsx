@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAngleDetail } from "@/lib/muqtarab";
 import { ArrowRight, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
+import { angleTheme } from "@/lib/angleTheme";
 import type { Topic } from "@shared/schema";
 
 function getIconComponent(iconKey: string) {
@@ -178,9 +179,23 @@ export default function MuqtarabDetail() {
   }
 
   const Icon = getIconComponent(angle.iconKey || 'Circle');
+  const theme = angleTheme(angle.colorHex);
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="relative min-h-screen bg-background" dir="rtl" style={theme.vars}>
+      {/* Glassmorphism — هالات ملوّنة بلون الزاوية في خلفية الصفحة */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div
+          className="absolute -top-32 -right-24 h-96 w-96 rounded-full blur-3xl opacity-40"
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+        />
+        <div
+          className="absolute top-1/3 -left-24 h-80 w-80 rounded-full blur-3xl opacity-30"
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+        />
+      </div>
+
+      <div className="relative z-10">
       <Header user={user} />
 
       {/* Breadcrumbs */}
@@ -284,7 +299,7 @@ export default function MuqtarabDetail() {
           <Button 
             variant="ghost" 
             asChild
-            className="gap-2"
+            className="gap-2 text-[color:var(--angle)] hover:text-[color:var(--angle)] hover:bg-[color:var(--angle-soft)]"
             data-testid="button-back"
           >
             <Link href="/muqtarab">
@@ -301,10 +316,15 @@ export default function MuqtarabDetail() {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h2 className="text-2xl md:text-3xl font-bold mb-2 flex items-center gap-2" data-testid="heading-topics">
-            <FileText className="h-6 w-6" />
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-lg"
+              style={{ backgroundColor: theme.soft, color: theme.color }}
+            >
+              <FileText className="h-5 w-5" />
+            </span>
             المواضيع
           </h2>
-          <Separator />
+          <div className="h-1 w-16 rounded-full" style={{ backgroundColor: theme.color }} />
         </div>
 
         {/* Loading state for topics */}
@@ -344,7 +364,8 @@ export default function MuqtarabDetail() {
             {topics.map((topic: Topic) => (
               <Link key={topic.id} href={`/muqtarab/${slug}/topic/${topic.slug}`}>
                 <Card 
-                  className="overflow-hidden hover-elevate cursor-pointer group h-full"
+                  className="overflow-hidden hover-elevate cursor-pointer group h-full border-t-2"
+                  style={{ borderTopColor: theme.color }}
                   data-testid={`card-topic-${topic.id}`}
                 >
                   {/* Hero Image */}
@@ -362,7 +383,7 @@ export default function MuqtarabDetail() {
                   <CardContent className="p-4 space-y-3">
                     {/* Title */}
                     <h3 
-                      className="font-bold text-lg line-clamp-2 group-hover:text-primary transition-colors"
+                      className="font-bold text-lg line-clamp-2 transition-colors group-hover:text-[color:var(--angle)]"
                       data-testid={`text-topic-title-${topic.id}`}
                     >
                       {topic.title}
@@ -401,6 +422,7 @@ export default function MuqtarabDetail() {
           </div>
         )}
       </main>
+      </div>
     </div>
   );
 }
