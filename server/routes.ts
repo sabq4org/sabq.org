@@ -68,7 +68,8 @@ import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from ".
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission } from "./services/muqtarabProvisioning";
-import { sendSubmissionReceivedEmail } from "./services/muqtarabEmails";
+import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
+import { notifyAuthorTopicPublished } from "./services/muqtarabNotifications";
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
@@ -20126,6 +20127,32 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     try {
       const userId = req.user!.id;
       const topic = await storage.publishTopic(req.params.id, userId);
+      // إشعار + بريد الكاتب إن كان الموضوع لكاتب آخر (لا للأدمن صاحب الموضوع نفسه)
+      if (topic && topic.createdBy && topic.createdBy !== userId) {
+        void (async () => {
+          const angle = await storage.getAngleById(topic.angleId);
+          const [author] = await db
+            .select({ email: users.email, firstName: users.firstName })
+            .from(users)
+            .where(eq(users.id, topic.createdBy))
+            .limit(1);
+          await notifyAuthorTopicPublished({
+            userId: topic.createdBy,
+            topicId: topic.id,
+            topicTitle: topic.title,
+            angleName: angle?.nameAr || "زاويتك",
+          });
+          if (author?.email) {
+            await sendTopicPublishedEmail({
+              toEmail: author.email,
+              firstName: (author.firstName || "").trim() || "الكاتب",
+              topicTitle: topic.title,
+              angleName: angle?.nameAr || "زاويتك",
+              topicUrl: angle ? buildTopicUrl(angle.slug, topic.slug) : MUQTARAB_EDIT_URL,
+            });
+          }
+        })().catch((e) => console.error("[publish] notify error:", e));
+      }
       res.json(topic);
     } catch (error) {
       console.error("Error publishing topic:", error);

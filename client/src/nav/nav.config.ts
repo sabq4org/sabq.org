@@ -193,9 +193,10 @@ export const navConfig: NavItem[] = [
     labelAr: "المحتوى",
     icon: Newspaper,
     roles: ["admin", "editor", "author", "reviewer", "comments_moderator", "reporter"],
-    // كاتب الرأي يكتب من عنصر "مقال جديد" المخصّص أعلاه؛ نخفي قسم المحتوى عنه
-    // كاملاً (excludeRoles على الحاوية يلغي كل الأبناء) لإزالة التكرار والضجيج.
-    excludeRoles: ["opinion_author"],
+    // كاتب الرأي وكاتب الزاوية يكتبان من عنصرهما المخصّص أعلاه؛ نخفي قسم المحتوى
+    // عنهما كاملاً (excludeRoles على الحاوية يُفحص قبل الصلاحيات ويلغي كل الأبناء —
+    // بما فيها "مكتبة الوسائط" التي تظهر بـ media.view). رفع الصور لا يحتاج ظهورها.
+    excludeRoles: ["opinion_author", "angle_writer"],
     // No parent permissions - each child validates independently and parent shows if any child is accessible
     children: [
       {

@@ -128,3 +128,26 @@ export async function notifyAuthorTopicReturned(opts: {
     console.error("[muqtarab-notify] فشل إشعار الكاتب بالإرجاع:", err);
   }
 }
+
+/** يُشعر الكاتب برفض موضوعه (لن يُنشر) مع السبب. */
+export async function notifyAuthorTopicRejected(opts: {
+  userId: string;
+  topicId: string;
+  topicTitle: string;
+  reason?: string | null;
+}): Promise<void> {
+  try {
+    await pushInbox({
+      userId: opts.userId,
+      type: "MuqtarabTopicRejected",
+      title: "📋 لم يُنشر موضوعك",
+      body: opts.reason
+        ? `لم يُنشر «${opts.topicTitle}» — ${opts.reason}`
+        : `لم يُنشر موضوعك «${opts.topicTitle}»`,
+      deeplink: MY_ANGLE_DEEPLINK,
+      metadata: { topicId: opts.topicId },
+    });
+  } catch (err) {
+    console.error("[muqtarab-notify] فشل إشعار الكاتب بالرفض:", err);
+  }
+}

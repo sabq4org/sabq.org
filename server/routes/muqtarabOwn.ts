@@ -37,10 +37,12 @@ import {
   notifyReviewersOfPendingTopic,
   notifyAuthorTopicPublished,
   notifyAuthorTopicReturned,
+  notifyAuthorTopicRejected,
 } from "../services/muqtarabNotifications";
 import {
   sendTopicPublishedEmail,
   sendTopicReturnedEmail,
+  sendTopicRejectedEmail,
   buildTopicUrl,
   MUQTARAB_EDIT_URL,
 } from "../services/muqtarabEmails";
@@ -423,6 +425,48 @@ router.post(
     } catch (err) {
       console.error("[review return] error:", err);
       res.status(500).json({ message: "فشل في إرجاع الموضوع" });
+    }
+  },
+);
+
+// رفض/حذف الموضوع مع سبب: يُشعر الكاتب ويرسل بريد السبب ثم يحذف الموضوع.
+router.post(
+  "/api/admin/muqtarab/topics/:id/reject",
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const reason = String(req.body?.reason || "").trim();
+      const topic = await storage.getTopicById(req.params.id);
+      if (!topic) return res.status(404).json({ message: "الموضوع غير موجود" });
+
+      // إشعار + بريد الكاتب بالسبب قبل الحذف (البيانات ملتقَطة، فالحذف آمن)
+      void (async () => {
+        const [author] = await db
+          .select({ email: users.email, firstName: users.firstName })
+          .from(users)
+          .where(eq(users.id, topic.createdBy))
+          .limit(1);
+        await notifyAuthorTopicRejected({
+          userId: topic.createdBy,
+          topicId: topic.id,
+          topicTitle: topic.title,
+          reason: reason || null,
+        });
+        if (author?.email) {
+          await sendTopicRejectedEmail({
+            toEmail: author.email,
+            firstName: (author.firstName || "").trim() || "الكاتب",
+            topicTitle: topic.title,
+            reason: reason || null,
+          });
+        }
+      })().catch((e) => console.error("[review reject] notify error:", e));
+
+      await storage.deleteTopic(req.params.id);
+      res.json({ success: true, message: "تم حذف الموضوع وإشعار الكاتب بالسبب" });
+    } catch (err) {
+      console.error("[review reject] error:", err);
+      res.status(500).json({ message: "فشل في رفض الموضوع" });
     }
   },
 );
