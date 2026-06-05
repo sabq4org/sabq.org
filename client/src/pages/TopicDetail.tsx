@@ -335,8 +335,17 @@ export default function TopicDetail() {
       setOgTag("og:title", `${topic.title} - ${angle.nameAr} | مُقترب`);
       setOgTag("og:description", description);
       setOgTag("og:type", "article");
-      if (topic.heroImageUrl) {
-        setOgTag("og:image", topic.heroImageUrl);
+
+      const seoMeta = (topic.seoMeta as { ogImage?: string } | null) || {};
+      const shareImageRaw =
+        seoMeta.ogImage || topic.heroImageUrl || angle.coverImageUrl || "";
+      if (shareImageRaw) {
+        const shareImage = shareImageRaw.startsWith("http")
+          ? shareImageRaw
+          : `${window.location.origin}${shareImageRaw.startsWith("/") ? "" : "/"}${shareImageRaw}`;
+        setOgTag("og:image", shareImage);
+        setOgTag("og:image:width", "1200");
+        setOgTag("og:image:height", "630");
       }
     }
   }, [topic, angle]);

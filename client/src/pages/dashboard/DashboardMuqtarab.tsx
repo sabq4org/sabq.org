@@ -321,7 +321,10 @@ function CoverImageUpload({ value, onChange, disabled }: CoverImageUploadProps) 
       }
 
       const data = await response.json();
-      const imageUrl = data.url || data.publicUrl;
+      const imageUrl = data.url || data.publicUrl || data.proxyUrl;
+      if (!imageUrl) {
+        throw new Error("لم يُرجع الخادم رابط الصورة");
+      }
       setPreviewUrl(imageUrl);
       onChange(imageUrl);
       
@@ -1004,13 +1007,16 @@ export default function DashboardMuqtarab() {
                   name="coverImageUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>صورة الغلاف</FormLabel>
+                      <FormLabel>صورة غلاف الزاوية</FormLabel>
                       <FormControl>
                         <CoverImageUpload
                           value={field.value}
                           onChange={(url) => field.onChange(url || "")}
                         />
                       </FormControl>
+                      <FormDescription>
+                        تظهر في بطاقة الزاوية على صفحة مُقترب، وفي معاينة المشاركة عندما لا يوجد غلاف للموضوع.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

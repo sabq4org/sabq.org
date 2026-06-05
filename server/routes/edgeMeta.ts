@@ -915,10 +915,11 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         plain ||
         `${row.title} — زاوية ${row.angleNameAr} على مُقترب من صحيفة سبق الإلكترونية.`
       ).slice(0, 220);
+      const shareImageRaw = (seoMeta.ogImage as string | undefined) || row.heroImageUrl || row.angleCover;
       return {
         title: `${title} — مُقترب — سبق`,
         description,
-        image: abs(row.heroImageUrl || row.angleCover),
+        image: abs(shareImageRaw),
         canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`,
         robots: row.status === "published" ? "index,follow" : "noindex, follow",
         type: "article",

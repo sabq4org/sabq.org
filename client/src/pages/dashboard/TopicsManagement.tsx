@@ -412,6 +412,9 @@ export default function TopicsManagement() {
       const result = await response.json();
       const imageUrl = result.proxyUrl || result.url;
       form.setValue("heroImageUrl", imageUrl);
+      if (!form.getValues("seoMeta.ogImage")) {
+        form.setValue("seoMeta.ogImage", imageUrl);
+      }
       setHeroImagePreview(imageUrl);
       toast({
         title: "تم رفع الصورة",
@@ -500,6 +503,10 @@ export default function TopicsManagement() {
         });
         form.setValue("excerpt", res.excerpt || "");
         applySeoResult(res);
+        const hero = (form.getValues("heroImageUrl") || "").trim();
+        if (hero && !form.getValues("seoMeta.ogImage")) {
+          form.setValue("seoMeta.ogImage", hero);
+        }
         toast({ title: "تم التوليد الشامل", description: "الموجز وبيانات SEO جاهزة للمراجعة." });
       }
     } catch (error) {
@@ -529,6 +536,9 @@ export default function TopicsManagement() {
       );
       if (result?.imageUrl) {
         form.setValue("heroImageUrl", result.imageUrl);
+        if (!form.getValues("seoMeta.ogImage")) {
+          form.setValue("seoMeta.ogImage", result.imageUrl);
+        }
         setHeroImagePreview(result.imageUrl);
         toast({ title: "تم توليد صورة الغلاف", description: "يمكنك استبدالها أو التوليد مجدداً." });
       } else {
@@ -545,7 +555,23 @@ export default function TopicsManagement() {
     }
   };
 
+  const syncShareImageFromHero = () => {
+    const hero = (form.getValues("heroImageUrl") || "").trim();
+    if (!hero) {
+      toast({ title: "لا توجد صورة غلاف", description: "ارفع صورة الغلاف أولاً", variant: "destructive" });
+      return;
+    }
+    form.setValue("seoMeta.ogImage", hero);
+    setSeoExpanded(true);
+    toast({ title: "تم ربط صورة المشاركة بغلاف الموضوع" });
+  };
+
   const handleSubmit = form.handleSubmit((data) => {
+    const hero = (data.heroImageUrl || "").trim();
+    const ogImage = (data.seoMeta?.ogImage || "").trim();
+    if (hero && !ogImage) {
+      data.seoMeta = { ...(data.seoMeta || {}), ogImage: hero };
+    }
     if (editingTopic) {
       updateMutation.mutate({ id: editingTopic.id, data });
     } else {
@@ -1108,6 +1134,21 @@ export default function TopicsManagement() {
                               data-testid="input-seo-og-image"
                             />
                           </FormControl>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <FormDescription className="!mt-0">
+                              تظهر عند المشاركة في واتساب وتويتر. يُفضّل صورة الغلاف أو غلاف الزاوية.
+                            </FormDescription>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={syncShareImageFromHero}
+                              data-testid="button-sync-og-from-hero"
+                            >
+                              استخدام صورة الغلاف
+                            </Button>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}

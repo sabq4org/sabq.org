@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { db } from "./db";
-import { articles, categories, users, enArticles, urArticles, gulfEvents } from "@shared/schema";
+import { articles, categories, users, enArticles, urArticles, gulfEvents, angles, topics } from "@shared/schema";
 import { eq, or, and, desc } from "drizzle-orm";
 import { withCache, CACHE_TTL } from "./memoryCache";
 import path from "path";
@@ -1196,46 +1196,122 @@ export async function socialCrawlerMiddleware(
       return res.send(html);
     }
 
-    // 4️⃣ Handle writer/muqtarab pages: /muqtarab/:id
-    const writerMatch = normalizedPath.match(/^\/muqtarab\/([^\/]+)$/);
-    if (writerMatch) {
-      const id = writerMatch[1];
-      console.log(`[SocialCrawler] Handling writer: ${id}`);
-      
-      const crawlerWriterColumns = {
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-        role: users.role,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-      };
-      const [writer] = await withCache(`crawler:user:${id}`, CACHE_TTL.LONG, async () =>
-        db.select(crawlerWriterColumns).from(users).where(eq(users.id, id)).limit(1)
+    // 4️⃣ Muqtarab topic: /muqtarab/:angleSlug/topic/:topicSlug
+    const muqtarabTopicMatch = normalizedPath.match(/^\/muqtarab\/([^/]+)\/topic\/([^/]+)$/);
+    if (muqtarabTopicMatch) {
+      const angleSlug = decodeURIComponent(muqtarabTopicMatch[1]);
+      const topicSlug = decodeURIComponent(muqtarabTopicMatch[2]);
+      console.log(`[SocialCrawler] Handling Muqtarab topic: ${angleSlug}/${topicSlug}`);
+
+      const [row] = await withCache(`crawler:muqtarab-topic:${angleSlug}:${topicSlug}`, CACHE_TTL.LONG, async () =>
+        db
+          .select({
+            title: topics.title,
+            excerpt: topics.excerpt,
+            content: topics.content,
+            heroImageUrl: topics.heroImageUrl,
+            status: topics.status,
+            publishedAt: topics.publishedAt,
+            updatedAt: topics.updatedAt,
+            seoMeta: topics.seoMeta,
+            topicSlug: topics.slug,
+            angleNameAr: angles.nameAr,
+            angleSlug: angles.slug,
+            angleCover: angles.coverImageUrl,
+          })
+          .from(topics)
+          .innerJoin(angles, eq(topics.angleId, angles.id))
+          .where(and(eq(angles.slug, angleSlug), eq(topics.slug, topicSlug)))
+          .limit(1)
       );
 
-      if (!writer) {
-        console.log(`[SocialCrawler] Writer not found: ${id} - returning 404`);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache');
-        return res.status(404).send(generate404HTML(baseUrl, 'ar'));
-      }
-
-      // Role filtering: only serve if user has opinion_writer role
-      if (writer.role !== 'opinion_writer') {
-        console.log(`[SocialCrawler] User ${id} is not an opinion writer (role: ${writer.role})`);
+      if (!row) {
+        console.log(`[SocialCrawler] Muqtarab topic not found: ${angleSlug}/${topicSlug}`);
         return next();
       }
 
-      const html = generateWriterHTML(writer, baseUrl);
-      const name = writer.firstName && writer.lastName 
-        ? `${writer.firstName} ${writer.lastName}` 
-        : writer.email;
-      console.log(`[SocialCrawler] ✅ Serving writer: ${name}`);
-      
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+      const seoMeta = (row.seoMeta as { ogImage?: string; metaTitle?: string; metaDescription?: string }) || {};
+      const plain = (row.content as { plainText?: string } | null)?.plainText || "";
+      const title = seoMeta.metaTitle || row.title || "";
+      const description = escapeHtml(
+        (seoMeta.metaDescription || row.excerpt || plain || `${row.title} — زاوية ${row.angleNameAr} على مُقترب`)
+          .slice(0, 220),
+      );
+      const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(row.angleSlug)}/topic/${encodeURIComponent(row.topicSlug)}`;
+      const rawImg = seoMeta.ogImage || row.heroImageUrl || row.angleCover || "";
+      prepareSocialImage(rawImg).catch(() => {});
+      const ogImage = escapeHtml(ensureAbsoluteUrl(rawImg, baseUrl));
+      const safeTitle = escapeHtml(`${title} — مُقترب — سبق`);
+
+      const html = generateMetaHTML({
+        title: safeTitle,
+        description,
+        url: escapeHtml(canonicalUrl),
+        image: ogImage,
+        type: "article",
+        baseUrl,
+        twitterSite: "@sabq",
+        publishedTime: row.publishedAt ? new Date(row.publishedAt).toISOString() : undefined,
+        modifiedTime: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+        heroImage: ogImage,
+        readMoreText: "اقرأ المزيد",
+      });
+
+      console.log(`[SocialCrawler] ✅ Serving Muqtarab topic: ${row.title}`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      return res.send(html);
+    }
+
+    // 4.5️⃣ Muqtarab angle: /muqtarab/:angleSlug
+    const muqtarabAngleMatch = normalizedPath.match(/^\/muqtarab\/([^/]+)$/);
+    if (muqtarabAngleMatch) {
+      const slug = decodeURIComponent(muqtarabAngleMatch[1]);
+      console.log(`[SocialCrawler] Handling Muqtarab angle: ${slug}`);
+
+      const [ang] = await withCache(`crawler:muqtarab-angle:${slug}`, CACHE_TTL.LONG, async () =>
+        db
+          .select({
+            nameAr: angles.nameAr,
+            slug: angles.slug,
+            shortDesc: angles.shortDesc,
+            coverImageUrl: angles.coverImageUrl,
+            isActive: angles.isActive,
+          })
+          .from(angles)
+          .where(eq(angles.slug, slug))
+          .limit(1)
+      );
+
+      if (!ang || !ang.isActive) {
+        console.log(`[SocialCrawler] Muqtarab angle not found: ${slug}`);
+        return next();
+      }
+
+      const canonicalUrl = `${baseUrl}/muqtarab/${encodeURIComponent(ang.slug)}`;
+      const description = escapeHtml(
+        (ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`).slice(0, 220),
+      );
+      const rawImg = ang.coverImageUrl || "";
+      prepareSocialImage(rawImg).catch(() => {});
+      const ogImage = escapeHtml(ensureAbsoluteUrl(rawImg, baseUrl));
+      const safeTitle = escapeHtml(`${ang.nameAr} — مُقترب — سبق`);
+
+      const html = generateMetaHTML({
+        title: safeTitle,
+        description,
+        url: escapeHtml(canonicalUrl),
+        image: ogImage,
+        type: "website",
+        baseUrl,
+        twitterSite: "@sabq",
+        heroImage: ogImage,
+        readMoreText: "اقرأ المزيد",
+      });
+
+      console.log(`[SocialCrawler] ✅ Serving Muqtarab angle: ${ang.nameAr}`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=3600");
       return res.send(html);
     }
 

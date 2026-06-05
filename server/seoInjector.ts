@@ -27,6 +27,7 @@ import {
   SABQ_ORG_AR,
   SABQ_ORG_EN,
 } from "./utils/creatorSchema";
+import { pickMuqtarabShareImageRaw, toAbsoluteShareImage } from "./utils/muqtarabShareImage";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -1221,11 +1222,11 @@ async function handleMuqtarabTopicPage(
     seoMeta.metaDescription || t.excerpt || plain || `${t.title} — زاوية ${t.angleNameAr} على مُقترب من صحيفة سبق الإلكترونية.`,
     220,
   );
-  const image = t.heroImageUrl
-    ? ensureAbsoluteUrl(t.heroImageUrl, baseUrl)
-    : t.angleCover
-      ? ensureAbsoluteUrl(t.angleCover, baseUrl)
-      : `${baseUrl}/branding/sabq-og-image.png`;
+  const image = toAbsoluteShareImage(
+    pickMuqtarabShareImageRaw(seoMeta.ogImage, t.heroImageUrl, t.angleCover),
+    baseUrl,
+    ensureAbsoluteUrl,
+  );
   const publishedTime = t.publishedAt ? new Date(t.publishedAt).toISOString() : undefined;
   const modifiedTime = t.updatedAt ? new Date(t.updatedAt).toISOString() : publishedTime;
 
