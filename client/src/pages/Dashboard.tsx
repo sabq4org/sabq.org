@@ -237,6 +237,15 @@ function Dashboard() {
     refetchInterval: 300000, // Auto-refresh every 5 minutes
   });
 
+  // تنبيه مُقترب: مواضيع بانتظار المراجعة (يظهر فقط لمن يملك صلاحية المراجعة)
+  const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
+  const { data: muqtarabQueueRaw } = useQuery<Array<{ id: string }>>({
+    queryKey: ["/api/admin/muqtarab/review-queue"],
+    enabled: !!user && canReviewMuqtarab,
+    refetchInterval: 120000, // كل دقيقتين — تنبيه شبه لحظي
+  });
+  const muqtarabPendingCount = Array.isArray(muqtarabQueueRaw) ? muqtarabQueueRaw.length : 0;
+
   // Mark initial load complete when stats are loaded
   useEffect(() => {
     if (stats && !initialLoadComplete) {
@@ -449,6 +458,32 @@ function Dashboard() {
               )}
             </CardContent>
           </Card>
+
+            {/* Muqtarab Review Alert — يظهر فقط عند وجود مواضيع بانتظار المراجعة */}
+            {canReviewMuqtarab && muqtarabPendingCount > 0 && (
+              <Link href="/dashboard/muqtarab/review" className="block" data-testid="link-muqtarab-review-alert">
+                <Card className="h-full hover-elevate active-elevate-2 transition-all border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 ring-1 ring-amber-200 dark:ring-amber-800/40">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium text-amber-800 dark:text-amber-300">مراجعة مُقترب</CardTitle>
+                    <div className="relative p-2 rounded-md bg-amber-200/60 dark:bg-amber-800/40">
+                      <BellRing className="h-4 w-4 text-amber-600 dark:text-amber-400 animate-pulse" data-testid="icon-muqtarab-review" />
+                      <span className="absolute -top-0.5 -left-0.5 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-amber-800 dark:text-amber-300" data-testid="text-muqtarab-pending-count">
+                      {muqtarabPendingCount}
+                    </div>
+                    <p className="text-xs text-amber-700/80 dark:text-amber-400/90" data-testid="text-muqtarab-pending-label">
+                      {muqtarabPendingCount === 1 ? "موضوع بانتظار المراجعة" : "مواضيع بانتظار المراجعة"} · اضغط للمراجعة
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
 
           </div>
         </div>
