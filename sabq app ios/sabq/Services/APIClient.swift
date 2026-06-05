@@ -52,6 +52,12 @@ actor APIClient {
     private let publicAPIBaseURL = URLConstants.publicAPI
     private let session: URLSession
     private let ephemeralSession: URLSession
+    /// For slow endpoints (multi-image upload, AI generation). The default
+    /// session caps the WHOLE request at `timeoutIntervalForResource = 30s`,
+    /// which silently kills 30s+ AI calls (e.g. image generation ~32s) even
+    /// when the caller passes a longer per-request `timeoutInterval`. This
+    /// session lifts the resource cap so those calls can complete.
+    private let longSession: URLSession
     private let decoder: JSONDecoder
     private var authToken: String?
     private var csrfToken: String?
@@ -93,6 +99,18 @@ actor APIClient {
             "Pragma": "no-cache"
         ]
         ephemeralSession = URLSession(configuration: ephemeralConfig)
+
+        let longConfig = URLSessionConfiguration.default
+        longConfig.timeoutIntervalForRequest = 210
+        longConfig.timeoutIntervalForResource = 210
+        longConfig.urlCache = nil
+        longConfig.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        longConfig.httpAdditionalHeaders = [
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Accept-Language": "ar"
+        ]
+        longSession = URLSession(configuration: longConfig)
 
         // Migrate from UserDefaults to Keychain (one-time)
         if let legacyToken = UserDefaults.standard.string(forKey: "sabq_auth_token") {
@@ -201,6 +219,12 @@ actor APIClient {
         // الطلب". Callers can pass a longer budget without slowing the rest.
         if let timeout {
             request.timeoutInterval = timeout
+            if let body {
+                request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
+            }
+            // Use the long-timeout session so the 30s session-level resource
+            // cap doesn't abort genuinely slow calls (AI generation, uploads).
+            return try await decode(type, from: longSession, request: request)
         }
         if let body {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
