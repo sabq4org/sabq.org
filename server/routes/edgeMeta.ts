@@ -31,15 +31,28 @@ import {
   articleTags,
   angles,
   topics,
+  staff,
 } from "@shared/schema";
-import { eq, or, and, desc, ne, aliasedTable, sql } from "drizzle-orm";
+import { eq, or, and, desc, ne, aliasedTable, sql, inArray } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
+import {
+  buildArticleAuthorPerson,
+  buildPersonJsonLd,
+  buildProfilePageJsonLd,
+  reporterProfileUrl,
+  muqtarabAngleUrl,
+  SABQ_ORG_AR,
+  SABQ_ORG_EN,
+} from "../utils/creatorSchema";
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { memoryCache, CACHE_TTL } from "../memoryCache";
 
 const router = Router();
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
+const reporterStaff = aliasedTable(staff, "reporter_staff");
+const authorStaff = aliasedTable(staff, "author_staff");
+const angleManagerStaff = aliasedTable(staff, "angle_manager_staff");
 const ARABIC_RE = /[؀-ۿ]/;
 const containsArabic = (s: string) => ARABIC_RE.test(s);
 
@@ -314,6 +327,7 @@ function articleMetaPayload(opts: {
   updatedAt?: Date | string | null;
   status?: string | null;
   author: string;
+  authorPerson?: Record<string, unknown>;
   section?: string | null;
   keywords?: string[];
   semanticHtml?: string;
@@ -380,7 +394,7 @@ function articleMetaPayload(opts: {
     datePublished: publishedTime,
     dateModified: modifiedTime,
     inLanguage: opts.lang,
-    author: { "@type": "Person", name: opts.author },
+    author: opts.authorPerson || { "@type": "Person", name: opts.author },
     publisher: {
       "@type": "NewsMediaOrganization",
       name: b.name,
@@ -443,16 +457,21 @@ async function fetchArArticle(slug: string) {
       categoryName: categories.nameAr,
       categorySlug: categories.slug,
       categoryEnglishSlug: categories.englishSlug,
+      authorId: articles.authorId,
       reporterId: articles.reporterId,
       authorFirstName: users.firstName,
       authorLastName: users.lastName,
       reporterFirstName: reporterUsers.firstName,
       reporterLastName: reporterUsers.lastName,
+      reporterStaffSlug: reporterStaff.slug,
+      authorStaffSlug: authorStaff.slug,
     })
     .from(articles)
     .leftJoin(categories, eq(articles.categoryId, categories.id))
     .leftJoin(users, eq(articles.authorId, users.id))
     .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+    .leftJoin(reporterStaff, eq(articles.reporterId, reporterStaff.userId))
+    .leftJoin(authorStaff, eq(articles.authorId, authorStaff.userId))
     .where(where!)
     .limit(1);
   return row || null;
@@ -475,6 +494,15 @@ function buildArArticlePayload(
   const reporterName = [row.reporterFirstName, row.reporterLastName].filter(Boolean).join(" ");
   const editorName = [row.authorFirstName, row.authorLastName].filter(Boolean).join(" ");
   const author = reporterName || editorName || ARTICLE_BRAND.ar.name;
+  const authorPerson = buildArticleAuthorPerson(SITE_URL, {
+    reporterName,
+    editorName,
+    reporterId: row.reporterId,
+    reporterStaffSlug: row.reporterStaffSlug,
+    authorId: row.authorId,
+    authorStaffSlug: row.authorStaffSlug,
+    fallbackName: ARTICLE_BRAND.ar.name,
+  });
   return articleMetaPayload({
     lang: "ar",
     title,
@@ -487,6 +515,7 @@ function buildArArticlePayload(
     updatedAt: row.updatedAt,
     status: row.status,
     author,
+    authorPerson,
     section: row.categoryName,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
@@ -717,13 +746,34 @@ async function buildKeywordMeta(slug: string, isEn: boolean) {
  * id doesn't resolve (was `index,follow` on the generic edge fallback).
  */
 async function buildReporterMeta(idOrSlug: string, isEn: boolean) {
-  const [reporter] = await db
-    .select({ firstName: users.firstName, lastName: users.lastName })
-    .from(users)
-    .where(eq(users.id, idOrSlug))
+  const [row] = await db
+    .select({
+      slug: staff.slug,
+      userId: staff.userId,
+      name: staff.name,
+      nameAr: staff.nameAr,
+      title: staff.title,
+      titleAr: staff.titleAr,
+      bio: staff.bio,
+      bioAr: staff.bioAr,
+      profileImage: staff.profileImage,
+      userProfileImage: users.profileImageUrl,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
+    .from(staff)
+    .leftJoin(users, eq(staff.userId, users.id))
+    .where(and(
+      or(eq(staff.slug, idOrSlug), eq(staff.userId, idOrSlug)),
+      eq(staff.isActive, true),
+      inArray(staff.staffType, ["reporter", "writer", "opinion_author", "content_creator"]),
+    ))
     .limit(1);
-  const canonical = `${SITE_URL}${isEn ? "/en" : ""}/reporter/${encodeURIComponent(idOrSlug)}`;
-  if (!reporter) {
+
+  const profileSlug = row?.slug || row?.userId || idOrSlug;
+  const canonical = reporterProfileUrl(SITE_URL, profileSlug, isEn ? "en" : "ar");
+
+  if (!row) {
     return {
       title: isEn ? "Reporter — Sabq" : "كاتب — سبق",
       description: isEn
@@ -736,18 +786,41 @@ async function buildReporterMeta(idOrSlug: string, isEn: boolean) {
       locale: isEn ? "en_US" : "ar_SA",
     };
   }
-  const fullName =
-    [reporter.firstName, reporter.lastName].filter(Boolean).join(" ") || idOrSlug;
+
+  const fullName = (isEn ? row.name : row.nameAr)
+    || [row.firstName, row.lastName].filter(Boolean).join(" ")
+    || profileSlug;
+  const bioText = (isEn ? row.bio : row.bioAr) || "";
+  const description = isEn
+    ? (bioText.slice(0, 220) || `Articles by ${fullName} on Sabq News.`)
+    : (bioText.slice(0, 220) || `مقالات وأخبار الكاتب ${fullName} على صحيفة سبق الإلكترونية.`);
+  const rawImage = row.profileImage || row.userProfileImage || "";
+  const image = rawImage ? abs(rawImage) : BRAND_OG_IMAGE;
+  const jobTitle = (isEn ? row.title : row.titleAr) || (isEn ? "Sabq Contributor" : "كاتب — سبق");
+  const person = buildPersonJsonLd({
+    name: fullName,
+    url: canonical,
+    image,
+    description,
+    jobTitle,
+    worksFor: isEn ? SABQ_ORG_EN : SABQ_ORG_AR,
+  });
+
   return {
     title: isEn ? `${fullName} — Sabq` : `${fullName} — سبق`,
-    description: isEn
-      ? `Articles by ${fullName} on Sabq News.`
-      : `مقالات وأخبار الكاتب ${fullName} على صحيفة سبق الإلكترونية.`,
-    image: BRAND_OG_IMAGE,
+    description,
+    image,
     canonical,
-    robots: "index,follow",
+    robots: "index, follow, max-image-preview:large",
     type: "profile",
     locale: isEn ? "en_US" : "ar_SA",
+    jsonLd: buildProfilePageJsonLd({
+      name: fullName,
+      url: canonical,
+      description,
+      image,
+      person,
+    }),
   };
 }
 
@@ -865,22 +938,57 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           shortDesc: angles.shortDesc,
           coverImageUrl: angles.coverImageUrl,
           isActive: angles.isActive,
+          managerFirstName: users.firstName,
+          managerLastName: users.lastName,
+          managerBio: users.bio,
+          managerImage: users.profileImageUrl,
+          managerStaffSlug: angleManagerStaff.slug,
+          managerStaffNameAr: angleManagerStaff.nameAr,
+          managerStaffBioAr: angleManagerStaff.bioAr,
+          managerStaffImage: angleManagerStaff.profileImage,
         })
         .from(angles)
+        .leftJoin(users, eq(angles.managerUserId, users.id))
+        .leftJoin(angleManagerStaff, eq(angles.managerUserId, angleManagerStaff.userId))
         .where(eq(angles.slug, slug))
         .limit(1);
       if (!ang || !ang.isActive) return null;
+      const canonical = muqtarabAngleUrl(SITE_URL, ang.slug);
       const description = (
         ang.shortDesc || `زاوية ${ang.nameAr} على منصة مُقترب من صحيفة سبق الإلكترونية.`
       ).slice(0, 220);
+      const image = abs(ang.coverImageUrl);
+      const writerName = ang.managerStaffNameAr
+        || [ang.managerFirstName, ang.managerLastName].filter(Boolean).join(" ")
+        || ang.nameAr;
+      const writerBio = (ang.managerStaffBioAr || ang.managerBio || description).slice(0, 220);
+      const writerImage = abs(ang.managerStaffImage || ang.managerImage || ang.coverImageUrl);
+      const writerProfileUrl = ang.managerStaffSlug
+        ? reporterProfileUrl(SITE_URL, ang.managerStaffSlug, "ar")
+        : canonical;
+      const person = buildPersonJsonLd({
+        name: writerName,
+        url: writerProfileUrl,
+        image: writerImage,
+        description: writerBio,
+        jobTitle: `كاتب زاوية ${ang.nameAr} — مُقترب`,
+        worksFor: SABQ_ORG_AR,
+      });
       return {
         title: `${ang.nameAr} — مُقترب — سبق`,
         description,
-        image: abs(ang.coverImageUrl),
-        canonical: `${SITE_URL}/muqtarab/${encodeURIComponent(ang.slug)}`,
-        robots: "index,follow",
-        type: "website",
+        image,
+        canonical,
+        robots: "index, follow, max-image-preview:large",
+        type: "profile",
         locale: "ar_SA",
+        jsonLd: buildProfilePageJsonLd({
+          name: `${ang.nameAr} — مُقترب`,
+          url: canonical,
+          description,
+          image,
+          person,
+        }),
       };
     },
   },
