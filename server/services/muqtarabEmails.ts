@@ -145,6 +145,39 @@ export async function sendTopicReturnedEmail(opts: {
   });
 }
 
+/** يُرسَل للكاتب عند رفض موضوعه (لن يُنشر) مع سبب عدم النشر. */
+export async function sendTopicRejectedEmail(opts: {
+  toEmail: string;
+  firstName: string;
+  topicTitle: string;
+  reason?: string | null;
+}): Promise<void> {
+  const reasonBlock = opts.reason
+    ? `<div style="background: #fef2f2; border-right: 4px solid #ef4444; padding: 18px; border-radius: 10px; margin-bottom: 18px;">
+        <p style="color: #991b1b; margin: 0; font-size: 15px;"><strong>📋 سبب عدم النشر:</strong><br>${opts.reason}</p>
+      </div>`
+    : "";
+  const body = `
+    <p style="color: #1f2937; font-size: 18px; line-height: 1.8; margin: 0 0 18px;">مرحباً <strong>${opts.firstName}</strong> 👋</p>
+    <p style="color: #4b5563; font-size: 16px; line-height: 1.8; margin: 0 0 18px;">
+      راجع فريق التحرير موضوعك <strong>"${opts.topicTitle}"</strong>، ونعتذر أنه لن يُنشر هذه المرة.
+    </p>
+    ${reasonBlock}
+    <p style="color: #4b5563; font-size: 16px; line-height: 1.8; margin: 0 0 8px;">نتطلع لمواضيعك القادمة — أضف موضوعاً جديداً من لوحتك في أي وقت. 🌟</p>
+    ${ctaButton(`${BASE_URL}/dashboard/my-angle`, "لوحة زاويتي")}`;
+
+  await sendEmailNotification({
+    to: opts.toEmail,
+    subject: `بخصوص موضوعك "${opts.topicTitle}" في مُقترب`,
+    html: emailShell({
+      emoji: "📋",
+      headerGradient: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+      headerTitle: "بخصوص موضوعك",
+      bodyHtml: body,
+    }),
+  });
+}
+
 export const MUQTARAB_EDIT_URL = `${BASE_URL}/dashboard/my-angle`;
 
 export function buildTopicUrl(angleSlug: string, topicSlug: string): string {

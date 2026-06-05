@@ -8,6 +8,7 @@ import {
   Eye,
   CheckCircle2,
   RotateCcw,
+  XCircle,
   Clock,
   FileText,
   Inbox,
@@ -70,6 +71,8 @@ export default function MuqtarabReview() {
   const [approveItem, setApproveItem] = useState<ReviewItem | null>(null);
   const [returnItem, setReturnItem] = useState<ReviewItem | null>(null);
   const [returnNotes, setReturnNotes] = useState("");
+  const [rejectItem, setRejectItem] = useState<ReviewItem | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const { data: queueRaw, isLoading } = useQuery<ReviewItem[]>({
     queryKey: ["/api/admin/muqtarab/review-queue"],
@@ -113,6 +116,22 @@ export default function MuqtarabReview() {
     },
     onError: (e) =>
       toast({ title: "خطأ", description: e instanceof Error ? e.message : "فشل في إرجاع الموضوع", variant: "destructive" }),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) =>
+      apiRequest(`/api/admin/muqtarab/topics/${id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      setRejectItem(null);
+      setRejectReason("");
+      toast({ title: "تم الرفض", description: "حُذف الموضوع وأُرسل للكاتب بريد بالسبب." });
+    },
+    onError: (e) =>
+      toast({ title: "خطأ", description: e instanceof Error ? e.message : "فشل في رفض الموضوع", variant: "destructive" }),
   });
 
   return (
@@ -213,6 +232,19 @@ export default function MuqtarabReview() {
                             <RotateCcw className="w-3.5 h-3.5" />
                             إرجاع
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-red-700 border-red-300 hover:bg-red-50"
+                            onClick={() => {
+                              setRejectItem(item);
+                              setRejectReason("");
+                            }}
+                            data-testid={`button-reject-${item.id}`}
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            رفض
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -311,6 +343,43 @@ export default function MuqtarabReview() {
                   <Loader2 className="w-4 h-4 animate-spin ml-2" />
                 ) : (
                   "إرجاع للتعديل"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Reject (delete) dialog */}
+        <AlertDialog open={!!rejectItem} onOpenChange={(o) => !o && setRejectItem(null)}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle>رفض الموضوع وحذفه</AlertDialogTitle>
+              <AlertDialogDescription>
+                سيُحذف «{rejectItem?.title}» نهائياً ويصل الكاتب بريد بسبب عدم النشر. اكتب السبب أدناه.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-2">
+              <label className="text-sm font-medium">سبب عدم النشر</label>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="اكتب سبب رفض الموضوع (سيصل الكاتب بالبريد)..."
+                rows={4}
+                className="mt-2"
+                data-testid="textarea-reject-reason"
+              />
+            </div>
+            <AlertDialogFooter className="gap-2">
+              <AlertDialogCancel>إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => rejectItem && rejectMutation.mutate({ id: rejectItem.id, reason: rejectReason })}
+                disabled={rejectMutation.isPending || !rejectReason.trim()}
+              >
+                {rejectMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                ) : (
+                  "رفض وحذف"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
