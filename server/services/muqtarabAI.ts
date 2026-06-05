@@ -129,3 +129,107 @@ ${plain}
 
   return { excerpt };
 }
+
+// ============================================================
+// مساعد الإدارة (AI Gatekeeper) — ملخص + فحص سياسات + تصنيف
+// ============================================================
+
+export interface ReviewAssist {
+  summary: string;
+  policy: {
+    risk: "low" | "medium" | "high";
+    flags: string[];
+    note: string;
+  };
+}
+
+/** يزوّد المراجع بملخص قصير + فحص مبدئي للسياسات (خطاب كراهية/تشهير/إساءة). */
+export async function assistReview(opts: {
+  title: string;
+  content: string;
+}): Promise<ReviewAssist> {
+  const plain = truncate(stripHtml(opts.content));
+  if (plain.length < 30) {
+    throw new Error("المحتوى قصير جداً للمساعدة في المراجعة");
+  }
+
+  const prompt = `أنت مساعد تحرير في منصة إخبارية سعودية. راجع الموضوع التالي وأعد:
+1) ملخصاً من 3 أسطر يساعد المحرر على قرار أولي.
+2) فحص سياسات النشر: ابحث عن خطاب كراهية، تشهير، قذف، تحريض، أو إساءة صريحة.
+
+العنوان: ${opts.title}
+المحتوى:
+${plain}
+
+أعد JSON فقط بهذا الشكل:
+{
+  "summary": "ملخص من 3 أسطر",
+  "risk": "low | medium | high",
+  "flags": ["وسم قصير لكل مخالفة محتملة (فارغة إن لا يوجد)"],
+  "note": "جملة توضح سبب التقييم"
+}`;
+
+  const res = await aiManager.generate(prompt, MODEL);
+  if (res.error) throw new Error(res.error);
+
+  const parsed = extractJson(res.content || "") as
+    | { summary?: string; risk?: string; flags?: string[]; note?: string }
+    | null;
+
+  const summary = String(parsed?.summary || "").trim();
+  if (!summary) throw new Error("لم يُرجع الذكاء الاصطناعي ملخصاً");
+
+  const risk = (["low", "medium", "high"].includes(String(parsed?.risk))
+    ? parsed!.risk
+    : "low") as "low" | "medium" | "high";
+
+  const flags = Array.isArray(parsed?.flags)
+    ? parsed!.flags.map((f) => String(f).trim()).filter(Boolean).slice(0, 8)
+    : [];
+
+  return {
+    summary,
+    policy: {
+      risk,
+      flags,
+      note: String(parsed?.note || "").trim() || "لا ملاحظات",
+    },
+  };
+}
+
+/** يقترح تصنيفاً للموضوع/الطلب الوارد من قائمة تصنيفات معروفة. */
+export async function classifySubmission(opts: {
+  text: string;
+  categories: { value: string; label: string }[];
+}): Promise<{ category: string; confidence: number }> {
+  const plain = truncate(stripHtml(opts.text), 3000);
+  if (plain.length < 20) {
+    throw new Error("النص قصير جداً للتصنيف");
+  }
+
+  const list = opts.categories.map((c) => `${c.value} = ${c.label}`).join("\n");
+  const prompt = `صنّف النص العربي التالي ضمن أحد التصنيفات المتاحة فقط.
+
+التصنيفات المتاحة (value = label):
+${list}
+
+النص:
+${plain}
+
+أعد JSON فقط: {"category":"value المناسب","confidence":0.0}`;
+
+  const res = await aiManager.generate(prompt, MODEL);
+  if (res.error) throw new Error(res.error);
+
+  const parsed = extractJson(res.content || "") as
+    | { category?: string; confidence?: number }
+    | null;
+
+  const valid = new Set(opts.categories.map((c) => c.value));
+  const category = parsed?.category && valid.has(String(parsed.category))
+    ? String(parsed.category)
+    : "other";
+  const confidence = Math.min(1, Math.max(0, Number(parsed?.confidence) || 0));
+
+  return { category, confidence };
+}

@@ -7,10 +7,17 @@
  */
 import { Router } from "express";
 import { asc, eq } from "drizzle-orm";
-import { requireAuth } from "../rbac";
+import { requireAuth, requirePermission } from "../rbac";
 import { db } from "../db";
 import { angles } from "@shared/schema";
-import { suggestTitles, proofreadContent, suggestExcerpt } from "../services/muqtarabAI";
+import { storage } from "../storage";
+import {
+  suggestTitles,
+  proofreadContent,
+  suggestExcerpt,
+  assistReview,
+  classifySubmission,
+} from "../services/muqtarabAI";
 
 const router = Router();
 
@@ -84,5 +91,51 @@ router.post("/api/muqtarab/my-angle/ai/suggest-excerpt", requireAuth, async (req
     });
   }
 });
+
+// ============================================================
+// مساعد الإدارة (muqtarab.manage)
+// ============================================================
+
+router.post(
+  "/api/admin/muqtarab/topics/:id/ai/review-assist",
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const topic = await storage.getTopicById(req.params.id);
+      if (!topic) return res.status(404).json({ message: "الموضوع غير موجود" });
+
+      const content = topic.content?.rawHtml || topic.content?.plainText || "";
+      const result = await assistReview({ title: topic.title, content });
+      res.json(result);
+    } catch (err) {
+      console.error("[muqtarab-ai] review-assist:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في مساعدة المراجعة",
+      });
+    }
+  },
+);
+
+router.post(
+  "/api/admin/muqtarab/ai/classify",
+  requirePermission("muqtarab.manage"),
+  async (req: any, res) => {
+    try {
+      const text = String(req.body?.text || "");
+      const categories = Array.isArray(req.body?.categories) ? req.body.categories : [];
+      if (categories.length === 0) {
+        return res.status(400).json({ message: "قائمة التصنيفات مطلوبة" });
+      }
+
+      const result = await classifySubmission({ text, categories });
+      res.json(result);
+    } catch (err) {
+      console.error("[muqtarab-ai] classify:", err);
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "فشل في التصنيف الذكي",
+      });
+    }
+  },
+);
 
 export default router;
