@@ -86,7 +86,7 @@ import { db } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
 import { eq, and, or, desc, asc, ilike, sql, inArray, gte, lt, lte, aliasedTable, isNull, ne, not, isNotNull, gt } from "drizzle-orm";
 import bcrypt from "bcrypt";
-import { generateEnglishSlug, transliterateToEnglish } from './utils/slugTransliterator';
+import { generateEnglishSlug, transliterateToEnglish, normalizeTopicSlug } from './utils/slugTransliterator';
 import path from "path";
 import { fileURLToPath } from "url";
 import passport from "passport";
@@ -19977,7 +19977,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.post("/api/admin/muqtarab/topics", requireAuth, requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
       const userId = req.user!.id;
-      const parsed = insertTopicSchema.safeParse({ ...req.body, createdBy: userId });
+      const body = { ...req.body, createdBy: userId };
+      if (typeof body.slug === "string") body.slug = normalizeTopicSlug(body.slug);
+      const parsed = insertTopicSchema.safeParse(body);
       
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.errors });
@@ -20013,7 +20015,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.patch("/api/admin/muqtarab/topics/:id", requireAuth, requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
       const userId = req.user!.id;
-      const parsed = updateTopicSchema.safeParse({ ...req.body, updatedBy: userId });
+      const body = { ...req.body, updatedBy: userId };
+      if (typeof body.slug === "string") body.slug = normalizeTopicSlug(body.slug);
+      const parsed = updateTopicSchema.safeParse(body);
       
       if (!parsed.success) {
         return res.status(400).json({ message: "Invalid topic data", errors: parsed.error.errors });

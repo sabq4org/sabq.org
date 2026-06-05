@@ -1,4 +1,7 @@
-import { nanoid } from 'nanoid';
+import { customAlphabet } from 'nanoid';
+
+/** URL-safe lowercase IDs for writer-created topics (validation requires a-z only). */
+const shortTopicSlug = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 7);
 
 const arabicToEnglishMap: Record<string, string> = {
   'ا': 'a',
@@ -76,7 +79,17 @@ export function transliterateToEnglish(arabicText: string): string {
  * @returns A short 7-character alphanumeric slug
  */
 export function generateEnglishSlug(_text?: string): string {
-  // Use nanoid with custom alphabet for URL-safe, readable slugs
-  // 7 characters gives us 62^7 = 3.5 trillion possible combinations
-  return nanoid(7);
+  // Lowercase-only alphabet — TopicsManagement validates /^[a-z0-9-]+$/ (no uppercase).
+  return shortTopicSlug();
+}
+
+/** Normalize a topic slug for storage/validation (lowercase, strip invalid chars). */
+export function normalizeTopicSlug(slug: string): string {
+  return slug
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\u0600-\u06FFa-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
 }

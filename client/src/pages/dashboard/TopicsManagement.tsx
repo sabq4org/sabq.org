@@ -73,8 +73,10 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 
 const topicFormSchema = insertTopicSchema.extend({
   title: z.string().min(2, "العنوان يجب أن يكون حرفين على الأقل"),
-  slug: z.string().min(2, "المعرف يجب أن يكون حرفين على الأقل")
-    .regex(/^[\u0600-\u06FFa-z0-9-]+$/, "المعرف يجب أن يحتوي على أحرف عربية أو إنجليزية صغيرة وأرقام وشرطات فقط"),
+  slug: z.string()
+    .transform((s) => normalizeTopicSlug(s))
+    .pipe(z.string().min(2, "المعرف يجب أن يكون حرفين على الأقل")
+      .regex(/^[\u0600-\u06FFa-z0-9-]+$/, "المعرف يجب أن يحتوي على أحرف عربية أو إنجليزية صغيرة وأرقام وشرطات فقط")),
   excerpt: z.string().optional(),
   content: z.object({
     blocks: z.array(z.object({
@@ -95,14 +97,20 @@ const topicFormSchema = insertTopicSchema.extend({
 
 type TopicFormValues = z.infer<typeof topicFormSchema>;
 
-function generateSlug(title: string): string {
-  return title
+function normalizeTopicSlug(slug: string): string {
+  return slug
     .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^\u0600-\u06FFa-z0-9-]/gi, '')
     .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\u0600-\u06FFa-z0-9-]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function generateSlug(title: string): string {
+  return normalizeTopicSlug(
+    title.replace(/\s+/g, '-').replace(/[^\u0600-\u06FFa-z0-9-]/gi, ''),
+  );
 }
 
 function getStatusBadge(status: string) {
@@ -345,7 +353,7 @@ export default function TopicsManagement() {
     form.reset({
       angleId: topic.angleId,
       title: topic.title,
-      slug: topic.slug,
+      slug: normalizeTopicSlug(topic.slug),
       excerpt: topic.excerpt || "",
       content: topic.content || { blocks: [], rawHtml: "", plainText: "" },
       heroImageUrl: topic.heroImageUrl || "",
@@ -683,6 +691,7 @@ export default function TopicsManagement() {
                           placeholder="مستقبل-الإعلام-الرقمي"
                           dir="rtl"
                           data-testid="input-slug"
+                          onChange={(e) => field.onChange(normalizeTopicSlug(e.target.value))}
                         />
                       </FormControl>
                       <FormDescription>
