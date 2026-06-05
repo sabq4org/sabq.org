@@ -475,6 +475,12 @@ export default function ArticleEditor() {
   // Check if user is an opinion author - opinion authors have restricted editor interface
   const isOpinionAuthor = user?.role === 'opinion_author' || (user?.roles && user.roles.some((r: any) => r.name === 'opinion_author' || r === 'opinion_author'));
 
+  // Opinion authors (and opinion/column pieces) write "مقال", everyone else "خبر".
+  // Drives the editor header wording so a كاتب رأي doesn't see "خبر جديد".
+  const isOpinionContext = isOpinionAuthor || articleType === 'opinion' || articleType === 'column';
+  const contentNoun = isOpinionContext ? 'مقال' : 'خبر';
+  const contentNounAccusative = isOpinionContext ? 'مقالاً' : 'خبراً';
+
   // Permission check: require articles.create for new articles, articles.edit/edit_any/edit_own for editing
   const canAccessEditor = user && hasAnyPermission(
     user, 
@@ -3475,10 +3481,10 @@ const generateSlug = (text: string) => {
             </div>
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold truncate">
-                {isNewArticle ? "خبر جديد" : "تحرير الخبر"}
+                {isNewArticle ? `${contentNoun} جديد` : `تحرير ال${contentNoun}`}
               </h1>
               <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">
-                {isNewArticle ? "اكتب خبراً جديداً وحدد إعدادات النشر" : "حدّث محتوى الخبر وأعدّ نشره"}
+                {isNewArticle ? `اكتب ${contentNounAccusative} جديداً وحدد إعدادات النشر` : `حدّث محتوى ال${contentNoun} وأعدّ نشره`}
               </p>
             </div>
             {/* Auto-save indicator - visible on desktop */}

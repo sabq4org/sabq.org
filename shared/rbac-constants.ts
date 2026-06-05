@@ -317,6 +317,11 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_VIEW,
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.ANALYTICS_VIEW_OWN,
+    // Dashboard - كاتب الرأي يدخل لوحته (/dashboard/opinion-author). Without
+    // DASHBOARD_VIEW the "لوحة التحكم" link in the public header dropdown is
+    // hidden (it gates on dashboard.view), so writers couldn't find their panel.
+    PERMISSION_CODES.DASHBOARD_VIEW,
+    PERMISSION_CODES.DASHBOARD_VIEW_STATS,
     PERMISSION_CODES.CHAT_USE,
   ],
 
