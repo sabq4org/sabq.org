@@ -134,6 +134,7 @@ export default function TopicsManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [deletingTopic, setDeletingTopic] = useState<Topic | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [seoExpanded, setSeoExpanded] = useState(false);
   const [heroImagePreview, setHeroImagePreview] = useState<string>("");
   const [isUploadingHero, setIsUploadingHero] = useState(false);
@@ -240,17 +241,19 @@ export default function TopicsManagement() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
       return await apiRequest(`/api/admin/muqtarab/topics/${id}`, {
         method: "DELETE",
+        body: JSON.stringify({ reason }),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/muqtarab/angles", angleId, "topics"] });
       setDeletingTopic(null);
+      setDeleteReason("");
       toast({
         title: "تم حذف الموضوع",
-        description: "تم حذف الموضوع بنجاح",
+        description: "تم حذف الموضوع، وأُشعِر الكاتب بالسبب إن كان لكاتب آخر.",
       });
     },
     onError: (error: any) => {
@@ -559,7 +562,7 @@ export default function TopicsManagement() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setDeletingTopic(topic)}
+                              onClick={() => { setDeletingTopic(topic); setDeleteReason(""); }}
                               data-testid={`button-delete-${topic.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -862,7 +865,10 @@ export default function TopicsManagement() {
         <AlertDialog
           open={!!deletingTopic}
           onOpenChange={(open) => {
-            if (!open) setDeletingTopic(null);
+            if (!open) {
+              setDeletingTopic(null);
+              setDeleteReason("");
+            }
           }}
         >
           <AlertDialogContent dir="rtl">
@@ -871,10 +877,21 @@ export default function TopicsManagement() {
                 حذف الموضوع
               </AlertDialogTitle>
               <AlertDialogDescription data-testid="text-delete-description">
-                هل أنت متأكد من حذف الموضوع "{deletingTopic?.title}"؟
-                لا يمكن التراجع عن هذا الإجراء.
+                سيُحذف الموضوع "{deletingTopic?.title}" نهائياً. إن كان لكاتب زاوية،
+                سيصله بريد بسبب عدم النشر — اكتب السبب أدناه.
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <div className="py-2">
+              <label className="text-sm font-medium">سبب الحذف / عدم النشر</label>
+              <Textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="اكتب السبب (يصل الكاتب بالبريد إن كان الموضوع لكاتب آخر)..."
+                rows={3}
+                className="mt-2"
+                data-testid="textarea-delete-reason"
+              />
+            </div>
             <AlertDialogFooter className="gap-2">
               <AlertDialogCancel data-testid="button-cancel-delete">
                 إلغاء
@@ -882,7 +899,7 @@ export default function TopicsManagement() {
               <AlertDialogAction
                 onClick={() => {
                   if (deletingTopic) {
-                    deleteMutation.mutate(deletingTopic.id);
+                    deleteMutation.mutate({ id: deletingTopic.id, reason: deleteReason });
                   }
                 }}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

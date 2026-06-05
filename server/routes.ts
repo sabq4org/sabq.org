@@ -68,8 +68,8 @@ import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from ".
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission } from "./services/muqtarabProvisioning";
-import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
-import { notifyAuthorTopicPublished } from "./services/muqtarabNotifications";
+import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, sendTopicRejectedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
+import { notifyAuthorTopicPublished, notifyAuthorTopicRejected } from "./services/muqtarabNotifications";
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
@@ -20176,9 +20176,36 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // DELETE /api/admin/muqtarab/topics/:id - Delete topic
+  // DELETE /api/admin/muqtarab/topics/:id - Delete topic (optional body { reason })
   app.delete("/api/admin/muqtarab/topics/:id", requireAuth, requirePermission("muqtarab.manage"), async (req: any, res) => {
     try {
+      const userId = req.user!.id;
+      const reason = String(req.body?.reason || "").trim();
+      const topic = await storage.getTopicById(req.params.id);
+      // إشعار + بريد "سبب عدم النشر" لكاتب الموضوع إن كان لكاتب آخر (لا للأدمن صاحبه)
+      if (topic && topic.createdBy && topic.createdBy !== userId) {
+        void (async () => {
+          const [author] = await db
+            .select({ email: users.email, firstName: users.firstName })
+            .from(users)
+            .where(eq(users.id, topic.createdBy))
+            .limit(1);
+          await notifyAuthorTopicRejected({
+            userId: topic.createdBy,
+            topicId: topic.id,
+            topicTitle: topic.title,
+            reason: reason || null,
+          });
+          if (author?.email) {
+            await sendTopicRejectedEmail({
+              toEmail: author.email,
+              firstName: (author.firstName || "").trim() || "الكاتب",
+              topicTitle: topic.title,
+              reason: reason || null,
+            });
+          }
+        })().catch((e) => console.error("[delete topic] notify error:", e));
+      }
       await storage.deleteTopic(req.params.id);
       res.status(204).send();
     } catch (error) {

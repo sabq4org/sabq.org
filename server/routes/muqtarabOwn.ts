@@ -429,6 +429,42 @@ router.post(
   },
 );
 
+// إحصاءات المواضيع لكل زاوية (لصفحة إدارة مُقترب): { [angleId]: {total, pending_review, ...} }
+router.get(
+  "/api/admin/muqtarab/angles/stats",
+  requirePermission("muqtarab.manage"),
+  async (_req: any, res) => {
+    try {
+      const rows = await db
+        .select({ angleId: topics.angleId, status: topics.status, count: sql<number>`count(*)` })
+        .from(topics)
+        .groupBy(topics.angleId, topics.status);
+
+      const stats: Record<
+        string,
+        { total: number; draft: number; pending_review: number; published: number; needs_revision: number; archived: number }
+      > = {};
+      for (const r of rows) {
+        const a = (stats[r.angleId] ||= {
+          total: 0,
+          draft: 0,
+          pending_review: 0,
+          published: 0,
+          needs_revision: 0,
+          archived: 0,
+        });
+        const c = Number(r.count);
+        a.total += c;
+        if (r.status in a) (a as any)[r.status] = c;
+      }
+      res.json(stats);
+    } catch (err) {
+      console.error("[angles stats] error:", err);
+      res.status(500).json({ message: "فشل في جلب إحصاءات الزوايا" });
+    }
+  },
+);
+
 // رفض/حذف الموضوع مع سبب: يُشعر الكاتب ويرسل بريد السبب ثم يحذف الموضوع.
 router.post(
   "/api/admin/muqtarab/topics/:id/reject",

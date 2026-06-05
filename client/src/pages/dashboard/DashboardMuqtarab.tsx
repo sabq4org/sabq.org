@@ -476,6 +476,19 @@ export default function DashboardMuqtarab() {
   });
   const angles = Array.isArray(anglesRaw) ? anglesRaw : [];
 
+  // إحصاءات المواضيع لكل زاوية (عدد + بانتظار المراجعة)
+  type AngleStat = { total: number; pending_review: number; published: number; draft: number; needs_revision: number };
+  const { data: anglesStatsRaw } = useQuery<Record<string, AngleStat>>({
+    queryKey: ["/api/admin/muqtarab/angles/stats"],
+    queryFn: async () => apiRequest("/api/admin/muqtarab/angles/stats"),
+    refetchInterval: 60000,
+  });
+  const anglesStats = anglesStatsRaw || {};
+  const totalPendingReview = Object.values(anglesStats).reduce(
+    (sum, s) => sum + (s?.pending_review || 0),
+    0,
+  );
+
   // Create mutation
   const createMutation = useMutation({
     mutationFn: async (data: AngleFormValues) => {
@@ -663,6 +676,26 @@ export default function DashboardMuqtarab() {
           </div>
         </div>
 
+        {/* تنبيه: مواضيع بانتظار المراجعة */}
+        {totalPendingReview > 0 && (
+          <Link href="/dashboard/muqtarab/review">
+            <div
+              className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 cursor-pointer hover:bg-blue-100 transition-colors dark:border-blue-900 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
+              data-testid="banner-pending-review"
+            >
+              <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
+                <FileText className="h-5 w-5" />
+                <span className="font-medium">
+                  {totalPendingReview} موضوع بانتظار المراجعة من الكتّاب
+                </span>
+              </div>
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+                مراجعة الآن ←
+              </span>
+            </div>
+          </Link>
+        )}
+
         {/* Angles Table */}
         <Card data-testid="card-angles-table">
           <CardHeader>
@@ -686,6 +719,7 @@ export default function DashboardMuqtarab() {
                       <TableHead className="text-right">الاسم</TableHead>
                       <TableHead className="text-right">المعرف</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
+                      <TableHead className="text-right">المواضيع</TableHead>
                       <TableHead className="text-right">الترتيب</TableHead>
                       <TableHead className="text-right">الإجراءات</TableHead>
                     </TableRow>
@@ -729,6 +763,30 @@ export default function DashboardMuqtarab() {
                             >
                               {angle.isActive ? "نشط" : "غير نشط"}
                             </Badge>
+                          </TableCell>
+                          <TableCell data-testid={`text-topics-${angle.id}`}>
+                            {(() => {
+                              const s = anglesStats[angle.id];
+                              const total = s?.total || 0;
+                              const pending = s?.pending_review || 0;
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <Link href={`/dashboard/muqtarab/angles/${angle.id}/topics`}>
+                                    <span className="text-sm text-muted-foreground hover:text-foreground hover:underline cursor-pointer">
+                                      {total} موضوع
+                                    </span>
+                                  </Link>
+                                  {pending > 0 && (
+                                    <Badge
+                                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                                      data-testid={`badge-pending-${angle.id}`}
+                                    >
+                                      {pending} بانتظار المراجعة
+                                    </Badge>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell data-testid={`text-sort-order-${angle.id}`}>
                             {angle.sortOrder}
