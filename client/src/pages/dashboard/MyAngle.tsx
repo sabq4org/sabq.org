@@ -24,8 +24,6 @@ import {
   Eye,
   TrendingUp,
   BarChart3,
-  PenLine,
-  Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,7 +71,7 @@ interface MyTopic {
 }
 
 interface MyAngleData {
-  angle: { id: string; nameAr: string; slug: string; shortDesc?: string | null; writerSignature?: string | null };
+  angle: { id: string; nameAr: string; slug: string; shortDesc?: string | null };
   stats: {
     draft: number;
     pending_review: number;
@@ -165,29 +163,6 @@ export default function MyAngle() {
     queryFn: async () => apiRequest("/api/muqtarab/my-angle/analytics"),
     enabled: !!angle,
     retry: false,
-  });
-
-  const [signature, setSignature] = useState<string>("");
-  const [signatureInit, setSignatureInit] = useState(false);
-  useEffect(() => {
-    if (angle && !signatureInit) {
-      setSignature(angle.writerSignature || "");
-      setSignatureInit(true);
-    }
-  }, [angle, signatureInit]);
-
-  const signatureMutation = useMutation({
-    mutationFn: async () =>
-      apiRequest("/api/muqtarab/my-angle/profile", {
-        method: "PATCH",
-        body: JSON.stringify({ writerSignature: signature }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/muqtarab/my-angle"] });
-      toast({ title: "تم حفظ التوقيع", description: "سيظهر في نهاية مواضيعك المنشورة." });
-    },
-    onError: (e) =>
-      toast({ title: "خطأ", description: e instanceof Error ? e.message : "فشل في حفظ التوقيع", variant: "destructive" }),
   });
 
   const buildPayload = () => {
@@ -525,45 +500,6 @@ export default function MyAngle() {
             </CardContent>
           </Card>
         </div>
-
-        {/* توقيع الكاتب */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <PenLine className="w-5 h-5 text-indigo-500" />
-              توقيع الكاتب
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              توقيع قصير يظهر بشكل جمالي في نهاية كل موضوع منشور (مثل: اسمك، أو جملة تعريفية).
-            </p>
-            <Textarea
-              value={signature}
-              onChange={(e) => setSignature(e.target.value)}
-              placeholder="مثال: بقلم محمد العتيبي — كاتب في الشأن التقني"
-              rows={2}
-              maxLength={500}
-              data-testid="input-signature"
-            />
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-muted-foreground">{signature.length}/500</span>
-              <Button
-                size="sm"
-                onClick={() => signatureMutation.mutate()}
-                disabled={signatureMutation.isPending || signature === (angle?.writerSignature || "")}
-                data-testid="button-save-signature"
-              >
-                {signatureMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 ml-2" />
-                )}
-                حفظ التوقيع
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Topics */}
         <Card>

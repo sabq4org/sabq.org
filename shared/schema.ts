@@ -1809,7 +1809,6 @@ export const angles = pgTable("angles", {
   iconKey: text("icon_key").notNull(), // Lucide icon name
   coverImageUrl: text("cover_image_url"),
   shortDesc: text("short_desc"),
-  writerSignature: text("writer_signature"), // توقيع الكاتب — يظهر نهاية كل موضوع
   sortOrder: integer("sort_order").default(0).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   managerUserId: varchar("manager_user_id").references(() => users.id, { onDelete: "set null" }),
