@@ -514,11 +514,16 @@ struct AdminArticleEditorView: View {
                     await vm.runAutoImage(content: html.isEmpty ? vm.contentHTML : html)
                 }
             } label: {
-                toolLabel(vm.isGeneratingImage ? "جارٍ التوليد…" : "توليد صورة بالذكاء الاصطناعي",
+                toolLabel(vm.isGeneratingImage ? "جارٍ توليد الصورة… (~30 ثانية)" : "توليد صورة بالذكاء الاصطناعي",
                           systemImage: "wand.and.stars", loading: vm.isGeneratingImage)
             }
             .buttonStyle(.plain)
             .disabled(vm.isGeneratingImage)
+            if vm.isGeneratingImage {
+                Text("يُرجى الانتظار وعدم إغلاق الشاشة حتى تكتمل الصورة")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.tertiaryInk)
+            }
             PhotosPicker(selection: $imagePickerItem, matching: .images) {
                 toolLabel(vm.isUploadingImage ? "جارٍ الرفع…" : "رفع صورة",
                           systemImage: "arrow.up.circle.fill",
