@@ -22,7 +22,8 @@ import {
   ChevronRight,
   ChevronLeft,
   PenTool,
-  ExternalLink
+  ExternalLink,
+  Mail,
 } from "lucide-react";
 import {
   Table,
@@ -89,12 +90,20 @@ export default function OpinionAuthorApplications() {
       return response;
     },
     onSuccess: (data) => {
-      toast({
-        title: "تمت الموافقة",
-        description: data.isExistingUser 
-          ? "تم قبول الطلب - المستخدم موجود بالفعل" 
-          : "تم قبول الطلب وإنشاء حساب كاتب الرأي",
-      });
+      if (data.emailSent === false) {
+        toast({
+          variant: "destructive",
+          title: "تمت الموافقة لكن البريد لم يُرسَل",
+          description: data.emailError || data.message || "استخدم «إعادة إرسال الدخول» من قائمة الطلبات",
+        });
+      } else {
+        toast({
+          title: "تمت الموافقة",
+          description: data.message || (data.isExistingUser
+            ? "تم قبول الطلب وإرسال بريد الدخول"
+            : "تم قبول الطلب وإنشاء حساب كاتب الرأي"),
+        });
+      }
       setApprovalResult({
         temporaryPassword: data.temporaryPassword || "",
         email: data.user.email,
@@ -109,6 +118,27 @@ export default function OpinionAuthorApplications() {
         variant: "destructive",
         title: "فشل الموافقة",
         description: error.message || "حدث خطأ أثناء الموافقة على الطلب",
+      });
+    },
+  });
+
+  const resendCredentialsMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest(`/api/admin/opinion-author-applications/${id}/resend-credentials`, {
+        method: "POST",
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "تم إرسال بيانات الدخول",
+        description: data?.message || "أُرسل بريد جديد بكلمة مرور مؤقتة",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        variant: "destructive",
+        title: "فشل إرسال البريد",
+        description: error.message || "تعذر إعادة إرسال بيانات الدخول",
       });
     },
   });
@@ -345,6 +375,23 @@ export default function OpinionAuthorApplications() {
                               <X className="w-4 h-4" />
                             </Button>
                           </>
+                        )}
+                        {app.status === "approved" && app.createdUserId && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            onClick={() => resendCredentialsMutation.mutate(app.id)}
+                            disabled={resendCredentialsMutation.isPending}
+                            data-testid={`button-resend-credentials-${app.id}`}
+                          >
+                            {resendCredentialsMutation.isPending ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Mail className="w-3 h-3" />
+                            )}
+                            إعادة إرسال الدخول
+                          </Button>
                         )}
                       </div>
                     </TableCell>

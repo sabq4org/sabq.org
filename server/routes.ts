@@ -67,6 +67,7 @@ import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from ".
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
+import { resendOpinionAuthorCredentials } from "./services/opinionAuthorProvisioning";
 import { sendSubmissionReceivedEmail, sendTopicPublishedEmail, sendTopicRejectedEmail, buildTopicUrl, MUQTARAB_EDIT_URL } from "./services/muqtarabEmails";
 import { notifyAuthorTopicPublished, notifyAuthorTopicRejected } from "./services/muqtarabNotifications";
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
@@ -36900,34 +36901,42 @@ Sitemap: https://sabq.org/sitemap-news.xml
         newValue: { status: 'approved', notes },
       });
 
-      // Send approval email notification (non-blocking)
-      console.log('📧 [APPROVE] Opinion author approval - sending email:', {
+      console.log("📧 [APPROVE] Opinion author approval - sending email:", {
         email: result.application.email,
         arabicName: result.application.arabicName,
-        temporaryPassword: result.temporaryPassword ? '***' : 'existing user'
+        temporaryPassword: result.temporaryPassword ? "***" : "existing user",
       });
 
-      if (result.temporaryPassword) {
-        sendOpinionAuthorApprovalEmail(
-          result.application.email,
-          result.application.arabicName || "كاتب الرأي",
-          result.temporaryPassword
-        ).catch(err => console.error("Failed to send opinion author approval email:", err));
-      } else {
-        sendOpinionAuthorApprovalEmailExistingUser(
-          result.application.email,
-          result.application.arabicName || "كاتب الرأي"
-        ).catch(err => console.error("Failed to send opinion author approval email (existing user):", err));
+      const emailResult = result.temporaryPassword
+        ? await sendOpinionAuthorApprovalEmail(
+            result.application.email,
+            result.application.arabicName || "كاتب الرأي",
+            result.temporaryPassword,
+          )
+        : await sendOpinionAuthorApprovalEmailExistingUser(
+            result.application.email,
+            result.application.arabicName || "كاتب الرأي",
+          );
+
+      if (!emailResult.success) {
+        console.error("Failed to send opinion author approval email:", emailResult.error);
       }
 
+      const emailOk = !!emailResult.success;
       res.json({
-        message: result.temporaryPassword 
-          ? "تمت الموافقة على الطلب وتم إنشاء حساب كاتب الرأي" 
-          : "تمت الموافقة على الطلب - المستخدم موجود بالفعل ويمكنه تسجيل الدخول بكلمة المرور الحالية",
+        message: emailOk
+          ? result.temporaryPassword
+            ? "تمت الموافقة على الطلب وتم إنشاء حساب كاتب الرأي وإرسال بيانات الدخول"
+            : "تمت الموافقة على الطلب وإرسال بريد الدخول للحساب الموجود"
+          : result.temporaryPassword
+            ? "تمت الموافقة وإنشاء الحساب لكن فشل إرسال البريد — أعد الإرسال من قائمة الطلبات"
+            : "تمت الموافقة لكن فشل إرسال البريد — أعد الإرسال من قائمة الطلبات",
         application: result.application,
         user: result.user,
         temporaryPassword: result.temporaryPassword,
         isExistingUser: !result.temporaryPassword,
+        emailSent: emailOk,
+        emailError: emailResult.error,
       });
     } catch (error: any) {
       console.error("Error approving opinion author application:", error);
@@ -36942,6 +36951,23 @@ Sitemap: https://sabq.org/sitemap-news.xml
   });
 
   // News Analytics Endpoint - Smart statistics and insights
+
+  app.post("/api/admin/opinion-author-applications/:id/resend-credentials", requireAuth, requireRole("admin", "system_admin"), async (req: any, res) => {
+    try {
+      const result = await resendOpinionAuthorCredentials(req.params.id);
+      if (!result.ok) {
+        return res.status(400).json({ message: result.message, emailError: result.emailError });
+      }
+      res.json({
+        success: true,
+        message: result.message,
+        emailSent: result.emailSent,
+      });
+    } catch (error: any) {
+      console.error("Error resending opinion author credentials:", error);
+      res.status(500).json({ message: "فشل في إعادة إرسال بيانات الدخول" });
+    }
+  });
 
   // POST /api/admin/opinion-author-applications/:id/reject - Reject application (admin only)
   app.post("/api/admin/opinion-author-applications/:id/reject", requireAuth, requireRole('admin', 'system_admin'), async (req: any, res) => {

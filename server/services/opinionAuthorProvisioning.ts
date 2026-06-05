@@ -1,0 +1,85 @@
+/**
+ * إعادة إرسال بيانات دخول كاتب الرأي بعد الموافقة.
+ */
+import bcrypt from "bcrypt";
+import { nanoid } from "nanoid";
+import { eq } from "drizzle-orm";
+import { db } from "../db";
+import { users, opinionAuthorApplications } from "@shared/schema";
+import { invalidateUserSessionCache } from "../auth";
+import { sendOpinionAuthorApprovalEmail } from "./employeeNotifications";
+
+export interface ResendOpinionAuthorCredentialsResult {
+  ok: boolean;
+  emailSent?: boolean;
+  emailError?: string;
+  message: string;
+}
+
+export async function resendOpinionAuthorCredentials(
+  applicationId: string,
+): Promise<ResendOpinionAuthorCredentialsResult> {
+  const [application] = await db
+    .select()
+    .from(opinionAuthorApplications)
+    .where(eq(opinionAuthorApplications.id, applicationId))
+    .limit(1);
+
+  if (!application) {
+    return { ok: false, message: "الطلب غير موجود" };
+  }
+  if (application.status !== "approved") {
+    return { ok: false, message: "الطلب غير معتمد" };
+  }
+  if (!application.createdUserId) {
+    return { ok: false, message: "لم يُربط الطلب بحساب مستخدم بعد" };
+  }
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, application.createdUserId))
+    .limit(1);
+
+  if (!user) {
+    return { ok: false, message: "لم يُعثر على حساب المستخدم المرتبط بالطلب" };
+  }
+
+  const temporaryPassword = nanoid(12);
+  const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash: hashedPassword,
+      mustChangePassword: true,
+      status: "active",
+      emailVerified: true,
+      role: "opinion_author",
+    })
+    .where(eq(users.id, user.id));
+
+  invalidateUserSessionCache(user.id);
+
+  const emailResult = await sendOpinionAuthorApprovalEmail(
+    application.email,
+    application.arabicName || "كاتب الرأي",
+    temporaryPassword,
+  );
+
+  if (!emailResult.success) {
+    console.error("[opinion-author] فشل إعادة إرسال بريد الدخول:", emailResult.error);
+    return {
+      ok: false,
+      emailSent: false,
+      emailError: emailResult.error,
+      message: emailResult.error || "فشل إرسال البريد",
+    };
+  }
+
+  return {
+    ok: true,
+    emailSent: true,
+    message: "تم إعادة تعيين كلمة المرور وإرسال بيانات الدخول بالبريد",
+  };
+}
