@@ -1,5 +1,8 @@
 # Sabq Smart News Platform
 
+> **تنبيه نشر (2026-06):** الإنتاج الرسمي على **Cloudflare Pages + Railway** (`sabq.org` / `api.sabq.org`) منذ **منتصف مايو 2026**. Replit لم يعد المضيف الحالي. المرجع: [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).  
+> اسم هذا الملف (`replit.md`) تاريخي — بقي مرجعاً معمارياً من حقبة Replit.
+
 Sabq Smart is an AI-powered, trilingual news platform that redefines news consumption through AI summarization, personalization, and social media distribution.
 
 ## Run & Operate
@@ -62,7 +65,7 @@ Preferred communication style: Simple, everyday language.
 *   **Null/Undefined Safety**: All TanStack Query data MUST be guarded with `Array.isArray(dataRaw) ? dataRaw : []` after the `useQuery()` call.
 *   **`slugRedirectMiddleware`**: This middleware 301-redirects Arabic slugs and `/news/` paths to `/article/{englishSlug}` for ALL visitors, including crawlers.
 *   **Cloudflare Image Transform**: Ensure relative image paths are routed through Cloudflare Image Transform for optimized social media images. Avoid using CF Image Transform on `/public-objects/` and `/api/` paths directly, as they return HTML.
-*   **Production `/public-objects/` paths**: In Replit production, `/public-objects/` paths need server-side 302 redirects to `/api/public-media/public/*` to serve actual images instead of SPA fallback HTML.
+*   **Production `/public-objects/` paths**: On Pages, `/api/*` يُحوَّل إلى Railway. في وضع single-process (dev/Replit القديم)، `/public-objects/` يحتاج proxy في `server/index.ts` أو تحويلاً إلى `/api/public-media/public/*` لتجنب SPA fallback HTML.
 
 ## Pointers
 

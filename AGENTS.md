@@ -5,7 +5,7 @@
 هذا الملف هو **المرجع الإلزامي** لكل Agent يعمل على مشروع سبق.
 اقرأه كاملاً قبل تنفيذ أي مهمة.
 
-> 📖 **مرجع ثانٍ إلزامي:** اقرأ كذلك [`CLAUDE.md`](CLAUDE.md) قبل أي مهمة فنية — فيه التفاصيل التشغيلية الحرجة (الـ split topology، RBAC، Caching، Storage strategy، gotchas التشغيلية).
+> 📖 **مراجع إلزامية:** [`CLAUDE.md`](CLAUDE.md) (RBAC، Caching، Storage، gotchas) · [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md) (**الإنتاج الحالي:** Cloudflare Pages + Railway — انتقلنا من Replit منتصف مايو 2026).
 
 ---
 

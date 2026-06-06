@@ -1,13 +1,12 @@
 # Split Topology Roadmap
 
-Tracks the remaining work for the experimental Railway + Vercel deployment
-at sabq.news. Production at sabq.org (Replit) is unaffected by anything in
-this file.
+Tracks the **historical** experimental Railway + Vercel deployment at
+`sabq.news`. **Production today (2026-06):** Cloudflare Pages + Railway on
+`sabq.org` / `api.sabq.org` — migrated from Replit in mid-May 2026. See
+[`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
 
-Last updated: 2026-05-11 — split is verified working end-to-end as of
-commit `cc2e963`. Admin login, dashboard, RBAC, edit locks, and seeded
-data (9 roles, 164 permissions, 344 mappings, 1 admin, 1 test reporter)
-all functional.
+Last updated: 2026-06-06 — `sabq.org` cut over to Cloudflare Pages; Replit
+decommissioned as production host.
 
 ---
 

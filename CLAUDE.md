@@ -21,9 +21,21 @@ Required env vars (full list in `replit.md`): `DATABASE_URL`, `OPENAI_API_KEY`, 
 
 ## Architecture
 
-### Two deploy topologies live in this repo
-1. **Replit (legacy/production at sabq.org)** — single Express process serves API + SPA on one port. This is the original topology and is still the production deployment. `server/index.ts` mounts API routes and serves the SPA via Vite middleware (dev) or static `dist/public/` (prod). The SEO injector (`server/seoInjector.ts`) and slug redirect middleware (`server/middleware/slugRedirect.ts`) run inline.
-2. **Railway + Vercel (experimental at sabq.news)** — backend on Railway (`api.sabq.news`, headless, API only), frontend on Vercel (`sabq.news` + `www.sabq.news`, Vite static build), Cloudflare DNS in front of both. The same code supports both modes via env flags. **This split is for testing only — production stays on Replit at sabq.org and is unaffected.** Verified end-to-end as of commit `1a20343`. See "Split topology" below for the details.
+### Production topology (sabq.org — since ~mid-May 2026)
+**Cloudflare Pages** (frontend) + **Railway** (API at `api.sabq.org`). Replit is **no longer** the production host — it was retired ~two weeks before 2026-06-06. Canonical ops doc: [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
+
+```
+Browser → Cloudflare Pages (sabq.org)
+        ├─ static SPA (dist/public)
+        ├─ functions/_middleware.js  (proxy /api/*, slug-redirect, SEO inject)
+        └─ Railway api.sabq.org      (Express, SERVE_SPA=false, DB_DRIVER=pg)
+```
+
+`REDIS_URL` is optional on Railway (sessions fall back to PostgreSQL; SSE/notifications stay single-pod without it). See `docs/DEPLOYMENT_STATUS.md` § Redis.
+
+### Other topologies still supported in code
+1. **Local / legacy single-process (Replit-style)** — `npm run dev` or `SERVE_SPA=true`: one Express process serves API + SPA. `server/seoInjector.ts` and `server/middleware/slugRedirect.ts` run inline. Used for dev, not current production.
+2. **Railway + Vercel (experimental at sabq.news)** — older split-test path. Production cut over to Pages on `sabq.org`; see "Split topology" below for env-flag mechanics (still valid for Railway headless mode).
 
 ### One process, one port (Replit mode)
 `server/index.ts` is the entry. In dev, the same Express server mounts API routes AND proxies the SPA through Vite middleware (`server/vite.ts`); in prod, the same server serves the prebuilt SPA from `dist/public/`. There is no Next.js — the frontend is React + Vite + Wouter routing, SSR-flavored only via the SEO injector that rewrites the prebuilt `index.html` per request.
@@ -112,7 +124,7 @@ Role/permission constants are in `shared/rbac-constants.ts`. Runtime logic in `s
 
 ## Gotchas
 
-- **Production lives on Replit, NOT Railway/Vercel.** The split topology is experimental — never run `db:push`, `migrate-urls-to-r2.ts --apply`, or any destructive command against the production DATABASE_URL. The migration script has a guard that refuses URLs containing `prod`/`production` unless `--i-understand` is passed.
+- **Production is Cloudflare Pages + Railway (`sabq.org` / `api.sabq.org`), NOT Replit.** Replit was the original host; migrated to Pages ~mid-May 2026. See `docs/DEPLOYMENT_STATUS.md`. Never run `db:push`, `migrate-urls-to-r2.ts --apply`, or any destructive command against the production `DATABASE_URL`. The migration script has a guard that refuses URLs containing `prod`/`production` unless `--i-understand` is passed.
 - **243 raw `fetch('/api/...')` callsites** still exist outside `queryClient.ts`. They work fine in PROXY mode (Vercel rewrites) but break in DIRECT mode (`VITE_API_URL` set). Migration path: switch them to `apiUrl()` from `@/lib/queryClient` as you touch them.
 - **`edgeMeta.ts` covers all crawler-facing routes (ar/en/ur articles + categories, omq, world-day, gulf, landing pages) but is still simpler than `seoInjector.ts`.** Missing vs. the original: JSON-LD structured data, hreflang link chains, Twitter card bytecount tweaks, opinion/reporter/keyword pages. Extend `ROUTE_HANDLERS` if those start mattering.
 - **Edit-lock endpoints live in [server/routes/articleEditLocks.ts](server/routes/articleEditLocks.ts).** The schema (`articleEditLocks` table) and cleanup job existed in the original repo but the four routes (GET / POST / DELETE / POST heartbeat) were never implemented. Without them the dashboard's ArticleEditor surfaces "تعذر الحصول على قفل التحرير" on every "edit existing article" open. Lock TTL is 10 minutes; heartbeats extend it. If you find similar "schema + cleanup job but no routes" gaps elsewhere, follow the same pattern.
@@ -121,10 +133,10 @@ Role/permission constants are in `shared/rbac-constants.ts`. Runtime logic in `s
 - **Seed SQL files can be mojibake.** `scripts/seed-rbac.ts` detects "UTF-8 bytes interpreted as Latin-1" content (e.g. `Ø£Ø­ÙØ¯` instead of `أحمد`) and round-trips through Latin-1 to recover correct UTF-8 before sending to Postgres. If you write a new seed loader, copy that snippet.
 - **Railway auto-fix bot has write access to GitHub.** It opens PRs and merges them to `main` when builds fail. During the experimental phase Vercel was set to build from `experimental/split-deploy` (not main) to isolate. If you see commits authored by `railway-app[bot]` on main, that's why.
 - **Process-level handlers** at the top of `server/index.ts` log uncaughtException/unhandledRejection but don't exit. Be aware when debugging silent failures.
-- **`/public-objects/` in Replit production** falls through to the SPA HTML shell unless the direct proxy in `server/index.ts` intercepts first. The proxy uses `ObjectStorageService.searchPublicObject()` for dual-bucket fallback.
+- **`/public-objects/` on single-process mode** falls through to the SPA HTML shell unless the direct proxy in `server/index.ts` intercepts first. On Pages production, `/api/*` is proxied to Railway — do not assume Replit routing. The proxy uses `ObjectStorageService.searchPublicObject()` for dual-bucket fallback.
 - **Rate limiting** keys off `x-sabq-client-ip` / `true-client-ip` first, then `cf-connecting-ip`, then `x-forwarded-for` (`rateLimitKey` in `server/index.ts`). Authenticated users (sessions) and GET requests are skipped — only anonymous writes are throttled. **Gotcha:** Cloudflare Pages/Worker `fetch()` proxy to `api.sabq.org` rewrites `cf-connecting-ip` to a single egress IP, collapsing every visitor into one write bucket → site-wide HTTP 429 on login/comments. Pages middleware must set `X-Sabq-Client-IP` from the inbound request; mobile can bypass the proxy via `api.sabq.org` directly. Full writeup: `docs/ratelimit-edge-ip-fix-2026-06-03.md`.
 - **Communication style preference** (from `replit.md`): simple, everyday language. The project README and most user-facing strings are Arabic; preserve RTL/Arabic conventions when editing UI.
 
 ## Pointers
 
-`replit.md` is the project's living architecture note — read it first when picking up unfamiliar work. `SYSTEM_DOCUMENTATION.md` and the `docs/` folder have deeper feature-specific writeups (audio newsletters, mobile API, SendGrid, Cloudflare purge design, etc.).
+`docs/DEPLOYMENT_STATUS.md` is the canonical production topology note (Pages + Railway; Replit retired mid-May 2026). `replit.md` is the legacy architecture note — still useful for stack/product context. `SYSTEM_DOCUMENTATION.md` and `docs/` have deeper feature writeups (audio newsletters, mobile API, SendGrid, Cloudflare purge, etc.).

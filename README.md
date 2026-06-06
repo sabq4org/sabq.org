@@ -115,7 +115,7 @@ It powers a real newsroom: writers compose with an AI co-pilot, editors approve 
 | 🤖 AI providers | **5** (OpenAI · Anthropic · Gemini · ElevenLabs · Google TTS) | **5** مزوّدات |
 | ⏰ Background jobs | **14** node-cron jobs with leader election | **14** مهمة خلفية |
 | 📱 Native apps | **iOS** SwiftUI · **Android** Compose · **Web** Vite SPA | **iOS** و**أندرويد** نيتيف |
-| 🚀 Deploy topology | Cloudflare → Vercel + Railway → Neon + Upstash | منصّة هجينة |
+| 🚀 Deploy topology | Cloudflare Pages + Railway (`sabq.org` / `api.sabq.org`) · Redis اختياري | Pages + Railway |
 
 </div>
 
@@ -132,7 +132,7 @@ flowchart LR
     end
     
     subgraph Frontend["🎨 Frontend · الواجهة"]
-        V[Vercel SPA<br/>sabq.org]
+        V[Cloudflare Pages<br/>sabq.org]
     end
     
     subgraph Backend["⚙️ Backend · الخلفية"]
@@ -142,7 +142,7 @@ flowchart LR
     
     subgraph Data["💾 Data · البيانات"]
         N[(Neon Postgres<br/>251 tables)]
-        U[(Upstash Redis<br/>sessions + cache)]
+        U[(Redis optional<br/>sessions · Railway)]
         S3[(R2 / S3<br/>media)]
         CFI[(CF Images<br/>primary)]
     end
