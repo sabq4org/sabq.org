@@ -115,7 +115,7 @@ It powers a real newsroom: writers compose with an AI co-pilot, editors approve 
 | 🤖 AI providers | **5** (OpenAI · Anthropic · Gemini · ElevenLabs · Google TTS) | **5** مزوّدات |
 | ⏰ Background jobs | **14** node-cron jobs with leader election | **14** مهمة خلفية |
 | 📱 Native apps | **iOS** SwiftUI · **Android** Compose · **Web** Vite SPA | **iOS** و**أندرويد** نيتيف |
-| 🚀 Deploy topology | Cloudflare Pages + Railway (`sabq.org` / `api.sabq.org`) · Redis اختياري | Pages + Railway |
+| 🚀 Deploy topology | Cloudflare Pages + Railway · Upstash Redis (جلسات — تخفيف Neon) | Pages + Railway + Redis |
 
 </div>
 
@@ -142,7 +142,7 @@ flowchart LR
     
     subgraph Data["💾 Data · البيانات"]
         N[(Neon Postgres<br/>251 tables)]
-        U[(Redis optional<br/>sessions · Railway)]
+        U[(Upstash Redis<br/>sessions · offload Neon)]
         S3[(R2 / S3<br/>media)]
         CFI[(CF Images<br/>primary)]
     end
@@ -187,7 +187,7 @@ flowchart LR
     class iOS,Android mobile
 ```
 
-> **Note:** The diagram shows the experimental split topology (sabq.news). Production at **sabq.org** still runs as a single-process Replit deployment (Express serving API + SPA on one port). See [`replit.md`](replit.md) for the canonical architecture note.
+> **Note:** الإنتاج على **sabq.org** = Cloudflare Pages + Railway (`api.sabq.org`) + Neon + Upstash Redis للجلسات. انظر [`docs/DEPLOYMENT_STATUS.md`](docs/DEPLOYMENT_STATUS.md).
 
 ---
 
@@ -284,7 +284,7 @@ OpenAI · Anthropic Claude · Google Gemini · ElevenLabs (multi-voice TTS) · G
 <td><b>☁️ Platform</b><br/>المنصّة</td>
 <td>
 
-Cloudflare (Workers, DNS, Images, R2) · Vercel (Vite SPA) · Railway (Node API) · Replit (legacy production) · Neon (managed Postgres) · Upstash (managed Redis)
+Cloudflare (Pages, Workers, DNS, Images, R2) · Railway (Node API) · Neon (Postgres) · Upstash (Redis sessions)
 
 </td>
 </tr>

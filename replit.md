@@ -13,7 +13,7 @@ Sabq Smart is an AI-powered, trilingual news platform that redefines news consum
 *   **Typecheck**: `npm run typecheck`
 *   **Generate Drizzle Kit Migrations**: `npm run db:generate`
 *   **Push Drizzle Kit Migrations to DB**: `npm run db:push`
-*   **Environment Variables**: `DATABASE_URL`, `REDIS_URL` (optional), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`, `GCS_PROJECT_ID`, `GCS_KEYFILE_PATH`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_ACCOUNT_HASH` (the three Cloudflare Images vars — checked by `isCloudflareConfigured()`), `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN` (for cache purge), `FCM_SERVER_KEY`, `MAILERLITE_WEBHOOK_SECRET` (required — MailerLite webhook signing secret for HMAC-SHA256 verification)
+*   **Environment Variables**: `DATABASE_URL`, `REDIS_URL` (مُفعّل في إنتاج Railway لتخفيف جلسات Neon؛ اختياري محلياً), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`, `GCS_PROJECT_ID`, `GCS_KEYFILE_PATH`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_IMAGES_TOKEN`, `CLOUDFLARE_ACCOUNT_HASH` (the three Cloudflare Images vars — checked by `isCloudflareConfigured()`), `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN` (for cache purge), `FCM_SERVER_KEY`, `MAILERLITE_WEBHOOK_SECRET` (required — MailerLite webhook signing secret for HMAC-SHA256 verification)
 
 ## Stack
 

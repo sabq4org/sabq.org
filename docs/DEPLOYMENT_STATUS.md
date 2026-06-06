@@ -12,7 +12,7 @@
 | **الواجهة (SPA)** | Cloudflare Pages | `sabq.org` · `www.sabq.org` | `npm run build:client` → `dist/public/` · `functions/_middleware.js` |
 | **الـ API** | Railway (Dockerfile) | `api.sabq.org` | `SERVE_SPA=false` · `DB_DRIVER=pg` |
 | **قاعدة البيانات** | Neon / Postgres | عبر `DATABASE_URL` على Railway | لا تشغّل `db:push` على prod بدون `./push-to-production.sh` |
-| **Redis** | اختياري على Railway | `REDIS_URL` | انظر قسم Redis أدناه |
+| **Redis** | Upstash (أو Redis مُدار) على Railway | `REDIS_URL` | **مُستخدم في الإنتاج** لتخفيف جلسات Neon — انظر § Redis |
 | **الوسائط** | Cloudflare Images + R2/S3 | — | كما في `CLAUDE.md` |
 
 ```
@@ -39,28 +39,44 @@
 
 ---
 
-## `REDIS_URL` — هل هو مفعّل؟
+## `REDIS_URL` — الجلسات وتخفيف ضغط Neon
 
-**في الكود:** Redis **اختياري**. إذا لم يُضبط `REDIS_URL` على Railway يعمل النظام بشكل طبيعي مع بدائل:
+### لماذا استخدمناه؟
 
-| الوظيفة | مع Redis | بدون Redis |
-|---------|----------|------------|
-| الجلسات | `connect-redis` | جدول `sessions` في PostgreSQL |
-| SSE / إشعارات بين النسخ | pub/sub | ذاكرة العملية الواحدة |
+على **Neon Postgres**، تخزين الجلسات في جدول `sessions` كان يولّد استعلاماً (قراءة/كتابة) على **كل طلب** يحمل كوكي جلسة — ضغطاً ملحوظاً على اتصالات Neon وتكلفة الحوسبة.  
+**القرار التشغيلي:** تفعيل `REDIS_URL` على Railway (غالباً **Upstash Redis**) ونقل الجلسات إلى `connect-redis` في `server/auth.ts`، بهدف:
+
+- تخفيف ~50% من حركة الجلسات على Postgres (تقدير من `تقرير_الأداء_المعماري_سبق.md`)
+- تقليل احتكاك حد الاتصالات (pool ~45) عند الذروة
+- إبقاء Neon مخصصاً للمحتوى والاستعلامات وليس لقراءة/كتابة session TTL
+
+هذا ليس «ميزة اختيارية للتجربة» — **مُفعّل في الإنتاج منذ فترة** كجزء من تحسين الأداء بعد الانتقال إلى Railway.
+
+### في الكود (سلوك fallback)
+
+الكود يبقى مرناً: بدون `REDIS_URL` يعود تلقائياً إلى جدول `sessions` في Postgres — مفيد للتطوير المحلي فقط، **ليس الوضع المستهدف للإنتاج**.
+
+| الوظيفة | مع Redis (الإنتاج) | بدون Redis (fallback) |
+|---------|-------------------|----------------------|
+| **الجلسات** | `connect-redis` → Upstash | جدول `sessions` في Neon |
+| SSE / إشعارات بين النسخ | pub/sub عبر Redis | ذاكرة العملية الواحدة |
 | Editor presence | متزامن بين pods | نسخة واحدة |
 | الكاش الساخن | `memoryCache.ts` (ذاكرة العملية) | نفس السلوك |
 
-**أين يُضبط:** متغير بيئة على **خدمة Railway** (ليس على Cloudflare Pages — Pages لا تستخدم Redis).
+### أين يُضبط
 
-**كيف تتأكد:**
-1. Railway → Service → Variables → هل `REDIS_URL` موجود؟
-2. سجلات الإقلاع: `[Session] Using Redis store` = مفعّل · `Using PostgreSQL store (add REDIS_URL...)` = غير مفعّل
+- **Railway** → Variables → `REDIS_URL` (مثال: `rediss://…upstash.io`)
+- **ليس** على Cloudflare Pages — الواجهة لا تتصل بـ Redis
 
-**متى تحتاجونه:**
-- أكثر من replica لـ Railway → **مستحسن** (جلسات + pub/sub بين النسخ)
-- replica واحدة (الوضع الشائع حالياً) → **اختياري**؛ PostgreSQL للجلسات يكفي لكنه يزيد ضغط DB
+### كيف تتأكد
 
-**محلي:** `docker-compose.yml` يشغّل Redis تلقائياً (`redis://redis:6379`). التطوير بـ `npm run dev` بدون Docker لا يحتاج Redis.
+1. Railway → Variables → `REDIS_URL` موجود
+2. سجلات الإقلاع: `[Session] Using Redis store (fast, no DB pressure)` ✅  
+   أو `Using PostgreSQL store (add REDIS_URL...)` ⚠️ يعني الجلسات عادت لـ Neon
+
+### محلي
+
+`docker-compose.yml` يشغّل Redis (`redis://redis:6379`). `npm run dev` بدون Docker لا يحتاج Redis — الجلسات تذهب لـ Postgres المحلي أو in-memory حسب الإعداد.
 
 ---
 

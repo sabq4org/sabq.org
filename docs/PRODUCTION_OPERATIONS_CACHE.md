@@ -5,11 +5,11 @@
 
 ## Redis في الإنتاج
 
-- `REDIS_URL` **اختياري** — يُضبط على **Railway** (ليس على Cloudflare Pages).
-- **بدون Redis:** الجلسات في PostgreSQL (`sessions`)؛ SSE والإشعارات وEditor Presence تعمل داخل ذاكرة العملية الواحدة — مقبول مع **replica واحدة** على Railway.
-- **مع Redis:** يقلل ضغط DB للجلسات؛ **مطلوب عملياً** عند تشغيل أكثر من نسخة Backend (pub/sub بين pods).
-- **التحقق:** سجلات Railway عند الإقلاع — `[Session] Using Redis store` أو `Using PostgreSQL store (add REDIS_URL...)`.
-- **محلي:** `docker-compose.yml` يوفّر Redis؛ `npm run dev` بدون Docker لا يحتاجه.
+- **`REDIS_URL` مُفعّل في الإنتاج على Railway** (غالباً Upstash) — **لتخفيف جلسات Passport عن Neon**، وليس للتجربة فقط.
+- كل طلب بجلسة كان يضرب جدول `sessions` في Postgres؛ نقل الجلسات إلى Redis خفّف ضغط الاتصالات والتكلفة (انظر `تقرير_الأداء_المعماري_سبق.md` و`docs/DEPLOYMENT_STATUS.md`).
+- **بدون Redis (fallback في الكود):** الجلسات تعود لـ Neon — مقبول محلياً، غير مستهدف للإنتاج.
+- **pub/sub:** SSE وEditor Presence بين أكثر من replica يستفيدان من Redis أيضاً.
+- **التحقق:** سجلات Railway — `[Session] Using Redis store` = الوضع الصحيح.
 
 ## أعمال الإقلاع
 

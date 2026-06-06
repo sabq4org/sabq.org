@@ -31,7 +31,7 @@ Browser → Cloudflare Pages (sabq.org)
         └─ Railway api.sabq.org      (Express, SERVE_SPA=false, DB_DRIVER=pg)
 ```
 
-`REDIS_URL` is optional on Railway (sessions fall back to PostgreSQL; SSE/notifications stay single-pod without it). See `docs/DEPLOYMENT_STATUS.md` § Redis.
+`REDIS_URL` on Railway is **production-enabled** (typically Upstash) to offload Passport sessions from Neon Postgres — optional only as a code fallback to the `sessions` table. See `docs/DEPLOYMENT_STATUS.md` § Redis.
 
 ### Other topologies still supported in code
 1. **Local / legacy single-process (Replit-style)** — `npm run dev` or `SERVE_SPA=true`: one Express process serves API + SPA. `server/seoInjector.ts` and `server/middleware/slugRedirect.ts` run inline. Used for dev, not current production.
