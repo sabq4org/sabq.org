@@ -73,6 +73,7 @@ export default function OpinionAuthorApplications() {
     isExistingUser?: boolean;
   } | null>(null);
   const [showApprovalResultDialog, setShowApprovalResultDialog] = useState(false);
+  const [credentialsDialogTitle, setCredentialsDialogTitle] = useState("تمت الموافقة بنجاح");
 
   const { data, isLoading, refetch } = useQuery<ApplicationsResponse>({
     queryKey: ["/api/admin/opinion-author-applications", statusFilter, page],
@@ -104,6 +105,7 @@ export default function OpinionAuthorApplications() {
             : "تم قبول الطلب وإنشاء حساب كاتب الرأي"),
         });
       }
+      setCredentialsDialogTitle("تمت الموافقة بنجاح");
       setApprovalResult({
         temporaryPassword: data.temporaryPassword || "",
         email: data.user.email,
@@ -129,15 +131,27 @@ export default function OpinionAuthorApplications() {
       });
     },
     onSuccess: (data: any) => {
+      if (data?.temporaryPassword) {
+        setCredentialsDialogTitle(
+          data.emailSent === false ? "كلمة مرور جديدة — أرسلها يدوياً" : "بيانات الدخول الجديدة",
+        );
+        setApprovalResult({
+          temporaryPassword: data.temporaryPassword,
+          email: data.email || "",
+          isExistingUser: false,
+        });
+        setShowApprovalResultDialog(true);
+      }
       toast({
-        title: "تم إرسال بيانات الدخول",
+        variant: data?.emailSent === false ? "destructive" : "default",
+        title: data?.emailSent === false ? "تم التعيين — البريد لم يُرسَل" : "تم إرسال بيانات الدخول",
         description: data?.message || "أُرسل بريد جديد بكلمة مرور مؤقتة",
       });
     },
     onError: (error: any) => {
       toast({
         variant: "destructive",
-        title: "فشل إرسال البريد",
+        title: "فشل إعادة الإرسال",
         description: error.message || "تعذر إعادة إرسال بيانات الدخول",
       });
     },
@@ -602,7 +616,7 @@ export default function OpinionAuthorApplications() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
-              تمت الموافقة بنجاح
+              {credentialsDialogTitle}
             </DialogTitle>
           </DialogHeader>
           <Alert>
@@ -643,9 +657,11 @@ export default function OpinionAuthorApplications() {
             </AlertDescription>
           </Alert>
           <p className="text-sm text-muted-foreground">
-            {approvalResult?.isExistingUser 
-              ? "المستخدم موجود بالفعل في النظام. يمكنه تسجيل الدخول بكلمة المرور الحالية."
-              : "يرجى إرسال بيانات الدخول هذه للكاتب. سيُطلب منه تغيير كلمة المرور عند تسجيل الدخول الأول."}
+            {approvalResult?.temporaryPassword
+              ? "انسخ كلمة المرور وأرسلها للكاتب (واتساب إذا لم يصل البريد — شائع مع Yahoo). عند أول دخول سيُطلب تغيير كلمة المرور. صفحة الدخول: sabq.org/login"
+              : approvalResult?.isExistingUser
+                ? "المستخدم موجود بالفعل في النظام. استخدم «إعادة إرسال الدخول» لتعيين كلمة مرور مؤقتة جديدة."
+                : "يرجى إرسال بيانات الدخول هذه للكاتب."}
           </p>
           <DialogFooter>
             <Button onClick={() => setShowApprovalResultDialog(false)} data-testid="button-close-approval">

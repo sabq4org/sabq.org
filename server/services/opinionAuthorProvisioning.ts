@@ -13,6 +13,9 @@ export interface ResendOpinionAuthorCredentialsResult {
   ok: boolean;
   emailSent?: boolean;
   emailError?: string;
+  /** Present when ok — admin-only endpoint may surface for manual delivery (Yahoo spam, etc.) */
+  temporaryPassword?: string;
+  email?: string;
   message: string;
 }
 
@@ -69,17 +72,24 @@ export async function resendOpinionAuthorCredentials(
 
   if (!emailResult.success) {
     console.error("[opinion-author] فشل إعادة إرسال بريد الدخول:", emailResult.error);
+    // Password was already rotated — return ok so admin can copy the temp password
+    // manually (common with Yahoo/Hotmail spam filters).
     return {
-      ok: false,
+      ok: true,
       emailSent: false,
       emailError: emailResult.error,
-      message: emailResult.error || "فشل إرسال البريد",
+      temporaryPassword,
+      email: application.email,
+      message:
+        "تم تعيين كلمة مرور مؤقتة جديدة لكن فشل إرسال البريد — انسخ كلمة المرور وأرسلها للكاتب يدوياً (واتساب/رسالة)",
     };
   }
 
   return {
     ok: true,
     emailSent: true,
+    temporaryPassword,
+    email: application.email,
     message: "تم إعادة تعيين كلمة المرور وإرسال بيانات الدخول بالبريد",
   };
 }

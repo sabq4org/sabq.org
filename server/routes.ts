@@ -36962,6 +36962,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         success: true,
         message: result.message,
         emailSent: result.emailSent,
+        emailError: result.emailError,
+        email: result.email,
+        // Admin-only: manual fallback when transactional email is blocked
+        temporaryPassword: result.temporaryPassword,
       });
     } catch (error: any) {
       console.error("Error resending opinion author credentials:", error);
