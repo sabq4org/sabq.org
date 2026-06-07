@@ -11,6 +11,7 @@ import { articles } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import fetch from 'node-fetch';
 import { ObjectStorageService } from '../objectStorage';
+import { assertSafeImageUrl } from '../utils/safeImageUrl';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -93,11 +94,18 @@ async function uploadToStorage(
  * Analyze original image and generate description
  */
 async function analyzeImage(imageUrl: string): Promise<string> {
+  // SSRF guard: imageUrl is user-supplied (req.body) and reaches the server's
+  // own fetch(). Restrict it to allowlisted https media hosts so it can't be
+  // pointed at internal services or the cloud metadata endpoint (S-02). Kept
+  // OUTSIDE the try below so a rejected URL propagates instead of silently
+  // falling back to a generic description.
+  const safeImageUrl = assertSafeImageUrl(imageUrl);
+
   try {
     console.log(`[AI Smart Thumbnail] Analyzing image: ${imageUrl}`);
-    
+
     // Fetch the image
-    const response = await fetch(imageUrl);
+    const response = await fetch(safeImageUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
     }
