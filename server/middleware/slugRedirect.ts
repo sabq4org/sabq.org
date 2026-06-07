@@ -9,6 +9,18 @@ function containsArabic(text: string): boolean {
   return ARABIC_CHAR_REGEX.test(text);
 }
 
+// Crawlers and corrupted/double-encoded URLs occasionally arrive with invalid
+// percent-encoding (a lone `%`, bad `%XX`, or a truncated UTF-8 byte sequence).
+// Raw decodeURIComponent() throws `URIError: URI malformed` on such input —
+// return the raw string so the middleware just skips the redirect instead.
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 const CRAWLER_USER_AGENTS = [
   'facebookexternalhit',
   'WhatsApp',
@@ -46,7 +58,7 @@ export async function slugRedirectMiddleware(
     const articleMatch = path.match(/^\/(article|news)\/([^/]+)/);
     if (articleMatch) {
       const [, routeType, slug] = articleMatch;
-      const decodedSlug = decodeURIComponent(slug);
+      const decodedSlug = safeDecode(slug);
       
       const needsRedirect = containsArabic(decodedSlug) || routeType === 'news';
       if (needsRedirect) {
@@ -89,7 +101,7 @@ export async function slugRedirectMiddleware(
     const categoryMatch = path.match(/^\/category\/([^/]+)/);
     if (categoryMatch) {
       const [, slug] = categoryMatch;
-      const decodedSlug = decodeURIComponent(slug);
+      const decodedSlug = safeDecode(slug);
       
       if (containsArabic(decodedSlug)) {
         const category = await db
