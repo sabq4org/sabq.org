@@ -1418,6 +1418,10 @@ struct CompactArticleRow: View {
     let article: Article
     let onBookmark: () -> Void
     let isBookmarked: Bool
+    /// Shows a "جديد" badge for articles that just landed via pull-to-refresh
+    /// / the live "أخبار جديدة" banner (`ArticlesStore.isRecentlyAdded`).
+    /// Defaulted so the eight non-home call sites stay source-compatible.
+    var isNew: Bool = false
 
     // Reader can flip between the legacy thumbnail-on-the-side layout
     // ("classic") and the experimental image-on-top hero layout
@@ -1444,6 +1448,7 @@ struct CompactArticleRow: View {
                 HStack(spacing: 8) {
                     StatusChip(title: article.category.title, tint: article.category.tint)
                     if article.isBreaking { breakingPill }
+                    if isNew { newPill }
                 }
 
                 Text(article.title)
@@ -1520,6 +1525,7 @@ struct CompactArticleRow: View {
 
             HStack(spacing: 6) {
                 if article.isBreaking { breakingPill }
+                if isNew { newPill }
                 StatusChip(title: article.category.title, tint: article.category.tint)
             }
             .padding(10)
@@ -1556,6 +1562,18 @@ struct CompactArticleRow: View {
             Capsule(style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.10))
         )
+    }
+
+    private var newPill: some View {
+        Text("جديد")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(SabqTheme.leaf)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(SabqTheme.leaf.opacity(0.12))
+            )
     }
 
     private var metadataRow: some View {

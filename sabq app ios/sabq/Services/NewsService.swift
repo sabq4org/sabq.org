@@ -131,7 +131,7 @@ enum NewsService {
     }
 
     static func fetchBreakingTicker() async -> [APIBreakingHeadline] {
-        (try? await APIClient.shared.fetchBreakingTicker())?.headlines ?? []
+        ((try? await APIClient.shared.fetchBreakingTicker()) ?? nil)?.headlines ?? []
     }
 
     static func fetchArticleDetail(slug: String) async -> (article: Article, related: [Article])? {

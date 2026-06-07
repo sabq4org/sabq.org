@@ -405,40 +405,66 @@ nonisolated struct APITrendingItem: Decodable {
 }
 
 // MARK: - Breaking Ticker
+//
+// Mirrors the dashboard-managed "شريط الأخبار العاجلة" served by
+// `GET /api/breaking-ticker/active` (server/storage.ts → getActiveBreakingTicker).
+// The payload is `{ topic: {...}, headlines: [...] }` with camelCase keys, or a
+// bare `null` when no topic is active. Earlier this model targeted the wrong
+// endpoint (`/api/v1/breaking`, which returns breaking-type *articles*) and a
+// flat shape that never matched, so the ticker never rendered on iOS.
 
 nonisolated struct APIBreakingTicker: Decodable {
-    let id: Int?
-    let title: String?
-    let headlines: [APIBreakingHeadline]?
-    let articles: [APIArticle]?
-    let count: Int?
-    let isActive: Bool?
+    let topic: APIBreakingTopic?
+    let headlines: [APIBreakingHeadline]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        id = try? c.decode(Int.self, forKey: FlexKey("id"))
-        title = try? c.decode(String.self, forKey: FlexKey("title"))
-        headlines = try? c.decode([APIBreakingHeadline].self, forKey: FlexKey("headlines"))
-        articles = try? c.decode([APIArticle].self, forKey: FlexKey("articles"))
-        count = try? c.decode(Int.self, forKey: FlexKey("count"))
-        isActive = (try? c.decode(Bool.self, forKey: FlexKey("is_active")))
-            ?? (try? c.decode(Bool.self, forKey: FlexKey("active")))
+        topic = try? c.decode(APIBreakingTopic.self, forKey: FlexKey("topic"))
+        headlines = (try? c.decode([APIBreakingHeadline].self, forKey: FlexKey("headlines"))) ?? []
+    }
+}
+
+nonisolated struct APIBreakingTopic: Decodable {
+    let id: String
+    let topicTitle: String
+    let isActive: Bool
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = (try? c.decode(String.self, forKey: FlexKey("id"))) ?? ""
+        topicTitle = (try? c.decode(String.self, forKey: FlexKey("topicTitle")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("topic_title")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("title")))
+            ?? ""
+        isActive = (try? c.decode(Bool.self, forKey: FlexKey("isActive")))
+            ?? (try? c.decode(Bool.self, forKey: FlexKey("is_active")))
+            ?? false
     }
 }
 
 nonisolated struct APIBreakingHeadline: Decodable, Identifiable {
-    let id: Int
-    let text: String
-    let articleSlug: String?
+    let id: String
+    let headline: String
+    let linkedArticleSlug: String?
+    let linkedArticleId: String?
+    let externalUrl: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        id = (try? c.decode(Int.self, forKey: FlexKey("id"))) ?? 0
-        text = (try? c.decode(String.self, forKey: FlexKey("text")))
+        id = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
+            ?? UUID().uuidString
+        headline = (try? c.decode(String.self, forKey: FlexKey("headline")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("text")))
             ?? (try? c.decode(String.self, forKey: FlexKey("title")))
             ?? ""
-        articleSlug = (try? c.decode(String.self, forKey: FlexKey("article_slug")))
+        linkedArticleSlug = (try? c.decode(String.self, forKey: FlexKey("linkedArticleSlug")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("linked_article_slug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("slug")))
+        linkedArticleId = (try? c.decode(String.self, forKey: FlexKey("linkedArticleId")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("linked_article_id")))
+        externalUrl = (try? c.decode(String.self, forKey: FlexKey("externalUrl")))
+            ?? (try? c.decode(String.self, forKey: FlexKey("external_url")))
     }
 }
 
