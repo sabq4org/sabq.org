@@ -74,6 +74,19 @@ const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
 
+// Crawlers and corrupted/double-encoded URLs occasionally hit these edge
+// endpoints with invalid percent-encoding (a lone `%`, bad `%XX`, or a
+// truncated UTF-8 byte sequence). Raw decodeURIComponent() throws
+// `URIError: URI malformed` on such input — return the raw string instead so
+// the handler degrades gracefully (no redirect / default meta) rather than 500.
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 function abs(url: string | null | undefined): string {
   if (!url) return DEFAULT_OG_IMAGE;
   if (/^https?:\/\//i.test(url)) return url;
@@ -86,7 +99,7 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
   const articleMatch = path.match(/^\/(article|news)\/([^/?#]+)/);
   if (articleMatch) {
     const [, routeType, rawSlug] = articleMatch;
-    const decodedSlug = decodeURIComponent(rawSlug);
+    const decodedSlug = safeDecode(rawSlug);
     const needsLookup = containsArabic(decodedSlug) || routeType === "news";
     if (needsLookup) {
       const where = containsArabic(decodedSlug)
@@ -109,7 +122,7 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
   const categoryMatch = path.match(/^\/category\/([^/?#]+)/);
   if (categoryMatch) {
     const [, rawSlug] = categoryMatch;
-    const decodedSlug = decodeURIComponent(rawSlug);
+    const decodedSlug = safeDecode(rawSlug);
     if (containsArabic(decodedSlug)) {
       const [row] = await db
         .select({ englishSlug: categories.englishSlug })
@@ -133,7 +146,7 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
   // Excludes CURRENT features that share a /<x>/<id> shape (gulf, omq).
   const legacyMatch = path.match(/^\/([a-z]+)(?:\/[a-z0-9-]+)*\/([^/?#]+)\/?$/i);
   if (legacyMatch && LEGACY_ARTICLE_PREFIXES.has(legacyMatch[1].toLowerCase())) {
-    const legacySlug = decodeURIComponent(legacyMatch[2]);
+    const legacySlug = safeDecode(legacyMatch[2]);
     const [row] = await db
       .select({ englishSlug: articles.englishSlug, slug: articles.slug })
       .from(articles)
@@ -887,8 +900,8 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/muqtarab\/([^/?#]+)\/topic\/([^/?#]+)/,
     handle: async (m) => {
-      const angleSlug = decodeURIComponent(m[1]);
-      const topicSlug = decodeURIComponent(m[2]);
+      const angleSlug = safeDecode(m[1]);
+      const topicSlug = safeDecode(m[2]);
       const [row] = await db
         .select({
           title: topics.title,
@@ -937,7 +950,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/muqtarab\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const [ang] = await db
         .select({
           nameAr: angles.nameAr,
@@ -1003,7 +1016,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/article\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const row = await fetchArArticle(slug);
       if (!row) return null;
       return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
@@ -1021,7 +1034,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/opinion\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const row = await fetchArArticle(slug);
       if (!row) return null;
       return buildArArticlePayload(row, slug, `${SITE_URL}/article/${row.englishSlug || slug}`);
@@ -1031,7 +1044,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/en\/article\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const row = await fetchEnArticle(slug);
       if (!row) return null;
       return buildEnArticlePayload(row, slug);
@@ -1041,7 +1054,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/ur\/article\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const row = await fetchUrArticle(slug);
       if (!row) return null;
       return buildUrArticlePayload(row, slug);
@@ -1051,7 +1064,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/category\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const where = or(eq(categories.englishSlug, slug), eq(categories.slug, slug));
       const [row] = await db
         .select({
@@ -1101,7 +1114,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/en\/category\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const [row] = await db
         .select({
           name: enCategories.name,
@@ -1128,7 +1141,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/ur\/category\/([^/?#]+)/,
     handle: async (m) => {
-      const slug = decodeURIComponent(m[1]);
+      const slug = safeDecode(m[1]);
       const [row] = await db
         .select({
           name: urCategories.name,
@@ -1155,7 +1168,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/omq\/([^/?#]+)/,
     handle: async (m) => {
-      const id = decodeURIComponent(m[1]);
+      const id = safeDecode(m[1]);
       // /omq/stats and /omq (without id) are SPA listings — skip DB lookup.
       if (id === "stats") return null;
       const [row] = await db
@@ -1196,7 +1209,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/world-day\/([^/?#]+)/,
     handle: async (m) => {
-      const id = decodeURIComponent(m[1]);
+      const id = safeDecode(m[1]);
       const [row] = await db
         .select({
           id: worldDays.id,
@@ -1224,7 +1237,7 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   {
     pattern: /^\/gulf\/([^/?#]+)/,
     handle: async (m) => {
-      const id = decodeURIComponent(m[1]);
+      const id = safeDecode(m[1]);
       const [row] = await db
         .select({
           id: gulfEvents.id,
@@ -1252,20 +1265,20 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   // Keyword/tag landing: /keyword/:slug + /en/keyword/:slug
   {
     pattern: /^\/keyword\/([^/?#]+)/,
-    handle: async (m) => buildKeywordMeta(decodeURIComponent(m[1]), false),
+    handle: async (m) => buildKeywordMeta(safeDecode(m[1]), false),
   },
   {
     pattern: /^\/en\/keyword\/([^/?#]+)/,
-    handle: async (m) => buildKeywordMeta(decodeURIComponent(m[1]), true),
+    handle: async (m) => buildKeywordMeta(safeDecode(m[1]), true),
   },
   // Reporter/author profile: /reporter/:idOrSlug + /en/reporter/:idOrSlug
   {
     pattern: /^\/reporter\/([^/?#]+)/,
-    handle: async (m) => buildReporterMeta(decodeURIComponent(m[1]), false),
+    handle: async (m) => buildReporterMeta(safeDecode(m[1]), false),
   },
   {
     pattern: /^\/en\/reporter\/([^/?#]+)/,
-    handle: async (m) => buildReporterMeta(decodeURIComponent(m[1]), true),
+    handle: async (m) => buildReporterMeta(safeDecode(m[1]), true),
   },
   // Gulf live coverage landing
   {
@@ -1312,7 +1325,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
     "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
   );
   try {
-    const slug = decodeURIComponent(String(req.params.slug || ""));
+    const slug = safeDecode(String(req.params.slug || ""));
     if (!slug) return res.status(400).json({ error: "missing slug" });
     const langParam = String(req.query.lang || "ar").toLowerCase();
     const lang: "ar" | "en" | "ur" =
@@ -1493,7 +1506,7 @@ router.get("/api/categories/:slug/seo-bundle", async (req, res) => {
     "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
   );
   try {
-    const slug = decodeURIComponent(String(req.params.slug || ""));
+    const slug = safeDecode(String(req.params.slug || ""));
     if (!slug) return res.status(400).json({ error: "missing slug" });
     const limit = Math.min(parseInt(String(req.query.limit || "30"), 10) || 30, 60);
 
