@@ -196,9 +196,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
                 </Button>
               </Link>
               <LanguageSwitcher />
-              <VariantSwitcher />
               <ThemeToggle />
-              
+
               {/* Notification Bell - Mobile - TEMPORARILY HIDDEN */}
               {/* {user && <NotificationBell />} */}
 
@@ -605,6 +604,14 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               </div>
             )}
 
+
+            {/* النمط البصري - Visual Style */}
+            <div className="p-3 border-t">
+              <h3 className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                النمط البصري
+              </h3>
+              <VariantSwitcher inline onSelect={() => setMobileMenuOpen(false)} />
+            </div>
 
             {/* إعدادات الوصول - Accessibility Settings */}
             <div className="p-3 border-t">

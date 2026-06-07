@@ -44,8 +44,61 @@ const VARIANT_OPTIONS: VariantOption[] = [
   },
 ];
 
-export function VariantSwitcher() {
+type VariantSwitcherProps = {
+  /** Render the options as an inline list (for the mobile side menu) instead of a dropdown icon button. */
+  inline?: boolean;
+  /** Called after a variant is selected — used to close the side menu so the change is visible. */
+  onSelect?: () => void;
+};
+
+export function VariantSwitcher({ inline = false, onSelect }: VariantSwitcherProps = {}) {
   const { variant, setVariant } = useTheme();
+
+  if (inline) {
+    return (
+      <div className="space-y-1" data-testid="variant-switcher-inline">
+        {VARIANT_OPTIONS.map((option) => {
+          const isActive = variant === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                setVariant(option.value);
+                onSelect?.();
+              }}
+              data-variant={option.value}
+              data-testid={`menu-variant-${option.value}`}
+              aria-pressed={isActive}
+              className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium hover-elevate active-elevate-2 cursor-pointer ${
+                isActive ? "bg-primary/5 border border-primary/20" : ""
+              }`}
+            >
+              <VariantPreview sample={option.sample} />
+              <div className="flex-1 min-w-0 text-right">
+                <div
+                  className="text-sm font-medium truncate"
+                  data-testid={`text-variant-label-${option.value}`}
+                >
+                  {option.label}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {option.description}
+                </div>
+              </div>
+              <Check
+                className={`h-4 w-4 flex-shrink-0 text-primary ${
+                  isActive ? "opacity-100" : "opacity-0"
+                }`}
+                aria-hidden="true"
+                data-testid={`icon-variant-active-${option.value}`}
+              />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <DropdownMenu>
