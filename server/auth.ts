@@ -9,7 +9,7 @@ import bcrypt from "bcrypt";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { users, canUserLogin, getUserStatusMessage } from "@shared/schema";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
@@ -146,32 +146,48 @@ export async function setupAuth(app: Express) {
       },
       async (email, password, done) => {
         try {
-          console.log("🔍 LocalStrategy: Checking user:", email);
-          
-          const [user] = await db
+          const normalizedEmail = email.toLowerCase().trim();
+          console.log("🔍 LocalStrategy: Checking user:", normalizedEmail);
+
+          // Case-insensitive lookup, and match ALL rows sharing this email.
+          // Some accounts exist as duplicate rows (e.g. a reader row + a writer
+          // row from the application/approval flow). An admin "resend login
+          // credentials" action rotates the password on ONE of those rows,
+          // while login used to do a case-sensitive eq().limit(1) and could
+          // land on the OTHER row → a freshly issued temp password reported as
+          // "invalid". Validating against every candidate row makes the
+          // password work regardless of which row holds it.
+          // (Dedup the rows for good with scripts/merge-duplicate-accounts.ts.)
+          const candidates = await db
             .select()
             .from(users)
-            .where(eq(users.email, email.toLowerCase()))
-            .limit(1);
+            .where(sql`lower(${users.email}) = ${normalizedEmail}`);
 
-          if (!user) {
+          if (candidates.length === 0) {
             console.log("❌ LocalStrategy: User not found");
             return done(null, false, { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
           }
 
-          console.log("✅ LocalStrategy: User found, checking password");
+          console.log(`✅ LocalStrategy: ${candidates.length} row(s) found, checking password`);
 
-          if (!user.passwordHash) {
-            console.log("❌ LocalStrategy: No password hash");
-            return done(null, false, { message: "هذا الحساب يحتاج إلى إعادة تعيين كلمة المرور" });
+          let user: (typeof candidates)[number] | undefined;
+          for (const candidate of candidates) {
+            if (candidate.passwordHash && (await bcrypt.compare(password, candidate.passwordHash))) {
+              user = candidate;
+              break;
+            }
           }
 
-          const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-          console.log("🔑 LocalStrategy: Password valid?", isValidPassword);
-          
-          if (!isValidPassword) {
+          if (!user) {
+            if (!candidates.some((c) => c.passwordHash)) {
+              console.log("❌ LocalStrategy: No password hash");
+              return done(null, false, { message: "هذا الحساب يحتاج إلى إعادة تعيين كلمة المرور" });
+            }
+            console.log("🔑 LocalStrategy: Password valid? false");
             return done(null, false, { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
           }
+
+          console.log("🔑 LocalStrategy: Password valid? true");
 
           // Check if user can login (not banned or deleted)
           if (!canUserLogin(user)) {
