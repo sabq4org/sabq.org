@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { queryClient } from "@/lib/queryClient";
+import { formatTime, formatNumber } from "@/lib/format";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { getObjectPosition } from "@/lib/imageUtils";
@@ -92,13 +93,13 @@ function isNewUpdate(dateString: string): boolean {
   }
 }
 
-// Exact clock time (e.g. ١٢:٤٥) shown on each timeline node.
+// Exact clock time (e.g. 12:45 م) shown on each timeline node. Routes through
+// the shared formatTime helper so digits stay Latin (the app-wide contract in
+// lib/format.ts) — toLocaleTimeString("ar-EG") would emit Arabic-Indic digits
+// and clash with the Latin-digit stats/counts on the same screen.
 function formatClock(dateString: string): string {
   try {
-    return parseISO(dateString).toLocaleTimeString("ar-EG", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatTime(parseISO(dateString));
   } catch {
     return "";
   }
@@ -374,11 +375,11 @@ function TimelineEntry({ item }: TimelineEntryProps) {
               <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-muted-foreground">
                 <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-views-${item.id}`}>
                   <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  {item.viewsCount.toLocaleString()}
+                  {formatNumber(item.viewsCount)}
                 </span>
                 <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-comments-${item.id}`}>
                   <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  {item.commentsCount.toLocaleString()}
+                  {formatNumber(item.commentsCount)}
                 </span>
               </div>
             </div>
@@ -693,10 +694,7 @@ export default function MomentByMoment() {
 
   useEffect(() => {
     const updateTime = () => {
-      setLastUpdate(new Date().toLocaleTimeString("ar-EG", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }));
+      setLastUpdate(formatTime(new Date()));
     };
 
     updateTime();
