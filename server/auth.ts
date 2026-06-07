@@ -147,7 +147,9 @@ export async function setupAuth(app: Express) {
       async (email, password, done) => {
         try {
           const normalizedEmail = email.toLowerCase().trim();
-          console.log("🔍 LocalStrategy: Checking user:", normalizedEmail);
+          // Don't log the email (PII) or password-validity in production (S-06).
+          const authDebug = process.env.NODE_ENV !== "production";
+          if (authDebug) console.log("🔍 LocalStrategy: Checking user:", normalizedEmail);
 
           // Case-insensitive lookup, and match ALL rows sharing this email.
           // Some accounts exist as duplicate rows (e.g. a reader row + a writer
@@ -164,11 +166,11 @@ export async function setupAuth(app: Express) {
             .where(sql`lower(${users.email}) = ${normalizedEmail}`);
 
           if (candidates.length === 0) {
-            console.log("❌ LocalStrategy: User not found");
+            if (authDebug) console.log("❌ LocalStrategy: User not found");
             return done(null, false, { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
           }
 
-          console.log(`✅ LocalStrategy: ${candidates.length} row(s) found, checking password`);
+          if (authDebug) console.log(`✅ LocalStrategy: ${candidates.length} row(s) found, checking password`);
 
           let user: (typeof candidates)[number] | undefined;
           for (const candidate of candidates) {
@@ -180,14 +182,14 @@ export async function setupAuth(app: Express) {
 
           if (!user) {
             if (!candidates.some((c) => c.passwordHash)) {
-              console.log("❌ LocalStrategy: No password hash");
+              if (authDebug) console.log("❌ LocalStrategy: No password hash");
               return done(null, false, { message: "هذا الحساب يحتاج إلى إعادة تعيين كلمة المرور" });
             }
-            console.log("🔑 LocalStrategy: Password valid? false");
+            if (authDebug) console.log("🔑 LocalStrategy: Password valid? false");
             return done(null, false, { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
           }
 
-          console.log("🔑 LocalStrategy: Password valid? true");
+          if (authDebug) console.log("🔑 LocalStrategy: Password valid? true");
 
           // Check if user can login (not banned or deleted)
           if (!canUserLogin(user)) {
@@ -225,8 +227,10 @@ export async function setupAuth(app: Express) {
         },
         async (accessToken, refreshToken, profile, done) => {
           try {
-            console.log("🔍 GoogleStrategy: Processing user:", profile.emails?.[0]?.value);
-            
+            if (process.env.NODE_ENV !== "production") {
+              console.log("🔍 GoogleStrategy: Processing user:", profile.emails?.[0]?.value);
+            }
+
             const email = profile.emails?.[0]?.value;
             const googleId = profile.id;
 
@@ -370,7 +374,9 @@ export async function setupAuth(app: Express) {
                 const userData = typeof req.body.user === 'string' ? JSON.parse(req.body.user) : req.body.user;
                 firstName = userData.name?.firstName || '';
                 lastName = userData.name?.lastName || '';
-                console.log("✅ AppleStrategy: Got name from first login:", firstName, lastName);
+                if (process.env.NODE_ENV !== "production") {
+                  console.log("✅ AppleStrategy: Got name from first login:", firstName, lastName);
+                }
               } catch (e) {
                 console.log("⚠️  AppleStrategy: Could not parse user data");
               }

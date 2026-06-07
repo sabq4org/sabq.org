@@ -597,7 +597,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Check if 2FA is enabled
       if (user.twoFactorEnabled) {
-        console.log("🔐 2FA required for user:", user.email);
+        if (process.env.NODE_ENV !== 'production') console.log("🔐 2FA required for user:", user.email);
         // Store userId in session temporarily for 2FA verification
         (req.session as any).pending2FAUserId = user.id;
         req.session.save((saveErr) => {
@@ -626,7 +626,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             console.error("❌ Session save error:", saveErr);
             return res.status(500).json({ message: "خطأ في حفظ الجلسة" });
           }
-          console.log("✅ Login successful:", user.email);
+          if (process.env.NODE_ENV !== 'production') console.log("✅ Login successful:", user.email);
       res.json({ message: "تم تسجيل الدخول بنجاح", user: { id: user.id, email: user.email }, mustChangePassword: user.mustChangePassword || false });
         });
       });

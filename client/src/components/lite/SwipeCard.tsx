@@ -4,6 +4,7 @@ import { Clock, Share2, Bookmark, BookmarkCheck, ChevronDown, Zap, Sparkles, Che
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import type { Article, Category, User } from "@shared/schema";
 import { ArticleQuiz } from "@/components/ArticleQuiz";
 import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
@@ -213,20 +214,19 @@ export function SwipeCard({
 
   const handleBookmarkClick = useCallback(async () => {
     try {
-      const response = await fetch(`/api/articles/${article.id}/bookmark`, {
-        method: "POST",
-        credentials: "include",
+      // Use apiRequest (not raw fetch) so the x-csrf-token header is attached —
+      // bookmark is a CSRF-protected state-changing route (S-01).
+      const data = await apiRequest<{ bookmarked: boolean }>(
+        `/api/articles/${article.id}/bookmark`,
+        { method: "POST" }
+      );
+
+      setLocalBookmarked(data.bookmarked);
+      toast({
+        title: data.bookmarked ? "تم الحفظ" : "تم إلغاء الحفظ",
+        description: data.bookmarked ? "تمت إضافة المقال للمحفوظات" : "تمت إزالة المقال من المحفوظات",
       });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setLocalBookmarked(data.bookmarked);
-        toast({
-          title: data.bookmarked ? "تم الحفظ" : "تم إلغاء الحفظ",
-          description: data.bookmarked ? "تمت إضافة المقال للمحفوظات" : "تمت إزالة المقال من المحفوظات",
-        });
-        onBookmark?.(article.id);
-      }
+      onBookmark?.(article.id);
     } catch (error) {
       toast({
         title: "خطأ",

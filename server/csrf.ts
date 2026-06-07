@@ -83,13 +83,16 @@ const EXEMPT_PATHS = [
   "/api/correspondent-applications",  // Public reporter registration form
   "/api/opinion-author-applications",  // Public opinion author registration form
   "/api/accessibility/track",  // Accessibility tracking for anonymous users
-  "/api/articles/",  // Article views for anonymous users
-  "/api/en/articles/",  // English article views for anonymous users
-  "/api/ur/articles/",  // Urdu article views for anonymous users
+  // NOTE: Do NOT add a broad "/api/articles/" prefix here. EXEMPT_PATHS uses
+  // startsWith matching, so a prefix would silently disable CSRF on every
+  // state-changing route under /api/articles/* (comments, reactions, tags,
+  // AI content generation, …) — a CSRF bypass (security audit S-01, 2026-06-07).
+  // Only the anonymous, header-less telemetry routes (view / reading-time,
+  // sent via raw fetch or navigator.sendBeacon which cannot attach the
+  // x-csrf-token header) are exempted, via EXEMPT_REGEX below.
   "/api/native-ads/",  // Native ads tracking (impressions/clicks) for anonymous users
   "/api/store/auth/",  // Store customer authentication (login, register, etc.)
   "/api/store/cart",  // Store cart operations
-  "/api/test/",  // Test endpoints for development
   "/api/analytics/visitors/ping",  // Visitor heartbeat for anonymous users
   "/api/v1/",  // Mobile API (iOS/Android apps)
   "/api/angle-submissions",  // Public angle submission form (Muqtarab)
@@ -121,12 +124,37 @@ const EXEMPT_PATHS = [
   "/api/shortlinks",
 ];
 
+// Precise exemptions for anonymous, header-less telemetry routes that live
+// under an otherwise CSRF-protected prefix. These are reached via raw fetch
+// or navigator.sendBeacon (which cannot attach the x-csrf-token header), are
+// unauthenticated/idempotent in effect, so CSRF adds no real protection.
+// Anchored regexes — NOT prefixes — so sibling state-changing routes
+// (e.g. /api/articles/:id/react, /comments) stay protected (S-01).
+const EXEMPT_REGEX = [
+  /^\/api\/articles\/[^/]+\/view$/,          // Arabic article view counter (sendBeacon)
+  /^\/api\/articles\/[^/]+\/reading-time$/,  // Reading-time telemetry (sendBeacon)
+  /^\/api\/en\/articles\/[^/]+\/view$/,      // English article view counter (raw fetch)
+  /^\/api\/ur\/articles\/[^/]+\/view$/,      // Urdu article view counter (raw fetch)
+];
+
 function isExemptPath(path: string, originalUrl: string): boolean {
   // Check both req.path and req.originalUrl since middleware mounting affects req.path
-  return EXEMPT_PATHS.some(exempt => 
+  if (EXEMPT_PATHS.some(exempt =>
     path === exempt || path.startsWith(exempt) ||
     originalUrl === exempt || originalUrl.startsWith(exempt)
-  );
+  )) {
+    return true;
+  }
+
+  // Dev-only test endpoints — never exempt in production (S-08).
+  if (process.env.NODE_ENV !== "production" &&
+      (path.startsWith("/api/test/") || originalUrl.startsWith("/api/test/"))) {
+    return true;
+  }
+
+  // req.path carries no query string, so the $-anchored regexes match it
+  // reliably even when originalUrl has a ?query suffix.
+  return EXEMPT_REGEX.some(re => re.test(path) || re.test(originalUrl));
 }
 
 export const validateCsrfToken: RequestHandler = (req, res, next) => {

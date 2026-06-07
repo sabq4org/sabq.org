@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -376,7 +377,11 @@ export default function MuqtarabReview() {
                 )}
                 <div
                   className="prose prose-sm dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: preview.content?.rawHtml || "<p>لا يوجد محتوى.</p>" }}
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(
+                      preview.content?.rawHtml || "<p>لا يوجد محتوى.</p>"
+                    ),
+                  }}
                 />
               </div>
             ) : null}
