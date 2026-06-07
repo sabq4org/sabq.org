@@ -50,6 +50,10 @@ struct HomeFeedView: View {
     @State private var latestOmq: APIDeepAnalysis?
     @State private var calendarToday: [APICalendarEvent] = []
     @State private var latestNewsletter: APIAudioNewsletter?
+    /// Dashboard-managed breaking strip (شريط الأخبار العاجلة). `nil` until the
+    /// background fetch resolves; an empty `headlines` array means no active
+    /// topic, in which case we fall back to the single-article breaking card.
+    @State private var breakingTicker: APIBreakingTicker?
     /// Reactive handle on the notifications singleton so the header bell's
     /// red unread dot refreshes when push notifications arrive or the
     /// user marks them read.
@@ -156,7 +160,13 @@ struct HomeFeedView: View {
                     .buttonStyle(.plain)
                     .animatedAppear(index: 0)
 
-                    if !articlesStore.breakingNews.isEmpty {
+                    // Editorial breaking strip (شريط الأخبار العاجلة) takes the
+                    // top slot when the dashboard has an active topic; otherwise
+                    // fall back to the single breaking-article card.
+                    if let ticker = breakingTicker, !ticker.headlines.isEmpty {
+                        BreakingTickerBar(headlines: ticker.headlines)
+                            .animatedAppear(index: 1)
+                    } else if !articlesStore.breakingNews.isEmpty {
                         breakingNewsSection
                             .animatedAppear(index: 1)
                     }
@@ -237,6 +247,9 @@ struct HomeFeedView: View {
             .refreshable {
                 SabqHaptics.medium()
                 await articlesStore.loadArticles(ignoreCache: true)
+                // أعد جلب شريط العاجل أيضاً حتى ينعكس أي تفعيل/تعطيل من لوحة
+                // التحكم فور السحب للتحديث.
+                breakingTicker = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
                 // الخبر الجديد في الكاروسيل يُدرج في الموضع 0 — نرجع المؤشر
                 // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
                 featuredIndex = 0
@@ -285,6 +298,7 @@ struct HomeFeedView: View {
             async let omqList: APIOmqListResponse? = try? await APIClient.shared.fetchOmqList(page: 1, limit: 1, status: "published")
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
+            async let breaking = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
             // Rich personal-journey insights (member-session only). Returns
             // nil for logged-out users so the block stays hidden cleanly.
             async let richJourney: APITodayInsights? = authStore.isLoggedIn
@@ -295,6 +309,7 @@ struct HomeFeedView: View {
             latestOmq = (await omqList)?.analyses.first
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
+            breakingTicker = await breaking
             richInsights = await richJourney
 
             // Fetch unread editorial-notification count so the header bell's
