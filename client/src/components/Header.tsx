@@ -168,7 +168,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
           </nav>
 
           {/* Actions - Right side */}
-          <div className="flex items-center gap-1">
+          {/* max-sm: shrink icon buttons (.w-9) to 32px + zero gap so the header fits narrow Android/Chrome widths; the EN language pill (size=sm, no .w-9) is left untouched */}
+          <div className="flex items-center gap-0.5 max-sm:gap-0 max-sm:[&_.w-9]:size-8">
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
@@ -182,7 +183,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             </Button>
 
             {/* Mobile Actions */}
-            <div className="md:hidden flex items-center gap-0.5">
+            <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
               <Link href="/lite">
                 <Button
