@@ -168,7 +168,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
           </nav>
 
           {/* Actions - Right side */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Mobile Menu Button */}
             <Button
               variant="ghost"
@@ -182,7 +182,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             </Button>
 
             {/* Mobile Actions */}
-            <div className="md:hidden flex items-center gap-1">
+            <div className="md:hidden flex items-center gap-0.5">
               <SearchDialog />
               <Link href="/lite">
                 <Button
@@ -293,7 +293,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             </div>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-1">
               <SearchDialog />
               <AccessibilitySettings variant="desktop" />
               <LanguageSwitcher />
