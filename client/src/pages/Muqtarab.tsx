@@ -52,6 +52,13 @@ export default function Muqtarab() {
     },
   });
 
+  // الأحدث أولاً — نقطة /featured لا تضمن الترتيب الزمني
+  const sortedTopics = (Array.isArray(allTopics) ? [...allTopics] : []).sort((a, b) => {
+    const tA = new Date(a.publishedAt ?? a.createdAt).getTime();
+    const tB = new Date(b.publishedAt ?? b.createdAt).getTime();
+    return tB - tA;
+  });
+
   useEffect(() => {
     if (error) {
       toast({
@@ -79,21 +86,21 @@ export default function Muqtarab() {
         <Header user={user} />
         <main className="container max-w-7xl mx-auto px-4 py-6">
           <div className="space-y-8">
-            {/* Angles skeleton */}
-            <div className="space-y-4">
-              <Skeleton className="h-6 w-32 rounded-lg" />
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-52 rounded-xl" />
-                ))}
-              </div>
-            </div>
             {/* Topics skeleton */}
             <div className="space-y-4">
               <Skeleton className="h-6 w-40 rounded-lg" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-64 rounded-xl" />
+                ))}
+              </div>
+            </div>
+            {/* Angles skeleton */}
+            <div className="space-y-4">
+              <Skeleton className="h-6 w-32 rounded-lg" />
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-52 rounded-xl" />
                 ))}
               </div>
             </div>
@@ -159,107 +166,6 @@ export default function Muqtarab() {
         <div className="container max-w-7xl mx-auto px-4 py-6">
         <div className="space-y-6">
 
-          {/* Angles Showcase — bto3atu rich destination cards */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="bg-gradient-to-br from-primary to-primary/80 p-1.5 rounded-lg shadow-sm">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <h2 className="text-lg font-bold">الزوايا</h2>
-              <span className="text-xs text-muted-foreground">— اختر زاوية وادخل عالم كاتبها</span>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {angles.map((angle) => {
-                const Icon = getIconComponent(angle.iconKey || 'Circle');
-                const theme = angleTheme(angle.colorHex);
-                const topicCount = angle.topicCount ?? 0;
-                return (
-                  <Link
-                    key={angle.id}
-                    href={`/muqtarab/${angle.slug}`}
-                    className="group"
-                    data-testid={`card-angle-${angle.id}`}
-                  >
-                    <Card
-                      className="h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
-                      style={theme.vars}
-                    >
-                      {/* Cover */}
-                      <div className={`relative h-24 sm:h-28 overflow-hidden${angle.coverImageUrl ? '' : ' angle-animated-cover'}`}>
-                        {angle.coverImageUrl && (
-                          <>
-                            <img
-                              src={angle.coverImageUrl}
-                              alt={angle.nameAr}
-                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                              loading="lazy"
-                            />
-                            <div
-                              className="absolute inset-0"
-                              style={{ background: `linear-gradient(to top, ${angle.colorHex}cc 0%, ${angle.colorHex}40 60%, transparent 100%)` }}
-                            />
-                          </>
-                        )}
-                        {/* Icon badge */}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div
-                            className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-md"
-                            style={{ backgroundColor: 'rgba(255,255,255,0.22)', backdropFilter: 'blur(8px)' }}
-                          >
-                            <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-white drop-shadow" />
-                          </div>
-                        </div>
-                        {/* Topic count chip */}
-                        <div className="absolute top-2 left-2">
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 text-white text-[10px] font-medium backdrop-blur-md">
-                            <FileText className="h-2.5 w-2.5" />
-                            <span>{topicCount} موضوعاً</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <CardContent className="p-3 space-y-1.5">
-                        <h3 className="font-bold text-sm sm:text-base leading-snug line-clamp-1 group-hover:text-[color:var(--angle)] transition-colors">
-                          {angle.nameAr}
-                        </h3>
-                        {angle.nameEn && (
-                          <p className="text-[11px] text-muted-foreground/80 line-clamp-1 uppercase tracking-wide">
-                            {angle.nameEn}
-                          </p>
-                        )}
-                        {angle.shortDesc && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[2.2rem]">
-                            {angle.shortDesc}
-                          </p>
-                        )}
-
-                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/50">
-                          {angle.writerName ? (
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {angle.writerAvatar ? (
-                                <img src={angle.writerAvatar} alt={angle.writerName} className="w-5 h-5 rounded-full object-cover" loading="lazy" />
-                              ) : (
-                                <div
-                                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-                                  style={{ backgroundColor: angle.colorHex }}
-                                >
-                                  {angle.writerName.charAt(0)}
-                                </div>
-                              )}
-                              <span className="text-[11px] text-muted-foreground truncate">{angle.writerName}</span>
-                            </div>
-                          ) : <span />}
-                          <ArrowUpLeft className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[color:var(--angle)] transition-colors flex-shrink-0" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Recent Topics — global feed across all angles */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -269,9 +175,9 @@ export default function Muqtarab() {
               <h2 className="text-lg font-bold">أحدث المواضيع</h2>
             </div>
 
-            {allTopics && allTopics.length > 0 ? (
+            {sortedTopics.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {allTopics.map((topic) => {
+                {sortedTopics.map((topic) => {
                   const angle = topic.angle;
                   const angleColor = angle?.colorHex || '#6366f1';
                   const Icon = angle ? getIconComponent(angle.iconKey || 'Circle') : Sparkles;
@@ -372,6 +278,107 @@ export default function Muqtarab() {
                 <p>لا توجد مواضيع منشورة بعد</p>
               </div>
             )}
+          </div>
+
+          {/* Angles Showcase — bto3atu rich destination cards */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="bg-gradient-to-br from-primary to-primary/80 p-1.5 rounded-lg shadow-sm">
+                <Sparkles className="h-4 w-4 text-primary-foreground" />
+              </div>
+              <h2 className="text-lg font-bold">الزوايا</h2>
+              <span className="text-xs text-muted-foreground">— اختر زاوية وادخل عالم كاتبها</span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+              {angles.map((angle) => {
+                const Icon = getIconComponent(angle.iconKey || 'Circle');
+                const theme = angleTheme(angle.colorHex);
+                const topicCount = angle.topicCount ?? 0;
+                return (
+                  <Link
+                    key={angle.id}
+                    href={`/muqtarab/${angle.slug}`}
+                    className="group"
+                    data-testid={`card-angle-${angle.id}`}
+                  >
+                    <Card
+                      className="h-full overflow-hidden border border-border/60 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group-hover:-translate-y-0.5"
+                      style={theme.vars}
+                    >
+                      {/* Cover */}
+                      <div className={`relative h-24 sm:h-28 overflow-hidden${angle.coverImageUrl ? '' : ' angle-animated-cover'}`}>
+                        {angle.coverImageUrl && (
+                          <>
+                            <img
+                              src={angle.coverImageUrl}
+                              alt={angle.nameAr}
+                              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              loading="lazy"
+                            />
+                            <div
+                              className="absolute inset-0"
+                              style={{ background: `linear-gradient(to top, ${angle.colorHex}cc 0%, ${angle.colorHex}40 60%, transparent 100%)` }}
+                            />
+                          </>
+                        )}
+                        {/* Icon badge */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div
+                            className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-md"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.22)', backdropFilter: 'blur(8px)' }}
+                          >
+                            <Icon className="w-6 h-6 sm:w-7 sm:h-7 text-white drop-shadow" />
+                          </div>
+                        </div>
+                        {/* Topic count chip */}
+                        <div className="absolute top-2 left-2">
+                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 text-white text-[10px] font-medium backdrop-blur-md">
+                            <FileText className="h-2.5 w-2.5" />
+                            <span>{topicCount} موضوعاً</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <CardContent className="p-3 space-y-1.5">
+                        <h3 className="font-bold text-sm sm:text-base leading-snug line-clamp-1 group-hover:text-[color:var(--angle)] transition-colors">
+                          {angle.nameAr}
+                        </h3>
+                        {angle.nameEn && (
+                          <p className="text-[11px] text-muted-foreground/80 line-clamp-1 uppercase tracking-wide">
+                            {angle.nameEn}
+                          </p>
+                        )}
+                        {angle.shortDesc && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[2.2rem]">
+                            {angle.shortDesc}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-border/50">
+                          {angle.writerName ? (
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {angle.writerAvatar ? (
+                                <img src={angle.writerAvatar} alt={angle.writerName} className="w-5 h-5 rounded-full object-cover" loading="lazy" />
+                              ) : (
+                                <div
+                                  className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                                  style={{ backgroundColor: angle.colorHex }}
+                                >
+                                  {angle.writerName.charAt(0)}
+                                </div>
+                              )}
+                              <span className="text-[11px] text-muted-foreground truncate">{angle.writerName}</span>
+                            </div>
+                          ) : <span />}
+                          <ArrowUpLeft className="h-3.5 w-3.5 text-muted-foreground group-hover:text-[color:var(--angle)] transition-colors flex-shrink-0" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
 
           {/* Invitation Banner */}
