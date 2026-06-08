@@ -4,12 +4,14 @@ import { BellRing, Bell } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 
 interface FollowKeywordButtonProps {
   keyword: string;
   variant?: "default" | "ghost" | "outline";
   size?: "default" | "sm" | "lg" | "icon";
   showText?: boolean;
+  className?: string;
 }
 
 export function FollowKeywordButton({
@@ -17,6 +19,7 @@ export function FollowKeywordButton({
   variant = "ghost",
   size = "sm",
   showText = false,
+  className,
 }: FollowKeywordButtonProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -117,7 +120,7 @@ export function FollowKeywordButton({
       onClick={handleClick}
       disabled={isPending || isLoading}
       data-testid={`button-${isFollowing ? "unfollow" : "follow"}-keyword-${keyword}`}
-      className="gap-1.5"
+      className={cn("gap-1.5", className)}
     >
       {isFollowing ? (
         <BellRing className="h-3.5 w-3.5 text-primary" />
