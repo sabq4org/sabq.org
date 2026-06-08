@@ -372,6 +372,61 @@ class RootInjector {
   }
 }
 
+function getApiCacheTtl(path, request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return 0;
+
+  // Bypass cache if there's a session cookie or auth header
+  const cookie = request.headers.get("cookie") || "";
+  if (cookie.includes("connect.sid")) return 0;
+  if (request.headers.has("authorization")) return 0;
+
+  // Bypass cache if client explicitly asks for fresh data
+  const cc = (request.headers.get("cache-control") || "").toLowerCase();
+  if (cc.includes("no-cache") || cc.includes("no-store")) return 0;
+
+  const url = new URL(request.url);
+  if (url.searchParams.has("_nc") || url.searchParams.has("_t")) return 0;
+
+  // Match cacheable GET patterns and determine TTL (in seconds)
+  if (path === "/api/homepage-lite") return 30;
+  if (path === "/api/homepage") return 30;
+  if (path === "/api/lite-feed") return 30;
+  if (path === "/api/ai-insights") return 30;
+  if (path === "/api/breaking-ticker/active") return 30;
+
+  if (path === "/api/categories") return 60;
+  if (path === "/api/categories/all") return 60;
+  if (path === "/api/categories/smart") return 60;
+  
+  if (path === "/api/articles/search-simple") return 0;
+
+  if (/^\/api\/categories\/[^/]+\/articles$/.test(path)) return 60;
+
+  if (/^\/api\/articles\/[^/]+$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/sidebar$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/related$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/ai-recommendations$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/ai-insights$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/ai-bullets$/.test(path)) return 60;
+  if (/^\/api\/articles\/[^/]+\/media-assets$/.test(path)) return 60;
+
+  return 0;
+}
+
+function apiCacheKey(requestUrl) {
+  const u = new URL(requestUrl);
+  // Keep only essential query parameters that alter the backend response
+  const cleanParams = new URLSearchParams();
+  const keepParams = ["limit", "offset", "page", "q", "category", "type"];
+  for (const p of keepParams) {
+    if (u.searchParams.has(p)) {
+      cleanParams.set(p, u.searchParams.get(p));
+    }
+  }
+  u.search = cleanParams.toString();
+  return new Request(u.toString(), { method: "GET" });
+}
+
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
@@ -482,8 +537,50 @@ export async function onRequest(context) {
 
   // 1) Proxy backend paths (every method).
   if (isProxyPath(path)) {
+    const apiCacheTtl = getApiCacheTtl(path, request);
+    const useApiCache = apiCacheTtl > 0;
+    const apiCacheKeyReq = useApiCache ? apiCacheKey(request.url) : null;
+
+    if (useApiCache && apiCacheKeyReq) {
+      try {
+        const hit = await caches.default.match(apiCacheKeyReq);
+        if (hit) {
+          const headers = new Headers(hit.headers);
+          headers.set("x-edge-cache", "HIT");
+          return new Response(hit.body, {
+            status: hit.status,
+            statusText: hit.statusText,
+            headers,
+          });
+        }
+      } catch (err) {
+        console.error("[pages-fn] api cache match error:", err);
+      }
+    }
+
     try {
-      return await proxyToApi(request, apiOrigin);
+      const res = await proxyToApi(request, apiOrigin);
+      
+      if (useApiCache && apiCacheKeyReq && res.status === 200) {
+        if (!res.headers.has("set-cookie")) {
+          const cachedHeaders = new Headers(res.headers);
+          cachedHeaders.set("Cache-Control", `public, max-age=${apiCacheTtl}, s-maxage=${apiCacheTtl}`);
+          
+          const responseToCache = new Response(res.clone().body, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: cachedHeaders,
+          });
+          
+          context.waitUntil(
+            caches.default.put(apiCacheKeyReq, responseToCache).catch((err) => {
+              console.error("[pages-fn] api cache put error:", err);
+            })
+          );
+        }
+      }
+      
+      return res;
     } catch (err) {
       console.error("[pages-fn] proxy error:", err);
       return new Response("Bad gateway", { status: 502 });

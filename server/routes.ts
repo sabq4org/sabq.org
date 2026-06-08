@@ -6616,7 +6616,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const [countResult] = await countQuery;
       const total = Number(countResult?.count || 0);
 
-      query = query.orderBy(desc(articles.publishedAt), desc(articles.createdAt))
+      // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
+      let orderClauses;
+      if (status === "archived") {
+        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+      } else if (status === "draft") {
+        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+      } else if (status === "scheduled") {
+        orderClauses = [desc(articles.scheduledAt), desc(articles.createdAt)];
+      } else {
+        orderClauses = [desc(articles.publishedAt), desc(articles.createdAt)];
+      }
+
+      query = query.orderBy(...orderClauses)
         .limit(limitNum)
         .offset(offset);
 
