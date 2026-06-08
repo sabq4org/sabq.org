@@ -97,15 +97,29 @@ export default function OpinionDetailPage() {
   });
   const relatedArticles = Array.isArray(relatedArticlesRaw) ? relatedArticlesRaw : [];
 
-  // Fetch article tags for keywords display
+  // Fetch article tags for keywords display and mediaAssets for image captions
   const { data: sidebarData } = useQuery<{
     tags: Array<{ id: string; nameAr: string; nameEn: string; slug: string }>;
+    mediaAssets?: Array<{
+      id: string;
+      displayOrder: number;
+      captionPlain?: string;
+      captionHtml?: string;
+      sourceName?: string;
+      sourceUrl?: string;
+      altText?: string;
+      mediaFile?: {
+        width?: number;
+        height?: number;
+      };
+    }>;
   }>({
     queryKey: ["/api/articles", slug, "sidebar"],
     enabled: !!slug,
     staleTime: 1000 * 60 * 5,
   });
   const articleTags = sidebarData?.tags || [];
+  const mediaAssets = sidebarData?.mediaAssets || [];
 
   const { logArticleView } = useArticleReadTracking({
     articleId: article?.id || "",
@@ -602,18 +616,25 @@ export default function OpinionDetailPage() {
               <Separator />
 
               {/* Featured Image with AI Badge */}
-              {article.imageUrl && (
-                <ImageWithCaption
-                  imageUrl={article.imageUrl}
-                  altText={article.title}
-                  captionPlain={(article as any).imageCaption}
-                  sourceName={(article as any).imageSource}
-                  isAiGenerated={article.isAiGeneratedThumbnail || article.isAiGeneratedImage || false}
-                  aiModel={(article as any).aiImageModel || undefined}
-                  objectPosition={getObjectPosition(article)}
-                  priority={true}
-                />
-              )}
+              {article.imageUrl && (() => {
+                const heroImageAsset = mediaAssets?.find(
+                  (asset: any) => asset.displayOrder === 0
+                );
+                return (
+                  <ImageWithCaption
+                    imageUrl={article.imageUrl}
+                    altText={heroImageAsset?.altText || article.title}
+                    captionHtml={heroImageAsset?.captionHtml}
+                    captionPlain={heroImageAsset?.captionPlain || heroImageAsset?.altText || (article as any).imageCaption}
+                    sourceName={heroImageAsset?.sourceName || (article as any).imageSource}
+                    sourceUrl={heroImageAsset?.sourceUrl}
+                    isAiGenerated={article.isAiGeneratedThumbnail || article.isAiGeneratedImage || false}
+                    aiModel={(article as any).aiImageModel || undefined}
+                    objectPosition={getObjectPosition(article)}
+                    priority={true}
+                  />
+                );
+              })()}
 
               {/* Smart Summary - Collapsible */}
               {(article.aiSummary || article.excerpt) && (
