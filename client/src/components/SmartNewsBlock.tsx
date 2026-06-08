@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, Tag, Newspaper, Flame, Zap, Brain, Camera, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, Tag, Newspaper, Flame, Zap, Brain, Camera, Sparkles, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -224,13 +224,13 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                                 <Zap className="h-2 w-2" />
                                 عاجل
                               </Badge>
-                            ) : article.isNew ? (
+                            ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
                               <Badge 
-                                className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0"
-                                data-testid={`badge-smart-mobile-new-${article.id}`}
+                                className="text-[10px] h-4 gap-0.5 bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 font-medium"
+                                data-testid={`badge-smart-mobile-opinion-${article.id}`}
                               >
-                                <Flame className="h-2 w-2" />
-                                جديد
+                                <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                رأي
                               </Badge>
                             ) : article.articleType === 'weekly_photos' ? (
                               <Badge 
@@ -250,6 +250,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                                 {article.category.nameAr}
                               </Badge>
                             ) : null}
+
+                            {article.isNew && (
+                              <Badge 
+                                className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0 animate-pulse"
+                                data-testid={`badge-smart-mobile-new-${article.id}`}
+                              >
+                                <Flame className="h-2 w-2" />
+                                جديد
+                              </Badge>
+                            )}
                             {/* AI Generated Content Badge */}
                             {article.aiGenerated && (
                               <Badge 
@@ -330,13 +340,13 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                         <Zap className="h-2.5 w-2.5" />
                         عاجل
                       </Badge>
-                    ) : article.isNew ? (
+                    ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
                       <Badge 
-                        className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0" 
-                        data-testid={`badge-smart-new-${article.id}`}
+                        className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 font-medium" 
+                        data-testid={`badge-smart-opinion-${article.id}`}
                       >
-                        <Flame className="h-2.5 w-2.5" />
-                        جديد
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        رأي
                       </Badge>
                     ) : article.articleType === 'weekly_photos' ? (
                       <Badge 
@@ -356,6 +366,16 @@ function GridLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {article.isNew && (
+                      <Badge 
+                        className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0 animate-pulse" 
+                        data-testid={`badge-smart-new-${article.id}`}
+                      >
+                        <Flame className="h-2.5 w-2.5" />
+                        جديد
+                      </Badge>
+                    )}
                     {/* AI Generated Content Badge */}
                     {article.aiGenerated && (
                       <Badge 
@@ -448,7 +468,15 @@ function ListLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                 <div className="flex-1 min-w-0 p-5 md:p-6 flex flex-col justify-center gap-3">
                   {/* Category & AI badges row */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {article.category && (
+                    {article.articleType === 'opinion' || article.articleType === 'column' ? (
+                      <Badge 
+                        className="text-xs font-medium px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white border-0 gap-1.5 shadow-sm font-semibold"
+                        data-testid={`badge-smart-article-list-opinion-${article.id}`}
+                      >
+                        <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                        رأي
+                      </Badge>
+                    ) : article.category ? (
                       <Badge 
                         variant="secondary"
                         className="text-xs font-medium px-3 py-1 shadow-sm text-black"
@@ -456,6 +484,16 @@ function ListLayout({ articles, blockId }: { articles: ProcessedArticle[]; block
                         data-testid={`badge-smart-article-list-category-${article.id}`}
                       >
                         {article.category.nameAr}
+                      </Badge>
+                    ) : null}
+
+                    {article.isNew && (
+                      <Badge 
+                        className="text-xs font-medium px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
+                        data-testid={`badge-smart-article-list-new-${article.id}`}
+                      >
+                        <Flame className="h-3.5 w-3.5" />
+                        جديد
                       </Badge>
                     )}
                     {article.aiGenerated && (
@@ -533,16 +571,36 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
             )}
             
             <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-end p-6 md:p-8">
-              {featured.category && (
-                <Badge 
-                  variant="secondary"
-                  className="text-xs mb-3 w-fit text-black"
-                  style={{ borderRight: `3px solid ${featured.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                  data-testid={`badge-smart-article-featured-category-${featured.id}`}
-                >
-                  {featured.category.nameAr}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2 flex-wrap mb-3 w-fit">
+                {featured.articleType === 'opinion' || featured.articleType === 'column' ? (
+                  <Badge 
+                    className="text-xs text-white bg-amber-600 hover:bg-amber-700 border-0 gap-1.5 shadow-sm font-semibold"
+                    data-testid={`badge-smart-article-featured-opinion-${featured.id}`}
+                  >
+                    <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    رأي
+                  </Badge>
+                ) : featured.category ? (
+                  <Badge 
+                    variant="secondary"
+                    className="text-xs text-black animate-none mb-0"
+                    style={{ borderRight: `3px solid ${featured.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
+                    data-testid={`badge-smart-article-featured-category-${featured.id}`}
+                  >
+                    {featured.category.nameAr}
+                  </Badge>
+                ) : null}
+
+                {featured.isNew && (
+                  <Badge 
+                    className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 gap-1 shadow-sm font-semibold animate-pulse"
+                    data-testid={`badge-smart-article-featured-new-${featured.id}`}
+                  >
+                    <Flame className="h-3.5 w-3.5" />
+                    جديد
+                  </Badge>
+                )}
+              </div>
               <h3 className="font-bold text-2xl md:text-3xl lg:text-4xl leading-tight text-white mb-4" data-testid={`text-smart-article-featured-title-${featured.id}`}>
                 {featured.title}
               </h3>
@@ -609,7 +667,14 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                     {/* Category Badge + AI Badge + Title */}
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-1">
-                        {article.category && (
+                        {article.articleType === 'opinion' || article.articleType === 'column' ? (
+                          <Badge 
+                            className="text-[9px] h-4 text-white bg-amber-600 hover:bg-amber-700 border-0 font-medium"
+                            data-testid={`badge-featured-side-opinion-${article.id}`}
+                          >
+                            رأي
+                          </Badge>
+                        ) : article.category ? (
                           <Badge 
                             variant="secondary"
                             className="text-[9px] h-4 text-black"
@@ -617,6 +682,15 @@ function FeaturedLayout({ articles, blockId }: { articles: ProcessedArticle[]; b
                             data-testid={`badge-featured-side-category-${article.id}`}
                           >
                             {article.category.nameAr}
+                          </Badge>
+                        ) : null}
+
+                        {article.isNew && (
+                          <Badge 
+                            className="text-[9px] h-4 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 font-medium animate-pulse"
+                            data-testid={`badge-featured-side-new-${article.id}`}
+                          >
+                            جديد
                           </Badge>
                         )}
                         {article.aiGenerated && (
@@ -672,16 +746,34 @@ function CarouselLayout({ articles, blockId, config }: { articles: ProcessedArti
                   </div>
                   
                   <CardContent className="p-3 space-y-2">
-                    {article.category && (
-                      <Badge 
-                        variant="secondary"
-                        className="text-[10px] shadow-sm text-black"
-                        style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
-                        data-testid={`badge-carousel-category-${article.id}`}
-                      >
-                        {article.category.nameAr}
-                      </Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {article.articleType === 'opinion' || article.articleType === 'column' ? (
+                        <Badge 
+                          className="text-[10px] shadow-sm text-white bg-amber-600 hover:bg-amber-700 border-0 font-medium"
+                          data-testid={`badge-carousel-opinion-${article.id}`}
+                        >
+                          رأي
+                        </Badge>
+                      ) : article.category ? (
+                        <Badge 
+                          variant="secondary"
+                          className="text-[10px] shadow-sm text-black"
+                          style={{ borderRight: `3px solid ${article.category.color || 'hsl(var(--primary))'}`, backgroundColor: '#e5e5e6' }}
+                          data-testid={`badge-carousel-category-${article.id}`}
+                        >
+                          {article.category.nameAr}
+                        </Badge>
+                      ) : null}
+
+                      {article.isNew && (
+                        <Badge 
+                          className="text-[10px] bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 font-medium animate-pulse"
+                          data-testid={`badge-carousel-new-${article.id}`}
+                        >
+                          جديد
+                        </Badge>
+                      )}
+                    </div>
                     <h3 
                       className="font-bold text-sm leading-relaxed line-clamp-2 group-hover:text-primary transition-colors"
                       data-testid={`text-carousel-title-${article.id}`}

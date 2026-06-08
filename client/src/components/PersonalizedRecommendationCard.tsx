@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Clock, Brain, Zap, Flame } from "lucide-react";
+import { Sparkles, Clock, Brain, Zap, Flame, BookOpen } from "lucide-react";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -127,16 +127,23 @@ export function PersonalizedRecommendationCard({
                   <Zap className="h-2.5 w-2.5" aria-hidden="true" />
                   عاجل
                 </Badge>
-              ) : isNewArticle(article.publishedAt) ? (
-                <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600">
-                  <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                  جديد
+              ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
+                <Badge className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium">
+                  <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                  رأي
                 </Badge>
               ) : article.category ? (
                 <Badge className="text-xs h-5 bg-muted text-muted-foreground border-0">
                   {article.category.nameAr}
                 </Badge>
               ) : null}
+
+              {isNewArticle(article.publishedAt) && (
+                <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse">
+                  <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                  جديد
+                </Badge>
+              )}
             </div>
 
             <h3

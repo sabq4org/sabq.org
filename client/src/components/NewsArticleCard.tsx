@@ -125,16 +125,16 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                   </div>
                 )}
                 <div className="flex-1 min-w-0 space-y-1.5">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {article.newsType === "breaking" ? (
                       <Badge variant="destructive" className="text-[10px] h-4 gap-0.5 shrink-0" data-testid={`badge-content-type-mobile-${article.id}`}>
                         <Zap className="h-2 w-2" aria-hidden="true" />
                         عاجل
                       </Badge>
-                    ) : isNewArticle(article.publishedAt) ? (
-                      <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0" data-testid={`badge-content-type-mobile-${article.id}`}>
-                        <Flame className="h-2 w-2" aria-hidden="true" />
-                        جديد
+                    ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
+                      <Badge className="text-[10px] h-4 gap-0.5 bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 font-medium" data-testid={`badge-content-type-mobile-${article.id}`}>
+                        <BookOpen className="h-2 w-2" aria-hidden="true" />
+                        رأي
                       </Badge>
                     ) : article.articleType === 'weekly_photos' ? (
                       <Badge className="text-[10px] h-4 gap-0.5 bg-orange-500/90 hover:bg-orange-600 text-white border-0 shrink-0" data-testid={`badge-content-type-mobile-${article.id}`}>
@@ -146,6 +146,14 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+                    
+                    {isNewArticle(article.publishedAt) && (
+                      <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0 animate-pulse" data-testid={`badge-new-mobile-${article.id}`}>
+                        <Flame className="h-2 w-2" aria-hidden="true" />
+                        جديد
+                      </Badge>
+                    )}
+
                     {article.aiGenerated && (
                       <Badge className="text-[10px] h-4 gap-0.5 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0" data-testid={`badge-ai-content-mobile-${article.id}`}>
                         <Brain className="h-2 w-2" aria-hidden="true" />
@@ -198,7 +206,7 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
             </div>
 
             <CardContent className="p-5 space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {article.newsType === "breaking" ? (
                   <Badge 
                     variant="destructive" 
@@ -208,13 +216,13 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                     <Zap className="h-2.5 w-2.5" aria-hidden="true" />
                     عاجل
                   </Badge>
-                ) : isNewArticle(article.publishedAt) ? (
+                ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
                   <Badge 
-                    className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0" 
+                    className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 shrink-0 font-medium" 
                     data-testid={`badge-content-type-${article.id}`}
                   >
-                    <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                    جديد
+                    <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                    رأي
                   </Badge>
                 ) : article.articleType === 'weekly_photos' ? (
                   <Badge 
@@ -234,6 +242,17 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                     {article.category.nameAr}
                   </Badge>
                 ) : null}
+
+                {isNewArticle(article.publishedAt) && (
+                  <Badge 
+                    className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 shrink-0 animate-pulse" 
+                    data-testid={`badge-new-${article.id}`}
+                  >
+                    <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                    جديد
+                  </Badge>
+                )}
+
                 {article.aiGenerated && (
                   <Badge 
                     className="text-xs h-5 gap-1 bg-violet-500/90 hover:bg-violet-600 text-white border-0 shrink-0"
@@ -316,10 +335,10 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                         <Zap className="h-2.5 w-2.5" aria-hidden="true" />
                         عاجل
                       </Badge>
-                    ) : isNewArticle(article.publishedAt) ? (
-                      <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600" data-testid={`badge-content-type-${article.id}`}>
-                        <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                        جديد
+                    ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
+                      <Badge className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        رأي
                       </Badge>
                     ) : article.articleType === 'weekly_photos' ? (
                       <Badge className="text-xs h-5 gap-1 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
@@ -335,6 +354,13 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {isNewArticle(article.publishedAt) && (
+                      <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
+                        <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                        جديد
+                      </Badge>
+                    )}
                   </div>
 
                   <h3
@@ -442,10 +468,10 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                       <Zap className="h-2.5 w-2.5" aria-hidden="true" />
                       عاجل
                     </Badge>
-                  ) : isNewArticle(article.publishedAt) ? (
-                    <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600" data-testid={`badge-content-type-${article.id}`}>
-                      <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                      جديد
+                  ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
+                    <Badge className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
+                      <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                      رأي
                     </Badge>
                   ) : article.articleType === 'weekly_photos' ? (
                     <Badge className="text-xs h-5 gap-1 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
@@ -461,6 +487,13 @@ export function NewsArticleCard({ article, viewMode, hideCategory = false, prior
                       {article.category.nameAr}
                     </Badge>
                   ) : null}
+
+                  {isNewArticle(article.publishedAt) && (
+                    <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
+                      <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                      جديد
+                    </Badge>
+                  )}
                 </div>
 
                 <h4

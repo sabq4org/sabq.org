@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Newspaper, Clock, MessageSquare, Sparkles, Zap, Star, Flame, Loader2, ChevronDown, Brain, Camera, BarChart3, Target } from "lucide-react";
+import { Newspaper, Clock, MessageSquare, Sparkles, Zap, Star, Flame, Loader2, ChevronDown, Brain, Camera, BarChart3, Target, BookOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { ArticleWithDetails } from "@shared/schema";
 import { formatArticleTimestamp } from "@/lib/formatTime";
@@ -407,15 +407,15 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                   <Zap className="h-2 w-2" aria-hidden="true" />
                                   عاجل
                                 </Badge>
+                              ) : ((article as any).articleType === 'opinion' || (article as any).articleType === 'column') ? (
+                                <Badge className="text-[10px] h-4 gap-0.5 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
+                                  <BookOpen className="h-2 w-2" aria-hidden="true" />
+                                  رأي
+                                </Badge>
                               ) : (article as any).articleType === 'weekly_photos' ? (
                                 <Badge className="text-[10px] h-4 gap-0.5 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
                                   <Camera className="h-2 w-2" aria-hidden="true" />
                                   صور
-                                </Badge>
-                              ) : isNewArticle(article.publishedAt) ? (
-                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600" data-testid={`badge-content-type-${article.id}`}>
-                                  <Flame className="h-2 w-2" aria-hidden="true" />
-                                  جديد
                                 </Badge>
                               ) : (article as any).articleType === 'infographic' ? (
                                 <Badge 
@@ -436,6 +436,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                   {article.category.nameAr}
                                 </Badge>
                               ) : null}
+
+                              {isNewArticle(article.publishedAt) && (
+                                <Badge className="text-[10px] h-4 gap-0.5 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
+                                  <Flame className="h-2 w-2" aria-hidden="true" />
+                                  جديد
+                                </Badge>
+                              )}
                             </div>
 
                             {/* Title */}
@@ -528,15 +535,15 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                         <Zap className="h-2.5 w-2.5" aria-hidden="true" />
                         عاجل
                       </Badge>
+                    ) : ((article as any).articleType === 'opinion' || (article as any).articleType === 'column') ? (
+                      <Badge className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium" data-testid={`badge-content-type-${article.id}`}>
+                        <BookOpen className="h-2.5 w-2.5" aria-hidden="true" />
+                        رأي
+                      </Badge>
                     ) : (article as any).articleType === 'weekly_photos' ? (
                       <Badge className="text-xs h-5 gap-1 bg-orange-500/90 hover:bg-orange-600 text-white border-0" data-testid={`badge-content-type-${article.id}`}>
                         <Camera className="h-2.5 w-2.5" aria-hidden="true" />
                         صور
-                      </Badge>
-                    ) : isNewArticle(article.publishedAt) ? (
-                      <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600" data-testid={`badge-content-type-${article.id}`}>
-                        <Flame className="h-2.5 w-2.5" aria-hidden="true" />
-                        جديد
                       </Badge>
                     ) : (article as any).articleType === 'infographic' ? (
                       <Badge 
@@ -557,6 +564,13 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                         {article.category.nameAr}
                       </Badge>
                     ) : null}
+
+                    {isNewArticle(article.publishedAt) && (
+                      <Badge className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse" data-testid={`badge-new-${article.id}`}>
+                        <Flame className="h-2.5 w-2.5" aria-hidden="true" />
+                        جديد
+                      </Badge>
+                    )}
                   </div>
                   
                   <h3 
