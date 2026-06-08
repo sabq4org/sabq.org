@@ -115,6 +115,7 @@ expectedArticlesPerMonth`) + **`status`** (`pending/approved/rejected`) + مرا
 | `GET /api/muqtarab/angles/:angleSlug/topics/:topicSlug` | موضوع منشور + الزاوية |
 | `GET /api/muqtarab/topics/:slug` | موضوع بالـ slug (يتطلب `angleId`) |
 | `GET /api/muqtarab/latest-topics` / `GET /api/muqtarab/topics/featured` | خلاصات الواجهة |
+| `POST /api/muqtarab/topics/:id/view` | عدّاد مشاهدات موضوع منشور (+1) |
 | `POST /api/angle-submissions` | **تقديم طلب زاوية (عام)** |
 
 ### طلبات الزوايا (إدارة — `muqtarab.manage`)
@@ -140,6 +141,8 @@ expectedArticlesPerMonth`) + **`status`** (`pending/approved/rejected`) + مرا
 | المسار | الوصف |
 |---|---|
 | `GET /api/muqtarab/my-angle` | زاويتي + إحصاءات الحالات |
+| `GET /api/muqtarab/my-angle/analytics` | إجمالي المشاهدات + أكثر ٥ مواضيع انتشاراً |
+| `PATCH /api/muqtarab/my-angle/profile` | تحديث توقيع الكاتب (`writerSignature`) والوصف المختصر (`shortDesc`) |
 | `GET /api/muqtarab/my-angle/topics` | كل مواضيعي |
 | `POST /api/muqtarab/my-angle/topics` | إنشاء (draft) — slug إنجليزي، `createdBy`=الكاتب |
 | `PATCH /api/muqtarab/my-angle/topics/:id` | تعديل (draft/needs_revision فقط) |
@@ -216,7 +219,7 @@ expectedArticlesPerMonth`) + **`status`** (`pending/approved/rejected`) + مرا
   - `server/seoInjector.ts` (مسار Replit المباشر): `handleMuqtarabAnglePage` + `handleMuqtarabTopicPage`
     (عنوان/وصف/صورة OG = heroImage، NewsArticle JSON-LD، 404 سليم للمفقود، noindex لغير المنشور).
   - `server/routes/edgeMeta.ts` (مسار Cloudflare — مسار الإنتاج للزواحف): معالجا زاوية + موضوع.
-- التغييرات تخص **الجديد فقط**؛ الزوايا/المواضيع القديمة تحتفظ بسلقها لكن ميتا مشاركتها تعمل.
+- التغييرات تخص **الجديد فقط**؛ الزوايا/المواضيع القديمة تحتفظ بـ slug‑ها لكن ميتا مشاركتها تعمل.
 
 ---
 
