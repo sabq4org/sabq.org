@@ -512,7 +512,7 @@ export default function OpinionDetailPage() {
               {/* Article Header */}
               <header className="space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="default" className="gap-1" data-testid="badge-opinion-type">
+                  <Badge className="bg-amber-600 hover:bg-amber-700 text-white border-0 gap-1 font-medium" data-testid="badge-opinion-type">
                     <BookOpen className="h-3 w-3" />
                     مقال رأي
                   </Badge>
