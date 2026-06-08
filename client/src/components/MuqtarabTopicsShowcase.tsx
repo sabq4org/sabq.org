@@ -25,10 +25,6 @@ interface MuqtarabTopicsShowcaseProps {
 }
 
 export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcaseProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
-
   const { data: topics, isLoading } = useQuery<TopicWithAngle[]>({
     queryKey: ["/api/muqtarab/topics/featured"],
     queryFn: async () => {
@@ -40,33 +36,6 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
     },
     enabled,
   });
-
-  const checkScrollButtons = () => {
-    if (scrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-      setCanScrollLeft(scrollLeft > 10);
-      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
-    }
-  };
-
-  useEffect(() => {
-    checkScrollButtons();
-    const scrollEl = scrollRef.current;
-    if (scrollEl) {
-      scrollEl.addEventListener('scroll', checkScrollButtons);
-      return () => scrollEl.removeEventListener('scroll', checkScrollButtons);
-    }
-  }, [topics]);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = 300;
-      scrollRef.current.scrollBy({
-        left: direction === 'right' ? scrollAmount : -scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
 
   if (isLoading) {
     return (
@@ -119,28 +88,6 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
           </div>
           
           <div className="flex items-center gap-1">
-            <div className="hidden md:flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => scroll('right')}
-                disabled={!canScrollRight}
-                data-testid="button-scroll-right"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => scroll('left')}
-                disabled={!canScrollLeft}
-                data-testid="button-scroll-left"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
             <Link href="/muqtarab">
               <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 px-2" data-testid="button-view-all-muqtarab">
                 المزيد
@@ -231,13 +178,11 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
           </CardContent>
         </Card>
 
-        {/* Desktop: Horizontal Scroll Cards */}
+        {/* Desktop: Grid of 2 rows and 4 columns */}
         <div 
-          ref={scrollRef}
-          className="hidden lg:flex gap-4 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="hidden lg:grid lg:grid-cols-4 lg:gap-4 pb-2"
         >
-          {topics.map((topic) => {
+          {topics.slice(0, 8).map((topic) => {
             const angle = topic.angle;
             const angleColor = angle?.colorHex || '#6366f1';
             const Icon = angle ? getIconComponent(angle.iconKey || 'Circle') : Sparkles;
@@ -246,7 +191,7 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
               <Link 
                 key={topic.id} 
                 href={`/muqtarab/${angle?.slug || 'general'}/topic/${topic.slug}`}
-                className="flex-shrink-0 w-72 snap-start"
+                className="w-full"
               >
                 <Card 
                   className="group h-full overflow-hidden border-0 shadow-md hover:shadow-lg transition-all duration-300 cursor-pointer"
