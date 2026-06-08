@@ -11936,15 +11936,27 @@ Respond in valid JSON format only:
           title: articles.title,
           subtitle: articles.subtitle,
           slug: articles.slug,
+          englishSlug: articles.englishSlug,
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
+          thumbnailUrl: articles.thumbnailUrl,
           imageFocalPoint: articles.imageFocalPoint,
           publishedAt: articles.publishedAt,
           categoryId: articles.categoryId,
           views: articles.views,
           newsType: articles.newsType,
+          articleType: articles.articleType,
+          isAiGeneratedThumbnail: articles.isAiGeneratedThumbnail,
+          isAiGeneratedImage: articles.isAiGeneratedImage,
+          infographicBannerUrl: articles.infographicBannerUrl,
+          isVideoTemplate: articles.isVideoTemplate,
+          aiGenerated: articles.aiGenerated,
+          categoryName: categories.nameAr,
+          categoryColor: categories.color,
+          categorySlug: categories.slug,
         })
         .from(articles)
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
         .where(and(
           eq(articles.status, "published"),
           eq(articles.hideFromHomepage, false),
@@ -11955,8 +11967,62 @@ Respond in valid JSON format only:
         .limit(limit)
         .offset(offset);
       
+      let pollArticleIds = new Set<string>();
+      let commentsMap = new Map<string, number>();
+      if (paginatedArticles.length > 0) {
+        const articleIds = paginatedArticles.map(a => a.id);
+        const [activePolls, commentsCountResult] = await Promise.all([
+          db.select({ articleId: articlePolls.articleId })
+            .from(articlePolls)
+            .where(and(
+              inArray(articlePolls.articleId, articleIds),
+              eq(articlePolls.isActive, true)
+            )),
+          db.select({
+            articleId: comments.articleId,
+            count: sql<number>`COUNT(*)::int`
+          })
+          .from(comments)
+          .where(inArray(comments.articleId, articleIds))
+          .groupBy(comments.articleId)
+        ]);
+        
+        pollArticleIds = new Set(activePolls.map(p => p.articleId));
+        commentsMap = new Map(commentsCountResult.map(r => [r.articleId, r.count]));
+      }
+
+      const formattedArticles = paginatedArticles.map(row => ({
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        slug: row.slug,
+        englishSlug: row.englishSlug,
+        excerpt: row.excerpt,
+        imageUrl: row.imageUrl,
+        thumbnailUrl: row.thumbnailUrl,
+        imageFocalPoint: row.imageFocalPoint,
+        publishedAt: row.publishedAt,
+        categoryId: row.categoryId,
+        views: row.views,
+        newsType: row.newsType,
+        articleType: row.articleType,
+        isAiGeneratedThumbnail: row.isAiGeneratedThumbnail,
+        isAiGeneratedImage: row.isAiGeneratedImage,
+        infographicBannerUrl: row.infographicBannerUrl,
+        isVideoTemplate: row.isVideoTemplate,
+        aiGenerated: row.aiGenerated,
+        commentsCount: commentsMap.get(row.id) || 0,
+        hasPoll: pollArticleIds.has(row.id),
+        category: row.categoryId ? {
+          id: row.categoryId,
+          nameAr: row.categoryName,
+          color: row.categoryColor,
+          slug: row.categorySlug,
+        } : null,
+      }));
+
       res.json({
-        articles: paginatedArticles,
+        articles: formattedArticles,
         hasMore: offset + paginatedArticles.length < total,
         total,
       });
