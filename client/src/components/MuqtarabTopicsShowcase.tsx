@@ -100,7 +100,7 @@ export function MuqtarabTopicsShowcase({ enabled = true }: MuqtarabTopicsShowcas
         {/* Mobile: List View (like أخبارك الذكية) */}
         <Card className="lg:hidden border-0 shadow-sm overflow-hidden">
           <CardContent className="p-0 divide-y divide-border/50">
-            {topics.slice(0, 5).map((topic) => {
+            {topics.slice(0, 8).map((topic) => {
               const angle = topic.angle;
               const angleColor = angle?.colorHex || '#6366f1';
               const Icon = angle ? getIconComponent(angle.iconKey || 'Circle') : Sparkles;

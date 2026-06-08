@@ -185,21 +185,129 @@ export function TrendingWeekSection() {
         </motion.div>
 
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <TrendingCardSkeleton key={i} />
-            ))}
-          </div>
+          <>
+            {/* Mobile Loading Skeleton */}
+            <Card className="lg:hidden border-0 shadow-sm overflow-hidden">
+              <CardContent className="p-0 divide-y divide-border/50">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-3 flex gap-3">
+                    <Skeleton className="w-24 h-16 rounded-lg flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Desktop Loading Skeleton */}
+            <div className="hidden lg:grid lg:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TrendingCardSkeleton key={i} />
+              ))}
+            </div>
+          </>
         ) : hasArticles ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            {articles.slice(0, 5).map((article, index) => (
-              <TrendingCard 
-                key={article.id} 
-                article={article} 
-                index={index}
-              />
-            ))}
-          </div>
+          <>
+            {/* Mobile: List View (styled like Muqtarab Showcase) */}
+            <Card className="lg:hidden border-0 shadow-sm overflow-hidden">
+              <CardContent className="p-0 divide-y divide-border/50 bg-card">
+                {articles.slice(0, 5).map((article, index) => {
+                  const timeAgo = article.publishedAt
+                    ? formatDistanceToNow(new Date(article.publishedAt), {
+                        addSuffix: true,
+                        locale: arSA,
+                      })
+                    : null;
+                  
+                  const categoryColor = article.category?.color || 'hsl(var(--primary))';
+
+                  return (
+                    <Link 
+                      key={article.id} 
+                      href={`/article/${article.englishSlug || article.slug}`}
+                      data-testid={`link-trending-article-mobile-${article.id}`}
+                    >
+                      <div className="block group cursor-pointer">
+                        <div className="p-3 hover-elevate active-elevate-2 transition-all">
+                          <div className="flex gap-3">
+                            {/* Image */}
+                            <div className="relative flex-shrink-0 w-24 h-16 rounded-lg overflow-hidden">
+                              {article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl ? (
+                                <OptimizedImage
+                                  src={article.infographicBannerUrl || article.imageUrl || article.thumbnailUrl || ''}
+                                  alt={article.title}
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                  objectPosition={getObjectPosition(article)}
+                                  preferSize="small"
+                                  aspectRatio="16/9"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-orange-500/20 via-red-500/20 to-orange-500/10" />
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 space-y-1">
+                              {/* Category / Views Badge */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {article.category && (
+                                  <Badge 
+                                    variant="secondary"
+                                    className="text-[10px] h-4 text-black font-semibold"
+                                    style={{ 
+                                      borderRight: `3px solid ${categoryColor}`, 
+                                      backgroundColor: '#e5e5e6' 
+                                    }}
+                                  >
+                                    {article.category.nameAr}
+                                  </Badge>
+                                )}
+                                {article.views !== undefined && article.views > 0 && (
+                                  <Badge 
+                                    className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border-0 text-[10px] gap-0.5 px-2 h-4"
+                                  >
+                                    <Eye className="h-2.5 w-2.5" />
+                                    {article.views.toLocaleString('en-US')}
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {/* Title */}
+                              <h4 className="font-bold text-sm line-clamp-2 leading-snug group-hover:text-primary transition-colors text-foreground">
+                                {article.title}
+                              </h4>
+
+                              {/* Meta */}
+                              {timeAgo && (
+                                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{timeAgo}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Desktop View */}
+            <div className="hidden lg:grid lg:grid-cols-5 gap-4">
+              {articles.slice(0, 5).map((article, index) => (
+                <TrendingCard 
+                  key={article.id} 
+                  article={article} 
+                  index={index}
+                />
+              ))}
+            </div>
+          </>
         ) : null}
       </div>
     </section>
