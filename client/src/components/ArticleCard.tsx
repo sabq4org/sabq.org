@@ -19,7 +19,8 @@ import {
   Play,
   Camera,
   BarChart3,
-  Zap
+  Zap,
+  BookOpen
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { Link } from "wouter";
@@ -154,6 +155,15 @@ export function ArticleCard({
                   استطلاع
                 </Badge>
               )}
+              {(article.articleType === 'opinion' || article.articleType === 'column') && (
+                <Badge 
+                  className="bg-amber-600/90 backdrop-blur-sm text-white border-0 text-xs sm:text-sm shadow-md gap-1 font-medium"
+                  data-testid={`badge-opinion-${article.id}`}
+                >
+                  <BookOpen className="h-3 w-3" />
+                  رأي
+                </Badge>
+              )}
               {article.category && (
                 <Badge 
                   className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-700/50 text-xs sm:text-sm shadow-lg font-semibold" 
@@ -260,6 +270,15 @@ export function ArticleCard({
                 >
                   <BarChart3 className="h-2.5 w-2.5" />
                   استطلاع
+                </Badge>
+              )}
+              {(article.articleType === 'opinion' || article.articleType === 'column') && (
+                <Badge 
+                  className="bg-amber-600 text-white border-0 text-[10px] px-1.5 py-0.5 gap-1 font-medium"
+                  data-testid={`badge-opinion-${article.id}`}
+                >
+                  <BookOpen className="h-2.5 w-2.5" />
+                  رأي
                 </Badge>
               )}
               {article.category && (
@@ -381,6 +400,15 @@ export function ArticleCard({
                   >
                     <BarChart3 className="h-3 w-3" />
                     استطلاع
+                  </Badge>
+                )}
+                {(article.articleType === 'opinion' || article.articleType === 'column') && (
+                  <Badge 
+                    className="bg-amber-600 text-white border-0 text-xs gap-1 font-medium"
+                    data-testid={`badge-opinion-${article.id}`}
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    رأي
                   </Badge>
                 )}
                 {aiInsight && (
@@ -529,6 +557,15 @@ export function ArticleCard({
                 >
                   <BarChart3 className="h-3 w-3" />
                   استطلاع
+                </Badge>
+              )}
+              {(article.articleType === 'opinion' || article.articleType === 'column') && (
+                <Badge 
+                  className="bg-amber-600/95 backdrop-blur-sm text-white border-0 text-xs shadow-md gap-1 font-medium"
+                  data-testid={`badge-opinion-${article.id}`}
+                >
+                  <BookOpen className="h-3 w-3" />
+                  رأي
                 </Badge>
               )}
               {article.category && (

@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, Tag, Newspaper, Flame, Zap, User } from "lucide-react";
+import { Clock, Tag, Newspaper, Flame, Zap, User, BookOpen } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import type { UrSmartBlock } from "@shared/schema";
@@ -27,6 +27,7 @@ interface ArticleResult {
   imageUrl?: string | null;
   excerpt?: string | null;
   newsType?: string | null;
+  articleType?: string | null;
   views?: number;
   imageFocalPoint?: { x: number; y: number } | null;
   category?: {
@@ -162,33 +163,45 @@ function GridLayout({ articles, blockId }: { articles: ArticleResult[]; blockId:
 
                         {/* Content */}
                         <div className="flex-1 min-w-0 space-y-2">
-                          {/* Breaking/New/Category Badge */}
-                          {article.newsType === "breaking" ? (
-                            <Badge 
-                              variant="destructive" 
-                              className="text-xs h-5 gap-1"
-                              data-testid={`badge-smart-mobile-breaking-${article.id}`}
-                            >
-                              <Zap className="h-3 w-3" />
-                              تازہ خبر
-                            </Badge>
-                          ) : isNewArticle(article.publishedAt) ? (
-                            <Badge 
-                              className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600"
-                              data-testid={`badge-smart-mobile-new-${article.id}`}
-                            >
-                              <Flame className="h-3 w-3" />
-                              نیا
-                            </Badge>
-                          ) : article.category ? (
-                            <Badge 
-                              variant="outline" 
-                              className="text-xs h-5"
-                              data-testid={`badge-smart-mobile-category-${article.id}`}
-                            >
-                              {article.category.icon} {article.category.name}
-                            </Badge>
-                          ) : null}
+                           {/* Breaking/New/Category/Opinion Badge */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {article.newsType === "breaking" ? (
+                              <Badge 
+                                variant="destructive" 
+                                className="text-xs h-5 gap-1"
+                                data-testid={`badge-smart-mobile-breaking-${article.id}`}
+                              >
+                                <Zap className="h-3 w-3" />
+                                تازہ خبر
+                              </Badge>
+                            ) : (article.articleType === 'opinion' || article.articleType === 'column') ? (
+                              <Badge 
+                                className="text-xs h-5 gap-1 bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium"
+                                data-testid={`badge-smart-mobile-opinion-${article.id}`}
+                              >
+                                <BookOpen className="h-3 w-3" aria-hidden="true" />
+                                رائے
+                              </Badge>
+                            ) : article.category ? (
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs h-5"
+                                data-testid={`badge-smart-mobile-category-${article.id}`}
+                              >
+                                {article.category.icon} {article.category.name}
+                              </Badge>
+                            ) : null}
+
+                            {isNewArticle(article.publishedAt) && (
+                              <Badge 
+                                className="text-xs h-5 gap-1 bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse"
+                                data-testid={`badge-smart-mobile-new-${article.id}`}
+                              >
+                                <Flame className="h-3 w-3" />
+                                نیا
+                              </Badge>
+                            )}
+                          </div>
 
                           {/* Title */}
                           <h4 className={`font-bold text-sm line-clamp-2 leading-snug transition-colors ${
@@ -301,18 +314,35 @@ function ListLayout({ articles, blockId }: { articles: ArticleResult[]; blockId:
                     </div>
                   )}
                   <div className="flex-1 min-w-0 space-y-2">
-                    {article.category && (
-                      <Badge 
-                        variant="outline" 
-                        className="text-xs"
-                        style={{ 
-                          borderColor: article.category.color || undefined,
-                          color: article.category.color || undefined,
-                        }}
-                      >
-                        {article.category.name}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {article.articleType === 'opinion' || article.articleType === 'column' ? (
+                        <Badge 
+                          className="text-xs bg-amber-600 hover:bg-amber-700 text-white border-0 font-medium"
+                        >
+                          <BookOpen className="h-3 w-3 mr-1" aria-hidden="true" />
+                          رائے
+                        </Badge>
+                      ) : article.category ? (
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs"
+                          style={{ 
+                            borderColor: article.category.color || undefined,
+                            color: article.category.color || undefined,
+                          }}
+                        >
+                          {article.category.name}
+                        </Badge>
+                      ) : null}
+
+                      {isNewArticle(article.publishedAt) && (
+                        <Badge 
+                          className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-600 animate-pulse"
+                        >
+                          نیا
+                        </Badge>
+                      )}
+                    </div>
                     <h3 className="font-bold text-base line-clamp-2 group-hover:text-primary transition-colors">
                       {article.title}
                     </h3>
