@@ -287,7 +287,6 @@ export default function Profile() {
       icon: null
     })).sort((a, b) => b.value - a.value);
   }
-
   // Calculate stats
   const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
   const estimatedReadTime = Math.round(totalReads * 3);
