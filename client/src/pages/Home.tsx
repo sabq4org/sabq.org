@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useCanonical } from "@/hooks/useCanonical";
 import { prefetchArticleDetail, prefetchCategoryPage, prefetchHomeSections, prefetchWhenIdle } from "@/lib/prefetchRoute";
 import { readHomepageCache, writeHomepageCache } from "@/lib/homepageCache";
 import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
@@ -207,6 +208,8 @@ export default function Home() {
   useEffect(() => {
     document.title = 'سبق - صحيفة إلكترونية سعودية';
   }, []);
+
+  useCanonical("https://sabq.org");
 
   // Mark initial load complete when homepage data loads
   useEffect(() => {

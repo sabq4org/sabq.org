@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
+import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
@@ -131,6 +132,18 @@ export default function OpinionDetailPage() {
       logArticleView();
     }
   }, [article?.id, user?.id]);
+
+  // Set document.title for SEO (GA4 auto-tracks page views)
+  useEffect(() => {
+    if (article?.title) {
+      document.title = `${article.title} | سبق`;
+    }
+    return () => {
+      document.title = 'سبق - صحيفة إلكترونية سعودية';
+    };
+  }, [article?.title]);
+
+  useCanonical(article ? `https://sabq.org/article/${article.englishSlug || slug}` : null);
 
   // GA analytics view — fire immediately (separate from the inflated DB counter).
   useEffect(() => {

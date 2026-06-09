@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Heart,
@@ -176,6 +177,8 @@ export default function EnglishArticleDetail() {
       document.title = 'Sabq - Saudi Electronic Newspaper';
     };
   }, [article?.title]);
+
+  useCanonical(article ? `https://sabq.org/en/article/${article.englishSlug || params.slug}` : null);
 
   if (isLoading) {
     return (

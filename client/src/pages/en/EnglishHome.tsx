@@ -12,6 +12,7 @@ import { EnglishSmartNewsBlock } from "@/components/en/EnglishSmartNewsBlock";
 import { EnglishSmartSummaryBlock } from "@/components/en/EnglishSmartSummaryBlock";
 import { EnglishFooter } from "@/components/en/EnglishFooter";
 import { useAuth } from "@/hooks/useAuth";
+import { useCanonical } from "@/hooks/useCanonical";
 import type { EnArticleWithDetails, EnSmartBlock } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -26,6 +27,8 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
 
 export default function EnglishHome() {
   const { user } = useAuth();
+  
+  useCanonical("https://sabq.org/en");
   
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticleWithDetails[]>({
     queryKey: ["/api/en/articles"],

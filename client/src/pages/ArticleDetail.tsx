@@ -36,6 +36,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
+import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
@@ -413,6 +414,8 @@ export default function ArticleDetail() {
       document.title = 'سبق - صحيفة إلكترونية سعودية';
     };
   }, [article?.title]);
+
+  useCanonical(article ? `https://sabq.org/article/${article.englishSlug || slug}` : null);
 
   // Track article view ONLY after a genuine read: the reader must stay on the
   // page, with the tab visible, for at least READ_DWELL_MS. Mashing the refresh

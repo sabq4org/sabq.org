@@ -11,6 +11,7 @@ import { UrduQuadCategoriesBlock } from "@/components/ur/UrduQuadCategoriesBlock
 import { UrduSmartNewsBlock } from "@/components/ur/UrduSmartNewsBlock";
 import { UrduSmartSummaryBlock } from "@/components/ur/UrduSmartSummaryBlock";
 import { useAuth } from "@/hooks/useAuth";
+import { useCanonical } from "@/hooks/useCanonical";
 import type { UrArticleWithDetails, UrSmartBlock } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -25,6 +26,8 @@ const isNewArticle = (publishedAt: Date | string | null | undefined) => {
 
 export default function UrduHome() {
   const { user } = useAuth();
+  
+  useCanonical("https://sabq.org/ur");
   
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<UrArticleWithDetails[]>({
     queryKey: ["/api/ur/articles"],

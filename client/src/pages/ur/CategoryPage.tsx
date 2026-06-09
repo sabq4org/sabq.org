@@ -1,6 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { UrduLayout } from "@/components/ur/UrduLayout";
+import { useCanonical } from "@/hooks/useCanonical";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,8 @@ export default function UrduCategoryPage() {
       return res.json();
     },
   });
+
+  useCanonical(category ? `https://sabq.org/ur/category/${category.englishSlug || slug}` : null);
 
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<UrArticle[]>({
     queryKey: ["/api/ur/categories", slug, "articles"],
