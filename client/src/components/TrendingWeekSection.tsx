@@ -31,6 +31,7 @@ interface TrendingArticle {
   category?: {
     id: string;
     nameAr: string;
+    color?: string | null;
   } | null;
 }
 
