@@ -101,38 +101,7 @@ export default function Profile() {
     enabled: !!user,
   });
 
-  // Computed values for Journey Dashboard
-  const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
-  const currentTier = computeTier(lifetime);
-  const nextTierInfo = nextTier(currentTier.level);
-  
-  // Calculate percentage progress to next tier
-  let progressPercentage = 100;
-  let pointsToNext = 0;
-  if (nextTierInfo) {
-    const range = nextTierInfo.minLifetimePoints - currentTier.minLifetimePoints;
-    const earned = lifetime - currentTier.minLifetimePoints;
-    progressPercentage = Math.min(100, Math.max(0, (earned / range) * 100));
-    pointsToNext = nextTierInfo.minLifetimePoints - lifetime;
-  }
 
-  // Map categories read statistics
-  const topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
-    const cat = categoriesAll?.find(c => c.id === tc.categoryId);
-    return {
-      name: cat ? (cat.nameAr || cat.name) : "تصنيف آخر",
-      value: tc.count,
-      weight: tc.weight,
-      color: cat?.color || "#6B7280",
-      icon: cat?.icon
-    };
-  });
-
-  // Calculate stats
-  const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
-  const estimatedReadTime = Math.round(totalReads * 3);
-  const totalEngagement = (activitySummary?.totalComments ?? 0) + (activitySummary?.totalReactions ?? 0) + (activitySummary?.totalBookmarks ?? 0);
-  const userPoints = loyaltyPoints?.totalPoints ?? 0;
 
   const form = useForm<UpdateUserFormData>({
     resolver: zodResolver(updateUserSchema),
@@ -265,6 +234,39 @@ export default function Profile() {
     queryKey: ["/api/loyalty/points"],
     enabled: !!user,
   });
+
+  // Computed values for Journey Dashboard (Moved below query declarations to avoid TDZ error)
+  const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
+  const currentTier = computeTier(lifetime);
+  const nextTierInfo = nextTier(currentTier.level);
+  
+  // Calculate percentage progress to next tier
+  let progressPercentage = 100;
+  let pointsToNext = 0;
+  if (nextTierInfo) {
+    const range = nextTierInfo.minLifetimePoints - currentTier.minLifetimePoints;
+    const earned = lifetime - currentTier.minLifetimePoints;
+    progressPercentage = Math.min(100, Math.max(0, (earned / range) * 100));
+    pointsToNext = nextTierInfo.minLifetimePoints - lifetime;
+  }
+
+  // Map categories read statistics
+  const topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
+    const cat = categoriesAll?.find(c => c.id === tc.categoryId);
+    return {
+      name: cat ? (cat.nameAr || cat.name) : "تصنيف آخر",
+      value: tc.count,
+      weight: tc.weight,
+      color: cat?.color || "#6B7280",
+      icon: cat?.icon
+    };
+  });
+
+  // Calculate stats
+  const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
+  const estimatedReadTime = Math.round(totalReads * 3);
+  const totalEngagement = (activitySummary?.totalComments ?? 0) + (activitySummary?.totalReactions ?? 0) + (activitySummary?.totalBookmarks ?? 0);
+  const userPoints = loyaltyPoints?.totalPoints ?? 0;
 
   const { data: followedKeywordsRaw, isLoading: isLoadingKeywords } = useQuery<
     Array<{ tagId: string; tagName: string; notify: boolean; articleCount: number }>
