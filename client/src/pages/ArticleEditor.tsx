@@ -104,6 +104,8 @@ import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
+import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
+import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
@@ -1974,217 +1976,22 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     <DashboardLayout>
       {/* Draft Recovery Dialog */}
       {/* Title Proofread Dialog */}
-      <Dialog open={showTitleProofreadDialog} onOpenChange={setShowTitleProofreadDialog}>
-        <DialogContent className="max-w-xl" data-testid="dialog-proofread-title">
-          <DialogHeader>
-            <DialogTitle>تدقيق لغوي للعنوان</DialogTitle>
-            <DialogDescription>
-              {titleProofreadResult?.hasIssues
-                ? "اقتراح تصحيح للعنوان. راجعه ثم اضغط \"تطبيق\" لاستبداله."
-                : "العنوان سليم لغوياً ولا يحتاج تصحيحاً."}
-            </DialogDescription>
-          </DialogHeader>
-          {titleProofreadResult && (
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">العنوان الأصلي</p>
-                <div
-                  className="p-3 rounded-md border bg-muted/30 text-sm"
-                  data-testid="text-title-original"
-                >
-                  {titleProofreadResult.original}
-                </div>
-              </div>
-              {titleProofreadResult.hasIssues && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">العنوان بعد التصحيح</p>
-                  <div
-                    className="p-3 rounded-md border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 text-sm font-medium"
-                    data-testid="text-title-suggestion"
-                  >
-                    {titleProofreadResult.suggestion}
-                  </div>
-                </div>
-              )}
-              {titleProofreadResult.notes.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">ملاحظات التصحيح</p>
-                  <ul className="space-y-1.5 text-sm list-disc pr-5">
-                    {titleProofreadResult.notes.map((n, idx) => (
-                      <li key={idx} data-testid={`note-title-${idx}`}>
-                        {n.type && <span className="text-xs text-muted-foreground ml-1">[{n.type}]</span>}
-                        {n.explanation}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowTitleProofreadDialog(false)}
-              data-testid="button-cancel-title-proofread"
-            >
-              إغلاق
-            </Button>
-            {titleProofreadResult?.hasIssues && (
-              <Button
-                onClick={() => {
-                  if (titleProofreadResult) {
-                    handleTitleChange(titleProofreadResult.suggestion);
-                    toast({ title: "تم تطبيق التصحيح على العنوان" });
-                  }
-                  setShowTitleProofreadDialog(false);
-                }}
-                data-testid="button-apply-title-proofread"
-              >
-                تطبيق التصحيح
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TitleProofreadDialog
+        open={showTitleProofreadDialog}
+        onOpenChange={setShowTitleProofreadDialog}
+        result={titleProofreadResult}
+        onApplySuggestion={handleTitleChange}
+      />
 
       {/* Proofread Dialog - Display spelling issues without auto-applying */}
-      <Dialog open={showProofreadDialog} onOpenChange={setShowProofreadDialog}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-proofread">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <SpellCheck className="h-5 w-5" />
-              نتائج التدقيق اللغوي
-            </DialogTitle>
-            <DialogDescription>
-              {proofreadIssues.length === 0
-                ? "النص سليم إملائياً، لا توجد أخطاء."
-                : `تم العثور على ${proofreadIssues.length} ملاحظة. اضغط "تطبيق" لاستبدال الكلمة في المقال، أو "تجاهل" لتجاوزها.`}
-            </DialogDescription>
-          </DialogHeader>
-          {proofreadIssues.length > 0 && (
-            <ScrollArea className="max-h-[60vh] pr-4">
-              <div className="space-y-3">
-                {proofreadIssues.map((issue, idx) => (
-                  <Card key={`${issue.original}-${idx}`} data-testid={`proofread-issue-${idx}`}>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">
-                          {issue.type || "إملائي"}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">رقم {idx + 1}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">الكلمة الحالية</Label>
-                          <div
-                            className="mt-1 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm font-medium"
-                            data-testid={`proofread-original-${idx}`}
-                          >
-                            {issue.original}
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">الاقتراح</Label>
-                          <div
-                            className="mt-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-medium"
-                            data-testid={`proofread-suggestion-${idx}`}
-                          >
-                            {issue.suggestion}
-                          </div>
-                        </div>
-                      </div>
-                      {issue.explanation && (
-                        <p className="text-xs text-muted-foreground" data-testid={`proofread-explanation-${idx}`}>
-                          {issue.explanation}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-end gap-2 pt-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setProofreadIssues((prev) => prev.filter((_, i) => i !== idx));
-                          }}
-                          data-testid={`button-skip-proofread-${idx}`}
-                        >
-                          تجاهل
-                        </Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => {
-                            if (!content.includes(issue.original)) {
-                              toast({
-                                title: "الكلمة لم تعد في النص",
-                                description: "ربما تم تعديل المقال. أعد التدقيق.",
-                                variant: "destructive",
-                              });
-                              setProofreadIssues((prev) => prev.filter((_, i) => i !== idx));
-                              return;
-                            }
-                            setContent(content.replace(issue.original, issue.suggestion));
-                            setProofreadIssues((prev) =>
-                              prev
-                                .filter((_, i) => i !== idx)
-                                .map((it) =>
-                                  it.original === issue.original
-                                    ? { ...it, original: issue.suggestion }
-                                    : it
-                                )
-                            );
-                            toast({ title: "تم التطبيق", description: `${issue.original} ← ${issue.suggestion}` });
-                          }}
-                          data-testid={`button-apply-proofread-${idx}`}
-                          className="gap-1"
-                        >
-                          <Check className="h-3 w-3" />
-                          تطبيق
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
-          <DialogFooter className="gap-2 sm:gap-2">
-            {proofreadIssues.length > 1 && (
-              <Button
-                variant="default"
-                onClick={() => {
-                  let newContent = content;
-                  let appliedCount = 0;
-                  for (const issue of proofreadIssues) {
-                    if (newContent.includes(issue.original)) {
-                      newContent = newContent.replace(issue.original, issue.suggestion);
-                      appliedCount++;
-                    }
-                  }
-                  setContent(newContent);
-                  setProofreadIssues([]);
-                  toast({
-                    title: "تم تطبيق التصحيحات",
-                    description: `تم تطبيق ${appliedCount} تصحيح${appliedCount === 1 ? "" : "اً"} على النص.`,
-                  });
-                  setShowProofreadDialog(false);
-                }}
-                data-testid="button-apply-all-proofread"
-                className="gap-1"
-              >
-                <Check className="h-4 w-4" />
-                تطبيق الكل ({proofreadIssues.length})
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => setShowProofreadDialog(false)}
-              data-testid="button-close-proofread"
-            >
-              إغلاق
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ProofreadDialog
+        open={showProofreadDialog}
+        onOpenChange={setShowProofreadDialog}
+        issues={proofreadIssues}
+        setIssues={setProofreadIssues}
+        content={content}
+        setContent={setContent}
+      />
 
       <AlertDialog open={showDraftRecoveryDialog} onOpenChange={setShowDraftRecoveryDialog}>
         <AlertDialogContent className="max-w-md" data-testid="dialog-draft-recovery">
