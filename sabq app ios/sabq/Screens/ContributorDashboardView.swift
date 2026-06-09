@@ -4,7 +4,7 @@ import Combine
 
 // MARK: - Models
 
-struct ContributorAnalytics: Decodable {
+nonisolated struct ContributorAnalytics: Decodable {
     let success: Bool
     let role: String
     let totalArticles: Int
@@ -51,7 +51,7 @@ struct ContributorAnalytics: Decodable {
     }
 }
 
-struct DailyStat: Decodable, Identifiable {
+nonisolated struct DailyStat: Decodable, Identifiable {
     var id: String { date }
     let date: String
     let views: Int
@@ -67,7 +67,7 @@ struct DailyStat: Decodable, Identifiable {
     }
 }
 
-struct BestArticle: Decodable {
+nonisolated struct BestArticle: Decodable {
     let id: String
     let title: String
     let views: Int
@@ -80,7 +80,7 @@ struct BestArticle: Decodable {
     }
 }
 
-struct Comparison: Decodable {
+nonisolated struct Comparison: Decodable {
     let viewsThisMonth: Int
     let viewsLastMonth: Int
     let likesThisMonth: Int
@@ -97,7 +97,7 @@ struct Comparison: Decodable {
     }
 }
 
-struct FollowerData: Decodable {
+nonisolated struct FollowerData: Decodable {
     let count: Int
     let dailyGrowth: [FollowerDay]
 
@@ -110,7 +110,7 @@ struct FollowerData: Decodable {
     }
 }
 
-struct FollowerDay: Decodable, Identifiable {
+nonisolated struct FollowerDay: Decodable, Identifiable {
     var id: String { date }
     let date: String
     let count: Int
@@ -122,7 +122,7 @@ struct FollowerDay: Decodable, Identifiable {
     }
 }
 
-struct TopArticle: Decodable, Identifiable {
+nonisolated struct TopArticle: Decodable, Identifiable {
     let id: String
     let title: String
     let views: Int
@@ -141,7 +141,7 @@ struct TopArticle: Decodable, Identifiable {
     }
 }
 
-struct FeaturedComment: Decodable {
+nonisolated struct FeaturedComment: Decodable {
     let content: String
     let userName: String
     let articleTitle: String
@@ -156,7 +156,7 @@ struct FeaturedComment: Decodable {
     }
 }
 
-struct PublishingActivity: Decodable {
+nonisolated struct PublishingActivity: Decodable {
     let lastPublishedAt: String?
     let daysSinceLastPublished: Int?
     let thisWeekCount: Int
@@ -173,7 +173,7 @@ struct PublishingActivity: Decodable {
     }
 }
 
-struct ContributorArticle: Decodable, Identifiable {
+nonisolated struct ContributorArticle: Decodable, Identifiable {
     let id: String
     let title: String
     let status: String
@@ -198,7 +198,7 @@ struct ContributorArticle: Decodable, Identifiable {
     }
 }
 
-struct ContributorRanking: Decodable {
+nonisolated struct ContributorRanking: Decodable {
     let rank: Int?
     let totalAuthors: Int
     let percentile: Int

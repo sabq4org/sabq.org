@@ -655,10 +655,11 @@ actor APIClient {
     /// returns a Bearer token in `APILoginResponse.token`.
     func loginWithGoogle(idToken: String) async throws -> APILoginResponse {
         await ensureCSRF()
+        let deviceInfo = await Self.currentDeviceInfo()
         return try await post(
             APILoginResponse.self,
             path: "/auth/google",
-            body: APIGoogleAuthRequest(idToken: idToken, deviceInfo: Self.currentDeviceInfo())
+            body: APIGoogleAuthRequest(idToken: idToken, deviceInfo: deviceInfo)
         )
     }
 
@@ -675,6 +676,7 @@ actor APIClient {
         let fullName: APIAppleAuthRequest.AppleFullName? = (firstName != nil || lastName != nil)
             ? .init(firstName: firstName, lastName: lastName)
             : nil
+        let deviceInfo = await Self.currentDeviceInfo()
         return try await post(
             APILoginResponse.self,
             path: "/auth/apple",
@@ -682,23 +684,26 @@ actor APIClient {
                 identityToken: identityToken,
                 fullName: fullName,
                 email: email,
-                deviceInfo: Self.currentDeviceInfo()
+                deviceInfo: deviceInfo
             )
         )
     }
 
-    nonisolated private static func currentDeviceInfo() -> APIDeviceInfo {
+    private static func currentDeviceInfo() async -> APIDeviceInfo {
         let bundle = Bundle.main
         let appVersion = (bundle.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         let build = (bundle.infoDictionary?["CFBundleVersion"] as? String) ?? "unknown"
         #if canImport(UIKit)
-        let device = UIDevice.current
+        let (osVersion, deviceName, deviceId) = await MainActor.run {
+            let device = UIDevice.current
+            return (device.systemVersion, device.model, device.identifierForVendor?.uuidString)
+        }
         return APIDeviceInfo(
             platform: "ios",
-            osVersion: device.systemVersion,
+            osVersion: osVersion,
             appVersion: "\(appVersion) (\(build))",
-            deviceName: device.model,
-            deviceId: device.identifierForVendor?.uuidString
+            deviceName: deviceName,
+            deviceId: deviceId
         )
         #else
         return APIDeviceInfo(

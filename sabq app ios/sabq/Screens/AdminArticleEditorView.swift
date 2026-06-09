@@ -58,10 +58,10 @@ final class AdminEditorViewModel: ObservableObject {
     let isNew: Bool
     private let service: AdminServicing
 
-    init(articleId: String?, newArticleType: String? = nil, service: AdminServicing = LiveAdminService()) {
+    init(articleId: String?, newArticleType: String? = nil, service: AdminServicing? = nil) {
         self.articleId = articleId
         self.isNew = (articleId == nil)
-        self.service = service
+        self.service = service ?? LiveAdminService()
         if articleId == nil {
             self.articleType = newArticleType ?? "news"
             self.status = .draft
@@ -308,6 +308,7 @@ final class AdminEditorViewModel: ObservableObject {
 
 /// Full admin article editor: fetches every field, edits the body as rich
 /// HTML (`SabqHTMLEditor`), and saves through `PATCH /api/v1/admin/articles/:id`.
+@MainActor
 struct AdminArticleEditorView: View {
     let articleId: String?
     let newArticleType: String?
@@ -574,12 +575,13 @@ struct AdminArticleEditorView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
+            let uploading = vm.isUploadingImage
             PhotosPicker(selection: $imagePickerItem, matching: .images) {
-                toolLabel(vm.isUploadingImage ? "جارٍ الرفع…" : "رفع صورة",
+                toolLabel(uploading ? "جارٍ الرفع…" : "رفع صورة",
                           systemImage: "arrow.up.circle.fill",
-                          loading: vm.isUploadingImage)
+                          loading: uploading)
             }
-            .disabled(vm.isUploadingImage)
+            .disabled(uploading)
             field("رابط الصورة") {
                 TextField("https://", text: $vm.imageUrl, axis: .vertical)
                     .font(.system(size: 13))
@@ -778,7 +780,7 @@ struct AdminArticleEditorView: View {
     }
 
     /// Pill label for an AI/upload action button (with optional spinner).
-    private func toolLabel(_ title: String, systemImage: String, loading: Bool) -> some View {
+    nonisolated private func toolLabel(_ title: String, systemImage: String, loading: Bool) -> some View {
         HStack(spacing: 7) {
             if loading {
                 ProgressView().controlSize(.small)

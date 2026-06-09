@@ -34,7 +34,7 @@ struct LoyaltyTier: Identifiable, Equatable {
 }
 
 enum LoyaltyTiers {
-    static let all: [LoyaltyTier] = [
+    nonisolated static let all: [LoyaltyTier] = [
         LoyaltyTier(
             level: 1, nameAr: "القارئ الجديد", nameEn: "New Reader",
             minLifetimePoints: 0,
@@ -81,24 +81,24 @@ enum LoyaltyTiers {
         ),
     ]
 
-    static func tier(forLifetimePoints points: Int) -> LoyaltyTier {
+    nonisolated static func tier(forLifetimePoints points: Int) -> LoyaltyTier {
         var current = all[0]
         for t in all where points >= t.minLifetimePoints { current = t }
         return current
     }
 
-    static func tier(forLevel level: Int) -> LoyaltyTier {
+    nonisolated static func tier(forLevel level: Int) -> LoyaltyTier {
         all.first(where: { $0.level == level }) ?? all[0]
     }
 
-    static func nextTier(after level: Int) -> LoyaltyTier? {
+    nonisolated static func nextTier(after level: Int) -> LoyaltyTier? {
         all.first(where: { $0.level == level + 1 })
     }
 }
 
 // API response shape — must match server/routes/mobileApiRoutes.ts
 // `GET /api/v1/loyalty/me`.
-struct LoyaltyPointsBlock: Codable, Equatable {
+nonisolated struct LoyaltyPointsBlock: Codable, Equatable {
     let userId: String?
     let totalPoints: Int
     let currentRank: String?
@@ -107,7 +107,7 @@ struct LoyaltyPointsBlock: Codable, Equatable {
     let lastActivityAt: String?
 }
 
-struct LoyaltySummary: Codable, Equatable {
+nonisolated struct LoyaltySummary: Codable, Equatable {
     let success: Bool?
     let points: LoyaltyPointsBlock?
     let weekPoints: Int
@@ -139,7 +139,7 @@ struct LoyaltySummary: Codable, Equatable {
 }
 
 // POST /api/v1/loyalty/events body shape
-struct LoyaltyEventPayload: Codable, Equatable {
+nonisolated struct LoyaltyEventPayload: Codable, Equatable {
     let action: String
     let source: String?
     let articleId: String?
@@ -155,13 +155,13 @@ struct LoyaltyEventPayload: Codable, Equatable {
     }
 }
 
-struct LoyaltyEventResult: Codable, Equatable {
+nonisolated struct LoyaltyEventResult: Codable, Equatable {
     let action: String
     let outcome: String  // AWARDED | DAILY_CAP | DEDUP | INVALID_ACTION | NEGATIVE_POINTS
     let points: Int?
 }
 
-struct LoyaltyEventBatchResponse: Codable, Equatable {
+nonisolated struct LoyaltyEventBatchResponse: Codable, Equatable {
     let success: Bool?
     let results: [LoyaltyEventResult]
 }
@@ -175,7 +175,7 @@ struct LoyaltyEventBatchResponse: Codable, Equatable {
 /// PROFILE_COMPLETE / EMAIL_VERIFIED. `metadata` is intentionally raw so
 /// the UI can introspect on a per-action basis without a parallel schema
 /// here for every shape the backend ships.
-struct LoyaltyHistoryEvent: Codable, Equatable, Identifiable {
+nonisolated struct LoyaltyHistoryEvent: Codable, Equatable, Identifiable {
     let id: String
     let action: String
     let points: Int
@@ -196,7 +196,7 @@ struct LoyaltyHistoryEvent: Codable, Equatable, Identifiable {
     }
 }
 
-struct LoyaltyHistoryResponse: Codable, Equatable {
+nonisolated struct LoyaltyHistoryResponse: Codable, Equatable {
     let success: Bool?
     let items: [LoyaltyHistoryEvent]
     let page: Int
@@ -204,14 +204,14 @@ struct LoyaltyHistoryResponse: Codable, Equatable {
     let hasMore: Bool
 }
 
-struct LoyaltyMonthlyBucket: Codable, Equatable, Identifiable {
+nonisolated struct LoyaltyMonthlyBucket: Codable, Equatable, Identifiable {
     let month: String   // "YYYY-MM"
     let total: Int
     let events: Int
     var id: String { month }
 }
 
-struct LoyaltyMonthlyResponse: Codable, Equatable {
+nonisolated struct LoyaltyMonthlyResponse: Codable, Equatable {
     let success: Bool?
     let months: [LoyaltyMonthlyBucket]
 }
@@ -219,7 +219,7 @@ struct LoyaltyMonthlyResponse: Codable, Equatable {
 /// Reward row returned by /loyalty/rewards. `canRedeem` is computed
 /// server-side from balance + per-user cap, so the iOS button can
 /// disable instantly without recomputing the rules locally.
-struct LoyaltyReward: Codable, Equatable, Identifiable {
+nonisolated struct LoyaltyReward: Codable, Equatable, Identifiable {
     let id: String
     let nameAr: String
     let nameEn: String?
@@ -236,13 +236,13 @@ struct LoyaltyReward: Codable, Equatable, Identifiable {
     let reasonBlocked: String?
 }
 
-struct LoyaltyRewardsResponse: Codable, Equatable {
+nonisolated struct LoyaltyRewardsResponse: Codable, Equatable {
     let success: Bool?
     let balance: Int
     let rewards: [LoyaltyReward]
 }
 
-struct LoyaltyRedeemResponse: Codable, Equatable {
+nonisolated struct LoyaltyRedeemResponse: Codable, Equatable {
     let success: Bool
     let message: String?
     let remainingBalance: Int?
@@ -259,7 +259,7 @@ struct LoyaltyRedeemResponse: Codable, Equatable {
 
 /// `/loyalty/redemptions/me` — member's own history. Status semantics
 /// (pending / delivered / expired / cancelled) match the dashboard.
-struct LoyaltyRedemption: Codable, Equatable, Identifiable {
+nonisolated struct LoyaltyRedemption: Codable, Equatable, Identifiable {
     let id: String
     let rewardId: String
     let pointsSpent: Int
@@ -282,7 +282,7 @@ struct LoyaltyRedemption: Codable, Equatable, Identifiable {
     }
 }
 
-struct LoyaltyRedemptionsResponse: Codable, Equatable {
+nonisolated struct LoyaltyRedemptionsResponse: Codable, Equatable {
     let success: Bool?
     let redemptions: [LoyaltyRedemption]
 }
