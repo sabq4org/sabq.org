@@ -1,6 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
+import { useCanonical } from "@/hooks/useCanonical";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -123,6 +124,8 @@ export default function CategoryPage() {
       document.title = 'سبق - صحيفة إلكترونية سعودية';
     };
   }, [category?.nameAr]);
+
+  useCanonical(category ? `https://sabq.org/category/${category.englishSlug || slug}` : null);
 
   // Filter and sort articles
   const filteredArticles = useMemo(() => {

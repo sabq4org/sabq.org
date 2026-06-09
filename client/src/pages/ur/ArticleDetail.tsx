@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useCanonical } from "@/hooks/useCanonical";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Heart,
@@ -161,6 +162,8 @@ export default function UrduArticleDetail() {
       document.title = 'سبق - سعودی الیکٹرانک اخبار';
     };
   }, [article?.title]);
+
+  useCanonical(article ? `https://sabq.org/ur/article/${article.englishSlug || params.slug}` : null);
 
   if (isLoading) {
     return (
