@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
 import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
 import { LoyaltyCard } from "@/components/loyalty/LoyaltyCard";
-import { computeTier } from "@shared/loyalty";
+import { computeTier, tierProgress, nextTier } from "@shared/loyalty";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Form,
@@ -43,6 +44,7 @@ import {
   Trophy,
   Coins,
   Star,
+  Sparkles,
   Tag,
   X,
   AlertCircle,
@@ -78,12 +80,59 @@ type UpdateUserFormData = z.infer<typeof updateUserSchema>;
 
 export default function Profile() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("activity");
+  const [activeTab, setActiveTab] = useState("journey");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   const { data: user } = useQuery<UserType>({
     queryKey: ["/api/auth/user"],
   });
+
+  const { data: activitySummary } = useQuery<any>({
+    queryKey: ["/api/user/activity-summary"],
+    enabled: !!user,
+  });
+
+  const { data: categoriesAll } = useQuery<any[]>({
+    queryKey: ["/api/categories/all"],
+  });
+
+  const { data: recommendations } = useQuery<ArticleWithDetails[]>({
+    queryKey: ["/api/recommendations"],
+    enabled: !!user,
+  });
+
+  // Computed values for Journey Dashboard
+  const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
+  const currentTier = computeTier(lifetime);
+  const nextTierInfo = nextTier(currentTier.level);
+  
+  // Calculate percentage progress to next tier
+  let progressPercentage = 100;
+  let pointsToNext = 0;
+  if (nextTierInfo) {
+    const range = nextTierInfo.minLifetimePoints - currentTier.minLifetimePoints;
+    const earned = lifetime - currentTier.minLifetimePoints;
+    progressPercentage = Math.min(100, Math.max(0, (earned / range) * 100));
+    pointsToNext = nextTierInfo.minLifetimePoints - lifetime;
+  }
+
+  // Map categories read statistics
+  const topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
+    const cat = categoriesAll?.find(c => c.id === tc.categoryId);
+    return {
+      name: cat ? (cat.nameAr || cat.name) : "تصنيف آخر",
+      value: tc.count,
+      weight: tc.weight,
+      color: cat?.color || "#6B7280",
+      icon: cat?.icon
+    };
+  });
+
+  // Calculate stats
+  const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
+  const estimatedReadTime = Math.round(totalReads * 3);
+  const totalEngagement = (activitySummary?.totalComments ?? 0) + (activitySummary?.totalReactions ?? 0) + (activitySummary?.totalBookmarks ?? 0);
+  const userPoints = loyaltyPoints?.totalPoints ?? 0;
 
   const form = useForm<UpdateUserFormData>({
     resolver: zodResolver(updateUserSchema),
@@ -960,6 +1009,11 @@ export default function Profile() {
             <CardContent className="p-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList dir="rtl" className="rounded-lg bg-muted p-1 flex flex-wrap w-full mb-6">
+                  <TabsTrigger value="journey" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-journey">
+                    <Trophy className="h-4 w-4 hidden sm:block text-amber-500" />
+                    <span>رحلتي الإحصائية</span>
+                  </TabsTrigger>
+
                   <TabsTrigger value="activity" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
                     <TrendingUp className="h-4 w-4 hidden sm:block" />
                     <span>نشاطي</span>
@@ -985,6 +1039,381 @@ export default function Profile() {
                     <span>المحفظة</span>
                   </TabsTrigger>
                 </TabsList>
+
+                {/* Journey Dashboard Tab */}
+                <TabsContent value="journey" className="space-y-8" dir="rtl">
+                  {/* Journey Header Card */}
+                  <Card className="border-transparent bg-gradient-to-br from-primary/10 via-background to-accent/5 overflow-hidden relative">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="space-y-1 text-right">
+                          <h3 className="text-xl font-bold flex items-center gap-2">
+                            <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
+                            أهلاً بك في رحلتك المعرفية في سبق!
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            هنا يمكنك استكشاف إحصائيات قراءتك، ومتابعة رتبة ولائك، واكتشاف الأوسمة المقترحة لك.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-background/50 backdrop-blur border border-border/50 rounded-full px-4 py-2 text-xs font-semibold">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          <span>آخر تحديث: {new Date(activitySummary?.updatedAt || Date.now()).toLocaleDateString("ar-SA", { hour: "numeric", minute: "numeric" })}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Interactive Stats Grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Card className="hover-elevate cursor-default transition-all duration-300">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
+                          <Eye className="h-5 w-5" />
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">المقالات المقروءة</p>
+                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalReads.toLocaleString("en-US")}</h4>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {activitySummary?.articlesReadLast7Days ?? 0} هذا الأسبوع
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="hover-elevate cursor-default transition-all duration-300">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
+                          <Coins className="h-5 w-5" />
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">نقاط الولاء</p>
+                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{userPoints.toLocaleString("en-US")}</h4>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            من أصل {lifetime.toLocaleString("en-US")} نقطة تاريخية
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="hover-elevate cursor-default transition-all duration-300">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                          <Clock className="h-5 w-5" />
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">وقت القراءة المقدر</p>
+                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{estimatedReadTime.toLocaleString("en-US")} د</h4>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            بمتوسط 3 دقائق للمقال
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="hover-elevate cursor-default transition-all duration-300">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
+                          <Heart className="h-5 w-5" />
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">التفاعل والمشاركة</p>
+                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalEngagement.toLocaleString("en-US")}</h4>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {activitySummary?.totalComments ?? 0} تعليق · {activitySummary?.totalReactions ?? 0} إعجاب
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Loyalty Road / Tier Pathway */}
+                  <Card className="border border-border/50">
+                    <CardHeader className="pb-3 text-right">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                        مسار تقدم رتبة الولاء
+                      </CardTitle>
+                      <CardDescription>
+                        كلما تفاعلت وقرأت أكثر في سبق، كلما ارتفعت رتبتك لتحصل على مزايا خاصة وأوسمة حصرية.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-2">
+                      <div className="space-y-6">
+                        {/* The Horizontal Line timeline */}
+                        <div className="relative flex items-center justify-between max-w-3xl mx-auto py-8">
+                          {/* Background Connector Bar */}
+                          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-muted rounded-full z-0" />
+                          {/* Active connector bar */}
+                          <div 
+                            className="absolute right-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-l from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
+                            style={{ 
+                              width: `${(currentTier.level - 1) * 25 + (nextTierInfo ? (progressPercentage / 4) : 25)}%` 
+                            }} 
+                          />
+
+                          {[1, 2, 3, 4, 5].map((lvl) => {
+                            const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
+                            const isCurrent = currentTier.level === lvl;
+                            const isUnlocked = currentTier.level >= lvl;
+
+                            return (
+                              <div key={lvl} className="flex flex-col items-center z-10 relative">
+                                <div 
+                                  className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md ${
+                                    isCurrent 
+                                      ? "bg-background border-amber-500 scale-125 ring-4 ring-amber-500/20 text-amber-500" 
+                                      : isUnlocked 
+                                        ? "bg-amber-500 border-amber-500 text-white" 
+                                        : "bg-background border-muted text-muted-foreground"
+                                  }`}
+                                  title={tierInfo.nameAr}
+                                >
+                                  {lvl}
+                                </div>
+                                <span className={`text-[11px] font-bold mt-2 text-center absolute -bottom-6 whitespace-nowrap ${
+                                  isCurrent ? "text-amber-500 scale-105" : isUnlocked ? "text-foreground" : "text-muted-foreground"
+                                }`}>
+                                  {tierInfo.nameAr}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Progress Explanation subtext */}
+                        <div className="mt-8 text-center bg-muted/30 border border-border/30 rounded-lg p-3 max-w-md mx-auto text-xs">
+                          {nextTierInfo ? (
+                            <p className="leading-relaxed">
+                              أنت الآن برتبة <strong className="text-amber-500">{currentTier.nameAr}</strong>. 
+                              تحتاج إلى <strong className="text-primary">{pointsToNext.toLocaleString("en-US")}</strong> نقطة إضافية للترقية إلى رتبة <strong>{nextTierInfo.nameAr}</strong>.
+                            </p>
+                          ) : (
+                            <p className="text-amber-500 font-bold leading-relaxed">
+                              تهانينا! لقد وصلت إلى الرتبة الأعلى: {currentTier.nameAr} (سفير سبق) 🎉
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Category Breakdown section */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Recharts PieChart Container */}
+                    <Card className="md:col-span-1 border border-border/50">
+                      <CardHeader className="text-right">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <LayoutDashboard className="h-4 w-4 text-primary" />
+                          توزيع اهتماماتك
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-[220px] flex items-center justify-center p-2 relative">
+                        {topCategoriesData.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={topCategoriesData}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={75}
+                                innerRadius={55}
+                                paddingAngle={3}
+                              >
+                                {topCategoriesData.map((entry: any, index: number) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <ChartTooltip formatter={(val: any) => [`${val} مقال`, 'قراءات']} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="text-center text-xs text-muted-foreground py-8">
+                            لا توجد قراءات كافية لتحليل الاهتمامات
+                          </div>
+                        )}
+                        {topCategoriesData.length > 0 && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-6">
+                            <span className="text-xl font-bold text-foreground">{totalReads}</span>
+                            <span className="text-[10px] text-muted-foreground">مقالاً مقروءاً</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Detailed list with values */}
+                    <Card className="md:col-span-2 border border-border/50">
+                      <CardHeader className="text-right">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                          تفاصيل القراءة حسب الأقسام
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {topCategoriesData.length > 0 ? (
+                          <div className="space-y-4">
+                            {topCategoriesData.map((item: any, idx: number) => (
+                              <div key={idx} className="space-y-1.5 text-right">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="flex items-center gap-2 font-medium">
+                                    <span 
+                                      className="h-2.5 w-2.5 rounded-full" 
+                                      style={{ backgroundColor: item.color }} 
+                                    />
+                                    {item.name}
+                                  </span>
+                                  <span className="text-muted-foreground font-mono">
+                                    {item.value} مقال ({Math.round(item.weight * 100)}%)
+                                  </span>
+                                </div>
+                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full rounded-full transition-all duration-500" 
+                                    style={{ 
+                                      backgroundColor: item.color,
+                                      width: `${item.weight * 100}%` 
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12 text-muted-foreground text-sm">
+                            <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                            ابدأ بقراءة بعض المقالات لرؤية تحليل تفصيلي لاهتماماتك.
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Achievements Grid */}
+                  <Card className="border border-border/50">
+                    <CardHeader className="text-right">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Trophy className="h-5 w-5 text-amber-500" />
+                        الأوسمة والإنجازات المعرفية
+                      </CardTitle>
+                      <CardDescription>
+                        أكمل المهام المختلفة لفتح أوسمة الإنجاز وتثبيتها في ملفك الشخصي.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {[
+                          {
+                            id: "welcome",
+                            title: "شارة البداية",
+                            description: "عضو جديد في عائلة سبق",
+                            icon: Trophy,
+                            unlocked: true,
+                            color: "text-amber-500",
+                            bg: "bg-amber-500/10",
+                          },
+                          {
+                            id: "reader",
+                            title: "القارئ النهم",
+                            description: "قرأت أكثر من 20 مقالاً",
+                            icon: Eye,
+                            unlocked: totalReads >= 20,
+                            color: "text-blue-500",
+                            bg: "bg-blue-500/10",
+                          },
+                          {
+                            id: "commenter",
+                            title: "معلق متميز",
+                            description: "شاركت بـ 5 تعليقات أو أكثر",
+                            icon: FileText,
+                            unlocked: (activitySummary?.totalComments ?? 0) >= 5,
+                            color: "text-green-500",
+                            bg: "bg-green-500/10",
+                          },
+                          {
+                            id: "supporter",
+                            title: "المساند المتفاعل",
+                            description: "أضفت 10 تفاعلات أو إعجابات",
+                            icon: Heart,
+                            unlocked: (activitySummary?.totalReactions ?? 0) >= 10,
+                            color: "text-red-500",
+                            bg: "bg-red-500/10",
+                          },
+                          {
+                            id: "passionate",
+                            title: "شغوف بالمعرفة",
+                            description: "جمعت 500 نقطة ولاء",
+                            icon: Star,
+                            unlocked: lifetime >= 500,
+                            color: "text-purple-500",
+                            bg: "bg-purple-500/10",
+                          },
+                          {
+                            id: "ambassador",
+                            title: "سفير سبق",
+                            description: "الوصول إلى الرتبة الأعلى في سبق",
+                            icon: Shield,
+                            unlocked: currentTier.level === 5,
+                            color: "text-indigo-500",
+                            bg: "bg-indigo-500/10",
+                          },
+                        ].map((badge) => {
+                          const IconComponent = badge.icon;
+                          return (
+                            <Card 
+                              key={badge.id}
+                              className={`p-4 flex flex-col items-center justify-center text-center gap-2.5 transition-all duration-300 relative overflow-hidden border-border/50 shadow-sm ${
+                                badge.unlocked 
+                                  ? "bg-card hover:shadow-md hover:border-primary/30" 
+                                  : "bg-muted/10 opacity-60 grayscale"
+                              }`}
+                            >
+                              <div className={`h-12 w-12 rounded-full flex items-center justify-center shadow-inner ${
+                                badge.unlocked ? badge.bg : "bg-muted/20"
+                              }`}>
+                                <IconComponent className={`h-6 w-6 ${badge.unlocked ? badge.color : "text-muted-foreground"}`} />
+                              </div>
+                              <div className="space-y-0.5">
+                                <h5 className={`text-xs font-bold ${badge.unlocked ? "text-foreground" : "text-muted-foreground"}`}>
+                                  {badge.title}
+                                </h5>
+                                <p className="text-[9px] text-muted-foreground leading-tight max-w-[100px]">
+                                  {badge.description}
+                                </p>
+                              </div>
+                              {!badge.unlocked && (
+                                <div className="absolute top-2 right-2 text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                </div>
+                              )}
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Recommendations */}
+                  <div>
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-right">
+                      <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
+                      ترشيحات معرفية مخصصة لرحلتك
+                    </h3>
+                    {recommendations && recommendations.length > 0 ? (
+                      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent snap-x" dir="rtl">
+                        {recommendations.slice(0, 6).map((article) => (
+                          <div key={article.id} className="min-w-[280px] w-[280px] sm:min-w-[320px] sm:w-[320px] snap-start shrink-0">
+                            <ArticleCard article={article} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 bg-muted/20 rounded-lg text-sm text-muted-foreground">
+                        نعمل حالياً على تحليل قراءاتك لتجهيز الترشيحات الأنسب لك.
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
 
                 {/* Activity Tab */}
                 <TabsContent value="activity" className="space-y-6" dir="rtl">

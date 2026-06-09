@@ -84,6 +84,7 @@ import java.time.temporal.ChronoUnit
 fun DailyBriefScreen(
     onBack: () -> Unit,
     onLogin: () -> Unit,
+    onSignUp: () -> Unit,
     onPickInterests: () -> Unit,
     onArticleClick: (Article) -> Unit,
     viewModel: DailyBriefViewModel = hiltViewModel(),
@@ -111,7 +112,7 @@ fun DailyBriefScreen(
                     onArticleClick = onArticleClick,
                 )
             } else {
-                guestLanding(onSignUp = onLogin, onLogin = onLogin)
+                guestLanding(onSignUp = onSignUp, onLogin = onLogin)
             }
             item { Spacer(modifier = Modifier.height(40.dp)) }
         }
@@ -480,6 +481,13 @@ private fun SuggestionCard(article: Article, onClick: () -> Unit) {
                         .clip(cardShape),
                 )
             }
+            com.sabq.smart.ui.components.BoxScopedAIImageBadgeOverlay(
+                isVisible = article.isAiGeneratedImage,
+                model = article.aiImageModel,
+                inset = 6.dp,
+                sizeScale = 0.75f,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
         }
         Text(
             text = article.category.title,

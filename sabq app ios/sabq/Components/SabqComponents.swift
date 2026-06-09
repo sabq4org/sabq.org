@@ -714,7 +714,9 @@ struct ImageLightbox: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .opacity(scale <= 1.01 ? max(0.0, 1.0 - abs(offset.height) / 400.0) : 1.0)
+                .ignoresSafeArea()
 
             if let image {
                 GeometryReader { proxy in
@@ -723,7 +725,7 @@ struct ImageLightbox: View {
                         .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .scaleEffect(scale)
+                        .scaleEffect(scale * (scale <= 1.01 ? max(0.8, 1.0 - abs(offset.height) / 2000.0) : 1.0))
                         .offset(offset)
                         .gesture(
                             MagnificationGesture()
@@ -745,14 +747,29 @@ struct ImageLightbox: View {
                                 .simultaneously(with:
                                     DragGesture()
                                         .onChanged { value in
-                                            guard scale > 1.01 else { return }
-                                            offset = CGSize(
-                                                width: lastOffset.width + value.translation.width,
-                                                height: lastOffset.height + value.translation.height
-                                            )
+                                            if scale > 1.01 {
+                                                offset = CGSize(
+                                                    width: lastOffset.width + value.translation.width,
+                                                    height: lastOffset.height + value.translation.height
+                                                )
+                                            } else {
+                                                offset = CGSize(width: 0, height: value.translation.height)
+                                            }
                                         }
-                                        .onEnded { _ in
-                                            lastOffset = offset
+                                        .onEnded { value in
+                                            if scale > 1.01 {
+                                                lastOffset = offset
+                                            } else {
+                                                if abs(value.translation.height) > 100 {
+                                                    SabqHaptics.light()
+                                                    dismiss()
+                                                } else {
+                                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                                                        offset = .zero
+                                                        lastOffset = .zero
+                                                    }
+                                                }
+                                            }
                                         }
                                 )
                         )
