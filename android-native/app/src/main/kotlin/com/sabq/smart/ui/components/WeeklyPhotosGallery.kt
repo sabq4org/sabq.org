@@ -55,6 +55,10 @@ import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.sabq.smart.data.WeeklyPhoto
 import com.sabq.smart.ui.theme.SabqTheme
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * "صور الأسبوع" timeline gallery. iOS counterpart:
@@ -409,7 +413,9 @@ fun WeeklyPhotosLightbox(
     onDismiss: () -> Unit,
 ) {
     val haptics = rememberSabqHaptics()
-    var index by remember { mutableIntStateOf(startIndex.coerceIn(0, photos.size - 1)) }
+    val pagerState = rememberPagerState(initialPage = startIndex, pageCount = { photos.size })
+    val coroutineScope = rememberCoroutineScope()
+    val index = pagerState.currentPage
     val current = photos[index]
 
     Dialog(
@@ -448,19 +454,25 @@ fun WeeklyPhotosLightbox(
                         .aspectRatio(16f / 10f),
                 ) {
                     val photoShape = RoundedCornerShape(18.dp)
-                    SubcomposeAsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(current.imageUrl)
-                            .crossfade(180)
-                            .size(4096)
-                            .build(),
-                        contentDescription = current.caption.ifBlank { null },
-                        contentScale = ContentScale.Fit,
+                    HorizontalPager(
+                        state = pagerState,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(photoShape)
-                            .background(Color.Black.copy(alpha = 0.6f), photoShape),
-                    )
+                            .background(Color.Black.copy(alpha = 0.6f), photoShape)
+                    ) { page ->
+                        val photo = photos[page]
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(photo.imageUrl)
+                                .crossfade(180)
+                                .size(4096)
+                                .build(),
+                            contentDescription = photo.caption.ifBlank { null },
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
                     // Rank pill + close X — top row.
                     Row(
@@ -526,7 +538,10 @@ fun WeeklyPhotosLightbox(
                             icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             onTap = {
                                 haptics.light()
-                                index = if (index == 0) photos.lastIndex else index - 1
+                                coroutineScope.launch {
+                                    val prev = if (pagerState.currentPage == 0) photos.lastIndex else pagerState.currentPage - 1
+                                    pagerState.animateScrollToPage(prev)
+                                }
                             },
                         )
                         Spacer(modifier = Modifier.weight(1f))
@@ -534,7 +549,10 @@ fun WeeklyPhotosLightbox(
                             icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                             onTap = {
                                 haptics.light()
-                                index = if (index == photos.lastIndex) 0 else index + 1
+                                coroutineScope.launch {
+                                    val next = if (pagerState.currentPage == photos.lastIndex) 0 else pagerState.currentPage + 1
+                                    pagerState.animateScrollToPage(next)
+                                }
                             },
                         )
                     }

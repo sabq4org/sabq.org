@@ -43,6 +43,8 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.positionChange
 
 /**
  * Full-screen image viewer surfaced when a reader taps the hero or an
@@ -120,10 +122,13 @@ fun ImageLightbox(
             }
         }
 
+        val dragScale = if (scale <= 1.01f) (1f - (Math.abs(animatedOffsetY) / 3000f)).coerceIn(0.8f, 1f) else 1f
+        val backdropAlpha = if (scale <= 1.01f) (1f - (Math.abs(animatedOffsetY) / 600f)).coerceIn(0f, 1f) else 1f
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color.Black.copy(alpha = backdropAlpha))
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onDoubleTap = {
@@ -161,12 +166,50 @@ fun ImageLightbox(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer(
-                        scaleX = animatedScale,
-                        scaleY = animatedScale,
+                        scaleX = animatedScale * dragScale,
+                        scaleY = animatedScale * dragScale,
                         translationX = animatedOffsetX,
                         translationY = animatedOffsetY,
                     )
-                    .transformable(state = transformState),
+                    .transformable(state = transformState)
+                    .pointerInput(scale) {
+                        if (scale <= 1.01f) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    var isDragging = false
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val changes = event.changes
+                                        if (changes.size > 1) {
+                                            isDragging = false
+                                            break
+                                        }
+                                        val change = changes.firstOrNull()
+                                        if (change != null && change.pressed) {
+                                            val positionChange = change.positionChange()
+                                            if (positionChange != Offset.Zero) {
+                                                isDragging = true
+                                                change.consume()
+                                                offsetX += positionChange.x
+                                                offsetY += positionChange.y
+                                            }
+                                        }
+                                    } while (event.changes.any { it.pressed })
+
+                                    if (isDragging) {
+                                        if (Math.abs(offsetY) > 150f) {
+                                            haptics.light()
+                                            onDismiss()
+                                        } else {
+                                            offsetX = 0f
+                                            offsetY = 0f
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                 loading = {
                     CircularProgressIndicator(
                         color = Color.White,

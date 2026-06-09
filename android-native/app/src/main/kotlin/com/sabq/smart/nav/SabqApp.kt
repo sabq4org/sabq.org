@@ -342,10 +342,12 @@ fun SabqApp(
                     SmartSignUpScreen(
                         onClose = { navController.popBackStack() },
                         onDone = {
-                            // Pop the smart signup AND the underlying login
-                            // screen so the user lands back at the surface
-                            // that requested authentication.
-                            navController.popBackStack(SabqRoutes.Login, inclusive = true)
+                            // Pop the smart signup AND the underlying login screen if present,
+                            // otherwise just pop the smart signup screen.
+                            val poppedLogin = navController.popBackStack(SabqRoutes.Login, inclusive = true)
+                            if (!poppedLogin) {
+                                navController.popBackStack()
+                            }
                         },
                     )
                 }
@@ -398,6 +400,7 @@ fun SabqApp(
                     DailyBriefScreen(
                         onBack = { navController.popBackStack() },
                         onLogin = { navController.navigate(SabqRoutes.Login) },
+                        onSignUp = { navController.navigate(SabqRoutes.SmartSignUp) },
                         onPickInterests = {
                             navController.navigate(SabqRoutes.InterestsPicker)
                         },

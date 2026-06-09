@@ -282,13 +282,22 @@ private fun TrendingRow(index: Int, article: Article, onClick: () -> Unit) {
             }
         }
         if (!article.imageUrl.isNullOrBlank()) {
-            FocalCachedAsyncImage(
-                url = article.imageUrl,
-                focalPoint = article.focalPoint,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-            )
+            Box {
+                FocalCachedAsyncImage(
+                    url = article.imageUrl,
+                    focalPoint = article.focalPoint,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
+                com.sabq.smart.ui.components.BoxScopedAIImageBadgeOverlay(
+                    isVisible = article.isAiGeneratedImage,
+                    model = article.aiImageModel,
+                    inset = 3.dp,
+                    sizeScale = 0.55f,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                )
+            }
         }
     }
 }

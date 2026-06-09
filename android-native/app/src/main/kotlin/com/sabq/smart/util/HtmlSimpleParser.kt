@@ -204,14 +204,18 @@ object HtmlSimpleParser {
 
         // Custom div blocks switch on data attributes BEFORE generic tags.
         if (tag.name == "div") {
-            if (tag.attr("data-image-gallery") != null || tag.classes.contains("photo-album")) {
+            val isGallery = tag.attr("data-image-gallery") != null || tag.classes.contains("photo-album")
+            val isVideo = tag.attr("data-video-embed") != null || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
+            val isTweet = tag.attr("data-twitter-embed") != null || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+
+            if (isGallery) {
                 return parseImageGallery(scanner, tag)
             }
-            if (tag.attr("data-video-embed") != null) {
+            if (isVideo) {
                 return parseVideoEmbed(scanner, tag)
             }
-            if (tag.attr("data-twitter-embed") != null) {
-                return parseTwitterEmbed(scanner)
+            if (isTweet) {
+                return parseTwitterEmbed(scanner, tag)
             }
             // Generic div: render children as paragraph.
             val inner = scanner.consumeContainer()
@@ -311,9 +315,18 @@ object HtmlSimpleParser {
     }
 
     private fun parseVideoEmbed(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
-        scanner.consumeContainer()
-        val embedUrl = tag.attr("data-embed-url") ?: tag.attr("src") ?: ""
+        val inner = scanner.consumeContainer()
+        var embedUrl = tag.attr("data-embed-url") ?: tag.attr("src") ?: ""
         val sourceUrl = tag.attr("data-url")
+        
+        if (embedUrl.isEmpty()) {
+            val iframeRegex = Regex("""<iframe[^>]*src="([^"]+)"[^>]*>""", RegexOption.IGNORE_CASE)
+            val match = iframeRegex.find(inner)
+            if (match != null) {
+                embedUrl = match.groupValues[1]
+            }
+        }
+        
         return BlockNode.VideoEmbed(
             provider = detectVideoProvider(embedUrl),
             embedUrl = embedUrl,
@@ -330,10 +343,10 @@ object HtmlSimpleParser {
         }
     }
 
-    private fun parseTwitterEmbed(scanner: HTMLScanner): BlockNode {
+    private fun parseTwitterEmbed(scanner: HTMLScanner, tag: HTMLTag): BlockNode {
         val inner = scanner.consumeContainer()
-        val url = extractTweetURL(inner)
-        return if (url != null) BlockNode.TwitterEmbed(url) else BlockNode.Divider
+        val url = extractTweetURL(inner) ?: tag.attr("data-embed-url") ?: tag.attr("href") ?: ""
+        return if (url.isNotEmpty()) BlockNode.TwitterEmbed(url) else BlockNode.Divider
     }
 
     private fun parseTwitterEmbedFromBlockquote(scanner: HTMLScanner): BlockNode {

@@ -1976,12 +1976,10 @@ struct WeeklyPhotosLightbox: View {
 
             VStack(spacing: 18) {
                 ZStack {
-                    Color.clear
-                        .aspectRatio(16.0 / 10.0, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .overlay(
+                    TabView(selection: $index) {
+                        ForEach(Array(photos.enumerated()), id: \.offset) { i, photo in
                             Group {
-                                if let url = URL(string: current.imageUrl) {
+                                if let url = URL(string: photo.imageUrl) {
                                     CachedAsyncImage(url: url, contentMode: .fit) {
                                         Color.black.opacity(0.6)
                                     }
@@ -1989,8 +1987,13 @@ struct WeeklyPhotosLightbox: View {
                                     Color.black.opacity(0.6)
                                 }
                             }
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .tag(i)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                     // Rank pill — top-leading (visually top-right in RTL).
                     VStack {

@@ -607,7 +607,7 @@ nonisolated enum ImageCache {
     /// inline image saturating its own connection. We also set a
     /// generous per-resource timeout (45s) so slow-but-not-dead
     /// connections don't get cut and re-queued.
-    nonisolated(unsafe) static let imageSession: URLSession = {
+    static let imageSession: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.httpMaximumConnectionsPerHost = 12
         cfg.timeoutIntervalForRequest = 45
@@ -714,7 +714,9 @@ struct ImageLightbox: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .opacity(scale <= 1.01 ? max(0.0, 1.0 - abs(offset.height) / 400.0) : 1.0)
+                .ignoresSafeArea()
 
             if let image {
                 GeometryReader { proxy in
@@ -723,7 +725,7 @@ struct ImageLightbox: View {
                         .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .scaleEffect(scale)
+                        .scaleEffect(scale * (scale <= 1.01 ? max(0.8, 1.0 - abs(offset.height) / 2000.0) : 1.0))
                         .offset(offset)
                         .gesture(
                             MagnificationGesture()
@@ -745,14 +747,29 @@ struct ImageLightbox: View {
                                 .simultaneously(with:
                                     DragGesture()
                                         .onChanged { value in
-                                            guard scale > 1.01 else { return }
-                                            offset = CGSize(
-                                                width: lastOffset.width + value.translation.width,
-                                                height: lastOffset.height + value.translation.height
-                                            )
+                                            if scale > 1.01 {
+                                                offset = CGSize(
+                                                    width: lastOffset.width + value.translation.width,
+                                                    height: lastOffset.height + value.translation.height
+                                                )
+                                            } else {
+                                                offset = CGSize(width: 0, height: value.translation.height)
+                                            }
                                         }
-                                        .onEnded { _ in
-                                            lastOffset = offset
+                                        .onEnded { value in
+                                            if scale > 1.01 {
+                                                lastOffset = offset
+                                            } else {
+                                                if abs(value.translation.height) > 100 {
+                                                    SabqHaptics.light()
+                                                    dismiss()
+                                                } else {
+                                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                                                        offset = .zero
+                                                        lastOffset = .zero
+                                                    }
+                                                }
+                                            }
                                         }
                                 )
                         )
@@ -908,11 +925,11 @@ enum SabqTheme {
                 : UIColor(accent.color)
         })
     }
-    static let teal        = Color(red: 0.16, green: 0.65, blue: 0.55)
-    static let sky         = Color(red: 0.22, green: 0.52, blue: 0.95)
-    static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
-    static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
-    static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
+    nonisolated static let teal        = Color(red: 0.16, green: 0.65, blue: 0.55)
+    nonisolated static let sky         = Color(red: 0.22, green: 0.52, blue: 0.95)
+    nonisolated static let gold        = Color(red: 0.92, green: 0.68, blue: 0.20)
+    nonisolated static let coral       = Color(red: 0.90, green: 0.35, blue: 0.32)
+    nonisolated static let leaf        = Color(red: 0.40, green: 0.73, blue: 0.22)
     static let paleFill = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.14, green: 0.14, blue: 0.16, alpha: 1)
@@ -929,10 +946,10 @@ enum SabqTheme {
             : UIColor(red: 0.95, green: 0.97, blue: 0.99, alpha: 1)
     })
 
-    static let cardRadius: CGFloat   = 28
-    static let tileRadius: CGFloat   = 22
-    static let chipRadius: CGFloat   = 14
-    static let buttonRadius: CGFloat = 20
+    nonisolated static let cardRadius: CGFloat   = 28
+    nonisolated static let tileRadius: CGFloat   = 22
+    nonisolated static let chipRadius: CGFloat   = 14
+    nonisolated static let buttonRadius: CGFloat = 20
 
     static var brandGradient: LinearGradient {
         LinearGradient(

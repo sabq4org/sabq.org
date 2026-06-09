@@ -30,8 +30,8 @@ final class AdminDashboardViewModel: ObservableObject {
 
     private let service: AdminServicing
 
-    init(service: AdminServicing = LiveAdminService()) {
-        self.service = service
+    init(service: AdminServicing? = nil) {
+        self.service = service ?? LiveAdminService()
     }
 
     /// Initial / pull-to-refresh load. The (slow) stats fetch runs in its own

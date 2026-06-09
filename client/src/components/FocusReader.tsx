@@ -330,12 +330,24 @@ export function FocusReader({
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[10000] bg-background"
+      className="fixed inset-0 z-[10000] bg-background overflow-hidden"
       dir={labels.dir}
       data-testid="overlay-focus-reader"
     >
+      {/* Cinematic Ambient Reader Background */}
+      {articleImageUrl && (
+        <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center filter blur-[130px] scale-[1.6] opacity-[0.05] dark:opacity-[0.18] transition-all duration-1000 animate-ambient-glow"
+            style={{
+              backgroundImage: `url(${articleImageUrl})`,
+            }}
+          />
+        </div>
+      )}
+
       {/* Top toolbar */}
-      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -421,7 +433,7 @@ export function FocusReader({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="h-[calc(100vh-3.75rem)] overflow-y-auto"
+        className="relative z-10 h-[calc(100vh-3.75rem)] overflow-y-auto"
       >
         <article
           className="mx-auto max-w-2xl px-4 py-10 sm:py-14"

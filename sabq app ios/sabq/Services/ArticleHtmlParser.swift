@@ -63,14 +63,18 @@ enum ArticleHtmlParser {
 
         // Custom div blocks switch on data attributes BEFORE generic tags.
         if tag.name == "div" {
-            if tag.attr("data-image-gallery") != nil || tag.classes.contains("photo-album") {
+            let isGallery = tag.attr("data-image-gallery") != nil || tag.classes.contains("photo-album")
+            let isVideo = tag.attr("data-video-embed") != nil || tag.classes.contains("video-embed") || tag.classes.contains("youtube-embed")
+            let isTweet = tag.attr("data-twitter-embed") != nil || tag.classes.contains("tweet-embed") || (tag.classes.contains("social-embed") && tag.attr("data-embed-type") == "twitter")
+
+            if isGallery {
                 return parseImageGallery(scanner: &scanner, tag: tag)
             }
-            if tag.attr("data-video-embed") != nil {
+            if isVideo {
                 return parseVideoEmbed(scanner: &scanner, tag: tag)
             }
-            if tag.attr("data-twitter-embed") != nil {
-                return parseTwitterEmbed(scanner: &scanner)
+            if isTweet {
+                return parseTwitterEmbed(scanner: &scanner, tag: tag)
             }
             // Generic div: render children as paragraph.
             let inner = scanner.consumeContainer()
@@ -168,9 +172,19 @@ enum ArticleHtmlParser {
     }
 
     private static func parseVideoEmbed(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
-        _ = scanner.consumeContainer()
-        let embedURL = tag.attr("data-embed-url") ?? tag.attr("src") ?? ""
+        let inner = scanner.consumeContainer()
+        var embedURL = tag.attr("data-embed-url") ?? tag.attr("src") ?? ""
         let srcURL = tag.attr("data-url")
+        
+        if embedURL.isEmpty {
+            let pattern = "<iframe[^>]*src=\"([^\"]+)\"[^>]*>"
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: inner, range: NSRange(inner.startIndex..., in: inner)),
+               let r = Range(match.range(at: 1), in: inner) {
+                embedURL = String(inner[r])
+            }
+        }
+        
         if let url = URL(string: embedURL) {
             return .videoEmbed(
                 provider: detectVideoProvider(url: url),
@@ -181,9 +195,14 @@ enum ArticleHtmlParser {
         return .divider
     }
 
-    private static func parseTwitterEmbed(scanner: inout HTMLScanner) -> ArticleBlock {
+    private static func parseTwitterEmbed(scanner: inout HTMLScanner, tag: HTMLTag) -> ArticleBlock {
         let inner = scanner.consumeContainer()
-        if let url = extractTweetURL(from: inner) { return .twitterEmbed(tweetURL: url) }
+        if let url = extractTweetURL(from: inner) {
+            return .twitterEmbed(tweetURL: url)
+        }
+        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"), let url = URL(string: raw) {
+            return .twitterEmbed(tweetURL: url)
+        }
         return .divider
     }
 
