@@ -78,3 +78,6 @@ sabq app ios/**/xcuserdata/
 sabq app ios/**/*.xcuserstate
 .vercel
 .env*
+test-results/
+playwright-report/
+.playwright-artifacts*/
