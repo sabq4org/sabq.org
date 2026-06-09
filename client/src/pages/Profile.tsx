@@ -60,6 +60,7 @@ import {
   Edit,
   Clock,
   Eye,
+  Lock,
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
@@ -251,7 +252,7 @@ export default function Profile() {
   }
 
   // Map categories read statistics
-  const topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
+  let topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
     const cat = categoriesAll?.find(c => c.id === tc.categoryId);
     return {
       name: cat ? (cat.nameAr || cat.name) : "تصنيف آخر",
@@ -262,6 +263,30 @@ export default function Profile() {
     };
   });
 
+  // Client-side fallback if the API summary is empty but we have local reading history
+  if (topCategoriesData.length === 0 && readingHistory.length > 0) {
+    const counts: Record<string, { count: number; name: string; color: string }> = {};
+    readingHistory.forEach((art) => {
+      const catId = art.categoryId || art.category?.id;
+      if (!catId) return;
+      const fullCat = categoriesAll?.find(c => c.id === catId);
+      const name = fullCat ? (fullCat.nameAr || fullCat.name) : (art.category?.nameAr || "تصنيف آخر");
+      const color = fullCat?.color || art.category?.color || "#6B7280";
+      if (!counts[catId]) {
+        counts[catId] = { count: 0, name, color };
+      }
+      counts[catId].count += 1;
+    });
+
+    const total = readingHistory.length;
+    topCategoriesData = Object.entries(counts).map(([_, data]) => ({
+      name: data.name,
+      value: data.count,
+      weight: data.count / total,
+      color: data.color,
+      icon: null
+    })).sort((a, b) => b.value - a.value);
+  }
   // Calculate stats
   const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
   const estimatedReadTime = Math.round(totalReads * 3);
@@ -1141,45 +1166,95 @@ export default function Profile() {
                     </CardHeader>
                     <CardContent className="pt-2">
                       <div className="space-y-6">
-                        {/* The Horizontal Line timeline */}
-                        <div className="relative flex items-center justify-between max-w-3xl mx-auto py-8">
-                          {/* Background Connector Bar */}
-                          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 bg-muted rounded-full z-0" />
-                          {/* Active connector bar */}
-                          <div 
-                            className="absolute right-0 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-l from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
-                            style={{ 
-                              width: `${(currentTier.level - 1) * 25 + (nextTierInfo ? (progressPercentage / 4) : 25)}%` 
-                            }} 
-                          />
+                        {/* Responsive Timeline Container */}
+                        <div className="relative py-4" dir="rtl">
+                          {/* Desktop Timeline (Horizontal) */}
+                          <div className="hidden md:flex relative items-center justify-between max-w-3xl mx-auto py-8 px-4">
+                            {/* Background Connector Bar */}
+                            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-muted rounded-full z-0" />
+                            {/* Active connector bar */}
+                            <div 
+                              className="absolute right-4 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-l from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
+                              style={{ 
+                                width: `calc(${(currentTier.level - 1) * 25 + (nextTierInfo ? (progressPercentage / 4) : 25)}% - 32px)` 
+                              }} 
+                            />
 
-                          {[1, 2, 3, 4, 5].map((lvl) => {
-                            const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
-                            const isCurrent = currentTier.level === lvl;
-                            const isUnlocked = currentTier.level >= lvl;
+                            {[1, 2, 3, 4, 5].map((lvl) => {
+                              const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
+                              const isCurrent = currentTier.level === lvl;
+                              const isUnlocked = currentTier.level >= lvl;
 
-                            return (
-                              <div key={lvl} className="flex flex-col items-center z-10 relative">
-                                <div 
-                                  className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md ${
-                                    isCurrent 
-                                      ? "bg-background border-amber-500 scale-125 ring-4 ring-amber-500/20 text-amber-500" 
-                                      : isUnlocked 
-                                        ? "bg-amber-500 border-amber-500 text-white" 
-                                        : "bg-background border-muted text-muted-foreground"
-                                  }`}
-                                  title={tierInfo.nameAr}
-                                >
-                                  {lvl}
+                              return (
+                                <div key={lvl} className="flex flex-col items-center z-10 relative">
+                                  <div 
+                                    className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md ${
+                                      isCurrent 
+                                        ? "bg-background border-amber-500 scale-125 ring-4 ring-amber-500/20 text-amber-500 font-bold" 
+                                        : isUnlocked 
+                                          ? "bg-amber-500 border-amber-500 text-white" 
+                                          : "bg-background border-muted text-muted-foreground"
+                                    }`}
+                                    title={tierInfo.nameAr}
+                                  >
+                                    {lvl}
+                                  </div>
+                                  <span className={`text-[11px] font-bold mt-2 text-center absolute -bottom-6 whitespace-nowrap ${
+                                    isCurrent ? "text-amber-500 scale-105" : isUnlocked ? "text-foreground" : "text-muted-foreground"
+                                  }`}>
+                                    {tierInfo.nameAr}
+                                  </span>
                                 </div>
-                                <span className={`text-[11px] font-bold mt-2 text-center absolute -bottom-6 whitespace-nowrap ${
-                                  isCurrent ? "text-amber-500 scale-105" : isUnlocked ? "text-foreground" : "text-muted-foreground"
-                                }`}>
-                                  {tierInfo.nameAr}
-                                </span>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+
+                          {/* Mobile Timeline (Vertical) */}
+                          <div className="flex md:hidden flex-col gap-6 relative pr-8 pl-4 py-4 max-w-xs mx-auto">
+                            {/* Background Connector Bar (Vertical) */}
+                            <div className="absolute right-[17px] top-6 bottom-6 w-0.5 bg-muted rounded-full z-0" />
+                            {/* Active connector bar (Vertical) */}
+                            <div 
+                              className="absolute right-[17px] top-6 w-0.5 bg-gradient-to-b from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
+                              style={{ 
+                                height: `calc(${((currentTier.level - 1) / 4) * 100}% - 12px)` 
+                              }} 
+                            />
+
+                            {[1, 2, 3, 4, 5].map((lvl) => {
+                              const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
+                              const isCurrent = currentTier.level === lvl;
+                              const isUnlocked = currentTier.level >= lvl;
+
+                              return (
+                                <div key={lvl} className="flex items-center gap-4 z-10 relative">
+                                  {/* Step Circle */}
+                                  <div 
+                                    className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm ${
+                                      isCurrent 
+                                        ? "bg-background border-amber-500 scale-110 ring-4 ring-amber-500/20 text-amber-500 font-bold" 
+                                        : isUnlocked 
+                                          ? "bg-amber-500 border-amber-500 text-white font-bold" 
+                                          : "bg-background border-muted text-muted-foreground"
+                                    }`}
+                                  >
+                                    {lvl}
+                                  </div>
+                                  {/* Step details */}
+                                  <div className="flex flex-col text-right">
+                                    <span className={`text-xs font-bold ${
+                                      isCurrent ? "text-amber-500" : isUnlocked ? "text-foreground" : "text-muted-foreground"
+                                    }`}>
+                                      {tierInfo.nameAr}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {lvl === 1 ? "من 0 نقطة" : lvl === 2 ? "من 100 نقطة" : lvl === 3 ? "من 500 نقطة" : lvl === 4 ? "من 2000 نقطة" : "من 10000 نقطة"}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         {/* Progress Explanation subtext */}
@@ -1311,8 +1386,9 @@ export default function Profile() {
                             description: "عضو جديد في عائلة سبق",
                             icon: Trophy,
                             unlocked: true,
-                            color: "text-amber-500",
-                            bg: "bg-amber-500/10",
+                            gradient: "from-yellow-400 to-amber-600",
+                            shadowColor: "rgba(245, 158, 11, 0.3)",
+                            hoverBorder: "hover:border-amber-500/40",
                           },
                           {
                             id: "reader",
@@ -1320,8 +1396,9 @@ export default function Profile() {
                             description: "قرأت أكثر من 20 مقالاً",
                             icon: Eye,
                             unlocked: totalReads >= 20,
-                            color: "text-blue-500",
-                            bg: "bg-blue-500/10",
+                            gradient: "from-emerald-400 to-teal-600",
+                            shadowColor: "rgba(16, 185, 129, 0.3)",
+                            hoverBorder: "hover:border-emerald-500/40",
                           },
                           {
                             id: "commenter",
@@ -1329,8 +1406,9 @@ export default function Profile() {
                             description: "شاركت بـ 5 تعليقات أو أكثر",
                             icon: FileText,
                             unlocked: (activitySummary?.totalComments ?? 0) >= 5,
-                            color: "text-green-500",
-                            bg: "bg-green-500/10",
+                            gradient: "from-violet-400 to-indigo-600",
+                            shadowColor: "rgba(139, 92, 246, 0.3)",
+                            hoverBorder: "hover:border-indigo-500/40",
                           },
                           {
                             id: "supporter",
@@ -1338,8 +1416,9 @@ export default function Profile() {
                             description: "أضفت 10 تفاعلات أو إعجابات",
                             icon: Heart,
                             unlocked: (activitySummary?.totalReactions ?? 0) >= 10,
-                            color: "text-red-500",
-                            bg: "bg-red-500/10",
+                            gradient: "from-rose-400 to-pink-600",
+                            shadowColor: "rgba(244, 63, 94, 0.3)",
+                            hoverBorder: "hover:border-rose-500/40",
                           },
                           {
                             id: "passionate",
@@ -1347,8 +1426,9 @@ export default function Profile() {
                             description: "جمعت 500 نقطة ولاء",
                             icon: Star,
                             unlocked: lifetime >= 500,
-                            color: "text-purple-500",
-                            bg: "bg-purple-500/10",
+                            gradient: "from-cyan-400 to-blue-600",
+                            shadowColor: "rgba(6, 182, 212, 0.3)",
+                            hoverBorder: "hover:border-cyan-500/40",
                           },
                           {
                             id: "ambassador",
@@ -1356,39 +1436,81 @@ export default function Profile() {
                             description: "الوصول إلى الرتبة الأعلى في سبق",
                             icon: Shield,
                             unlocked: currentTier.level === 5,
-                            color: "text-indigo-500",
-                            bg: "bg-indigo-500/10",
+                            gradient: "from-red-500 via-purple-600 to-indigo-600",
+                            shadowColor: "rgba(239, 68, 68, 0.3)",
+                            hoverBorder: "hover:border-red-500/40",
                           },
                         ].map((badge) => {
                           const IconComponent = badge.icon;
                           return (
-                            <Card 
+                            <motion.div
                               key={badge.id}
-                              className={`p-4 flex flex-col items-center justify-center text-center gap-2.5 transition-all duration-300 relative overflow-hidden border-border/50 shadow-sm ${
-                                badge.unlocked 
-                                  ? "bg-card hover:shadow-md hover:border-primary/30" 
-                                  : "bg-muted/10 opacity-60 grayscale"
-                              }`}
+                              whileHover={badge.unlocked ? { scale: 1.05, y: -4 } : {}}
+                              transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                              className="relative h-full"
                             >
-                              <div className={`h-12 w-12 rounded-full flex items-center justify-center shadow-inner ${
-                                badge.unlocked ? badge.bg : "bg-muted/20"
-                              }`}>
-                                <IconComponent className={`h-6 w-6 ${badge.unlocked ? badge.color : "text-muted-foreground"}`} />
-                              </div>
-                              <div className="space-y-0.5">
-                                <h5 className={`text-xs font-bold ${badge.unlocked ? "text-foreground" : "text-muted-foreground"}`}>
-                                  {badge.title}
-                                </h5>
-                                <p className="text-[9px] text-muted-foreground leading-tight max-w-[100px]">
-                                  {badge.description}
-                                </p>
-                              </div>
-                              {!badge.unlocked && (
-                                <div className="absolute top-2 right-2 text-muted-foreground">
-                                  <Clock className="h-3 w-3" />
+                              <Card 
+                                className={`h-full p-4 flex flex-col items-center justify-between text-center gap-3 transition-all duration-300 relative overflow-hidden border border-border/60 ${
+                                  badge.unlocked 
+                                    ? `bg-gradient-to-b from-card via-card to-background shadow-sm hover:shadow-md ${badge.hoverBorder}` 
+                                    : "bg-muted/5 opacity-50 border-dashed"
+                                }`}
+                              >
+                                {/* Glow backdrop for unlocked badge */}
+                                {badge.unlocked && (
+                                  <div 
+                                    className="absolute -top-12 -left-12 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none"
+                                    style={{ background: `radial-gradient(circle, ${badge.shadowColor} 0%, transparent 70%)` }}
+                                  />
+                                )}
+
+                                {/* Icon container with gradient */}
+                                <div 
+                                  className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-transform duration-500 ${
+                                    badge.unlocked 
+                                      ? `bg-gradient-to-br ${badge.gradient} text-white shadow-md shadow-black/10` 
+                                      : "bg-muted/20 text-muted-foreground border border-muted/30"
+                                  }`}
+                                  style={{
+                                    boxShadow: badge.unlocked ? `0 8px 16px -4px ${badge.shadowColor}` : undefined
+                                  }}
+                                >
+                                  <IconComponent className="h-5 w-5" />
                                 </div>
-                              )}
-                            </Card>
+
+                                <div className="space-y-1 z-10 flex-1 flex flex-col justify-center">
+                                  <h5 className={`text-[11px] font-bold leading-tight ${badge.unlocked ? "text-foreground" : "text-muted-foreground"}`}>
+                                    {badge.title}
+                                  </h5>
+                                  <p className="text-[9px] text-muted-foreground leading-normal max-w-[100px] mx-auto">
+                                    {badge.description}
+                                  </p>
+                                </div>
+
+                                {/* Status Tag/Check */}
+                                {badge.unlocked ? (
+                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0">
+                                    مكتمل
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-muted/20 text-muted-foreground/60 border-transparent text-[9px] px-1.5 py-0 gap-1">
+                                    <Lock className="h-2 w-2" />
+                                    مغلق
+                                  </Badge>
+                                )}
+
+                                {/* Absolute Lock/Unlock Indicator */}
+                                {badge.unlocked ? (
+                                  <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                                    <Check className="h-2.5 w-2.5" />
+                                  </div>
+                                ) : (
+                                  <div className="absolute top-1.5 right-1.5 text-muted-foreground/60">
+                                    <Lock className="h-3 w-3" />
+                                  </div>
+                                )}
+                              </Card>
+                            </motion.div>
                           );
                         })}
                       </div>
