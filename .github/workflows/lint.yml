@@ -1,0 +1,43 @@
+name: Lint (changed files)
+
+# Lints ONLY the files changed in the PR — legacy debt (235 raw fetch,
+# 885 `any`, 350 console.log) never blocks a merge, but touched files
+# must not introduce NEW debt. Rules live in eslint.config.js.
+
+on:
+  pull_request:
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ESLint on changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint changed TS/TSX files
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACMR \
+            origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | tr '\n' ' ')
+          if [ -z "$FILES" ]; then
+            echo "No TypeScript changes — skipping lint."
+            exit 0
+          fi
+          echo "Linting: $FILES"
+          npx eslint --no-warn-ignored $FILES
