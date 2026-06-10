@@ -70,7 +70,14 @@
       window.signal = signal;
     </script>
     
-    <!-- DEFERRED: Load GPT and GTM scripts on user interaction or after 5s -->
+    <!-- DEFERRED: Load GPT and GTM after first content paint (smart gate).
+         Triggers, whichever fires first:
+           1. user interaction (scroll/click/touch/mouse/key) — immediate
+           2. 'sabq:content-painted' — dispatched by the app (Home/Category/Article)
+              via double-rAF once the route's main data has actually painted,
+              so the ~1.16MB ad stack (GTM→Permutive, GPT, apstag) never
+              competes with the LCP window on slow mobile (GSC: 29k slow URLs)
+           3. 7s fallback timer — covers routes that don't emit the signal -->
     <script data-cfasync="false">
       (function() {
         var loaded = false;
@@ -79,6 +86,7 @@
           loaded = true;
           var evts = ['scroll','click','touchstart','mousemove','keydown'];
           evts.forEach(function(e){ document.removeEventListener(e, loadAdScripts, {capture:true}); });
+          window.removeEventListener('sabq:content-painted', loadAdScripts);
           var gpt = document.createElement('script');
           gpt.async = true;
           gpt.src = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
@@ -91,7 +99,8 @@
         }
         var evts = ['scroll','click','touchstart','mousemove','keydown'];
         evts.forEach(function(e){ document.addEventListener(e, loadAdScripts, {capture:true,once:true,passive:true}); });
-        setTimeout(loadAdScripts, 5000);
+        window.addEventListener('sabq:content-painted', loadAdScripts, {once:true});
+        setTimeout(loadAdScripts, 7000);
       })();
     </script>
     <!-- Disable Cloudflare Rocket Loader for this page (rocket-loader=off) -->

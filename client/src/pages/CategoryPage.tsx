@@ -2,6 +2,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useEffect, Fragment } from "react";
 import { useCanonical } from "@/hooks/useCanonical";
+import { signalContentPainted } from "@/lib/contentPaintedSignal";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -111,6 +112,11 @@ export default function CategoryPage() {
     enabled: !!slug,
   });
   const allArticles = Array.isArray(allArticlesRaw) ? allArticlesRaw : [];
+
+  // المحتوى الرئيسي جاهز → حرّر طبقة الإعلانات المؤجلة (انظر index.html)
+  useEffect(() => {
+    if (!articlesLoading && allArticlesRaw !== undefined) signalContentPainted();
+  }, [articlesLoading, allArticlesRaw]);
 
   // Reset displayCount when filters change
   useEffect(() => {

@@ -37,7 +37,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
+import { signalContentPainted } from "@/lib/contentPaintedSignal";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
   trackArticleView,
@@ -132,6 +133,11 @@ export default function ArticleDetail() {
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
+
+  // المحتوى الرئيسي جاهز → حرّر طبقة الإعلانات المؤجلة (انظر index.html)
+  useEffect(() => {
+    if (article) signalContentPainted();
+  }, [article]);
 
   // Parse stored aiSummary text into up to 3 bullets (no extra request needed)
   const storedBullets = useMemo<string[]>(() => {
@@ -296,7 +302,7 @@ export default function ArticleDetail() {
     queryFn: async () => {
       if (!article?.id) return null;
       try {
-        const response = await fetch(`/api/shortlinks/article/${article.id}`, {
+        const response = await fetch(apiUrl(`/api/shortlinks/article/${article.id}`), {
           credentials: "include",
         });
         if (response.status === 404) {
@@ -435,9 +441,8 @@ export default function ArticleDetail() {
       if (fired) return;
       fired = true;
       clearInterval(intervalId);
-      fetch(`/api/articles/${articleId}/view`, { method: 'POST' })
+      fetch(apiUrl(`/api/articles/${articleId}/view`), { method: 'POST' })
         .then(r => r.json())
-        .then(data => console.log('[View] Tracked:', data))
         .catch(err => console.error('[View] Error:', err));
     };
 
@@ -480,7 +485,6 @@ export default function ArticleDetail() {
     
     if (existingScript && window.twttr?.widgets) {
       // Script already loaded, just render tweets
-      console.log('[ArticleDetail] Twitter widgets already loaded, rendering tweets');
       window.twttr.widgets.load();
     } else if (!existingScript) {
       // Load script for the first time
@@ -490,7 +494,6 @@ export default function ArticleDetail() {
       script.charset = 'utf-8';
       
       script.onload = () => {
-        console.log('[ArticleDetail] Twitter widgets script loaded successfully');
         applyThemeToTweets();
         if (window.twttr?.widgets) {
           window.twttr.widgets.load();
@@ -513,7 +516,6 @@ export default function ArticleDetail() {
       // Only reload if theme actually changed
       if (currentTheme !== previousTheme) {
         previousTheme = currentTheme;
-        console.log('[ArticleDetail] Theme changed to', currentTheme);
         applyThemeToTweets();
         if (window.twttr?.widgets) {
           window.twttr.widgets.load();
@@ -784,7 +786,7 @@ export default function ArticleDetail() {
       refreshEngagementLists();
     },
     onError: (error: Error) => {
-      console.log("React mutation error:", error.message);
+      console.warn("React mutation error:", error.message);
       if (isUnauthorizedError(error)) {
         toast({
           title: "تسجيل دخول مطلوب",
@@ -830,7 +832,7 @@ export default function ArticleDetail() {
       refreshEngagementLists();
     },
     onError: (error: Error) => {
-      console.log("Bookmark mutation error:", error.message);
+      console.warn("Bookmark mutation error:", error.message);
       if (isUnauthorizedError(error)) {
         toast({
           title: "تسجيل دخول مطلوب",
