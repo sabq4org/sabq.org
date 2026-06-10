@@ -1929,7 +1929,8 @@ export interface IStorage {
   getPublisherCreditById(creditId: string): Promise<PublisherCredit | undefined>;
   createPublisherCredit(credit: InsertPublisherCredit & { remainingCredits: number }): Promise<PublisherCredit>;
   updatePublisherCredit(creditId: string, updates: Partial<Pick<PublisherCredit, 'packageName' | 'expiryDate' | 'isActive' | 'notes'>>): Promise<PublisherCredit>;
-  deductPublisherCredit(publisherId: string, articleId: string, performedBy: string): Promise<void>;
+  // deductPublisherCredit moved to services/publisherCreditService.ts
+  // (ADR-001): atomic transaction + retry + reconcile logging.
   deactivateExpiredCredits(): Promise<{ deactivated: number; creditIds: string[] }>;
   getPublisherStats(publisherId: string, period?: { start: Date; end: Date }): Promise<{
     totalArticles: number;
@@ -5610,8 +5611,67 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
+    // Audit M1.4 (2026-06-10): latest-comments used to be fetched with one
+    // query PER search result (N+1 — a 50-row page fired 50 extra queries).
+    // Now a single window-function query fetches the newest 5 comments for
+    // every result at once, grouped in memory below.
+    type LatestComment = {
+      id: string;
+      content: string;
+      status: string;
+      aiClassification: string | null;
+      aiModerationScore: number | null;
+      createdAt: string;
+      userName: string;
+    };
+    const commentsByArticle = new Map<string, LatestComment[]>();
+    const articleIdsWithComments = includeComments
+      ? results.filter((r) => (r.totalComments || 0) > 0).map((r) => r.article.id)
+      : [];
+
+    if (articleIdsWithComments.length > 0) {
+      const ranked = db.$with('ranked_comments').as(
+        db
+          .select({
+            id: comments.id,
+            articleId: comments.articleId,
+            content: comments.content,
+            status: comments.status,
+            aiClassification: comments.aiClassification,
+            aiModerationScore: comments.aiModerationScore,
+            createdAt: comments.createdAt,
+            userName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${users.email})`.as('user_name'),
+            rn: sql<number>`row_number() over (partition by ${comments.articleId} order by ${comments.createdAt} desc)`.as('rn'),
+          })
+          .from(comments)
+          .leftJoin(users, eq(comments.userId, users.id))
+          .where(inArray(comments.articleId, articleIdsWithComments)),
+      );
+
+      const commentRows = await db
+        .with(ranked)
+        .select()
+        .from(ranked)
+        .where(sql`${ranked.rn} <= 5`)
+        .orderBy(ranked.articleId, ranked.rn);
+
+      for (const row of commentRows) {
+        const list = commentsByArticle.get(row.articleId) ?? [];
+        list.push({
+          id: row.id,
+          content: row.content,
+          status: row.status,
+          aiClassification: row.aiClassification,
+          aiModerationScore: row.aiModerationScore,
+          createdAt: row.createdAt.toISOString(),
+          userName: row.userName || 'مجهول',
+        });
+        commentsByArticle.set(row.articleId, list);
+      }
+    }
+
     // Process results
-    const processedArticles = await Promise.all(results.map(async (r) => {
+    const processedArticles = results.map((r) => {
       let highlightedTitle = r.article.title;
       let relevanceScore = 0;
 
@@ -5619,44 +5679,15 @@ export class DatabaseStorage implements IStorage {
         const searchTerm = params.query.trim();
         const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
         highlightedTitle = r.article.title.replace(regex, '<mark>$1</mark>');
-        
+
         const matchCount = (r.article.title.match(regex) || []).length;
         relevanceScore = Math.min(matchCount * 0.25, 1);
       }
 
-      // Get latest comments if requested
-      let latestComments: Array<{
-        id: string;
-        content: string;
-        status: string;
-        aiClassification: string | null;
-        aiModerationScore: number | null;
-        createdAt: string;
-        userName: string;
-      }> | undefined;
-
-      if (includeComments && (r.totalComments || 0) > 0) {
-        const commentsData = await db
-          .select({
-            comment: comments,
-            userName: sql<string>`COALESCE(${users.firstName} || ' ' || ${users.lastName}, ${users.email})`.as('user_name'),
-          })
-          .from(comments)
-          .leftJoin(users, eq(comments.userId, users.id))
-          .where(eq(comments.articleId, r.article.id))
-          .orderBy(desc(comments.createdAt))
-          .limit(5);
-
-        latestComments = commentsData.map(c => ({
-          id: c.comment.id,
-          content: c.comment.content,
-          status: c.comment.status,
-          aiClassification: c.comment.aiClassification,
-          aiModerationScore: c.comment.aiModerationScore,
-          createdAt: c.comment.createdAt.toISOString(),
-          userName: c.userName || 'مجهول',
-        }));
-      }
+      const latestComments: LatestComment[] | undefined =
+        includeComments && (r.totalComments || 0) > 0
+          ? commentsByArticle.get(r.article.id) ?? []
+          : undefined;
 
       return {
         id: r.article.id,
@@ -5679,7 +5710,7 @@ export class DatabaseStorage implements IStorage {
         },
         latestComments,
       };
-    }));
+    });
 
     return {
       articles: processedArticles,
@@ -17261,48 +17292,9 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async deductPublisherCredit(
-    publisherId: string, 
-    articleId: string, 
-    performedBy: string
-  ): Promise<void> {
-    // Get active credit package
-    const activeCredit = await this.getActivePublisherCredit(publisherId);
-    
-    if (!activeCredit) {
-      throw new Error('No active credit package available');
-    }
-
-    if (activeCredit.remainingCredits <= 0) {
-      throw new Error('No remaining credits');
-    }
-
-    // Deduct one credit
-    const creditsBefore = activeCredit.remainingCredits;
-    const creditsAfter = creditsBefore - 1;
-
-    await db
-      .update(publisherCredits)
-      .set({
-        usedCredits: activeCredit.usedCredits + 1,
-        remainingCredits: creditsAfter,
-        updatedAt: new Date(),
-      })
-      .where(eq(publisherCredits.id, activeCredit.id));
-
-    // Log the deduction
-    await this.createCreditLog({
-      publisherId,
-      creditPackageId: activeCredit.id,
-      articleId,
-      actionType: 'credit_used',
-      creditsBefore,
-      creditsChanged: -1,
-      creditsAfter,
-      performedBy,
-      notes: `تم خصم رصيد مقابل نشر خبر`,
-    });
-  }
+  // deductPublisherCredit moved to services/publisherCreditService.ts
+  // (ADR-001): the old version ran UPDATE + log INSERT non-atomically and
+  // its callers swallowed failures. See deductPublisherCreditSafely.
 
   async getPublisherStats(
     publisherId: string, 

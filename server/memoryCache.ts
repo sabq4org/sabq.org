@@ -298,11 +298,14 @@ export function getTotalSseCount(): number {
   return sseConnectionManager.getConnectionCount() + _externalSseCount;
 }
 
-class MemoryCache {
+export class MemoryCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private readonly maxEntries: number;
+  private lastEvictionLogAt = 0;
 
-  constructor() {
+  constructor(maxEntries: number = 5000) {
+    this.maxEntries = maxEntries;
     this.startCleanup();
   }
 
@@ -316,26 +319,64 @@ class MemoryCache {
         }
       }
     }, 60000);
+    // Never keep the process alive just for cache cleanup (also lets
+    // test runners exit cleanly).
+    this.cleanupInterval.unref?.();
   }
 
   get<T>(key: string): T | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
-    
+
     if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
       return null;
     }
-    
+
     return entry.data as T;
   }
 
   set<T>(key: string, data: T, ttlMs: number = 60000): void {
+    if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
+      this.evictForSpace();
+    }
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
       ttl: ttlMs,
     });
+  }
+
+  // Audit M1.1 (2026-06-10): the cache previously grew without bound — a
+  // flood of unique keys inside one TTL window (e.g. per-slug or per-query
+  // cache keys under crawler traffic) could OOM the pod. This is a safety
+  // valve, not an LRU: expired entries go first, then the oldest by
+  // creation time, in a batch so the O(n log n) sort amortizes.
+  private evictForSpace(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key);
+      }
+    }
+    if (this.cache.size < this.maxEntries) return;
+
+    const overshoot = this.cache.size - this.maxEntries + 1;
+    const batch = Math.max(overshoot, Math.ceil(this.maxEntries * 0.02));
+    const oldest = Array.from(this.cache.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, batch);
+    for (const [key] of oldest) {
+      this.cache.delete(key);
+    }
+
+    if (now - this.lastEvictionLogAt > 60_000) {
+      this.lastEvictionLogAt = now;
+      console.warn(
+        `[Cache] memoryCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+          `If this repeats, some caller is generating unbounded cache keys.`,
+      );
+    }
   }
 
   delete(key: string): void {
@@ -499,9 +540,15 @@ interface SWRCacheEntry<T> {
   staleWhileRevalidate: number;
 }
 
-class StaleWhileRevalidateCache {
+export class StaleWhileRevalidateCache {
   private cache: Map<string, SWRCacheEntry<any>> = new Map();
   private refreshing: Set<string> = new Set(); // Track in-flight refreshes
+  private readonly maxEntries: number;
+  private lastEvictionLogAt = 0;
+
+  constructor(maxEntries: number = 5000) {
+    this.maxEntries = maxEntries;
+  }
 
   get<T>(key: string): { data: T | null; isStale: boolean; shouldRefresh: boolean } {
     const entry = this.cache.get(key);
@@ -528,6 +575,9 @@ class StaleWhileRevalidateCache {
   }
 
   set<T>(key: string, data: T, ttlMs: number, staleWhileRevalidateMs: number = ttlMs): void {
+    if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
+      this.evictForSpace();
+    }
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
@@ -535,6 +585,40 @@ class StaleWhileRevalidateCache {
       staleWhileRevalidate: staleWhileRevalidateMs,
     });
     this.refreshing.delete(key);
+  }
+
+  // Audit M1.1 (2026-06-10): unlike MemoryCache, this class has NO periodic
+  // sweep — fully-expired entries are only removed when their own key is
+  // read again, so unique keys that are never re-read accumulated forever.
+  // Same safety valve as MemoryCache.evictForSpace: expired first, then
+  // oldest-by-creation in a batch.
+  private evictForSpace(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache) {
+      if (now - entry.timestamp > entry.ttl + entry.staleWhileRevalidate) {
+        this.cache.delete(key);
+        this.refreshing.delete(key);
+      }
+    }
+    if (this.cache.size < this.maxEntries) return;
+
+    const overshoot = this.cache.size - this.maxEntries + 1;
+    const batch = Math.max(overshoot, Math.ceil(this.maxEntries * 0.02));
+    const oldest = Array.from(this.cache.entries())
+      .sort((a, b) => a[1].timestamp - b[1].timestamp)
+      .slice(0, batch);
+    for (const [key] of oldest) {
+      this.cache.delete(key);
+      this.refreshing.delete(key);
+    }
+
+    if (now - this.lastEvictionLogAt > 60_000) {
+      this.lastEvictionLogAt = now;
+      console.warn(
+        `[Cache] swrCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+          `If this repeats, some caller is generating unbounded cache keys.`,
+      );
+    }
   }
 
   markRefreshing(key: string): void {
