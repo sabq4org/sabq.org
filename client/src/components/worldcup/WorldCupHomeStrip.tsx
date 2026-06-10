@@ -35,6 +35,21 @@ function TeamChip({ team }: { team: WcFixture["home"] }) {
   );
 }
 
+// صيغة المدة بالعربية السليمة: مفرد/مثنى/جمع
+function arabicDays(n: number): string {
+  if (n === 1) return "يوم";
+  if (n === 2) return "يومين";
+  if (n <= 10) return `${n} أيام`;
+  return `${n} يومًا`;
+}
+
+function arabicHours(n: number): string {
+  if (n === 1) return "ساعة";
+  if (n === 2) return "ساعتين";
+  if (n <= 10) return `${n} ساعات`;
+  return `${n} ساعة`;
+}
+
 function TickingCountdown({ timestamp }: { timestamp: number }) {
   const [countdown, setCountdown] = useState(() => countdownTo(timestamp));
   useEffect(() => {
@@ -43,14 +58,21 @@ function TickingCountdown({ timestamp }: { timestamp: number }) {
   }, [timestamp]);
 
   const pad = (n: number) => String(n).padStart(2, "0");
-  const text =
-    countdown.days > 0
-      ? `${countdown.days} يوم و ${countdown.hours} ساعة`
-      : `${pad(countdown.hours)}:${pad(countdown.minutes)}:${pad(countdown.seconds)}`;
+  // في آخر يوم نعرض ساعة رقمية HH:MM:SS (وحدها تحتاج dir=ltr)؛
+  // قبل ذلك نصًا عربيًا خالصًا — خلطه مع dir=ltr يبعثر الأرقام (Bidi)
+  const isClock = countdown.days === 0;
+  const text = isClock
+    ? `${pad(countdown.hours)}:${pad(countdown.minutes)}:${pad(countdown.seconds)}`
+    : countdown.hours > 0
+      ? `${arabicDays(countdown.days)} و${arabicHours(countdown.hours)}`
+      : arabicDays(countdown.days);
 
   return (
     <p className="text-[11px] text-emerald-200/90">
-      تنطلق بعد <span className="font-black text-emerald-300 tabular-nums" dir="ltr">{text}</span>
+      تنطلق بعد{" "}
+      <span className="font-black text-emerald-300 tabular-nums" dir={isClock ? "ltr" : undefined}>
+        {text}
+      </span>
     </p>
   );
 }
