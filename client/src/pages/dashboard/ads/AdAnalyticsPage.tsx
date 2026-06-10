@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/queryClient";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -37,7 +38,6 @@ import {
   RefreshCw,
   Smartphone,
   Globe,
-  FileText,
   Radio,
   Power,
 } from "lucide-react";
@@ -433,7 +433,7 @@ export default function AdAnalyticsPage() {
     
     const fetchLiveData = async () => {
       try {
-        const response = await fetch('/api/ads/analytics/live-poll', {
+        const response = await fetch(apiUrl('/api/ads/analytics/live-poll'), {
           credentials: 'include'
         });
         
@@ -539,40 +539,6 @@ export default function AdAnalyticsPage() {
       });
     } finally {
       setIsExporting(false);
-    }
-  };
-
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
-
-  const handleExportPDF = async () => {
-    setIsExportingPDF(true);
-    try {
-      const url = `/api/ads/analytics/export/pdf?${dateParams}`;
-      const response = await fetch(url, { credentials: "include" });
-      if (!response.ok) throw new Error("فشل التصدير");
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = `ad-analytics-report-${format(new Date(), "yyyy-MM-dd")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-
-      toast({
-        title: "تم التصدير بنجاح",
-        description: "تم تحميل تقرير PDF بنجاح",
-      });
-    } catch (error) {
-      toast({
-        title: "خطأ في التصدير",
-        description: "حدث خطأ أثناء تصدير التقرير",
-        variant: "destructive",
-      });
-    } finally {
-      setIsExportingPDF(false);
     }
   };
 
@@ -916,15 +882,6 @@ export default function AdAnalyticsPage() {
             >
               <Download className="h-4 w-4 ml-2" />
               تصدير CSV
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportPDF}
-              disabled={isExportingPDF}
-              data-testid="button-export-pdf"
-            >
-              <FileText className="h-4 w-4 ml-2" />
-              {isExportingPDF ? "جاري التصدير..." : "تصدير PDF"}
             </Button>
           </div>
         </div>

@@ -78,6 +78,14 @@ sabq app ios/**/xcuserdata/
 sabq app ios/**/*.xcuserstate
 .vercel
 .env*
+# Templates stay tracked — only filled-in env files are secret.
+!.env.example
+!.env.railway.example
 test-results/
 playwright-report/
 .playwright-artifacts*/
+
+# Internal security review reports — kept local like AUDIT_REPORT.md;
+# they describe the attack surface and must not be published.
+docs/security/تقرير_المراجعة_الأمنية_سبق.docx
+docs/security/تقرير_المراجعة_الأمنية_سبق.json

@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import { db } from '../db';
 import { pushNotificationLogs, pushDevices } from '@shared/schema';
 import { eq } from 'drizzle-orm';

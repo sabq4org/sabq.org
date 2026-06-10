@@ -9,7 +9,6 @@ import pRetry from 'p-retry';
 import { db } from '../db';
 import { articles } from '@shared/schema';
 import { eq } from 'drizzle-orm';
-import fetch from 'node-fetch';
 import { ObjectStorageService } from '../objectStorage';
 import { assertSafeImageUrl } from '../utils/safeImageUrl';
 
@@ -110,7 +109,7 @@ async function analyzeImage(imageUrl: string): Promise<string> {
       throw new Error(`Failed to fetch image: ${response.statusText}`);
     }
     
-    const buffer = await response.buffer();
+    const buffer = Buffer.from(await response.arrayBuffer());
     const base64Image = buffer.toString('base64');
     
     // Use Gemini to analyze the image

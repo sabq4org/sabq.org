@@ -8,7 +8,6 @@ import { storage } from '../storage';
 import { db } from '../db';
 import { articles } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
-import fetch from 'node-fetch';
 import path from 'path';
 import { cloudflareImagesService } from './cloudflareImagesService';
 
@@ -222,7 +221,7 @@ export async function generateThumbnail(
         throw new Error('Image too large: maximum size is 10MB');
       }
       
-      buffer = await response.buffer();
+      buffer = Buffer.from(await response.arrayBuffer());
     }
     
     // Additional size check after download

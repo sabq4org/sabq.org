@@ -1340,18 +1340,6 @@ if (!(globalThis as any).__sabqServer) {
         console.error("[Server] ⚠️  Database warmup failed, but marking ready anyway:", error);
         isServerReady = true;
       }
-      
-      // Image migration — PAUSED (disabled temporarily)
-      // setTimeout(async () => {
-      //   try {
-      //     const { startMigration } = await import("./scripts/migrateImages");
-      //     const migResult = await startMigration();
-      //     console.log(`[Server] 🖼️ Image migration: ${migResult.message}`);
-      //   } catch (err) {
-      //     console.error("[Server] ⚠️ Image migration failed to start:", err);
-      //   }
-      // }, 15000);
-      console.log("[Server] 🖼️ Image migration is PAUSED (disabled temporarily)");
 
       const enableBackgroundWorkers = process.env.ENABLE_BACKGROUND_WORKERS === "true";
       

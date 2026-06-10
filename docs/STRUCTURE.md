@@ -1,0 +1,49 @@
+# خريطة توثيق المشروع (Documentation Map)
+
+أُعيد تنظيم وثائق Markdown المتناثرة في جذر المشروع إلى بنية مصنّفة تحت `docs/`.
+الملفات الاصطلاحية تبقى في الجذر: `README.md`, `CLAUDE.md`, `AGENTS.md`, `replit.md`.
+
+> ملاحظة: لم يُنقل أو يُحذف أي ملف كود أو إعداد. كود TypeScript لا يستورد ملفات `.md`،
+> وتم التحقق بعد النقل عبر `npm run check`.
+
+## docs/security/ — الأمن
+- `SECURITY_AUDIT_REPORT.md` — تقرير تدقيق أمني سابق
+- `SECURITY_LINK_INJECTION_AUDIT_AR.md` — تدقيق حقن الروابط
+- `threat_model.md` — نموذج التهديد
+
+## docs/architecture/ — المعمارية
+- `SYSTEM_DOCUMENTATION.md` — توثيق النظام الشامل
+- `AUTHENTICATION_FLOW.md` — تدفّق المصادقة
+- `CALENDAR_SYSTEM.md` — نظام التقويم
+- `SPLIT_ROADMAP.md` — خارطة فصل النشر
+- `design_guidelines.md` — إرشادات التصميم
+
+## docs/setup/ — الإعداد والتشغيل
+- `DATABASE_SETUP_INSTRUCTIONS_AR.md`
+- `OBJECT-STORAGE-SETUP.md`
+- `SECRETS-UPDATE-GUIDE.md`
+- `WEBHOOK-SETUP-GUIDE.md`
+- `MIGRATION_RUNBOOK.md`
+
+## docs/handoff/ — تسليمات
+- `HANDOFF-android-native-2026-05-19.md`
+- `HANDOFF-android-native-NEXT.md`
+- `android_surface_card_contrast_fix.md`
+
+## docs/reference/ — مراجع
+- `sabq-dashboard-documentation.md`
+- `sabq-ios-api-reference.md`
+- `sabq-services-guide.md`
+
+## docs/reports/ — تقارير
+- `AUDIT_REPORT.md`
+- `DATABASE_COST_FORENSIC_REPORT.md`
+- `تقرير_الأداء_المعماري_سبق.md`
+
+## docs/notes/ — ملاحظات
+- `sultan.md`
+
+## مقترحات لم تُنفَّذ (تتطلّب قرار الفريق)
+- إنشاء `SECURITY.md` جذري يفهرس وثائق الأمن وسياسة الإفصاح.
+- ملفات ثنائية في الجذر يُنصح بنقلها/أرشفتها يدوياً: `sabq-clean.tar.gz` (≈19MB),
+  `honor_articles_report.docx`, `temp_import.txt`, `rbac-export.json`.

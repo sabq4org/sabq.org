@@ -37,14 +37,16 @@ interface ApnsCredentials {
 }
 
 function getApnsCredentials(): ApnsCredentials | null {
-  // Support both APNS_PRIVATE_KEY and APNS_KEY_P8 (Apple's .p8 file content)
-  const keyId = process.env.APNS_KEY_ID || "STM6UV9C8H";
-  const teamId = process.env.APNS_TEAM_ID || "CBU7MJEC5R";
+  // Support both APNS_PRIVATE_KEY and APNS_KEY_P8 (Apple's .p8 file content).
+  // keyId/teamId are env-only — hardcoded fallbacks were removed in the
+  // 2026-06-10 audit so a leaked .p8 alone is not immediately usable.
+  const keyId = process.env.APNS_KEY_ID;
+  const teamId = process.env.APNS_TEAM_ID;
   const privateKey = process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY;
   const bundleId = process.env.APNS_BUNDLE_ID || "com.sabq.sabqorg";
 
-  if (!privateKey) {
-    console.warn("[APNs] Missing credentials (APNS_KEY_P8) - push notifications disabled");
+  if (!privateKey || !keyId || !teamId) {
+    console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
     return null;
   }
 

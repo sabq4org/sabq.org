@@ -20,10 +20,17 @@
 
 export const BASE_URL = 'https://sabq.org';
 
-// The IndexNow key — read from env or fall back to built-in default.
-// To rotate the key: set INDEXNOW_KEY env var and re-deploy.
-export const INDEXNOW_KEY: string =
-  process.env.INDEXNOW_KEY || 'sabq2026f4a8b2d3e1c7a9f5b0d6e2c4';
+// The IndexNow key — env-only (no built-in default; hardcoded fallbacks were
+// removed in the 2026-06-10 audit). When unset, pings are skipped with a
+// warning and the /{key}.txt verification route is not registered.
+export const INDEXNOW_KEY: string = process.env.INDEXNOW_KEY || '';
+
+if (!INDEXNOW_KEY) {
+  console.warn(
+    '[IndexNow] INDEXNOW_KEY is not set — IndexNow pings are disabled. ' +
+    'Set it to re-enable immediate search-engine notification.',
+  );
+}
 
 /**
  * Ping IndexNow API to request immediate indexing of an article.
@@ -36,6 +43,7 @@ export const INDEXNOW_KEY: string =
  * skip it. Always submit the final canonical URL.
  */
 export async function pingIndexNow(canonicalSlug: string): Promise<void> {
+  if (!INDEXNOW_KEY) return;
   const articleUrl = `${BASE_URL}/article/${encodeURIComponent(canonicalSlug)}`;
   try {
     const res = await fetch('https://api.indexnow.org/indexnow', {
