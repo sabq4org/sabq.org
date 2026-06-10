@@ -90,7 +90,7 @@ export default tseslint.config(
     // (see ADR-001). When an extraction shrinks a file, RATCHET the
     // ceiling down to the new size + 100 so the monolith can't regrow.
     files: ["server/routes.ts"],
-    rules: { "max-lines": ["error", { max: 38670 }] },
+    rules: { "max-lines": ["error", { max: 37880 }] },
   },
   {
     files: ["server/storage.ts"],
