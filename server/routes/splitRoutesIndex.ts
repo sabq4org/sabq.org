@@ -27,6 +27,7 @@ import muqtarabAIRouter from "./muqtarabAI";
 import { registerAnnouncementRoutes } from "./announcements";
 import { registerAudioBriefRoutes } from "./audioBriefs";
 import { registerShortsRoutes } from "./shorts";
+import { registerCalendarRoutes } from "./calendar";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -62,4 +63,5 @@ export function registerSplitRoutes(app: Express) {
   registerAnnouncementRoutes(app);
   registerAudioBriefRoutes(app);
   registerShortsRoutes(app);
+  registerCalendarRoutes(app);
 }
