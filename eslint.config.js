@@ -82,4 +82,74 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "off",
     },
   },
+  {
+    // ADR-001 (docs/architecture/ADR-001-data-access-layer.md): route modules
+    // are HTTP-only. Drizzle queries belong in server/services/<feature>.ts;
+    // routes call the service. The `ignores` list below is the 46 legacy
+    // violators that predate the rule — when you clean one up (move its
+    // queries into a service), DELETE it from this list so it can't regress.
+    files: ["server/routes/**/*.ts"],
+    ignores: [
+      "server/routes/abTests.ts",
+      "server/routes/advertiserAuth.ts",
+      "server/routes/advertiserPayments.ts",
+      "server/routes/articleEditLocks.ts",
+      "server/routes/audioNewsletterRoutes.ts",
+      "server/routes/commentModeration.ts",
+      "server/routes/edgeExistsRoute.ts",
+      "server/routes/edgeMeta.ts",
+      "server/routes/emailAgent.ts",
+      "server/routes/focalPoints.ts",
+      "server/routes/gulfEvents.ts",
+      "server/routes/hajjBlock.ts",
+      "server/routes/homepage.ts",
+      "server/routes/interests.ts",
+      "server/routes/keywordFollowing.ts",
+      "server/routes/liveNews.ts",
+      "server/routes/loyaltyAdmin.ts",
+      "server/routes/mediaStoreRoutes.ts",
+      "server/routes/mobileApiRoutes.ts",
+      "server/routes/muqtarabAI.ts",
+      "server/routes/muqtarabOwn.ts",
+      "server/routes/nanoBananaRoutes.ts",
+      "server/routes/nativeAds.ts",
+      "server/routes/newsMap.ts",
+      "server/routes/newsletterAnalyticsRoutes.ts",
+      "server/routes/notebookLmRoutes.ts",
+      "server/routes/opinionTickets.ts",
+      "server/routes/paymentAnalytics.ts",
+      "server/routes/pollsRoutes.ts",
+      "server/routes/pushNotificationRoutes.ts",
+      "server/routes/rssFeedRoutes.ts",
+      "server/routes/setup.ts",
+      "server/routes/smartClassificationRoutes.ts",
+      "server/routes/smartInsightsRoutes.ts",
+      "server/routes/smartInterests.ts",
+      "server/routes/smartNewsletterRoutes.ts",
+      "server/routes/storeCustomerRoutes.ts",
+      "server/routes/stories.ts",
+      "server/routes/tags.ts",
+      "server/routes/tapPaymentRoutes.ts",
+      "server/routes/themes.ts",
+      "server/routes/trendingKeywords.ts",
+      "server/routes/twoFactorRoutes.ts",
+      "server/routes/v1/oauthMobile.ts",
+      "server/routes/visualAiRoutes.ts",
+      "server/routes/whatsappAgent.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/db", "**/db.js"],
+              message:
+                "ADR-001: server/routes/* are HTTP-only. Put Drizzle queries in server/services/<feature>.ts and import that instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

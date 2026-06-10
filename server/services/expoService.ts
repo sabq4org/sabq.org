@@ -5,8 +5,6 @@
  * For devices that register with ExponentPushToken format
  */
 
-import fetch from 'node-fetch';
-
 // ============================================================================
 // Types
 // ============================================================================

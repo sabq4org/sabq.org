@@ -28540,12 +28540,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   // IndexNow Key Verification File
   // Search engines fetch /{key}.txt to verify domain ownership.
   // Must return exactly the key as plain text.
+  // Only registered when INDEXNOW_KEY is configured (env-only).
   // ============================================================
-  app.get(`/${INDEXNOW_KEY}.txt`, (_req, res) => {
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(INDEXNOW_KEY);
-  });
+  if (INDEXNOW_KEY) {
+    app.get(`/${INDEXNOW_KEY}.txt`, (_req, res) => {
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(INDEXNOW_KEY);
+    });
+  }
 
   // News Analytics Endpoint - Smart statistics and insights
 
@@ -39097,47 +39100,5 @@ Sitemap: https://sabq.org/sitemap-news.xml
       res.status(500).json({ message: "فشل في تحديث عدد المشاهدات" });
     }
   });
-  // ============================================
-  // IMAGE MIGRATION ADMIN API
-  // ============================================
-  app.post("/api/admin/image-migration/start", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
-    try {
-      const { startMigration } = await import("./scripts/migrateImages");
-      const result = await startMigration();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/admin/image-migration/stop", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
-    try {
-      const { stopMigration } = await import("./scripts/migrateImages");
-      res.json(stopMigration());
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.get("/api/admin/image-migration/status", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
-    try {
-      const { getMigrationProgress } = await import("./scripts/migrateImages");
-      const progress = await getMigrationProgress();
-      res.json(progress);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/admin/image-migration/retry-failed", requireAuth, requireRole(["admin"] as any), async (_req, res) => {
-    try {
-      const { retryFailed } = await import("./scripts/migrateImages");
-      const result = await retryFailed();
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   return httpServer;
 }
