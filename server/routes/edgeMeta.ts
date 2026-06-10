@@ -1306,6 +1306,20 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // World Cup 2026 hub landing
+  {
+    pattern: /^\/world-cup\/?$/,
+    handle: async () => ({
+      title: "مونديال 2026 — تغطية حية لكأس العالم | سبق",
+      description:
+        "نتائج مباشرة، جدول المباريات بتوقيت الرياض، ترتيب المجموعات، الهدافون، ومشوار الأخضر في كأس العالم 2026 على صحيفة سبق.",
+      image: BRAND_OG_IMAGE,
+      canonical: `${SITE_URL}/world-cup`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+    }),
+  },
 ];
 
 /**
