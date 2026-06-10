@@ -1,0 +1,41 @@
+name: Build + unit tests
+
+# Milestone 0 of the 2026-06-10 audit: a PR must not merge if it breaks the
+# server/client build or any unit test. Complements typecheck.yml (tsc) and
+# lint.yml (changed-files ESLint) — together these four are the merge gate.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: vitest + esbuild + vite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (vitest)
+        run: npm run test:unit
+
+      - name: Server build (esbuild)
+        run: npm run build:server
+
+      - name: Client build (vite)
+        run: npm run build:client
