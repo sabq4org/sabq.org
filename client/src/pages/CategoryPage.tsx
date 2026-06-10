@@ -104,9 +104,11 @@ export default function CategoryPage() {
   // DMS Ad tracking for category page
   useAdTracking(category?.nameAr || '');
 
+  // يعمل بالتوازي مع استعلام القسم — المسار يعتمد على الـ slug وحده،
+  // وانتظار القسم كان يضيف ~ثانية كاملة على LCP الجوال (GSC: 29 ألف صفحة)
   const { data: allArticlesRaw, isLoading: articlesLoading } = useQuery<ArticleWithDetails[]>({
     queryKey: ["/api/categories", slug, "articles"],
-    enabled: !!category,
+    enabled: !!slug,
   });
   const allArticles = Array.isArray(allArticlesRaw) ? allArticlesRaw : [];
 
