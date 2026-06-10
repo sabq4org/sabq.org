@@ -38,7 +38,7 @@ export default function UrduCategoryPage() {
     },
   });
 
-  useCanonical(category ? `https://sabq.org/ur/category/${category.englishSlug || slug}` : null);
+  useCanonical(category ? `https://sabq.org/ur/category/${category.slug || slug}` : null);
 
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<UrArticle[]>({
     queryKey: ["/api/ur/categories", slug, "articles"],

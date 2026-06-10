@@ -37,7 +37,7 @@ export default function EnglishCategoryPage() {
     },
   });
 
-  useCanonical(category ? `https://sabq.org/en/category/${category.englishSlug || slug}` : null);
+  useCanonical(category ? `https://sabq.org/en/category/${category.slug || slug}` : null);
 
   const { data: articlesRaw, isLoading: articlesLoading } = useQuery<EnArticle[]>({
     queryKey: ["/api/en/categories", slug, "articles"],
