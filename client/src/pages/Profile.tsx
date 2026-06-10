@@ -1,3 +1,7 @@
+// صفحة الملف الشخصي — إعادة تصميم 2026-06-10.
+// المبادئ: معلومة واحدة = مكان واحد (نقاط الولاء تظهر في شريط الولاء فقط)،
+// 4 تبويبات بدل 6، الإعدادات خلف أيقونة الترس، لا محتوى موصى به هنا،
+// لون الولاء موحّد (ذهبي #c9963f) والألوان الأخرى بياناتية فقط.
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -6,9 +10,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
-import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
-import { LoyaltyCard } from "@/components/loyalty/LoyaltyCard";
-import { computeTier, tierProgress, nextTier } from "@shared/loyalty";
+import { computeTier, nextTier } from "@shared/loyalty";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,11 +31,11 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { 
-  Heart, 
-  Bookmark, 
-  FileText, 
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
+import {
+  Heart,
+  Bookmark,
+  FileText,
   Settings,
   Bell,
   Shield,
@@ -44,30 +46,29 @@ import {
   Trophy,
   Coins,
   Star,
-  Sparkles,
   Tag,
   X,
   AlertCircle,
   Mail,
   Users,
-  UserPlus,
   UserMinus,
   IdCard,
   Check,
   Download,
-  Plus,
   Wallet,
   Edit,
   Clock,
   Eye,
   Lock,
+  CalendarDays,
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
-import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
-import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
+
+// اللون الموحّد لهوية الولاء في الصفحة (P3 — توحيد الألوان)
+const GOLD = "#c9963f";
 
 const updateUserSchema = z.object({
   firstName: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").optional(),
@@ -79,9 +80,18 @@ const updateUserSchema = z.object({
 
 type UpdateUserFormData = z.infer<typeof updateUserSchema>;
 
+function formatJoinDate(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  return new Date(date).toLocaleDateString("ar-SA-u-ca-gregory", {
+    year: "numeric",
+    month: "long",
+  });
+}
+
 export default function Profile() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("journey");
+  const [activeTab, setActiveTab] = useState("activity");
+  const [communityView, setCommunityView] = useState<"followers" | "following">("followers");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   const { data: user } = useQuery<UserType>({
@@ -96,13 +106,6 @@ export default function Profile() {
   const { data: categoriesAll } = useQuery<any[]>({
     queryKey: ["/api/categories/all"],
   });
-
-  const { data: recommendations } = useQuery<ArticleWithDetails[]>({
-    queryKey: ["/api/recommendations"],
-    enabled: !!user,
-  });
-
-
 
   const form = useForm<UpdateUserFormData>({
     resolver: zodResolver(updateUserSchema),
@@ -236,12 +239,11 @@ export default function Profile() {
     enabled: !!user,
   });
 
-  // Computed values for Journey Dashboard (Moved below query declarations to avoid TDZ error)
+  // قيم الولاء المحسوبة — تُعرض في شريط الولاء (Zone 2) ومسار الرتب (إنجازاتي) فقط
   const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
   const currentTier = computeTier(lifetime);
   const nextTierInfo = nextTier(currentTier.level);
-  
-  // Calculate percentage progress to next tier
+
   let progressPercentage = 100;
   let pointsToNext = 0;
   if (nextTierInfo) {
@@ -251,7 +253,7 @@ export default function Profile() {
     pointsToNext = nextTierInfo.minLifetimePoints - lifetime;
   }
 
-  // Map categories read statistics
+  // توزيع القراءة حسب الأقسام (يُعرض داخل تبويب نشاطي)
   let topCategoriesData = (activitySummary?.topCategories || []).map((tc: any) => {
     const cat = categoriesAll?.find(c => c.id === tc.categoryId);
     return {
@@ -263,7 +265,6 @@ export default function Profile() {
     };
   });
 
-  // Client-side fallback if the API summary is empty but we have local reading history
   if (topCategoriesData.length === 0 && readingHistory.length > 0) {
     const counts: Record<string, { count: number; name: string; color: string }> = {};
     readingHistory.forEach((art) => {
@@ -287,11 +288,8 @@ export default function Profile() {
       icon: null
     })).sort((a, b) => b.value - a.value);
   }
-  // Calculate stats
+
   const totalReads = activitySummary?.totalArticlesRead ?? readingHistory.length ?? 0;
-  const estimatedReadTime = Math.round(totalReads * 3);
-  const totalEngagement = (activitySummary?.totalComments ?? 0) + (activitySummary?.totalReactions ?? 0) + (activitySummary?.totalBookmarks ?? 0);
-  const userPoints = loyaltyPoints?.totalPoints ?? 0;
 
   const { data: followedKeywordsRaw, isLoading: isLoadingKeywords } = useQuery<
     Array<{ tagId: string; tagName: string; notify: boolean; articleCount: number }>
@@ -323,7 +321,7 @@ export default function Profile() {
     },
   });
 
-  const { data: followStats, isLoading: isLoadingFollowStats } = useQuery<{
+  const { data: followStats } = useQuery<{
     followersCount: number;
     followingCount: number;
   }>({
@@ -343,11 +341,11 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/followers', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/followers/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/followers/${user?.id}?limit=50`));
       if (!res.ok) throw new Error('Failed to fetch followers');
       return res.json();
     },
-    enabled: !!user && activeTab === 'followers',
+    enabled: !!user && activeTab === 'community' && communityView === 'followers',
   });
   const followers = Array.isArray(followersRaw) ? followersRaw : [];
 
@@ -363,11 +361,11 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/following', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/following/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/following/${user?.id}?limit=50`));
       if (!res.ok) throw new Error('Failed to fetch following');
       return res.json();
     },
-    enabled: !!user && activeTab === 'following',
+    enabled: !!user && activeTab === 'community' && communityView === 'following',
   });
   const following = Array.isArray(followingRaw) ? followingRaw : [];
 
@@ -384,7 +382,7 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ['/api/social/stats', unfollowedUserId] });
       queryClient.invalidateQueries({ queryKey: ['/api/social/followers', unfollowedUserId] });
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      
+
       toast({
         title: "تم إلغاء المتابعة",
         description: "لم تعد تتابع هذا المستخدم",
@@ -399,31 +397,19 @@ export default function Profile() {
     },
   });
 
-  // Press Card Status Query
-  const { data: pressCardStatus, isLoading: isLoadingPressCard } = useQuery({
-    queryKey: ['/api/wallet/press/status'],
-    enabled: !!user,
-  });
-
-  // Loyalty Card Status Query
-  const { data: loyaltyCardStatus, isLoading: isLoadingLoyaltyCard } = useQuery({
-    queryKey: ['/api/wallet/loyalty/status'],
-    enabled: !!user,
-  });
-
-  // Press Card Issuance Mutation
+  // إصدار البطاقة الصحفية (Apple Wallet) — داخل الإعدادات
   const issuePressCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/press/issue', {
+      const response = await fetch(apiUrl('/api/wallet/press/issue'), {
         method: 'POST',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to issue press card');
       }
-      
+
       const contentType = response.headers.get('Content-Type');
       if (contentType === 'application/vnd.apple.pkpass') {
         const blob = await response.blob();
@@ -455,19 +441,19 @@ export default function Profile() {
     },
   });
 
-  // Loyalty Card Issuance Mutation
+  // إصدار بطاقة العضوية (Apple Wallet) — داخل الإعدادات
   const issueLoyaltyCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/loyalty/issue', {
+      const response = await fetch(apiUrl('/api/wallet/loyalty/issue'), {
         method: 'POST',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Failed to issue loyalty card');
       }
-      
+
       const contentType = response.headers.get('Content-Type');
       if (contentType === 'application/vnd.apple.pkpass') {
         const blob = await response.blob();
@@ -523,13 +509,6 @@ export default function Profile() {
   };
 
   const getRoleBadge = (role?: string) => {
-    // Full role→Arabic-label map. Previously this only covered five
-    // roles which meant writers/columnists/editor-in-chief/etc. fell
-    // through to either the raw English key or — when role was nil —
-    // the "reader" fallback, surfacing as "قارئ" for non-reader users.
-    // The 2026-05-20 fix to /api/auth/user now also ships `roleLabel`
-    // directly from the DB; this client-side map is the fallback for
-    // sessions cached before that backend deploy reached the edge.
     const labels: Record<string, string> = {
       system_admin: "مدير النظام",
       superadmin: "المدير العام",
@@ -558,59 +537,15 @@ export default function Profile() {
       contributor: "مساهم",
       reader: "قارئ",
     };
-    const variants: Record<string, "default" | "secondary" | "outline"> = {
-      system_admin: "default",
-      superadmin: "default",
-      admin: "default",
-      editor: "secondary",
-      editor_in_chief: "default",
-      chief_editor: "default",
-      senior_editor: "secondary",
-      managing_editor: "default",
-      editorial_manager: "default",
-      content_manager: "default",
-      reporter: "secondary",
-      correspondent: "secondary",
-      journalist: "secondary",
-      writer: "secondary",
-      author: "secondary",
-      article_writer: "secondary",
-      article_author: "secondary",
-      opinion_author: "secondary",
-      columnist: "secondary",
-      comments_moderator: "secondary",
-      moderator: "secondary",
-      media_manager: "secondary",
-      publisher: "secondary",
-      photographer: "outline",
-      contributor: "outline",
-      reader: "outline",
-    };
-    // Prefer the server-supplied roleLabel (Arabic, single source of
-    // truth in the DB roles.name_ar column). Fall back to the local
-    // map for sessions cached before the backend update propagated.
     const label = (user as any)?.roleLabel
       || labels[role || "reader"]
       || role
       || "قارئ";
     return (
-      <Badge variant={variants[role || "reader"] || "outline"} data-testid="badge-user-role">
+      <Badge variant="secondary" className="font-normal" data-testid="badge-user-role">
         {label}
       </Badge>
     );
-  };
-
-  const getRankIcon = (rank?: string) => {
-    switch (rank) {
-      case "سفير سبق":
-        return <Trophy className="h-5 w-5 text-yellow-500" />;
-      case "العضو الذهبي":
-        return <Star className="h-5 w-5 text-amber-500" />;
-      case "المتفاعل":
-        return <TrendingUp className="h-5 w-5 text-blue-500" />;
-      default:
-        return <Coins className="h-5 w-5 text-gray-500" />;
-    }
   };
 
   const getFollowerDisplayName = (follower: { firstName: string | null; lastName: string | null; email: string | null }) => {
@@ -636,8 +571,8 @@ export default function Profile() {
             <p className="text-muted-foreground mb-8">
               سجل الدخول لعرض ملفك الشخصي
             </p>
-            <Button 
-              onClick={() => window.location.href = "/api/login"} 
+            <Button
+              onClick={() => window.location.href = "/api/login"}
               data-testid="button-login-profile"
             >
               تسجيل الدخول
@@ -649,12 +584,12 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#f8f5f0] dark:bg-background">
       <Header user={user} />
 
-      {/* Email Verification Alert */}
+      {/* تنبيه تفعيل البريد */}
       {user && !user.emailVerified && (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4" dir="rtl">
+        <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-4" dir="rtl">
           <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-email-verification">
             <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
             <AlertTitle className="text-yellow-800 dark:text-yellow-300 text-right">
@@ -691,172 +626,161 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Modern Profile Header — Phase 2 loyalty redesign */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
-        {(() => {
-          const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
-          const heroTier = computeTier(lifetime);
-          const heroLevel = loyaltyPoints?.rankLevel ?? heroTier.level;
-          return (
-        <Card
-          className="mb-6 overflow-hidden border-transparent relative"
-          style={{
-            background: `linear-gradient(135deg, ${heroTier.color}14 0%, transparent 55%)`,
-          }}
-        >
-          {/* Tier accent stripe at the top */}
-          <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${heroTier.color}, transparent)` }} />
-          <CardContent className="p-5 sm:p-7">
-            {/* 2026-05-19 rev — declutter the hero. The previous layout
-                stacked four chips of different sizes (tier, role, press
-                card) next to the name, with mismatched primary/outline
-                buttons below. The tier chip was redundant with the
-                LoyaltyCard. Now: avatar + name + email + ONE compact
-                meta row (role + press, both same neutral chip style),
-                then two same-size buttons. On mobile everything centers
-                so the wrap doesn't look chaotic. */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-6 lg:gap-8 items-center">
-              <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 items-center sm:items-start text-center sm:text-right">
-              {/* Avatar with tier ring */}
-              <div className="relative shrink-0">
-                <div
-                  className="rounded-full p-1"
-                  style={{ background: `linear-gradient(135deg, ${heroTier.color}, ${heroTier.color}66)` }}
-                >
-                  <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-xl">
-                    <AvatarImage
-                      src={user.profileImageUrl || ""}
-                      alt={getUserDisplayName()}
-                      className="object-cover"
-                      data-testid="img-profile-avatar"
-                    />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl sm:text-3xl">
-                      {getInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
+      <div className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 space-y-6" dir="rtl">
+        {/* ════════ Zone 1 — Hero ════════ */}
+        <Card className="relative bg-white dark:bg-card shadow-sm border-border/50 overflow-visible">
+          {/* أيقونة الإعدادات — في الزاوية */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`absolute top-3 left-3 h-9 w-9 rounded-full text-muted-foreground hover:text-foreground ${activeTab === "settings" ? "bg-muted text-foreground" : ""}`}
+            onClick={() => setActiveTab(activeTab === "settings" ? "activity" : "settings")}
+            aria-label="الإعدادات"
+            data-testid="button-open-settings"
+          >
+            <Settings className="h-5 w-5" />
+          </Button>
 
-                <div className="absolute -bottom-1 -right-1">
-                  <input
-                    id="avatar-file-input"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={handleAvatarFileChange}
-                    disabled={isUploadingAvatar}
-                    data-testid="input-avatar-file"
+          <CardContent className="p-6 sm:p-8 flex flex-col items-center text-center">
+            {/* الصورة المركزية */}
+            <div className="relative">
+              <div
+                className="rounded-full p-1"
+                style={{ background: `linear-gradient(135deg, ${GOLD}, ${GOLD}55)` }}
+              >
+                <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-4 border-background shadow-lg">
+                  <AvatarImage
+                    src={user.profileImageUrl || ""}
+                    alt={getUserDisplayName()}
+                    className="object-cover"
+                    data-testid="img-profile-avatar"
                   />
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="icon"
-                    className="h-8 w-8 rounded-full shadow-md"
-                    disabled={isUploadingAvatar}
-                    onClick={() => document.getElementById("avatar-file-input")?.click()}
-                    data-testid="button-upload-avatar"
-                    aria-label="تغيير الصورة الشخصية"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                  <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
+                    {getInitials()}
+                  </AvatarFallback>
+                </Avatar>
               </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0 space-y-3">
-                <div className="space-y-1">
-                  <h1
-                    className="text-2xl sm:text-3xl font-bold leading-tight truncate"
-                    data-testid="text-profile-name"
-                  >
-                    {getUserDisplayName()}
-                  </h1>
-                  <p
-                    className="text-sm text-muted-foreground truncate"
-                    data-testid="text-profile-email"
-                  >
-                    {user.email}
-                  </p>
-                </div>
-
-                {/* Compact meta row — role + press credential only. Tier
-                    badge lives on the loyalty card to its left, so we
-                    don't repeat it here. */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
-                  {getRoleBadge(user.role)}
-                  {user.hasPressCard && (
-                    <Badge variant="outline" className="gap-1 font-normal" data-testid="badge-press-card">
-                      <IdCard className="h-3 w-3" />
-                      صحفي معتمد
-                    </Badge>
-                  )}
-                </div>
-
-                {user.bio && !isEditingProfile && (
-                  <p className="text-sm text-foreground/80 max-w-2xl leading-relaxed">
-                    {user.bio}
-                  </p>
-                )}
-
-                {/* Quick Actions — same size, same variant family so
-                    they read as a unit. Full width on mobile, inline on
-                    sm+. */}
-                <div className="flex flex-col sm:flex-row gap-2 pt-1 w-full sm:w-auto">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-2 w-full sm:w-auto"
-                    onClick={() => setIsEditingProfile(!isEditingProfile)}
-                    data-testid="button-edit-profile"
-                  >
-                    <Edit className="h-4 w-4" />
-                    {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
-                  </Button>
-
-                  {hasRole(user, "editor", "admin", "system_admin") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 w-full sm:w-auto"
-                      asChild
-                      data-testid="button-go-to-dashboard"
-                    >
-                      <Link href="/dashboard">
-                        <LayoutDashboard className="h-4 w-4" />
-                        لوحة التحكم
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </div>
-              </div>
-
-              {/* Loyalty Card — the showpiece. Full-width on mobile, fixed-width on desktop. */}
-              <div className="w-full lg:w-[400px] shrink-0">
-                <LoyaltyCard
-                  userName={getUserDisplayName()}
-                  userId={user.id}
-                  lifetimePoints={lifetime}
-                  memberSince={user.createdAt}
-                  rankLevel={heroLevel}
+              <div className="absolute bottom-0 left-0">
+                <input
+                  id="avatar-file-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={handleAvatarFileChange}
+                  disabled={isUploadingAvatar}
+                  data-testid="input-avatar-file"
                 />
+                <Button
+                  type="button"
+                  variant="default"
+                  size="icon"
+                  className="h-8 w-8 rounded-full shadow-md"
+                  disabled={isUploadingAvatar}
+                  onClick={() => document.getElementById("avatar-file-input")?.click()}
+                  data-testid="button-upload-avatar"
+                  aria-label="تغيير الصورة الشخصية"
+                >
+                  {isUploadingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                </Button>
               </div>
             </div>
 
-            {/* Edit Profile Form */}
+            {/* الاسم + الرتبة + تاريخ الانضمام */}
+            <h1 className="mt-4 text-2xl sm:text-3xl font-bold leading-tight" data-testid="text-profile-name">
+              {getUserDisplayName()}
+            </h1>
+
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+              <Badge
+                className="gap-1 border-transparent font-semibold"
+                style={{ backgroundColor: `${GOLD}1f`, color: GOLD }}
+                data-testid="badge-loyalty-tier"
+              >
+                <Trophy className="h-3 w-3" />
+                {currentTier.nameAr}
+              </Badge>
+              {getRoleBadge(user.role)}
+              {user.hasPressCard && (
+                <Badge variant="outline" className="gap-1 font-normal" data-testid="badge-press-card">
+                  <IdCard className="h-3 w-3" />
+                  صحفي معتمد
+                </Badge>
+              )}
+            </div>
+
+            {user.createdAt && (
+              <p className="mt-2 text-sm text-muted-foreground flex items-center gap-1.5" data-testid="text-join-date">
+                <CalendarDays className="h-3.5 w-3.5" />
+                عضو منذ {formatJoinDate(user.createdAt)}
+              </p>
+            )}
+
+            {user.bio && !isEditingProfile && (
+              <p className="mt-3 text-sm text-foreground/80 max-w-xl leading-relaxed">
+                {user.bio}
+              </p>
+            )}
+
+            {/* 3 أرقام فقط */}
+            <div className="mt-6 grid grid-cols-3 gap-0 w-full max-w-md divide-x divide-x-reverse divide-border/60">
+              <div className="px-2" data-testid="text-stat-reads">
+                <p className="text-[28px] sm:text-[32px] font-bold leading-none tabular-nums">
+                  {totalReads.toLocaleString("en-US")}
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">مقال مقروء</p>
+              </div>
+              <div className="px-2" data-testid="text-stat-likes">
+                <p className="text-[28px] sm:text-[32px] font-bold leading-none tabular-nums">
+                  {likedArticles.length.toLocaleString("en-US")}
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">إعجاب</p>
+              </div>
+              <div className="px-2" data-testid="text-stat-followers">
+                <p className="text-[28px] sm:text-[32px] font-bold leading-none tabular-nums">
+                  {(followStats?.followersCount || 0).toLocaleString("en-US")}
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">متابع</p>
+              </div>
+            </div>
+
+            {/* زر رئيسي واحد */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                variant="default"
+                className="gap-2 w-full sm:w-auto"
+                onClick={() => setIsEditingProfile(!isEditingProfile)}
+                data-testid="button-edit-profile"
+              >
+                <Edit className="h-4 w-4" />
+                {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
+              </Button>
+              {hasRole(user, "editor", "admin", "system_admin") && (
+                <Button
+                  variant="outline"
+                  className="gap-2 w-full sm:w-auto"
+                  asChild
+                  data-testid="button-go-to-dashboard"
+                >
+                  <Link href="/dashboard">
+                    <LayoutDashboard className="h-4 w-4" />
+                    لوحة التحكم
+                  </Link>
+                </Button>
+              )}
+            </div>
+
+            {/* نموذج تعديل الملف */}
             <AnimatePresence>
               {isEditingProfile && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="mt-6 pt-6 border-t"
+                  className="mt-6 pt-6 border-t w-full max-w-xl text-right"
                 >
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      {/* Names are write-once for comment integrity — once a
-                         non-empty value exists the input is read-only and the
-                         backend silently drops further updates. See PR for
-                         the security rationale. */}
+                      {/* الأسماء تُكتب مرة واحدة لمصداقية التعليقات — راجع PR الأمان */}
                       {(() => {
                         const firstNameLocked = !!user?.firstName?.trim();
                         const lastNameLocked = !!user?.lastName?.trim();
@@ -933,8 +857,8 @@ export default function Profile() {
                           <FormItem>
                             <FormLabel>نبذة عنك</FormLabel>
                             <FormControl>
-                              <Textarea 
-                                {...field} 
+                              <Textarea
+                                {...field}
                                 rows={4}
                                 placeholder="اكتب نبذة مختصرة عنك..."
                                 data-testid="input-bio"
@@ -979,313 +903,164 @@ export default function Profile() {
             </AnimatePresence>
           </CardContent>
         </Card>
-          );
-        })()}
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 md:gap-4 mb-6">
-          <MobileOptimizedKpiCard
-            label="متابع"
-            value={(followStats?.followersCount || 0).toLocaleString('en-US')}
-            icon={Users}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            testId="text-stat-followers"
-          />
+        {/* ════════ Zone 2 — شريط الولاء (المصدر الوحيد للنقاط) ════════ */}
+        <Card
+          className="bg-white dark:bg-card shadow-sm border-border/50 overflow-hidden"
+          data-testid="loyalty-strip"
+        >
+          <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${GOLD}, ${GOLD}33)` }} />
+          <CardContent className="p-5">
+            <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-8">
+              {/* النقاط */}
+              <div className="flex items-center gap-3 shrink-0">
+                <div
+                  className="h-11 w-11 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: `${GOLD}1f`, color: GOLD }}
+                >
+                  <Coins className="h-5 w-5" />
+                </div>
+                <div className="text-right">
+                  <p className="text-[28px] font-bold leading-none tabular-nums" style={{ color: GOLD }} data-testid="text-loyalty-points">
+                    {(loyaltyPoints?.totalPoints || 0).toLocaleString("en-US")}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">نقطة ولاء</p>
+                </div>
+              </div>
 
-          <MobileOptimizedKpiCard
-            label="إعجاب"
-            value={likedArticles.length.toLocaleString('en-US')}
-            icon={Heart}
-            iconColor="text-red-500"
-            iconBgColor="bg-red-500/10"
-            testId="text-stat-likes"
-          />
+              <Separator orientation="vertical" className="hidden sm:block h-10" />
 
-          <MobileOptimizedKpiCard
-            label="محفوظ"
-            value={bookmarkedArticles.length.toLocaleString('en-US')}
-            icon={Bookmark}
-            iconColor="text-blue-500"
-            iconBgColor="bg-blue-500/10"
-            testId="text-stat-bookmarks"
-          />
+              {/* التقدم للرتبة التالية */}
+              <div className="flex-1 w-full min-w-0">
+                {nextTierInfo ? (
+                  <>
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="font-semibold" style={{ color: GOLD }}>{currentTier.nameAr}</span>
+                      <span className="text-muted-foreground">
+                        تبقى {pointsToNext.toLocaleString("en-US")} نقطة → {nextTierInfo.nameAr}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${progressPercentage}%`, background: `linear-gradient(90deg, ${GOLD}, ${GOLD}aa)` }}
+                        data-testid="loyalty-progress-bar"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm font-bold flex items-center gap-2" style={{ color: GOLD }}>
+                    <Trophy className="h-4 w-4" />
+                    وصلت إلى الرتبة الأعلى: {currentTier.nameAr} 🎉
+                  </p>
+                )}
+              </div>
 
-          <MobileOptimizedKpiCard
-            label="قراءة"
-            value={readingHistory.length.toLocaleString('en-US')}
-            icon={Eye}
-            iconColor="text-green-500"
-            iconBgColor="bg-green-500/10"
-            testId="text-stat-reads"
-          />
+              {/* رابط المسار الكامل */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0 text-xs"
+                style={{ color: GOLD }}
+                onClick={() => setActiveTab("achievements")}
+                data-testid="button-view-loyalty-path"
+              >
+                مسار الرتب ←
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          <MobileOptimizedKpiCard
-            label="نقطة"
-            value={(loyaltyPoints?.totalPoints || 0).toLocaleString('en-US')}
-            icon={Coins}
-            iconColor="text-amber-500"
-            iconBgColor="bg-amber-500/10"
-            testId="text-stat-points"
-          />
-        </div>
+        {/* ════════ Zone 3 + 4 — التبويبات والمحتوى ════════ */}
+        <Card className="bg-white dark:bg-card shadow-sm border-border/50">
+          <CardContent className="p-4 sm:p-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList dir="rtl" className="rounded-lg bg-muted p-1 grid grid-cols-4 w-full mb-6">
+                <TabsTrigger value="activity" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
+                  <TrendingUp className="h-4 w-4 hidden sm:block" />
+                  <span>نشاطي</span>
+                </TabsTrigger>
+                <TabsTrigger value="bookmarks" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-bookmarks">
+                  <Bookmark className="h-4 w-4 hidden sm:block" />
+                  <span>محفوظاتي</span>
+                </TabsTrigger>
+                <TabsTrigger value="community" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-community">
+                  <Users className="h-4 w-4 hidden sm:block" />
+                  <span>مجتمعي</span>
+                </TabsTrigger>
+                <TabsTrigger value="achievements" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-achievements">
+                  <Trophy className="h-4 w-4 hidden sm:block" />
+                  <span>إنجازاتي</span>
+                </TabsTrigger>
+              </TabsList>
 
-        {/* Main Content with Tabs */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList dir="rtl" className="rounded-lg bg-muted p-1 flex flex-wrap w-full mb-6">
-                  <TabsTrigger value="journey" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-journey">
-                    <Trophy className="h-4 w-4 hidden sm:block text-amber-500" />
-                    <span>رحلتي الإحصائية</span>
-                  </TabsTrigger>
+              {/* ───── نشاطي ───── */}
+              <TabsContent value="activity" className="space-y-6" dir="rtl">
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-muted-foreground" />
+                    سجل القراءة
+                  </h3>
+                  {isLoadingHistory ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-64" />
+                      ))}
+                    </div>
+                  ) : readingHistory.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {readingHistory.slice(0, 6).map((article) => (
+                        <ArticleCard key={article.id} article={article} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-muted/30 rounded-lg">
+                      <Clock className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-muted-foreground">لم تقرأ أي مقالات بعد</p>
+                    </div>
+                  )}
+                </div>
 
-                  <TabsTrigger value="activity" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-activity">
-                    <TrendingUp className="h-4 w-4 hidden sm:block" />
-                    <span>نشاطي</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="bookmarks" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-bookmarks">
-                    <Bookmark className="h-4 w-4 hidden sm:block" />
-                    <span>المحفوظات</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="followers" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-followers">
-                    <Users className="h-4 w-4 hidden sm:block" />
-                    <span>المتابعون</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="settings" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-settings">
-                    <Settings className="h-4 w-4 hidden sm:block" />
-                    <span>الإعدادات</span>
-                  </TabsTrigger>
-                  
-                  <TabsTrigger value="wallet" className="gap-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md" data-testid="tab-wallet">
-                    <Wallet className="h-4 w-4 hidden sm:block" />
-                    <span>المحفظة</span>
-                  </TabsTrigger>
-                </TabsList>
+                <Separator />
 
-                {/* Journey Dashboard Tab */}
-                <TabsContent value="journey" className="space-y-8" dir="rtl">
-                  {/* Journey Header Card */}
-                  <Card className="border-transparent bg-gradient-to-br from-primary/10 via-background to-accent/5 overflow-hidden relative">
-                    <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div className="space-y-1 text-right">
-                          <h3 className="text-xl font-bold flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
-                            أهلاً بك في رحلتك المعرفية في سبق!
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            هنا يمكنك استكشاف إحصائيات قراءتك، ومتابعة رتبة ولائك، واكتشاف الأوسمة المقترحة لك.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 bg-background/50 backdrop-blur border border-border/50 rounded-full px-4 py-2 text-xs font-semibold">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          <span>آخر تحديث: {new Date(activitySummary?.updatedAt || Date.now()).toLocaleDateString("ar-SA", { hour: "numeric", minute: "numeric" })}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Heart className="h-5 w-5 text-muted-foreground" />
+                    المقالات المفضلة
+                  </h3>
+                  {isLoadingLiked ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-64" />
+                      ))}
+                    </div>
+                  ) : likedArticles.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {likedArticles.slice(0, 6).map((article) => (
+                        <ArticleCard key={article.id} article={article} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-muted/30 rounded-lg">
+                      <Heart className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-muted-foreground">لم تعجبك أي مقالات بعد</p>
+                    </div>
+                  )}
+                </div>
 
-                  {/* Interactive Stats Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
-                          <Eye className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">المقالات المقروءة</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalReads.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {activitySummary?.articlesReadLast7Days ?? 0} هذا الأسبوع
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
-                          <Coins className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">نقاط الولاء</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{userPoints.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            من أصل {lifetime.toLocaleString("en-US")} نقطة تاريخية
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                          <Clock className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">وقت القراءة المقدر</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{estimatedReadTime.toLocaleString("en-US")} د</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            بمتوسط 3 دقائق للمقال
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
-                          <Heart className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">التفاعل والمشاركة</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalEngagement.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {activitySummary?.totalComments ?? 0} تعليق · {activitySummary?.totalReactions ?? 0} إعجاب
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Loyalty Road / Tier Pathway */}
-                  <Card className="border border-border/50">
-                    <CardHeader className="pb-3 text-right">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        مسار تقدم رتبة الولاء
-                      </CardTitle>
-                      <CardDescription>
-                        كلما تفاعلت وقرأت أكثر في سبق، كلما ارتفعت رتبتك لتحصل على مزايا خاصة وأوسمة حصرية.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-2">
-                      <div className="space-y-6">
-                        {/* Responsive Timeline Container */}
-                        <div className="relative py-4" dir="rtl">
-                          {/* Desktop Timeline (Horizontal) */}
-                          <div className="hidden md:flex relative items-center justify-between max-w-3xl mx-auto py-8 px-4">
-                            {/* Background Connector Bar */}
-                            <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-muted rounded-full z-0" />
-                            {/* Active connector bar */}
-                            <div 
-                              className="absolute right-4 top-1/2 -translate-y-1/2 h-1 bg-gradient-to-l from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
-                              style={{ 
-                                width: `calc(${(currentTier.level - 1) * 25 + (nextTierInfo ? (progressPercentage / 4) : 25)}% - 32px)` 
-                              }} 
-                            />
-
-                            {[1, 2, 3, 4, 5].map((lvl) => {
-                              const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
-                              const isCurrent = currentTier.level === lvl;
-                              const isUnlocked = currentTier.level >= lvl;
-
-                              return (
-                                <div key={lvl} className="flex flex-col items-center z-10 relative">
-                                  <div 
-                                    className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md ${
-                                      isCurrent 
-                                        ? "bg-background border-amber-500 scale-125 ring-4 ring-amber-500/20 text-amber-500 font-bold" 
-                                        : isUnlocked 
-                                          ? "bg-amber-500 border-amber-500 text-white" 
-                                          : "bg-background border-muted text-muted-foreground"
-                                    }`}
-                                    title={tierInfo.nameAr}
-                                  >
-                                    {lvl}
-                                  </div>
-                                  <span className={`text-[11px] font-bold mt-2 text-center absolute -bottom-6 whitespace-nowrap ${
-                                    isCurrent ? "text-amber-500 scale-105" : isUnlocked ? "text-foreground" : "text-muted-foreground"
-                                  }`}>
-                                    {tierInfo.nameAr}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-
-                          {/* Mobile Timeline (Vertical) */}
-                          <div className="flex md:hidden flex-col gap-6 relative pr-8 pl-4 py-4 max-w-xs mx-auto">
-                            {/* Background Connector Bar (Vertical) */}
-                            <div className="absolute right-[17px] top-6 bottom-6 w-0.5 bg-muted rounded-full z-0" />
-                            {/* Active connector bar (Vertical) */}
-                            <div 
-                              className="absolute right-[17px] top-6 w-0.5 bg-gradient-to-b from-amber-500 to-primary rounded-full z-0 transition-all duration-500" 
-                              style={{ 
-                                height: `calc(${((currentTier.level - 1) / 4) * 100}% - 12px)` 
-                              }} 
-                            />
-
-                            {[1, 2, 3, 4, 5].map((lvl) => {
-                              const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
-                              const isCurrent = currentTier.level === lvl;
-                              const isUnlocked = currentTier.level >= lvl;
-
-                              return (
-                                <div key={lvl} className="flex items-center gap-4 z-10 relative">
-                                  {/* Step Circle */}
-                                  <div 
-                                    className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm ${
-                                      isCurrent 
-                                        ? "bg-background border-amber-500 scale-110 ring-4 ring-amber-500/20 text-amber-500 font-bold" 
-                                        : isUnlocked 
-                                          ? "bg-amber-500 border-amber-500 text-white font-bold" 
-                                          : "bg-background border-muted text-muted-foreground"
-                                    }`}
-                                  >
-                                    {lvl}
-                                  </div>
-                                  {/* Step details */}
-                                  <div className="flex flex-col text-right">
-                                    <span className={`text-xs font-bold ${
-                                      isCurrent ? "text-amber-500" : isUnlocked ? "text-foreground" : "text-muted-foreground"
-                                    }`}>
-                                      {tierInfo.nameAr}
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {lvl === 1 ? "من 0 نقطة" : lvl === 2 ? "من 100 نقطة" : lvl === 3 ? "من 500 نقطة" : lvl === 4 ? "من 2000 نقطة" : "من 10000 نقطة"}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Progress Explanation subtext */}
-                        <div className="mt-8 text-center bg-muted/30 border border-border/30 rounded-lg p-3 max-w-md mx-auto text-xs">
-                          {nextTierInfo ? (
-                            <p className="leading-relaxed">
-                              أنت الآن برتبة <strong className="text-amber-500">{currentTier.nameAr}</strong>. 
-                              تحتاج إلى <strong className="text-primary">{pointsToNext.toLocaleString("en-US")}</strong> نقطة إضافية للترقية إلى رتبة <strong>{nextTierInfo.nameAr}</strong>.
-                            </p>
-                          ) : (
-                            <p className="text-amber-500 font-bold leading-relaxed">
-                              تهانينا! لقد وصلت إلى الرتبة الأعلى: {currentTier.nameAr} (سفير سبق) 🎉
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Category Breakdown section */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Recharts PieChart Container */}
-                    <Card className="md:col-span-1 border border-border/50">
-                      <CardHeader className="text-right">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <LayoutDashboard className="h-4 w-4 text-primary" />
-                          توزيع اهتماماتك
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="h-[220px] flex items-center justify-center p-2 relative">
-                        {topCategoriesData.length > 0 ? (
+                {/* توزيع الاهتمامات — بيانات قراءة، ألوانها بياناتية من ألوان الأقسام */}
+                {topCategoriesData.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <Card className="md:col-span-1 border border-border/50 shadow-none">
+                        <CardHeader className="text-right">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                            توزيع اهتماماتك
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="h-[220px] flex items-center justify-center p-2 relative">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
@@ -1305,38 +1080,29 @@ export default function Profile() {
                               <ChartTooltip formatter={(val: any) => [`${val} مقال`, 'قراءات']} />
                             </PieChart>
                           </ResponsiveContainer>
-                        ) : (
-                          <div className="text-center text-xs text-muted-foreground py-8">
-                            لا توجد قراءات كافية لتحليل الاهتمامات
-                          </div>
-                        )}
-                        {topCategoriesData.length > 0 && (
                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-6">
                             <span className="text-xl font-bold text-foreground">{totalReads}</span>
                             <span className="text-[10px] text-muted-foreground">مقالاً مقروءاً</span>
                           </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
 
-                    {/* Detailed list with values */}
-                    <Card className="md:col-span-2 border border-border/50">
-                      <CardHeader className="text-right">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-green-500" />
-                          تفاصيل القراءة حسب الأقسام
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {topCategoriesData.length > 0 ? (
+                      <Card className="md:col-span-2 border border-border/50 shadow-none">
+                        <CardHeader className="text-right">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                            تفاصيل القراءة حسب الأقسام
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
                           <div className="space-y-4">
                             {topCategoriesData.map((item: any, idx: number) => (
                               <div key={idx} className="space-y-1.5 text-right">
                                 <div className="flex justify-between items-center text-xs">
                                   <span className="flex items-center gap-2 font-medium">
-                                    <span 
-                                      className="h-2.5 w-2.5 rounded-full" 
-                                      style={{ backgroundColor: item.color }} 
+                                    <span
+                                      className="h-2.5 w-2.5 rounded-full"
+                                      style={{ backgroundColor: item.color }}
                                     />
                                     {item.name}
                                   </span>
@@ -1345,302 +1111,75 @@ export default function Profile() {
                                   </span>
                                 </div>
                                 <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full rounded-full transition-all duration-500" 
-                                    style={{ 
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{
                                       backgroundColor: item.color,
-                                      width: `${item.weight * 100}%` 
-                                    }} 
+                                      width: `${item.weight * 100}%`
+                                    }}
                                   />
                                 </div>
                               </div>
                             ))}
                           </div>
-                        ) : (
-                          <div className="text-center py-12 text-muted-foreground text-sm">
-                            <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                            ابدأ بقراءة بعض المقالات لرؤية تحليل تفصيلي لاهتماماتك.
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Achievements Grid */}
-                  <Card className="border border-border/50">
-                    <CardHeader className="text-right">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        الأوسمة والإنجازات المعرفية
-                      </CardTitle>
-                      <CardDescription>
-                        أكمل المهام المختلفة لفتح أوسمة الإنجاز وتثبيتها في ملفك الشخصي.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {[
-                          {
-                            id: "welcome",
-                            title: "شارة البداية",
-                            description: "عضو جديد في عائلة سبق",
-                            icon: Trophy,
-                            unlocked: true,
-                            gradient: "from-yellow-400 to-amber-600",
-                            shadowColor: "rgba(245, 158, 11, 0.3)",
-                            hoverBorder: "hover:border-amber-500/40",
-                          },
-                          {
-                            id: "reader",
-                            title: "القارئ النهم",
-                            description: "قرأت أكثر من 20 مقالاً",
-                            icon: Eye,
-                            unlocked: totalReads >= 20,
-                            gradient: "from-emerald-400 to-teal-600",
-                            shadowColor: "rgba(16, 185, 129, 0.3)",
-                            hoverBorder: "hover:border-emerald-500/40",
-                          },
-                          {
-                            id: "commenter",
-                            title: "معلق متميز",
-                            description: "شاركت بـ 5 تعليقات أو أكثر",
-                            icon: FileText,
-                            unlocked: (activitySummary?.totalComments ?? 0) >= 5,
-                            gradient: "from-violet-400 to-indigo-600",
-                            shadowColor: "rgba(139, 92, 246, 0.3)",
-                            hoverBorder: "hover:border-indigo-500/40",
-                          },
-                          {
-                            id: "supporter",
-                            title: "المساند المتفاعل",
-                            description: "أضفت 10 تفاعلات أو إعجابات",
-                            icon: Heart,
-                            unlocked: (activitySummary?.totalReactions ?? 0) >= 10,
-                            gradient: "from-rose-400 to-pink-600",
-                            shadowColor: "rgba(244, 63, 94, 0.3)",
-                            hoverBorder: "hover:border-rose-500/40",
-                          },
-                          {
-                            id: "passionate",
-                            title: "شغوف بالمعرفة",
-                            description: "جمعت 500 نقطة ولاء",
-                            icon: Star,
-                            unlocked: lifetime >= 500,
-                            gradient: "from-cyan-400 to-blue-600",
-                            shadowColor: "rgba(6, 182, 212, 0.3)",
-                            hoverBorder: "hover:border-cyan-500/40",
-                          },
-                          {
-                            id: "ambassador",
-                            title: "سفير سبق",
-                            description: "الوصول إلى الرتبة الأعلى في سبق",
-                            icon: Shield,
-                            unlocked: currentTier.level === 5,
-                            gradient: "from-red-500 via-purple-600 to-indigo-600",
-                            shadowColor: "rgba(239, 68, 68, 0.3)",
-                            hoverBorder: "hover:border-red-500/40",
-                          },
-                        ].map((badge) => {
-                          const IconComponent = badge.icon;
-                          return (
-                            <motion.div
-                              key={badge.id}
-                              whileHover={badge.unlocked ? { scale: 1.05, y: -4 } : {}}
-                              transition={{ type: "spring", stiffness: 300, damping: 15 }}
-                              className="relative h-full"
-                            >
-                              <Card 
-                                className={`h-full p-4 flex flex-col items-center justify-between text-center gap-3 transition-all duration-300 relative overflow-hidden border border-border/60 ${
-                                  badge.unlocked 
-                                    ? `bg-gradient-to-b from-card via-card to-background shadow-sm hover:shadow-md ${badge.hoverBorder}` 
-                                    : "bg-muted/5 opacity-50 border-dashed"
-                                }`}
-                              >
-                                {/* Glow backdrop for unlocked badge */}
-                                {badge.unlocked && (
-                                  <div 
-                                    className="absolute -top-12 -left-12 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none"
-                                    style={{ background: `radial-gradient(circle, ${badge.shadowColor} 0%, transparent 70%)` }}
-                                  />
-                                )}
-
-                                {/* Icon container with gradient */}
-                                <div 
-                                  className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-transform duration-500 ${
-                                    badge.unlocked 
-                                      ? `bg-gradient-to-br ${badge.gradient} text-white shadow-md shadow-black/10` 
-                                      : "bg-muted/20 text-muted-foreground border border-muted/30"
-                                  }`}
-                                  style={{
-                                    boxShadow: badge.unlocked ? `0 8px 16px -4px ${badge.shadowColor}` : undefined
-                                  }}
-                                >
-                                  <IconComponent className="h-5 w-5" />
-                                </div>
-
-                                <div className="space-y-1 z-10 flex-1 flex flex-col justify-center">
-                                  <h5 className={`text-[11px] font-bold leading-tight ${badge.unlocked ? "text-foreground" : "text-muted-foreground"}`}>
-                                    {badge.title}
-                                  </h5>
-                                  <p className="text-[9px] text-muted-foreground leading-normal max-w-[100px] mx-auto">
-                                    {badge.description}
-                                  </p>
-                                </div>
-
-                                {/* Status Tag/Check */}
-                                {badge.unlocked ? (
-                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0">
-                                    مكتمل
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="bg-muted/20 text-muted-foreground/60 border-transparent text-[9px] px-1.5 py-0 gap-1">
-                                    <Lock className="h-2 w-2" />
-                                    مغلق
-                                  </Badge>
-                                )}
-
-                                {/* Absolute Lock/Unlock Indicator */}
-                                {badge.unlocked ? (
-                                  <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
-                                    <Check className="h-2.5 w-2.5" />
-                                  </div>
-                                ) : (
-                                  <div className="absolute top-1.5 right-1.5 text-muted-foreground/60">
-                                    <Lock className="h-3 w-3" />
-                                  </div>
-                                )}
-                              </Card>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Recommendations */}
-                  <div>
-                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-right">
-                      <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
-                      ترشيحات معرفية مخصصة لرحلتك
-                    </h3>
-                    {recommendations && recommendations.length > 0 ? (
-                      <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent snap-x" dir="rtl">
-                        {recommendations.slice(0, 6).map((article) => (
-                          <div key={article.id} className="min-w-[280px] w-[280px] sm:min-w-[320px] sm:w-[320px] snap-start shrink-0">
-                            <ArticleCard article={article} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-10 bg-muted/20 rounded-lg text-sm text-muted-foreground">
-                        نعمل حالياً على تحليل قراءاتك لتجهيز الترشيحات الأنسب لك.
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
-                {/* Activity Tab */}
-                <TabsContent value="activity" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Heart className="h-5 w-5 text-red-500" />
-                      المقالات المفضلة
-                    </h3>
-                    {isLoadingLiked ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <Skeleton key={i} className="h-64" />
-                        ))}
-                      </div>
-                    ) : likedArticles.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {likedArticles.map((article) => (
-                          <ArticleCard key={article.id} article={article} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-muted/30 rounded-lg">
-                        <Heart className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">لم تعجبك أي مقالات بعد</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Clock className="h-5 w-5 text-blue-500" />
-                      سجل القراءة
-                    </h3>
-                    {isLoadingHistory ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <Skeleton key={i} className="h-64" />
-                        ))}
-                      </div>
-                    ) : readingHistory.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {readingHistory.slice(0, 6).map((article) => (
-                          <ArticleCard key={article.id} article={article} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 bg-muted/30 rounded-lg">
-                        <Clock className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                        <p className="text-muted-foreground">لم تقرأ أي مقالات بعد</p>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
-                {/* Bookmarks Tab */}
-                <TabsContent value="bookmarks" dir="rtl">
-                  {isLoadingBookmarks ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} className="h-64" />
-                      ))}
+                        </CardContent>
+                      </Card>
                     </div>
-                  ) : bookmarkedArticles.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {bookmarkedArticles.map((article) => (
-                        <ArticleCard key={article.id} article={article} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Bookmark className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-muted-foreground">لم تحفظ أي مقالات بعد</p>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        احفظ المقالات المهمة لقراءتها لاحقًا
-                      </p>
-                    </div>
-                  )}
-                </TabsContent>
+                  </>
+                )}
+              </TabsContent>
 
-                {/* Followers Tab */}
-                <TabsContent value="followers" className="space-y-4" dir="rtl">
-                  <div className="flex gap-4 border-b">
-                    <Button
-                      variant="ghost"
-                      className="pb-3 relative"
-                      onClick={() => setActiveTab('followers')}
-                      data-testid="button-show-followers"
-                    >
-                      المتابعون ({followStats?.followersCount || 0})
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="pb-3"
-                      onClick={() => setActiveTab('following')}
-                      data-testid="button-show-following"
-                    >
-                      المتابَعون ({followStats?.followingCount || 0})
-                    </Button>
+              {/* ───── محفوظاتي ───── */}
+              <TabsContent value="bookmarks" dir="rtl">
+                {isLoadingBookmarks ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-64" />
+                    ))}
                   </div>
+                ) : bookmarkedArticles.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {bookmarkedArticles.map((article) => (
+                      <ArticleCard key={article.id} article={article} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-muted/30 rounded-lg">
+                    <Bookmark className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground">لم تحفظ أي مقالات بعد</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      احفظ المقالات المهمة لقراءتها لاحقًا
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
 
-                  {isLoadingFollowers ? (
+              {/* ───── مجتمعي ───── */}
+              <TabsContent value="community" className="space-y-5" dir="rtl">
+                {/* مفتاح التبديل بين المتابعين والمتابَعين */}
+                <div className="inline-flex rounded-lg bg-muted p-1 gap-1">
+                  <Button
+                    variant={communityView === "followers" ? "secondary" : "ghost"}
+                    size="sm"
+                    className={communityView === "followers" ? "bg-background shadow-sm" : ""}
+                    onClick={() => setCommunityView("followers")}
+                    data-testid="button-show-followers"
+                  >
+                    المتابعون ({(followStats?.followersCount || 0).toLocaleString("en-US")})
+                  </Button>
+                  <Button
+                    variant={communityView === "following" ? "secondary" : "ghost"}
+                    size="sm"
+                    className={communityView === "following" ? "bg-background shadow-sm" : ""}
+                    onClick={() => setCommunityView("following")}
+                    data-testid="button-show-following"
+                  >
+                    المتابَعون ({(followStats?.followingCount || 0).toLocaleString("en-US")})
+                  </Button>
+                </div>
+
+                {communityView === "followers" ? (
+                  isLoadingFollowers ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map((i) => (
                         <Skeleton key={i} className="h-20" />
@@ -1649,7 +1188,7 @@ export default function Profile() {
                   ) : followers.length > 0 ? (
                     <div className="space-y-3">
                       {followers.map((follower) => (
-                        <Card key={follower.id} className="hover-elevate">
+                        <Card key={follower.id} className="hover-elevate shadow-none border-border/50">
                           <CardContent className="p-4">
                             <div className="flex items-center gap-3">
                               <Avatar>
@@ -1658,8 +1197,8 @@ export default function Profile() {
                                   {getFollowerInitials(follower)}
                                 </AvatarFallback>
                               </Avatar>
-                              <div className="flex-1">
-                                <p className="font-medium">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">
                                   {getFollowerDisplayName(follower)}
                                 </p>
                                 {follower.bio && (
@@ -1675,7 +1214,7 @@ export default function Profile() {
                                 data-testid={`button-view-profile-${follower.id}`}
                               >
                                 <Link href={`/user/${follower.id}`}>
-                                  عرض الملف الشخصي
+                                  عرض الملف
                                 </Link>
                               </Button>
                             </div>
@@ -1688,160 +1227,463 @@ export default function Profile() {
                       <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-muted-foreground">لا يوجد متابعون بعد</p>
                     </div>
-                  )}
-                </TabsContent>
-
-                {/* Following Tab */}
-                <TabsContent value="following" className="space-y-4" dir="rtl">
-                  <div className="flex gap-4 border-b">
-                    <Button
-                      variant="ghost"
-                      className="pb-3"
-                      onClick={() => setActiveTab('followers')}
-                      data-testid="button-show-followers-2"
-                    >
-                      المتابعون ({followStats?.followersCount || 0})
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="pb-3 relative"
-                      onClick={() => setActiveTab('following')}
-                      data-testid="button-show-following-2"
-                    >
-                      المتابَعون ({followStats?.followingCount || 0})
-                    </Button>
+                  )
+                ) : isLoadingFollowing ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20" />
+                    ))}
                   </div>
+                ) : following.length > 0 ? (
+                  <div className="space-y-3">
+                    {following.map((followed) => (
+                      <Card key={followed.id} className="hover-elevate shadow-none border-border/50">
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={followed.profileImageUrl || ""} />
+                              <AvatarFallback>
+                                {getFollowerInitials(followed)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">
+                                {getFollowerDisplayName(followed)}
+                              </p>
+                              {followed.bio && (
+                                <p className="text-sm text-muted-foreground line-clamp-1">
+                                  {followed.bio}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                data-testid={`button-view-profile-${followed.id}`}
+                              >
+                                <Link href={`/user/${followed.id}`}>
+                                  عرض
+                                </Link>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => unfollowUserMutation.mutate(followed.id)}
+                                disabled={unfollowUserMutation.isPending}
+                                data-testid={`button-unfollow-user-${followed.id}`}
+                              >
+                                <UserMinus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-muted/30 rounded-lg">
+                    <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground">لا تتابع أحدًا بعد</p>
+                  </div>
+                )}
 
-                  {isLoadingFollowing ? (
-                    <div className="space-y-3">
+                {/* كلماتي المتابعة */}
+                <Separator />
+                <div>
+                  <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                    كلماتي المتابعة
+                  </h3>
+                  {isLoadingKeywords ? (
+                    <div className="space-y-2">
                       {[1, 2, 3].map((i) => (
-                        <Skeleton key={i} className="h-20" />
+                        <Skeleton key={i} className="h-8" />
                       ))}
                     </div>
-                  ) : following.length > 0 ? (
-                    <div className="space-y-3">
-                      {following.map((followed) => (
-                        <Card key={followed.id} className="hover-elevate">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage src={followed.profileImageUrl || ""} />
-                                <AvatarFallback>
-                                  {getFollowerInitials(followed)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1">
-                                <p className="font-medium">
-                                  {getFollowerDisplayName(followed)}
-                                </p>
-                                {followed.bio && (
-                                  <p className="text-sm text-muted-foreground line-clamp-1">
-                                    {followed.bio}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                  data-testid={`button-view-profile-${followed.id}`}
-                                >
-                                  <Link href={`/user/${followed.id}`}>
-                                    عرض
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => unfollowUserMutation.mutate(followed.id)}
-                                  disabled={unfollowUserMutation.isPending}
-                                  data-testid={`button-unfollow-user-${followed.id}`}
-                                >
-                                  <UserMinus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                  ) : followedKeywords.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {followedKeywords.map((keyword) => (
+                        <span
+                          key={keyword.tagId}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 pr-3 pl-1.5 py-1 text-sm"
+                        >
+                          <Link href={`/keyword/${keyword.tagName}`}>
+                            <span className="cursor-pointer font-medium hover:underline" data-testid={`link-keyword-${keyword.tagId}`}>
+                              #{keyword.tagName}
+                            </span>
+                          </Link>
+                          <span className="text-xs text-muted-foreground">{keyword.articleCount}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 rounded-full"
+                            onClick={() => unfollowKeywordMutation.mutate(keyword.tagId)}
+                            disabled={unfollowKeywordMutation.isPending}
+                            data-testid={`button-unfollow-keyword-${keyword.tagId}`}
+                            aria-label={`إلغاء متابعة ${keyword.tagName}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </span>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
-                      <p className="text-muted-foreground">لا تتابع أحدًا بعد</p>
-                    </div>
+                    <p className="text-sm text-muted-foreground">لم تتابع أي كلمات بعد</p>
                   )}
-                </TabsContent>
+                </div>
+              </TabsContent>
 
-                {/* Settings Tab */}
-                <TabsContent value="settings" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Bell className="h-5 w-5" />
-                      إعدادات الإشعارات
-                    </h3>
-                    <Card>
+              {/* ───── إنجازاتي — مسار الرتب والشارات (هنا فقط) ───── */}
+              <TabsContent value="achievements" className="space-y-6" dir="rtl">
+                <Card className="border border-border/50 shadow-none">
+                  <CardHeader className="pb-3 text-right">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Trophy className="h-5 w-5" style={{ color: GOLD }} />
+                      مسار تقدم رتبة الولاء
+                    </CardTitle>
+                    <CardDescription>
+                      كلما تفاعلت وقرأت أكثر في سبق، كلما ارتفعت رتبتك لتحصل على مزايا خاصة وأوسمة حصرية.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-2">
+                    <div className="space-y-6">
+                      <div className="relative py-4" dir="rtl">
+                        {/* المسار الأفقي (شاشات كبيرة) */}
+                        <div className="hidden md:flex relative items-center justify-between max-w-3xl mx-auto py-8 px-4">
+                          <div className="absolute left-4 right-4 top-1/2 -translate-y-1/2 h-1 bg-muted rounded-full z-0" />
+                          <div
+                            className="absolute right-4 top-1/2 -translate-y-1/2 h-1 rounded-full z-0 transition-all duration-500"
+                            style={{
+                              background: `linear-gradient(270deg, ${GOLD}, ${GOLD}66)`,
+                              width: `calc(${(currentTier.level - 1) * 25 + (nextTierInfo ? (progressPercentage / 4) : 25)}% - 32px)`
+                            }}
+                          />
+
+                          {[1, 2, 3, 4, 5].map((lvl) => {
+                            const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
+                            const isCurrent = currentTier.level === lvl;
+                            const isUnlocked = currentTier.level >= lvl;
+
+                            return (
+                              <div key={lvl} className="flex flex-col items-center z-10 relative">
+                                <div
+                                  className={`h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-md ${
+                                    isCurrent
+                                      ? "bg-background scale-125 font-bold"
+                                      : isUnlocked
+                                        ? "text-white"
+                                        : "bg-background border-muted text-muted-foreground"
+                                  }`}
+                                  style={
+                                    isCurrent
+                                      ? { borderColor: GOLD, color: GOLD, boxShadow: `0 0 0 4px ${GOLD}33` }
+                                      : isUnlocked
+                                        ? { backgroundColor: GOLD, borderColor: GOLD }
+                                        : undefined
+                                  }
+                                  title={tierInfo.nameAr}
+                                >
+                                  {lvl}
+                                </div>
+                                <span
+                                  className={`text-[11px] font-bold mt-2 text-center absolute -bottom-6 whitespace-nowrap ${
+                                    isCurrent ? "scale-105" : isUnlocked ? "text-foreground" : "text-muted-foreground"
+                                  }`}
+                                  style={isCurrent ? { color: GOLD } : undefined}
+                                >
+                                  {tierInfo.nameAr}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* المسار العمودي (جوال) */}
+                        <div className="flex md:hidden flex-col gap-6 relative pr-8 pl-4 py-4 max-w-xs mx-auto">
+                          <div className="absolute right-[17px] top-6 bottom-6 w-0.5 bg-muted rounded-full z-0" />
+                          <div
+                            className="absolute right-[17px] top-6 w-0.5 rounded-full z-0 transition-all duration-500"
+                            style={{
+                              background: `linear-gradient(180deg, ${GOLD}, ${GOLD}66)`,
+                              height: `calc(${((currentTier.level - 1) / 4) * 100}% - 12px)`
+                            }}
+                          />
+
+                          {[1, 2, 3, 4, 5].map((lvl) => {
+                            const tierInfo = computeTier(lvl === 1 ? 0 : lvl === 2 ? 100 : lvl === 3 ? 500 : lvl === 4 ? 2000 : 10000);
+                            const isCurrent = currentTier.level === lvl;
+                            const isUnlocked = currentTier.level >= lvl;
+
+                            return (
+                              <div key={lvl} className="flex items-center gap-4 z-10 relative">
+                                <div
+                                  className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm font-bold ${
+                                    isCurrent
+                                      ? "bg-background scale-110"
+                                      : isUnlocked
+                                        ? "text-white"
+                                        : "bg-background border-muted text-muted-foreground"
+                                  }`}
+                                  style={
+                                    isCurrent
+                                      ? { borderColor: GOLD, color: GOLD, boxShadow: `0 0 0 4px ${GOLD}33` }
+                                      : isUnlocked
+                                        ? { backgroundColor: GOLD, borderColor: GOLD }
+                                        : undefined
+                                  }
+                                >
+                                  {lvl}
+                                </div>
+                                <div className="flex flex-col text-right">
+                                  <span
+                                    className={`text-xs font-bold ${isUnlocked && !isCurrent ? "text-foreground" : !isUnlocked ? "text-muted-foreground" : ""}`}
+                                    style={isCurrent ? { color: GOLD } : undefined}
+                                  >
+                                    {tierInfo.nameAr}
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {lvl === 1 ? "من 0 نقطة" : lvl === 2 ? "من 100 نقطة" : lvl === 3 ? "من 500 نقطة" : lvl === 4 ? "من 2000 نقطة" : "من 10000 نقطة"}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="mt-8 text-center bg-muted/30 border border-border/30 rounded-lg p-3 max-w-md mx-auto text-xs">
+                        {nextTierInfo ? (
+                          <p className="leading-relaxed">
+                            أنت الآن برتبة <strong style={{ color: GOLD }}>{currentTier.nameAr}</strong>.
+                            تحتاج إلى <strong style={{ color: GOLD }}>{pointsToNext.toLocaleString("en-US")}</strong> نقطة إضافية للترقية إلى رتبة <strong>{nextTierInfo.nameAr}</strong>.
+                          </p>
+                        ) : (
+                          <p className="font-bold leading-relaxed" style={{ color: GOLD }}>
+                            تهانينا! لقد وصلت إلى الرتبة الأعلى: {currentTier.nameAr} (سفير سبق) 🎉
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* الأوسمة */}
+                <Card className="border border-border/50 shadow-none">
+                  <CardHeader className="text-right">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Star className="h-5 w-5" style={{ color: GOLD }} />
+                      الأوسمة والإنجازات المعرفية
+                    </CardTitle>
+                    <CardDescription>
+                      أكمل المهام المختلفة لفتح أوسمة الإنجاز وتثبيتها في ملفك الشخصي.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {[
+                        {
+                          id: "welcome",
+                          title: "شارة البداية",
+                          description: "عضو جديد في عائلة سبق",
+                          icon: Trophy,
+                          unlocked: true,
+                        },
+                        {
+                          id: "reader",
+                          title: "القارئ النهم",
+                          description: "قرأت أكثر من 20 مقالاً",
+                          icon: Eye,
+                          unlocked: totalReads >= 20,
+                        },
+                        {
+                          id: "commenter",
+                          title: "معلق متميز",
+                          description: "شاركت بـ 5 تعليقات أو أكثر",
+                          icon: FileText,
+                          unlocked: (activitySummary?.totalComments ?? 0) >= 5,
+                        },
+                        {
+                          id: "supporter",
+                          title: "المساند المتفاعل",
+                          description: "أضفت 10 تفاعلات أو إعجابات",
+                          icon: Heart,
+                          unlocked: (activitySummary?.totalReactions ?? 0) >= 10,
+                        },
+                        {
+                          id: "passionate",
+                          title: "شغوف بالمعرفة",
+                          description: "جمعت 500 نقطة ولاء",
+                          icon: Star,
+                          unlocked: lifetime >= 500,
+                        },
+                        {
+                          id: "ambassador",
+                          title: "سفير سبق",
+                          description: "الوصول إلى الرتبة الأعلى في سبق",
+                          icon: Shield,
+                          unlocked: currentTier.level === 5,
+                        },
+                      ].map((badge) => {
+                        const IconComponent = badge.icon;
+                        return (
+                          <motion.div
+                            key={badge.id}
+                            whileHover={badge.unlocked ? { scale: 1.05, y: -4 } : {}}
+                            transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                            className="relative h-full"
+                          >
+                            <Card
+                              className={`h-full p-4 flex flex-col items-center justify-between text-center gap-3 transition-all duration-300 relative overflow-hidden border ${
+                                badge.unlocked
+                                  ? "border-border/60 bg-card shadow-sm hover:shadow-md"
+                                  : "border-dashed border-border/60 bg-muted/5 opacity-50"
+                              }`}
+                            >
+                              <div
+                                className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-transform duration-500 ${
+                                  badge.unlocked ? "text-white" : "bg-muted/20 text-muted-foreground border border-muted/30"
+                                }`}
+                                style={
+                                  badge.unlocked
+                                    ? {
+                                        background: `linear-gradient(135deg, ${GOLD}, ${GOLD}99)`,
+                                        boxShadow: `0 8px 16px -4px ${GOLD}55`,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <IconComponent className="h-5 w-5" />
+                              </div>
+
+                              <div className="space-y-1 z-10 flex-1 flex flex-col justify-center">
+                                <h5 className={`text-[11px] font-bold leading-tight ${badge.unlocked ? "text-foreground" : "text-muted-foreground"}`}>
+                                  {badge.title}
+                                </h5>
+                                <p className="text-[9px] text-muted-foreground leading-normal max-w-[100px] mx-auto">
+                                  {badge.description}
+                                </p>
+                              </div>
+
+                              {badge.unlocked ? (
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0">
+                                  مكتمل
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-muted/20 text-muted-foreground/60 border-transparent text-[9px] px-1.5 py-0 gap-1">
+                                  <Lock className="h-2 w-2" />
+                                  مغلق
+                                </Badge>
+                              )}
+
+                              {badge.unlocked ? (
+                                <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                                  <Check className="h-2.5 w-2.5" />
+                                </div>
+                              ) : (
+                                <div className="absolute top-1.5 right-1.5 text-muted-foreground/60">
+                                  <Lock className="h-3 w-3" />
+                                </div>
+                              )}
+                            </Card>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* ───── الإعدادات (تُفتح من أيقونة الترس) ───── */}
+              <TabsContent value="settings" className="space-y-6" dir="rtl">
+                <div className="flex items-center gap-2 text-lg font-semibold">
+                  <Settings className="h-5 w-5 text-muted-foreground" />
+                  الإعدادات
+                </div>
+
+                <div>
+                  <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    الخصوصية والأمان
+                  </h3>
+                  <Card className="shadow-none border-border/50">
+                    <CardContent className="p-6">
+                      <TwoFactorSettings />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div>
+                  <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-muted-foreground" />
+                    Apple Wallet
+                  </h3>
+                  <div className="space-y-4">
+                    <Card className="shadow-none border-border/50">
                       <CardContent className="p-6">
-                        <p className="text-muted-foreground">
-                          قريبًا: خيارات تخصيص الإشعارات
-                        </p>
+                        <div className="flex items-start gap-4">
+                          <div
+                            className="h-12 w-12 rounded-full flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: `${GOLD}1f`, color: GOLD }}
+                          >
+                            <Trophy className="h-6 w-6" />
+                          </div>
+                          <div className="flex-1 space-y-3">
+                            <div>
+                              <h4 className="font-semibold">بطاقة العضوية</h4>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                احصل على بطاقة عضوية رقمية تعرض نقاط الولاء ورتبتك
+                              </p>
+                            </div>
+                            <Button
+                              onClick={() => issueLoyaltyCardMutation.mutate()}
+                              disabled={issueLoyaltyCardMutation.isPending}
+                              className="gap-2"
+                              data-testid="button-download-loyalty-card"
+                            >
+                              {issueLoyaltyCardMutation.isPending ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  جاري الإصدار...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-4 w-4" />
+                                  تحميل بطاقة العضوية
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
                       </CardContent>
                     </Card>
-                  </div>
 
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      الخصوصية والأمان
-                    </h3>
-                    <Card>
-                      <CardContent className="p-6">
-                        <TwoFactorSettings />
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
-
-                {/* Wallet Tab */}
-                <TabsContent value="wallet" className="space-y-6" dir="rtl">
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Apple Wallet
-                    </h3>
-                    
-                    <div className="space-y-4">
-                      {/* Loyalty Card */}
-                      <Card>
+                    {user.hasPressCard && (
+                      <Card className="shadow-none border-border/50">
                         <CardContent className="p-6">
                           <div className="flex items-start gap-4">
-                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center shrink-0">
-                              <Trophy className="h-6 w-6 text-blue-500" />
+                            <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center shrink-0 text-muted-foreground">
+                              <IdCard className="h-6 w-6" />
                             </div>
                             <div className="flex-1 space-y-3">
                               <div>
-                                <h4 className="font-semibold">بطاقة العضوية</h4>
+                                <h4 className="font-semibold">البطاقة الصحفية</h4>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                  احصل على بطاقة عضوية رقمية تعرض نقاط الولاء ورتبتك
+                                  بطاقة صحفية رقمية معتمدة من سبق للصحفيين
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="gap-1">
-                                  <Coins className="h-3 w-3" />
-                                  {loyaltyPoints?.totalPoints || 0} نقطة
-                                </Badge>
-                                <Badge variant="outline">
-                                  {loyaltyPoints?.currentRank || "القارئ الجديد"}
-                                </Badge>
-                              </div>
+                              <Badge variant="default" className="gap-1">
+                                <Check className="h-3 w-3" />
+                                صحفي معتمد
+                              </Badge>
                               <Button
-                                onClick={() => issueLoyaltyCardMutation.mutate()}
-                                disabled={issueLoyaltyCardMutation.isPending}
+                                onClick={() => issuePressCardMutation.mutate()}
+                                disabled={issuePressCardMutation.isPending}
                                 className="gap-2"
-                                data-testid="button-download-loyalty-card"
+                                data-testid="button-download-press-card"
                               >
-                                {issueLoyaltyCardMutation.isPending ? (
+                                {issuePressCardMutation.isPending ? (
                                   <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     جاري الإصدار...
@@ -1849,7 +1691,7 @@ export default function Profile() {
                                 ) : (
                                   <>
                                     <Download className="h-4 w-4" />
-                                    تحميل بطاقة العضوية
+                                    تحميل البطاقة الصحفية
                                   </>
                                 )}
                               </Button>
@@ -1857,121 +1699,27 @@ export default function Profile() {
                           </div>
                         </CardContent>
                       </Card>
-
-                      {/* Press Card (if eligible) */}
-                      {user.hasPressCard && (
-                        <Card>
-                          <CardContent className="p-6">
-                            <div className="flex items-start gap-4">
-                              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center shrink-0">
-                                <IdCard className="h-6 w-6 text-green-500" />
-                              </div>
-                              <div className="flex-1 space-y-3">
-                                <div>
-                                  <h4 className="font-semibold">البطاقة الصحفية</h4>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    بطاقة صحفية رقمية معتمدة من سبق للصحفيين
-                                  </p>
-                                </div>
-                                <Badge variant="default" className="gap-1">
-                                  <Check className="h-3 w-3" />
-                                  صحفي معتمد
-                                </Badge>
-                                <Button
-                                  onClick={() => issuePressCardMutation.mutate()}
-                                  disabled={issuePressCardMutation.isPending}
-                                  className="gap-2"
-                                  data-testid="button-download-press-card"
-                                >
-                                  {issuePressCardMutation.isPending ? (
-                                    <>
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      جاري الإصدار...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Download className="h-4 w-4" />
-                                      تحميل البطاقة الصحفية
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
+                    )}
                   </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+                </div>
 
-          {/* Sidebar */}
-          <aside className="space-y-6">
-            {/* Smart Interests */}
-            <div>
-              <SmartInterestsBlock userId={user.id} />
-            </div>
-
-            {/* Followed Keywords */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  كلماتي المتابعة
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingKeywords ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-8" />
-                    ))}
-                  </div>
-                ) : followedKeywords.length > 0 ? (
-                  <div className="space-y-2">
-                    {followedKeywords.slice(0, 5).map((keyword) => (
-                      <div
-                        key={keyword.tagId}
-                        className="flex items-center justify-between gap-2 p-2 rounded-md hover-elevate"
-                      >
-                        <Link href={`/keyword/${keyword.tagName}`}>
-                          <span className="flex items-center gap-2 flex-1 cursor-pointer" data-testid={`link-keyword-${keyword.tagId}`}>
-                            <Tag className="h-3.5 w-3.5 text-primary" />
-                            <span className="text-sm font-medium">{keyword.tagName}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {keyword.articleCount}
-                            </Badge>
-                          </span>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => unfollowKeywordMutation.mutate(keyword.tagId)}
-                          disabled={unfollowKeywordMutation.isPending}
-                          data-testid={`button-unfollow-keyword-${keyword.tagId}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Tag className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      لم تتابع أي كلمات بعد
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <LoyaltyBlock />
-          </aside>
-        </div>
+                <div>
+                  <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-muted-foreground" />
+                    إعدادات الإشعارات
+                  </h3>
+                  <Card className="shadow-none border-border/50">
+                    <CardContent className="p-6">
+                      <p className="text-muted-foreground text-sm">
+                        قريبًا: خيارات تخصيص الإشعارات
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
