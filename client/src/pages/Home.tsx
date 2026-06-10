@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/queryClient";
+import { signalContentPainted } from "@/lib/contentPaintedSignal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -252,6 +253,11 @@ export default function Home() {
     return lead?.imageUrl || lead?.thumbnailUrl || null;
   }, [homepage]);
   useHeroPreload(heroLeadImage);
+
+  // المحتوى الرئيسي جاهز → حرّر طبقة الإعلانات المؤجلة (انظر index.html)
+  useEffect(() => {
+    if (homepage?.hero?.length) signalContentPainted();
+  }, [homepage]);
 
   const feedTitle = useMemo(() => user ? "أخبارك الذكية" : "جميع الأخبار", [user]);
   const feedSubtitle = useMemo(() => user ? "محتوى مُختار بذكاء بناءً على اهتماماتك" : undefined, [user]);
