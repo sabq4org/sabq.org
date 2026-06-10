@@ -1,4 +1,0 @@
-# SPA fallback: serve the shell for client-routed paths so functions/_middleware
-# can fetch + inject into it. Functions run BEFORE this file, so proxied paths
-# (/api/*, /uploads/*, sitemap, etc.) and real static files are unaffected.
-/*    /index.html    200
