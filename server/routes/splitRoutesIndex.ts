@@ -24,6 +24,7 @@ import deployWebhooksRouter from "./deployWebhooks";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
+import { registerAnnouncementRoutes } from "./announcements";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -56,4 +57,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
+  registerAnnouncementRoutes(app);
 }

@@ -83,6 +83,20 @@ export default tseslint.config(
     },
   },
   {
+    // Audit T2.1 (2026-06-10): the two monoliths are FROZEN. Ceilings are
+    // current size + ~100 lines of slack for bugfixes — adding a new
+    // endpoint or query method here WILL fail lint; put it in
+    // server/routes/<module>.ts / server/services/<feature>.ts instead
+    // (see ADR-001). When an extraction shrinks a file, RATCHET the
+    // ceiling down to the new size + 100 so the monolith can't regrow.
+    files: ["server/routes.ts"],
+    rules: { "max-lines": ["error", { max: 38670 }] },
+  },
+  {
+    files: ["server/storage.ts"],
+    rules: { "max-lines": ["error", { max: 21240 }] },
+  },
+  {
     // ADR-001 (docs/architecture/ADR-001-data-access-layer.md): route modules
     // are HTTP-only. Drizzle queries belong in server/services/<feature>.ts;
     // routes call the service. The `ignores` list below is the 46 legacy
