@@ -3,6 +3,7 @@ import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
 import { useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useQuery } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/queryClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInViewport } from "@/hooks/useInViewport";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -34,6 +35,7 @@ const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSec
 const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
 const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
+const WorldCupHomeStrip = lazyDefault(() => import("@/components/worldcup/WorldCupHomeStrip"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
@@ -118,7 +120,7 @@ function reportHomepageEvent(event: "homepage_feed_degraded" | "homepage_feed_re
     if (event === "homepage_feed_degraded") {
       console.warn("[homepage] feed refetch failed — showing cached content", message);
     } else {
-      console.info("[homepage] feed auto-recovered");
+      console.warn("[homepage] feed auto-recovered");
     }
     const gtag = (window as any).gtag;
     if (typeof gtag === "function") {
@@ -147,7 +149,7 @@ export default function Home() {
   const { data: categoriesWithStats } = useQuery<CategoryWithStats[]>({
     queryKey: ["/api/categories", "withStats"],
     queryFn: async () => {
-      const res = await fetch("/api/categories?withStats=true", { credentials: "include" });
+      const res = await fetch(apiUrl("/api/categories?withStats=true"), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch categories");
       return res.json();
     },
@@ -262,7 +264,7 @@ export default function Home() {
     const poll = async () => {
       if (!active || document.hidden) return;
       try {
-        const res = await fetch('/api/cache-invalidation/check');
+        const res = await fetch(apiUrl('/api/cache-invalidation/check'));
         if (!res.ok) return;
         const data = await res.json();
         if (lastUpdate && data.lastUpdate > lastUpdate) {
@@ -408,6 +410,13 @@ export default function Home() {
               <HeroCarousel articles={homepage.hero} />
             </div>
           )}
+
+          {/* World Cup 2026 strip — hides itself when /api/world-cup is unavailable */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <WorldCupHomeStrip />
+            </Suspense>
+          </ErrorBoundary>
 
           {/* Gulf Live Coverage Block — hidden (no active events) */}
           {/* <ErrorBoundary fallback={null}>

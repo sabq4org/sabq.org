@@ -4,6 +4,7 @@ import { CalendarDays, MapPin, Radio, Sparkles, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import {
   countdownTo,
   formatKickoffDay,
@@ -105,6 +106,17 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           transition={{ duration: 0.4 }}
           className="flex flex-col items-center text-center gap-3 mb-8"
         >
+          <div className="rounded-2xl bg-white px-4 py-3 shadow-2xl ring-1 ring-white/20">
+            <img
+              src={worldCupEmblem}
+              alt="شعار كأس العالم 2026"
+              className="h-20 w-auto object-contain"
+              width={233}
+              height={360}
+              loading="eager"
+              decoding="async"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <Badge className="bg-emerald-400/15 text-emerald-200 border border-emerald-300/20 gap-1.5 px-3 py-1">
               <Trophy className="h-3.5 w-3.5" />
