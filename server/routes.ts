@@ -54,6 +54,8 @@ import { notificationBus } from "./notificationBus";
 import { sendArticleNotification, sendDraftSubmittedNotification } from "./notificationService";
 import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sendReporterArchiveEmail, sendReporterDeletionEmail, sendReporterRevisionEmail, sendOpinionAuthorPublishEmail, sendOpinionAuthorRejectionEmail, sendOpinionAuthorArchiveEmail, sendOpinionAuthorDeletionEmail, sendOpinionAuthorRevisionEmail } from "./services/editorAlerts";
 import { awardPoints } from "./services/loyalty";
+import { safeErrorPayload } from "./utils/safeError";
+import { deductPublisherCreditSafely } from "./services/publisherCreditService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -6921,17 +6923,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
 
       // Send response IMMEDIATELY before any notifications
-      // Auto-deduct publisher credit when article is created as published
+      // Auto-deduct publisher credit when article is created as published.
+      // Never throws; unrecovered failures emit [RECONCILE] log lines.
       if (newArticle.status === "published") {
-        try {
-          const publisher = await storage.getPublisherByUserId(newArticle.authorId);
-          if (publisher && publisher.isActive) {
-            await storage.deductPublisherCredit(publisher.id, newArticle.id, req.user.id);
-            console.log(`💰 [PUBLISHER CREDIT] Deducted 1 credit for publisher ${publisher.id} - article ${newArticle.id}`);
-          }
-        } catch (creditError: any) {
-          console.warn(`⚠️ [PUBLISHER CREDIT] Could not deduct credit: ${creditError.message}`);
-        }
+        await deductPublisherCreditSafely({
+          authorUserId: newArticle.authorId,
+          articleId: newArticle.id,
+          actorId: req.user.id,
+        });
       }
       res.status(201).json(newArticle);
 
@@ -7444,17 +7443,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             metadata: { ip: req.ip, userAgent: req.get("user-agent") },
           });
 
-          // Auto-deduct publisher credit when article is published
+          // Auto-deduct publisher credit when article is published.
+          // Never throws; unrecovered failures emit [RECONCILE] log lines.
           if (updatedArticle.status === "published" && existingArticle.status !== "published") {
-            try {
-              const publisher = await storage.getPublisherByUserId(updatedArticle.authorId);
-              if (publisher && publisher.isActive) {
-                await storage.deductPublisherCredit(publisher.id, updatedArticle.id, userId);
-                console.log(`💰 [PUBLISHER CREDIT] Deducted 1 credit for publisher ${publisher.id}`);
-              }
-            } catch (creditError: any) {
-              console.warn(`⚠️ [PUBLISHER CREDIT] Could not deduct credit: ${creditError.message}`);
-            }
+            await deductPublisherCreditSafely({
+              authorUserId: updatedArticle.authorId,
+              articleId: updatedArticle.id,
+              actorId: userId,
+            });
           }
 
           // Editorial push notifications — fire on real status transitions
@@ -8576,8 +8572,7 @@ Respond in valid JSON format only:
         enArticleTitle: newEnArticle.title,
       });
     } catch (error: any) {
-      console.error("Error translating article:", error);
-      res.status(500).json({ message: error.message || "فشلت عملية الترجمة" });
+      res.status(500).json(safeErrorPayload(error, "فشلت عملية الترجمة", "translate-article"));
     }
   });
 
@@ -11732,8 +11727,7 @@ Respond in valid JSON format only:
       
       res.json(categories);
     } catch (error: any) {
-      console.error("Error fetching iFox categories:", error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json(safeErrorPayload(error, "فشل جلب التصنيفات", "ifox-categories"));
     }
   });
 
@@ -35275,8 +35269,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       
       res.json(article);
     } catch (error: any) {
-      console.error("Error fetching iFox article:", error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json(safeErrorPayload(error, "فشل جلب المقال", "ifox-article"));
     }
   });
 
@@ -36521,8 +36514,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         
         res.json(categories);
       } catch (error: any) {
-        console.error("Error fetching iFox category map:", error);
-        res.status(500).json({ message: error.message });
+        res.status(500).json(safeErrorPayload(error, "فشل جلب التصنيفات", "ifox-category-map"));
       }
     }
   );
