@@ -433,7 +433,11 @@ export async function getOverview(): Promise<WcOverview> {
 
   const upcoming = fixtures.filter((f) => !f.status.finished && !f.status.live);
   const motdPool = live.length > 0 ? live : today.filter((f) => !f.status.finished);
-  const fallbackPool = motdPool.length > 0 ? motdPool : upcoming.slice(0, 9);
+  // المفاضلة بالنجومية داخل أقرب يوم لعب فقط — مباراة الافتتاح غدًا
+  // لا يجوز أن تتجاوزها مباراة أبرز بعد ثلاثة أيام
+  const nextDayKey = (upcoming[0]?.date ?? "").slice(0, 10);
+  const nextDayMatches = upcoming.filter((f) => (f.date ?? "").slice(0, 10) === nextDayKey);
+  const fallbackPool = motdPool.length > 0 ? motdPool : nextDayMatches;
   const motdFixture = [...fallbackPool].sort(
     (a, b) => starWeight(b) - starWeight(a) || a.timestamp - b.timestamp
   )[0] ?? null;

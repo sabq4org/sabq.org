@@ -9,6 +9,8 @@ import {
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
+  riyadhDayKey,
+  todayRiyadhKey,
   type WcCountdown,
   type WcFixture,
   type WcOverview,
@@ -169,7 +171,13 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           {fixture && (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-emerald-100/70">
-                <span className="font-bold text-emerald-200">{fixture.status.live ? "تجري الآن" : "مباراة اليوم"}</span>
+                <span className="font-bold text-emerald-200">
+                  {fixture.status.live
+                    ? "تجري الآن"
+                    : riyadhDayKey(fixture.date) === todayRiyadhKey()
+                      ? "مباراة اليوم"
+                      : "المباراة القادمة"}
+                </span>
                 <span>·</span>
                 <span>{fixture.round}</span>
                 <span className="hidden sm:inline">·</span>
