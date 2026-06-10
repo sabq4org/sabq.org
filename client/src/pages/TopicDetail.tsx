@@ -1,6 +1,6 @@
 import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -11,15 +11,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { apiUrl } from "@/lib/queryClient";
 import {
   ArrowRight,
+  ArrowUp,
   ChevronRight,
   Share2,
   Calendar,
+  Check,
+  Clock,
+  Copy,
+  Eye,
   Home,
   Circle,
+  Loader2,
+  MessageCircle,
+  Pause,
   User,
   Sparkles,
+  Volume2,
 } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
@@ -95,6 +106,24 @@ function prepareTopicContent(topic: Topic) {
   return content;
 }
 
+/** يقدّر زمن القراءة بالدقائق من نصوص الموضوع (متوسط 180 كلمة/دقيقة للعربية). */
+function estimateReadingMinutes(topic: Topic): number {
+  const parts: string[] = [];
+  if (topic.excerpt) parts.push(topic.excerpt);
+  const content = topic.content;
+  if (content?.blocks?.length) {
+    for (const block of content.blocks) {
+      if (block.content) parts.push(block.content);
+      if (block.caption) parts.push(block.caption);
+    }
+  }
+  if (content?.plainText) parts.push(content.plainText);
+  if (content?.rawHtml) parts.push(content.rawHtml.replace(/<[^>]+>/g, " "));
+
+  const words = normalizeText(parts.join(" ")).split(" ").filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 180));
+}
+
 function WriterByline({
   writer,
   angleName,
@@ -105,7 +134,7 @@ function WriterByline({
   if (!writer) return null;
 
   const avatar = (
-    <Avatar className="h-12 w-12 shrink-0">
+    <Avatar className="h-12 w-12 shrink-0 ring-2 ring-[color:var(--angle-border)] ring-offset-2 ring-offset-background">
       {writer.avatar && (
         <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
       )}
@@ -131,7 +160,7 @@ function WriterByline({
   );
 
   return (
-    <div className="flex items-center gap-3 mt-4" data-testid="writer-byline">
+    <div className="flex items-center gap-3" data-testid="writer-byline">
       {writer.slug ? <Link href={`/reporter/${writer.slug}`}>{avatar}</Link> : avatar}
       <div className="min-w-0">
         {nameEl}
@@ -204,9 +233,13 @@ function renderContentBlock(
       return (
         <blockquote
           key={index}
-          className="border-r-4 border-[color:var(--angle,#6366f1)] pr-5 my-8 italic text-lg text-muted-foreground leading-relaxed"
+          className="relative my-10 rounded-2xl border border-[color:var(--angle-border)] bg-[color:var(--angle-soft)]/40 px-6 py-5 pr-8 text-lg leading-relaxed text-foreground/90 not-italic"
           data-testid={`content-quote-${index}`}
         >
+          <span
+            className="absolute right-0 top-3 bottom-3 w-1 rounded-full bg-[color:var(--angle)]"
+            aria-hidden="true"
+          />
           {block.content}
         </blockquote>
       );
@@ -256,9 +289,12 @@ function renderContentBlock(
   }
 }
 
+type TtsState = "idle" | "loading" | "playing" | "paused";
+
 export default function TopicDetail() {
   const { angleSlug, topicSlug } = useParams<{ angleSlug: string; topicSlug: string }>();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string }>({
     queryKey: ["/api/auth/user"],
@@ -272,7 +308,7 @@ export default function TopicDetail() {
   } = useQuery<TopicDetailResponse>({
     queryKey: ["/api/muqtarab/angles", angleSlug, "topics", topicSlug],
     queryFn: async () => {
-      const res = await fetch(`/api/muqtarab/angles/${angleSlug}/topics/${topicSlug}`);
+      const res = await fetch(apiUrl(`/api/muqtarab/angles/${angleSlug}/topics/${topicSlug}`));
       if (!res.ok) throw new Error("Failed to fetch topic");
       return res.json();
     },
@@ -282,7 +318,7 @@ export default function TopicDetail() {
   const { data: relatedData } = useQuery<{ topics: Topic[] }>({
     queryKey: ["/api/muqtarab/angles", angleSlug, "topics", "related"],
     queryFn: async () => {
-      const res = await fetch(`/api/muqtarab/angles/${angleSlug}/topics?limit=5`);
+      const res = await fetch(apiUrl(`/api/muqtarab/angles/${angleSlug}/topics?limit=5`));
       if (!res.ok) throw new Error("Failed to fetch related topics");
       return res.json();
     },
@@ -295,17 +331,152 @@ export default function TopicDetail() {
 
   const relatedTopics = (relatedData?.topics ?? []).filter((t) => t.id !== topic?.id).slice(0, 3);
 
+  // ---- تتبع المشاهدة ----
   const viewedRef = useRef<string | null>(null);
   useEffect(() => {
     if (topic?.id && viewedRef.current !== topic.id) {
       viewedRef.current = topic.id;
-      fetch(`/api/muqtarab/topics/${topic.id}/view`, {
+      fetch(apiUrl(`/api/muqtarab/topics/${topic.id}/view`), {
         method: "POST",
         credentials: "include",
       }).catch(() => {});
     }
   }, [topic?.id]);
 
+  // ---- شريط تقدم القراءة + زر العودة للأعلى ----
+  const articleRef = useRef<HTMLDivElement | null>(null);
+  const progressRef = useRef<HTMLDivElement | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        const el = articleRef.current;
+        const bar = progressRef.current;
+        if (el && bar) {
+          const start = el.offsetTop - 80;
+          const end = el.offsetTop + el.offsetHeight - window.innerHeight;
+          const raw = (window.scrollY - start) / Math.max(1, end - start);
+          const pct = Math.min(1, Math.max(0, raw));
+          bar.style.transform = `scaleX(${pct})`;
+        }
+        setShowBackToTop(window.scrollY > 700);
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [topic?.id]);
+
+  // ---- الاستماع للموجز (ElevenLabs TTS) ----
+  const [ttsState, setTtsState] = useState<TtsState>("idle");
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsUrlRef = useRef<string | null>(null);
+
+  const stopTts = useCallback(() => {
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+    }
+    if (ttsUrlRef.current) {
+      URL.revokeObjectURL(ttsUrlRef.current);
+      ttsUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopTts, [stopTts]);
+
+  const handleListen = async () => {
+    if (!topic?.excerpt) return;
+
+    if (ttsState === "playing") {
+      ttsAudioRef.current?.pause();
+      setTtsState("paused");
+      return;
+    }
+    if (ttsState === "paused" && ttsAudioRef.current) {
+      ttsAudioRef.current.play();
+      setTtsState("playing");
+      return;
+    }
+    if (ttsState === "loading") return;
+
+    setTtsState("loading");
+    try {
+      const res = await fetch(apiUrl("/api/ai/text-to-speech"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: `${topic.title}. ${topic.excerpt}` }),
+      });
+      if (!res.ok) throw new Error("TTS failed");
+      const blob = await res.blob();
+      stopTts();
+      const url = URL.createObjectURL(blob);
+      ttsUrlRef.current = url;
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+      audio.onended = () => setTtsState("idle");
+      audio.onerror = () => setTtsState("idle");
+      await audio.play();
+      setTtsState("playing");
+    } catch {
+      setTtsState("idle");
+      toast({
+        title: "تعذر تشغيل الموجز الصوتي",
+        description: "حاول مرة أخرى بعد قليل.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ---- المشاركة ----
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    if (navigator.share && topic) {
+      try {
+        await navigator.share({
+          title: topic.title,
+          text: topic.excerpt || "",
+          url: window.location.href,
+        });
+        return;
+      } catch {
+        // المستخدم ألغى المشاركة — لا شيء يُفعل
+      }
+    } else {
+      handleCopyLink();
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      toast({ title: "تم نسخ الرابط", description: "شارك الموضوع مع من تحب." });
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      toast({ title: "تعذر نسخ الرابط", variant: "destructive" });
+    }
+  };
+
+  const shareOnX = () => {
+    if (!topic) return;
+    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(topic.title)}&url=${encodeURIComponent(window.location.href)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const shareOnWhatsApp = () => {
+    if (!topic) return;
+    const url = `https://wa.me/?text=${encodeURIComponent(`${topic.title}\n${window.location.href}`)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // ---- SEO ----
   useEffect(() => {
     if (topic && angle) {
       document.title = `${topic.title} - ${angle.nameAr} | مُقترب | سبق`;
@@ -351,20 +522,6 @@ export default function TopicDetail() {
       }
     }
   }, [topic, angle]);
-
-  const handleShare = async () => {
-    if (navigator.share && topic) {
-      try {
-        await navigator.share({
-          title: topic.title,
-          text: topic.excerpt || "",
-          url: window.location.href,
-        });
-      } catch (err) {
-        console.log("Share failed:", err);
-      }
-    }
-  };
 
   if (isLoadingTopic) {
     return (
@@ -448,6 +605,8 @@ export default function TopicDetail() {
   const AngleIcon = getLucideIcon(angle.iconKey, Circle);
   const keywords =
     (topic.seoMeta as { keywords?: string[] } | null)?.keywords?.filter(Boolean) ?? [];
+  const readingMinutes = estimateReadingMinutes(topic);
+  const viewCount = topic.viewCount ?? 0;
 
   return (
     <div
@@ -455,6 +614,16 @@ export default function TopicDetail() {
       dir="rtl"
       style={theme.vars}
     >
+      {/* شريط تقدم القراءة */}
+      <div className="fixed inset-x-0 top-0 z-[60] h-1 bg-transparent" aria-hidden="true">
+        <div
+          ref={progressRef}
+          className="h-full w-full origin-right"
+          style={{ background: theme.gradient, transform: "scaleX(0)" }}
+          data-testid="reading-progress"
+        />
+      </div>
+
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div
           className="absolute -top-32 -left-24 h-96 w-96 rounded-full blur-3xl opacity-25"
@@ -502,33 +671,59 @@ export default function TopicDetail() {
           </div>
         </div>
 
-        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10">
+        <main className="flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
           <div className="max-w-3xl mx-auto">
-            <header className="mb-8">
+            {/* ---- الترويسة ---- */}
+            <header className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <Link href={`/muqtarab/${angleSlug}`}>
                 <a
-                  className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium"
+                  className="mb-5 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold shadow-sm transition-transform hover:scale-[1.03]"
                   style={{ backgroundColor: theme.soft, color: theme.color }}
                   data-testid="chip-angle"
                 >
                   <AngleIcon className="h-4 w-4" />
-                  {angle.nameAr}
+                  زاوية {angle.nameAr}
                 </a>
               </Link>
+
               <h1
-                className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold leading-tight text-foreground"
+                className="text-3xl md:text-4xl lg:text-[2.75rem] font-bold leading-[1.35] text-foreground"
                 data-testid="heading-topic-title"
               >
                 {topic.title}
               </h1>
-              <WriterByline writer={writer} angleName={angle.nameAr} />
-              <div className="mt-5 flex items-center justify-between gap-4 flex-wrap">
-                {topic.publishedAt && (
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Calendar className="h-4 w-4" />
-                    <span data-testid="text-published-date">{formatDate(topic.publishedAt)}</span>
-                  </div>
-                )}
+
+              <div
+                className="mt-5 h-1 w-20 rounded-full"
+                style={{ background: theme.gradient }}
+                aria-hidden="true"
+              />
+
+              {/* الكاتب + بيانات القراءة */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+                <WriterByline writer={writer} angleName={angle.nameAr} />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                  {topic.publishedAt && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4" />
+                      <span data-testid="text-published-date">{formatDate(topic.publishedAt)}</span>
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5" data-testid="text-reading-time">
+                    <Clock className="h-4 w-4" />
+                    {readingMinutes} {readingMinutes === 1 ? "دقيقة" : "دقائق"} قراءة
+                  </span>
+                  {viewCount > 0 && (
+                    <span className="flex items-center gap-1.5" data-testid="text-view-count">
+                      <Eye className="h-4 w-4" />
+                      {viewCount.toLocaleString("ar-EG")} مشاهدة
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* أزرار المشاركة */}
+              <div className="mt-6 flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -539,35 +734,103 @@ export default function TopicDetail() {
                   <Share2 className="h-4 w-4" />
                   مشاركة
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={shareOnX}
+                  className="gap-2"
+                  aria-label="مشاركة على X"
+                  data-testid="button-share-x"
+                >
+                  <span className="text-sm font-bold leading-none" aria-hidden="true">𝕏</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={shareOnWhatsApp}
+                  className="gap-2"
+                  aria-label="مشاركة عبر واتساب"
+                  data-testid="button-share-whatsapp"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className="gap-2"
+                  aria-label="نسخ الرابط"
+                  data-testid="button-copy-link"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                </Button>
               </div>
             </header>
 
+            {/* ---- الموجز الذكي ---- */}
             {topic.excerpt && (
               <aside
-                className="mb-10 rounded-2xl border p-6 md:p-7"
-                style={{ backgroundColor: theme.softer, borderColor: theme.border }}
+                className="mb-10 rounded-2xl p-[1.5px] animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100"
+                style={{ background: theme.gradient }}
                 data-testid="section-excerpt"
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4" style={{ color: theme.color }} />
+                <div className="rounded-[calc(1rem-1.5px)] bg-background/95 backdrop-blur p-6 md:p-7">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" style={{ color: theme.color }} />
+                      <p
+                        className="text-xs font-bold tracking-wide"
+                        style={{ color: theme.color }}
+                      >
+                        الموجز الذكي
+                      </p>
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] px-1.5 py-0"
+                        style={{ backgroundColor: theme.soft, color: theme.color }}
+                      >
+                        AI
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleListen}
+                      disabled={ttsState === "loading"}
+                      className="h-8 gap-1.5 text-xs font-semibold hover:bg-[color:var(--angle-soft)]"
+                      style={{ color: theme.color }}
+                      data-testid="button-listen-excerpt"
+                    >
+                      {ttsState === "loading" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : ttsState === "playing" ? (
+                        <Pause className="h-3.5 w-3.5" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5" />
+                      )}
+                      {ttsState === "playing"
+                        ? "إيقاف مؤقت"
+                        : ttsState === "paused"
+                          ? "متابعة الاستماع"
+                          : "استمع للموجز"}
+                    </Button>
+                  </div>
                   <p
-                    className="text-xs font-semibold tracking-wide uppercase"
-                    style={{ color: theme.color }}
+                    className="text-lg md:text-xl leading-relaxed text-foreground/90"
+                    data-testid="text-excerpt"
                   >
-                    الموجز
+                    {topic.excerpt}
                   </p>
                 </div>
-                <p
-                  className="text-lg md:text-xl leading-relaxed text-foreground/90"
-                  data-testid="text-excerpt"
-                >
-                  {topic.excerpt}
-                </p>
               </aside>
             )}
 
             {topic.heroImageUrl && (
-              <div className="mb-10" data-testid="section-featured-image">
+              <div
+                className="mb-10 overflow-hidden rounded-2xl shadow-lg animate-in fade-in duration-700 delay-150"
+                style={{ boxShadow: `0 20px 50px -20px ${theme.glow}` }}
+                data-testid="section-featured-image"
+              >
                 <ImageWithCaption
                   imageUrl={topic.heroImageUrl}
                   altText={topic.title}
@@ -576,45 +839,62 @@ export default function TopicDetail() {
               </div>
             )}
 
-            <article
-              className="prose prose-lg max-w-none prose-headings:text-foreground prose-p:text-lg prose-p:leading-[1.9] prose-p:mb-5 prose-a:text-[color:var(--angle)]"
-              data-testid="section-content"
-            >
-              {contentBlocks.length > 0 ? (
-                contentBlocks.map((block, index) => renderContentBlock(block, index))
-              ) : displayContent?.rawHtml ? (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(displayContent.rawHtml),
-                  }}
-                  data-testid="content-raw-html"
-                />
-              ) : displayContent?.plainText ? (
-                <p className="text-lg leading-[1.9]" data-testid="content-plain-text">
-                  {displayContent.plainText}
-                </p>
-              ) : (
-                !hasContent && (
-                  <p className="text-muted-foreground text-center py-12" data-testid="text-no-content">
-                    لا يوجد محتوى متاح لهذا الموضوع
+            {/* ---- المحتوى ---- */}
+            <div ref={articleRef}>
+              <article
+                className="prose prose-lg max-w-none prose-headings:text-foreground prose-p:text-lg prose-p:leading-[1.9] prose-p:mb-5 prose-a:text-[color:var(--angle)]"
+                data-testid="section-content"
+              >
+                {contentBlocks.length > 0 ? (
+                  contentBlocks.map((block, index) => renderContentBlock(block, index))
+                ) : displayContent?.rawHtml ? (
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(displayContent.rawHtml),
+                    }}
+                    data-testid="content-raw-html"
+                  />
+                ) : displayContent?.plainText ? (
+                  <p className="text-lg leading-[1.9]" data-testid="content-plain-text">
+                    {displayContent.plainText}
                   </p>
-                )
-              )}
-            </article>
+                ) : (
+                  !hasContent && (
+                    <p className="text-muted-foreground text-center py-12" data-testid="text-no-content">
+                      لا يوجد محتوى متاح لهذا الموضوع
+                    </p>
+                  )
+                )}
+              </article>
+            </div>
+
+            {/* فاصل نهاية الموضوع */}
+            {hasContent && (
+              <div className="my-10 flex items-center justify-center gap-3" aria-hidden="true">
+                <span className="h-px w-16 bg-border" />
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: theme.soft, color: theme.color }}
+                >
+                  <AngleIcon className="h-4 w-4" />
+                </span>
+                <span className="h-px w-16 bg-border" />
+              </div>
+            )}
 
             {keywords.length > 0 && (
-              <div className="mt-10 space-y-3" data-testid="section-keywords">
+              <div className="mt-2 space-y-3" data-testid="section-keywords">
                 <h3 className="text-sm font-semibold text-muted-foreground">الكلمات المفتاحية</h3>
                 <div className="flex flex-wrap gap-2">
                   {keywords.map((keyword, index) => (
                     <Badge
                       key={`${keyword}-${index}`}
                       variant="secondary"
-                      className="cursor-pointer hover-elevate active-elevate-2 transition-all duration-300 hover:scale-105"
+                      className="cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-[color:var(--angle-soft)] hover:text-[color:var(--angle)]"
                       onClick={() => setLocation(`/keyword/${encodeURIComponent(keyword)}`)}
                       data-testid={`badge-keyword-${index}`}
                     >
-                      {keyword}
+                      #{keyword}
                     </Badge>
                   ))}
                 </div>
@@ -637,15 +917,14 @@ export default function TopicDetail() {
                   <p className="text-xs font-semibold mb-1" style={{ color: theme.color }}>
                     توقيع الكاتب
                   </p>
-                  <p
-                    className="text-base font-medium leading-relaxed whitespace-pre-wrap text-foreground"
-                  >
+                  <p className="text-base font-medium leading-relaxed whitespace-pre-wrap text-foreground">
                     {angle.writerSignature}
                   </p>
                 </div>
               </div>
             )}
 
+            {/* ---- المزيد من الزاوية ---- */}
             {relatedTopics.length > 0 && (
               <section className="mt-14" data-testid="section-related-topics">
                 <h2
@@ -656,27 +935,36 @@ export default function TopicDetail() {
                   المزيد من {angle.nameAr}
                 </h2>
                 <div className="grid gap-4">
-                  {relatedTopics.map((related) => (
+                  {relatedTopics.map((related, idx) => (
                     <Link
                       key={related.id}
                       href={`/muqtarab/${angleSlug}/topic/${related.slug}`}
                     >
-                      <Card className="group hover:shadow-md transition-shadow border-[color:var(--angle-border)]/40 hover:border-[color:var(--angle-border)]">
-                        <CardContent className="p-4">
-                          <h3 className="font-semibold text-foreground group-hover:text-[color:var(--angle)] transition-colors line-clamp-2">
-                            {related.title}
-                          </h3>
-                          {related.excerpt && (
-                            <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
-                              {related.excerpt}
-                            </p>
-                          )}
-                          {related.publishedAt && (
-                            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(related.publishedAt)}
-                            </p>
-                          )}
+                      <Card className="group cursor-pointer border-[color:var(--angle-border)]/40 transition-all duration-300 hover:border-[color:var(--angle-border)] hover:shadow-md hover:-translate-y-0.5">
+                        <CardContent className="flex items-start gap-4 p-4">
+                          <span
+                            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold tabular-nums"
+                            style={{ backgroundColor: theme.soft, color: theme.color }}
+                            aria-hidden="true"
+                          >
+                            {(idx + 1).toLocaleString("ar-EG")}
+                          </span>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-foreground group-hover:text-[color:var(--angle)] transition-colors line-clamp-2">
+                              {related.title}
+                            </h3>
+                            {related.excerpt && (
+                              <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
+                                {related.excerpt}
+                              </p>
+                            )}
+                            {related.publishedAt && (
+                              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {formatDate(related.publishedAt)}
+                              </p>
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     </Link>
@@ -712,6 +1000,20 @@ export default function TopicDetail() {
 
         <Footer />
       </div>
+
+      {/* زر العودة للأعلى */}
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className={`fixed bottom-6 left-6 z-50 flex h-11 w-11 items-center justify-center rounded-full border bg-background/90 shadow-lg backdrop-blur transition-all duration-300 hover:scale-105 ${
+          showBackToTop ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-3"
+        }`}
+        style={{ borderColor: theme.border, color: theme.color }}
+        aria-label="العودة إلى الأعلى"
+        data-testid="button-back-to-top"
+      >
+        <ArrowUp className="h-5 w-5" />
+      </button>
     </div>
   );
 }
