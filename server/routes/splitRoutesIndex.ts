@@ -29,6 +29,7 @@ import { registerAudioBriefRoutes } from "./audioBriefs";
 import { registerShortsRoutes } from "./shorts";
 import { registerCalendarRoutes } from "./calendar";
 import { registerTaskRoutes } from "./tasks";
+import { registerWalletRoutes } from "./wallet";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -66,4 +67,5 @@ export function registerSplitRoutes(app: Express) {
   registerShortsRoutes(app);
   registerCalendarRoutes(app);
   registerTaskRoutes(app);
+  registerWalletRoutes(app);
 }
