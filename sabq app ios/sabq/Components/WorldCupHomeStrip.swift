@@ -29,13 +29,16 @@ struct WorldCupHomeStrip: View {
     }
 
     private func card(_ f: WCFixture) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("مونديال 2026")
-                    .font(.system(size: 16, weight: .black)).foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .black)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.8)
                 Text("تغطية حية بتوقيت الرياض")
-                    .font(.system(size: 11)).foregroundStyle(WCTheme.emerald.opacity(0.8))
+                    .font(.system(size: 9)).foregroundStyle(WCTheme.emerald.opacity(0.8))
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 4)
 
@@ -73,9 +76,12 @@ struct WorldCupHomeStrip: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .fixedSize()
-                Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                    .font(.system(size: 10)).foregroundStyle(WCTheme.emerald.opacity(0.85))
-                    .lineLimit(1).fixedSize()
+                // عدّاد يتحرّك كل ثانية (TimelineView) كما في الهيرو
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
+                        .font(.system(size: 10)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                        .lineLimit(1).fixedSize()
+                }
             }
         }
     }
