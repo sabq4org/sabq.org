@@ -9,6 +9,8 @@ import type { WcLeader, WcScorer } from "./wcTypes";
 interface ScorersSectionProps {
   scorers: WcScorer[] | undefined;
   isLoading: boolean;
+  /** انطلقت البطولة (مباراة حية أو منتهية) — المزود يعتمد إحصاءات اللاعبين بعد المباريات بفاصل */
+  tournamentStarted: boolean;
 }
 
 const PODIUM_RING = [
@@ -143,9 +145,11 @@ function LeadersList({ endpoint, render, emptyMessage }: {
   );
 }
 
-export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
+export function ScorersSection({ scorers, isLoading, tournamentStarted }: ScorersSectionProps) {
   const podium = (scorers ?? []).slice(0, 3);
   const rest = (scorers ?? []).slice(3);
+  // «ينطلق مع أول صافرة» تصبح خاطئة لحظة انطلاق البطولة — العبارات تتبع الحالة
+  const pendingStats = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات";
 
   return (
     <section dir="rtl" className="py-10" id="scorers">
@@ -185,7 +189,7 @@ export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
               </div>
             )}
             {!isLoading && podium.length === 0 && (
-              <EmptyRace message="سباق الحذاء الذهبي ينطلق مع أول صافرة" />
+              <EmptyRace message={tournamentStarted ? pendingStats : "سباق الحذاء الذهبي ينطلق مع أول صافرة"} />
             )}
             {!isLoading && podium.length > 0 && (
               <motion.div
@@ -227,7 +231,7 @@ export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
           <TabsContent value="assists">
             <LeadersList
               endpoint="/api/world-cup/assists"
-              emptyMessage="سباق صنّاع الأهداف ينطلق مع أول صافرة"
+              emptyMessage={tournamentStarted ? pendingStats : "سباق صنّاع الأهداف ينطلق مع أول صافرة"}
               render={(leader) => (
                 <>
                   <span className="hidden sm:inline">{leader.goals} أهداف</span>
@@ -240,7 +244,7 @@ export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
           <TabsContent value="cards">
             <LeadersList
               endpoint="/api/world-cup/cards"
-              emptyMessage="لا بطاقات بعد — وعسى ألا تكثر"
+              emptyMessage={tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر"}
               render={(leader) => (
                 <span className="flex items-center gap-2">
                   <span className="flex items-center gap-1 font-black tabular-nums">
