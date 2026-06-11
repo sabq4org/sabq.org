@@ -22,6 +22,10 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
     m.includes("تعذر تحميل الصفحة") ||
     // Named lazy export undefined after stale/partial chunk (WebKit minified)
     (m.includes("undefined is not an object") && m.includes("evaluating '") && m.includes(".")) ||
+    // Same poison, bracket form — a swallowed vite:preloadError resolves the
+    // import with `undefined`, then lazyNamed's minified `(await t())[n]`
+    // throws a message with NO dot, which the rule above misses.
+    (m.includes("undefined is not an object") && m.includes("(await")) ||
     (m.includes("cannot read properties of undefined") &&
       m.includes("reading '") &&
       !m.includes("reading 'default'"))
@@ -31,7 +35,16 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
 export function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): Promise<T> {
   return new Promise((resolve, reject) => {
     importFn()
-      .then(resolve)
+      .then((mod) => {
+        // If ANY window listener calls preventDefault() on vite:preloadError,
+        // Vite's preload helper resolves the FAILED import with `undefined`
+        // instead of rejecting. Normalize that to a recognizable chunk error so
+        // the retry/recovery path below handles it like a normal load failure.
+        if (mod == null) {
+          throw new Error("Loading chunk failed: empty module namespace");
+        }
+        resolve(mod);
+      })
       .catch((error: Error) => {
         const isModuleError = isChunkErrorMessage(error.message);
 

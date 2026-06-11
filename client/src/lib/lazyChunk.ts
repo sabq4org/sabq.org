@@ -16,7 +16,10 @@ export function lazyNamed<P = object>(
   return lazy(() =>
     retryImport(async () => {
       const mod = await loader();
-      const component = mod[exportName];
+      // Optional-chain: a swallowed vite:preloadError resolves a failed import
+      // with `undefined` — plain `mod[exportName]` would throw WebKit's
+      // dot-less `(await t())[n]` TypeError before reaching the guard below.
+      const component = mod?.[exportName];
       if (!component) {
         throw new Error(`Loading chunk failed: missing export ${exportName}`);
       }

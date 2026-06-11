@@ -115,8 +115,15 @@ export function installDeployRecovery(): void {
   // Vite fires this on the window when a preloaded/lazy chunk fails to load —
   // the canonical "shell points at a rotated hash" signal.
   window.addEventListener("vite:preloadError", (event) => {
-    event.preventDefault?.();
-    reloadOnce("vite:preloadError");
+    // Only swallow the error when we actually reload. preventDefault() makes
+    // Vite's preload helper RESOLVE the failed import with `undefined` instead
+    // of rejecting — so calling it while the cooldown blocks the reload poisons
+    // every lazy chunk that fails in the next 30s: the caller gets `undefined`,
+    // WebKit throws the dot-less "undefined is not an object (evaluating
+    // '(await t())[n]')", and retryImport never gets a rejection to retry.
+    if (attemptChunkRecoveryReload("vite:preloadError")) {
+      event.preventDefault?.();
+    }
   });
 
   // Belt-and-suspenders: dynamic import() rejections that aren't surfaced as

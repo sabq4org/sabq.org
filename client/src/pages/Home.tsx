@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, ReactNode, startTransition, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Component, ReactNode, startTransition, Suspense } from "react";
 import { lazyDefault, lazyNamed } from "@/lib/lazyChunk";
 import { useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -62,6 +62,27 @@ function ArticleCardSkeleton() {
   );
 }
 
+// Below-the-fold sections are optional content: if one fails (chunk blocked by
+// a content blocker, transient network/CDN hiccup, mid-deploy hash rotation),
+// collapse just that section instead of letting the error bubble up to the
+// route-level ErrorBoundary and replace the WHOLE homepage with "حدث خطأ".
+// Recovery reloads stay the job of deployRecovery's window-level listeners.
+class SectionErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[LazySection] section failed, collapsing it:", error?.message);
+  }
+
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 function LazySection({ children, minHeight = 200 }: { children: ReactNode; minHeight?: number }) {
   // Start loading well before the section enters the viewport so its JS chunk
   // and data fetch resolve by the time the user scrolls to it — eliminates the
@@ -90,9 +111,11 @@ function LazySection({ children, minHeight = 200 }: { children: ReactNode; minHe
       }}
     >
       {shouldRender ? (
-        <Suspense fallback={<SectionSkeleton height={minHeight} />}>
-          {children}
-        </Suspense>
+        <SectionErrorBoundary>
+          <Suspense fallback={<SectionSkeleton height={minHeight} />}>
+            {children}
+          </Suspense>
+        </SectionErrorBoundary>
       ) : (
         <SectionSkeleton height={minHeight} />
       )}
