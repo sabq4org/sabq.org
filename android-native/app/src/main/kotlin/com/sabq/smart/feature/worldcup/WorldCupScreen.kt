@@ -339,7 +339,9 @@ private fun MatchesSection(fixtures: List<WcFixture>, isLoading: Boolean, onOpen
                     "live" -> "لا توجد مباريات مباشرة الآن — عُد عند صافرة البداية"
                     "today" -> "لا توجد مباريات اليوم"
                     "upcoming" -> "لا توجد مباريات قادمة معلنة بعد"
-                    else -> "لم تُلعب أي مباراة بعد — الانطلاقة قريبًا"
+                    // «الانطلاقة قريبًا» تصبح خاطئة لحظة انطلاق البطولة — الرسالة تتبع الحالة
+                    else -> if (live.isNotEmpty()) "مباراة جارية الآن — نتيجتها تظهر هنا فور صافرة النهاية"
+                    else "النتائج تظهر هنا فور انتهاء أول مباراة"
                 }
             )
             else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp)) {

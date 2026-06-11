@@ -114,7 +114,16 @@ export function MatchesSection({ fixtures, isLoading, onOpenMatch }: MatchesSect
               <DayGroupedGrid fixtures={upcoming} onOpenMatch={onOpenMatch} emptyMessage="لا توجد مباريات قادمة معلنة بعد" />
             </TabsContent>
             <TabsContent value="finished">
-              <DayGroupedGrid fixtures={finished} onOpenMatch={onOpenMatch} emptyMessage="لم تُلعب أي مباراة بعد — الانطلاقة قريبًا" />
+              {/* «الانطلاقة قريبًا» تصبح خاطئة لحظة انطلاق البطولة — الرسالة تتبع الحالة */}
+              <DayGroupedGrid
+                fixtures={finished}
+                onOpenMatch={onOpenMatch}
+                emptyMessage={
+                  live.length > 0
+                    ? "مباراة جارية الآن — نتيجتها تظهر هنا فور صافرة النهاية"
+                    : "النتائج تظهر هنا فور انتهاء أول مباراة"
+                }
+              />
             </TabsContent>
           </Tabs>
         )}
