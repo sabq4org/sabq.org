@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import {
+  elapsedLabel,
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
@@ -161,7 +162,7 @@ export default function WorldCupHomeStrip() {
                 >
                   {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
                   {fixture.status.live && fixture.status.elapsed != null
-                    ? `${fixture.status.elapsed}'`
+                    ? elapsedLabel(fixture.status)
                     : fixture.status.label}
                 </Badge>
               </>
