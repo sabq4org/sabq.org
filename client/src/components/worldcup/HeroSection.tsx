@@ -41,6 +41,19 @@ function CountdownChips({ timestamp }: { timestamp: number }) {
     return () => clearInterval(interval);
   }, [timestamp]);
 
+  // موعد الانطلاق حان لكن المزود لم يرفع إشارة «حية» بعد — لا نعرض أصفارًا مجمدة
+  if (countdown.total <= 0) {
+    return (
+      <div className="flex items-center justify-center gap-2 text-sm font-bold text-emerald-100">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />
+        </span>
+        حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات
+      </div>
+    );
+  }
+
   const chips = [
     { value: countdown.days, label: "يوم" },
     { value: countdown.hours, label: "ساعة" },
