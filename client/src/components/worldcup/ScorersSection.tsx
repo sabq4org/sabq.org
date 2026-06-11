@@ -148,8 +148,11 @@ function LeadersList({ endpoint, render, emptyMessage }: {
 }
 
 export function ScorersSection({ scorers, isLoading, tournamentStarted }: ScorersSectionProps) {
-  const podium = (scorers ?? []).slice(0, 3);
-  const rest = (scorers ?? []).slice(3);
+  const all = scorers ?? [];
+  // المنصة تحتاج ثلاثة هدافين مكتملين — أقل من ذلك يعرض قائمة صفوف عادية
+  const showPodium = all.length >= 3;
+  const podium = showPodium ? all.slice(0, 3) : [];
+  const rest = showPodium ? all.slice(3) : all;
   // «ينطلق مع أول صافرة» تصبح خاطئة لحظة انطلاق البطولة — العبارات تتبع الحالة
   const pendingStats = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات";
 
@@ -190,10 +193,10 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
                 ))}
               </div>
             )}
-            {!isLoading && podium.length === 0 && (
+            {!isLoading && all.length === 0 && (
               <EmptyRace message={tournamentStarted ? pendingStats : "سباق الحذاء الذهبي ينطلق مع أول صافرة"} />
             )}
-            {!isLoading && podium.length > 0 && (
+            {!isLoading && all.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -201,11 +204,13 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
                 transition={{ duration: 0.4 }}
               >
                 {/* منصة التتويج: الثاني — الأول — الثالث */}
-                <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
-                  {podium[1] ? <PodiumCard scorer={podium[1]} place={1} /> : <span />}
-                  <PodiumCard scorer={podium[0]} place={0} />
-                  {podium[2] ? <PodiumCard scorer={podium[2]} place={2} /> : <span />}
-                </div>
+                {showPodium && (
+                  <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
+                    <PodiumCard scorer={podium[1]} place={1} />
+                    <PodiumCard scorer={podium[0]} place={0} />
+                    <PodiumCard scorer={podium[2]} place={2} />
+                  </div>
+                )}
                 {rest.length > 0 && (
                   <div className="max-w-2xl mx-auto space-y-1.5">
                     {rest.map((scorer) => (

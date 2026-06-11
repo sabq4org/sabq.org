@@ -177,11 +177,16 @@ export async function getStandings(): Promise<WcGroup[]> {
   return withSWR("wc:standings", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
     const rows = await apiGet("standings", { league: LEAGUE_ID, season: SEASON });
     const tables: any[][] = rows[0]?.league?.standings ?? [];
+    // المزود يسمي المجموعات "Group A" قبل البطولة و"Group Stage - Group A" بعد
+    // أول إعادة حساب، وجدول أفضل الثوالث يأتي باسم "Group Stage" بلا حرف — نستبعده
+    const groupLetter = (table: any[]): string | null =>
+      (table[0]?.group ?? "").match(/Group\s+([A-L])\s*$/i)?.[1]?.toUpperCase() ?? null;
     return tables
-      .filter((table) => /^Group/i.test(table[0]?.group ?? ""))
+      .filter((table) => groupLetter(table) !== null)
+      .sort((a, b) => groupLetter(a)!.localeCompare(groupLetter(b)!))
       .map((table) => ({
         group: localizeGroup(table[0]?.group ?? ""),
-        groupEn: table[0]?.group ?? "",
+        groupEn: `Group ${groupLetter(table)}`,
         rows: table.map((row: any): WcStandingRow => ({
           rank: row.rank,
           team: localizeTeam(row.team),
@@ -383,6 +388,7 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
 interface WcRaceTally {
   name: string;
   team: WcTeam;
+  photo: string;
   goals: number;
   penalties: number;
   assists: number;
@@ -406,14 +412,23 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     }
 
     const tallies = new Map<string, WcRaceTally>();
-    const bump = (name: string | null, teamId: number, apply: (t: WcRaceTally) => void) => {
+    const bump = (
+      name: string | null,
+      playerId: number | null,
+      teamId: number,
+      apply: (t: WcRaceTally) => void
+    ) => {
       const team = teamById.get(teamId);
       if (!name || !team) return;
       const key = `${teamId}:${name}`;
       let tally = tallies.get(key);
       if (!tally) {
-        tally = { name, team, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
+        // صور المزود تتبع معرف اللاعب مباشرة
+        const photo = playerId ? `https://media.api-sports.io/football/players/${playerId}.png` : "";
+        tally = { name, team, photo, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
         tallies.set(key, tally);
+      } else if (!tally.photo && playerId) {
+        tally.photo = `https://media.api-sports.io/football/players/${playerId}.png`;
       }
       apply(tally);
     };
@@ -423,18 +438,18 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
       for (const ev of detail?.events ?? []) {
         if (ev.type === "goal" && ev.detail !== "Own Goal") {
           // الهدف العكسي لا يدخل سباق الهداف، وركلة الجزاء الضائعة نوع مستقل أصلًا
-          bump(ev.player, ev.teamId, (t) => {
+          bump(ev.player, ev.playerId, ev.teamId, (t) => {
             t.goals += 1;
             if (ev.detail === "Penalty") t.penalties += 1;
           });
-          if (ev.assist) bump(ev.assist, ev.teamId, (t) => { t.assists += 1; });
+          if (ev.assist) bump(ev.assist, ev.assistId, ev.teamId, (t) => { t.assists += 1; });
         } else if (ev.type === "yellow-card") {
-          bump(ev.player, ev.teamId, (t) => {
+          bump(ev.player, ev.playerId, ev.teamId, (t) => {
             t.yellow += 1;
             if (ev.detail === "Second Yellow card") t.red += 1; // طرد بإنذارين
           });
         } else if (ev.type === "red-card") {
-          bump(ev.player, ev.teamId, (t) => { t.red += 1; });
+          bump(ev.player, ev.playerId, ev.teamId, (t) => { t.red += 1; });
         }
       }
     }
@@ -443,7 +458,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
       rank: index + 1,
       name: t.name,
-      photo: "",
+      photo: t.photo,
       team: t.team,
       goals: t.goals,
       assists: t.assists,
@@ -460,7 +475,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         .map((t, i): WcScorer => ({
           rank: i + 1,
           name: t.name,
-          photo: "",
+          photo: t.photo,
           team: t.team,
           goals: t.goals,
           assists: t.assists,
@@ -511,7 +526,9 @@ export interface WcMatchEvent {
   /** تفصيل المزود الخام (Own Goal / Penalty / Second Yellow card) — يلزم تجميع السباقات */
   detail: string;
   player: string;
+  playerId: number | null;
   assist: string | null;
+  assistId: number | null;
 }
 
 export interface WcLineupPlayer {
@@ -623,7 +640,9 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
         label: localized.label,
         detail: ev.detail ?? "",
         player: tr(ev.player?.name),
+        playerId: ev.player?.id ?? null,
         assist: ev.assist?.name ? tr(ev.assist.name) : null,
+        assistId: ev.assist?.id ?? null,
       };
     });
 
