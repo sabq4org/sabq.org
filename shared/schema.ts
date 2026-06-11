@@ -12299,3 +12299,15 @@ export const articleDailyStats = pgTable("article_daily_stats", {
 ]);
 
 export type ArticleDailyStat = typeof articleDailyStats.$inferSelect;
+
+// ── World Cup player-name transliterations (AI, cached once) ──
+// مفتاح المصدر = الاسم كما يرسله مزود البيانات (لاتيني). يُعرَّب مرة واحدة
+// ويُحفظ هنا فلا يُعاد طلبه من الـAI أبدًا. انظر server/services/worldCupNameTranslator.ts
+export const wcPlayerNames = pgTable("wc_player_names", {
+  id: serial("id").primaryKey(),
+  source: text("source").notNull().unique(),
+  arabic: text("arabic").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type WcPlayerName = typeof wcPlayerNames.$inferSelect;

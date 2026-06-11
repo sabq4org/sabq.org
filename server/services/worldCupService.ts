@@ -13,11 +13,11 @@ import {
   WC_STATUS_AR,
   localizeEvent,
   localizeGroup,
-  localizePlayerName,
   localizeRound,
   localizeTeamName,
   localizeVenue,
 } from "./worldCupNames";
+import { resolveNames } from "./worldCupNameTranslator";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 1; // World Cup
@@ -211,11 +211,13 @@ export interface WcScorer {
 export async function getTopScorers(): Promise<WcScorer[]> {
   return withSWR("wc:scorers", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
-    return rows.slice(0, 10).map((row: any, index: number): WcScorer => {
+    const top = rows.slice(0, 10);
+    const tr = await resolveNames(top.map((row: any) => row.player?.name));
+    return top.map((row: any, index: number): WcScorer => {
       const stats = row.statistics?.[0] ?? {};
       return {
         rank: index + 1,
-        name: localizePlayerName(row.player?.name),
+        name: tr(row.player?.name),
         photo: row.player?.photo ?? "",
         team: localizeTeam(stats.team),
         goals: stats.goals?.total ?? 0,
@@ -285,10 +287,11 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
     const rows = await apiGet("players/squads", { team: teamId });
     const entry = rows[0];
     if (!entry) return null;
+    const tr = await resolveNames((entry.players ?? []).map((p: any) => p.name));
     const players: WcSquadPlayer[] = (entry.players ?? [])
       .map((p: any): WcSquadPlayer => ({
         id: p.id ?? 0,
-        name: localizePlayerName(p.name),
+        name: tr(p.name),
         number: p.number ?? null,
         position: POSITION_AR[p.position] ?? p.position ?? "",
         positionEn: p.position ?? "",
@@ -350,11 +353,11 @@ export interface WcLeader {
   matches: number;
 }
 
-function mapLeader(row: any, index: number): WcLeader {
+function mapLeader(row: any, index: number, tr: (n: string | null | undefined) => string): WcLeader {
   const stats = row.statistics?.[0] ?? {};
   return {
     rank: index + 1,
-    name: localizePlayerName(row.player?.name),
+    name: tr(row.player?.name),
     photo: row.player?.photo ?? "",
     team: localizeTeam(stats.team),
     goals: stats.goals?.total ?? 0,
@@ -368,15 +371,17 @@ function mapLeader(row: any, index: number): WcLeader {
 
 export async function getTopAssists(): Promise<WcLeader[]> {
   return withSWR("wc:assists", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
-    const rows = await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON });
-    return rows.slice(0, 10).map(mapLeader);
+    const rows = (await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
+    const tr = await resolveNames(rows.map((row: any) => row.player?.name));
+    return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
 }
 
 export async function getTopCards(): Promise<WcLeader[]> {
   return withSWR("wc:cards", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
-    const rows = await apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON });
-    return rows.slice(0, 10).map(mapLeader);
+    const rows = (await apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
+    const tr = await resolveNames(rows.map((row: any) => row.player?.name));
+    return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
 }
 
@@ -467,6 +472,21 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
     const item = rows[0];
     if (!item) return null;
 
+    // اجمع كل أسماء اللاعبين في هذه المباراة (أحداث + تشكيلات + تقييمات)
+    // وعرّبها دفعة واحدة — استدعاء AI واحد فقط للأسماء الجديدة، ثم كاش للأبد
+    const rawNames: (string | null | undefined)[] = [];
+    for (const ev of item.events ?? []) {
+      rawNames.push(ev.player?.name, ev.assist?.name);
+    }
+    for (const lineup of item.lineups ?? []) {
+      for (const p of lineup.startXI ?? []) rawNames.push(p.player?.name);
+      for (const p of lineup.substitutes ?? []) rawNames.push(p.player?.name);
+    }
+    for (const teamBlock of item.players ?? []) {
+      for (const p of teamBlock.players ?? []) rawNames.push(p.player?.name);
+    }
+    const tr = await resolveNames(rawNames);
+
     const events: WcMatchEvent[] = (item.events ?? []).map((ev: any) => {
       const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
       return {
@@ -475,15 +495,15 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
         teamId: ev.team?.id ?? 0,
         type: localized.type,
         label: localized.label,
-        player: localizePlayerName(ev.player?.name),
-        assist: ev.assist?.name ? localizePlayerName(ev.assist.name) : null,
+        player: tr(ev.player?.name),
+        assist: ev.assist?.name ? tr(ev.assist.name) : null,
       };
     });
 
     const lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({
         id: p.player?.id ?? 0,
-        name: localizePlayerName(p.player?.name),
+        name: tr(p.player?.name),
         number: p.player?.number ?? null,
         position: p.player?.pos ?? null,
         grid: p.player?.grid ?? null,
@@ -507,7 +527,7 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
           if (!Number.isFinite(rating)) return null;
           return {
             id: p.player?.id ?? 0,
-            name: localizePlayerName(p.player?.name),
+            name: tr(p.player?.name),
             photo: p.player?.photo ?? "",
             teamId: teamBlock.team?.id ?? 0,
             number: st.games?.number ?? null,
