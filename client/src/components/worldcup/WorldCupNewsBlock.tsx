@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ChevronLeft, Clock, Newspaper } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 
@@ -169,6 +170,19 @@ export default function WorldCupNewsBlock() {
             </Link>
           </motion.div>
         ))}
+      </div>
+
+      {/* صفّان من الأخبار ثم بوابة القسم الرياضي الكامل */}
+      <div className="mt-5 flex justify-center">
+        <Link href="/category/sports">
+          <Button
+            variant="outline"
+            className="rounded-full px-6 font-bold border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
+          >
+            المزيد من أخبار كأس العالم
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </Link>
       </div>
     </section>
   );
