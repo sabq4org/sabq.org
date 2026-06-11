@@ -647,8 +647,10 @@ export async function getOverview(): Promise<WcOverview> {
   const nextDayKey = (upcoming[0]?.date ?? "").slice(0, 10);
   const nextDayMatches = upcoming.filter((f) => (f.date ?? "").slice(0, 10) === nextDayKey);
   const fallbackPool = motdPool.length > 0 ? motdPool : nextDayMatches;
+  // الأقرب زمنيًا أولًا — مباراة الفجر لا تتجاوزها مباراة المساء مهما علت
+  // نجوميتها؛ النجومية كاسر تعادل للمباريات المتزامنة (ختام المجموعات)
   const motdFixture = [...fallbackPool].sort(
-    (a, b) => starWeight(b) - starWeight(a) || a.timestamp - b.timestamp
+    (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a)
   )[0] ?? null;
 
   let motdPrediction: WcPrediction | null = null;
