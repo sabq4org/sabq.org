@@ -288,6 +288,21 @@ nonisolated enum WCTheme {
     static let sky = Color(red: 0.35, green: 0.66, blue: 0.96)
     static let gold = Color(red: 0.92, green: 0.68, blue: 0.20)
     static let leaf = Color(red: 0.40, green: 0.73, blue: 0.22)
+
+    // لوحة الوضع الداكن الموحّدة للقسم كله (ثيم الملعب الليلي بلا أبيض مزعج)
+    static let card = Color.white.opacity(0.06)
+    static let cardStroke = Color.white.opacity(0.10)
+    static let onDark = Color.white
+    static let onDarkDim = Color.white.opacity(0.62)
+    static let chipFill = Color.white.opacity(0.10)
+
+    /// خلفية القسم — تدرّج ملعب ليلي عمودي ثابت عبر الوضعين.
+    static var sectionBackground: LinearGradient {
+        LinearGradient(
+            colors: [stadiumTop, Color(red: 0.03, green: 0.18, blue: 0.13), stadiumBottom],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
 }
 
 nonisolated enum WCFormat {

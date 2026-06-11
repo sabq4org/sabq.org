@@ -40,7 +40,7 @@ struct WorldCupView: View {
             }
             .padding(.bottom, 36)
         }
-        .background(SabqTheme.background.ignoresSafeArea())
+        .background(WCTheme.sectionBackground.ignoresSafeArea())
         .navigationTitle("مونديال 2026")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(WCTheme.stadiumTop, for: .navigationBar)
@@ -332,12 +332,21 @@ struct WCMatchesSection: View {
     let onOpenMatch: (Int) -> Void
 
     enum Tab: String, CaseIterable { case live = "مباشر", today = "اليوم", upcoming = "القادمة", finished = "النتائج" }
-    @State private var tab: Tab = .upcoming
+    // nil = اتبع الافتراضي المحسوب؛ بمجرد اختيار المستخدم يثبت اختياره
+    @State private var userTab: Tab?
 
     private var live: [WCFixture] { fixtures.filter { $0.status.live } }
     private var today: [WCFixture] { fixtures.filter { WCFormat.dayKey($0.date) == WCFormat.todayKey() } }
     private var upcoming: [WCFixture] { fixtures.filter { !$0.status.live && !$0.status.finished } }
     private var finished: [WCFixture] { fixtures.filter { $0.status.finished }.reversed() }
+
+    // الافتراضي «اليوم» إذا كان فيه مباريات (لتقليل الازدحام)، وإلا مباشر ثم القادمة
+    private var defaultTab: Tab {
+        if !today.isEmpty { return .today }
+        if !live.isEmpty { return .live }
+        return .upcoming
+    }
+    private var tab: Tab { userTab ?? defaultTab }
 
     private var current: [WCFixture] {
         switch tab {
@@ -358,7 +367,7 @@ struct WCMatchesSection: View {
                 HStack(spacing: 8) {
                     ForEach(Tab.allCases, id: \.self) { t in
                         let count = t == .live ? live.count : 0
-                        Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
+                        Button { withAnimation(.easeOut(duration: 0.2)) { userTab = t } } label: {
                             HStack(spacing: 5) {
                                 Text(t.rawValue)
                                 if t == .live && count > 0 {
@@ -368,9 +377,9 @@ struct WCMatchesSection: View {
                                 }
                             }
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(tab == t ? .white : SabqTheme.secondaryInk)
+                            .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                             .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : SabqTheme.softFill))
+                            .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
                         }
                         .buttonStyle(.plain)
                     }
@@ -382,7 +391,7 @@ struct WCMatchesSection: View {
                 WCLoading()
             } else if current.isEmpty {
                 Text(emptyText)
-                    .font(.system(size: 13)).foregroundStyle(SabqTheme.secondaryInk)
+                    .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 30)
             } else {
                 LazyVStack(spacing: 16) {
@@ -390,8 +399,8 @@ struct WCMatchesSection: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 6) {
                                 Circle().fill(WCTheme.emeraldDeep).frame(width: 7, height: 7)
-                                Text(day.label).font(.system(size: 14, weight: .bold)).foregroundStyle(SabqTheme.ink)
-                                Text("(\(day.items.count))").font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
+                                Text(day.label).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                Text("(\(day.items.count))").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                             }
                             ForEach(day.items) { f in
                                 WCMatchCard(fixture: f) { onOpenMatch(f.id) }
@@ -437,7 +446,7 @@ struct WCMatchCard: View {
         Button(action: onTap) {
             VStack(spacing: 10) {
                 HStack {
-                    Text(fixture.round).font(.system(size: 11, weight: .semibold)).foregroundStyle(SabqTheme.secondaryInk)
+                    Text(fixture.round).font(.system(size: 11, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
                     Spacer()
                     WCStatusPill(fixture: fixture)
                 }
@@ -446,36 +455,36 @@ struct WCMatchCard: View {
                 if let pen = fixture.penalties {
                     HStack {
                         Text("ركلات الترجيح: \(pen.home ?? 0) - \(pen.away ?? 0)")
-                            .font(.system(size: 11)).foregroundStyle(SabqTheme.secondaryInk)
+                            .font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                         Spacer()
                     }
                 }
-                Divider().overlay(SabqTheme.outline)
+                Divider().overlay(WCTheme.cardStroke)
                 HStack(spacing: 5) {
                     Image(systemName: "mappin.and.ellipse").font(.system(size: 10))
                     Text("\(fixture.venue.name) — \(fixture.venue.city)").lineLimit(1)
                     Spacer()
                 }
-                .font(.system(size: 11)).foregroundStyle(SabqTheme.secondaryInk)
+                .font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SabqTheme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(WCTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
     }
 
     private func teamRow(_ team: WCTeam, goals: Int?, win: Bool) -> some View {
         HStack(spacing: 8) {
-            WCTeamLogo(team: team, size: 28, ring: SabqTheme.outline)
+            WCTeamLogo(team: team, size: 28, ring: WCTheme.cardStroke)
             Text(team.name)
                 .font(.system(size: 14, weight: win ? .heavy : .semibold))
-                .foregroundStyle(SabqTheme.ink)
+                .foregroundStyle(WCTheme.onDark)
             Spacer()
             if let goals {
                 Text("\(goals)")
                     .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundStyle(win ? WCTheme.emeraldDeep : SabqTheme.ink)
+                    .foregroundStyle(win ? WCTheme.emeraldDeep : WCTheme.onDark)
             }
         }
     }
@@ -497,7 +506,7 @@ struct WCStandingsSection: View {
                 WCLoading()
             } else if groups.isEmpty {
                 Text("جداول الترتيب تظهر هنا فور انطلاق البطولة")
-                    .font(.system(size: 13)).foregroundStyle(SabqTheme.secondaryInk)
+                    .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             } else {
                 LazyVStack(spacing: 12) {
@@ -518,32 +527,32 @@ struct WCStandingsSection: View {
                 HStack(spacing: 10) {
                     Text("لعب"); Text("فارق"); Text("نقاط")
                 }
-                .font(.system(size: 10)).foregroundStyle(SabqTheme.secondaryInk)
+                .font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
             }
             ForEach(group.rows) { row in
                 standingRow(row)
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
     }
 
     private func standingRow(_ row: WCStandingRow) -> some View {
         let highlight: Color = row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear)
         return HStack(spacing: 8) {
-            Text("\(row.rank)").font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk).frame(width: 16)
-            WCTeamLogo(team: row.team, size: 20, ring: SabqTheme.outline)
-            Text(row.team.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(SabqTheme.ink).lineLimit(1)
+            Text("\(row.rank)").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
+            WCTeamLogo(team: row.team, size: 20, ring: WCTheme.cardStroke)
+            Text(row.team.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             if let form = row.form { WCFormDots(form: form) }
             Spacer()
             Text("\(row.played)").frame(width: 28)
             Text(row.goalsDiff > 0 ? "+\(row.goalsDiff)" : "\(row.goalsDiff)").frame(width: 36)
                 .environment(\.layoutDirection, .leftToRight)
-            Text("\(row.points)").font(.system(size: 14, weight: .black)).foregroundStyle(SabqTheme.ink).frame(width: 28)
+            Text("\(row.points)").font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark).frame(width: 28)
         }
         .font(.system(size: 12).monospacedDigit())
-        .foregroundStyle(SabqTheme.secondaryInk)
+        .foregroundStyle(WCTheme.onDarkDim)
         .padding(.vertical, 5).padding(.horizontal, 6)
         .background(
             HStack { Rectangle().fill(highlight).frame(width: 3); Spacer() }
@@ -565,6 +574,6 @@ struct WCFormDots: View {
         .environment(\.layoutDirection, .leftToRight)
     }
     private func color(_ ch: Character) -> Color {
-        switch ch { case "W": return WCTheme.emeraldDeep; case "D": return SabqTheme.tertiaryInk; case "L": return WCTheme.liveRed; default: return SabqTheme.outline }
+        switch ch { case "W": return WCTheme.emeraldDeep; case "D": return WCTheme.onDarkDim; case "L": return WCTheme.liveRed; default: return WCTheme.cardStroke }
     }
 }

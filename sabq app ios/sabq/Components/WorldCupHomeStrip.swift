@@ -68,9 +68,14 @@ struct WorldCupHomeStrip: View {
             }
         } else {
             VStack(spacing: 1) {
-                Text(WCFormat.time(f)).font(.system(size: 16, weight: .black, design: .rounded)).foregroundStyle(.white)
+                Text(WCFormat.time(f))
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize()
                 Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
                     .font(.system(size: 10)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                    .lineLimit(1).fixedSize()
             }
         }
     }

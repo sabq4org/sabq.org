@@ -55,9 +55,9 @@ struct WCStatusPill: View {
         } else if fixture.status.finished {
             Text(fixture.status.label)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(onDark ? Color.white.opacity(0.85) : SabqTheme.secondaryInk)
+                .foregroundStyle(onDark ? Color.white.opacity(0.85) : WCTheme.onDarkDim)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(onDark ? Color.white.opacity(0.12) : SabqTheme.softFill))
+                .background(Capsule().fill(onDark ? Color.white.opacity(0.12) : WCTheme.chipFill))
         } else {
             Text(WCFormat.time(fixture))
                 .font(.system(size: 11, weight: .bold))
@@ -163,10 +163,10 @@ struct WCSectionHeader: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(SabqFonts.headline(size: 21))
-                    .foregroundStyle(SabqTheme.ink)
+                    .foregroundStyle(WCTheme.onDark)
                 Text(subtitle)
                     .font(.system(size: 12))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(WCTheme.onDarkDim)
             }
             Spacer(minLength: 0)
         }
@@ -186,10 +186,10 @@ struct WCEmptyState: View {
                 .foregroundStyle(WCTheme.emeraldDeep)
             Text(title)
                 .font(SabqFonts.subhead(size: 15))
-                .foregroundStyle(SabqTheme.ink)
+                .foregroundStyle(WCTheme.onDark)
             Text(subtitle)
                 .font(.system(size: 12))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -200,7 +200,7 @@ struct WCEmptyState: View {
 /// مؤشر تحميل بلون العلامة.
 struct WCLoading: View {
     var body: some View {
-        HStack { Spacer(); ProgressView().tint(WCTheme.emeraldDeep); Spacer() }
+        HStack { Spacer(); ProgressView().tint(.white); Spacer() }
             .padding(.vertical, 32)
     }
 }

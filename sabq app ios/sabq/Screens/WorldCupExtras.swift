@@ -24,9 +24,9 @@ struct WCRacesSection: View {
                     Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                         Text(t.rawValue)
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(tab == t ? .white : SabqTheme.secondaryInk)
+                            .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                             .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(Capsule().fill(tab == t ? WCTheme.gold : SabqTheme.softFill))
+                            .background(Capsule().fill(tab == t ? WCTheme.gold : WCTheme.chipFill))
                     }
                     .buttonStyle(.plain)
                 }
@@ -94,14 +94,14 @@ struct WCRacesSection: View {
 
     private func metric(_ value: String, sub: String) -> some View {
         HStack(spacing: 8) {
-            Text(sub).font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
-            Text(value).font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(SabqTheme.ink)
+            Text(sub).font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+            Text(value).font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(WCTheme.onDark)
         }
     }
     private func cardCount(_ n: Int, color: Color) -> some View {
         HStack(spacing: 3) {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 12)
-            Text("\(n)").font(.system(size: 14, weight: .black)).foregroundStyle(SabqTheme.ink)
+            Text("\(n)").font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
         }
     }
 
@@ -121,13 +121,13 @@ struct WCRaceEmpty: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "soccerball").font(.system(size: 28)).foregroundStyle(WCTheme.gold)
-            Text(message).font(SabqFonts.subhead(size: 14)).foregroundStyle(SabqTheme.ink)
+            Text(message).font(SabqFonts.subhead(size: 14)).foregroundStyle(WCTheme.onDark)
             Text("تابع هنا الترتيب أولًا بأول طوال البطولة")
-                .font(.system(size: 12)).foregroundStyle(SabqTheme.secondaryInk)
+                .font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
         }
         .frame(maxWidth: .infinity).padding(.vertical, 26)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
     }
 }
 
@@ -150,16 +150,16 @@ struct WCPodium: View {
                     .offset(y: 6)
             }
             Text(scorer.name).font(.system(size: place == 0 ? 15 : 13, weight: .heavy))
-                .foregroundStyle(SabqTheme.ink).multilineTextAlignment(.center).lineLimit(1)
+                .foregroundStyle(WCTheme.onDark).multilineTextAlignment(.center).lineLimit(1)
             HStack(spacing: 4) {
                 WCRemoteImage(url: scorer.team.logo).frame(width: 14, height: 14)
-                Text(scorer.team.name).font(.system(size: 11)).foregroundStyle(SabqTheme.secondaryInk).lineLimit(1)
+                Text(scorer.team.name).font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
             }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text("\(scorer.goals)")
                     .font(.system(size: place == 0 ? 28 : 22, weight: .black, design: .rounded))
-                    .foregroundStyle(place == 0 ? WCTheme.gold : SabqTheme.ink)
-                Text(scorer.goals == 1 ? "هدف" : "أهداف").font(.system(size: 11)).foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(place == 0 ? WCTheme.gold : WCTheme.onDark)
+                Text(scorer.goals == 1 ? "هدف" : "أهداف").font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim)
             }
         }
         .frame(maxWidth: .infinity)
@@ -170,8 +170,8 @@ struct WCPodium: View {
         Group {
             if scorer.photo.isEmpty {
                 Text(String(scorer.name.prefix(2)))
-                    .font(.system(size: 18, weight: .black)).foregroundStyle(SabqTheme.secondaryInk)
-                    .frame(width: size, height: size).background(Circle().fill(SabqTheme.softFill))
+                    .font(.system(size: 18, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                    .frame(width: size, height: size).background(Circle().fill(WCTheme.chipFill))
             } else {
                 WCRemoteImage(url: scorer.photo, contentMode: .fill)
                     .frame(width: size, height: size).clipShape(Circle())
@@ -192,27 +192,27 @@ struct WCLeaderRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("\(rank)").font(.system(size: 13)).foregroundStyle(SabqTheme.secondaryInk).frame(width: 20)
+            Text("\(rank)").font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim).frame(width: 20)
             photoView
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).font(.system(size: 14, weight: .bold)).foregroundStyle(SabqTheme.ink).lineLimit(1)
+                Text(name).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 HStack(spacing: 4) {
                     WCRemoteImage(url: team.logo).frame(width: 12, height: 12)
-                    Text(team.name).font(.system(size: 11)).foregroundStyle(SabqTheme.secondaryInk).lineLimit(1)
+                    Text(team.name).font(.system(size: 11)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
                 }
             }
             Spacer()
             trailing()
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
     }
 
     private var photoView: some View {
         Group {
             if photo.isEmpty {
-                Circle().fill(SabqTheme.softFill).frame(width: 36, height: 36)
+                Circle().fill(WCTheme.chipFill).frame(width: 36, height: 36)
             } else {
                 WCRemoteImage(url: photo, contentMode: .fill).frame(width: 36, height: 36).clipShape(Circle())
             }
@@ -261,8 +261,8 @@ struct WCTeamsSection: View {
     private func teamTile(_ team: WCTeam) -> some View {
         let isSaudi = team.id == WCTheme.saudiId
         return VStack(spacing: 6) {
-            WCTeamLogo(team: team, size: 38, ring: SabqTheme.outline)
-            Text(team.name).font(.system(size: 11, weight: .bold)).foregroundStyle(SabqTheme.ink)
+            WCTeamLogo(team: team, size: 38, ring: WCTheme.cardStroke)
+            Text(team.name).font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).multilineTextAlignment(.center)
             if isSaudi {
                 Text("الأخضر").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
@@ -272,10 +272,10 @@ struct WCTeamsSection: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12).padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(SabqTheme.surface))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(isSaudi ? WCTheme.emeraldDeep : SabqTheme.outline.opacity(0.5), lineWidth: isSaudi ? 2 : 0.5)
+                .stroke(isSaudi ? WCTheme.emeraldDeep : WCTheme.cardStroke.opacity(0.5), lineWidth: isSaudi ? 2 : 0.5)
         )
     }
 }
@@ -312,19 +312,22 @@ struct WCSquadSheet: View {
                     .padding(16)
                 } else {
                     Text("القائمة الرسمية لم تُعلن بعد")
-                        .font(.system(size: 13)).foregroundStyle(SabqTheme.secondaryInk)
+                        .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
                         .frame(maxWidth: .infinity).padding(.top, 50)
                 }
             }
-            .background(SabqTheme.background.ignoresSafeArea())
+            .background(WCTheme.sectionBackground.ignoresSafeArea())
             .navigationTitle("قائمة \(team.name)")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(WCTheme.stadiumTop, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                    Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.white) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    WCTeamLogo(team: team, size: 30, ring: SabqTheme.outline)
+                    WCTeamLogo(team: team, size: 30, ring: WCTheme.cardStroke)
                 }
             }
             .task {
@@ -339,21 +342,21 @@ struct WCSquadSheet: View {
     private func playerRow(_ p: WCSquadPlayer) -> some View {
         HStack(spacing: 10) {
             if p.photo.isEmpty {
-                Circle().fill(SabqTheme.softFill).frame(width: 36, height: 36)
+                Circle().fill(WCTheme.chipFill).frame(width: 36, height: 36)
             } else {
                 WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 36, height: 36).clipShape(Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(p.name).font(.system(size: 14, weight: .bold)).foregroundStyle(SabqTheme.ink).lineLimit(1)
+                Text(p.name).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 if let age = p.age {
-                    Text("\(age) سنة").font(.system(size: 10)).foregroundStyle(SabqTheme.secondaryInk)
+                    Text("\(age) سنة").font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                 }
             }
             Spacer()
             Text(p.number.map { "\($0)" } ?? "—")
-                .font(.system(size: 15, weight: .black)).foregroundStyle(SabqTheme.secondaryInk)
+                .font(.system(size: 15, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
     }
 }
