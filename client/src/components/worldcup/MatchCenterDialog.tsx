@@ -342,7 +342,10 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
 
   return (
     <Dialog open={fixtureId != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" dir="rtl">
+      <DialogContent
+        className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col [&>button]:left-4 [&>button]:right-auto"
+        dir="rtl"
+      >
         <DialogHeader>
           <DialogTitle className="sr-only">مركز المباراة</DialogTitle>
           {isLoading && (
