@@ -156,7 +156,7 @@ function LineupsTab({ lineups }: { lineups: WcLineup[] }) {
   if (lineups.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-8">
-        التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة
+        التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة
       </p>
     );
   }

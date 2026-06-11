@@ -195,7 +195,7 @@ struct WCLineupsView: View {
 
     var body: some View {
         if detail.lineups.isEmpty {
-            emptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة")
+            emptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة")
         } else {
             VStack(spacing: 18) {
                 ForEach(detail.lineups) { lineup in
