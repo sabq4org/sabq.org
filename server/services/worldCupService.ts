@@ -28,6 +28,9 @@ const TIMEZONE = "Asia/Riyadh";
 const LIVE_TTL = 15 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
+// المزود ينشر التشكيلات قبل الانطلاق بـ 20–40 دقيقة — كاش 5 دقائق يؤخرها حتى الصافرة
+const MATCH_DETAIL_PREKICKOFF_TTL = 60 * 1000;
+const PREKICKOFF_WINDOW_MS = 75 * 60 * 1000;
 
 export function isWorldCupConfigured(): boolean {
   return Boolean((process.env.APIFOOTBALL_KEY || "").trim());
@@ -463,9 +466,16 @@ export interface WcMatchDetail {
 }
 
 export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail | null> {
-  // مباراة حية تُحدَّث كل 20 ثانية، والمنتهية/القادمة كل 5 دقائق
+  // مباراة حية تُحدَّث كل 20 ثانية، وقبيل الانطلاق كل دقيقة (لالتقاط التشكيلات فور نشرها)،
+  // والمنتهية/البعيدة كل 5 دقائق
   const known = (await getFixtures()).find((f) => f.id === fixtureId);
-  const ttl = known?.status.live ? MATCH_DETAIL_LIVE_TTL : CACHE_TTL.MEDIUM;
+  let ttl = CACHE_TTL.MEDIUM;
+  if (known?.status.live) {
+    ttl = MATCH_DETAIL_LIVE_TTL;
+  } else if (known && !known.status.finished) {
+    const msToKickoff = new Date(known.date).getTime() - Date.now();
+    if (msToKickoff < PREKICKOFF_WINDOW_MS) ttl = MATCH_DETAIL_PREKICKOFF_TTL;
+  }
 
   const detail = await withSWR(`wc:match:${fixtureId}`, ttl, ttl * 2, async () => {
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
