@@ -206,9 +206,10 @@ private fun TeamColumn(team: WcTeam, modifier: Modifier = Modifier) {
 private fun HeroCenter(f: WcFixture, modifier: Modifier = Modifier) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
         if (f.started) {
-            LtrText("${f.goals.home ?: 0} - ${f.goals.away ?: 0}", Color.White, 40, FontWeight.Black)
+            // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه
+            LtrText("${f.goals.away ?: 0} - ${f.goals.home ?: 0}", Color.White, 40, FontWeight.Black)
             f.penalties?.let {
-                Text("(${it.home ?: 0} - ${it.away ?: 0}) ركلات الترجيح", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 11.sp)
+                Text("(${it.away ?: 0} - ${it.home ?: 0}) ركلات الترجيح", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 11.sp)
             }
             WcStatusPill(f)
         } else {

@@ -210,12 +210,13 @@ struct WCHeroSection: View {
     private func centerColumn(_ f: WCFixture) -> some View {
         VStack(spacing: 6) {
             if f.started {
-                Text("\(f.goals.home ?? 0) - \(f.goals.away ?? 0)")
+                // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه
+                Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                     .font(.system(size: 40, weight: .black, design: .rounded))
                     .foregroundStyle(.white)
                     .environment(\.layoutDirection, .leftToRight)
                 if let pen = f.penalties {
-                    Text("(\(pen.home ?? 0) - \(pen.away ?? 0)) ركلات الترجيح")
+                    Text("(\(pen.away ?? 0) - \(pen.home ?? 0)) ركلات الترجيح")
                         .font(.system(size: 11)).foregroundStyle(WCTheme.emerald.opacity(0.85))
                 }
                 WCStatusPill(fixture: f, onDark: true)

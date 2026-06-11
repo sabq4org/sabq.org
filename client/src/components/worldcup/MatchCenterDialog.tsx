@@ -215,8 +215,9 @@ function HeadToHeadList({ detail }: { detail: WcMatchDetail }) {
           </Badge>
           <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
             <span className="font-semibold truncate">{match.home.name}</span>
+            {/* اسم المضيف على اليمين — الضيف أولًا داخل LTR */}
             <span className="font-black tabular-nums shrink-0" dir="ltr">
-              {match.goals.home ?? 0} - {match.goals.away ?? 0}
+              {match.goals.away ?? 0} - {match.goals.home ?? 0}
             </span>
             <span className="font-semibold truncate">{match.away.name}</span>
           </div>
@@ -365,9 +366,10 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
                   <span className="text-sm font-extrabold">{fixture.home.name}</span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
+                  {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه */}
                   {fixture.status.live || fixture.status.finished ? (
                     <span className="text-3xl font-black tabular-nums" dir="ltr">
-                      {fixture.goals.home ?? 0} - {fixture.goals.away ?? 0}
+                      {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
                     </span>
                   ) : (
                     <span className="text-xl font-black">{formatKickoffTime(fixture.date)}</span>

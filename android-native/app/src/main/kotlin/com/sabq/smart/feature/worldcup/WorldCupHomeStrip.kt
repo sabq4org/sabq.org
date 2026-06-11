@@ -97,7 +97,8 @@ private fun StripLogo(url: String) {
 private fun StripCenter(f: WcFixture) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (f.started) {
-            LtrText("${f.goals.home ?: 0} - ${f.goals.away ?: 0}", Color.White, 18, FontWeight.Black)
+            // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
+            LtrText("${f.goals.away ?: 0} - ${f.goals.home ?: 0}", Color.White, 18, FontWeight.Black)
             WcStatusPill(f)
         } else {
             Text(WcFormat.time(f), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)

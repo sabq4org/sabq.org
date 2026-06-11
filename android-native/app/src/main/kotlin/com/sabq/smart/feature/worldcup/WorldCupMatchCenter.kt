@@ -153,7 +153,8 @@ private fun MatchHeader(f: WcFixture) {
         Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth()) {
             HeadTeam(f.home, Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.width(100.dp)) {
-                if (f.started) LtrText("${f.goals.home ?: 0} - ${f.goals.away ?: 0}", WcColors.onDark, 30, FontWeight.Black)
+                // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
+                if (f.started) LtrText("${f.goals.away ?: 0} - ${f.goals.home ?: 0}", WcColors.onDark, 30, FontWeight.Black)
                 else Text(WcFormat.time(f), color = WcColors.onDark, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 WcStatusPill(f)
             }
@@ -411,7 +412,8 @@ private fun H2hRow(m: WcFixture) {
             LtrText(m.date.take(4), WcColors.onDarkDim, 12, FontWeight.Bold)
         }
         Text(m.home.name, color = WcColors.onDark, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        LtrText("${m.goals.home ?: 0} - ${m.goals.away ?: 0}", WcColors.onDark, 13, FontWeight.Black)
+        // اسم المضيف على اليمين — الضيف أولًا داخل LTR
+        LtrText("${m.goals.away ?: 0} - ${m.goals.home ?: 0}", WcColors.onDark, 13, FontWeight.Black)
         Text(m.away.name, color = WcColors.onDark, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }

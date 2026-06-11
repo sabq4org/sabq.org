@@ -148,8 +148,9 @@ export default function WorldCupHomeStrip() {
           <div className="flex flex-col items-center gap-0.5 shrink-0">
             {started ? (
               <>
+                {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR */}
                 <span className="text-2xl font-black text-white tabular-nums leading-none" dir="ltr">
-                  {fixture.goals.home ?? 0} - {fixture.goals.away ?? 0}
+                  {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
                 </span>
                 <Badge
                   className={
