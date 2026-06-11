@@ -174,6 +174,21 @@ ${article.content.substring(0, 3000)}
   return prompts[language];
 }
 
+// مخطط JSON الصارم لمخرجات SEO — يُمرر لـ Structured Outputs ليستحيل كسر الـ JSON
+const SEO_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["metaTitle", "metaDescription", "keywords", "socialTitle", "socialDescription", "imageAltText"],
+  properties: {
+    metaTitle: { type: "string" },
+    metaDescription: { type: "string" },
+    keywords: { type: "array", items: { type: "string" } },
+    socialTitle: { type: "string" },
+    socialDescription: { type: "string" },
+    imageAltText: { type: "string" },
+  },
+} as const;
+
 // Generate SEO using Anthropic Claude
 async function generateWithClaude(
   article: ArticleInput,
@@ -187,7 +202,7 @@ async function generateWithClaude(
 
   const response = await client.messages.create({
     model: model,
-    max_tokens: 1024,
+    max_tokens: 2000,
     temperature: 0.3, // Lower temperature for more consistent SEO output
     system: SYSTEM_PROMPTS[language],
     messages: [
@@ -196,7 +211,15 @@ async function generateWithClaude(
         content: createUserPrompt(article, language),
       },
     ],
-  });
+    // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
+    output_config: {
+      format: { type: "json_schema", schema: SEO_JSON_SCHEMA },
+    },
+  } as any);
+
+  if (response.stop_reason === "max_tokens") {
+    throw new Error("Claude SEO response truncated (stop_reason=max_tokens)");
+  }
 
   // Extract JSON from response
   const textContent = response.content.find((block) => block.type === "text");
