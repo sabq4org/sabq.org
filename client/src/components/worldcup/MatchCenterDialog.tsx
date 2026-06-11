@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  elapsedLabel,
   formatKickoffDay,
   formatKickoffTime,
   type WcFixture,
@@ -383,7 +384,7 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
                   >
                     {fixture.status.live && <Radio className="h-3 w-3 animate-pulse" />}
                     {fixture.status.live && fixture.status.elapsed != null
-                      ? `${fixture.status.elapsed}'`
+                      ? elapsedLabel(fixture.status)
                       : fixture.status.label}
                   </Badge>
                 </div>

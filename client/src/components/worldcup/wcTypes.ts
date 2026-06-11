@@ -233,6 +233,12 @@ export interface WcCountdown {
   total: number;
 }
 
+/** دقيقة اللعب مع الوقت بدل الضائع: 90+8' بدل 90' المجمدة */
+export function elapsedLabel(status: WcFixture["status"]): string {
+  if (status.elapsed == null) return status.label;
+  return status.extra ? `${status.elapsed}+${status.extra}'` : `${status.elapsed}'`;
+}
+
 export function countdownTo(timestamp: number): WcCountdown {
   const total = Math.max(0, timestamp * 1000 - Date.now());
   return {
