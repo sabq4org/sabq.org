@@ -24,7 +24,17 @@ export default function WorldCup() {
 
   const { data: overview, isLoading: overviewLoading } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    refetchInterval: 30_000,
+    // حول لحظة الانطلاق (الموعد مرّ والمزود لم يرفع «حية» بعد) نستعجل كل 10 ثوانٍ
+    // حتى تنقلب الواجهة للوضع المباشر بأقل تأخير ممكن
+    refetchInterval: (query) => {
+      const fixture = query.state.data?.matchOfTheDay?.fixture;
+      const kickoffPassed =
+        fixture &&
+        !fixture.status.live &&
+        !fixture.status.finished &&
+        fixture.timestamp * 1000 <= Date.now();
+      return kickoffPassed ? 10_000 : 30_000;
+    },
     refetchIntervalInBackground: false,
   });
 

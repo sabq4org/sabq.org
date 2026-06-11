@@ -57,6 +57,15 @@ function TickingCountdown({ timestamp }: { timestamp: number }) {
     return () => clearInterval(interval);
   }, [timestamp]);
 
+  // موعد الانطلاق حان لكن المزود لم يرفع إشارة «حية» بعد — لا نعرض 00:00:00 مجمدة
+  if (countdown.total <= 0) {
+    return (
+      <p className="text-[11px] font-bold text-emerald-200/90">
+        حان موعد الانطلاق — التغطية الحية خلال لحظات
+      </p>
+    );
+  }
+
   const pad = (n: number) => String(n).padStart(2, "0");
   // في آخر يوم نعرض ساعة رقمية HH:MM:SS (وحدها تحتاج dir=ltr)؛
   // قبل ذلك نصًا عربيًا خالصًا — خلطه مع dir=ltr يبعثر الأرقام (Bidi)

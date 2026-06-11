@@ -80,15 +80,27 @@ struct WCCountdownChips: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
             let total = max(0, Double(timestamp) - Date().timeIntervalSince1970)
-            let days = Int(total) / 86_400
-            let hours = (Int(total) % 86_400) / 3_600
-            let minutes = (Int(total) % 3_600) / 60
-            let seconds = Int(total) % 60
-            HStack(spacing: 8) {
-                chip(days, "يوم")
-                chip(hours, "ساعة")
-                chip(minutes, "دقيقة")
-                chip(seconds, "ثانية")
+            if total <= 0 {
+                // الموعد حان والمزود لم يرفع إشارة «حية» بعد — لا أصفار مجمدة
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(WCTheme.emerald)
+                        .frame(width: 8, height: 8)
+                    Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            } else {
+                let days = Int(total) / 86_400
+                let hours = (Int(total) % 86_400) / 3_600
+                let minutes = (Int(total) % 3_600) / 60
+                let seconds = Int(total) % 60
+                HStack(spacing: 8) {
+                    chip(days, "يوم")
+                    chip(hours, "ساعة")
+                    chip(minutes, "دقيقة")
+                    chip(seconds, "ثانية")
+                }
             }
         }
     }
