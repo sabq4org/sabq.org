@@ -171,6 +171,10 @@ struct HomeFeedView: View {
                             .animatedAppear(index: 1)
                     }
 
+                    // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات
+                    WorldCupHomeStrip()
+                        .animatedAppear(index: 1)
+
                     if !articlesStore.stories.isEmpty {
                         storiesSection
                             .animatedAppear(index: 2)

@@ -1,0 +1,384 @@
+import Foundation
+import SwiftUI
+
+// MARK: - World Cup 2026 — DTOs
+//
+// مرآة لما ترسله نقاط /api/world-cup/* (مُعرَّبة من الخادم). الـ JSON يصل
+// بصيغة camelCase نظيفة، والـ decoder المشترك في APIClient عادي بلا
+// keyDecodingStrategy، فالأسماء هنا تطابق المفاتيح حرفيًا. الحقول التي قد
+// تكون null في الخادم optional هنا. التواريخ تبقى نصًا وتُحلَّل بـ
+// SabqFormatters.parseISO8601 عند العرض.
+
+nonisolated struct WCTeam: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+    let winner: Bool?
+}
+
+nonisolated struct WCStatus: Decodable, Hashable {
+    let code: String
+    let label: String
+    let elapsed: Int?
+    let extra: Int?
+    let live: Bool
+    let finished: Bool
+}
+
+nonisolated struct WCScore: Decodable, Hashable {
+    let home: Int?
+    let away: Int?
+}
+
+nonisolated struct WCVenue: Decodable, Hashable {
+    let name: String
+    let city: String
+}
+
+nonisolated struct WCFixture: Decodable, Identifiable, Hashable {
+    let id: Int
+    let date: String
+    let timestamp: Int
+    let status: WCStatus
+    let round: String
+    let roundEn: String
+    let venue: WCVenue
+    let home: WCTeam
+    let away: WCTeam
+    let goals: WCScore
+    let penalties: WCScore?
+
+    var started: Bool { status.live || status.finished }
+    var kickoff: Date? { SabqFormatters.parseISO8601(date) }
+}
+
+nonisolated struct WCPrediction: Decodable, Hashable {
+    let home: Int
+    let draw: Int
+    let away: Int
+    let advice: String?
+}
+
+nonisolated struct WCMatchOfDay: Decodable, Hashable {
+    let fixture: WCFixture
+    let prediction: WCPrediction?
+}
+
+nonisolated struct WCStandingRow: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let team: WCTeam
+    let played: Int
+    let win: Int
+    let draw: Int
+    let lose: Int
+    let goalsFor: Int
+    let goalsAgainst: Int
+    let goalsDiff: Int
+    let points: Int
+    let form: String?
+
+    var id: Int { team.id }
+}
+
+nonisolated struct WCGroup: Decodable, Identifiable, Hashable {
+    let group: String
+    let groupEn: String
+    let rows: [WCStandingRow]
+
+    var id: String { groupEn }
+}
+
+nonisolated struct WCSaudi: Decodable, Hashable {
+    let next: WCFixture?
+    let fixtures: [WCFixture]
+    let group: WCGroup?
+}
+
+nonisolated struct WCOverview: Decodable, Hashable {
+    let live: [WCFixture]
+    let today: [WCFixture]
+    let matchOfTheDay: WCMatchOfDay?
+    let saudi: WCSaudi
+    let updatedAt: String
+}
+
+nonisolated struct WCScorer: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let name: String
+    let photo: String
+    let team: WCTeam
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let minutes: Int
+    let matches: Int
+
+    var id: String { "\(rank)-\(name)" }
+}
+
+nonisolated struct WCLeader: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let name: String
+    let photo: String
+    let team: WCTeam
+    let goals: Int
+    let assists: Int
+    let yellow: Int
+    let red: Int
+    let minutes: Int
+    let matches: Int
+
+    var id: String { "\(rank)-\(name)" }
+}
+
+nonisolated struct WCMatchEvent: Decodable, Identifiable, Hashable {
+    let minute: Int
+    let extraMinute: Int?
+    let teamId: Int
+    let type: String
+    let label: String
+    let player: String
+    let assist: String?
+
+    var id: String { "\(minute)-\(extraMinute ?? 0)-\(type)-\(player)" }
+}
+
+nonisolated struct WCLineupPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String?
+    let grid: String?
+}
+
+nonisolated struct WCLineup: Decodable, Identifiable, Hashable {
+    let teamId: Int
+    let teamName: String
+    let formation: String?
+    let coach: String
+    let startXI: [WCLineupPlayer]
+    let substitutes: [WCLineupPlayer]
+
+    var id: Int { teamId }
+}
+
+nonisolated struct WCStatistic: Decodable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    let home: String
+    let away: String
+
+    var id: String { key }
+}
+
+nonisolated struct WCPlayerRating: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let photo: String
+    let teamId: Int
+    let number: Int?
+    let position: String
+    let rating: Double
+    let minutes: Int
+    let goals: Int
+    let assists: Int
+    let captain: Bool
+}
+
+nonisolated struct WCMatchDetail: Decodable, Hashable {
+    let fixture: WCFixture
+    let events: [WCMatchEvent]
+    let lineups: [WCLineup]
+    let statistics: [WCStatistic]
+    let prediction: WCPrediction?
+    let ratings: [WCPlayerRating]
+    let manOfTheMatch: WCPlayerRating?
+    let headToHead: [WCFixture]
+}
+
+nonisolated struct WCSquadPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String
+    let positionEn: String
+    let age: Int?
+    let photo: String
+}
+
+nonisolated struct WCSquad: Decodable, Hashable {
+    let team: WCTeam
+    let players: [WCSquadPlayer]
+}
+
+// MARK: - Response envelopes
+
+private nonisolated struct WCFixturesResponse: Decodable { let fixtures: [WCFixture] }
+private nonisolated struct WCStandingsResponse: Decodable { let groups: [WCGroup] }
+private nonisolated struct WCScorersResponse: Decodable { let scorers: [WCScorer] }
+private nonisolated struct WCLeadersResponse: Decodable { let leaders: [WCLeader] }
+private nonisolated struct WCTeamsResponse: Decodable { let teams: [WCTeam] }
+
+// MARK: - APIClient — World Cup reads
+//
+// كل النقاط عامة (لا مصادقة) فتُمرَّر عبر apiRoot=publicAPI بدل
+// الافتراضي mobileAPI(/api/v1). الكاش على الخادم يخدم آلاف الزوار من طلب
+// واحد، لذا لا نضيف كاشًا محليًا غير افتراضي URLSession.
+
+extension APIClient {
+    func fetchWorldCupOverview(ignoreCache: Bool = false) async throws -> WCOverview {
+        try await get(WCOverview.self, path: "/world-cup/overview",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupFixtures() async throws -> [WCFixture] {
+        try await get(WCFixturesResponse.self, path: "/world-cup/fixtures",
+                      apiRoot: URLConstants.publicAPI).fixtures
+    }
+
+    func fetchWorldCupStandings() async throws -> [WCGroup] {
+        try await get(WCStandingsResponse.self, path: "/world-cup/standings",
+                      apiRoot: URLConstants.publicAPI).groups
+    }
+
+    func fetchWorldCupScorers() async throws -> [WCScorer] {
+        try await get(WCScorersResponse.self, path: "/world-cup/scorers",
+                      apiRoot: URLConstants.publicAPI).scorers
+    }
+
+    func fetchWorldCupAssists() async throws -> [WCLeader] {
+        try await get(WCLeadersResponse.self, path: "/world-cup/assists",
+                      apiRoot: URLConstants.publicAPI).leaders
+    }
+
+    func fetchWorldCupCards() async throws -> [WCLeader] {
+        try await get(WCLeadersResponse.self, path: "/world-cup/cards",
+                      apiRoot: URLConstants.publicAPI).leaders
+    }
+
+    func fetchWorldCupTeams() async throws -> [WCTeam] {
+        try await get(WCTeamsResponse.self, path: "/world-cup/teams",
+                      apiRoot: URLConstants.publicAPI).teams
+    }
+
+    func fetchWorldCupSquad(teamId: Int) async throws -> WCSquad {
+        try await get(WCSquad.self, path: "/world-cup/squad/\(teamId)",
+                      apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupMatch(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCMatchDetail {
+        try await get(WCMatchDetail.self, path: "/world-cup/match/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+}
+
+// MARK: - World Cup shared helpers (theme, formatting, navigation)
+
+nonisolated enum WCTheme {
+    static let saudiId = 23
+
+    // ثيم الملعب الليلي — أخضر زمردي ثابت عبر الوضعين (الهيرو دائمًا داكن)
+    static let stadiumTop = Color(red: 0.02, green: 0.15, blue: 0.11)
+    static let stadiumBottom = Color(red: 0.02, green: 0.22, blue: 0.16)
+    static let emerald = Color(red: 0.20, green: 0.83, blue: 0.60)
+    static let emeraldDeep = Color(red: 0.06, green: 0.50, blue: 0.36)
+    static let pitchTop = Color(red: 0.13, green: 0.55, blue: 0.35)
+    static let pitchBottom = Color(red: 0.09, green: 0.42, blue: 0.27)
+    static let liveRed = Color(red: 0.90, green: 0.22, blue: 0.22)
+    static let sky = Color(red: 0.35, green: 0.66, blue: 0.96)
+    static let gold = Color(red: 0.92, green: 0.68, blue: 0.20)
+    static let leaf = Color(red: 0.40, green: 0.73, blue: 0.22)
+
+    // لوحة الوضع الداكن الموحّدة للقسم كله (ثيم الملعب الليلي بلا أبيض مزعج)
+    static let card = Color.white.opacity(0.06)
+    static let cardStroke = Color.white.opacity(0.10)
+    static let onDark = Color.white
+    static let onDarkDim = Color.white.opacity(0.62)
+    static let chipFill = Color.white.opacity(0.10)
+
+    /// خلفية القسم — تدرّج ملعب ليلي عمودي ثابت عبر الوضعين.
+    static var sectionBackground: LinearGradient {
+        LinearGradient(
+            colors: [stadiumTop, Color(red: 0.03, green: 0.18, blue: 0.13), stadiumBottom],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+}
+
+nonisolated enum WCFormat {
+    /// "1:00 ص" بتوقيت الرياض (12-ساعة عربي بأرقام لاتينية).
+    /// ca-gregory ضروري: ar_SA يفترض التقويم الهجري افتراضيًا.
+    static let timeRiyadh: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ar_SA-u-ca-gregory-nu-latn")
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+
+    /// "الأحد، 14 يونيو" (ميلادي — ca-gregory يمنع التحول للهجري)
+    static let dayRiyadh: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ar_SA-u-ca-gregory-nu-latn")
+        f.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        f.dateFormat = "EEEE، d MMMM"
+        return f
+    }()
+
+    static func time(_ fixture: WCFixture) -> String {
+        guard let d = fixture.kickoff else { return "" }
+        return timeRiyadh.string(from: d)
+    }
+
+    static func day(_ fixture: WCFixture) -> String {
+        guard let d = fixture.kickoff else { return "" }
+        return dayRiyadh.string(from: d)
+    }
+
+    /// مفتاح اليوم بتوقيت الرياض من سلسلة ISO (تصل بإزاحة +03:00 فالقص مباشر)
+    static func dayKey(_ iso: String) -> String { String(iso.prefix(10)) }
+
+    static func todayKey() -> String {
+        let riyadh = Date().addingTimeInterval(3 * 3600)
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: riyadh)
+    }
+
+    /// عدّ تنازلي عربي سليم: يوم/يومين/3 أيام، ساعة/ساعتين، أو HH:MM:SS في آخر يوم
+    static func countdown(to timestamp: Int) -> String {
+        let total = max(0, Double(timestamp) - Date().timeIntervalSince1970)
+        let days = Int(total) / 86_400
+        let hours = (Int(total) % 86_400) / 3_600
+        let minutes = (Int(total) % 3_600) / 60
+        let seconds = Int(total) % 60
+        if days == 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+        }
+        let d = arabicDays(days)
+        return hours > 0 ? "\(d) و\(arabicHours(hours))" : d
+    }
+
+    static func arabicDays(_ n: Int) -> String {
+        switch n {
+        case 1: return "يوم"
+        case 2: return "يومين"
+        case 3...10: return "\(n) أيام"
+        default: return "\(n) يومًا"
+        }
+    }
+
+    static func arabicHours(_ n: Int) -> String {
+        switch n {
+        case 1: return "ساعة"
+        case 2: return "ساعتين"
+        case 3...10: return "\(n) ساعات"
+        default: return "\(n) ساعة"
+        }
+    }
+}
+
+/// مسار التنقل لقسم كأس العالم
+nonisolated struct WorldCupRoute: Hashable {}
