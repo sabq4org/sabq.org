@@ -10,7 +10,10 @@ struct WorldCupHomeStrip: View {
     @State private var loaded = false
 
     var body: some View {
-        Group {
+        // حامل مكان Color.clear يمنع SwiftUI من إلغاء العرض (وبالتالي .task)
+        // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
+        ZStack {
+            Color.clear.frame(width: 0, height: 0)
             if let f = overview?.matchOfTheDay?.fixture {
                 NavigationLink(value: WorldCupRoute()) {
                     card(f)

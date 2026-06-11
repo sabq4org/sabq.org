@@ -291,19 +291,20 @@ nonisolated enum WCTheme {
 }
 
 nonisolated enum WCFormat {
-    /// "1:00 ص" بتوقيت الرياض (12-ساعة عربي بأرقام لاتينية)
+    /// "1:00 ص" بتوقيت الرياض (12-ساعة عربي بأرقام لاتينية).
+    /// ca-gregory ضروري: ar_SA يفترض التقويم الهجري افتراضيًا.
     static let timeRiyadh: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar_SA-u-nu-latn")
+        f.locale = Locale(identifier: "ar_SA-u-ca-gregory-nu-latn")
         f.timeZone = TimeZone(identifier: "Asia/Riyadh")
         f.dateFormat = "h:mm a"
         return f
     }()
 
-    /// "الأحد، 14 يونيو"
+    /// "الأحد، 14 يونيو" (ميلادي — ca-gregory يمنع التحول للهجري)
     static let dayRiyadh: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar_SA-u-nu-latn")
+        f.locale = Locale(identifier: "ar_SA-u-ca-gregory-nu-latn")
         f.timeZone = TimeZone(identifier: "Asia/Riyadh")
         f.dateFormat = "EEEE، d MMMM"
         return f
