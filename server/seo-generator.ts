@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { SABQ_LANGUAGE_STANDARDS_AR, SABQ_PRIMARY_EDITOR_MODEL } from "./ai/sabqEditorialPrompt";
 
 // SEO Generator for multilingual articles
 // Supports Arabic (Claude), English (GPT-4o), and Urdu (Gemini)
@@ -33,7 +34,7 @@ interface ArticleInput {
 // Configuration: Primary and fallback models per language (Migrated to gpt-5.1)
 const SEO_MODEL_CONFIG = {
   ar: {
-    primary: { provider: "anthropic" as const, model: "claude-sonnet-4-5" },
+    primary: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
     fallback: { provider: "openai" as const, model: "gpt-5.1" },
   },
   en: {
@@ -42,13 +43,15 @@ const SEO_MODEL_CONFIG = {
   },
   ur: {
     primary: { provider: "gemini" as const, model: "gemini-2.5-flash-preview-05-20" },
-    fallback: { provider: "anthropic" as const, model: "claude-sonnet-4-5" },
+    fallback: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
   },
 };
 
 // System prompts per language
 const SYSTEM_PROMPTS = {
-  ar: `أنت خبير في تحسين محركات البحث (SEO) للمحتوى العربي. مهمتك توليد metadata محسّن لمحركات البحث العربية والعالمية.
+  ar: `أنت خبير في تحسين محركات البحث (SEO) في صحيفة سبق الإلكترونية. مهمتك توليد metadata محسّن لمحركات البحث العربية والعالمية بمعيار سبق التحريري.
+
+${SABQ_LANGUAGE_STANDARDS_AR}
 
 **المتطلبات:**
 1. **العنوان (metaTitle):** 50-60 حرف، جذاب، يحتوي على الكلمة المفتاحية الرئيسية

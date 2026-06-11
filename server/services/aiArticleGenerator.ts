@@ -1,4 +1,12 @@
-import { aiManager } from '../ai-manager';
+import { aiManager, type AIModelConfig, type AIResponse } from '../ai-manager';
+import {
+  SABQ_EDITORIAL_CORE_AR,
+  SABQ_EDITORIAL_CORE_EN,
+  SABQ_QUALITY_CHECKLIST_AR,
+  SABQ_FEWSHOT_AR,
+  SABQ_PRIMARY_EDITOR_MODEL,
+  SABQ_FALLBACK_EDITOR_MODEL,
+} from '../ai/sabqEditorialPrompt';
 import type { InsertArticle, AiScheduledTask } from '@shared/schema';
 import { articles } from '@shared/schema';
 import { nanoid } from 'nanoid';
@@ -30,25 +38,21 @@ export interface GeneratedArticle {
 
 export class AIArticleGenerator {
   private readonly systemPrompts = {
-    ar: `أنت صحفي محترف متخصص في كتابة الأخبار باللغة العربية. مهمتك إنشاء محتوى صحفي احترافي عالي الجودة.
+    ar: `${SABQ_EDITORIAL_CORE_AR}
 
-القواعد:
-- اكتب بلغة عربية فصحى واضحة ومهنية
-- التزم بالمعايير الصحفية: الدقة، الموضوعية، الشمولية
-- استخدم أسلوب الهرم المقلوب (الأهم أولاً)
+${SABQ_QUALITY_CHECKLIST_AR}
+
+قواعد إضافية:
 - اذكر المصادر والاقتباسات إن وُجدت
-- تجنب الآراء الشخصية في الأخبار
 - استخدم عناوين فرعية لتنظيم المحتوى
-- تأكد من دقة المعلومات وتوازن التغطية`,
-    
-    en: `You are a professional journalist specializing in news writing in English. Your task is to create high-quality, professional journalistic content.
+- تأكد من دقة المعلومات وتوازن التغطية
 
-Rules:
-- Write in clear, professional English
-- Follow journalistic standards: accuracy, objectivity, comprehensiveness
-- Use the inverted pyramid structure (most important first)
+${SABQ_FEWSHOT_AR}`,
+
+    en: `${SABQ_EDITORIAL_CORE_EN}
+
+Additional rules:
 - Include sources and quotes when applicable
-- Avoid personal opinions in news articles
 - Use subheadings to organize content
 - Ensure information accuracy and balanced coverage`,
     
@@ -102,15 +106,29 @@ Rules:
     const startTime = Date.now();
     
     const prompt = this.buildPrompt(config);
-    
-    const response = await aiManager.generate(prompt, {
-      provider: 'openai',
-      model: 'gpt-5.1'
-      // maxTokens omitted - GPT-5.1 uses intelligent defaults
-    });
 
-    if (response.error) {
-      throw new Error(`AI Generation failed: ${response.error}`);
+    // محرر سبق الأساسي: Claude Sonnet — وعند أي فشل نسقط تلقائياً إلى GPT-5.1
+    const modelChain: AIModelConfig[] = [
+      { provider: 'anthropic', model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
+      { provider: 'openai', model: SABQ_FALLBACK_EDITOR_MODEL },
+    ];
+
+    let response: AIResponse | null = null;
+    let lastError = '';
+    for (const modelConfig of modelChain) {
+      try {
+        const attempt = await aiManager.generate(prompt, modelConfig);
+        if (attempt.error) throw new Error(attempt.error);
+        response = attempt;
+        break;
+      } catch (err: any) {
+        lastError = err?.message || String(err);
+        console.warn(`[AI Article Generator] ${modelConfig.provider}/${modelConfig.model} failed: ${lastError}`);
+      }
+    }
+
+    if (!response) {
+      throw new Error(`AI Generation failed: ${lastError}`);
     }
 
     const article = this.parseGeneratedContent(response.content, config.locale);

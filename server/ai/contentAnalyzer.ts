@@ -1,6 +1,43 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import {
+  SABQ_PRIME_RULE_AR,
+  SABQ_LANGUAGE_STANDARDS_AR,
+  SABQ_HEADLINE_STANDARDS_AR,
+  SABQ_FEWSHOT_AR,
+  SABQ_PRIME_RULE_EN,
+  SABQ_STANDARDS_EN,
+  SABQ_PRIMARY_EDITOR_MODEL,
+  SABQ_FALLBACK_EDITOR_MODEL,
+} from "./sabqEditorialPrompt";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// محرر الأسلوب الأساسي (Claude) — يُنشأ عند أول استخدام، والفشل يسقط تلقائياً إلى OpenAI
+let anthropicClient: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!anthropicClient) {
+    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
+      throw new Error("AI_INTEGRATIONS_ANTHROPIC_API_KEY is not configured");
+    }
+    anthropicClient = new Anthropic({
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+    });
+  }
+  return anthropicClient;
+}
+
+function stripJsonCodeFences(text: string): string {
+  let t = text.trim();
+  if (t.startsWith("```")) {
+    t = t.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  }
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start >= 0 && end > start) t = t.slice(start, end + 1);
+  return t;
+}
 
 /**
  * Knowledge-cutoff guardrails for the editorial agent.
@@ -209,6 +246,12 @@ export async function analyzeAndEditWithSabqStyle(
     const SYSTEM_PROMPTS = {
       ar: POLITICAL_FACTS_PREAMBLE.ar + `أنت محرر صحفي محترف يعمل ضمن غرفة الأخبار الرقمية لصحيفة "سبق"، وتعمل وفق أسلوب الكتابة التحريرية الخاص بالصحيفة.
 
+${SABQ_PRIME_RULE_AR}
+
+${SABQ_LANGUAGE_STANDARDS_AR}
+
+${SABQ_HEADLINE_STANDARDS_AR}
+
 ## 🧹 خطوة 1: تنظيف النص (إلزامي قبل التحرير!)
 
 **قبل البدء بالتحرير، يجب حذف:**
@@ -309,7 +352,7 @@ export async function analyzeAndEditWithSabqStyle(
   "suggestions": [ "نصائح إيجابية للمراسل" ],
 
   "optimized": {
-    "title": "عنوان رئيسي احترافي قوي (6-15 كلمة)",
+    "title": "عنوان رئيسي احترافي قوي (5-12 كلمة، مكتمل وغير مبتور)",
     "lead": "مقدمة قوية (20-60 كلمة) - أهم معلومة",
     "content": "النص المُحرَّر بأسلوب سبق - **بعد حذف التوقيعات والأسماء** - منسّق بـ HTML (<p>...</p>) - احتفظ بكل التفاصيل الإخبارية!",
     "seoKeywords": ["4-10 كلمات مفتاحية"]
@@ -339,6 +382,8 @@ export async function analyzeAndEditWithSabqStyle(
 أعلنت الهيئة السعودية للبيانات والذكاء الاصطناعي عن...
 "
 
+${SABQ_FEWSHOT_AR}
+
 ## ⚠️ القواعد الذهبية
 ✅ **احذف**: التوقيعات، الأسماء في نهاية النص، معلومات الاتصال
 ✅ **نظّف**: النص من أي شيء لا يتعلق بالخبر
@@ -353,6 +398,10 @@ export async function analyzeAndEditWithSabqStyle(
       en: POLITICAL_FACTS_PREAMBLE.en + `You are a professional news editor for **Sabq English**, producing English news stories in a professional journalistic style consistent with Sabq English's editorial identity — clear, factual, engaging, and globally relevant.
 
 **Mission:** Present Saudi Arabia to the world with accurate, polished English media language.
+
+${SABQ_PRIME_RULE_EN}
+
+${SABQ_STANDARDS_EN}
 
 ## 🧹 Step 1: Clean the Text (Mandatory before editing!)
 
@@ -585,28 +634,54 @@ Professional English news story, ready for immediate publication, presenting Sau
       throw new Error(`No system prompt found for language: ${normalizedLang}`);
     }
 
-    // Migrated to gpt-5.1 - with retry for rate limits
-    const response = await withOpenAIRetry(
-      () => openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: `قم بتحليل وتحرير المحتوى التالي:\n\n${text.substring(0, 5000)}`,
-          },
-        ],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 3000,
-      }),
-      3,
-      "SabqEditor"
-    );
+    // محرر الأسلوب الأساسي: Claude Sonnet — وعند أي فشل نسقط تلقائياً إلى GPT-5.1
+    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:\n\n${text.substring(0, 5000)}`;
+    let result: any;
+    try {
+      const anthropic = getAnthropicClient();
+      const message = await anthropic.messages.create({
+        model: SABQ_PRIMARY_EDITOR_MODEL,
+        max_tokens: 3000,
+        temperature: 0.3,
+        system: systemPrompt + "\n\nأخرج JSON صالحاً فقط، دون أي نص خارج كائن JSON.",
+        messages: [{ role: "user", content: userPrompt }],
+      });
 
-    const result = JSON.parse(response.choices[0].message.content || "{}");
+      let responseText = "";
+      for (const block of message.content) {
+        if (block.type === "text") responseText += block.text;
+      }
+      if (!responseText) {
+        throw new Error("Empty response from Claude");
+      }
+      result = JSON.parse(stripJsonCodeFences(responseText));
+      console.log(`[Sabq Editor] Edited with ${SABQ_PRIMARY_EDITOR_MODEL}`);
+    } catch (claudeError: any) {
+      console.warn(
+        `[Sabq Editor] ${SABQ_PRIMARY_EDITOR_MODEL} failed (${claudeError?.message || claudeError}); falling back to ${SABQ_FALLBACK_EDITOR_MODEL}`
+      );
+      const response = await withOpenAIRetry(
+        () => openai.chat.completions.create({
+          model: SABQ_FALLBACK_EDITOR_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            {
+              role: "user",
+              content: userPrompt,
+            },
+          ],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 3000,
+        }),
+        3,
+        "SabqEditor"
+      );
+
+      result = JSON.parse(response.choices[0].message.content || "{}");
+    }
 
     console.log("[Sabq Editor] Analysis and editing completed successfully");
     console.log("[Sabq Editor] Quality score:", result.qualityScore);

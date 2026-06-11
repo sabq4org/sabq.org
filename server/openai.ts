@@ -1,6 +1,12 @@
 // Reference: javascript_openai blueprint
 import OpenAI from "openai";
 import { retryWithBackoff } from "./utils/retryWithBackoff";
+import {
+  SABQ_LANGUAGE_STANDARDS_AR,
+  SABQ_HEADLINE_STANDARDS_AR,
+  SABQ_SUMMARY_STANDARDS_AR,
+  SABQ_PRIME_RULE_AR,
+} from "./ai/sabqEditorialPrompt";
 
 // the newest OpenAI model is "gpt-5.1" - unified model for all completions
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -121,7 +127,11 @@ export async function summarizeArticle(text: string): Promise<string> {
       messages: [
         {
           role: "system",
-          content: "أنت مساعد ذكي متخصص في تلخيص المقالات الإخبارية باللغة العربية. قم بإنشاء ملخص موجز ودقيق يحافظ على النقاط الرئيسية.",
+          content: `أنت محرر صحفي خبير في صحيفة سبق الإلكترونية، متخصص في كتابة الموجز الذكي للأخبار.
+
+${SABQ_LANGUAGE_STANDARDS_AR}
+
+${SABQ_SUMMARY_STANDARDS_AR}`,
         },
         {
           role: "user",
@@ -175,7 +185,9 @@ export async function generateTitle(content: string, language: "ar" | "en" | "ur
     console.log("[GenerateTitles] Clean content preview:", cleanContent.substring(0, 100) + "...");
     
     const SYSTEM_PROMPTS = {
-      ar: `أنت محرر عناوين خبير في صحيفة "سبق" السعودية. تتبع معايير صارمة لكتابة العناوين:
+      ar: `أنت محرر عناوين خبير في صحيفة "سبق" السعودية. تتبع معايير سبق الموحّدة لكتابة العناوين:
+
+${SABQ_PRIME_RULE_AR}
 
 ⚠️ **تعليمات أساسية (مهم جداً!):**
 - اقرأ المحتوى **كاملاً من أوله إلى آخره** قبل كتابة أي عنوان
@@ -183,12 +195,11 @@ export async function generateTitle(content: string, language: "ar" | "en" | "ur
 - حدد **أقوى نقطة في كامل النص** لتكون محور العنوان
 - كل عنوان من الثلاثة يجب أن يركز على زاوية مختلفة من الخبر
 
-معايير العنوان:
-- الحد: 15-20 كلمة أو 120 حرفاً كحد أقصى
-- عنوان قوي ومفصّل يشرح الخبر بوضوح
-- يبدأ بفعل قوي أو اسم فاعل
-- شامل، واضح، ومباشر
-- يتضمن كلمة مفتاحية رئيسية
+${SABQ_HEADLINE_STANDARDS_AR}
+
+معايير إضافية:
+- لغة عربية فصحى سليمة 100% بلا أي خطأ إملائي أو نحوي
+- يبدأ بفعل قوي أو اسم فاعل، ويتضمن كلمة مفتاحية رئيسية
 - تجنب ":" و"..." والأقواس
 - لا تكرر نفس الكلمات في العناوين المختلفة`,
       en: `You are an expert headline editor at "Sabq" newspaper. Follow strict headline standards:
@@ -199,9 +210,9 @@ export async function generateTitle(content: string, language: "ar" | "en" | "ur
 - Identify the **strongest point in the ENTIRE text** to be the focus of the headline
 - Each of the 3 headlines should focus on a DIFFERENT angle of the news
 
-Headline standards:
-- Limit: 15-20 words or 120 characters maximum
-- Strong, detailed headline that clearly explains the news
+Headline standards (Sabq unified):
+- 5 to 12 words. Compelling, accurate, no clickbait; never truncated or grammatically incomplete
+- Strong headline that clearly explains the news
 - Start with a strong verb or active noun
 - Comprehensive, clear, and direct
 - Include a primary keyword
@@ -215,7 +226,7 @@ Headline standards:
 - پوری تحریر میں سب سے مضبوط نقطہ تلاش کریں
 
 معیارات:
-- حد: 15-20 الفاظ یا 120 حروف زیادہ سے زیادہ
+- حد: 5-12 الفاظ، مکمل اور کبھی نامکمل نہیں
 - مضبوط، تفصیلی عنوان جو خبر کو واضح طور پر بیان کرے
 - مضبوط فعل یا فاعل اسم سے شروع کریں
 - جامع، واضح، اور براہ راست
@@ -227,7 +238,7 @@ Headline standards:
 
 ⚠️ تعليمات مهمة:
 1. اقرأ **كامل النص أدناه** من البداية إلى النهاية قبل اقتراح أي عنوان
-2. كل عنوان بين 15-20 كلمة أو 120 حرفاً كحد أقصى
+2. كل عنوان بين 5-12 كلمة، مكتمل لغوياً وغير مبتور
 3. العنوان الأول: ركز على المعلومة الأقوى في الخبر
 4. العنوان الثاني: ركز على زاوية مختلفة أو تفصيل مهم آخر
 5. العنوان الثالث: ركز على جانب ثالث مختلف من الخبر
@@ -242,7 +253,7 @@ ${cleanContent}`,
 
 ⚠️ Important instructions:
 1. Read the **ENTIRE text below** from start to end before suggesting any headline
-2. Each headline 15-20 words or 120 characters maximum
+2. Each headline 5-12 words, complete and never truncated
 3. First headline: Focus on the strongest information in the news
 4. Second headline: Focus on a different angle or important detail
 5. Third headline: Focus on a third different aspect of the news
@@ -257,7 +268,7 @@ ${cleanContent}`,
 
 اہم ہدایات:
 1. عنوان تجویز کرنے سے پہلے نیچے دیا گیا **پورا متن** پڑھیں
-2. ہر عنوان 15-20 الفاظ یا 120 حروف زیادہ سے زیادہ
+2. ہر عنوان 5-12 الفاظ، مکمل اور نامکمل نہیں
 3. پہلا عنوان: خبر کی سب سے مضبوط معلومات پر توجہ دیں
 4. دوسرا عنوان: ایک مختلف زاویے پر توجہ دیں
 5. تیسرا عنوان: تیسرے مختلف پہلو پر توجہ دیں
@@ -706,6 +717,10 @@ export async function generateSmartContent(newsContent: string, language: "ar" |
     const systemPrompts = {
       ar: `🎯 الدور: أنت محرر خبير في صحيفة "سبق" السعودية، متخصص في كتابة الأخبار بأسلوب صحفي احترافي وسهل الفهم، يدعم تحسين محركات البحث (SEO) ويجذب القارئ العربي.
 
+${SABQ_PRIME_RULE_AR}
+
+${SABQ_LANGUAGE_STANDARDS_AR}
+
 ⚠️ **تعليمات أساسية (مهم جداً!):**
 - اقرأ المحتوى **كاملاً من أوله إلى آخره** قبل كتابة أي شيء.
 - حدد **جميع النقاط المهمة** في الخبر (القرارات، الأرقام، الأسماء، التواريخ، التفاصيل الفريدة).
@@ -714,9 +729,9 @@ export async function generateSmartContent(newsContent: string, language: "ar" |
 - إذا كان الخبر يحتوي على عدة نقاط مهمة، اختر واحدة مختلفة في كل مرة يُطلب منك التوليد.
 
 ✳️ المطلوب منك:
-1. **العنوان الرئيسي (main_title):**  
-   - الحد: 15-20 كلمة أو 120 حرفاً كحد أقصى.  
-   - عنوان قوي ومفصّل يشرح الخبر بوضوح.  
+1. **العنوان الرئيسي (main_title):**
+   - الحد: 5-12 كلمة. مكتمل لغوياً وغير مبتور، دون مبالغة أو تضليل.
+   - عنوان قوي يشرح الخبر بوضوح.
    - يبدأ بفعل قوي أو اسم فاعل.  
    - جذّاب، شامل، ومناسب لأسلوب صحيفة "سبق".  
    - يتضمن كلمة مفتاحية رئيسية.  
@@ -778,9 +793,9 @@ export async function generateSmartContent(newsContent: string, language: "ar" |
 - If the news contains multiple important points, choose a different one each time generation is requested.
 
 ✳️ Requirements:
-1. **Main Title (main_title):**  
-   - Limit: 15-20 words or 120 characters maximum.  
-   - Strong, detailed headline that clearly explains the news.  
+1. **Main Title (main_title):**
+   - Limit: 5-12 words. Complete, never truncated, no exaggeration or clickbait.
+   - Strong headline that clearly explains the news.
    - Start with a strong verb or active noun.  
    - Catchy, comprehensive, and suitable for "Sabq" newspaper style.  
    - Include a primary keyword.  
@@ -854,9 +869,9 @@ Return the result in JSON format only with the following fields:
    - Media-quality journalistic style
    - Preserve all original information
 
-2. **Main Title (main_title):**  
-   - 15-20 words or 120 characters maximum
-   - Strong, detailed headline in English
+2. **Main Title (main_title):**
+   - 5-12 words, complete and never truncated
+   - Strong, accurate headline in English
    - Focus on the strongest information
 
 3. **Subtitle (sub_title):**  

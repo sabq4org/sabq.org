@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { SABQ_CATEGORY_RULE_AR } from "./ai/sabqEditorialPrompt";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 // Helper: Strip HTML tags and decode entities
 function stripHtml(html: string): string {
@@ -77,6 +78,8 @@ export async function classifyArticle(
 
 التصنيفات المتاحة:
 ${categoriesText}
+
+${SABQ_CATEGORY_RULE_AR}
 
 المهمة:
 1. حدد التصنيف الأساسي الأنسب للمقال
