@@ -106,6 +106,10 @@ object SabqRoutes {
     const val Search = "search"
     const val Sections = "sections"
     const val ContributorDashboard = "dashboard/contributor"
+    const val WorldCup = "world-cup"
+    const val WorldCupMatch = "world-cup/match/{id}"
+
+    fun worldCupMatch(id: Int): String = "world-cup/match/$id"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -212,6 +216,9 @@ fun SabqApp(
                         },
                         onTrendingAllClick = {
                             navController.navigate(SabqRoutes.Trending)
+                        },
+                        onWorldCupClick = {
+                            navController.navigate(SabqRoutes.WorldCup)
                         },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
@@ -438,6 +445,20 @@ fun SabqApp(
                 }
                 composable(SabqRoutes.LiveCoverage) {
                     LiveCoverageScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(SabqRoutes.WorldCup) {
+                    com.sabq.smart.feature.worldcup.WorldCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.WorldCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.worldcup.WorldCupMatchCenterScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

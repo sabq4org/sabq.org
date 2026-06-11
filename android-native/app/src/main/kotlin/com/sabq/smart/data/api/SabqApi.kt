@@ -476,4 +476,34 @@ interface SabqApi {
 
     @GET("api/v1/contributor/ranking")
     suspend fun getContributorRanking(): ApiContributorRanking
+
+    // -- World Cup 2026 (نقاط عامة على api.sabq.org مباشرة، مطابقة لـiOS) ----
+    // روابط مطلقة تتجاوز baseUrl(sabq.org) لتضرب الخادم مباشرة دون وسيط Pages.
+
+    @GET("https://api.sabq.org/api/world-cup/overview")
+    suspend fun getWorldCupOverview(): com.sabq.smart.feature.worldcup.WcOverview
+
+    @GET("https://api.sabq.org/api/world-cup/fixtures")
+    suspend fun getWorldCupFixtures(): com.sabq.smart.feature.worldcup.WcFixturesResponse
+
+    @GET("https://api.sabq.org/api/world-cup/standings")
+    suspend fun getWorldCupStandings(): com.sabq.smart.feature.worldcup.WcStandingsResponse
+
+    @GET("https://api.sabq.org/api/world-cup/scorers")
+    suspend fun getWorldCupScorers(): com.sabq.smart.feature.worldcup.WcScorersResponse
+
+    @GET("https://api.sabq.org/api/world-cup/assists")
+    suspend fun getWorldCupAssists(): com.sabq.smart.feature.worldcup.WcLeadersResponse
+
+    @GET("https://api.sabq.org/api/world-cup/cards")
+    suspend fun getWorldCupCards(): com.sabq.smart.feature.worldcup.WcLeadersResponse
+
+    @GET("https://api.sabq.org/api/world-cup/teams")
+    suspend fun getWorldCupTeams(): com.sabq.smart.feature.worldcup.WcTeamsResponse
+
+    @GET("https://api.sabq.org/api/world-cup/squad/{teamId}")
+    suspend fun getWorldCupSquad(@Path("teamId") teamId: Int): com.sabq.smart.feature.worldcup.WcSquad
+
+    @GET("https://api.sabq.org/api/world-cup/match/{id}")
+    suspend fun getWorldCupMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcMatchDetail
 }
