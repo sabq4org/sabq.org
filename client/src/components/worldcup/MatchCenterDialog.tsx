@@ -2,12 +2,14 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
+  Crown,
   Goal,
   MapPin,
   MonitorPlay,
   Radio,
   ShieldAlert,
   Square,
+  Star,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -195,20 +197,53 @@ function StatRow({ stat }: { stat: WcStatistic }) {
   );
 }
 
-// ---------- التوقعات ----------
+// ---------- التوقعات وسجل المواجهات ----------
+
+function HeadToHeadList({ detail }: { detail: WcMatchDetail }) {
+  if (detail.headToHead.length === 0) {
+    return (
+      <p className="text-center text-xs text-muted-foreground py-3">
+        أول مواجهة رسمية بين المنتخبين — التاريخ يبدأ من هنا
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      {detail.headToHead.map((match) => (
+        <div key={match.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
+          <Badge variant="secondary" className="tabular-nums shrink-0" dir="ltr">
+            {(match.date ?? "").slice(0, 4)}
+          </Badge>
+          <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
+            <span className="font-semibold truncate">{match.home.name}</span>
+            <span className="font-black tabular-nums shrink-0" dir="ltr">
+              {match.goals.home ?? 0} - {match.goals.away ?? 0}
+            </span>
+            <span className="font-semibold truncate">{match.away.name}</span>
+          </div>
+          {match.penalties && (
+            <span className="text-[10px] text-muted-foreground shrink-0">ركلات ترجيح</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function PredictionTab({ detail }: { detail: WcMatchDetail }) {
   const prediction = detail.prediction;
-  if (!prediction) {
-    return <p className="text-center text-sm text-muted-foreground py-8">لا تتوفر توقعات لهذه المباراة</p>;
-  }
-  const rows = [
-    { label: `فوز ${detail.fixture.home.name}`, value: prediction.home, color: "bg-emerald-500" },
-    { label: "التعادل", value: prediction.draw, color: "bg-zinc-400" },
-    { label: `فوز ${detail.fixture.away.name}`, value: prediction.away, color: "bg-sky-500" },
-  ];
+  const rows = prediction
+    ? [
+        { label: `فوز ${detail.fixture.home.name}`, value: prediction.home, color: "bg-emerald-500" },
+        { label: "التعادل", value: prediction.draw, color: "bg-zinc-400" },
+        { label: `فوز ${detail.fixture.away.name}`, value: prediction.away, color: "bg-sky-500" },
+      ]
+    : [];
   return (
     <div className="space-y-4 py-2">
+      {!prediction && (
+        <p className="text-center text-sm text-muted-foreground py-2">لا تتوفر توقعات لهذه المباراة</p>
+      )}
       {rows.map((row) => (
         <div key={row.label} className="space-y-1">
           <div className="flex items-center justify-between text-sm">
@@ -220,9 +255,77 @@ function PredictionTab({ detail }: { detail: WcMatchDetail }) {
           </div>
         </div>
       ))}
-      <p className="text-[11px] text-muted-foreground text-center pt-2">
-        توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا
+      {prediction && (
+        <p className="text-[11px] text-muted-foreground text-center">
+          توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا
+        </p>
+      )}
+      <div className="pt-2 border-t border-border/60">
+        <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2">سجل المواجهات</h4>
+        <HeadToHeadList detail={detail} />
+      </div>
+    </div>
+  );
+}
+
+// ---------- تقييمات اللاعبين ----------
+
+function ratingColor(rating: number): string {
+  if (rating >= 8) return "bg-emerald-500 text-white";
+  if (rating >= 7) return "bg-lime-500 text-white";
+  if (rating >= 6) return "bg-amber-500 text-white";
+  return "bg-red-500 text-white";
+}
+
+function RatingsTab({ detail }: { detail: WcMatchDetail }) {
+  if (detail.ratings.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        تقييمات اللاعبين تظهر هنا بعد انطلاق المباراة
       </p>
+    );
+  }
+  const teamLogo = (teamId: number) =>
+    teamId === detail.fixture.home.id ? detail.fixture.home.logo : detail.fixture.away.logo;
+  return (
+    <div className="space-y-2 py-1">
+      {detail.manOfTheMatch && (
+        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3.5 py-2.5">
+          <Crown className="h-5 w-5 text-amber-500 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">رجل المباراة</p>
+            <p className="text-sm font-black truncate">{detail.manOfTheMatch.name}</p>
+          </div>
+          <span className={`rounded-lg px-2 py-1 text-sm font-black tabular-nums ${ratingColor(detail.manOfTheMatch.rating)}`}>
+            {detail.manOfTheMatch.rating.toFixed(1)}
+          </span>
+        </div>
+      )}
+      {detail.ratings.map((player) => (
+        <div key={`${player.teamId}-${player.id}`} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
+          <div className="h-8 w-8 rounded-full overflow-hidden bg-muted shrink-0">
+            {player.photo && (
+              <img src={player.photo} alt={player.name} className="h-full w-full object-cover" loading="lazy" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold truncate">
+              {player.name}
+              {player.captain && <span className="text-[10px] text-amber-500 ms-1">(ك)</span>}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {player.position}
+              {player.minutes ? ` · ${player.minutes} د` : ""}
+              {player.goals ? ` · ${player.goals} ⚽` : ""}
+              {player.assists ? ` · ${player.assists} صناعة` : ""}
+            </p>
+          </div>
+          <img src={teamLogo(player.teamId)} alt="" className="h-4 w-4 object-contain shrink-0" loading="lazy" />
+          <span className={`rounded-md px-1.5 py-0.5 text-xs font-black tabular-nums shrink-0 ${ratingColor(player.rating)}`}>
+            {player.rating.toFixed(1)}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -297,10 +400,16 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
 
         {detail && (
           <Tabs defaultValue="events" dir="rtl" className="flex-1 min-h-0 flex flex-col">
-            <TabsList className="self-center">
+            <TabsList className="self-center flex-wrap h-auto">
               <TabsTrigger value="events">الأحداث</TabsTrigger>
               <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
               <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
+              {detail.ratings.length > 0 && (
+                <TabsTrigger value="ratings" className="gap-1">
+                  <Star className="h-3 w-3 text-amber-500" />
+                  التقييمات
+                </TabsTrigger>
+              )}
               <TabsTrigger value="prediction">التوقعات</TabsTrigger>
             </TabsList>
             <ScrollArea className="flex-1 mt-3 pe-2">
@@ -323,6 +432,11 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
                   </div>
                 )}
               </TabsContent>
+              {detail.ratings.length > 0 && (
+                <TabsContent value="ratings" className="mt-0">
+                  <RatingsTab detail={detail} />
+                </TabsContent>
+              )}
               <TabsContent value="prediction" className="mt-0">
                 <PredictionTab detail={detail} />
               </TabsContent>

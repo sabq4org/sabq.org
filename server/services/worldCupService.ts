@@ -235,6 +235,89 @@ export interface WcPrediction {
   advice: string | null;
 }
 
+// ---------- المنتخبات والقوائم ----------
+
+const POSITION_AR: Record<string, string> = {
+  Goalkeeper: "حارس مرمى",
+  Defender: "مدافع",
+  Midfielder: "لاعب وسط",
+  Attacker: "مهاجم",
+  G: "حارس مرمى",
+  D: "مدافع",
+  M: "لاعب وسط",
+  F: "مهاجم",
+};
+
+const POSITION_ORDER: Record<string, number> = { Goalkeeper: 0, Defender: 1, Midfielder: 2, Attacker: 3 };
+
+const SQUAD_TTL = 6 * 60 * 60 * 1000; // القوائم شبه ثابتة أثناء البطولة
+
+export async function getTeams(): Promise<WcTeam[]> {
+  return withSWR("wc:teams", SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("teams", { league: LEAGUE_ID, season: SEASON });
+    const teams = rows.map((row: any) => localizeTeam(row.team));
+    // الأخضر أولًا ثم ترتيب أبجدي عربي
+    return teams.sort((a, b) => {
+      if (a.id === SAUDI_TEAM_ID) return -1;
+      if (b.id === SAUDI_TEAM_ID) return 1;
+      return a.name.localeCompare(b.name, "ar");
+    });
+  });
+}
+
+export interface WcSquadPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+}
+
+export interface WcSquad {
+  team: WcTeam;
+  players: WcSquadPlayer[];
+}
+
+export async function getSquad(teamId: number): Promise<WcSquad | null> {
+  return withSWR(`wc:squad:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("players/squads", { team: teamId });
+    const entry = rows[0];
+    if (!entry) return null;
+    const players: WcSquadPlayer[] = (entry.players ?? [])
+      .map((p: any): WcSquadPlayer => ({
+        id: p.id ?? 0,
+        name: localizePlayerName(p.name),
+        number: p.number ?? null,
+        position: POSITION_AR[p.position] ?? p.position ?? "",
+        positionEn: p.position ?? "",
+        age: p.age ?? null,
+        photo: p.photo ?? "",
+      }))
+      .sort(
+        (a: WcSquadPlayer, b: WcSquadPlayer) =>
+          (POSITION_ORDER[a.positionEn] ?? 9) - (POSITION_ORDER[b.positionEn] ?? 9) ||
+          (a.number ?? 99) - (b.number ?? 99)
+      );
+    return { team: localizeTeam(entry.team), players };
+  });
+}
+
+// ---------- المواجهات التاريخية ----------
+
+export async function getHeadToHead(teamA: number, teamB: number): Promise<WcFixture[]> {
+  const key = [teamA, teamB].sort((a, b) => a - b).join("-");
+  return withSWR(`wc:h2h:${key}`, CACHE_TTL.VERY_LONG, CACHE_TTL.VERY_LONG * 2, async () => {
+    const rows = await apiGet("fixtures/headtohead", { h2h: `${teamA}-${teamB}`, timezone: TIMEZONE });
+    return rows
+      .map(localizeFixture)
+      .filter((f) => f.status.finished)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 10);
+  });
+}
+
 const parsePercent = (value: unknown): number => {
   const n = parseInt(String(value ?? "").replace("%", ""), 10);
   return Number.isFinite(n) ? n : 0;
@@ -251,6 +334,49 @@ export async function getPrediction(fixtureId: number): Promise<WcPrediction | n
       away: parsePercent(p.percent?.away),
       advice: null, // نص النصيحة يأتي إنجليزيًا من المزود — النِّسَب تكفي للواجهة
     };
+  });
+}
+
+export interface WcLeader {
+  rank: number;
+  name: string;
+  photo: string;
+  team: WcTeam;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+  minutes: number;
+  matches: number;
+}
+
+function mapLeader(row: any, index: number): WcLeader {
+  const stats = row.statistics?.[0] ?? {};
+  return {
+    rank: index + 1,
+    name: localizePlayerName(row.player?.name),
+    photo: row.player?.photo ?? "",
+    team: localizeTeam(stats.team),
+    goals: stats.goals?.total ?? 0,
+    assists: stats.goals?.assists ?? 0,
+    yellow: stats.cards?.yellow ?? 0,
+    red: (stats.cards?.red ?? 0) + (stats.cards?.yellowred ?? 0),
+    minutes: stats.games?.minutes ?? 0,
+    matches: stats.games?.appearences ?? 0,
+  };
+}
+
+export async function getTopAssists(): Promise<WcLeader[]> {
+  return withSWR("wc:assists", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON });
+    return rows.slice(0, 10).map(mapLeader);
+  });
+}
+
+export async function getTopCards(): Promise<WcLeader[]> {
+  return withSWR("wc:cards", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON });
+    return rows.slice(0, 10).map(mapLeader);
   });
 }
 
@@ -306,12 +432,29 @@ const STAT_AR: Record<string, string> = {
   "expected_goals": "الأهداف المتوقعة (xG)",
 };
 
+export interface WcPlayerRating {
+  id: number;
+  name: string;
+  photo: string;
+  teamId: number;
+  number: number | null;
+  position: string;
+  rating: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  captain: boolean;
+}
+
 export interface WcMatchDetail {
   fixture: WcFixture;
   events: WcMatchEvent[];
   lineups: WcLineup[];
   statistics: WcStatistic[];
   prediction: WcPrediction | null;
+  ratings: WcPlayerRating[];
+  manOfTheMatch: WcPlayerRating | null;
+  headToHead: WcFixture[];
 }
 
 export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail | null> {
@@ -355,6 +498,31 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
       };
     });
 
+    // تقييمات اللاعبين — يرسلها المزود ضمن نفس الرد بعد انطلاق المباراة
+    const ratings: WcPlayerRating[] = (item.players ?? [])
+      .flatMap((teamBlock: any) =>
+        (teamBlock.players ?? []).map((p: any): WcPlayerRating | null => {
+          const st = p.statistics?.[0] ?? {};
+          const rating = parseFloat(st.games?.rating ?? "");
+          if (!Number.isFinite(rating)) return null;
+          return {
+            id: p.player?.id ?? 0,
+            name: localizePlayerName(p.player?.name),
+            photo: p.player?.photo ?? "",
+            teamId: teamBlock.team?.id ?? 0,
+            number: st.games?.number ?? null,
+            position: POSITION_AR[st.games?.position] ?? st.games?.position ?? "",
+            rating,
+            minutes: st.games?.minutes ?? 0,
+            goals: st.goals?.total ?? 0,
+            assists: st.goals?.assists ?? 0,
+            captain: st.games?.captain ?? false,
+          };
+        })
+      )
+      .filter(Boolean)
+      .sort((a: WcPlayerRating, b: WcPlayerRating) => b.rating - a.rating);
+
     const homeStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.home?.id);
     const awayStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.away?.id);
     const statistics: WcStatistic[] = (homeStats?.statistics ?? [])
@@ -369,7 +537,7 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
         };
       });
 
-    return { fixture: localizeFixture(item), events, lineups, statistics };
+    return { fixture: localizeFixture(item), events, lineups, statistics, ratings };
   });
 
   if (!detail) return null;
@@ -384,7 +552,18 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
     }
   }
 
-  return { ...detail, prediction };
+  // سجل المواجهات — كاشه المستقل طويل فلا يكلف نداءً مع كل تحديث حي
+  let headToHead: WcFixture[] = [];
+  try {
+    headToHead = await getHeadToHead(detail.fixture.home.id, detail.fixture.away.id);
+  } catch (error) {
+    console.warn(`[WorldCup] h2h failed for fixture ${fixtureId}:`, error);
+  }
+
+  const manOfTheMatch =
+    detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
+
+  return { ...detail, prediction, headToHead, manOfTheMatch };
 }
 
 // ---------- نظرة عامة مُجمَّعة للصفحة الرئيسية للقسم ----------

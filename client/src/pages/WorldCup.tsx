@@ -11,6 +11,7 @@ import { NewsSection } from "@/components/worldcup/NewsSection";
 import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
+import { TeamsSection } from "@/components/worldcup/TeamsSection";
 import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worldcup/wcTypes";
 
 export default function WorldCup() {
@@ -59,6 +60,7 @@ export default function WorldCup() {
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
         <ScorersSection scorers={scorers} isLoading={scorersLoading} />
+        <TeamsSection />
         <NewsSection />
       </main>
 

@@ -1,8 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Award, Goal, Timer } from "lucide-react";
+import { Award, Goal, Handshake, Square, Timer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WcScorer } from "./wcTypes";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { WcLeader, WcScorer } from "./wcTypes";
 
 interface ScorersSectionProps {
   scorers: WcScorer[] | undefined;
@@ -20,7 +22,7 @@ function PodiumCard({ scorer, place }: { scorer: WcScorer; place: number }) {
   return (
     <div className={`flex flex-col items-center gap-2 ${isFirst ? "" : "mt-8"}`}>
       <div className="relative">
-        <div className={`${isFirst ? "h-24 w-24" : "h-18 w-18 h-[72px] w-[72px]"} rounded-full overflow-hidden ring-4 ${PODIUM_RING[place]} bg-muted`}>
+        <div className={`${isFirst ? "h-24 w-24" : "h-[72px] w-[72px]"} rounded-full overflow-hidden ring-4 ${PODIUM_RING[place]} bg-muted`}>
           {scorer.photo ? (
             <img src={scorer.photo} alt={scorer.name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
@@ -50,6 +52,97 @@ function PodiumCard({ scorer, place }: { scorer: WcScorer; place: number }) {
   );
 }
 
+function LeaderRow({
+  rank,
+  name,
+  photo,
+  team,
+  minutes,
+  end,
+}: {
+  rank: number;
+  name: string;
+  photo: string;
+  team: { name: string; logo: string };
+  minutes: number;
+  end: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-3.5 py-2.5 dark:border dark:border-card-border">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="w-5 text-center text-sm text-muted-foreground tabular-nums">{rank}</span>
+        <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
+          {photo && <img src={photo} alt={name} className="h-full w-full object-cover" loading="lazy" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold truncate">{name}</p>
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <img src={team.logo} alt={team.name} className="h-3 w-3 object-contain" loading="lazy" />
+            {team.name}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
+        <span className="hidden sm:flex items-center gap-1">
+          <Timer className="h-3 w-3" />
+          {minutes} د
+        </span>
+        {end}
+      </div>
+    </div>
+  );
+}
+
+function EmptyRace({ message }: { message: string }) {
+  return (
+    <Card className="border-0 dark:border dark:border-card-border max-w-xl mx-auto">
+      <CardContent className="py-10 flex flex-col items-center gap-2 text-center">
+        <Goal className="h-8 w-8 text-amber-500" />
+        <p className="font-bold">{message}</p>
+        <p className="text-sm text-muted-foreground">تابع هنا الترتيب أولًا بأول طوال البطولة</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeadersList({ endpoint, render, emptyMessage }: {
+  endpoint: string;
+  render: (leader: WcLeader) => React.ReactNode;
+  emptyMessage: string;
+}) {
+  const { data, isLoading } = useQuery<{ leaders: WcLeader[] }>({
+    queryKey: [endpoint],
+    staleTime: 10 * 60_000,
+  });
+  const leaders = Array.isArray(data?.leaders) ? data.leaders : [];
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-1.5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-14 rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+  if (leaders.length === 0) return <EmptyRace message={emptyMessage} />;
+  return (
+    <div className="max-w-2xl mx-auto space-y-1.5">
+      {leaders.map((leader) => (
+        <LeaderRow
+          key={`${leader.rank}-${leader.name}`}
+          rank={leader.rank}
+          name={leader.name}
+          photo={leader.photo}
+          team={leader.team}
+          minutes={leader.minutes}
+          end={render(leader)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
   const podium = (scorers ?? []).slice(0, 3);
   const rest = (scorers ?? []).slice(3);
@@ -62,79 +155,107 @@ export function ScorersSection({ scorers, isLoading }: ScorersSectionProps) {
             <Award className="h-6 w-6 text-amber-500" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">الحذاء الذهبي</h2>
-            <p className="text-sm text-muted-foreground">سباق هدافي المونديال</p>
+            <h2 className="text-2xl font-bold">سباقات البطولة</h2>
+            <p className="text-sm text-muted-foreground">الحذاء الذهبي، صنّاع الأهداف، والبطاقات</p>
           </div>
         </div>
 
-        {isLoading && (
-          <div className="grid grid-cols-3 gap-4 max-w-xl mx-auto">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-44 rounded-xl" />
-            ))}
-          </div>
-        )}
+        <Tabs defaultValue="goals" dir="rtl">
+          <TabsList className="mb-5">
+            <TabsTrigger value="goals" className="gap-1.5">
+              <Goal className="h-3.5 w-3.5" />
+              الهدافون
+            </TabsTrigger>
+            <TabsTrigger value="assists" className="gap-1.5">
+              <Handshake className="h-3.5 w-3.5" />
+              صنّاع الأهداف
+            </TabsTrigger>
+            <TabsTrigger value="cards" className="gap-1.5">
+              <Square className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+              البطاقات
+            </TabsTrigger>
+          </TabsList>
 
-        {!isLoading && podium.length === 0 && (
-          <Card className="border-0 dark:border dark:border-card-border max-w-xl mx-auto">
-            <CardContent className="py-10 flex flex-col items-center gap-2 text-center">
-              <Goal className="h-8 w-8 text-amber-500" />
-              <p className="font-bold">سباق الحذاء الذهبي ينطلق مع أول صافرة</p>
-              <p className="text-sm text-muted-foreground">تابع هنا ترتيب الهدافين أولًا بأول طوال البطولة</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {!isLoading && podium.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4 }}
-          >
-            {/* منصة التتويج: الثاني — الأول — الثالث */}
-            <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
-              {podium[1] ? <PodiumCard scorer={podium[1]} place={1} /> : <span />}
-              <PodiumCard scorer={podium[0]} place={0} />
-              {podium[2] ? <PodiumCard scorer={podium[2]} place={2} /> : <span />}
-            </div>
-
-            {rest.length > 0 && (
-              <div className="max-w-2xl mx-auto space-y-1.5">
-                {rest.map((scorer) => (
-                  <div
-                    key={`${scorer.rank}-${scorer.name}`}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-card px-3.5 py-2.5 dark:border dark:border-card-border"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-5 text-center text-sm text-muted-foreground tabular-nums">{scorer.rank}</span>
-                      <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
-                        {scorer.photo && (
-                          <img src={scorer.photo} alt={scorer.name} className="h-full w-full object-cover" loading="lazy" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold truncate">{scorer.name}</p>
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <img src={scorer.team.logo} alt={scorer.team.name} className="h-3 w-3 object-contain" loading="lazy" />
-                          {scorer.team.name}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
-                      <span className="hidden sm:flex items-center gap-1">
-                        <Timer className="h-3 w-3" />
-                        {scorer.minutes} د
-                      </span>
-                      <span className="hidden sm:inline">{scorer.assists} صناعة</span>
-                      <span className="text-lg font-black text-foreground tabular-nums">{scorer.goals}</span>
-                    </div>
-                  </div>
+          <TabsContent value="goals">
+            {isLoading && (
+              <div className="grid grid-cols-3 gap-4 max-w-xl mx-auto">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-44 rounded-xl" />
                 ))}
               </div>
             )}
-          </motion.div>
-        )}
+            {!isLoading && podium.length === 0 && (
+              <EmptyRace message="سباق الحذاء الذهبي ينطلق مع أول صافرة" />
+            )}
+            {!isLoading && podium.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4 }}
+              >
+                {/* منصة التتويج: الثاني — الأول — الثالث */}
+                <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
+                  {podium[1] ? <PodiumCard scorer={podium[1]} place={1} /> : <span />}
+                  <PodiumCard scorer={podium[0]} place={0} />
+                  {podium[2] ? <PodiumCard scorer={podium[2]} place={2} /> : <span />}
+                </div>
+                {rest.length > 0 && (
+                  <div className="max-w-2xl mx-auto space-y-1.5">
+                    {rest.map((scorer) => (
+                      <LeaderRow
+                        key={`${scorer.rank}-${scorer.name}`}
+                        rank={scorer.rank}
+                        name={scorer.name}
+                        photo={scorer.photo}
+                        team={scorer.team}
+                        minutes={scorer.minutes}
+                        end={
+                          <>
+                            <span className="hidden sm:inline">{scorer.assists} صناعة</span>
+                            <span className="text-lg font-black text-foreground tabular-nums">{scorer.goals}</span>
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="assists">
+            <LeadersList
+              endpoint="/api/world-cup/assists"
+              emptyMessage="سباق صنّاع الأهداف ينطلق مع أول صافرة"
+              render={(leader) => (
+                <>
+                  <span className="hidden sm:inline">{leader.goals} أهداف</span>
+                  <span className="text-lg font-black text-foreground tabular-nums">{leader.assists}</span>
+                </>
+              )}
+            />
+          </TabsContent>
+
+          <TabsContent value="cards">
+            <LeadersList
+              endpoint="/api/world-cup/cards"
+              emptyMessage="لا بطاقات بعد — وعسى ألا تكثر"
+              render={(leader) => (
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 font-black tabular-nums">
+                    <Square className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    {leader.yellow}
+                  </span>
+                  <span className="flex items-center gap-1 font-black tabular-nums">
+                    <Square className="h-3 w-3 fill-red-500 text-red-500" />
+                    {leader.red}
+                  </span>
+                </span>
+              )}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </section>
   );
