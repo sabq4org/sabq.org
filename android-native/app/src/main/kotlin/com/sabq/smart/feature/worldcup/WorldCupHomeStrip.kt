@@ -102,7 +102,12 @@ private fun StripCenter(f: WcFixture) {
         } else {
             Text(WcFormat.time(f), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1)
             val now = rememberSecondTicker()
-            Text("تنطلق بعد ${WcFormat.countdown(f.timestamp, now)}", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 10.sp, maxLines = 1)
+            if (f.timestamp.toLong() * 1000L <= now) {
+                // الموعد حان والمزود لم يرفع إشارة «حية» بعد — لا 00:00:00 مجمدة
+                Text("حان موعد الانطلاق — التغطية الحية خلال لحظات", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            } else {
+                Text("تنطلق بعد ${WcFormat.countdown(f.timestamp, now)}", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 10.sp, maxLines = 1)
+            }
         }
     }
 }

@@ -159,6 +159,24 @@ fun rememberSecondTicker(): Long {
 fun WcCountdownChips(timestamp: Int) {
     val now = rememberSecondTicker()
     val total = (timestamp.toLong() * 1000L - now).coerceAtLeast(0L) / 1000L
+    if (total <= 0L) {
+        // الموعد حان والمزود لم يرفع إشارة «حية» بعد — لا أصفار مجمدة
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(WcColors.emerald),
+            )
+            Text(
+                "حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        return
+    }
     val days = (total / 86_400).toInt()
     val hours = ((total % 86_400) / 3_600).toInt()
     val minutes = ((total % 3_600) / 60).toInt()
