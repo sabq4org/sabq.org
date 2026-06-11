@@ -1689,14 +1689,6 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 90000);
 
-        setTimeout(async () => {
-          try {
-            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
-            startWorldCupNewsJob();
-          } catch (error) {
-            console.error("[Server] Error starting world cup news job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY + 100000);
 
         // Missing Thumbnails Regeneration - DISABLED for performance
         // TODO: Re-enable when missing images are fixed
@@ -1781,6 +1773,21 @@ if (!(globalThis as any).__sabqServer) {
         console.log("[Server] AI Tasks Scheduler skipped (background workers disabled or not leader)");
       } else {
         console.log("[Server] AI Tasks Scheduler disabled (set ENABLE_AI_TASKS_SCHEDULER=true to enable)");
+      }
+
+      // أخبار المونديال: التسجيل خارج بوابة isLeader() عمدًا — أثناء النشر
+      // يقلع الـ pod الجديد قبل موت القديم فلا يكون قائدًا لحظة الإقلاع،
+      // والتسجيل المشروط بالقيادة يترك الوظيفة ميتة. الـ cron يُجدول هنا
+      // دائمًا، وفحص القيادة يتم داخل كل دورة في worldCupNewsJob نفسه.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
+            startWorldCupNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting world cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
       }
 
     // Handle server errors

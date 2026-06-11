@@ -11,12 +11,19 @@
  * لم تطلبها، حتى لو كان APIFOOTBALL_KEY موجودًا.
  */
 import cron from "node-cron";
+import { isLeader } from "../leaderElection";
 import { isWorldCupConfigured } from "../services/worldCupService";
 import { runWorldCupNewsCycle } from "../services/worldCupNewsGenerator";
 
 let isRunning = false;
 
 async function tick(trigger: string): Promise<void> {
+  // فحص القيادة عند كل دورة لا عند التسجيل: أثناء النشر يقلع الـ pod
+  // الجديد بينما القديم ما زال ممسكًا بقفل القيادة، فالتسجيل المشروط
+  // بالقيادة لحظة الإقلاع يترك الوظيفة ميتة حتى إعادة تشغيل يدوية.
+  // هنا الـ cron مجدول دائمًا، والدورة تمتنع بصمت ما لم يكن هذا الـ pod
+  // هو القائد — مرة واحدة عبر كل النسخ، ومحصنة ضد انتقال القيادة.
+  if (!isLeader()) return;
   if (isRunning) {
     console.log("[WC News Job] previous cycle still running — skipping");
     return;
