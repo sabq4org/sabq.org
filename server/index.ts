@@ -1689,6 +1689,15 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 90000);
 
+        setTimeout(async () => {
+          try {
+            const { startWorldCupNewsJob } = await import("./jobs/worldCupNewsJob");
+            startWorldCupNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting world cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 100000);
+
         // Missing Thumbnails Regeneration - DISABLED for performance
         // TODO: Re-enable when missing images are fixed
         // setTimeout(async () => {

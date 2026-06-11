@@ -5,24 +5,20 @@ import { motion } from "framer-motion";
 import { Clock, Newspaper } from "lucide-react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { MatchVisual, type WcNewsItem } from "./WorldCupNewsBlock";
 
-interface SearchArticle {
-  id: number;
-  title: string;
-  slug: string;
-  imageUrl: string | null;
-  publishedAt: string | null;
-  excerpt: string | null;
-  categoryName: string | null;
-}
-
+/**
+ * «آخر أخبار المونديال» داخل صفحة /world-cup — يقرأ من /api/world-cup/news
+ * (المواد المولّدة من بيانات المباريات + مواد غرفة الأخبار عن المونديال)
+ * بدل البحث النصي الذي كان يعتمد على فهرسة search_vector غير المضمونة.
+ */
 export function NewsSection() {
-  const { data } = useQuery<{ results: SearchArticle[] }>({
-    queryKey: ["/api/search", { q: "كأس العالم", limit: 9 }],
-    staleTime: 5 * 60 * 1000,
+  const { data } = useQuery<{ news: WcNewsItem[] }>({
+    queryKey: ["/api/world-cup/news", { limit: 9 }],
+    staleTime: 2 * 60 * 1000,
   });
 
-  const articles = Array.isArray(data?.results) ? data.results : [];
+  const articles = Array.isArray(data?.news) ? data.news : [];
   if (articles.length === 0) return null;
 
   return (
@@ -49,29 +45,25 @@ export function NewsSection() {
             >
               <Link href={`/article/${article.slug}`}>
                 <Card className="group h-full overflow-hidden border-0 dark:border dark:border-card-border hover-elevate active-elevate-2 cursor-pointer transition-all duration-300">
-                  {article.imageUrl && (
-                    <div className="relative aspect-[16/9] overflow-hidden">
-                      <img
-                        src={article.imageUrl}
-                        alt={article.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
-                      />
-                    </div>
-                  )}
+                  <MatchVisual item={article} />
                   <CardContent className="p-3 space-y-2">
                     <h3 className="font-bold text-sm leading-relaxed line-clamp-2 group-hover:text-primary transition-colors">
                       {article.title}
                     </h3>
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      {article.publishedAt && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" />
-                          {formatDistanceToNow(new Date(article.publishedAt), { addSuffix: true, locale: arSA })}
-                        </span>
-                      )}
-                      {article.categoryName && <span>· {article.categoryName}</span>}
-                    </div>
+                    {article.excerpt && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                        {article.excerpt}
+                      </p>
+                    )}
+                    {article.publishedAt && (
+                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Clock className="h-2.5 w-2.5" />
+                        {formatDistanceToNow(new Date(article.publishedAt), {
+                          addSuffix: true,
+                          locale: arSA,
+                        })}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </Link>
