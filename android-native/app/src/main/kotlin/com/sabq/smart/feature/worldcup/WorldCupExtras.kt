@@ -48,6 +48,9 @@ import com.sabq.smart.ui.theme.IbmPlexSansArabic
 @Composable
 fun RacesSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel) {
     var tab by remember { mutableStateOf("goals") }
+    // «ينطلق مع أول صافرة» تصبح خاطئة لحظة انطلاق البطولة — العبارات تتبع الحالة
+    val tournamentStarted = state.fixtures.any { it.status.live || it.status.finished }
+    val pendingStats = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات"
     LaunchedEffect(tab) {
         if (tab == "assists") viewModel.loadAssists()
         if (tab == "cards") viewModel.loadCards()
@@ -67,14 +70,14 @@ fun RacesSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel)
         }
         Box(Modifier.padding(horizontal = 16.dp)) {
             when (tab) {
-                "goals" -> GoalsRace(state.scorers, state.scorersLoading)
-                "assists" -> LeadersList(state.assists, "سباق صنّاع الأهداف ينطلق مع أول صافرة") { l ->
+                "goals" -> GoalsRace(state.scorers, state.scorersLoading, tournamentStarted)
+                "assists" -> LeadersList(state.assists, if (tournamentStarted) pendingStats else "سباق صنّاع الأهداف ينطلق مع أول صافرة") { l ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("${l.goals} أهداف", color = WcColors.onDarkDim, fontSize = 12.sp)
                         Text("${l.assists}", color = WcColors.onDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
                     }
                 }
-                else -> LeadersList(state.cards, "لا بطاقات بعد — وعسى ألا تكثر") { l ->
+                else -> LeadersList(state.cards, if (tournamentStarted) "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" else "لا بطاقات بعد — وعسى ألا تكثر") { l ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         CardCount(l.yellow, WcColors.gold); CardCount(l.red, WcColors.liveRed)
                     }
@@ -85,18 +88,20 @@ fun RacesSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel)
 }
 
 @Composable
-private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean) {
+private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean, tournamentStarted: Boolean) {
     when {
         loading -> WcLoading()
-        scorers.isEmpty() -> RaceEmpty("سباق الحذاء الذهبي ينطلق مع أول صافرة")
+        scorers.isEmpty() -> RaceEmpty(if (tournamentStarted) "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات" else "سباق الحذاء الذهبي ينطلق مع أول صافرة")
         else -> {
-            val podium = scorers.take(3)
-            val rest = scorers.drop(3)
+            // المنصة تحتاج ثلاثة هدافين مكتملين — أقل من ذلك قائمة صفوف عادية
+            val showPodium = scorers.size >= 3
+            val podium = if (showPodium) scorers.take(3) else emptyList()
+            val rest = if (showPodium) scorers.drop(3) else scorers
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    if (podium.size > 1) Box(Modifier.weight(1f)) { Podium(podium[1], 1) } else Spacer(Modifier.weight(1f))
+                if (showPodium) Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Box(Modifier.weight(1f)) { Podium(podium[1], 1) }
                     Box(Modifier.weight(1f)) { Podium(podium[0], 0) }
-                    if (podium.size > 2) Box(Modifier.weight(1f)) { Podium(podium[2], 2) } else Spacer(Modifier.weight(1f))
+                    Box(Modifier.weight(1f)) { Podium(podium[2], 2) }
                 }
                 rest.forEach { s ->
                     LeaderRow(s.rank, s.name, s.photo, s.team, s.minutes) {

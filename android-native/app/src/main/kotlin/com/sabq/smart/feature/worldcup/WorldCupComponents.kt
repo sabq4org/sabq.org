@@ -101,7 +101,11 @@ fun WcStatusPill(fixture: WcFixture, onDark: Boolean = true) {
             ) {
                 LivePulseDot()
                 Text(
-                    fixture.status.elapsed?.let { "$it'" } ?: fixture.status.label,
+                    // الوقت بدل الضائع: 90+8' بدل 90' المجمدة في أكثر دقائق المباراة توترًا
+                    fixture.status.elapsed?.let { e ->
+                        val x = fixture.status.extra
+                        if (x != null && x > 0) "$e+$x'" else "$e'"
+                    } ?: fixture.status.label,
                     color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                 )
             }
