@@ -85,10 +85,12 @@ function LeaderRow({
         </div>
       </div>
       <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
-        <span className="hidden sm:flex items-center gap-1">
-          <Timer className="h-3 w-3" />
-          {minutes} د
-        </span>
+        {minutes > 0 && (
+          <span className="hidden sm:flex items-center gap-1">
+            <Timer className="h-3 w-3" />
+            {minutes} د
+          </span>
+        )}
         {end}
       </div>
     </div>
