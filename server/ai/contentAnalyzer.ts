@@ -29,6 +29,40 @@ function getAnthropicClient(): Anthropic {
   return anthropicClient;
 }
 
+// مخطط JSON الصارم لمخرجات التحرير — يُمرر لـ Structured Outputs ليستحيل كسر الـ JSON
+const SABQ_EDITORIAL_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "qualityScore",
+    "language",
+    "detectedCategory",
+    "hasNewsValue",
+    "issues",
+    "suggestions",
+    "optimized",
+  ],
+  properties: {
+    qualityScore: { type: "number" },
+    language: { type: "string" },
+    detectedCategory: { type: "string" },
+    hasNewsValue: { type: "boolean" },
+    issues: { type: "array", items: { type: "string" } },
+    suggestions: { type: "array", items: { type: "string" } },
+    optimized: {
+      type: "object",
+      additionalProperties: false,
+      required: ["title", "lead", "content", "seoKeywords"],
+      properties: {
+        title: { type: "string" },
+        lead: { type: "string" },
+        content: { type: "string" },
+        seoKeywords: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
+} as const;
+
 function stripJsonCodeFences(text: string): string {
   let t = text.trim();
   if (t.startsWith("```")) {
@@ -642,11 +676,19 @@ Professional English news story, ready for immediate publication, presenting Sau
       const anthropic = getAnthropicClient();
       const message = await anthropic.messages.create({
         model: SABQ_PRIMARY_EDITOR_MODEL,
-        max_tokens: 3000,
+        max_tokens: 8000,
         temperature: 0.3,
-        system: systemPrompt + "\n\nأخرج JSON صالحاً فقط، دون أي نص خارج كائن JSON.",
+        system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
-      });
+        // Structured Outputs: تضمن JSON صالحاً مطابقاً للمخطط (output_config غير موجود في أنواع SDK 0.68 لكنه GA في الـ API)
+        output_config: {
+          format: { type: "json_schema", schema: SABQ_EDITORIAL_JSON_SCHEMA },
+        },
+      } as any);
+
+      if (message.stop_reason === "max_tokens") {
+        throw new Error("Claude response truncated (stop_reason=max_tokens)");
+      }
 
       let responseText = "";
       for (const block of message.content) {
