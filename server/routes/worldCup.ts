@@ -17,6 +17,7 @@ import {
   getTopScorers,
   isWorldCupConfigured,
 } from "../services/worldCupService";
+import { getWorldCupNews } from "../services/worldCupNewsGenerator";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -40,6 +41,20 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error("[WorldCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة المونديال حاليًا" });
+    }
+  });
+
+  // الأخبار المولّدة آليًا من بيانات المباريات (معاينات + تقارير) — تُنشر
+  // في قسم الرياضة وتُعرض هنا لبلوك الواجهة وصفحة القسم
+  app.get("/api/world-cup/news", async (req, res) => {
+    if (!guard(res)) return;
+    try {
+      const limit = Number(req.query.limit) || 6;
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.json({ news: await getWorldCupNews(limit) });
+    } catch (error) {
+      console.error("[WorldCup] news failed:", error);
+      res.status(502).json({ message: "تعذر جلب أخبار المونديال حاليًا" });
     }
   });
 

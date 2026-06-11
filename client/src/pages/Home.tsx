@@ -37,6 +37,7 @@ const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopi
 const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const WorldCupHomeStrip = lazyDefault(() => import("@/components/worldcup/WorldCupHomeStrip"));
+const WorldCupNewsBlock = lazyDefault(() => import("@/components/worldcup/WorldCupNewsBlock"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
@@ -421,6 +422,14 @@ export default function Home() {
           <ErrorBoundary fallback={null}>
             <Suspense fallback={null}>
               <WorldCupHomeStrip />
+            </Suspense>
+          </ErrorBoundary>
+
+          {/* World Cup 2026 auto-generated news (previews + match reports) —
+              hides itself while no articles are published */}
+          <ErrorBoundary fallback={null}>
+            <Suspense fallback={null}>
+              <WorldCupNewsBlock />
             </Suspense>
           </ErrorBoundary>
 
