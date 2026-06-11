@@ -212,7 +212,7 @@ export interface WcScorer {
 }
 
 export async function getTopScorers(): Promise<WcScorer[]> {
-  return withSWR("wc:scorers", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const provider = await withSWR("wc:scorers", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
     const top = rows.slice(0, 10);
     const tr = await resolveNames(top.map((row: any) => row.player?.name));
@@ -231,6 +231,9 @@ export async function getTopScorers(): Promise<WcScorer[]> {
       };
     });
   });
+  if ((provider ?? []).length > 0) return provider;
+  // لوحة المزود لم تصدر بعد — نجمعها من أحداث المباريات
+  return (await aggregateRacesFromEvents()).scorers;
 }
 
 export interface WcPrediction {
@@ -372,20 +375,131 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
   };
 }
 
+// ---------- تجميع السباقات من الأحداث ----------
+// لوحات اللاعبين المجمعة تُعتمد عند المزود بفاصل بعد المباريات، بينما الأحداث
+// لحظية وبين أيدينا — فنجمع الهدافين/الصناعة/البطاقات بأنفسنا ريثما تصدر لوحاته
+// (لوحة المزود أكمل: دقائق اللعب والصور وعدد المباريات — تحل محل التجميع فور صدورها).
+
+interface WcRaceTally {
+  name: string;
+  team: WcTeam;
+  goals: number;
+  penalties: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+interface WcRacesFromEvents {
+  scorers: WcScorer[];
+  assists: WcLeader[];
+  cards: WcLeader[];
+}
+
+async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
+  return withSWR<WcRacesFromEvents>("wc:racesFromEvents", 30 * 1000, 60 * 1000, async () => {
+    const started = (await getFixtures()).filter((f) => f.status.live || f.status.finished);
+    const teamById = new Map<number, WcTeam>();
+    for (const f of started) {
+      teamById.set(f.home.id, f.home);
+      teamById.set(f.away.id, f.away);
+    }
+
+    const tallies = new Map<string, WcRaceTally>();
+    const bump = (name: string | null, teamId: number, apply: (t: WcRaceTally) => void) => {
+      const team = teamById.get(teamId);
+      if (!name || !team) return;
+      const key = `${teamId}:${name}`;
+      let tally = tallies.get(key);
+      if (!tally) {
+        tally = { name, team, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
+        tallies.set(key, tally);
+      }
+      apply(tally);
+    };
+
+    const details = await Promise.all(started.map((f) => getMatchDetail(f.id).catch(() => null)));
+    for (const detail of details) {
+      for (const ev of detail?.events ?? []) {
+        if (ev.type === "goal" && ev.detail !== "Own Goal") {
+          // الهدف العكسي لا يدخل سباق الهداف، وركلة الجزاء الضائعة نوع مستقل أصلًا
+          bump(ev.player, ev.teamId, (t) => {
+            t.goals += 1;
+            if (ev.detail === "Penalty") t.penalties += 1;
+          });
+          if (ev.assist) bump(ev.assist, ev.teamId, (t) => { t.assists += 1; });
+        } else if (ev.type === "yellow-card") {
+          bump(ev.player, ev.teamId, (t) => {
+            t.yellow += 1;
+            if (ev.detail === "Second Yellow card") t.red += 1; // طرد بإنذارين
+          });
+        } else if (ev.type === "red-card") {
+          bump(ev.player, ev.teamId, (t) => { t.red += 1; });
+        }
+      }
+    }
+
+    const all = [...tallies.values()];
+    const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
+      rank: index + 1,
+      name: t.name,
+      photo: "",
+      team: t.team,
+      goals: t.goals,
+      assists: t.assists,
+      yellow: t.yellow,
+      red: t.red,
+      minutes: 0,
+      matches: 0,
+    });
+    return {
+      scorers: all
+        .filter((t) => t.goals > 0)
+        .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+        .slice(0, 10)
+        .map((t, i): WcScorer => ({
+          rank: i + 1,
+          name: t.name,
+          photo: "",
+          team: t.team,
+          goals: t.goals,
+          assists: t.assists,
+          penalties: t.penalties,
+          minutes: 0,
+          matches: 0,
+        })),
+      assists: all
+        .filter((t) => t.assists > 0)
+        .sort((a, b) => b.assists - a.assists || b.goals - a.goals)
+        .slice(0, 10)
+        .map(toLeader),
+      cards: all
+        .filter((t) => t.yellow + t.red > 0)
+        .sort((a, b) => b.yellow - a.yellow || b.red - a.red)
+        .slice(0, 10)
+        .map(toLeader),
+    };
+  });
+}
+
 export async function getTopAssists(): Promise<WcLeader[]> {
-  return withSWR("wc:assists", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const provider = await withSWR("wc:assists", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = (await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
     const tr = await resolveNames(rows.map((row: any) => row.player?.name));
     return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
+  if ((provider ?? []).length > 0) return provider;
+  return (await aggregateRacesFromEvents()).assists;
 }
 
 export async function getTopCards(): Promise<WcLeader[]> {
-  return withSWR("wc:cards", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const provider = await withSWR("wc:cards", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = (await apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
     const tr = await resolveNames(rows.map((row: any) => row.player?.name));
     return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
+  if ((provider ?? []).length > 0) return provider;
+  return (await aggregateRacesFromEvents()).cards;
 }
 
 export interface WcMatchEvent {
@@ -394,6 +508,8 @@ export interface WcMatchEvent {
   teamId: number;
   type: string;
   label: string;
+  /** تفصيل المزود الخام (Own Goal / Penalty / Second Yellow card) — يلزم تجميع السباقات */
+  detail: string;
   player: string;
   assist: string | null;
 }
@@ -505,6 +621,7 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
         teamId: ev.team?.id ?? 0,
         type: localized.type,
         label: localized.label,
+        detail: ev.detail ?? "",
         player: tr(ev.player?.name),
         assist: ev.assist?.name ? tr(ev.assist.name) : null,
       };
