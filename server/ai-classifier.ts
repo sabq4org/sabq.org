@@ -28,11 +28,11 @@ let anthropicClient: Anthropic | null = null;
 
 function getAnthropicClient(): Anthropic {
   if (!anthropicClient) {
-    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY) {
-      throw new Error("AI_INTEGRATIONS_ANTHROPIC_API_KEY is not configured");
+    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY (or AI_INTEGRATIONS_ANTHROPIC_API_KEY) is not configured");
     }
     anthropicClient = new Anthropic({
-      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY!,
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
       baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
     });
   }
