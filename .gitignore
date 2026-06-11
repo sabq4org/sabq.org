@@ -53,6 +53,9 @@ backup_unused_assets
 # Apple Wallet pass templates need their icon/logo PNGs committed —
 # the runtime container reads them from disk when generating .pkpass.
 !server/lib/passkit/**/*.png
+# Native iOS app asset catalog images must be committed — Xcode Cloud builds from the repo
+!sabq app ios/sabq/Assets.xcassets/**/*.png
+sabq app ios/sabq/Assets.xcassets/.appicon-backup*/
 # Internal security audit — kept local; contains attack-surface details
 AUDIT_REPORT.md
 
