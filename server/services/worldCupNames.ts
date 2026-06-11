@@ -123,9 +123,13 @@ export function localizeRound(round: string): string {
   return GROUP_STAGE_ROUND_AR[round] ?? KNOCKOUT_ROUND_AR[round] ?? round;
 }
 
-/** "Group A" → "المجموعة A" (تأتي من ترتيب المجموعات) */
+/**
+ * "Group A" أو "Group Stage - Group A" → "المجموعة A".
+ * المزود غيّر التسمية مع أول إعادة حساب للجداول أثناء البطولة — نلتقط
+ * الحرف في نهاية الاسم لنصمد أمام الصيغتين.
+ */
 export function localizeGroup(group: string): string {
-  const m = group.match(/^Group\s+([A-L])$/i);
+  const m = group.match(/Group\s+([A-L])\s*$/i);
   return m ? `المجموعة ${m[1].toUpperCase()}` : group;
 }
 
