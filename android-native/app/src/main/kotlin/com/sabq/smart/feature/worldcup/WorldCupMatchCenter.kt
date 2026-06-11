@@ -219,7 +219,7 @@ private fun EventIcon(type: String) {
 
 @Composable
 private fun LineupsTab(detail: WcMatchDetail) {
-    if (detail.lineups.isEmpty()) { WcEmptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو ساعة"); return }
+    if (detail.lineups.isEmpty()) { WcEmptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة"); return }
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
         detail.lineups.forEach { Pitch(it) }
     }
