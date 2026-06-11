@@ -9,7 +9,11 @@ import {
   getLiveFixtures,
   getMatchDetail,
   getOverview,
+  getSquad,
   getStandings,
+  getTeams,
+  getTopAssists,
+  getTopCards,
   getTopScorers,
   isWorldCupConfigured,
 } from "../services/worldCupService";
@@ -80,6 +84,56 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error("[WorldCup] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
+    }
+  });
+
+  app.get("/api/world-cup/teams", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ teams: await getTeams() });
+    } catch (error) {
+      console.error("[WorldCup] teams failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة المنتخبات حاليًا" });
+    }
+  });
+
+  app.get("/api/world-cup/squad/:teamId", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = parseInt(String(req.params.teamId), 10);
+    if (!Number.isFinite(teamId) || teamId <= 0) {
+      return res.status(400).json({ message: "معرّف منتخب غير صالح" });
+    }
+    try {
+      const squad = await getSquad(teamId);
+      if (!squad) return res.status(404).json({ message: "قائمة المنتخب غير متاحة" });
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(squad);
+    } catch (error) {
+      console.error(`[WorldCup] squad ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب قائمة المنتخب حاليًا" });
+    }
+  });
+
+  app.get("/api/world-cup/assists", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ leaders: await getTopAssists() });
+    } catch (error) {
+      console.error("[WorldCup] assists failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة صناع الأهداف حاليًا" });
+    }
+  });
+
+  app.get("/api/world-cup/cards", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ leaders: await getTopCards() });
+    } catch (error) {
+      console.error("[WorldCup] cards failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة البطاقات حاليًا" });
     }
   });
 

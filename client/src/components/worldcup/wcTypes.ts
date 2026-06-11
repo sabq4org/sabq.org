@@ -104,12 +104,57 @@ export interface WcStatistic {
   away: string;
 }
 
+export interface WcPlayerRating {
+  id: number;
+  name: string;
+  photo: string;
+  teamId: number;
+  number: number | null;
+  position: string;
+  rating: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  captain: boolean;
+}
+
 export interface WcMatchDetail {
   fixture: WcFixture;
   events: WcMatchEvent[];
   lineups: WcLineup[];
   statistics: WcStatistic[];
   prediction: WcPrediction | null;
+  ratings: WcPlayerRating[];
+  manOfTheMatch: WcPlayerRating | null;
+  headToHead: WcFixture[];
+}
+
+export interface WcLeader {
+  rank: number;
+  name: string;
+  photo: string;
+  team: WcTeam;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+  minutes: number;
+  matches: number;
+}
+
+export interface WcSquadPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+}
+
+export interface WcSquad {
+  team: WcTeam;
+  players: WcSquadPlayer[];
 }
 
 export interface WcOverview {
