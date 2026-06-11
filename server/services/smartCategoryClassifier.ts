@@ -6,6 +6,11 @@
  */
 
 import { aiManager } from '../ai-manager';
+import {
+  SABQ_CATEGORY_RULE_AR,
+  SABQ_LANGUAGE_STANDARDS_AR,
+  SABQ_NEWSLETTER_STANDARDS_AR,
+} from '../ai/sabqEditorialPrompt';
 import { db } from '../db';
 import { categories, articles } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
@@ -67,10 +72,12 @@ export async function classifyArticle(request: ClassificationRequest): Promise<C
     request.keywords?.length ? `الكلمات المفتاحية: ${request.keywords.join(', ')}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const prompt = `أنت محلل تصنيف صحفي متخصص. مهمتك تحليل المقال التالي واختيار القسم الأنسب له.
+  const prompt = `أنت محلل تصنيف صحفي متخصص في صحيفة سبق. مهمتك تحليل المقال التالي واختيار القسم الأنسب له.
 
 ## الأقسام المتاحة:
 ${categoriesList}
+
+${SABQ_CATEGORY_RULE_AR}
 
 ## المقال للتحليل:
 ${articleContent}
@@ -196,7 +203,11 @@ export async function generateNewsletterSubtitle(request: {
     request.content ? `المحتوى: ${request.content.substring(0, 1500)}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const prompt = `أنت محرر نشرة إخبارية محترف. مهمتك إنشاء عنوان فرعي جذاب وملخص قصير للمقال التالي ليُستخدم في النشرة الإخبارية عبر البريد الإلكتروني.
+  const prompt = `أنت محرر نشرة إخبارية خبير في صحيفة سبق الإلكترونية. مهمتك إنشاء عنوان فرعي جذاب وملخص قصير للمقال التالي ليُستخدم في النشرة الإخبارية عبر البريد الإلكتروني.
+
+${SABQ_LANGUAGE_STANDARDS_AR}
+
+${SABQ_NEWSLETTER_STANDARDS_AR}
 
 ## المقال:
 ${articleContent}
@@ -204,7 +215,7 @@ ${articleContent}
 ## التعليمات:
 1. اكتب عنوان فرعي جذاب (10-15 كلمة) يحفز القارئ على فتح المقال
 2. اكتب ملخص مختصر (30-50 كلمة) يلخص أهم نقطة في المقال
-3. استخدم أسلوب مشوق ومباشر
+3. استخدم أسلوب مشوق ومباشر دون تضليل أو مبالغة
 4. تجنب التكرار مع العنوان الرئيسي
 
 أجب بصيغة JSON فقط:
