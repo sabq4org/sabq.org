@@ -235,7 +235,7 @@ export const AI_MODELS = {
   
   // Anthropic
   CLAUDE_OPUS: { provider: 'anthropic' as const, model: 'claude-opus-4-1' },
-  CLAUDE_SONNET: { provider: 'anthropic' as const, model: 'claude-sonnet-4-5' },
+  CLAUDE_SONNET: { provider: 'anthropic' as const, model: 'claude-sonnet-4-6' },
   CLAUDE_HAIKU: { provider: 'anthropic' as const, model: 'claude-haiku-4-5' },
   
   // Gemini 3 - Latest November 2025

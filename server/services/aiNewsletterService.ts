@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { SABQ_NEWSLETTER_STANDARDS_AR, SABQ_SUMMARY_STANDARDS_AR } from "../ai/sabqEditorialPrompt";
 import type { Article } from "@shared/schema";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -16,14 +17,15 @@ export async function generateArticleSummary(article: Article): Promise<string> 
       messages: [
         {
           role: "system",
-          content: `أنت كاتب محترف في صحيفة سبق الإخبارية. مهمتك إنشاء ملخصات جذابة ومختصرة للأخبار باللغة العربية الفصحى.
+          content: `أنت محرر صحفي خبير في صحيفة سبق الإلكترونية. مهمتك إنشاء ملخصات جذابة ومختصرة للأخبار للنشرة الذكية.
 
-قواعد الملخص:
-- اكتب ملخصاً من 2-3 جمل فقط
-- استخدم لغة واضحة وجذابة
+${SABQ_SUMMARY_STANDARDS_AR}
+
+${SABQ_NEWSLETTER_STANDARDS_AR}
+
+قواعد إضافية:
 - ركز على أهم المعلومات والأحداث
-- تجنب التكرار والحشو
-- اجعل الملخص يثير اهتمام القارئ لقراءة المقال كاملاً`
+- اجعل الملخص يثير اهتمام القارئ لقراءة المقال كاملاً دون تضليل`
         },
         {
           role: "user",
@@ -65,6 +67,8 @@ export async function generatePersonalizedIntro(
         {
           role: "system",
           content: `أنت كاتب ودود في صحيفة سبق الإخبارية. مهمتك كتابة مقدمة شخصية قصيرة وجذابة للنشرة الإخبارية.
+
+${SABQ_NEWSLETTER_STANDARDS_AR}
 
 قواعد المقدمة:
 - اكتب تحية شخصية ودافئة باللغة العربية
