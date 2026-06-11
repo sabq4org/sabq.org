@@ -25,7 +25,10 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
 
   return (
     <Dialog open={team != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col" dir="rtl">
+      <DialogContent
+        className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col [&>button]:left-4 [&>button]:right-auto"
+        dir="rtl"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             {team && (
