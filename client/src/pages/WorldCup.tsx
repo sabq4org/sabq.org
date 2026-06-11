@@ -69,7 +69,11 @@ export default function WorldCup() {
         <SaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
-        <ScorersSection scorers={scorers} isLoading={scorersLoading} />
+        <ScorersSection
+          scorers={scorers}
+          isLoading={scorersLoading}
+          tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
+        />
         <TeamsSection />
         <NewsSection />
       </main>
