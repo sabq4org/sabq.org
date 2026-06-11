@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -412,7 +411,11 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
               )}
               <TabsTrigger value="prediction">التوقعات</TabsTrigger>
             </TabsList>
-            <ScrollArea className="flex-1 mt-3 pe-2">
+            {/* تمرير أصلي — react-remove-scroll في نافذة Radix يحجب ScrollArea على اللمس */}
+            <div
+              className="flex-1 mt-3 pe-2 overflow-y-auto overscroll-contain"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               <TabsContent value="events" className="mt-0">
                 <EventsTimeline events={detail.events} fixture={detail.fixture} />
               </TabsContent>
@@ -440,7 +443,7 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
               <TabsContent value="prediction" className="mt-0">
                 <PredictionTab detail={detail} />
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
         )}
       </DialogContent>

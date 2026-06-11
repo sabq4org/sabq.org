@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SAUDI_TEAM_ID, type WcSquad, type WcTeam } from "./wcTypes";
 
@@ -40,7 +39,11 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pe-2">
+        {/* تمرير أصلي — react-remove-scroll في نافذة Radix يحجب ScrollArea على اللمس */}
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain pe-2"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {isLoading && (
             <div className="space-y-2 py-2">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -93,7 +96,7 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
