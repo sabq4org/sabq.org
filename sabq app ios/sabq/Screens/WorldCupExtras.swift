@@ -5,6 +5,8 @@ import SwiftUI
 struct WCRacesSection: View {
     let scorers: [WCScorer]
     let scorersLoading: Bool
+    /// انطلقت البطولة — المزود يعتمد لوحات اللاعبين بفاصل بعد المباريات
+    let tournamentStarted: Bool
 
     enum Tab: String, CaseIterable { case goals = "الهدافون", assists = "صنّاع الأهداف", cards = "البطاقات" }
     @State private var tab: Tab = .goals
@@ -37,10 +39,10 @@ struct WCRacesSection: View {
             Group {
                 switch tab {
                 case .goals: goalsView
-                case .assists: leadersView(assists, empty: "سباق صنّاع الأهداف ينطلق مع أول صافرة") { l in
+                case .assists: leadersView(assists, empty: tournamentStarted ? Self.pendingStats : "سباق صنّاع الأهداف ينطلق مع أول صافرة") { l in
                     metric("\(l.assists)", sub: "\(l.goals) أهداف")
                 }
-                case .cards: leadersView(cards, empty: "لا بطاقات بعد — وعسى ألا تكثر") { l in
+                case .cards: leadersView(cards, empty: tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر") { l in
                     HStack(spacing: 8) {
                         cardCount(l.yellow, color: WCTheme.gold)
                         cardCount(l.red, color: WCTheme.liveRed)
@@ -53,20 +55,27 @@ struct WCRacesSection: View {
         .task(id: tab) { await loadIfNeeded() }
     }
 
-    // الهدافون: منصة تتويج + قائمة
+    // «ينطلق مع أول صافرة» تصبح خاطئة لحظة انطلاق البطولة — العبارات تتبع الحالة
+    static let pendingStats = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات"
+
+    // الهدافون: منصة تتويج (باكتمال ثلاثة) + قائمة
     @ViewBuilder private var goalsView: some View {
         if scorersLoading {
             WCLoading()
         } else if scorers.isEmpty {
-            WCRaceEmpty(message: "سباق الحذاء الذهبي ينطلق مع أول صافرة")
+            WCRaceEmpty(message: tournamentStarted ? Self.pendingStats : "سباق الحذاء الذهبي ينطلق مع أول صافرة")
         } else {
-            let podium = Array(scorers.prefix(3))
-            let rest = Array(scorers.dropFirst(3))
+            // المنصة تحتاج ثلاثة هدافين مكتملين — أقل من ذلك قائمة صفوف عادية
+            let showPodium = scorers.count >= 3
+            let podium = showPodium ? Array(scorers.prefix(3)) : []
+            let rest = showPodium ? Array(scorers.dropFirst(3)) : scorers
             VStack(spacing: 18) {
-                HStack(alignment: .top, spacing: 10) {
-                    if podium.count > 1 { WCPodium(scorer: podium[1], place: 1) } else { Spacer() }
-                    WCPodium(scorer: podium[0], place: 0)
-                    if podium.count > 2 { WCPodium(scorer: podium[2], place: 2) } else { Spacer() }
+                if showPodium {
+                    HStack(alignment: .top, spacing: 10) {
+                        WCPodium(scorer: podium[1], place: 1)
+                        WCPodium(scorer: podium[0], place: 0)
+                        WCPodium(scorer: podium[2], place: 2)
+                    }
                 }
                 ForEach(rest) { s in
                     WCLeaderRow(rank: s.rank, name: s.name, photo: s.photo, team: s.team, minutes: s.minutes) {

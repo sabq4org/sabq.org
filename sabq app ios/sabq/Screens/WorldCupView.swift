@@ -34,7 +34,11 @@ struct WorldCupView: View {
 
                 WCStandingsSection(groups: standings, isLoading: standingsLoading)
 
-                WCRacesSection(scorers: scorers, scorersLoading: scorersLoading)
+                WCRacesSection(
+                    scorers: scorers,
+                    scorersLoading: scorersLoading,
+                    tournamentStarted: fixtures.contains { $0.status.live || $0.status.finished }
+                )
 
                 WCTeamsSection()
             }
