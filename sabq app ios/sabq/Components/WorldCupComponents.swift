@@ -68,8 +68,10 @@ struct WCStatusPill: View {
     }
 
     private var elapsedText: String {
-        if let e = fixture.status.elapsed { return "\(e)'" }
-        return fixture.status.label
+        guard let e = fixture.status.elapsed else { return fixture.status.label }
+        // الوقت بدل الضائع: 90+8' بدل 90' المجمدة في أكثر دقائق المباراة توترًا
+        if let x = fixture.status.extra, x > 0 { return "\(e)+\(x)'" }
+        return "\(e)'"
     }
 }
 
