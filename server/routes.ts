@@ -13725,7 +13725,7 @@ Respond in valid JSON format only:
       
       console.log("[Edit+Generate API] ✅ All operations completed");
       console.log("[Edit+Generate API] Quality score:", editResult.qualityScore);
-      console.log("[Edit+Generate API] Generated title:", generatedContent.mainTitle);
+      console.log("[Edit+Generate API] Title (Claude→GPT fallback):", editResult.optimized.title || generatedContent.mainTitle);
       console.log("[Edit+Generate API] Newsletter subtitle:", newsletterResult?.subtitle || "N/A");
       
       // Return combined result with best of both worlds
@@ -13738,8 +13738,8 @@ Respond in valid JSON format only:
         hasNewsValue: editResult.hasNewsValue,
         issues: editResult.issues,
         suggestions: editResult.suggestions,
-        // Generated fields from smart content (same as "توليد ذكي شامل")
-        mainTitle: generatedContent.mainTitle,
+        // العنوان من محرر الأسلوب المعتمد (Claude) — وعنوان GPT احتياطاً عند فشله
+        mainTitle: editResult.optimized.title || generatedContent.mainTitle,
         subTitle: generatedContent.subTitle,
         smartSummary: generatedContent.smartSummary,
         keywords: generatedContent.keywords,
