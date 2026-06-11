@@ -71,7 +71,8 @@ struct WorldCupMatchCenter: View {
                 teamHead(f.home)
                 VStack(spacing: 4) {
                     if f.started {
-                        Text("\(f.goals.home ?? 0) - \(f.goals.away ?? 0)")
+                        // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
+                        Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                             .font(.system(size: 30, weight: .black, design: .rounded))
                             .foregroundStyle(WCTheme.onDark)
                             .environment(\.layoutDirection, .leftToRight)
@@ -465,7 +466,8 @@ struct WCPredictionView: View {
                 .background(Capsule().fill(WCTheme.chipFill))
                 .environment(\.layoutDirection, .leftToRight)
             Text(m.home.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-            Text("\(m.goals.home ?? 0) - \(m.goals.away ?? 0)")
+            // اسم المضيف على اليمين — الضيف أولًا داخل LTR
+            Text("\(m.goals.away ?? 0) - \(m.goals.home ?? 0)")
                 .font(.system(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight)
             Text(m.away.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)

@@ -64,7 +64,8 @@ struct WorldCupHomeStrip: View {
     @ViewBuilder private func centerColumn(_ f: WCFixture) -> some View {
         if f.started {
             VStack(spacing: 1) {
-                Text("\(f.goals.home ?? 0) - \(f.goals.away ?? 0)")
+                // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
+                Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                     .font(.system(size: 18, weight: .black, design: .rounded)).foregroundStyle(.white)
                     .environment(\.layoutDirection, .leftToRight)
                 WCStatusPill(fixture: f, onDark: true)

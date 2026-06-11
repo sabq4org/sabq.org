@@ -206,12 +206,13 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
                 <div className="flex flex-col items-center gap-2 min-w-[7rem]">
                   {fixture.status.live || fixture.status.finished ? (
                     <>
+                      {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه */}
                       <div className="text-4xl sm:text-5xl font-black text-white tabular-nums" dir="ltr">
-                        {fixture.goals.home ?? 0} - {fixture.goals.away ?? 0}
+                        {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
                       </div>
                       {fixture.penalties && (
                         <span className="text-xs text-emerald-100/80" dir="ltr">
-                          ({fixture.penalties.home} - {fixture.penalties.away}) ركلات الترجيح
+                          ({fixture.penalties.away} - {fixture.penalties.home}) ركلات الترجيح
                         </span>
                       )}
                       <Badge
