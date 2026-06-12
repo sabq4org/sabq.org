@@ -7796,7 +7796,14 @@ export class DatabaseStorage implements IStorage {
           )
         )
       )
-      .orderBy(desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.views))
+      // التمييز من بعض المسارات (iOS الإداري) لا يختم displayOrder فيبقى 0
+      // ويغرق تحت المختومين — GREATEST يساوي غير المختوم بحداثة نشره
+      // (displayOrder المختوم = ثوانٍ يونكس، نفس مقياس EPOCH)
+      .orderBy(
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
+        desc(articles.publishedAt),
+        desc(articles.views)
+      )
       .limit(3);
 
     return results.map((r) => ({

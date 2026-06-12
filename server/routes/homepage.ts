@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and, or, desc, inArray, isNull, isNotNull, ne, aliasedTable } from "drizzle-orm";
+import { eq, and, or, desc, inArray, isNull, isNotNull, ne, aliasedTable, sql } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
 import { articles, categories, users, articlePolls } from "@shared/schema";
@@ -163,7 +163,14 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                 )
               )
             )
-            .orderBy(desc(articles.displayOrder), desc(articles.publishedAt))
+            // ختم displayOrder = ثوانٍ يونكس لحظة التمييز/الترتيب من اللوحة،
+            // لكن بعض مسارات التمييز (تطبيق iOS الإداري) لا تختم فيبقى صفرًا
+            // ويغرق المقال تحت كل المختومين القدامى. GREATEST يجعل غير
+            // المختوم يرتب بحداثة نشره — نفس المقياس فلا يكسر ترتيب المحررين
+            .orderBy(
+              desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
+              desc(articles.publishedAt)
+            )
             .limit(5),
 
           db

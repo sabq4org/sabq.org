@@ -7028,7 +7028,12 @@ router.patch("/admin/articles/:id", async (req: Request, res: Response) => {
     // Enums / flags
     if (typeof b.articleType === "string") updates.articleType = b.articleType;
     if (typeof b.newsType === "string") updates.newsType = b.newsType;
-    if (typeof b.isFeatured === "boolean") updates.isFeatured = b.isFeatured;
+    if (typeof b.isFeatured === "boolean") {
+      updates.isFeatured = b.isFeatured;
+      // لوحة الويب تختم displayOrder بثواني يونكس لحظة التمييز وهو ما يرتب
+      // الكروسيل — بدون الختم هنا يبقى صفرًا ويغرق المقال تحت كل المختومين
+      updates.displayOrder = b.isFeatured ? Math.floor(Date.now() / 1000) : 0;
+    }
     if (typeof b.hideFromHomepage === "boolean") updates.hideFromHomepage = b.hideFromHomepage;
 
     // Scheduling
