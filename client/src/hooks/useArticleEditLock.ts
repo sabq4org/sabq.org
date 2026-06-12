@@ -118,11 +118,11 @@ export function useArticleEditLock({
     },
   });
 
-  // Heartbeat mutation
+  // Heartbeat mutation — POST لمطابقة مسار الخادم (PATCH كان يسقط في 404 HTML)
   const heartbeatMutation = useMutation({
     mutationFn: async () => {
       return await apiRequest(`/api/admin/articles/${id}/lock/heartbeat`, {
-        method: "PATCH",
+        method: "POST",
       });
     },
     onSuccess: (data: LockStatus) => {

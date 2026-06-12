@@ -8,6 +8,10 @@ import { storage } from "../../storage";
 import type { RadarItem } from "@shared/schema";
 import { approvedCategories, categoryIdBySlug, getItem, getSource, updateItem } from "./repo";
 
+// حساب «صحيفة سبق» (admin@sabq.org) — المراسل المعتمد للمواد المرصودة من
+// مصادر خارجية؛ نفس الحساب الافتراضي في ArticleEditor (NEWSPAPER_ACCOUNT_ID)
+const SABQ_NEWSPAPER_REPORTER_ID = process.env.RADAR_REPORTER_ID || "RnP7eDOAl5T5rGpib9_8d";
+
 function arabicSlug(title: string): string {
   const base = title
     .toLowerCase()
@@ -67,8 +71,11 @@ export async function exportItemToArticle(
     locale: "ar",
     categoryId,
     authorId: userId,
+    reporterId: SABQ_NEWSPAPER_REPORTER_ID,
     articleType: "news",
-    newsType: item.isBreaking ? "breaking" : "regular",
+    // «عاجل» قرار تحريري يتخذه المحرر من الفورم — تعليم الرادار للمادة
+    // كعاجل إشارة فرز داخلية فقط ولا يجوز أن تتسرب إلى شريط العاجل
+    newsType: "regular",
     publishType: "instant",
     status: "draft",
     aiGenerated: true,

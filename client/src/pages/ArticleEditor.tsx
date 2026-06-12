@@ -2545,12 +2545,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       }
                       setIsGeneratingNewsletterContent(true);
                       try {
-                        const response = await fetch("/api/smart-classification/newsletter-subtitle", {
+                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
+                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
                           method: "POST",
-                          headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ title, content, excerpt }),
                         });
-                        const data = await response.json();
                         if (data.success) {
                           setNewsletterSubtitle(data.subtitle);
                           setNewsletterExcerpt(data.excerpt);

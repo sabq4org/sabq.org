@@ -123,7 +123,7 @@ router.post("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) =
   }
 });
 
-router.post("/api/admin/articles/:id/lock/heartbeat", requireAuth, async (req: any, res) => {
+const heartbeatHandler = async (req: any, res: any) => {
   try {
     const articleId = req.params.id;
     const userId = req.user.id;
@@ -151,7 +151,12 @@ router.post("/api/admin/articles/:id/lock/heartbeat", requireAuth, async (req: a
     console.error("[edit-lock] heartbeat error:", err);
     res.status(500).json({ message: "Failed to refresh lock" });
   }
-});
+};
+
+router.post("/api/admin/articles/:id/lock/heartbeat", requireAuth, heartbeatHandler);
+// alias PATCH: الحزم المكيّشة القديمة كانت ترسل PATCH فتسقط في 404 HTML —
+// يبقى القبول بالطريقتين حتى لا ينكسر القفل أثناء نافذة انتشار النشر
+router.patch("/api/admin/articles/:id/lock/heartbeat", requireAuth, heartbeatHandler);
 
 router.delete("/api/admin/articles/:id/lock", requireAuth, async (req: any, res) => {
   try {
