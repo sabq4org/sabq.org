@@ -206,6 +206,8 @@ export async function getStandings(): Promise<WcGroup[]> {
 
 export interface WcScorer {
   rank: number;
+  /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+  id: number;
   name: string;
   photo: string;
   team: WcTeam;
@@ -225,6 +227,7 @@ export async function getTopScorers(): Promise<WcScorer[]> {
       const stats = row.statistics?.[0] ?? {};
       return {
         rank: index + 1,
+        id: row.player?.id ?? 0,
         name: tr(row.player?.name),
         photo: row.player?.photo ?? "",
         team: localizeTeam(stats.team),
@@ -318,6 +321,331 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
   });
 }
 
+// ---------- بطاقة اللاعب الشاملة ----------
+// تجمع كل ما يوفره المزود عن اللاعب: الملف الشخصي + المسيرة + الألقاب +
+// أرقام البطولة + حالة الإصابة. كل نداء يفشل بمعزل عن الآخرين —
+// البطاقة تُبنى مما توفر.
+
+const PLAYER_CARD_TTL = 60 * 60 * 1000; // الملف شبه ثابت؛ أرقام البطولة تتجدد كل ساعة
+
+const TROPHY_PLACE_AR: Record<string, string> = {
+  Winner: "بطل",
+  "2nd Place": "وصيف",
+  "3rd Place": "المركز الثالث",
+};
+
+// أسماء البطولات قصيرة وعامة عند المزود ("Saudi League" + country تفصلها عن
+// غيرها) — ترجمة معنوية ثابتة؛ غير المعروف يبقى كما هو بدل تشويهه بنقل صوتي
+const COMPETITION_AR: Record<string, string> = {
+  "World Cup": "كأس العالم",
+  "Club World Cup": "كأس العالم للأندية",
+  "FIFA Club World Cup": "كأس العالم للأندية",
+  "FIFA Intercontinental Cup": "كأس إنتركونتيننتال",
+  "Euro Championship": "كأس أمم أوروبا",
+  "Copa America": "كوبا أمريكا",
+  "Africa Cup of Nations": "كأس الأمم الأفريقية",
+  "Asian Cup": "كأس آسيا",
+  "Gold Cup": "الكأس الذهبية (كونكاكاف)",
+  "Gulf Cup": "كأس الخليج",
+  "Arab Cup": "كأس العرب",
+  "Olympics Men": "أولمبياد",
+  "Confederations Cup": "كأس القارات",
+  "UEFA Champions League": "دوري أبطال أوروبا",
+  "Champions League": "دوري الأبطال",
+  "AFC Champions League": "دوري أبطال آسيا",
+  "CAF Champions League": "دوري أبطال أفريقيا",
+  "Copa Libertadores": "كأس ليبرتادوريس",
+  "UEFA Europa League": "الدوري الأوروبي",
+  "Europa League": "الدوري الأوروبي",
+  "UEFA Super Cup": "كأس السوبر الأوروبي",
+  "UEFA Nations League": "دوري الأمم الأوروبية",
+  "Saudi League": "الدوري السعودي",
+  "Pro League": "دوري المحترفين",
+  "Premier League": "الدوري الممتاز",
+  "First Division": "دوري الدرجة الأولى",
+  "Second Division": "دوري الدرجة الثانية",
+  "Super Cup": "كأس السوبر",
+  "King Cup": "كأس الملك",
+  "King's Cup": "كأس الملك",
+  "Crown Prince Cup": "كأس ولي العهد",
+  "La Liga": "الدوري الإسباني",
+  "Serie A": "الدوري الإيطالي",
+  Bundesliga: "الدوري الألماني",
+  "Ligue 1": "الدوري الفرنسي",
+  Eredivisie: "الدوري الهولندي",
+  "Primeira Liga": "الدوري البرتغالي",
+  "Major League Soccer": "الدوري الأمريكي",
+  "FA Cup": "كأس الاتحاد الإنجليزي",
+  "League Cup": "كأس الرابطة الإنجليزية",
+  "Community Shield": "الدرع الخيرية",
+  "Copa del Rey": "كأس ملك إسبانيا",
+  "Coppa Italia": "كأس إيطاليا",
+  "DFB Pokal": "كأس ألمانيا",
+  "Coupe de France": "كأس فرنسا",
+  "Trophée des Champions": "كأس الأبطال الفرنسي",
+  "Arab Club Champions Cup": "كأس العرب للأندية الأبطال",
+  "AFC U23 Asian Cup": "كأس آسيا تحت 23 عامًا",
+  "U20 World Cup": "كأس العالم للشباب",
+  "U17 World Cup": "كأس العالم للناشئين",
+  Friendlies: "مباريات ودية",
+};
+
+// دول الألقاب وبلد الميلاد — المنتخبات الـ48 وأشهر دول الكرة؛ "World" تأتي
+// مع البطولات الدولية. غير المعروف يبقى كما هو.
+const COUNTRY_AR: Record<string, string> = {
+  "Saudi Arabia": "السعودية",
+  World: "العالم",
+  Asia: "آسيا",
+  Africa: "أفريقيا",
+  Europe: "أوروبا",
+  "South America": "أمريكا الجنوبية",
+  "North America": "أمريكا الشمالية",
+  England: "إنجلترا",
+  Spain: "إسبانيا",
+  Italy: "إيطاليا",
+  Germany: "ألمانيا",
+  France: "فرنسا",
+  Portugal: "البرتغال",
+  Netherlands: "هولندا",
+  Belgium: "بلجيكا",
+  Brazil: "البرازيل",
+  Argentina: "الأرجنتين",
+  Morocco: "المغرب",
+  Tunisia: "تونس",
+  Algeria: "الجزائر",
+  Egypt: "مصر",
+  Qatar: "قطر",
+  "United Arab Emirates": "الإمارات",
+  Kuwait: "الكويت",
+  Bahrain: "البحرين",
+  Oman: "عُمان",
+  Jordan: "الأردن",
+  Iraq: "العراق",
+  Lebanon: "لبنان",
+  Turkey: "تركيا",
+  Türkiye: "تركيا",
+  USA: "الولايات المتحدة",
+  Mexico: "المكسيك",
+  Canada: "كندا",
+  Japan: "اليابان",
+  "South Korea": "كوريا الجنوبية",
+  "Korea Republic": "كوريا الجنوبية",
+  Australia: "أستراليا",
+  Iran: "إيران",
+  Uzbekistan: "أوزبكستان",
+  Croatia: "كرواتيا",
+  Switzerland: "سويسرا",
+  Austria: "النمسا",
+  Scotland: "اسكتلندا",
+  Wales: "ويلز",
+  Ireland: "أيرلندا",
+  Norway: "النرويج",
+  Sweden: "السويد",
+  Denmark: "الدنمارك",
+  Poland: "بولندا",
+  Greece: "اليونان",
+  Russia: "روسيا",
+  Ukraine: "أوكرانيا",
+  Senegal: "السنغال",
+  Ghana: "غانا",
+  Nigeria: "نيجيريا",
+  Cameroon: "الكاميرون",
+  "Ivory Coast": "ساحل العاج",
+  "South Africa": "جنوب أفريقيا",
+  "Cape Verde": "الرأس الأخضر",
+  Uruguay: "أوروغواي",
+  Colombia: "كولومبيا",
+  Ecuador: "الإكوادور",
+  Paraguay: "باراغواي",
+  Panama: "بنما",
+  "Costa Rica": "كوستاريكا",
+  Haiti: "هايتي",
+  Curacao: "كوراساو",
+  "New Zealand": "نيوزيلندا",
+};
+
+const localizeCompetition = (name: string): string => COMPETITION_AR[name] ?? name;
+const localizeCountry = (name: string): string => COUNTRY_AR[name] ?? name;
+
+/** "188" أو "188 cm" → 188 */
+const parseMetric = (value: unknown): number | null => {
+  const n = parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export interface WcPlayerCareerStop {
+  teamId: number;
+  team: string;
+  logo: string;
+  seasons: number[];
+}
+
+export interface WcPlayerTrophy {
+  competition: string;
+  country: string;
+  season: string;
+  place: string;
+  winner: boolean;
+}
+
+export interface WcPlayerTournamentStats {
+  matches: number;
+  lineups: number;
+  minutes: number;
+  rating: number | null;
+  goals: number;
+  assists: number;
+  shots: number;
+  shotsOn: number;
+  passes: number;
+  keyPasses: number;
+  dribblesAttempts: number;
+  dribblesSuccess: number;
+  tackles: number;
+  yellow: number;
+  red: number;
+  saves: number;
+  conceded: number;
+  penaltiesScored: number;
+  penaltiesMissed: number;
+}
+
+export interface WcPlayerCard {
+  id: number;
+  name: string;
+  /** الاسم الرسمي الكامل — null عندما لا يضيف شيئًا على الاسم المعروض */
+  fullName: string | null;
+  photo: string;
+  position: string;
+  positionEn: string;
+  number: number | null;
+  age: number | null;
+  birthDate: string | null;
+  /** "الرياض، السعودية" — المدينة بالنقل الصوتي والدولة من الخريطة الثابتة */
+  birthPlace: string | null;
+  height: number | null;
+  weight: number | null;
+  career: WcPlayerCareerStop[];
+  trophies: WcPlayerTrophy[];
+  /** أرقام اللاعب التراكمية في مونديال 2026 — null قبل اعتماد المزود لها */
+  stats: WcPlayerTournamentStats | null;
+  injury: { reason: string } | null;
+}
+
+export async function getPlayerCard(playerId: number): Promise<WcPlayerCard | null> {
+  return withSWR(`wc:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const [profileRows, careerRows, trophyRows, statsRows, injuryRows] = await Promise.all([
+      apiGet("players/profiles", { player: playerId }),
+      apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
+      apiGet("trophies", { player: playerId }).catch(() => [] as any[]),
+      apiGet("players", { id: playerId, season: SEASON, league: LEAGUE_ID }).catch(() => [] as any[]),
+      apiGet("injuries", { player: playerId, season: SEASON }).catch(() => [] as any[]),
+    ]);
+
+    const p = profileRows[0]?.player;
+    if (!p?.id) return null;
+
+    // كل ما يحتاج نقلًا صوتيًا (أشخاص/أندية/مدن) في دفعة تعريب واحدة
+    const officialFull = [p.firstname, p.lastname].filter(Boolean).join(" ").trim();
+    const tr = await resolveNames([
+      p.name,
+      officialFull,
+      p.birth?.place,
+      ...careerRows.map((row: any) => row.team?.name),
+    ]);
+
+    const career: WcPlayerCareerStop[] = careerRows
+      .map((row: any): WcPlayerCareerStop => {
+        const teamId = row.team?.id ?? 0;
+        // المنتخبات الـ48 من قاموسها الثابت؛ الأندية بالنقل الصوتي
+        const ntName = localizeTeamName(teamId, "");
+        return {
+          teamId,
+          team: ntName || tr(row.team?.name),
+          logo: row.team?.logo ?? "",
+          seasons: ((row.seasons ?? []) as number[]).filter((s) => Number.isFinite(s)).sort((a, b) => a - b),
+        };
+      })
+      .filter((stop: WcPlayerCareerStop) => stop.team)
+      .sort(
+        (a: WcPlayerCareerStop, b: WcPlayerCareerStop) =>
+          (b.seasons[b.seasons.length - 1] ?? 0) - (a.seasons[a.seasons.length - 1] ?? 0)
+      );
+
+    const seenTrophies = new Set<string>();
+    const trophies: WcPlayerTrophy[] = trophyRows
+      .filter((row: any) => row?.league && row?.season)
+      .filter((row: any) => {
+        const key = `${row.league}|${row.country}|${row.season}|${row.place}`;
+        if (seenTrophies.has(key)) return false;
+        seenTrophies.add(key);
+        return true;
+      })
+      .map((row: any): WcPlayerTrophy => ({
+        competition: localizeCompetition(row.league),
+        country: localizeCountry(row.country ?? ""),
+        season: String(row.season),
+        place: TROPHY_PLACE_AR[row.place] ?? row.place ?? "",
+        winner: row.place === "Winner",
+      }))
+      .sort((a: WcPlayerTrophy, b: WcPlayerTrophy) => b.season.localeCompare(a.season));
+
+    const st = statsRows[0]?.statistics?.[0];
+    const matches = st?.games?.appearences ?? 0;
+    const stats: WcPlayerTournamentStats | null =
+      st && matches > 0
+        ? {
+            matches,
+            lineups: st.games?.lineups ?? 0,
+            minutes: st.games?.minutes ?? 0,
+            rating: Number.isFinite(parseFloat(st.games?.rating ?? "")) ? parseFloat(st.games.rating) : null,
+            goals: st.goals?.total ?? 0,
+            assists: st.goals?.assists ?? 0,
+            shots: st.shots?.total ?? 0,
+            shotsOn: st.shots?.on ?? 0,
+            passes: st.passes?.total ?? 0,
+            keyPasses: st.passes?.key ?? 0,
+            dribblesAttempts: st.dribbles?.attempts ?? 0,
+            dribblesSuccess: st.dribbles?.success ?? 0,
+            tackles: st.tackles?.total ?? 0,
+            yellow: st.cards?.yellow ?? 0,
+            red: (st.cards?.red ?? 0) + (st.cards?.yellowred ?? 0),
+            saves: st.goals?.saves ?? 0,
+            conceded: st.goals?.conceded ?? 0,
+            penaltiesScored: st.penalty?.scored ?? 0,
+            penaltiesMissed: st.penalty?.missed ?? 0,
+          }
+        : null;
+
+    // أحدث سجل إصابة في موسم البطولة — أفضل جهد، والسبب يبقى إنجليزيًا
+    // عند المزود فلا نعرضه إلا معرّبًا في الواجهة عبر شارة عامة
+    const injuryReason: string | null = injuryRows[0]?.player?.reason ?? null;
+
+    const displayName = tr(p.name);
+    const translatedFull = officialFull ? tr(officialFull) : "";
+
+    return {
+      id: p.id,
+      name: displayName,
+      fullName: translatedFull && translatedFull !== displayName ? translatedFull : null,
+      photo: p.photo ?? "",
+      position: POSITION_AR[p.position] ?? p.position ?? "",
+      positionEn: p.position ?? "",
+      number: p.number ?? null,
+      age: p.age ?? null,
+      birthDate: p.birth?.date ?? null,
+      birthPlace:
+        [tr(p.birth?.place), localizeCountry(p.birth?.country ?? "")].filter(Boolean).join("، ") || null,
+      height: parseMetric(p.height),
+      weight: parseMetric(p.weight),
+      career,
+      trophies,
+      stats,
+      injury: injuryReason ? { reason: injuryReason } : null,
+    };
+  });
+}
+
 // ---------- المواجهات التاريخية ----------
 
 export async function getHeadToHead(teamA: number, teamB: number): Promise<WcFixture[]> {
@@ -353,6 +681,8 @@ export async function getPrediction(fixtureId: number): Promise<WcPrediction | n
 
 export interface WcLeader {
   rank: number;
+  /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+  id: number;
   name: string;
   photo: string;
   team: WcTeam;
@@ -368,6 +698,7 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
   const stats = row.statistics?.[0] ?? {};
   return {
     rank: index + 1,
+    id: row.player?.id ?? 0,
     name: tr(row.player?.name),
     photo: row.player?.photo ?? "",
     team: localizeTeam(stats.team),
@@ -386,6 +717,7 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
 // (لوحة المزود أكمل: دقائق اللعب والصور وعدد المباريات — تحل محل التجميع فور صدورها).
 
 interface WcRaceTally {
+  playerId: number | null;
   name: string;
   team: WcTeam;
   photo: string;
@@ -425,9 +757,10 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
       if (!tally) {
         // صور المزود تتبع معرف اللاعب مباشرة
         const photo = playerId ? `https://media.api-sports.io/football/players/${playerId}.png` : "";
-        tally = { name, team, photo, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
+        tally = { playerId, name, team, photo, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
         tallies.set(key, tally);
       } else if (!tally.photo && playerId) {
+        tally.playerId = playerId;
         tally.photo = `https://media.api-sports.io/football/players/${playerId}.png`;
       }
       apply(tally);
@@ -457,6 +790,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     const all = [...tallies.values()];
     const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
       rank: index + 1,
+      id: t.playerId ?? 0,
       name: t.name,
       photo: t.photo,
       team: t.team,
@@ -474,6 +808,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         .slice(0, 10)
         .map((t, i): WcScorer => ({
           rank: i + 1,
+          id: t.playerId ?? 0,
           name: t.name,
           photo: t.photo,
           team: t.team,

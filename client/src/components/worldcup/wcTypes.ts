@@ -53,6 +53,8 @@ export interface WcGroup {
 
 export interface WcScorer {
   rank: number;
+  /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+  id: number;
   name: string;
   photo: string;
   team: WcTeam;
@@ -77,7 +79,9 @@ export interface WcMatchEvent {
   type: string;
   label: string;
   player: string;
+  playerId: number | null;
   assist: string | null;
+  assistId: number | null;
 }
 
 export interface WcLineupPlayer {
@@ -131,6 +135,8 @@ export interface WcMatchDetail {
 
 export interface WcLeader {
   rank: number;
+  /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+  id: number;
   name: string;
   photo: string;
   team: WcTeam;
@@ -155,6 +161,62 @@ export interface WcSquadPlayer {
 export interface WcSquad {
   team: WcTeam;
   players: WcSquadPlayer[];
+}
+
+export interface WcPlayerCareerStop {
+  teamId: number;
+  team: string;
+  logo: string;
+  seasons: number[];
+}
+
+export interface WcPlayerTrophy {
+  competition: string;
+  country: string;
+  season: string;
+  place: string;
+  winner: boolean;
+}
+
+export interface WcPlayerTournamentStats {
+  matches: number;
+  lineups: number;
+  minutes: number;
+  rating: number | null;
+  goals: number;
+  assists: number;
+  shots: number;
+  shotsOn: number;
+  passes: number;
+  keyPasses: number;
+  dribblesAttempts: number;
+  dribblesSuccess: number;
+  tackles: number;
+  yellow: number;
+  red: number;
+  saves: number;
+  conceded: number;
+  penaltiesScored: number;
+  penaltiesMissed: number;
+}
+
+export interface WcPlayerCard {
+  id: number;
+  name: string;
+  fullName: string | null;
+  photo: string;
+  position: string;
+  positionEn: string;
+  number: number | null;
+  age: number | null;
+  birthDate: string | null;
+  birthPlace: string | null;
+  height: number | null;
+  weight: number | null;
+  career: WcPlayerCareerStop[];
+  trophies: WcPlayerTrophy[];
+  stats: WcPlayerTournamentStats | null;
+  injury: { reason: string } | null;
 }
 
 export interface WcOverview {

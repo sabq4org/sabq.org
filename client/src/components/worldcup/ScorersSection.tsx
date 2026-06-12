@@ -11,6 +11,7 @@ interface ScorersSectionProps {
   isLoading: boolean;
   /** انطلقت البطولة (مباراة حية أو منتهية) — المزود يعتمد إحصاءات اللاعبين بعد المباريات بفاصل */
   tournamentStarted: boolean;
+  onOpenPlayer: (playerId: number) => void;
 }
 
 const PODIUM_RING = [
@@ -19,10 +20,24 @@ const PODIUM_RING = [
   "ring-orange-700/70", // البرونز
 ];
 
-function PodiumCard({ scorer, place }: { scorer: WcScorer; place: number }) {
+function PodiumCard({
+  scorer,
+  place,
+  onOpenPlayer,
+}: {
+  scorer: WcScorer;
+  place: number;
+  onOpenPlayer: (playerId: number) => void;
+}) {
   const isFirst = place === 0;
   return (
-    <div className={`flex flex-col items-center gap-2 ${isFirst ? "" : "mt-8"}`}>
+    <button
+      type="button"
+      onClick={() => scorer.id > 0 && onOpenPlayer(scorer.id)}
+      disabled={scorer.id <= 0}
+      className={`flex flex-col items-center gap-2 rounded-xl p-2 hover-elevate active-elevate-2 transition-all disabled:cursor-default ${isFirst ? "" : "mt-8"}`}
+      data-testid={`wc-podium-${scorer.id}`}
+    >
       <div className="relative">
         <div className={`${isFirst ? "h-24 w-24" : "h-[72px] w-[72px]"} rounded-full overflow-hidden ring-4 ${PODIUM_RING[place]} bg-muted`}>
           {scorer.photo ? (
@@ -50,27 +65,37 @@ function PodiumCard({ scorer, place }: { scorer: WcScorer; place: number }) {
         <span className={`font-black tabular-nums ${isFirst ? "text-3xl" : "text-2xl"}`}>{scorer.goals}</span>
         <span className="text-xs text-muted-foreground">{scorer.goals === 1 ? "هدف" : "أهداف"}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
 function LeaderRow({
   rank,
+  playerId,
   name,
   photo,
   team,
   minutes,
   end,
+  onOpenPlayer,
 }: {
   rank: number;
+  playerId: number;
   name: string;
   photo: string;
   team: { name: string; logo: string };
   minutes: number;
   end: React.ReactNode;
+  onOpenPlayer: (playerId: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-card px-3.5 py-2.5 dark:border dark:border-card-border">
+    <button
+      type="button"
+      onClick={() => playerId > 0 && onOpenPlayer(playerId)}
+      disabled={playerId <= 0}
+      className="w-full flex items-center justify-between gap-3 rounded-xl bg-card px-3.5 py-2.5 dark:border dark:border-card-border text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+      data-testid={`wc-leader-${playerId}`}
+    >
       <div className="flex items-center gap-3 min-w-0">
         <span className="w-5 text-center text-sm text-muted-foreground tabular-nums">{rank}</span>
         <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
@@ -93,7 +118,7 @@ function LeaderRow({
         )}
         {end}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -109,10 +134,11 @@ function EmptyRace({ message }: { message: string }) {
   );
 }
 
-function LeadersList({ endpoint, render, emptyMessage }: {
+function LeadersList({ endpoint, render, emptyMessage, onOpenPlayer }: {
   endpoint: string;
   render: (leader: WcLeader) => React.ReactNode;
   emptyMessage: string;
+  onOpenPlayer: (playerId: number) => void;
 }) {
   const { data, isLoading } = useQuery<{ leaders: WcLeader[] }>({
     queryKey: [endpoint],
@@ -136,18 +162,20 @@ function LeadersList({ endpoint, render, emptyMessage }: {
         <LeaderRow
           key={`${leader.rank}-${leader.name}`}
           rank={leader.rank}
+          playerId={leader.id}
           name={leader.name}
           photo={leader.photo}
           team={leader.team}
           minutes={leader.minutes}
           end={render(leader)}
+          onOpenPlayer={onOpenPlayer}
         />
       ))}
     </div>
   );
 }
 
-export function ScorersSection({ scorers, isLoading, tournamentStarted }: ScorersSectionProps) {
+export function ScorersSection({ scorers, isLoading, tournamentStarted, onOpenPlayer }: ScorersSectionProps) {
   const all = scorers ?? [];
   // المنصة تحتاج ثلاثة هدافين مكتملين — أقل من ذلك يعرض قائمة صفوف عادية
   const showPodium = all.length >= 3;
@@ -206,9 +234,9 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
                 {/* منصة التتويج: الثاني — الأول — الثالث */}
                 {showPodium && (
                   <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
-                    <PodiumCard scorer={podium[1]} place={1} />
-                    <PodiumCard scorer={podium[0]} place={0} />
-                    <PodiumCard scorer={podium[2]} place={2} />
+                    <PodiumCard scorer={podium[1]} place={1} onOpenPlayer={onOpenPlayer} />
+                    <PodiumCard scorer={podium[0]} place={0} onOpenPlayer={onOpenPlayer} />
+                    <PodiumCard scorer={podium[2]} place={2} onOpenPlayer={onOpenPlayer} />
                   </div>
                 )}
                 {rest.length > 0 && (
@@ -217,10 +245,12 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
                       <LeaderRow
                         key={`${scorer.rank}-${scorer.name}`}
                         rank={scorer.rank}
+                        playerId={scorer.id}
                         name={scorer.name}
                         photo={scorer.photo}
                         team={scorer.team}
                         minutes={scorer.minutes}
+                        onOpenPlayer={onOpenPlayer}
                         end={
                           <>
                             <span className="hidden sm:inline">{scorer.assists} صناعة</span>
@@ -238,6 +268,7 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
           <TabsContent value="assists">
             <LeadersList
               endpoint="/api/world-cup/assists"
+              onOpenPlayer={onOpenPlayer}
               emptyMessage={tournamentStarted ? pendingStats : "سباق صنّاع الأهداف ينطلق مع أول صافرة"}
               render={(leader) => (
                 <>
@@ -251,6 +282,7 @@ export function ScorersSection({ scorers, isLoading, tournamentStarted }: Scorer
           <TabsContent value="cards">
             <LeadersList
               endpoint="/api/world-cup/cards"
+              onOpenPlayer={onOpenPlayer}
               emptyMessage={tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر"}
               render={(leader) => (
                 <span className="flex items-center gap-2">

@@ -29,6 +29,8 @@ import {
 interface MatchCenterDialogProps {
   fixtureId: number | null;
   onClose: () => void;
+  /** يفتح بطاقة اللاعب فوق مركز المباراة دون إغلاقه */
+  onOpenPlayer: (playerId: number) => void;
 }
 
 // ---------- الأحداث ----------
@@ -43,7 +45,15 @@ function EventIcon({ type }: { type: string }) {
   return <Radio className="h-4 w-4 text-muted-foreground" />;
 }
 
-function EventsTimeline({ events, fixture }: { events: WcMatchEvent[]; fixture: WcFixture }) {
+function EventsTimeline({
+  events,
+  fixture,
+  onOpenPlayer,
+}: {
+  events: WcMatchEvent[];
+  fixture: WcFixture;
+  onOpenPlayer: (playerId: number) => void;
+}) {
   if (events.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-8">
@@ -61,8 +71,15 @@ function EventsTimeline({ events, fixture }: { events: WcMatchEvent[]; fixture: 
       {sorted.map((event, index) => {
         const isHome = event.teamId === fixture.home.id;
         const team = isHome ? fixture.home : fixture.away;
+        const clickable = (event.playerId ?? 0) > 0;
         return (
-          <div key={index} className="flex items-center gap-3 rounded-xl bg-muted/40 px-3 py-2.5">
+          <button
+            key={index}
+            type="button"
+            onClick={() => clickable && onOpenPlayer(event.playerId!)}
+            disabled={!clickable}
+            className="w-full flex items-center gap-3 rounded-xl bg-muted/40 px-3 py-2.5 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+          >
             <Badge variant="secondary" className="tabular-nums shrink-0 min-w-[3rem] justify-center" dir="ltr">
               {event.minute}'{event.extraMinute ? `+${event.extraMinute}` : ""}
             </Badge>
@@ -80,7 +97,7 @@ function EventsTimeline({ events, fixture }: { events: WcMatchEvent[]; fixture: 
               )}
             </div>
             <img src={team.logo} alt={team.name} className="h-5 w-5 object-contain shrink-0" loading="lazy" />
-          </div>
+          </button>
         );
       })}
     </div>
@@ -89,7 +106,13 @@ function EventsTimeline({ events, fixture }: { events: WcMatchEvent[]; fixture: 
 
 // ---------- التشكيلات (ملعب 2D) ----------
 
-function TacticalPitch({ lineup }: { lineup: WcLineup }) {
+function TacticalPitch({
+  lineup,
+  onOpenPlayer,
+}: {
+  lineup: WcLineup;
+  onOpenPlayer: (playerId: number) => void;
+}) {
   // المزود يرسل موقع كل لاعب كشبكة "صف:عمود" — الصف 1 هو الحارس
   const rows = useMemo(() => {
     const byRow = new Map<number, { col: number; player: WcLineup["startXI"][number] }[]>();
@@ -133,14 +156,20 @@ function TacticalPitch({ lineup }: { lineup: WcLineup }) {
               dir="ltr"
             >
               {rowPlayers.map((player) => (
-                <div key={player.id} className="flex flex-col items-center gap-0.5 w-14">
+                <button
+                  key={player.id}
+                  type="button"
+                  onClick={() => player.id > 0 && onOpenPlayer(player.id)}
+                  disabled={player.id <= 0}
+                  className="flex flex-col items-center gap-0.5 w-14 disabled:cursor-default"
+                >
                   <span className="h-7 w-7 rounded-full bg-white text-emerald-900 text-[11px] font-black flex items-center justify-center shadow-md tabular-nums">
                     {player.number ?? "•"}
                   </span>
                   <span className="text-[9px] text-white text-center leading-tight line-clamp-2 drop-shadow">
                     {player.name}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           ))
@@ -153,7 +182,13 @@ function TacticalPitch({ lineup }: { lineup: WcLineup }) {
   );
 }
 
-function LineupsTab({ lineups }: { lineups: WcLineup[] }) {
+function LineupsTab({
+  lineups,
+  onOpenPlayer,
+}: {
+  lineups: WcLineup[];
+  onOpenPlayer: (playerId: number) => void;
+}) {
   if (lineups.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-8">
@@ -164,7 +199,7 @@ function LineupsTab({ lineups }: { lineups: WcLineup[] }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {lineups.map((lineup) => (
-        <TacticalPitch key={lineup.teamId} lineup={lineup} />
+        <TacticalPitch key={lineup.teamId} lineup={lineup} onOpenPlayer={onOpenPlayer} />
       ))}
     </div>
   );
@@ -278,7 +313,13 @@ function ratingColor(rating: number): string {
   return "bg-red-500 text-white";
 }
 
-function RatingsTab({ detail }: { detail: WcMatchDetail }) {
+function RatingsTab({
+  detail,
+  onOpenPlayer,
+}: {
+  detail: WcMatchDetail;
+  onOpenPlayer: (playerId: number) => void;
+}) {
   if (detail.ratings.length === 0) {
     return (
       <p className="text-center text-sm text-muted-foreground py-8">
@@ -291,7 +332,12 @@ function RatingsTab({ detail }: { detail: WcMatchDetail }) {
   return (
     <div className="space-y-2 py-1">
       {detail.manOfTheMatch && (
-        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3.5 py-2.5">
+        <button
+          type="button"
+          onClick={() => detail.manOfTheMatch!.id > 0 && onOpenPlayer(detail.manOfTheMatch!.id)}
+          disabled={detail.manOfTheMatch.id <= 0}
+          className="w-full flex items-center gap-3 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3.5 py-2.5 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+        >
           <Crown className="h-5 w-5 text-amber-500 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">رجل المباراة</p>
@@ -300,10 +346,16 @@ function RatingsTab({ detail }: { detail: WcMatchDetail }) {
           <span className={`rounded-lg px-2 py-1 text-sm font-black tabular-nums ${ratingColor(detail.manOfTheMatch.rating)}`}>
             {detail.manOfTheMatch.rating.toFixed(1)}
           </span>
-        </div>
+        </button>
       )}
       {detail.ratings.map((player) => (
-        <div key={`${player.teamId}-${player.id}`} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
+        <button
+          key={`${player.teamId}-${player.id}`}
+          type="button"
+          onClick={() => player.id > 0 && onOpenPlayer(player.id)}
+          disabled={player.id <= 0}
+          className="w-full flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+        >
           <div className="h-8 w-8 rounded-full overflow-hidden bg-muted shrink-0">
             {player.photo && (
               <img src={player.photo} alt={player.name} className="h-full w-full object-cover" loading="lazy" />
@@ -325,7 +377,7 @@ function RatingsTab({ detail }: { detail: WcMatchDetail }) {
           <span className={`rounded-md px-1.5 py-0.5 text-xs font-black tabular-nums shrink-0 ${ratingColor(player.rating)}`}>
             {player.rating.toFixed(1)}
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -333,7 +385,7 @@ function RatingsTab({ detail }: { detail: WcMatchDetail }) {
 
 // ---------- الحوار ----------
 
-export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps) {
+export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
   const { data: detail, isLoading } = useQuery<WcMatchDetail>({
     queryKey: [`/api/world-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
@@ -423,10 +475,10 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               <TabsContent value="events" className="mt-0">
-                <EventsTimeline events={detail.events} fixture={detail.fixture} />
+                <EventsTimeline events={detail.events} fixture={detail.fixture} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
               <TabsContent value="lineups" className="mt-0">
-                <LineupsTab lineups={detail.lineups} />
+                <LineupsTab lineups={detail.lineups} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
               <TabsContent value="stats" className="mt-0">
                 {detail.statistics.length === 0 ? (
@@ -443,7 +495,7 @@ export function MatchCenterDialog({ fixtureId, onClose }: MatchCenterDialogProps
               </TabsContent>
               {detail.ratings.length > 0 && (
                 <TabsContent value="ratings" className="mt-0">
-                  <RatingsTab detail={detail} />
+                  <RatingsTab detail={detail} onOpenPlayer={onOpenPlayer} />
                 </TabsContent>
               )}
               <TabsContent value="prediction" className="mt-0">
