@@ -232,29 +232,29 @@ export default function SystemSettings() {
       icon: Info,
       label: "معلومة",
       color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      borderColor: "border-blue-500/30",
+      bgColor: "bg-blue-500/10 dark:bg-muted/40",
+      borderColor: "border-blue-500/30 dark:border-border",
     },
     success: {
       icon: CheckCircle,
       label: "نجاح",
       color: "text-green-500",
-      bgColor: "bg-green-500/10",
-      borderColor: "border-green-500/30",
+      bgColor: "bg-green-500/10 dark:bg-muted/40",
+      borderColor: "border-green-500/30 dark:border-border",
     },
     warning: {
       icon: AlertTriangle,
       label: "تحذير",
       color: "text-yellow-500",
-      bgColor: "bg-yellow-500/10",
-      borderColor: "border-yellow-500/30",
+      bgColor: "bg-yellow-500/10 dark:bg-muted/40",
+      borderColor: "border-yellow-500/30 dark:border-border",
     },
     danger: {
       icon: AlertCircle,
       label: "خطر",
       color: "text-red-500",
-      bgColor: "bg-red-500/10",
-      borderColor: "border-red-500/30",
+      bgColor: "bg-red-500/10 dark:bg-muted/40",
+      borderColor: "border-red-500/30 dark:border-border",
     },
   };
 
@@ -279,7 +279,7 @@ export default function SystemSettings() {
     <DashboardLayout>
       <div className="space-y-8" dir="rtl">
         {/* Header Card - matching dashboard welcome style */}
-        <Card className="bg-gradient-to-r from-slate-50 via-blue-50/50 to-slate-50 dark:from-slate-950/50 dark:via-blue-950/30 dark:to-slate-950/50 border-primary/20" data-testid="card-settings-header">
+        <Card className="bg-gradient-to-r from-slate-50 via-blue-50/50 to-slate-50 dark:from-card dark:via-card dark:to-card border-primary/20" data-testid="card-settings-header">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1 space-y-2">
@@ -318,7 +318,7 @@ export default function SystemSettings() {
               icon={Sparkles}
               iconColorEnabled="text-violet-500"
               testId="switch-ifox-visibility"
-              bgColor="bg-violet-50 dark:bg-violet-950/30"
+              bgColor="bg-violet-50 dark:bg-card"
             />
           </div>
         </div>
@@ -336,7 +336,7 @@ export default function SystemSettings() {
               icon={PartyPopper}
               iconColorEnabled="text-primary"
               testId="switch-celebration-mode"
-              bgColor="bg-amber-50 dark:bg-amber-950/30"
+              bgColor="bg-amber-50 dark:bg-card"
             />
           </div>
         </div>
@@ -347,7 +347,7 @@ export default function SystemSettings() {
           
           {/* Current Announcement Preview */}
           {announcement?.isActive && announcement?.message && (
-            <Card className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+            <Card className="bg-green-50 dark:bg-card border-green-200 dark:border-border">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">

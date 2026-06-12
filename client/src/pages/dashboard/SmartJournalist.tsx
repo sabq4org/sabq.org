@@ -222,7 +222,7 @@ export default function SmartJournalist() {
 
             {/* Active Task Progress */}
             {activeTask && (activeTask.status === "pending" || activeTask.status === "processing") && (
-              <Card className="border-primary/50">
+              <Card className="border-primary/50 dark:border-border">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export default function SmartJournalist() {
                       {recentTasks.map((task) => (
                         <Card 
                           key={task.id} 
-                          className={`hover-elevate cursor-pointer ${task.id === activeTaskId ? 'border-primary' : ''}`}
+                          className={`hover-elevate cursor-pointer ${task.id === activeTaskId ? 'border-primary dark:border-border dark:bg-muted/60' : ''}`}
                           onClick={() => task.status === "completed" && openPreview(task)}
                           data-testid={`task-card-${task.id}`}
                         >

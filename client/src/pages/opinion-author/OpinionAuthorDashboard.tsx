@@ -187,7 +187,7 @@ export default function OpinionAuthorDashboard() {
           <>
             {/* Needs Changes Alert */}
             {needsChangesList.length > 0 && (
-              <div className="rounded-xl border-2 border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40 p-4 md:p-5 space-y-3">
+              <div className="rounded-xl border-2 border-amber-300 bg-amber-50 dark:bg-card dark:border-border p-4 md:p-5 space-y-3">
                 <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100 font-semibold">
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   مقالات تحتاج تعديلك ({needsChangesList.length})
@@ -199,7 +199,7 @@ export default function OpinionAuthorDashboard() {
                   {needsChangesList.map((article) => (
                     <li
                       key={article.id}
-                      className="rounded-lg border border-amber-200/80 bg-white/60 dark:bg-background/40 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                      className="rounded-lg border border-amber-200/80 dark:border-border bg-white/60 dark:bg-background/40 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
                     >
                       <div className="min-w-0 flex-1 space-y-2">
                         <p className="font-medium line-clamp-2">{article.title}</p>
@@ -359,7 +359,7 @@ export default function OpinionAuthorDashboard() {
                           </td>
                           <td className="py-3 px-4">
                             {article.reviewStatus === "needs_changes" && article.reviewNotes ? (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 leading-relaxed max-w-md">
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-muted/40 dark:border-border px-3 py-2 text-xs text-amber-900 dark:text-amber-100 leading-relaxed max-w-md">
                                 <span className="font-medium flex items-center gap-1 mb-1">
                                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                                   ملاحظات التحرير
@@ -367,7 +367,7 @@ export default function OpinionAuthorDashboard() {
                                 {article.reviewNotes}
                               </div>
                             ) : article.reviewStatus === "pending_review" && article.reviewedAt ? (
-                              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/30 px-3 py-2 text-xs text-blue-900 dark:text-blue-100 leading-relaxed max-w-md">
+                              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-muted/40 dark:border-border px-3 py-2 text-xs text-blue-900 dark:text-blue-100 leading-relaxed max-w-md">
                                 <span className="font-medium">أُرسل للمراجعة</span>
                                 {article.reviewNotes ? (
                                   <p className="mt-1 text-muted-foreground">{article.reviewNotes}</p>

@@ -36,7 +36,7 @@ export function ResubmittedDraftIndicator({
 
   return (
     <div
-      className="rounded-md border border-amber-300/80 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/40 px-2.5 py-1.5 text-xs text-amber-950 dark:text-amber-100 leading-relaxed"
+      className="rounded-md border border-amber-300/80 bg-amber-50 dark:bg-muted/40 dark:border-border px-2.5 py-1.5 text-xs text-amber-950 dark:text-amber-100 leading-relaxed"
       data-testid={testId}
     >
       <div className="flex items-center gap-1.5 font-semibold">

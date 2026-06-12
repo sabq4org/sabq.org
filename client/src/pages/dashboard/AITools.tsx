@@ -39,7 +39,7 @@ export default function AITools() {
           </p>
         </div>
 
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 dark:from-transparent dark:to-transparent border-primary/20 dark:border-border">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -1031,7 +1031,7 @@ function TrendsAnalyzer() {
         {result && (
           <div className="space-y-6 pt-4">
             {/* Overall Insights */}
-            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 dark:from-transparent dark:to-transparent border-primary/20 dark:border-border">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">الملخص العام</CardTitle>
                 <CardDescription className="text-xs">
@@ -1139,7 +1139,7 @@ function TrendsAnalyzer() {
             {(result?.insights?.recommendations?.length ?? 0) > 0 && (
               <div className="space-y-3">
                 <h3 className="font-semibold text-sm">توصيات استراتيجية المحتوى</h3>
-                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-card dark:to-card border-blue-200 dark:border-border">
                   <CardContent className="p-4">
                     <ul className="space-y-2">
                       {result?.insights?.recommendations?.map((rec: string, index: number) => (

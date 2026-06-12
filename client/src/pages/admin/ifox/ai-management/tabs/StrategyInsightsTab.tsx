@@ -248,7 +248,7 @@ export default function StrategyInsightsTab() {
               </div>
 
               {/* Recommendation Section */}
-              <div className="p-4 bg-primary/5 border-r-4 border-primary rounded-lg">
+              <div className="p-4 bg-primary/5 dark:bg-muted/40 border-r-4 border-primary dark:border-border rounded-lg">
                 <h3 className="font-semibold mb-2 flex items-center gap-2">
                   <Target className="w-4 h-4" />
                   التوصية
@@ -260,7 +260,7 @@ export default function StrategyInsightsTab() {
 
               {/* Content Gap */}
               {Boolean(selectedInsight.contentGap) && (
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 border-r-4 border-yellow-500 rounded-lg">
+                <div className="p-4 bg-yellow-50 dark:bg-muted/40 border-r-4 border-yellow-500 dark:border-border rounded-lg">
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     فجوة المحتوى
@@ -273,7 +273,7 @@ export default function StrategyInsightsTab() {
 
               {/* Differentiation Strategy */}
               {Boolean(selectedInsight.differentiationStrategy) && (
-                <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border-r-4 border-blue-500 rounded-lg">
+                <div className="p-4 bg-blue-50 dark:bg-muted/40 border-r-4 border-blue-500 dark:border-border rounded-lg">
                   <h3 className="font-semibold mb-2 flex items-center gap-2">
                     <Zap className="w-4 h-4" />
                     استراتيجية التميز

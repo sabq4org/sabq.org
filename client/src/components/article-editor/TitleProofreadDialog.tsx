@@ -56,7 +56,7 @@ export function TitleProofreadDialog({
               <div>
                 <p className="text-xs text-muted-foreground mb-1">العنوان بعد التصحيح</p>
                 <div
-                  className="p-3 rounded-md border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30 text-sm font-medium"
+                  className="p-3 rounded-md border border-green-300 dark:border-border bg-green-50 dark:bg-muted/40 text-sm font-medium"
                   data-testid="text-title-suggestion"
                 >
                   {result.suggestion}

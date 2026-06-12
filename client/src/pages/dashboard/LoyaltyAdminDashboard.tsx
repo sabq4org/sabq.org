@@ -413,7 +413,7 @@ function KpiCard({
   };
   return (
     <Card className="relative overflow-hidden">
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${colorMap[color]} blur-2xl opacity-50 -z-0`} />
+      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${colorMap[color]} dark:from-transparent dark:to-transparent blur-2xl opacity-50 -z-0`} />
       <CardContent className="p-5 relative z-10">
         <div className="flex items-start justify-between mb-3">
           <div className={`p-2 rounded-lg bg-gradient-to-br ${colorMap[color]}`}>{icon}</div>

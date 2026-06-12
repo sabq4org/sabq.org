@@ -25,7 +25,7 @@ export function WriterInquiriesButton({ className }: WriterInquiriesButtonProps)
       onClick={() => navigate("/dashboard/opinion-author/tickets")}
       data-testid="button-my-tickets"
       className={cn(
-        "gap-2 relative bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900 dark:bg-amber-500/10 dark:hover:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-100",
+        "gap-2 relative bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900 dark:bg-card dark:hover:bg-muted/60 dark:border-border dark:text-amber-100",
         className,
       )}
     >

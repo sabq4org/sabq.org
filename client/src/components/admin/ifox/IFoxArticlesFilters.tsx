@@ -151,7 +151,7 @@ export function IFoxArticlesFilters({
     (filters.aiScoreMin || filters.aiScoreMax ? 1 : 0);
 
   return (
-    <Card className="bg-gradient-to-br from-background via-background to-primary/5 border-primary/10">
+    <Card className="bg-gradient-to-br from-background via-background to-primary/5 dark:from-card dark:via-card dark:to-card border-primary/10 dark:border-border">
       <CardContent className="p-3 sm:p-4 md:p-6">
         <div className="space-y-3 sm:space-y-4">
           {/* Header with Search */}

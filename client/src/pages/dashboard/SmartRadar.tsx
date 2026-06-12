@@ -425,7 +425,7 @@ function KpiCard({
   highlight?: boolean;
 }) {
   return (
-    <Card className={highlight ? "border-red-300 dark:border-red-800" : undefined}>
+    <Card className={highlight ? "border-red-300 dark:border-border" : undefined}>
       <CardContent className="p-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {icon}
@@ -459,7 +459,7 @@ function RadarItemCard({
   const keywords = Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [];
 
   return (
-    <Card className={`flex flex-col ${item.isBreaking ? "border-red-300 dark:border-red-800" : ""}`}>
+    <Card className={`flex flex-col ${item.isBreaking ? "border-red-300 dark:border-border" : ""}`}>
       <CardHeader className="space-y-2 pb-2">
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {item.isBreaking && (

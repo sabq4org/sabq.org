@@ -321,10 +321,10 @@ export default function QualityChecksTab() {
                     {selectedCheck.suggestions.map((suggestion: any, index: number) => (
                       <li
                         key={index}
-                        className="flex gap-2 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg"
+                        className="flex gap-2 p-3 bg-blue-50 dark:bg-muted/40 border border-blue-200 dark:border-border rounded-lg"
                         data-testid={`suggestion-${index}`}
                       >
-                        <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
                         <span className="text-sm">{suggestion}</span>
                       </li>
                     ))}
@@ -340,10 +340,10 @@ export default function QualityChecksTab() {
                     {selectedCheck.strengths.map((strength: any, index: number) => (
                       <li
                         key={index}
-                        className="flex gap-2 p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg"
+                        className="flex gap-2 p-3 bg-green-50 dark:bg-muted/40 border border-green-200 dark:border-border rounded-lg"
                         data-testid={`strength-${index}`}
                       >
-                        <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
                         <span className="text-sm">{strength}</span>
                       </li>
                     ))}

@@ -47,7 +47,7 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { motion } from "framer-motion";
@@ -151,7 +151,7 @@ export default function ContactMessageDetail() {
   const { data: message, isLoading, error } = useQuery<MessageWithReplies>({
     queryKey: ["/api/contact-messages", id, "full"],
     queryFn: async () => {
-      const response = await fetch(`/api/contact-messages/${id}/full`, {
+      const response = await fetch(apiUrl(`/api/contact-messages/${id}/full`), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -169,7 +169,7 @@ export default function ContactMessageDetail() {
   }>({
     queryKey: ["/api/admin/contact-messages", 1, "all", ""],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/contact-messages?limit=100`, {
+      const response = await fetch(apiUrl(`/api/admin/contact-messages?limit=100`), {
         credentials: "include",
       });
       if (!response.ok) return { messages: [], total: 0 };
@@ -644,7 +644,7 @@ export default function ContactMessageDetail() {
               {/* Legacy reply from replyText field */}
               {message.replyText && (
                 <div
-                  className="p-4 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800"
+                  className="p-4 bg-green-50 dark:bg-muted/40 rounded-lg border border-green-200 dark:border-border"
                   data-testid="legacy-reply"
                 >
                   <div className="flex items-start gap-3">

@@ -240,7 +240,7 @@ export default function EditorAlertsSettings() {
           </div>
         </div>
 
-        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-slate-950/30">
+        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="الإعدادات العامة" color="bg-amber-500" />
             
@@ -265,7 +265,7 @@ export default function EditorAlertsSettings() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-blue-950/30">
+        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="قناة البريد الإلكتروني" color="bg-blue-500" />
             
@@ -306,7 +306,7 @@ export default function EditorAlertsSettings() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all bg-green-50 dark:bg-green-950/30">
+        <Card className="hover-elevate transition-all bg-green-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="قناة واتساب" color="bg-green-500" />
             
@@ -389,7 +389,7 @@ export default function EditorAlertsSettings() {
         </Card>
 
         {settings.enabled && (
-          <Card className="hover-elevate transition-all bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+          <Card className="hover-elevate transition-all bg-emerald-50 dark:bg-card border-emerald-200 dark:border-border">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="p-2 rounded-md bg-emerald-500/20">
@@ -421,7 +421,7 @@ export default function EditorAlertsSettings() {
         )}
 
         {!settings.enabled && (
-          <Card className="hover-elevate transition-all bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800">
+          <Card className="hover-elevate transition-all bg-orange-50 dark:bg-card border-orange-200 dark:border-border">
             <CardContent className="p-6">
               <div className="flex items-start gap-4">
                 <div className="p-2 rounded-md bg-orange-500/20">

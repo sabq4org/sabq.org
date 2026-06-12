@@ -325,7 +325,7 @@ export default function MuqtarabReview() {
             ) : preview ? (
               <div className="space-y-4">
                 {(assist || assistLoadingId === previewId) && (
-                  <div className="rounded-lg border bg-indigo-50/60 dark:bg-indigo-950/20 p-4 space-y-3">
+                  <div className="rounded-lg border bg-indigo-50/60 dark:bg-muted/40 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <Sparkles className="w-4 h-4 text-indigo-500" />
                       مساعد المراجعة الذكي

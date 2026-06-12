@@ -406,7 +406,7 @@ export default function ImageStudio() {
                 <Card 
                   className={`cursor-pointer transition-all ${
                     selectedModel === "nano-banana" 
-                      ? "ring-2 ring-purple-500 bg-purple-50 dark:bg-purple-900/20" 
+                      ? "ring-2 ring-purple-500 bg-purple-50 dark:bg-muted/60"
                       : "hover:shadow-md"
                   }`}
                   onClick={() => setSelectedModel("nano-banana")}
@@ -432,7 +432,7 @@ export default function ImageStudio() {
                 <Card 
                   className={`cursor-pointer transition-all ${
                     selectedModel === "notebooklm" 
-                      ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20" 
+                      ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-muted/60"
                       : "hover:shadow-md"
                   }`}
                   onClick={() => setSelectedModel("notebooklm")}
@@ -507,7 +507,7 @@ export default function ImageStudio() {
                 ))}
               </div>
               {selectedStyle !== "none" && (
-                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="p-3 bg-green-50 dark:bg-muted/40 rounded-lg border border-green-200 dark:border-border">
                   <p className="text-sm text-green-700 dark:text-green-300 flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span>
@@ -712,7 +712,7 @@ export default function ImageStudio() {
                   </p>
                 </div>
 
-                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="p-3 bg-blue-50 dark:bg-muted/40 rounded-lg">
                   <p className="text-sm text-blue-700 dark:text-blue-300">
                     <strong className="flex items-center gap-2">
                       <Lightbulb className="w-4 h-4" />

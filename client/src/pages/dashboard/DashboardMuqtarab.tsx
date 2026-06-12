@@ -96,7 +96,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { queryClient, apiRequest, getCsrfToken, apiUrl } from "@/lib/queryClient";
 import { insertAngleSchema } from "@shared/schema";
 import type { Angle } from "@/lib/muqtarab";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -306,7 +306,7 @@ function CoverImageUpload({ value, onChange, disabled }: CoverImageUploadProps) 
 
     try {
       const csrfToken = getCsrfToken();
-      const response = await fetch("/api/media/upload", {
+      const response = await fetch(apiUrl("/api/media/upload"), {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -460,7 +460,7 @@ export default function DashboardMuqtarab() {
   const { data: muqtarabSection } = useQuery<Section>({
     queryKey: ["/api/muqtarab/section"],
     queryFn: async () => {
-      const res = await fetch("/api/muqtarab/section");
+      const res = await fetch(apiUrl("/api/muqtarab/section"));
       if (!res.ok) throw new Error("Failed to fetch section");
       return res.json();
     },
@@ -470,7 +470,7 @@ export default function DashboardMuqtarab() {
   const { data: anglesRaw, isLoading } = useQuery<Angle[]>({
     queryKey: ["/api/muqtarab/angles"],
     queryFn: async () => {
-      const res = await fetch("/api/muqtarab/angles");
+      const res = await fetch(apiUrl("/api/muqtarab/angles"));
       if (!res.ok) throw new Error("Failed to fetch angles");
       return res.json();
     },
@@ -690,7 +690,7 @@ export default function DashboardMuqtarab() {
         {totalPendingReview > 0 && (
           <Link href="/dashboard/muqtarab/review">
             <div
-              className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 cursor-pointer hover:bg-blue-100 transition-colors dark:border-blue-900 dark:bg-blue-950/30 dark:hover:bg-blue-950/50"
+              className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 cursor-pointer hover:bg-blue-100 transition-colors dark:border-border dark:bg-card dark:hover:bg-muted/50"
               data-testid="banner-pending-review"
             >
               <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">

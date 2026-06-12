@@ -144,7 +144,7 @@ const TEMPLATES = [
     description: "نشرة إخبارية صباحية موجزة لبداية يومك",
     icon: Newspaper,
     color: "text-orange-500",
-    bgColor: "bg-orange-50 dark:bg-orange-950/20"
+    bgColor: "bg-orange-50 dark:bg-muted/40"
   },
   {
     id: "evening_digest",
@@ -152,7 +152,7 @@ const TEMPLATES = [
     description: "ملخص شامل لأهم أحداث اليوم",
     icon: Briefcase,
     color: "text-blue-500",
-    bgColor: "bg-blue-50 dark:bg-blue-950/20"
+    bgColor: "bg-blue-50 dark:bg-muted/40"
   },
   {
     id: "weekly_analysis",
@@ -160,7 +160,7 @@ const TEMPLATES = [
     description: "تحليل معمق لأبرز أحداث الأسبوع",
     icon: TrendingUp,
     color: "text-purple-500",
-    bgColor: "bg-purple-50 dark:bg-purple-950/20"
+    bgColor: "bg-purple-50 dark:bg-muted/40"
   },
   {
     id: "breaking_news",
@@ -168,7 +168,7 @@ const TEMPLATES = [
     description: "تغطية فورية للأحداث العاجلة",
     icon: Zap,
     color: "text-red-500",
-    bgColor: "bg-red-50 dark:bg-red-950/20"
+    bgColor: "bg-red-50 dark:bg-muted/40"
   },
   {
     id: "tech_update",
@@ -176,7 +176,7 @@ const TEMPLATES = [
     description: "آخر مستجدات عالم التكنولوجيا",
     icon: Laptop,
     color: "text-cyan-500",
-    bgColor: "bg-cyan-50 dark:bg-cyan-950/20"
+    bgColor: "bg-cyan-50 dark:bg-muted/40"
   },
   {
     id: "business_report",
@@ -184,7 +184,7 @@ const TEMPLATES = [
     description: "تحليل الأسواق والأخبار الاقتصادية",
     icon: Briefcase,
     color: "text-green-500",
-    bgColor: "bg-green-50 dark:bg-green-950/20"
+    bgColor: "bg-green-50 dark:bg-muted/40"
   },
   {
     id: "sport_highlights",
@@ -192,7 +192,7 @@ const TEMPLATES = [
     description: "ملخص الأحداث الرياضية المهمة",
     icon: Trophy,
     color: "text-yellow-500",
-    bgColor: "bg-yellow-50 dark:bg-yellow-950/20"
+    bgColor: "bg-yellow-50 dark:bg-muted/40"
   },
   {
     id: "custom",
@@ -200,7 +200,7 @@ const TEMPLATES = [
     description: "أنشئ نشرة بتصميمك الخاص",
     icon: Sparkles,
     color: "text-pink-500",
-    bgColor: "bg-pink-50 dark:bg-pink-950/20"
+    bgColor: "bg-pink-50 dark:bg-muted/40"
   }
 ];
 

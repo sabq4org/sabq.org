@@ -60,10 +60,10 @@ export default function CalendarPage() {
   };
 
   const getImportanceColor = (importance: number) => {
-    if (importance >= 5) return "border-r-red-400 bg-red-50 dark:bg-red-950/30";
-    if (importance >= 4) return "border-r-orange-400 bg-orange-50 dark:bg-orange-950/30";
-    if (importance >= 3) return "border-r-yellow-400 bg-yellow-50 dark:bg-yellow-950/30";
-    return "border-r-blue-400 bg-blue-50 dark:bg-blue-950/30";
+    if (importance >= 5) return "border-r-red-400 bg-red-50 dark:bg-muted/40";
+    if (importance >= 4) return "border-r-orange-400 bg-orange-50 dark:bg-muted/40";
+    if (importance >= 3) return "border-r-yellow-400 bg-yellow-50 dark:bg-muted/40";
+    return "border-r-blue-400 bg-blue-50 dark:bg-muted/40";
   };
 
   const getImportanceColorSimple = (importance: number) => {
