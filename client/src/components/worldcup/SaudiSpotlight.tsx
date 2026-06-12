@@ -116,8 +116,10 @@ export function SaudiSpotlight({ saudi, onOpenMatch, onOpenPlayer }: SaudiSpotli
             <Shield className="h-56 w-56 text-white" />
           </div>
 
-          <div className="relative grid gap-6 lg:grid-cols-[1fr_auto]">
-            <div className="space-y-4">
+          {/* minmax(0,1fr) + min-w-0: عرض شريط التشكيلة الداخلي (~1.8k px) يتسرب
+              عبر min-width:auto الافتراضي لعنصر الـgrid فيمدد البطاقة كاملة */}
+          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="space-y-4 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl sm:text-3xl font-black text-white">مشوار الأخضر</h2>
                 <Badge className="bg-white/15 text-emerald-50 border-0">{saudi.group?.group ?? "كأس العالم 2026"}</Badge>
