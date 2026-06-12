@@ -15,7 +15,9 @@ import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
  * تصميم البطاقات مطابق لبطاقات «أخبارك الذكية» (PersonalizedFeed):
  * صورة 16/9 ثم شارة تصنيف بشريط جانبي ملون ثم عنوان كبير ثم مقتطف ثم
  * الوقت. 8 بطاقات = صفّان × 4 أعمدة على الشاشات الكبيرة، وقائمة مدمجة
- * على الجوال — نفس سلوك «أخبارك الذكية» تمامًا.
+ * على الجوال — نفس سلوك «أخبارك الذكية» تمامًا، مع فارق وحيد: إطار حاد
+ * رمادي خفيف بزوايا قائمة لأن البطاقات تجلس فوق الحزام الأخضر للقسم
+ * (WorldCupHomeSection) وتحتاج حدًا يفصلها عنه.
  *
  * لا صور مباريات مرخصة للمواد المولّدة، فبطاقتها تُرسم بشعاري المنتخبين
  * على خلفية ملعبية؛ وعندما يضيف المحرر صورة حقيقية من اللوحة تظهر بدلها
@@ -205,8 +207,9 @@ export default function WorldCupNewsBlock() {
 
       <p className="text-muted-foreground">معاينات وتقارير مباريات كأس العالم 2026 لحظة بلحظة</p>
 
-      {/* الجوال: قائمة مدمجة — نفس بنية «أخبارك الذكية» */}
-      <Card className="overflow-hidden lg:hidden border-0 dark:border dark:border-card-border">
+      {/* الجوال: قائمة مدمجة — نفس بنية «أخبارك الذكية» لكن بإطار حاد
+          رمادي خفيف (زوايا قائمة) يميز بطاقات المونديال فوق الخلفية الخضراء */}
+      <Card className="overflow-hidden lg:hidden rounded-none border-neutral-300/70 dark:border-neutral-700">
         <CardContent className="p-0">
           <div className="dark:divide-y">
             {items.map((item) => (
@@ -251,7 +254,7 @@ export default function WorldCupNewsBlock() {
         {items.map((item) => (
           <Link key={item.id} href={`/article/${item.slug}`}>
             <Card
-              className="cursor-pointer h-full overflow-hidden border-0 dark:border dark:border-card-border"
+              className="cursor-pointer h-full overflow-hidden rounded-none border-neutral-300/70 dark:border-neutral-700"
               data-testid={`card-wc-news-${item.id}`}
               onMouseEnter={() => prefetchArticle(item.slug)}
               onTouchStart={() => prefetchArticle(item.slug)}

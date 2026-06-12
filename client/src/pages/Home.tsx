@@ -36,8 +36,7 @@ const TrendingWeekSection = lazyNamed(() => import("@/components/TrendingWeekSec
 const MuqtarabTopicsShowcase = lazyNamed(() => import("@/components/MuqtarabTopicsShowcase"), "MuqtarabTopicsShowcase");
 const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesBlock"), "QuadCategoriesBlock");
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
-const WorldCupHomeStrip = lazyDefault(() => import("@/components/worldcup/WorldCupHomeStrip"));
-const WorldCupNewsBlock = lazyDefault(() => import("@/components/worldcup/WorldCupNewsBlock"));
+const WorldCupHomeSection = lazyDefault(() => import("@/components/worldcup/WorldCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
 
@@ -433,30 +432,21 @@ export default function Home() {
       )}
 
       <main className="flex-1">
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-8">
+          {/* Hero Section */}
+          {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
+        </div>
+
+        {/* World Cup 2026 section (match-of-the-day strip + auto-generated news)
+            on a full-width light-green band — the section hides itself entirely
+            (band included) when /api/world-cup has no match and no news */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <WorldCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
-          {/* Hero Section — mb-14 يكسر انهيار الهوامش مع space-y-8 ليمنح
-              قسم المونديال تنفسًا أوضح تحت الكروسيل */}
-          {homepage.hero && homepage.hero.length > 0 && (
-            <div className="mb-14">
-              <HeroCarousel articles={homepage.hero} />
-            </div>
-          )}
-
-          {/* World Cup 2026 strip — hides itself when /api/world-cup is unavailable */}
-          <ErrorBoundary fallback={null}>
-            <Suspense fallback={null}>
-              <WorldCupHomeStrip />
-            </Suspense>
-          </ErrorBoundary>
-
-          {/* World Cup 2026 auto-generated news (previews + match reports) —
-              hides itself while no articles are published */}
-          <ErrorBoundary fallback={null}>
-            <Suspense fallback={null}>
-              <WorldCupNewsBlock />
-            </Suspense>
-          </ErrorBoundary>
-
           {/* Gulf Live Coverage Block — hidden (no active events) */}
           {/* <ErrorBoundary fallback={null}>
             <Suspense fallback={null}>
