@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatArticleTimestamp } from "@/lib/formatTime";
+import { getObjectPosition } from "@/lib/imageUtils";
 import { prefetchArticle } from "@/lib/prefetchRoute";
 import { cn } from "@/lib/utils";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
@@ -28,6 +29,8 @@ export interface WcNewsItem {
   slug: string;
   excerpt: string | null;
   imageUrl: string | null;
+  /** نقطة التركيز التي يحددها المحرر في اللوحة — تتحكم في قصّ object-cover */
+  imageFocalPoint: { x: number; y: number } | null;
   publishedAt: string | null;
   kind: "preview" | "report" | "news";
   home: { name: string; logo: string } | null;
@@ -69,6 +72,7 @@ export function MatchVisual({
           src={item.imageUrl}
           alt={item.title}
           className="w-full h-full object-cover"
+          style={{ objectPosition: getObjectPosition(item) }}
           loading="lazy"
         />
         {showBadge && (

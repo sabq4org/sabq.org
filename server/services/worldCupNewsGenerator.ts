@@ -352,6 +352,8 @@ export interface WcNewsItem {
   slug: string;
   excerpt: string | null;
   imageUrl: string | null;
+  /** نقطة التركيز التي يحددها المحرر في اللوحة — تتحكم في قصّ object-cover */
+  imageFocalPoint: { x: number; y: number } | null;
   publishedAt: string | null;
   /** preview/report = مولّدة من بيانات مباراة؛ news = مادة تحريرية عادية عن المونديال */
   kind: WcArticleKind | "news";
@@ -383,6 +385,7 @@ export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
       slug: articles.slug,
       excerpt: articles.excerpt,
       imageUrl: articles.imageUrl,
+      imageFocalPoint: articles.imageFocalPoint,
       publishedAt: articles.publishedAt,
     })
     .from(articles)
@@ -414,6 +417,7 @@ export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
       slug: row.slug,
       excerpt: row.excerpt ?? null,
       imageUrl: row.imageUrl ?? null,
+      imageFocalPoint: row.imageFocalPoint ?? null,
       publishedAt: row.publishedAt ? new Date(row.publishedAt).toISOString() : null,
       kind: (match?.[1] as WcArticleKind | undefined) ?? "news",
       fixtureId,
