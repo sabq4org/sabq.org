@@ -469,7 +469,13 @@ function RadarItemCard({
           )}
           <Badge variant="secondary">{item.sourceName ?? "مصدر"}</Badge>
           {item.originalLanguage && <Badge variant="outline">{item.originalLanguage}</Badge>}
-          <span className="text-muted-foreground">{timeAgo(item.publishedAt ?? item.fetchedAt)}</span>
+          {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
+              عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
+          <span className="text-muted-foreground">
+            {item.publishedAt
+              ? `نُشر ${timeAgo(item.publishedAt)}`
+              : `رُصد ${timeAgo(item.fetchedAt)} — تاريخ النشر غير معروف`}
+          </span>
         </div>
         {score != null && (
           <div className="flex items-center gap-2">

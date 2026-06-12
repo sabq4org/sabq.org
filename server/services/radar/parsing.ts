@@ -94,6 +94,61 @@ export function parseDraftPayload(raw: string): RadarDraft {
   };
 }
 
+// ---------- تفكيك تواريخ الخلاصات ----------
+
+// لواحق المناطق الزمنية التي لا يفهمها V8 — أبرزها BST البريطانية (خلاصات
+// Sky Sports) التي كانت تُسقط التاريخ كاملًا فتظهر مادة قديمة «منذ دقائق»
+const TZ_ABBREVIATIONS: Record<string, string> = {
+  BST: "+0100", // British Summer Time
+  CET: "+0100",
+  CEST: "+0200",
+  EET: "+0200",
+  EEST: "+0300",
+  MSK: "+0300",
+  AST: "+0300", // Arabia Standard Time
+};
+
+export function parseFeedDate(value: unknown): Date | undefined {
+  if (!value) return undefined;
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+
+  let date = new Date(raw);
+  if (!Number.isNaN(date.getTime())) return date;
+
+  const match = raw.match(/\s([A-Z]{3,4})$/);
+  const offset = match ? TZ_ABBREVIATIONS[match[1]] : undefined;
+  if (offset) {
+    date = new Date(raw.replace(/\s[A-Z]{3,4}$/, ` ${offset}`));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return undefined;
+}
+
+// ---------- بوابة الحداثة ----------
+
+export interface DatedItem {
+  publishedAt?: Date;
+}
+
+/**
+ * إسقاط المواد القديمة قبل دخولها الرادار:
+ * - مادة بتاريخ نشر أقدم من النافذة → تُسقط.
+ * - مادة بلا تاريخ: تُسقط في أول جلبة للمصدر (قد تكون أرشيفًا كاملًا)،
+ *   وتُقبل لاحقًا — ظهور guid جديد بعد أول جلبة قرينةُ حداثة.
+ */
+export function filterFreshItems<T extends DatedItem>(
+  items: T[],
+  options: { isFirstFetch: boolean; maxAgeHours: number; now?: Date }
+): T[] {
+  const nowMs = (options.now ?? new Date()).getTime();
+  const cutoff = nowMs - options.maxAgeHours * 60 * 60 * 1000;
+  return items.filter((item) => {
+    if (item.publishedAt) return item.publishedAt.getTime() >= cutoff;
+    return !options.isFirstFetch;
+  });
+}
+
 // ---------- مطابقة قواعد التنبيه ----------
 
 export interface AlertMatch {

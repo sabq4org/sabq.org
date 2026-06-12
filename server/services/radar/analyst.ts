@@ -14,6 +14,17 @@ const ANALYST_MODEL_CHAIN: AIModelConfig[] = [
   { provider: "openai", model: "gpt-5.1", maxTokens: 6000, jsonMode: true },
 ];
 
+const fmtRiyadh = (date: Date): string =>
+  date.toLocaleString("ar-SA", {
+    timeZone: "Asia/Riyadh",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
 function buildAnalysisPrompt(
   items: RadarItem[],
   categoryList: { slug: string; nameAr: string }[]
@@ -21,16 +32,16 @@ function buildAnalysisPrompt(
   const itemsBrief = items
     .map(
       (item, i) =>
-        `${i + 1}. id: ${item.id}\n   اللغة: ${item.originalLanguage || "غير معروفة"}\n   العنوان: ${item.originalTitle}\n   الملخص: ${item.originalExcerpt || "(لا يوجد)"}`
+        `${i + 1}. id: ${item.id}\n   اللغة: ${item.originalLanguage || "غير معروفة"}\n   تاريخ النشر: ${item.publishedAt ? fmtRiyadh(new Date(item.publishedAt)) : "غير معروف"}\n   العنوان: ${item.originalTitle}\n   الملخص: ${item.originalExcerpt || "(لا يوجد)"}`
     )
     .join("\n");
   const categoriesBrief = categoryList.map((c) => `- ${c.slug}: ${c.nameAr}`).join("\n");
 
-  return `أنت محلل أخبار في غرفة رصد صحيفة "سبق" الإلكترونية السعودية. أمامك مواد التقطها الرادار من مصادر عالمية بلغات مختلفة. قيّم كل مادة لجمهور سبق (القارئ السعودي والخليجي والعربي).
+  return `أنت محلل أخبار في غرفة رصد صحيفة "سبق" الإلكترونية السعودية. الآن: ${fmtRiyadh(new Date())} بتوقيت الرياض. أمامك مواد التقطها الرادار من مصادر عالمية بلغات مختلفة. قيّم كل مادة لجمهور سبق (القارئ السعودي والخليجي والعربي).
 
 لكل مادة أعد:
-- newsValue: قيمة إخبارية من 0 إلى 100. عوامل الرفع: خبر عاجل/طارئ، شأن سعودي أو خليجي مباشر، حدث عالمي كبير يهم القارئ العربي، انفراد أو تطور جديد. عوامل الخفض: شأن محلي أجنبي ضيق، مادة ترويجية، خبر قديم متداول.
-- isBreaking: هل هو خبر عاجل بطبيعته (حدث للتو ويستدعي نشرًا فوريًا)؟
+- newsValue: قيمة إخبارية من 0 إلى 100. عوامل الرفع: خبر عاجل/طارئ، شأن سعودي أو خليجي مباشر، حدث عالمي كبير يهم القارئ العربي، انفراد أو تطور جديد. عوامل الخفض: شأن محلي أجنبي ضيق، مادة ترويجية، خبر قديم متداول. قارن تاريخ النشر بالوقت الحالي أعلاه: مادة مضى على نشرها أكثر من يومين أو يتحدث متنها عن حدث انقضى فعلًا = قديمة، اخصم قيمتها بحدة (لا تتجاوز 30) ولا تعلّمها عاجلة أبدًا.
+- isBreaking: هل هو خبر عاجل بطبيعته (حدث للتو ويستدعي نشرًا فوريًا)؟ يُشترط أن يكون تاريخ نشره خلال الساعات الأخيرة.
 - translatedTitle: عنوان عربي بترجمة تفسيرية صحفية (انقل المعنى والسياق، لا الكلمات) — من 5 إلى 12 كلمة.
 - translatedSummary: ملخص عربي من جملتين إلى ثلاث ينقل جوهر الخبر بدقة دون أي إضافة من عندك.
 - categorySlug: الأنسب من قائمة التصنيفات المعتمدة أدناه فقط، أو null إن لم يصلح أي منها.

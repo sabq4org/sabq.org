@@ -5,9 +5,11 @@
 import Parser from "rss-parser";
 import type { RadarSource } from "@shared/schema";
 import type { NormalizedRadarItem } from "./repo";
+import { filterFreshItems, parseFeedDate } from "./parsing";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_ITEMS_PER_FETCH = 30;
+const MAX_ITEM_AGE_HOURS = Number(process.env.RADAR_MAX_ITEM_AGE_HOURS || 48);
 
 const rssParser = new Parser({
   timeout: FETCH_TIMEOUT_MS,
@@ -20,12 +22,6 @@ function cleanText(value: unknown, maxLength: number): string {
     .replace(/\s+/g, " ")
     .trim()
     .substring(0, maxLength);
-}
-
-function parseDate(value: unknown): Date | undefined {
-  if (!value) return undefined;
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 async function fetchRss(source: RadarSource): Promise<NormalizedRadarItem[]> {
@@ -42,7 +38,9 @@ async function fetchRss(source: RadarSource): Promise<NormalizedRadarItem[]> {
       title,
       excerpt: cleanText(item.contentSnippet ?? (item as any).summary ?? item.content, 1200) || undefined,
       imageUrl: enclosureUrl && /^https?:\/\//.test(enclosureUrl) ? enclosureUrl : undefined,
-      publishedAt: parseDate(item.isoDate ?? item.pubDate),
+      // pubDate الخام قبل isoDate: مكتبة rss-parser تحسب isoDate بـ new Date
+      // فتُسقط لواحق مثل BST التي تعالجها parseFeedDate
+      publishedAt: parseFeedDate(item.pubDate ?? item.isoDate),
     });
   }
   return items;
@@ -105,7 +103,7 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
             1200
           ) || undefined,
         imageUrl: firstString(raw, ["image", "imageUrl", "image_url", "thumbnail", "urlToImage"]) || undefined,
-        publishedAt: parseDate(
+        publishedAt: parseFeedDate(
           firstString(raw, ["publishedAt", "published_at", "pubDate", "date", "published", "created_at"])
         ),
       });
@@ -118,7 +116,12 @@ async function fetchJson(source: RadarSource): Promise<NormalizedRadarItem[]> {
 
 export async function fetchSource(source: RadarSource): Promise<NormalizedRadarItem[]> {
   const items = source.type === "json" ? await fetchJson(source) : await fetchRss(source);
+  // بوابة الحداثة: خلاصة تاريخها طويل (مثل Sky Sports) لا تُغرق الرادار بالقديم
+  const fresh = filterFreshItems(items, {
+    isFirstFetch: !source.lastFetchedAt,
+    maxAgeHours: MAX_ITEM_AGE_HOURS,
+  });
   // الأحدث أولًا ثم قصّ الدفعة — مصدر مهمل طويلًا لا يُغرق الرادار دفعة واحدة
-  items.sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
-  return items.slice(0, MAX_ITEMS_PER_FETCH);
+  fresh.sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
+  return fresh.slice(0, MAX_ITEMS_PER_FETCH);
 }

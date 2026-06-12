@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterFreshItems,
   matchAlertRules,
   parseAnalysisPayload,
   parseDraftPayload,
+  parseFeedDate,
 } from "../../server/services/radar/parsing";
 import type { RadarAlertRule } from "@shared/schema";
 
@@ -72,6 +74,50 @@ describe("parseDraftPayload", () => {
   it("throws when title or content is missing", () => {
     expect(() => parseDraftPayload('{"title": "بلا متن"}')).toThrow();
     expect(() => parseDraftPayload('{"content": "<p>بلا عنوان</p>"}')).toThrow();
+  });
+});
+
+describe("parseFeedDate", () => {
+  it("parses the Sky Sports BST format that V8 rejects natively", () => {
+    const date = parseFeedDate("Wed, 10 Jun 2026 15:50:00 BST");
+    expect(date).toBeDefined();
+    // BST = UTC+1 → الساعة 14:50 بالتوقيت العالمي
+    expect(date!.toISOString()).toBe("2026-06-10T14:50:00.000Z");
+  });
+
+  it("keeps native parsing for GMT/ISO formats", () => {
+    expect(parseFeedDate("Fri, 12 Jun 2026 07:00:00 GMT")!.toISOString()).toBe(
+      "2026-06-12T07:00:00.000Z"
+    );
+    expect(parseFeedDate("2026-06-12T05:06:53Z")!.toISOString()).toBe("2026-06-12T05:06:53.000Z");
+  });
+
+  it("returns undefined for garbage or empty input", () => {
+    expect(parseFeedDate("")).toBeUndefined();
+    expect(parseFeedDate(null)).toBeUndefined();
+    expect(parseFeedDate("not a date XYZ")).toBeUndefined();
+  });
+});
+
+describe("filterFreshItems", () => {
+  const now = new Date("2026-06-12T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600_000);
+
+  it("drops items older than the freshness window", () => {
+    const items = [
+      { publishedAt: hoursAgo(2) },
+      { publishedAt: hoursAgo(47) },
+      { publishedAt: hoursAgo(49) },
+      { publishedAt: hoursAgo(24 * 14) }, // أسبوعان — حالة Sky Sports
+    ];
+    const fresh = filterFreshItems(items, { isFirstFetch: false, maxAgeHours: 48, now });
+    expect(fresh).toHaveLength(2);
+  });
+
+  it("drops undated items on first fetch but accepts them afterwards", () => {
+    const items = [{ publishedAt: undefined }, { publishedAt: hoursAgo(1) }];
+    expect(filterFreshItems(items, { isFirstFetch: true, maxAgeHours: 48, now })).toHaveLength(1);
+    expect(filterFreshItems(items, { isFirstFetch: false, maxAgeHours: 48, now })).toHaveLength(2);
   });
 });
 
