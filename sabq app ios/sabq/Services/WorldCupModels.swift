@@ -104,6 +104,9 @@ nonisolated struct WCOverview: Decodable, Hashable {
 
 nonisolated struct WCScorer: Decodable, Identifiable, Hashable {
     let rank: Int
+    /// معرّف اللاعب عند المزود (مفتاح JSON: id) — يفتح بطاقة اللاعب؛ 0/null = غير معروف.
+    /// معرّف Identifiable يبقى النصي المركّب لثبات ForEach مع صفوف بلا معرّف.
+    let playerId: Int?
     let name: String
     let photo: String
     let team: WCTeam
@@ -114,10 +117,17 @@ nonisolated struct WCScorer: Decodable, Identifiable, Hashable {
     let matches: Int
 
     var id: String { "\(rank)-\(name)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case playerId = "id"
+        case rank, name, photo, team, goals, assists, penalties, minutes, matches
+    }
 }
 
 nonisolated struct WCLeader: Decodable, Identifiable, Hashable {
     let rank: Int
+    /// معرّف اللاعب عند المزود (مفتاح JSON: id) — يفتح بطاقة اللاعب؛ 0/null = غير معروف.
+    let playerId: Int?
     let name: String
     let photo: String
     let team: WCTeam
@@ -129,6 +139,11 @@ nonisolated struct WCLeader: Decodable, Identifiable, Hashable {
     let matches: Int
 
     var id: String { "\(rank)-\(name)" }
+
+    private enum CodingKeys: String, CodingKey {
+        case playerId = "id"
+        case rank, name, photo, team, goals, assists, yellow, red, minutes, matches
+    }
 }
 
 nonisolated struct WCMatchEvent: Decodable, Identifiable, Hashable {
@@ -138,7 +153,9 @@ nonisolated struct WCMatchEvent: Decodable, Identifiable, Hashable {
     let type: String
     let label: String
     let player: String
+    let playerId: Int?
     let assist: String?
+    let assistId: Int?
 
     var id: String { "\(minute)-\(extraMinute ?? 0)-\(type)-\(player)" }
 }
@@ -211,6 +228,81 @@ nonisolated struct WCSquad: Decodable, Hashable {
     let players: [WCSquadPlayer]
 }
 
+// MARK: - بطاقة اللاعب الشاملة (/world-cup/player/:id)
+
+nonisolated struct WCPlayerCareerStop: Decodable, Identifiable, Hashable {
+    let teamId: Int
+    let team: String
+    let logo: String
+    let seasons: [Int]
+
+    var id: String { "\(teamId)-\(team)" }
+
+    /// [2019..2025] → "2019–2025"، وموسم واحد يُعرض مفردًا
+    var seasonsLabel: String {
+        guard let first = seasons.first, let last = seasons.last else { return "" }
+        return first == last ? "\(first)" : "\(first)–\(last)"
+    }
+}
+
+nonisolated struct WCPlayerTrophy: Decodable, Identifiable, Hashable {
+    let competition: String
+    let country: String
+    let season: String
+    let place: String
+    let winner: Bool
+
+    var id: String { "\(competition)-\(country)-\(season)-\(place)" }
+}
+
+nonisolated struct WCPlayerTournamentStats: Decodable, Hashable {
+    let matches: Int
+    let lineups: Int
+    let minutes: Int
+    let rating: Double?
+    let goals: Int
+    let assists: Int
+    let shots: Int
+    let shotsOn: Int
+    let passes: Int
+    let keyPasses: Int
+    let dribblesAttempts: Int
+    let dribblesSuccess: Int
+    let tackles: Int
+    let yellow: Int
+    let red: Int
+    let saves: Int
+    let conceded: Int
+    let penaltiesScored: Int
+    let penaltiesMissed: Int
+}
+
+nonisolated struct WCPlayerInjury: Decodable, Hashable {
+    let reason: String
+}
+
+nonisolated struct WCPlayerCard: Decodable, Hashable {
+    let id: Int
+    let name: String
+    /// الاسم الرسمي الكامل — null عندما لا يضيف شيئًا على الاسم المعروض
+    let fullName: String?
+    let photo: String
+    let position: String
+    let positionEn: String
+    let number: Int?
+    let age: Int?
+    let birthDate: String?
+    /// "الرياض، السعودية" — جاهز للعرض من الخادم
+    let birthPlace: String?
+    let height: Int?
+    let weight: Int?
+    let career: [WCPlayerCareerStop]
+    let trophies: [WCPlayerTrophy]
+    /// أرقام اللاعب التراكمية في مونديال 2026 — null قبل اعتماد المزود لها
+    let stats: WCPlayerTournamentStats?
+    let injury: WCPlayerInjury?
+}
+
 // MARK: - Response envelopes
 
 private nonisolated struct WCFixturesResponse: Decodable { let fixtures: [WCFixture] }
@@ -269,6 +361,11 @@ extension APIClient {
     func fetchWorldCupMatch(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCMatchDetail {
         try await get(WCMatchDetail.self, path: "/world-cup/match/\(fixtureId)",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupPlayer(playerId: Int) async throws -> WCPlayerCard {
+        try await get(WCPlayerCard.self, path: "/world-cup/player/\(playerId)",
+                      apiRoot: URLConstants.publicAPI)
     }
 }
 

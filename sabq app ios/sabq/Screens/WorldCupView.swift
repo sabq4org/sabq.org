@@ -289,6 +289,7 @@ struct WCSaudiSpotlight: View {
             ForEach(saudi.fixtures) { f in
                 saudiRow(f)
             }
+            WCSaudiSquadStrip()
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -324,6 +325,66 @@ struct WCSaudiSpotlight: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.08)))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// شريط تشكيلة الأخضر — كل لاعب يفتح بطاقته الشاملة.
+/// ZStack + Color.clear وليس Group/if: الحاوية يجب أن تبقى حية وإلا
+/// أسقط EmptyView معدِّل task ولن تُجلب القائمة أبدًا (فخ موثّق).
+struct WCSaudiSquadStrip: View {
+    @State private var players: [WCSquadPlayer] = []
+    @State private var selectedPlayer: WCPlayerSelection?
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(width: 0, height: 0)
+            if !players.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("تشكيلة الأخضر — اضغط على اللاعب لملفه الكامل")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(WCTheme.emerald.opacity(0.85))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(players) { p in
+                                playerChip(p)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            if let r = try? await APIClient.shared.fetchWorldCupSquad(teamId: WCTheme.saudiId) {
+                await MainActor.run { players = r.players }
+            }
+        }
+        .sheet(item: $selectedPlayer) { sel in
+            WCPlayerSheet(playerId: sel.id)
+                .presentationDetents([.large])
+        }
+    }
+
+    private func playerChip(_ p: WCSquadPlayer) -> some View {
+        Button { selectedPlayer = WCPlayerSelection(p.id) } label: {
+            VStack(spacing: 4) {
+                Group {
+                    if p.photo.isEmpty {
+                        Text(String(p.name.prefix(2)))
+                            .font(.system(size: 13, weight: .black)).foregroundStyle(.white.opacity(0.7))
+                            .frame(width: 46, height: 46).background(Circle().fill(.white.opacity(0.12)))
+                    } else {
+                        WCRemoteImage(url: p.photo, contentMode: .fill)
+                            .frame(width: 46, height: 46).clipShape(Circle())
+                    }
+                }
+                .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 2))
+                Text(p.name)
+                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(2).multilineTextAlignment(.center)
+                    .frame(width: 58, height: 24, alignment: .top)
+            }
         }
         .buttonStyle(.plain)
     }

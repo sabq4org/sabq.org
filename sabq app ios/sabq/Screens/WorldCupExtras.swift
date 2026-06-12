@@ -14,6 +14,7 @@ struct WCRacesSection: View {
     @State private var cards: [WCLeader] = []
     @State private var assistsLoaded = false
     @State private var cardsLoaded = false
+    @State private var selectedPlayer: WCPlayerSelection?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -53,6 +54,10 @@ struct WCRacesSection: View {
             .padding(.horizontal, 16)
         }
         .task(id: tab) { await loadIfNeeded() }
+        .sheet(item: $selectedPlayer) { sel in
+            WCPlayerSheet(playerId: sel.id)
+                .presentationDetents([.large])
+        }
     }
 
     // «ينطلق مع أول صافرة» تصبح خاطئة لحظة انطلاق البطولة — العبارات تتبع الحالة
@@ -72,18 +77,28 @@ struct WCRacesSection: View {
             VStack(spacing: 18) {
                 if showPodium {
                     HStack(alignment: .top, spacing: 10) {
-                        WCPodium(scorer: podium[1], place: 1)
-                        WCPodium(scorer: podium[0], place: 0)
-                        WCPodium(scorer: podium[2], place: 2)
+                        podiumButton(podium[1], place: 1)
+                        podiumButton(podium[0], place: 0)
+                        podiumButton(podium[2], place: 2)
                     }
                 }
                 ForEach(rest) { s in
-                    WCLeaderRow(rank: s.rank, name: s.name, photo: s.photo, team: s.team, minutes: s.minutes) {
-                        metric("\(s.goals)", sub: "\(s.assists) صناعة")
+                    Button { selectedPlayer = WCPlayerSelection(s.playerId) } label: {
+                        WCLeaderRow(rank: s.rank, name: s.name, photo: s.photo, team: s.team, minutes: s.minutes) {
+                            metric("\(s.goals)", sub: "\(s.assists) صناعة")
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func podiumButton(_ scorer: WCScorer, place: Int) -> some View {
+        Button { selectedPlayer = WCPlayerSelection(scorer.playerId) } label: {
+            WCPodium(scorer: scorer, place: place)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -93,9 +108,12 @@ struct WCRacesSection: View {
         } else {
             VStack(spacing: 8) {
                 ForEach(leaders) { l in
-                    WCLeaderRow(rank: l.rank, name: l.name, photo: l.photo, team: l.team, minutes: l.minutes) {
-                        trailing(l)
+                    Button { selectedPlayer = WCPlayerSelection(l.playerId) } label: {
+                        WCLeaderRow(rank: l.rank, name: l.name, photo: l.photo, team: l.team, minutes: l.minutes) {
+                            trailing(l)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -295,6 +313,7 @@ struct WCSquadSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var squad: WCSquad?
     @State private var loading = true
+    @State private var selectedPlayer: WCPlayerSelection?
 
     private let sections: [(en: String, label: String)] = [
         ("Goalkeeper", "حراسة المرمى"), ("Defender", "الدفاع"),
@@ -344,28 +363,37 @@ struct WCSquadSheet: View {
                     await MainActor.run { squad = r; loading = false }
                 } else { await MainActor.run { loading = false } }
             }
+            .sheet(item: $selectedPlayer) { sel in
+                WCPlayerSheet(playerId: sel.id)
+                    .presentationDetents([.large])
+            }
         }
         .sabqRTL()
     }
 
     private func playerRow(_ p: WCSquadPlayer) -> some View {
-        HStack(spacing: 10) {
-            if p.photo.isEmpty {
-                Circle().fill(WCTheme.chipFill).frame(width: 36, height: 36)
-            } else {
-                WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 36, height: 36).clipShape(Circle())
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(p.name).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                if let age = p.age {
-                    Text("\(age) سنة").font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+        Button { selectedPlayer = WCPlayerSelection(p.id) } label: {
+            HStack(spacing: 10) {
+                if p.photo.isEmpty {
+                    Circle().fill(WCTheme.chipFill).frame(width: 36, height: 36)
+                } else {
+                    WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 36, height: 36).clipShape(Circle())
                 }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(p.name).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    if let age = p.age {
+                        Text("\(age) سنة").font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+                Spacer()
+                Text(p.number.map { "\($0)" } ?? "—")
+                    .font(.system(size: 15, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim.opacity(0.6))
             }
-            Spacer()
-            Text(p.number.map { "\($0)" } ?? "—")
-                .font(.system(size: 15, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+        .buttonStyle(.plain)
     }
 }
