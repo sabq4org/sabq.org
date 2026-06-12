@@ -7788,9 +7788,11 @@ export class DatabaseStorage implements IStorage {
             ne(articles.articleType, 'opinion'),
             eq(articles.isFeatured, true)
           ),
+          // المحتوى المولّد آليًا لا يدخل الكروسيل إلا بتمييز محرر صريح
           or(
             isNull(articles.aiGenerated),
-            eq(articles.aiGenerated, false)
+            eq(articles.aiGenerated, false),
+            eq(articles.isFeatured, true)
           )
         )
       )

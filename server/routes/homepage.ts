@@ -154,9 +154,12 @@ router.get("/api/homepage-lite", cacheControl(AUTOSCALE_CACHE.HOMEPAGE), async (
                   eq(articles.newsType, 'breaking'),
                   eq(articles.isFeatured, true)
                 ),
+                // استبعاد المحتوى المولّد آليًا من الكروسيل إلا إذا ميّزه
+                // محرر صراحة — القرار البشري يتجاوز الفلتر الآلي
                 or(
                   isNull(articles.aiGenerated),
-                  eq(articles.aiGenerated, false)
+                  eq(articles.aiGenerated, false),
+                  eq(articles.isFeatured, true)
                 )
               )
             )
