@@ -10,6 +10,11 @@
  * منع التكرار عبر الـ slug الحتمي: wc26-preview-{fixtureId} /
  * wc26-report-{fixtureId} — لا حاجة لجدول تتبّع جديد، ووجود الـ slug
  * يعني أن المادة أُنتجت.
+ *
+ * المفتاح يُختم أيضًا في legacySlug لأن محرر اللوحة قد يعيد توليد الـ slug
+ * من العنوان بعد إعادة الصياغة (حادثة كندا × البوسنة 2026-06-12: تعديل
+ * العنوان بدّل الـ slug فولّد المحرك التقرير مرة ثانية بعد 34 ثانية).
+ * legacySlug لا يلمسه المحرر، ففحص الوجود يبحث في العمودين معًا.
  */
 import { eq, like, ilike, notIlike, and, or, desc } from "drizzle-orm";
 import { db } from "../db";
@@ -46,7 +51,7 @@ async function articleExists(slug: string): Promise<boolean> {
   const rows = await db
     .select({ id: articles.id })
     .from(articles)
-    .where(eq(articles.slug, slug))
+    .where(or(eq(articles.slug, slug), eq(articles.legacySlug, slug)))
     .limit(1);
   return rows.length > 0;
 }
@@ -252,6 +257,8 @@ async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Pro
   const created = await storage.createArticle({
     title: generated.title,
     slug: slugFor(kind, detail.fixture.id),
+    // مفتاح منع التكرار المحصّن — يبقى ثابتًا حتى لو أعاد المحرر توليد الـ slug
+    legacySlug: slugFor(kind, detail.fixture.id),
     content: `${generated.content}\n${hubFooter}`,
     excerpt: (generated.summary || generated.metaDescription).substring(0, 200),
     aiSummary: generated.summary,
@@ -386,6 +393,7 @@ export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
       id: articles.id,
       title: articles.title,
       slug: articles.slug,
+      legacySlug: articles.legacySlug,
       excerpt: articles.excerpt,
       imageUrl: articles.imageUrl,
       publishedAt: articles.publishedAt,
@@ -394,7 +402,11 @@ export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
     .where(
       and(
         eq(articles.status, "published"),
-        or(like(articles.slug, `${SLUG_PREFIX}-%`), manualWorldCupNews)
+        or(
+          like(articles.slug, `${SLUG_PREFIX}-%`),
+          like(articles.legacySlug, `${SLUG_PREFIX}-%`),
+          manualWorldCupNews
+        )
       )
     )
     .orderBy(desc(articles.publishedAt))
@@ -410,7 +422,8 @@ export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
   const byId = new Map(fixtures.map((f) => [f.id, f]));
 
   return rows.map((row) => {
-    const match = SLUG_RE.exec(row.slug);
+    // الـ slug قد يتغير تحريريًا بعد النشر — legacySlug يحفظ النمط الحتمي
+    const match = SLUG_RE.exec(row.slug) ?? (row.legacySlug ? SLUG_RE.exec(row.legacySlug) : null);
     const fixtureId = match ? Number(match[2]) : null;
     const fixture = fixtureId != null ? byId.get(fixtureId) : undefined;
     return {
