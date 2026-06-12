@@ -65,7 +65,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
 
   return (
     <Card 
-      className="h-full bg-gradient-to-br from-orange-500/5 via-transparent to-transparent border-orange-200/50 dark:border-orange-800/50"
+      className="h-full bg-gradient-to-br from-orange-500/5 via-transparent to-transparent dark:from-transparent border-orange-200/50 dark:border-border"
       data-testid="contact-messages-widget"
     >
       <CardHeader className="pb-3">
@@ -88,7 +88,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-2">
-          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 dark:bg-muted/40 dark:border-border">
             <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mb-1" />
             <span className="text-lg font-bold" data-testid="text-pending-count">
               {pendingCount.toLocaleString("en-US")}
@@ -96,7 +96,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
             <span className="text-[10px] text-muted-foreground">بانتظار الرد</span>
           </div>
           
-          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 dark:bg-muted/40 dark:border-border">
             <Inbox className="h-4 w-4 text-blue-600 dark:text-blue-400 mb-1" />
             <span className="text-lg font-bold" data-testid="text-read-count">
               {readCount.toLocaleString("en-US")}
@@ -104,7 +104,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
             <span className="text-[10px] text-muted-foreground">تمت القراءة</span>
           </div>
           
-          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+          <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-green-500/10 border border-green-500/20 dark:bg-muted/40 dark:border-border">
             <CheckCheck className="h-4 w-4 text-green-600 dark:text-green-400 mb-1" />
             <span className="text-lg font-bold" data-testid="text-replied-count">
               {repliedCount.toLocaleString("en-US")}
@@ -125,7 +125,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
             <Link href="/dashboard/contact-messages">
               <Button 
                 variant="outline" 
-                className="w-full gap-2 border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-950/50"
+                className="w-full gap-2 border-orange-200 dark:border-border hover:bg-orange-50 dark:hover:bg-accent/50"
                 data-testid="button-view-messages"
               >
                 <Mail className="h-4 w-4" />
