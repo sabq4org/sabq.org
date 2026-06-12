@@ -239,9 +239,7 @@ export async function getTopScorers(): Promise<WcScorer[]> {
       };
     });
   });
-  if ((provider ?? []).length > 0) return provider;
-  // لوحة المزود لم تصدر بعد — نجمعها من أحداث المباريات
-  return (await aggregateRacesFromEvents()).scorers;
+  return freshestBoard(provider, (await aggregateRacesFromEvents()).scorers, (r) => r.goals);
 }
 
 export interface WcPrediction {
@@ -717,9 +715,29 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
 }
 
 // ---------- تجميع السباقات من الأحداث ----------
-// لوحات اللاعبين المجمعة تُعتمد عند المزود بفاصل بعد المباريات، بينما الأحداث
-// لحظية وبين أيدينا — فنجمع الهدافين/الصناعة/البطاقات بأنفسنا ريثما تصدر لوحاته
-// (لوحة المزود أكمل: دقائق اللعب والصور وعدد المباريات — تحل محل التجميع فور صدورها).
+// لوحات اللاعبين المجمعة تُعتمد عند المزود بفاصل بعد المباريات (مرة أو مرتين يوميًا)،
+// بينما الأحداث لحظية وبين أيدينا — فنجمع الهدافين/الصناعة/البطاقات بأنفسنا ونقارن:
+// إن كان مجموع عدّنا أعلى فلوحة المزود متأخرة ونعرض تجميعنا، وإلا فلوحته الأكمل
+// (دقائق اللعب والصور وعدد المباريات) هي المرجع.
+
+function freshestBoard<T extends { id: number; photo: string; minutes: number; matches: number }>(
+  provider: T[] | null | undefined,
+  fromEvents: T[],
+  count: (row: T) => number
+): T[] {
+  const board = provider ?? [];
+  const providerTotal = board.reduce((sum, row) => sum + count(row), 0);
+  const eventsTotal = fromEvents.reduce((sum, row) => sum + count(row), 0);
+  if (board.length > 0 && providerTotal >= eventsTotal) return board;
+  // المزود متأخر — تجميعنا هو الأحدث، ونثريه بدقائق/مباريات/صور صفه المطابق
+  const byId = new Map(board.map((row) => [row.id, row]));
+  return fromEvents.map((row) => {
+    const known = row.id ? byId.get(row.id) : undefined;
+    return known
+      ? { ...row, minutes: known.minutes, matches: known.matches, photo: row.photo || known.photo }
+      : row;
+  });
+}
 
 interface WcRaceTally {
   playerId: number | null;
@@ -771,9 +789,28 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
       apply(tally);
     };
 
-    const details = await Promise.all(started.map((f) => getMatchDetail(f.id).catch(() => null)));
-    for (const detail of details) {
-      for (const ev of detail?.events ?? []) {
+    // أحداث المباراة المنتهية لا تتغير — كاش طويل خاص بها كي لا يستنزف التجميع
+    // الدوري (كل 30 ثانية) حصة المزود بإعادة جلب تفاصيل كل مباريات البطولة
+    const FINISHED_EVENTS_TTL = 60 * 60 * 1000;
+    const eventLists = await Promise.all(
+      started.map(async (f): Promise<WcMatchEvent[]> => {
+        try {
+          if (f.status.finished) {
+            return await withSWR(
+              `wc:raceEvents:${f.id}`,
+              FINISHED_EVENTS_TTL,
+              FINISHED_EVENTS_TTL * 2,
+              async () => (await getMatchDetail(f.id))?.events ?? []
+            );
+          }
+          return (await getMatchDetail(f.id))?.events ?? [];
+        } catch {
+          return [];
+        }
+      })
+    );
+    for (const events of eventLists) {
+      for (const ev of events) {
         if (ev.type === "goal" && ev.detail !== "Own Goal") {
           // الهدف العكسي لا يدخل سباق الهداف، وركلة الجزاء الضائعة نوع مستقل أصلًا
           bump(ev.player, ev.playerId, ev.teamId, (t) => {
@@ -843,8 +880,7 @@ export async function getTopAssists(): Promise<WcLeader[]> {
     const tr = await resolveNames(rows.map((row: any) => row.player?.name));
     return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
-  if ((provider ?? []).length > 0) return provider;
-  return (await aggregateRacesFromEvents()).assists;
+  return freshestBoard(provider, (await aggregateRacesFromEvents()).assists, (r) => r.assists);
 }
 
 export async function getTopCards(): Promise<WcLeader[]> {
@@ -853,8 +889,7 @@ export async function getTopCards(): Promise<WcLeader[]> {
     const tr = await resolveNames(rows.map((row: any) => row.player?.name));
     return rows.map((row: any, i: number) => mapLeader(row, i, tr));
   });
-  if ((provider ?? []).length > 0) return provider;
-  return (await aggregateRacesFromEvents()).cards;
+  return freshestBoard(provider, (await aggregateRacesFromEvents()).cards, (r) => r.yellow + r.red);
 }
 
 export interface WcMatchEvent {
