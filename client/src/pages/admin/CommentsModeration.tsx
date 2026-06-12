@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ar } from "date-fns/locale";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
@@ -123,7 +123,7 @@ export default function CommentsModeration() {
         limit: "20",
       });
       if (searchQuery) params.append("search", searchQuery);
-      const res = await fetch(`/api/admin/comments?${params}`);
+      const res = await fetch(apiUrl(`/api/admin/comments?${params}`));
       if (!res.ok) throw new Error("Failed to fetch comments");
       return res.json();
     },
@@ -474,9 +474,9 @@ export default function CommentsModeration() {
                     </p>
 
                     {comment.aiDetectedIssues && comment.aiDetectedIssues.length > 0 && (
-                      <div className="bg-orange-50 dark:bg-orange-950/30 p-3 rounded-md border border-orange-200 dark:border-orange-800">
+                      <div className="bg-orange-50 dark:bg-muted/40 p-3 rounded-md border border-orange-200 dark:border-border">
                         <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className="h-4 w-4 text-orange-600" />
+                          <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                           <span className="text-sm font-medium text-orange-700 dark:text-orange-400">
                             مشاكل مكتشفة بواسطة الذكاء الاصطناعي
                           </span>
@@ -489,7 +489,7 @@ export default function CommentsModeration() {
                           ))}
                         </div>
                         {comment.aiModerationReason && (
-                          <p className="text-xs text-orange-600 mt-2">{comment.aiModerationReason}</p>
+                          <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">{comment.aiModerationReason}</p>
                         )}
                       </div>
                     )}

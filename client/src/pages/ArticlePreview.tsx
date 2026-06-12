@@ -126,12 +126,12 @@ export default function ArticlePreview() {
       <Header user={user} />
 
       {/* Preview Mode Banner */}
-      <div className="bg-amber-500 text-black py-3 px-4 sticky top-0 z-50 shadow-lg">
+      <div className="bg-amber-500 dark:bg-card text-black dark:text-foreground py-3 px-4 sticky top-0 z-50 shadow-lg">
         <div className="container mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
             <span className="font-bold text-lg">وضع المعاينة</span>
-            <Badge variant="secondary" className="bg-black/20 text-black border-black/30">
+            <Badge variant="secondary" className="bg-black/20 text-black border-black/30 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30">
               {article.status === 'draft' ? 'مسودة' : article.status === 'published' ? 'منشور' : article.status}
             </Badge>
           </div>
@@ -164,7 +164,7 @@ export default function ArticlePreview() {
 
       {/* Preview Notice */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-amber-50 dark:bg-card border border-amber-200 dark:border-border rounded-lg p-4 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-amber-800 dark:text-amber-200">

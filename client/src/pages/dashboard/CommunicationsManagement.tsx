@@ -91,7 +91,7 @@ export default function CommunicationsManagement() {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -107,7 +107,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -123,7 +123,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -139,7 +139,7 @@ export default function CommunicationsManagement() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-red-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-card">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>

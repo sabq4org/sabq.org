@@ -102,7 +102,7 @@ export default function LoyaltyAccount() {
         </div>
 
         {/* ─── Tier hero card ─── */}
-        <Card className="mb-6 overflow-hidden border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-br from-amber-500/10 to-orange-500/5">
+        <Card className="mb-6 overflow-hidden border-amber-200/60 dark:border-border bg-gradient-to-br from-amber-500/10 to-orange-500/5 dark:from-transparent dark:to-transparent">
           <CardContent className="p-6">
             {loadingSummary ? (
               <Skeleton className="h-32 w-full" />

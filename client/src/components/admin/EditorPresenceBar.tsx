@@ -90,7 +90,7 @@ export function EditorPresenceBar() {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/40"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-border dark:bg-card"
       data-testid="editor-presence-bar"
       aria-live="polite"
     >

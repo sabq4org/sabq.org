@@ -244,7 +244,7 @@ export function EmailDetailsModal({
                   )}
 
                   {log.aiAnalysis.warnings && log.aiAnalysis.warnings.length > 0 && (
-                    <div className="p-3 border border-amber-500 rounded-lg bg-amber-50 dark:bg-amber-950">
+                    <div className="p-3 border border-amber-500 dark:border-border rounded-lg bg-amber-50 dark:bg-muted/40">
                       <p className="text-sm text-amber-700 dark:text-amber-300 mb-2 font-medium">
                         تحذيرات
                       </p>
@@ -259,7 +259,7 @@ export function EmailDetailsModal({
                   )}
 
                   {log.aiAnalysis.errors && log.aiAnalysis.errors.length > 0 && (
-                    <div className="p-3 border border-red-500 rounded-lg bg-red-50 dark:bg-red-950">
+                    <div className="p-3 border border-red-500 dark:border-border rounded-lg bg-red-50 dark:bg-muted/40">
                       <p className="text-sm text-red-700 dark:text-red-300 mb-2 font-medium">
                         أخطاء
                       </p>
@@ -278,7 +278,7 @@ export function EmailDetailsModal({
 
             {/* Processing Error */}
             {log.processingError && (
-              <div className="p-4 border border-red-500 rounded-lg bg-red-50 dark:bg-red-950">
+              <div className="p-4 border border-red-500 dark:border-border rounded-lg bg-red-50 dark:bg-muted/40">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -318,7 +318,7 @@ export function EmailDetailsModal({
 
             {/* Rejection Reason */}
             {log.status === "rejected" && log.rejectionReason && (
-              <div className="p-4 border border-red-500 rounded-lg bg-red-50 dark:bg-red-950">
+              <div className="p-4 border border-red-500 dark:border-border rounded-lg bg-red-50 dark:bg-muted/40">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -340,7 +340,7 @@ export function EmailDetailsModal({
 
             {/* Article Link */}
             {log.articleId && (
-              <div className="p-4 border border-emerald-500 rounded-lg bg-emerald-50 dark:bg-emerald-950">
+              <div className="p-4 border border-emerald-500 dark:border-border rounded-lg bg-emerald-50 dark:bg-muted/40">
                 <p className="text-sm text-emerald-700 dark:text-emerald-300 mb-2">
                   تم إنشاء مقال بنجاح
                 </p>

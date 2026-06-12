@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTaskQuickPane, TaskViewDialog, TaskEditDialog } from "@/components/tasks";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import { 
   ListTodo, 
   Edit, 
@@ -120,30 +120,30 @@ function getStatusVariant(status: string): "default" | "secondary" | "outline" {
 function getPriorityColor(priority: string): string {
   switch (priority) {
     case 'low':
-      return 'text-gray-600';
+      return 'text-gray-600 dark:text-gray-400';
     case 'medium':
-      return 'text-blue-600';
+      return 'text-blue-600 dark:text-blue-400';
     case 'high':
-      return 'text-orange-600';
+      return 'text-orange-600 dark:text-orange-400';
     case 'critical':
-      return 'text-red-600';
+      return 'text-red-600 dark:text-red-400';
     default:
-      return 'text-gray-600';
+      return 'text-gray-600 dark:text-gray-400';
   }
 }
 
 function getPriorityBackground(priority: string): string {
   switch (priority) {
     case 'critical':
-      return 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/30';
+      return 'bg-red-50 dark:bg-card border-red-200 dark:border-border';
     case 'high':
-      return 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/30';
+      return 'bg-blue-50 dark:bg-card border-blue-200 dark:border-border';
     case 'medium':
-      return 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900/30';
+      return 'bg-yellow-50 dark:bg-card border-yellow-200 dark:border-border';
     case 'low':
-      return 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/30';
+      return 'bg-green-50 dark:bg-card border-green-200 dark:border-border';
     default:
-      return 'bg-gray-50 dark:bg-gray-950/20 border-gray-200 dark:border-gray-900/30';
+      return 'bg-gray-50 dark:bg-card border-gray-200 dark:border-border';
   }
 }
 
@@ -199,7 +199,7 @@ function SubtaskRow({ parentTask, users, onDelete, onCreateSubtask, onView, onEd
   const { data: subtasks } = useQuery<Task[]>({
     queryKey: ['/api/tasks', 'subtasks', parentTask.id],
     queryFn: async () => {
-      const res = await fetch(`/api/tasks?parentTaskId=${parentTask.id}`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/tasks?parentTaskId=${parentTask.id}`), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch subtasks');
       const data = await res.json();
       return data.tasks || [];
@@ -593,7 +593,7 @@ export default function TasksPage() {
   const { data: statistics } = useQuery<TaskStatistics>({
     queryKey: ['/api/tasks/statistics'],
     queryFn: async () => {
-      const res = await fetch('/api/tasks/statistics', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/tasks/statistics'), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch statistics');
       return await res.json();
     },
@@ -613,7 +613,7 @@ export default function TasksPage() {
       if (priorityFilter && priorityFilter !== 'all') params.append('priority', priorityFilter);
       if (assigneeFilter && assigneeFilter !== 'all') params.append('assignedToId', assigneeFilter);
 
-      const res = await fetch(`/api/tasks?${params}`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/tasks?${params}`), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch tasks');
       return await res.json();
     },
@@ -623,7 +623,7 @@ export default function TasksPage() {
   const { data: usersRaw } = useQuery<User[]>({
     queryKey: ['/api/users'],
     queryFn: async () => {
-      const res = await fetch('/api/users', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/users'), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },

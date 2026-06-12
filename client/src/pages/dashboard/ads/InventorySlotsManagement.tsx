@@ -192,13 +192,6 @@ export default function InventorySlotsManagement() {
     document.title = "إدارة أماكن العرض الإعلانية - لوحة تحكم الإعلانات";
   }, []);
 
-  // Debug log
-  useEffect(() => {
-    if (user) {
-      console.log("[InventorySlotsManagement] User role:", user.role, "isAdmin:", isAdmin);
-    }
-  }, [user, isAdmin]);
-
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -423,7 +416,7 @@ export default function InventorySlotsManagement() {
 
         {/* Stats Card */}
         <div className="grid gap-4 md:grid-cols-3 mb-6">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الأماكن</CardTitle>
               <div className="p-2 rounded-md bg-blue-500/20">
@@ -437,7 +430,7 @@ export default function InventorySlotsManagement() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الأماكن النشطة</CardTitle>
               <div className="p-2 rounded-md bg-green-500/20">
@@ -451,7 +444,7 @@ export default function InventorySlotsManagement() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-gray-50 dark:bg-gray-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-gray-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الأماكن غير النشطة</CardTitle>
               <div className="p-2 rounded-md bg-gray-500/20">

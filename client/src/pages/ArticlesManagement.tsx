@@ -5,7 +5,7 @@ import { useAuth, hasAnyPermission } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -148,7 +148,7 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-amber-500/5 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-orange-500/5 border-r-4 border-r-orange-500' : ''}`}
+      className={`border-b border-border hover:bg-muted/30 ${isDragging ? 'bg-primary/10 shadow-lg' : ''} ${isSaving ? 'opacity-70' : ''} ${highlightResubmitted === 'resubmitted' ? 'bg-amber-50/80 dark:bg-muted/60 border-r-4 border-r-amber-500' : ''} ${highlightResubmitted === 'awaiting' ? 'bg-orange-50/80 dark:bg-muted/60 border-r-4 border-r-orange-500' : ''}`}
       data-testid={`row-article-${article.id}`}
     >
       <td 
@@ -278,13 +278,12 @@ export default function ArticlesManagement() {
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ["/api/admin/articles/metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/admin/articles/metrics", { credentials: "include" });
+      const response = await fetch(apiUrl("/api/admin/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
         console.error("Metrics fetch failed:", response.status, response.statusText);
         throw new Error("Failed to fetch metrics");
       }
       const data = await response.json();
-      console.log("Metrics loaded:", data);
       return data;
     },
     enabled: !!user,
@@ -898,7 +897,7 @@ export default function ArticlesManagement() {
             {/* Published Card */}
             <Card
               onClick={() => setActiveStatus('published')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30 ${
+              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card ${
                 activeStatus === 'published' ? 'ring-2 ring-emerald-500' : ''
               }`}
               data-testid="card-stat-published"
@@ -917,7 +916,7 @@ export default function ArticlesManagement() {
             {/* Scheduled Card */}
             <Card
               onClick={() => setActiveStatus('scheduled')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-indigo-50 dark:bg-indigo-950/30 ${
+              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-indigo-50 dark:bg-card ${
                 activeStatus === 'scheduled' ? 'ring-2 ring-indigo-500' : ''
               }`}
               data-testid="card-stat-scheduled"
@@ -936,7 +935,7 @@ export default function ArticlesManagement() {
             {/* Draft Card */}
             <Card
               onClick={() => setActiveStatus('draft')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30 ${
+              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card ${
                 activeStatus === 'draft' ? 'ring-2 ring-amber-500' : ''
               }`}
               data-testid="card-stat-draft"
@@ -955,7 +954,7 @@ export default function ArticlesManagement() {
             {/* Archived Card */}
             <Card
               onClick={() => setActiveStatus('archived')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-slate-50 dark:bg-slate-950/30 ${
+              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-slate-50 dark:bg-card ${
                 activeStatus === 'archived' ? 'ring-2 ring-slate-500' : ''
               }`}
               data-testid="card-stat-archived"
@@ -1344,10 +1343,10 @@ export default function ArticlesManagement() {
                   key={article.id} 
                   className={`border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all ${
                     isResubmittedAfterRevision(article)
-                      ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-600"
+                      ? "bg-amber-50 dark:bg-card border-amber-300 dark:border-border"
                       : isAwaitingContributorRevision(article)
-                        ? "bg-orange-50 dark:bg-orange-500/10 border-orange-300 dark:border-orange-600"
-                        : "bg-blue-50 dark:bg-blue-950/30"
+                        ? "bg-orange-50 dark:bg-card border-orange-300 dark:border-border"
+                        : "bg-blue-50 dark:bg-card"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >

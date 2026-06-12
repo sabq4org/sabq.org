@@ -109,7 +109,7 @@ import { ProofreadDialog } from "@/components/article-editor/ProofreadDialog";
 import { useArticleEditLock } from "@/hooks/useArticleEditLock";
 import { useEditorPresence } from "@/hooks/useEditorPresence";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
-import { apiRequest, queryClient, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient, getCsrfToken } from "@/lib/queryClient";
 import {
   markArticleSubmittedInAnalyticsCache,
   invalidateContributorAnalytics,
@@ -567,7 +567,7 @@ export default function ArticleEditor() {
   const { data: availableAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string; iconKey: string }[]>({
     queryKey: ["/api/muqtarab/angles"],
     queryFn: async () => {
-      const res = await fetch("/api/muqtarab/angles");
+      const res = await fetch(apiUrl("/api/muqtarab/angles"));
       if (!res.ok) return [];
       const data = await res.json();
       return data.angles || data || [];
@@ -579,7 +579,7 @@ export default function ArticleEditor() {
   const { data: articleAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string }[]>({
     queryKey: ["/api/admin/articles", id, "angles"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/articles/${id}/angles`);
+      const res = await fetch(apiUrl(`/api/admin/articles/${id}/angles`));
       if (!res.ok) return [];
       return res.json();
     },
@@ -714,7 +714,7 @@ export default function ArticleEditor() {
       
       // Load existing poll for this article
       if (article.id) {
-        fetch(`/api/polls/article/${article.id}`, { credentials: "include" })
+        fetch(apiUrl(`/api/polls/article/${article.id}`), { credentials: "include" })
           .then(res => res.ok ? res.json() : null)
           .then(poll => {
             if (poll && poll.question) {
@@ -1350,14 +1350,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       if (savedArticleId && selectedAngleIds.length > 0) {
         try {
           // Get current angles for comparison
-          const currentAnglesRes = await fetch(`/api/admin/articles/${savedArticleId}/angles`);
+          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
           const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
           const currentAngleIds = currentAngles.map((a: any) => a.id);
-          
+
           // Add new angles
           for (const angleId of selectedAngleIds) {
             if (!currentAngleIds.includes(angleId)) {
-              await fetch(`/api/admin/articles/${savedArticleId}/angles`, {
+              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ angleId }),
@@ -1368,7 +1368,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           // Remove unselected angles
           for (const angleId of currentAngleIds) {
             if (!selectedAngleIds.includes(angleId)) {
-              await fetch(`/api/admin/articles/${savedArticleId}/angles/${angleId}`, {
+              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angleId}`), {
                 method: "DELETE",
               });
             }
@@ -1379,10 +1379,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       } else if (savedArticleId && selectedAngleIds.length === 0) {
         // Remove all angles if none selected
         try {
-          const currentAnglesRes = await fetch(`/api/admin/articles/${savedArticleId}/angles`);
+          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
           const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
           for (const angle of currentAngles) {
-            await fetch(`/api/admin/articles/${savedArticleId}/angles/${angle.id}`, {
+            await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angle.id}`), {
               method: "DELETE",
             });
           }
@@ -1395,7 +1395,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       if (savedArticleId && pollData && pollData.enabled && pollData.question && pollData.options.filter(o => o.trim()).length >= 2) {
         try {
           const csrfToken = getCsrfToken();
-          const pollRes = await fetch("/api/polls", {
+          const pollRes = await fetch(apiUrl("/api/polls"), {
             method: "POST",
             headers: { 
               "Content-Type": "application/json",
@@ -1454,7 +1454,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         toast({
           title: successTitle,
           description: successDescription,
-          className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
         });
       }
       if (!variables.skipNavigate) {
@@ -1705,7 +1704,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     toast({
       title: "تم الإرسال",
       description: "عاد المحتوى إلى مسودات فريق التحرير للمراجعة",
-      className: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
     });
     navigateAfterContributorSubmit();
   };
@@ -2145,7 +2143,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
           <div
-            className="mb-4 flex flex-wrap items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950 border border-amber-500 rounded-lg"
+            className="mb-4 flex flex-wrap items-center gap-3 p-4 bg-amber-50 dark:bg-card border border-amber-500 dark:border-border rounded-lg"
             data-testid="alert-concurrent-editors"
           >
             <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-400 shrink-0" />
@@ -2185,7 +2183,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         {/* Lock Alert - When article is locked by another user */}
         {isLockedByOther && lockStatus?.lockedBy && (
           <div 
-            className="mb-6 flex items-center gap-3 p-4 bg-red-50 dark:bg-red-950 border border-red-500 rounded-lg"
+            className="mb-6 flex items-center gap-3 p-4 bg-red-50 dark:bg-card border border-red-500 dark:border-border rounded-lg"
             data-testid="lock-alert"
           >
             <Lock className="h-5 w-5 text-red-700 dark:text-red-400 shrink-0" />
@@ -2362,7 +2360,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           {/* Main Content Area - 70% */}
           <div className="lg:col-span-7 space-y-6">
             {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-4 space-y-3">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
                   يؤسفنا إبلاغكم بوجود بعض الملاحظات على {articleType === "opinion" ? "المقال" : "الخبر"}
                 </p>
@@ -2417,7 +2415,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               if (!enteredByName) return null;
               
               return (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-sm">
+                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-card border border-blue-200 dark:border-border rounded-lg text-sm">
                   <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   <span className="text-blue-700 dark:text-blue-300">
                     تم إدخال الخبر بواسطة: <strong>{enteredByName}</strong>
@@ -2751,7 +2749,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     
                     {/* Image Caption Fields - Inline below image */}
                     {isNewArticle ? (
-                      <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                      <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-border dark:bg-muted/40 dark:text-amber-200">
                         <strong>شرح الصورة البارزة:</strong> سيظهر حقل إضافة الشرح والمصدر للصورة بعد حفظ الخبر لأول مرة (سيتم حفظه تلقائياً خلال ثوانٍ).
                       </div>
                     ) : (
@@ -3449,7 +3447,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                                 const formData = new FormData();
                                 formData.append('file', file);
                                 const csrfToken = getCsrfToken();
-                                const response = await fetch('/api/upload/video', { 
+                                const response = await fetch(apiUrl('/api/upload/video'), {
                                   method: 'POST', 
                                   body: formData, 
                                   credentials: 'include',
@@ -3546,7 +3544,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                                   try {
                                     const formData = new FormData();
                                     formData.append('file', file);
-                                    const response = await fetch('/api/upload/image', { method: 'POST', body: formData, credentials: 'include' });
+                                    const response = await fetch(apiUrl('/api/upload/image'), { method: 'POST', body: formData, credentials: 'include' });
                                     if (!response.ok) {
                                       const error = await response.json();
                                       throw new Error(error.message || 'فشل رفع الصورة');

@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,7 +152,7 @@ export default function StaffMembers() {
     queryFn: async () => {
       // Fetch all staff roles in parallel
       const rolePromises = STAFF_ROLES.map(async (queriedRole) => {
-        const res = await fetch(`/api/admin/users?role=${encodeURIComponent(queriedRole)}&limit=1000`);
+        const res = await fetch(apiUrl(`/api/admin/users?role=${encodeURIComponent(queriedRole)}&limit=1000`));
         if (!res.ok) return { role: queriedRole, users: [] as StaffUser[] };
         const data = await res.json();
         let usersArray: StaffUser[] = [];
@@ -888,7 +888,7 @@ export default function StaffMembers() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="bg-amber-50 dark:bg-muted/40 border border-amber-200 dark:border-border rounded-lg p-4">
               <p className="text-sm text-amber-800 dark:text-amber-200">
                 <strong>تنبيه:</strong> سيتم إنشاء كلمة مرور مؤقتة جديدة لكل موظف وسيُطلب منه تغييرها عند أول تسجيل دخول.
               </p>

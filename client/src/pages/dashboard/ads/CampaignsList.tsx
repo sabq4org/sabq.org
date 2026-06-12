@@ -268,7 +268,7 @@ export default function CampaignsList() {
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-4 mb-6">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الحملات</CardTitle>
               <div className="p-2 rounded-md bg-purple-500/20">
@@ -282,7 +282,7 @@ export default function CampaignsList() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الحملات النشطة</CardTitle>
               <div className="p-2 rounded-md bg-green-500/20">
@@ -296,7 +296,7 @@ export default function CampaignsList() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الظهورات المستهلكة</CardTitle>
               <div className="p-2 rounded-md bg-blue-500/20">
@@ -310,7 +310,7 @@ export default function CampaignsList() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الظهورات</CardTitle>
               <div className="p-2 rounded-md bg-amber-500/20">

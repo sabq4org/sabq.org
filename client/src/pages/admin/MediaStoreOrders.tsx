@@ -243,7 +243,7 @@ export default function MediaStoreOrders() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30" data-testid="card-total-orders">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-total-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الطلبات</CardTitle>
               <div className="p-2 rounded-md bg-purple-500/20">
@@ -257,7 +257,7 @@ export default function MediaStoreOrders() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-yellow-50 dark:bg-yellow-950/30" data-testid="card-pending-orders">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-yellow-50 dark:bg-card" data-testid="card-pending-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">قيد الانتظار</CardTitle>
               <div className="p-2 rounded-md bg-yellow-500/20">
@@ -265,13 +265,13 @@ export default function MediaStoreOrders() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600" data-testid="text-pending-orders">
+              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-pending-orders">
                 {statsLoading ? "..." : (statsData?.pendingOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30" data-testid="card-paid-orders">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-paid-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">تم الدفع</CardTitle>
               <div className="p-2 rounded-md bg-blue-500/20">
@@ -279,13 +279,13 @@ export default function MediaStoreOrders() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600" data-testid="text-paid-orders">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-paid-orders">
                 {statsLoading ? "..." : (statsData?.paidOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-orange-950/30" data-testid="card-processing-orders">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-card" data-testid="card-processing-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">قيد التنفيذ</CardTitle>
               <div className="p-2 rounded-md bg-orange-500/20">
@@ -293,13 +293,13 @@ export default function MediaStoreOrders() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-orange-600" data-testid="text-processing-orders">
+              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-processing-orders">
                 {statsLoading ? "..." : (statsData?.processingOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30" data-testid="card-completed-orders">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-completed-orders">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">مكتمل</CardTitle>
               <div className="p-2 rounded-md bg-green-500/20">
@@ -307,14 +307,14 @@ export default function MediaStoreOrders() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600" data-testid="text-completed-orders">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-completed-orders">
                 {statsLoading ? "..." : (statsData?.completedOrders || 0).toLocaleString('en-US')}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30" data-testid="card-revenue">
+        <Card className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card" data-testid="card-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
             <div className="p-2 rounded-md bg-emerald-500/20">
@@ -322,7 +322,7 @@ export default function MediaStoreOrders() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600" data-testid="text-total-revenue">
+            <div className="text-3xl font-bold text-green-600 dark:text-green-400" data-testid="text-total-revenue">
               {statsLoading ? "..." : formatPrice(statsData?.totalRevenueSAR || "0")}
             </div>
           </CardContent>

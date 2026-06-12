@@ -74,7 +74,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ModerationAdvancedSearch } from "@/components/ModerationAdvancedSearch";
@@ -276,7 +276,7 @@ export default function AIModerationDashboard() {
     queryKey: ["/api/moderation/member", selectedMemberId],
     queryFn: async () => {
       if (!selectedMemberId) throw new Error("No member selected");
-      const response = await fetch(`/api/moderation/member/${selectedMemberId}`);
+      const response = await fetch(apiUrl(`/api/moderation/member/${selectedMemberId}`));
       if (!response.ok) throw new Error("Failed to fetch member profile");
       return response.json();
     },
@@ -679,7 +679,7 @@ export default function AIModerationDashboard() {
         <div className="space-y-3">
           <SectionHeader title="إحصائيات التحليل" color="bg-blue-500" />
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المحلل</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -692,7 +692,7 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">آمن</CardTitle>
                 <div className="p-2 rounded-md bg-accent-green/30">
@@ -705,7 +705,7 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مشكوك فيه</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -718,7 +718,7 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-orange-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-orange-50 dark:bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">سبام</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -731,7 +731,7 @@ export default function AIModerationDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-red-950/30">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-red-50 dark:bg-card">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">ضار</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -747,7 +747,7 @@ export default function AIModerationDashboard() {
         </div>
 
         {stats && stats.total > 0 && (
-          <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-violet-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">متوسط نقاط الأمان</CardTitle>
               <div className="p-2 rounded-md bg-accent-purple/30">

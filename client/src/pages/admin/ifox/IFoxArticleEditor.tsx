@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -148,7 +148,7 @@ export default function IFoxArticleEditor() {
   const { data: articleData, isLoading } = useQuery<ArticleWithDetails>({
     queryKey: ['/api/admin/ifox/articles', articleId],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/ifox/articles/${articleId}`);
+      const response = await fetch(apiUrl(`/api/admin/ifox/articles/${articleId}`));
       if (!response.ok) throw new Error('Failed to fetch article');
       return response.json();
     },
@@ -516,7 +516,7 @@ export default function IFoxArticleEditor() {
         </div>
 
         {/* AI Score Card */}
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 dark:from-card dark:to-card border-primary/20 dark:border-border">
           <CardContent className="p-3 sm:p-4 md:p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
@@ -821,14 +821,14 @@ export default function IFoxArticleEditor() {
                     )}
 
                     {isEditMode && !categoriesLoading && ifoxCategories && ifoxCategories.length < 5 && articleData?.category && (
-                      <div className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2 mb-4 p-3 rounded-lg bg-amber-100 dark:bg-amber-900/20">
+                      <div className="text-sm text-amber-600 dark:text-amber-500 flex items-center gap-2 mb-4 p-3 rounded-lg bg-amber-100 dark:bg-muted/40">
                         <AlertCircle className="h-4 w-4" />
                         تم تحميل التصنيف الحالي فقط. لتغيير التصنيف، يرجى إعادة تحميل الصفحة.
                       </div>
                     )}
 
                     {!isEditMode && categoriesError && (
-                      <div className="text-sm text-destructive flex items-center gap-2 mb-4 p-3 rounded-lg bg-destructive/10">
+                      <div className="text-sm text-destructive flex items-center gap-2 mb-4 p-3 rounded-lg bg-destructive/10 dark:bg-muted/40">
                         <AlertCircle className="h-4 w-4" />
                         فشل تحميل التصنيفات. يرجى إعادة تحميل الصفحة.
                       </div>

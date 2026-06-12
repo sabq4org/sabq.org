@@ -166,7 +166,7 @@ export default function FocalPointDashboard() {
           </CardContent>
         </Card>
 
-        <Card data-testid="card-stat-needs-review" className={needsReviewCount > 0 ? "border-amber-300 dark:border-amber-700" : ""}>
+        <Card data-testid="card-stat-needs-review" className={needsReviewCount > 0 ? "border-amber-300 dark:border-border" : ""}>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">تحتاج مراجعة</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -316,7 +316,7 @@ export default function FocalPointDashboard() {
       </Card>
 
       {needsReviewCount > 0 && (
-        <Card className="border-amber-300 dark:border-amber-700">
+        <Card className="border-amber-300 dark:border-border">
           <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />

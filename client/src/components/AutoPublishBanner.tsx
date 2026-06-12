@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X, CheckCircle2, FileText, Clock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
@@ -84,7 +85,7 @@ export function AutoPublishBanner() {
       // `/api/notifications` has no server-side `type` filter, so fetch a
       // small page and pick the newest article_published entry client-side.
       const res = await fetch(
-        "/api/notifications?limit=20",
+        apiUrl("/api/notifications?limit=20"),
         { credentials: "include" },
       );
       if (!res.ok) return null;
@@ -141,7 +142,7 @@ export function AutoPublishBanner() {
       dir="rtl"
       data-testid="banner-autopublish"
     >
-      <div className="bg-green-50/95 dark:bg-green-950/95 backdrop-blur-sm border border-green-200/50 dark:border-green-900/50 rounded-lg shadow-lg overflow-hidden">
+      <div className="bg-green-50/95 dark:bg-card/95 backdrop-blur-sm border border-green-200/50 dark:border-border rounded-lg shadow-lg overflow-hidden">
         <div className="p-4">
           <div className="flex items-start gap-3">
             {/* Icon */}

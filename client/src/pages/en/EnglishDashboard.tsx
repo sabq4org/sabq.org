@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { apiUrl } from "@/lib/queryClient";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
@@ -216,7 +217,7 @@ function Dashboard() {
     <EnglishDashboardLayout>
       <div className="space-y-6">
         {/* Welcome Section with Greeting */}
-        <Card className="bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 dark:from-indigo-950/20 dark:via-blue-950/20 dark:to-indigo-950/20 border-primary/20 shadow-sm shadow-indigo-50 dark:shadow-none" data-testid="card-welcome">
+        <Card className="bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 dark:from-card dark:via-card dark:to-card border-primary/20 shadow-sm shadow-indigo-50 dark:shadow-none" data-testid="card-welcome">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1 space-y-2">
@@ -682,7 +683,7 @@ function UpcomingTasksWidget() {
   }>>({
     queryKey: ["/api/calendar/my-assignments"],
     queryFn: async () => {
-      const response = await fetch("/api/calendar/my-assignments?status=pending");
+      const response = await fetch(apiUrl("/api/calendar/my-assignments?status=pending"));
       if (!response.ok) {
         throw new Error("Failed to fetch tasks");
       }
@@ -787,7 +788,7 @@ function UrgentReminderBanner() {
 
   return (
     <div 
-      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-blue-950/30 dark:via-blue-950/20 dark:to-blue-950/30 border-r-4 border-r-blue-400 rounded-lg p-4 shadow-sm"
+      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-card dark:via-card dark:to-card border-r-4 border-r-blue-400 dark:border-r-border rounded-lg p-4 shadow-sm"
       data-testid="banner-urgent-reminder"
     >
       <div className="flex items-start gap-4">

@@ -217,7 +217,7 @@ export default function UserBehavior() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-pink-50 dark:bg-pink-950/20 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-pink-50 dark:bg-muted/40 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Heart className="h-5 w-5 text-pink-500" />
                     <span className="font-medium">الإعجابات</span>
@@ -226,7 +226,7 @@ export default function UserBehavior() {
                     {data?.interactionCounts.likes}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-muted/40 rounded-lg">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-5 w-5 text-blue-500" />
                     <span className="font-medium">التعليقات</span>
@@ -235,7 +235,7 @@ export default function UserBehavior() {
                     {data?.interactionCounts.comments}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-muted/40 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Bookmark className="h-5 w-5 text-green-500" />
                     <span className="font-medium">الحفظ</span>

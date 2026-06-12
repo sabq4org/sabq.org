@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
+import { apiUrl } from "@/lib/queryClient";
 import { FileText, Eye, Heart, MessageSquare, TrendingUp, Users, Award, Star, Crown, Medal, Flame } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -112,7 +113,7 @@ export default function StaffProductivity() {
   const { data, isLoading, error } = useQuery<ProductivityData>({
     queryKey: ['/api/staff/productivity', timeRange],
     queryFn: async () => {
-      const response = await fetch(`/api/staff/productivity?range=${timeRange}`, {
+      const response = await fetch(apiUrl(`/api/staff/productivity?range=${timeRange}`), {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -157,7 +158,7 @@ export default function StaffProductivity() {
           <SectionHeader title="إحصائيات الفريق" color="bg-blue-500" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
             {/* Articles Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30" data-testid="card-articles-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-articles-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المقالات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -181,7 +182,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Views Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30" data-testid="card-views-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-views-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المشاهدات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -205,7 +206,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Reactions Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30" data-testid="card-reactions-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-reactions-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي التفاعلات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-green/30">
@@ -229,7 +230,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Comments Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-violet-950/30" data-testid="card-comments-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-card" data-testid="card-comments-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي التعليقات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-purple/30">
@@ -259,7 +260,7 @@ export default function StaffProductivity() {
           <SectionHeader title="حائط التقدير" color="bg-yellow-500" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* الأبرز - Most Prominent */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 border-yellow-200 dark:border-yellow-800" data-testid="card-top-performers">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-card dark:to-card border-yellow-200 dark:border-border" data-testid="card-top-performers">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <div className="p-2 rounded-full bg-yellow-500/20">
@@ -291,7 +292,7 @@ export default function StaffProductivity() {
                         return (
                           <div
                             key={member.userId}
-                            className="flex items-center gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-yellow-200/50 dark:border-yellow-700/30"
+                            className="flex items-center gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-yellow-200/50 dark:border-border"
                             data-testid={`top-performer-${index}`}
                           >
                             <div className={`p-2 rounded-full ${medals[index]?.bg}`}>
@@ -328,7 +329,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* الأكثر نشاطاً - Most Active */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 border-orange-200 dark:border-orange-800" data-testid="card-most-active">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-orange-50 to-red-50 dark:from-card dark:to-card border-orange-200 dark:border-border" data-testid="card-most-active">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <div className="p-2 rounded-full bg-orange-500/20">
@@ -359,7 +360,7 @@ export default function StaffProductivity() {
                         return (
                           <div
                             key={member.userId}
-                            className="flex items-center gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-orange-200/50 dark:border-orange-700/30"
+                            className="flex items-center gap-3 p-3 rounded-lg bg-white/60 dark:bg-black/20 border border-orange-200/50 dark:border-border"
                             data-testid={`most-active-${index}`}
                           >
                             <div className={`p-2 rounded-full ${flames[index]?.bg}`}>
@@ -483,7 +484,7 @@ export default function StaffProductivity() {
         {/* Score Formula Info */}
         <div className="space-y-3">
           <SectionHeader title="معادلة الحساب" color="bg-slate-500" />
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-md bg-accent-blue/30">

@@ -218,7 +218,7 @@ export default function AutoImageSettingsPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -234,7 +234,7 @@ export default function AutoImageSettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -250,7 +250,7 @@ export default function AutoImageSettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30">
+          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -267,9 +267,9 @@ export default function AutoImageSettingsPage() {
           </Card>
 
           <Card className={`hover-elevate active-elevate-2 transition-all ${
-            settings.enabled 
-              ? 'bg-green-50 dark:bg-green-950/30' 
-              : 'bg-gray-50 dark:bg-gray-950/30'
+            settings.enabled
+              ? 'bg-green-50 dark:bg-card'
+              : 'bg-gray-50 dark:bg-card'
           }`}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -301,7 +301,7 @@ export default function AutoImageSettingsPage() {
 
         {/* Usage Progress */}
         {settings.maxMonthlyGenerations && (
-          <Card className="hover-elevate transition-all bg-gradient-to-l from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30">
+          <Card className="hover-elevate transition-all bg-gradient-to-l from-purple-50 to-blue-50 dark:from-card dark:to-card">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">استخدام الشهر الحالي</span>
@@ -326,7 +326,7 @@ export default function AutoImageSettingsPage() {
         )}
 
         {/* Main Settings */}
-        <Card className="hover-elevate transition-all bg-violet-50 dark:bg-violet-950/30">
+        <Card className="hover-elevate transition-all bg-violet-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="الإعدادات الرئيسية" color="bg-violet-500" />
             
@@ -451,7 +451,7 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Article Types Settings */}
-        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-blue-950/30">
+        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="أنواع المقالات" color="bg-blue-500" />
             <p className="text-sm text-muted-foreground mb-4">
@@ -465,7 +465,7 @@ export default function AutoImageSettingsPage() {
                   className={`
                     p-4 rounded-lg border-2 cursor-pointer transition-all hover-elevate
                     ${settings.articleTypes.includes(type.value)
-                      ? "border-blue-500 bg-blue-100 dark:bg-blue-900/50"
+                      ? "border-blue-500 bg-blue-100 dark:bg-muted/60"
                       : "border-muted bg-white/50 dark:bg-black/20 hover:border-blue-300"}
                   `}
                   onClick={() => toggleArticleType(type.value)}
@@ -493,7 +493,7 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Skip Categories Settings */}
-        <Card className="hover-elevate transition-all bg-orange-50 dark:bg-orange-950/30">
+        <Card className="hover-elevate transition-all bg-orange-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="الفئات المستثناة" color="bg-orange-500" />
             <p className="text-sm text-muted-foreground mb-4">
@@ -558,7 +558,7 @@ export default function AutoImageSettingsPage() {
         </Card>
 
         {/* Advanced Settings */}
-        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-slate-950/30">
+        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-card">
           <CardContent className="p-6">
             <SectionHeader title="إعدادات متقدمة" color="bg-slate-500" />
             

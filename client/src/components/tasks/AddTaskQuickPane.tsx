@@ -34,6 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { apiUrl } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { InsertTask } from "@shared/schema";
 
@@ -125,7 +126,7 @@ export default function AddTaskQuickPane({
   const { data: usersRaw } = useQuery<User[]>({
     queryKey: ["/api/users"],
     queryFn: async () => {
-      const res = await fetch("/api/users", { credentials: "include" });
+      const res = await fetch(apiUrl("/api/users"), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch users");
       return await res.json();
     },
@@ -330,7 +331,7 @@ export default function AddTaskQuickPane({
                   className="space-y-3 mt-3"
                 >
                   {creatingSubtaskFor && (
-                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-muted/40 rounded-lg">
                       <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
                         إنشاء مهمة فرعية
                       </p>

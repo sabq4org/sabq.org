@@ -139,7 +139,7 @@ export default function RecommendationAnalytics() {
           <>
             {/* Overview Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30" data-testid="card-total-recommendations">
+              <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-total-recommendations">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     إجمالي التوصيات
@@ -158,7 +158,7 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30" data-testid="card-unique-users">
+              <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-unique-users">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     مستخدمون نشطون
@@ -177,7 +177,7 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30" data-testid="card-view-rate">
+              <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-view-rate">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     معدل المشاهدة
@@ -196,7 +196,7 @@ export default function RecommendationAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30" data-testid="card-ctr">
+              <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-ctr">
                 <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
                     نسبة النقر (CTR)

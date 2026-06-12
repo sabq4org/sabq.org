@@ -212,7 +212,7 @@ export default function PaymentsDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30" data-testid="card-today-revenue">
+        <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-today-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إيرادات اليوم</CardTitle>
             <div className="p-2 rounded-md bg-green-500/20">
@@ -226,7 +226,7 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30" data-testid="card-month-revenue">
+        <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-month-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إيرادات الشهر</CardTitle>
             <div className="p-2 rounded-md bg-blue-500/20">
@@ -250,7 +250,7 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30" data-testid="card-success-rate">
+        <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card" data-testid="card-success-rate">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">نسبة النجاح</CardTitle>
             <div className="p-2 rounded-md bg-purple-500/20">
@@ -267,7 +267,7 @@ export default function PaymentsDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30" data-testid="card-lifetime-revenue">
+        <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-lifetime-revenue">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي الإيرادات</CardTitle>
             <div className="p-2 rounded-md bg-amber-500/20">
@@ -553,7 +553,7 @@ export default function PaymentsDashboard() {
                     {failedData.map((tx) => (
                       <div 
                         key={tx.id} 
-                        className="flex items-center justify-between p-3 rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-800"
+                        className="flex items-center justify-between p-3 rounded-lg border border-yellow-200 bg-yellow-50 dark:bg-muted/40 dark:border-border"
                         data-testid={`failed-row-${tx.id}`}
                       >
                         <div className="flex items-center gap-3">
@@ -607,7 +607,7 @@ export default function PaymentsDashboard() {
                     {alertsData.map((alert) => (
                       <div 
                         key={alert.id} 
-                        className={`p-4 rounded-lg border ${!alert.isRead ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : ""}`}
+                        className={`p-4 rounded-lg border ${!alert.isRead ? "bg-blue-50 dark:bg-muted/60 border-blue-200 dark:border-border" : ""}`}
                         data-testid={`alert-row-${alert.id}`}
                       >
                         <div className="flex items-start justify-between gap-2">
