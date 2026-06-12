@@ -17,15 +17,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,8 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 import java.time.LocalDate
@@ -48,14 +50,21 @@ import java.util.Locale
  * بطاقة اللاعب الشاملة — تُفتح بالضغط على أي لاعب في قسم المونديال
  * (قائمة المنتخب، السباقات، التشكيلات، التقييمات، الأحداث، شريط الأخضر).
  * مطابقة لـiOS WCPlayerSheet وويب PlayerCardDialog، بثيم الملعب الليلي.
+ * ModalBottomSheet بكامل الارتفاع — نفس عرض sheet في تطبيق iOS بلا هوامش مهدرة.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerCardDialog(card: WcPlayerCard?, loading: Boolean, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WcColors.stadiumMid,
+        dragHandle = { WcSheetHandle() },
+    ) {
         ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
             Column(
-                modifier = Modifier.fillMaxWidth(0.92f).clip(RoundedCornerShape(24.dp)).background(WcColors.stadiumMid)
-                    .border(1.dp, WcColors.cardStroke, RoundedCornerShape(24.dp)).padding(18.dp).height(600.dp),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.96f)
+                    .padding(horizontal = 18.dp).padding(bottom = 18.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("بطاقة اللاعب", color = WcColors.onDark, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -81,6 +90,15 @@ fun PlayerCardDialog(card: WcPlayerCard?, loading: Boolean, onDismiss: () -> Uni
             }
         }
     }
+}
+
+/** مقبض سحب أبيض خافت على الثيم الداكن. */
+@Composable
+fun WcSheetHandle() {
+    Box(
+        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 40.dp, height = 4.dp)
+            .clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f)),
+    )
 }
 
 // ---------- الهوية ----------

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -39,8 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 
 // ---------- سباقات البطولة (هدافون/صنّاع/بطاقات) ----------
@@ -232,14 +231,21 @@ private fun TeamTile(team: WcTeam, onClick: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -> Unit, onOpenPlayer: (Int) -> Unit) {
     val sections = listOf("Goalkeeper" to "حراسة المرمى", "Defender" to "الدفاع", "Midfielder" to "الوسط", "Attacker" to "الهجوم")
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // ModalBottomSheet بكامل الارتفاع — نفس عرض sheet في تطبيق iOS بلا هوامش مهدرة
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WcColors.stadiumMid,
+        dragHandle = { WcSheetHandle() },
+    ) {
         ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
             Column(
-                modifier = Modifier.fillMaxWidth(0.92f).clip(RoundedCornerShape(24.dp)).background(WcColors.stadiumMid)
-                    .border(1.dp, WcColors.cardStroke, RoundedCornerShape(24.dp)).padding(18.dp).height(560.dp),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.96f)
+                    .padding(horizontal = 18.dp).padding(bottom = 18.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     WcTeamLogo(team, size = 34)

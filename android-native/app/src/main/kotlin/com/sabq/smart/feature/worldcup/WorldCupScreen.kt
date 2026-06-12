@@ -129,13 +129,14 @@ fun WorldCupScreen(
 private fun HeroSection(overview: WcOverview?, isLoading: Boolean, onOpenMatch: (Int) -> Unit) {
     val motd = overview?.matchOfTheDay
     val liveCount = overview?.live?.size ?: 0
+    // هامش الصفحة 12 وهامش داخلي 10 فقط — حاوية داخل حاوية تأكل العرض
     Box(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(28.dp))
             .background(
                 Brush.linearGradient(listOf(WcColors.stadiumTop, WcColors.stadiumBottom))
             )
-            .padding(horizontal = 18.dp, vertical = 18.dp),
+            .padding(horizontal = 10.dp, vertical = 16.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth()) {
             // ترويسة
@@ -174,7 +175,7 @@ private fun MatchCard(motd: WcMatchOfDay, onOpenMatch: (Int) -> Unit) {
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
             .background(Color.White.copy(alpha = 0.06f))
             .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
-            .padding(20.dp),
+            .padding(horizontal = 14.dp, vertical = 18.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             val label = if (f.status.live) "تجري الآن"
