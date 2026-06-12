@@ -326,7 +326,7 @@ function Dashboard() {
         <DashboardAnnouncementBanner deferLoading={!initialLoadComplete} />
 
         {/* Welcome Section with Greeting */}
-        <Card className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 dark:from-card dark:via-card dark:to-card border-primary/20" data-testid="card-welcome">
+        <Card className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 dark:from-card dark:via-card dark:to-card border-primary/20 dark:border-border" data-testid="card-welcome">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1 space-y-2">
@@ -463,7 +463,7 @@ function Dashboard() {
             {/* Muqtarab Review Alert — يظهر فقط عند وجود مواضيع بانتظار المراجعة */}
             {canReviewMuqtarab && muqtarabPendingCount > 0 && (
               <Link href="/dashboard/muqtarab/review" className="block" data-testid="link-muqtarab-review-alert">
-                <Card className="h-full hover-elevate active-elevate-2 transition-all border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-card ring-1 ring-amber-200 dark:ring-amber-800/40">
+                <Card className="h-full hover-elevate active-elevate-2 transition-all border-amber-300 dark:border-border bg-amber-50 dark:bg-card ring-1 ring-amber-200 dark:ring-transparent">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-amber-800 dark:text-amber-300">مراجعة مُقترب</CardTitle>
                     <div className="relative p-2 rounded-md bg-amber-200/60 dark:bg-amber-800/40">
@@ -1204,7 +1204,7 @@ function UrgentReminderBanner() {
 
   return (
     <div 
-      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-card dark:via-card dark:to-card border-r-4 border-r-blue-400 rounded-lg p-4 shadow-sm"
+      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-card dark:via-card dark:to-card border-r-4 border-r-blue-400 dark:border-r-border rounded-lg p-4 shadow-sm"
       data-testid="banner-urgent-reminder"
     >
       <div className="flex items-start gap-4">
