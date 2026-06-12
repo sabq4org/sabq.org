@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ChevronLeft, MapPin, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +9,50 @@ import {
   SAUDI_TEAM_ID,
   type WcFixture,
   type WcOverview,
+  type WcSquad,
 } from "./wcTypes";
 
 interface SaudiSpotlightProps {
   saudi: WcOverview["saudi"] | undefined;
   onOpenMatch: (fixtureId: number) => void;
+  onOpenPlayer: (playerId: number) => void;
+}
+
+/** شريط لاعبي الأخضر — كل لاعب يفتح بطاقته الشاملة */
+function SaudiSquadStrip({ onOpenPlayer }: { onOpenPlayer: (playerId: number) => void }) {
+  const { data: squad } = useQuery<WcSquad>({
+    queryKey: [`/api/world-cup/squad/${SAUDI_TEAM_ID}`],
+    staleTime: 60 * 60 * 1000,
+  });
+  const players = Array.isArray(squad?.players) ? squad.players : [];
+  if (players.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold text-emerald-100/80">تشكيلة الأخضر — اضغط على اللاعب لملفه الكامل</p>
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {players.map((player) => (
+          <button
+            key={player.id || `${player.name}-${player.number}`}
+            type="button"
+            onClick={() => player.id > 0 && onOpenPlayer(player.id)}
+            disabled={player.id <= 0}
+            className="flex flex-col items-center gap-1 w-16 shrink-0 disabled:cursor-default group"
+            data-testid={`wc-saudi-player-${player.id}`}
+          >
+            <span className="h-12 w-12 rounded-full overflow-hidden bg-white/90 ring-2 ring-white/20 group-hover:ring-emerald-300/70 transition-all">
+              {player.photo && (
+                <img src={player.photo} alt={player.name} className="h-full w-full object-cover" loading="lazy" />
+              )}
+            </span>
+            <span className="text-[9px] text-emerald-50/90 text-center leading-tight line-clamp-2 w-full">
+              {player.name}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function SaudiFixtureRow({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id: number) => void }) {
@@ -53,7 +93,7 @@ function SaudiFixtureRow({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id:
   );
 }
 
-export function SaudiSpotlight({ saudi, onOpenMatch }: SaudiSpotlightProps) {
+export function SaudiSpotlight({ saudi, onOpenMatch, onOpenPlayer }: SaudiSpotlightProps) {
   if (!saudi || saudi.fixtures.length === 0) return null;
 
   const saudiRow = saudi.group?.rows.find((row) => row.team.id === SAUDI_TEAM_ID);
@@ -98,6 +138,7 @@ export function SaudiSpotlight({ saudi, onOpenMatch }: SaudiSpotlightProps) {
                   <SaudiFixtureRow key={fixture.id} fixture={fixture} onOpen={onOpenMatch} />
                 ))}
               </div>
+              <SaudiSquadStrip onOpenPlayer={onOpenPlayer} />
             </div>
 
             {saudi.group && (

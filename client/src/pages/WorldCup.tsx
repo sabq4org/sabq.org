@@ -8,6 +8,7 @@ import { HeroSection } from "@/components/worldcup/HeroSection";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { MatchesSection } from "@/components/worldcup/MatchesSection";
 import { NewsSection } from "@/components/worldcup/NewsSection";
+import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
 import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
@@ -17,6 +18,8 @@ import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worl
 export default function WorldCup() {
   const { user } = useAuth();
   const [openFixtureId, setOpenFixtureId] = useState<number | null>(null);
+  // بطاقة اللاعب تعلو أي نافذة مفتوحة (قائمة منتخب / مركز مباراة) دون إغلاقها
+  const [openPlayerId, setOpenPlayerId] = useState<number | null>(null);
 
   useEffect(() => {
     document.title = "مونديال 2026 — تغطية حية لكأس العالم | سبق";
@@ -66,19 +69,29 @@ export default function WorldCup() {
 
       <main className="flex-1">
         <HeroSection overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
-        <SaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
+        <SaudiSpotlight
+          saudi={overview?.saudi}
+          onOpenMatch={setOpenFixtureId}
+          onOpenPlayer={setOpenPlayerId}
+        />
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
         <ScorersSection
           scorers={scorers}
           isLoading={scorersLoading}
           tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
+          onOpenPlayer={setOpenPlayerId}
         />
-        <TeamsSection />
+        <TeamsSection onOpenPlayer={setOpenPlayerId} />
         <NewsSection />
       </main>
 
-      <MatchCenterDialog fixtureId={openFixtureId} onClose={() => setOpenFixtureId(null)} />
+      <MatchCenterDialog
+        fixtureId={openFixtureId}
+        onClose={() => setOpenFixtureId(null)}
+        onOpenPlayer={setOpenPlayerId}
+      />
+      <PlayerCardDialog playerId={openPlayerId} onClose={() => setOpenPlayerId(null)} />
       <Footer />
     </div>
   );

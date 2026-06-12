@@ -16,7 +16,15 @@ const POSITION_SECTIONS = [
   { en: "Attacker", label: "الهجوم" },
 ];
 
-function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () => void }) {
+function TeamSquadDialog({
+  team,
+  onClose,
+  onOpenPlayer,
+}: {
+  team: WcTeam | null;
+  onClose: () => void;
+  onOpenPlayer: (playerId: number) => void;
+}) {
   const { data: squad, isLoading } = useQuery<WcSquad>({
     queryKey: [`/api/world-cup/squad/${team?.id}`],
     enabled: team != null,
@@ -73,9 +81,13 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {players.map((player) => (
-                        <div
+                        <button
                           key={player.id || `${player.name}-${player.number}`}
-                          className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-1.5"
+                          type="button"
+                          onClick={() => player.id > 0 && onOpenPlayer(player.id)}
+                          disabled={player.id <= 0}
+                          className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-1.5 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+                          data-testid={`wc-player-${player.id}`}
                         >
                           <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
                             {player.photo && (
@@ -91,7 +103,7 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
                           <span className="text-sm font-black text-muted-foreground tabular-nums shrink-0">
                             {player.number ?? "—"}
                           </span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -105,7 +117,7 @@ function TeamSquadDialog({ team, onClose }: { team: WcTeam | null; onClose: () =
   );
 }
 
-export function TeamsSection() {
+export function TeamsSection({ onOpenPlayer }: { onOpenPlayer: (playerId: number) => void }) {
   const [openTeam, setOpenTeam] = useState<WcTeam | null>(null);
   const { data, isLoading } = useQuery<{ teams: WcTeam[] }>({
     queryKey: ["/api/world-cup/teams"],
@@ -166,7 +178,7 @@ export function TeamsSection() {
         )}
       </div>
 
-      <TeamSquadDialog team={openTeam} onClose={() => setOpenTeam(null)} />
+      <TeamSquadDialog team={openTeam} onClose={() => setOpenTeam(null)} onOpenPlayer={onOpenPlayer} />
     </section>
   );
 }
