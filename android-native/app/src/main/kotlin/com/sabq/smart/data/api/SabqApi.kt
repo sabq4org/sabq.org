@@ -506,4 +506,7 @@ interface SabqApi {
 
     @GET("https://api.sabq.org/api/world-cup/match/{id}")
     suspend fun getWorldCupMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcMatchDetail
+
+    @GET("https://api.sabq.org/api/world-cup/player/{id}")
+    suspend fun getWorldCupPlayer(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerCard
 }

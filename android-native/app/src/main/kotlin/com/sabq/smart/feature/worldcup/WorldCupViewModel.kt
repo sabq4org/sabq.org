@@ -41,6 +41,12 @@ class WorldCupViewModel @Inject constructor(
         val selectedTeam: WcTeam? = null,
         val squad: WcSquad? = null,
         val squadLoading: Boolean = false,
+        // شريط تشكيلة الأخضر في «مشوار الأخضر»
+        val saudiSquad: List<WcSquadPlayer> = emptyList(),
+        // بطاقة اللاعب الشاملة — تعلو أي حوار مفتوح
+        val selectedPlayerId: Int? = null,
+        val playerCard: WcPlayerCard? = null,
+        val playerLoading: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -55,6 +61,8 @@ class WorldCupViewModel @Inject constructor(
             val standings = async { runCatching { repo.standings() }.getOrDefault(emptyList()) }
             val scorers = async { runCatching { repo.scorers() }.getOrDefault(emptyList()) }
             val teams = async { runCatching { repo.teams() }.getOrDefault(emptyList()) }
+            // تشكيلة الأخضر لشريط «مشوار الأخضر» — مكاشة على الخادم فلا تكلفة تذكر
+            val saudiSquad = async { runCatching { repo.squad(WC_SAUDI_TEAM_ID).players }.getOrDefault(emptyList()) }
             _state.update {
                 it.copy(
                     overview = overview.await(), overviewLoading = false,
@@ -62,6 +70,7 @@ class WorldCupViewModel @Inject constructor(
                     standings = standings.await(), standingsLoading = false,
                     scorers = scorers.await(), scorersLoading = false,
                     teams = teams.await(), teamsLoading = false,
+                    saudiSquad = saudiSquad.await(),
                     isRefreshing = false,
                 )
             }
@@ -101,5 +110,19 @@ class WorldCupViewModel @Inject constructor(
 
     fun closeSquad() {
         _state.update { it.copy(selectedTeam = null, squad = null, squadLoading = false) }
+    }
+
+    /** يفتح بطاقة اللاعب الشاملة — يتجاهل المعرّفات غير الصالحة (تجميع الأحداث قبل لوحات المزود) */
+    fun openPlayer(playerId: Int) {
+        if (playerId <= 0) return
+        _state.update { it.copy(selectedPlayerId = playerId, playerCard = null, playerLoading = true) }
+        viewModelScope.launch {
+            val r = runCatching { repo.player(playerId) }.getOrNull()
+            _state.update { it.copy(playerCard = r, playerLoading = false) }
+        }
+    }
+
+    fun closePlayer() {
+        _state.update { it.copy(selectedPlayerId = null, playerCard = null, playerLoading = false) }
     }
 }

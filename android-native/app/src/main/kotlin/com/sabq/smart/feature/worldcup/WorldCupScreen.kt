@@ -94,7 +94,7 @@ fun WorldCupScreen(
                     item { HeroSection(state.overview, state.overviewLoading, onOpenMatch) }
 
                     state.overview?.saudi?.takeIf { it.fixtures.isNotEmpty() }?.let { saudi ->
-                        item { SaudiSpotlight(saudi, onOpenMatch) }
+                        item { SaudiSpotlight(saudi, state.saudiSquad, onOpenMatch, viewModel::openPlayer) }
                     }
 
                     item { MatchesSection(state.fixtures, state.fixturesLoading, onOpenMatch) }
@@ -109,7 +109,15 @@ fun WorldCupScreen(
 
             // حوار قائمة المنتخب
             state.selectedTeam?.let { team ->
-                SquadDialog(team = team, squad = state.squad, loading = state.squadLoading, onDismiss = viewModel::closeSquad)
+                SquadDialog(
+                    team = team, squad = state.squad, loading = state.squadLoading,
+                    onDismiss = viewModel::closeSquad, onOpenPlayer = viewModel::openPlayer,
+                )
+            }
+
+            // بطاقة اللاعب — تعلو قائمة المنتخب إن كانت مفتوحة
+            if (state.selectedPlayerId != null) {
+                PlayerCardDialog(card = state.playerCard, loading = state.playerLoading, onDismiss = viewModel::closePlayer)
             }
         }
     }
@@ -245,7 +253,12 @@ private fun Pill(text: String, bg: Color, fg: Color) {
 // ---------- مشوار الأخضر ----------
 
 @Composable
-private fun SaudiSpotlight(saudi: WcSaudi, onOpenMatch: (Int) -> Unit) {
+private fun SaudiSpotlight(
+    saudi: WcSaudi,
+    saudiSquad: List<WcSquadPlayer>,
+    onOpenMatch: (Int) -> Unit,
+    onOpenPlayer: (Int) -> Unit,
+) {
     Column(
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
@@ -267,6 +280,7 @@ private fun SaudiSpotlight(saudi: WcSaudi, onOpenMatch: (Int) -> Unit) {
             }
         }
         saudi.fixtures.forEach { f -> SaudiRow(f, onOpenMatch) }
+        SaudiSquadStrip(saudiSquad, onOpenPlayer)
     }
 }
 

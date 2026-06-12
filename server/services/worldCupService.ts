@@ -465,6 +465,8 @@ const COUNTRY_AR: Record<string, string> = {
   Haiti: "هايتي",
   Curacao: "كوراساو",
   "New Zealand": "نيوزيلندا",
+  Guyana: "غويانا",
+  "French Guiana": "غويانا الفرنسية",
 };
 
 const localizeCompetition = (name: string): string => COMPETITION_AR[name] ?? name;

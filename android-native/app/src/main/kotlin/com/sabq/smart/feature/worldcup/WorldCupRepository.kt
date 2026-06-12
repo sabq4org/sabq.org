@@ -21,4 +21,5 @@ class WorldCupRepository @Inject constructor(
     suspend fun teams(): List<WcTeam> = api.getWorldCupTeams().teams
     suspend fun squad(teamId: Int): WcSquad = api.getWorldCupSquad(teamId)
     suspend fun match(fixtureId: Int): WcMatchDetail = api.getWorldCupMatch(fixtureId)
+    suspend fun player(playerId: Int): WcPlayerCard = api.getWorldCupPlayer(playerId)
 }
