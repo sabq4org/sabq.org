@@ -226,6 +226,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 // === LAZY IMPORTS (Dashboard Tools) ===
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
+const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartRadar")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
 const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
 const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
@@ -713,6 +714,9 @@ function Router() {
         
         {/* World Days Management */}
         <Route path="/dashboard/world-days">{() => <LazyRoute component={WorldDaysManagement} />}</Route>
+
+        {/* Smart Radar — رادار سبق الذكي */}
+        <Route path="/dashboard/radar">{() => <LazyRoute component={SmartRadar} />}</Route>
         
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
         <Route path="/dashboard/analytics">{() => <LazyRoute component={AnalyticsDashboard} />}</Route>

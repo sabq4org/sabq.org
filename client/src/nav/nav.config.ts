@@ -59,6 +59,7 @@ import {
   Trophy,
   Moon,
   Inbox,
+  Radar,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -224,6 +225,15 @@ export const navConfig: NavItem[] = [
         icon: PlusCircle,
         roles: ["admin", "editor", "author", "reporter"],
         permissions: ["articles.create"], // Users with articles.create permission can access
+      },
+      {
+        id: "smart_radar",
+        labelKey: "nav.smart_radar",
+        labelAr: "رادار سبق الذكي",
+        path: "/dashboard/radar",
+        icon: Radar,
+        roles: ["admin", "editor"],
+        permissions: ["articles.create"], // أداة تحريرية — نفس صلاحية إنشاء المقالات
       },
       {
         id: "push_notifications",
