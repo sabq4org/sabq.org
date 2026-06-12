@@ -67,7 +67,14 @@ class WorldCupMatchViewModel @Inject constructor(
 ) : ViewModel() {
     private val fixtureId: Int = savedStateHandle.get<String>("id")?.toIntOrNull() ?: 0
 
-    data class UiState(val detail: WcMatchDetail? = null, val loading: Boolean = true)
+    data class UiState(
+        val detail: WcMatchDetail? = null,
+        val loading: Boolean = true,
+        // بطاقة اللاعب الشاملة — تعلو مركز المباراة
+        val selectedPlayerId: Int? = null,
+        val playerCard: WcPlayerCard? = null,
+        val playerLoading: Boolean = false,
+    )
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -79,6 +86,20 @@ class WorldCupMatchViewModel @Inject constructor(
             val d = runCatching { repo.match(fixtureId) }.getOrNull()
             _state.update { it.copy(detail = d, loading = false) }
         }
+    }
+
+    /** يفتح بطاقة اللاعب الشاملة — يتجاهل المعرّفات غير الصالحة */
+    fun openPlayer(playerId: Int) {
+        if (playerId <= 0) return
+        _state.update { it.copy(selectedPlayerId = playerId, playerCard = null, playerLoading = true) }
+        viewModelScope.launch {
+            val r = runCatching { repo.player(playerId) }.getOrNull()
+            _state.update { it.copy(playerCard = r, playerLoading = false) }
+        }
+    }
+
+    fun closePlayer() {
+        _state.update { it.copy(selectedPlayerId = null, playerCard = null, playerLoading = false) }
     }
 }
 
@@ -104,14 +125,19 @@ fun WorldCupMatchCenterScreen(onBack: () -> Unit, viewModel: WorldCupMatchViewMo
             when {
                 state.loading -> WcLoading()
                 detail == null -> WcEmptyText("تعذر جلب تفاصيل المباراة")
-                else -> MatchContent(detail)
+                else -> MatchContent(detail, viewModel::openPlayer)
             }
+        }
+
+        // بطاقة اللاعب — تعلو مركز المباراة
+        if (state.selectedPlayerId != null) {
+            PlayerCardDialog(card = state.playerCard, loading = state.playerLoading, onDismiss = viewModel::closePlayer)
         }
     }
 }
 
 @Composable
-private fun MatchContent(detail: WcMatchDetail) {
+private fun MatchContent(detail: WcMatchDetail, onOpenPlayer: (Int) -> Unit) {
     val tabs = buildList {
         add("events" to "الأحداث"); add("lineups" to "التشكيلات"); add("stats" to "الإحصائيات")
         if (detail.ratings.isNotEmpty()) add("ratings" to "التقييمات")
@@ -137,10 +163,10 @@ private fun MatchContent(detail: WcMatchDetail) {
         }
         item {
             when (tab) {
-                "events" -> EventsTab(detail)
-                "lineups" -> LineupsTab(detail)
+                "events" -> EventsTab(detail, onOpenPlayer)
+                "lineups" -> LineupsTab(detail, onOpenPlayer)
                 "stats" -> StatsTab(detail)
-                "ratings" -> RatingsTab(detail)
+                "ratings" -> RatingsTab(detail, onOpenPlayer)
                 else -> PredictionTab(detail)
             }
         }
@@ -175,15 +201,18 @@ private fun HeadTeam(team: WcTeam, modifier: Modifier = Modifier) {
 // ---------- الأحداث ----------
 
 @Composable
-private fun EventsTab(detail: WcMatchDetail) {
+private fun EventsTab(detail: WcMatchDetail, onOpenPlayer: (Int) -> Unit) {
     if (detail.events.isEmpty()) { WcEmptyText("الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة"); return }
     val sorted = detail.events.sortedWith(compareByDescending<WcMatchEvent> { it.minute }.thenByDescending { it.extraMinute ?: 0 })
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         sorted.forEach { ev ->
             val team = if (ev.teamId == detail.fixture.home.id) detail.fixture.home else detail.fixture.away
+            val playerId = ev.playerId ?: 0
             Row(
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.chipFill).padding(horizontal = 12.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.chipFill)
+                    .clickable(enabled = playerId > 0) { onOpenPlayer(playerId) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
                 LtrText("${ev.minute}'${ev.extraMinute?.let { "+$it" } ?: ""}", WcColors.onDarkDim, 12, FontWeight.Bold)
                 EventIcon(ev.type)
@@ -219,15 +248,15 @@ private fun EventIcon(type: String) {
 // ---------- التشكيلات (ملعب 2D) ----------
 
 @Composable
-private fun LineupsTab(detail: WcMatchDetail) {
+private fun LineupsTab(detail: WcMatchDetail, onOpenPlayer: (Int) -> Unit) {
     if (detail.lineups.isEmpty()) { WcEmptyText("التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة"); return }
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        detail.lineups.forEach { Pitch(it) }
+        detail.lineups.forEach { Pitch(it, onOpenPlayer) }
     }
 }
 
 @Composable
-private fun Pitch(lineup: WcLineup) {
+private fun Pitch(lineup: WcLineup, onOpenPlayer: (Int) -> Unit) {
     val rows = lineup.startXI.groupBy { (it.grid ?: "0:0").split(":").firstOrNull()?.toIntOrNull() ?: 0 }
         .filterKeys { it > 0 }.toSortedMap()
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -249,7 +278,7 @@ private fun Pitch(lineup: WcLineup) {
                     // أعلى = الهجوم (أعلى صف رقمًا)، أسفل = الحارس (صف 1)
                     rows.keys.sortedDescending().forEach { r ->
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                            rows[r]!!.sortedBy { (it.grid ?: "0:0").split(":").getOrNull(1)?.toIntOrNull() ?: 0 }.forEach { p -> PlayerDot(p) }
+                            rows[r]!!.sortedBy { (it.grid ?: "0:0").split(":").getOrNull(1)?.toIntOrNull() ?: 0 }.forEach { p -> PlayerDot(p, onOpenPlayer) }
                         }
                     }
                 }
@@ -267,8 +296,11 @@ private fun LtrTextBg(text: String) {
 }
 
 @Composable
-private fun PlayerDot(p: WcLineupPlayer) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.width(56.dp)) {
+private fun PlayerDot(p: WcLineupPlayer, onOpenPlayer: (Int) -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.width(56.dp).clip(RoundedCornerShape(8.dp)).clickable(enabled = p.id > 0) { onOpenPlayer(p.id) },
+    ) {
         Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
             Text(p.number?.toString() ?: "•", color = WcColors.pitchBottom, fontSize = 11.sp, fontWeight = FontWeight.Black)
         }
@@ -315,14 +347,16 @@ private fun ratingColor(r: Double): Color = when {
 }
 
 @Composable
-private fun RatingsTab(detail: WcMatchDetail) {
+private fun RatingsTab(detail: WcMatchDetail, onOpenPlayer: (Int) -> Unit) {
     if (detail.ratings.isEmpty()) { WcEmptyText("تقييمات اللاعبين تظهر هنا بعد انطلاق المباراة"); return }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         detail.manOfTheMatch?.let { motm ->
             Row(
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.gold.copy(alpha = 0.12f))
-                    .border(1.dp, WcColors.gold.copy(alpha = 0.3f), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+                    .border(1.dp, WcColors.gold.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                    .clickable(enabled = motm.id > 0) { onOpenPlayer(motm.id) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Icon(Icons.Filled.WorkspacePremium, null, tint = WcColors.gold, modifier = Modifier.size(20.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -336,7 +370,9 @@ private fun RatingsTab(detail: WcMatchDetail) {
             val teamLogo = if (p.teamId == detail.fixture.home.id) detail.fixture.home.logo else detail.fixture.away.logo
             Row(
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.chipFill).padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.chipFill)
+                    .clickable(enabled = p.id > 0) { onOpenPlayer(p.id) }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 WcPlayerPhoto(p.photo, p.name, 32)
                 Column(modifier = Modifier.weight(1f)) {

@@ -111,6 +111,8 @@ data class WcOverview(
 @Serializable
 data class WcScorer(
     val rank: Int = 0,
+    /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+    val id: Int = 0,
     val name: String = "",
     val photo: String = "",
     val team: WcTeam = WcTeam(),
@@ -124,6 +126,8 @@ data class WcScorer(
 @Serializable
 data class WcLeader(
     val rank: Int = 0,
+    /** معرّف اللاعب عند المزود — يفتح بطاقة اللاعب؛ 0 = غير معروف */
+    val id: Int = 0,
     val name: String = "",
     val photo: String = "",
     val team: WcTeam = WcTeam(),
@@ -143,7 +147,9 @@ data class WcMatchEvent(
     val type: String = "",
     val label: String = "",
     val player: String = "",
+    val playerId: Int? = null,
     val assist: String? = null,
+    val assistId: Int? = null,
 )
 
 @Serializable
@@ -215,6 +221,82 @@ data class WcSquadPlayer(
 data class WcSquad(
     val team: WcTeam = WcTeam(),
     val players: List<WcSquadPlayer> = emptyList(),
+)
+
+// ---------- بطاقة اللاعب الشاملة (/world-cup/player/:id) ----------
+
+@Serializable
+data class WcPlayerCareerStop(
+    val teamId: Int = 0,
+    val team: String = "",
+    val logo: String = "",
+    val seasons: List<Int> = emptyList(),
+) {
+    /** [2019..2025] → "2019–2025"، وموسم واحد يُعرض مفردًا */
+    val seasonsLabel: String
+        get() {
+            val first = seasons.firstOrNull() ?: return ""
+            val last = seasons.last()
+            return if (first == last) "$first" else "$first–$last"
+        }
+}
+
+@Serializable
+data class WcPlayerTrophy(
+    val competition: String = "",
+    val country: String = "",
+    val season: String = "",
+    val place: String = "",
+    val winner: Boolean = false,
+)
+
+@Serializable
+data class WcPlayerTournamentStats(
+    val matches: Int = 0,
+    val lineups: Int = 0,
+    val minutes: Int = 0,
+    val rating: Double? = null,
+    val goals: Int = 0,
+    val assists: Int = 0,
+    val shots: Int = 0,
+    val shotsOn: Int = 0,
+    val passes: Int = 0,
+    val keyPasses: Int = 0,
+    val dribblesAttempts: Int = 0,
+    val dribblesSuccess: Int = 0,
+    val tackles: Int = 0,
+    val yellow: Int = 0,
+    val red: Int = 0,
+    val saves: Int = 0,
+    val conceded: Int = 0,
+    val penaltiesScored: Int = 0,
+    val penaltiesMissed: Int = 0,
+)
+
+@Serializable
+data class WcPlayerInjury(val reason: String = "")
+
+@Serializable
+data class WcPlayerCard(
+    val id: Int = 0,
+    val name: String = "",
+    /** الاسم الرسمي الكامل — null عندما لا يضيف شيئًا على الاسم المعروض */
+    val fullName: String? = null,
+    val photo: String = "",
+    val position: String = "",
+    val positionEn: String = "",
+    val number: Int? = null,
+    val age: Int? = null,
+    val birthDate: String? = null,
+    /** "الرياض، السعودية" — جاهز للعرض من الخادم */
+    val birthPlace: String? = null,
+    val height: Int? = null,
+    val weight: Int? = null,
+    val career: List<WcPlayerCareerStop> = emptyList(),
+    val trophies: List<WcPlayerTrophy> = emptyList(),
+    /** أرقام اللاعب التراكمية في مونديال 2026 — null قبل اعتماد المزود لها */
+    val stats: WcPlayerTournamentStats? = null,
+    val injury: WcPlayerInjury? = null,
 )
 
 // أغلفة الاستجابات

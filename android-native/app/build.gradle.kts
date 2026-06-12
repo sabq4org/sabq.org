@@ -29,8 +29,8 @@ android {
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 140
-        versionName = "10.0.9"
+        versionCode = 141
+        versionName = "10.1.0"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced

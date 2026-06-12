@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -39,8 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.sabq.smart.ui.theme.IbmPlexSansArabic
 
 // ---------- سباقات البطولة (هدافون/صنّاع/بطاقات) ----------
@@ -70,14 +69,14 @@ fun RacesSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel)
         }
         Box(Modifier.padding(horizontal = 16.dp)) {
             when (tab) {
-                "goals" -> GoalsRace(state.scorers, state.scorersLoading, tournamentStarted)
-                "assists" -> LeadersList(state.assists, if (tournamentStarted) pendingStats else "سباق صنّاع الأهداف ينطلق مع أول صافرة") { l ->
+                "goals" -> GoalsRace(state.scorers, state.scorersLoading, tournamentStarted, viewModel::openPlayer)
+                "assists" -> LeadersList(state.assists, if (tournamentStarted) pendingStats else "سباق صنّاع الأهداف ينطلق مع أول صافرة", viewModel::openPlayer) { l ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("${l.goals} أهداف", color = WcColors.onDarkDim, fontSize = 12.sp)
                         Text("${l.assists}", color = WcColors.onDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
                     }
                 }
-                else -> LeadersList(state.cards, if (tournamentStarted) "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" else "لا بطاقات بعد — وعسى ألا تكثر") { l ->
+                else -> LeadersList(state.cards, if (tournamentStarted) "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" else "لا بطاقات بعد — وعسى ألا تكثر", viewModel::openPlayer) { l ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         CardCount(l.yellow, WcColors.gold); CardCount(l.red, WcColors.liveRed)
                     }
@@ -88,7 +87,7 @@ fun RacesSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel)
 }
 
 @Composable
-private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean, tournamentStarted: Boolean) {
+private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean, tournamentStarted: Boolean, onOpenPlayer: (Int) -> Unit) {
     when {
         loading -> WcLoading()
         scorers.isEmpty() -> RaceEmpty(if (tournamentStarted) "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات" else "سباق الحذاء الذهبي ينطلق مع أول صافرة")
@@ -99,12 +98,12 @@ private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean, tournamentStart
             val rest = if (showPodium) scorers.drop(3) else scorers
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (showPodium) Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Box(Modifier.weight(1f)) { Podium(podium[1], 1) }
-                    Box(Modifier.weight(1f)) { Podium(podium[0], 0) }
-                    Box(Modifier.weight(1f)) { Podium(podium[2], 2) }
+                    Box(Modifier.weight(1f)) { Podium(podium[1], 1, onOpenPlayer) }
+                    Box(Modifier.weight(1f)) { Podium(podium[0], 0, onOpenPlayer) }
+                    Box(Modifier.weight(1f)) { Podium(podium[2], 2, onOpenPlayer) }
                 }
                 rest.forEach { s ->
-                    LeaderRow(s.rank, s.name, s.photo, s.team, s.minutes) {
+                    LeaderRow(s.rank, s.id, s.name, s.photo, s.team, s.minutes, onOpenPlayer) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("${s.assists} صناعة", color = WcColors.onDarkDim, fontSize = 12.sp)
                             Text("${s.goals}", color = WcColors.onDark, fontSize = 18.sp, fontWeight = FontWeight.Black)
@@ -117,11 +116,13 @@ private fun GoalsRace(scorers: List<WcScorer>, loading: Boolean, tournamentStart
 }
 
 @Composable
-private fun Podium(scorer: WcScorer, place: Int) {
+private fun Podium(scorer: WcScorer, place: Int, onOpenPlayer: (Int) -> Unit) {
     val ring = listOf(WcColors.gold, Color(0.75f, 0.75f, 0.75f), Color(0.7f, 0.4f, 0.15f))[place]
     val size = if (place == 0) 84 else 64
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = if (place == 0) 0.dp else 24.dp)) {
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .clickable(enabled = scorer.id > 0) { onOpenPlayer(scorer.id) }
+            .padding(top = if (place == 0) 0.dp else 24.dp)) {
         Box(contentAlignment = Alignment.BottomCenter) {
             Box(modifier = Modifier.size(size.dp).clip(CircleShape).border(4.dp, ring, CircleShape)) {
                 WcPlayerPhoto(scorer.photo, scorer.name, size)
@@ -142,19 +143,21 @@ private fun Podium(scorer: WcScorer, place: Int) {
 }
 
 @Composable
-private fun LeadersList(leaders: List<WcLeader>, empty: String, trailing: @Composable (WcLeader) -> Unit) {
+private fun LeadersList(leaders: List<WcLeader>, empty: String, onOpenPlayer: (Int) -> Unit, trailing: @Composable (WcLeader) -> Unit) {
     if (leaders.isEmpty()) RaceEmpty(empty)
     else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        leaders.forEach { l -> LeaderRow(l.rank, l.name, l.photo, l.team, l.minutes) { trailing(l) } }
+        leaders.forEach { l -> LeaderRow(l.rank, l.id, l.name, l.photo, l.team, l.minutes, onOpenPlayer) { trailing(l) } }
     }
 }
 
 @Composable
-private fun LeaderRow(rank: Int, name: String, photo: String, team: WcTeam, minutes: Int, trailing: @Composable () -> Unit) {
+private fun LeaderRow(rank: Int, playerId: Int, name: String, photo: String, team: WcTeam, minutes: Int, onOpenPlayer: (Int) -> Unit, trailing: @Composable () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.card)
-            .border(0.5.dp, WcColors.cardStroke, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+            .border(0.5.dp, WcColors.cardStroke, RoundedCornerShape(16.dp))
+            .clickable(enabled = playerId > 0) { onOpenPlayer(playerId) }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text("$rank", color = WcColors.onDarkDim, fontSize = 13.sp, modifier = Modifier.width(20.dp), textAlign = TextAlign.Center)
         WcPlayerPhoto(photo, name, 36)
@@ -228,14 +231,21 @@ private fun TeamTile(team: WcTeam, onClick: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -> Unit) {
+fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -> Unit, onOpenPlayer: (Int) -> Unit) {
     val sections = listOf("Goalkeeper" to "حراسة المرمى", "Defender" to "الدفاع", "Midfielder" to "الوسط", "Attacker" to "الهجوم")
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // ModalBottomSheet بكامل الارتفاع — نفس عرض sheet في تطبيق iOS بلا هوامش مهدرة
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = WcColors.stadiumMid,
+        dragHandle = { WcSheetHandle() },
+    ) {
         ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
             Column(
-                modifier = Modifier.fillMaxWidth(0.92f).clip(RoundedCornerShape(24.dp)).background(WcColors.stadiumMid)
-                    .border(1.dp, WcColors.cardStroke, RoundedCornerShape(24.dp)).padding(18.dp).height(560.dp),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.96f)
+                    .padding(horizontal = 18.dp).padding(bottom = 18.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     WcTeamLogo(team, size = 34)
@@ -252,7 +262,7 @@ fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -
                             if (players.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(label, color = WcColors.emerald, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    players.forEach { SquadPlayerRow(it) }
+                                    players.forEach { SquadPlayerRow(it, onOpenPlayer) }
                                 }
                             }
                         }
@@ -264,10 +274,12 @@ fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -
 }
 
 @Composable
-private fun SquadPlayerRow(p: WcSquadPlayer) {
+private fun SquadPlayerRow(p: WcSquadPlayer, onOpenPlayer: (Int) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.card).padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.card)
+            .clickable(enabled = p.id > 0) { onOpenPlayer(p.id) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         WcPlayerPhoto(p.photo, p.name, 36)
         Column(modifier = Modifier.weight(1f)) {
@@ -275,5 +287,6 @@ private fun SquadPlayerRow(p: WcSquadPlayer) {
             p.age?.let { Text("$it سنة", color = WcColors.onDarkDim, fontSize = 10.sp) }
         }
         Text(p.number?.toString() ?: "—", color = WcColors.onDarkDim, fontSize = 15.sp, fontWeight = FontWeight.Black)
+        Text("‹", color = WcColors.onDarkDim.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
