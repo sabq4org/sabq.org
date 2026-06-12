@@ -11,6 +11,8 @@ import {
   updateArticleCategorySuggestion,
   updateArticleNewsletterContent,
 } from '../services/smartCategoryClassifier';
+import { requireAnyPermission } from '../rbac';
+import { PERMISSION_CODES } from '@shared/rbac-constants';
 import { db } from '../db';
 import { articles } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -20,25 +22,21 @@ const router = Router();
 // Authentication middleware
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (!(req as any).user) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       success: false,
-      message: 'يجب تسجيل الدخول للوصول إلى هذه الخدمة' 
+      message: 'يجب تسجيل الدخول للوصول إلى هذه الخدمة'
     });
   }
   next();
 }
 
-// Check if user has editor/admin role
-function isEditorOrAdmin(req: Request, res: Response, next: NextFunction) {
-  const user = (req as any).user as any;
-  if (!user || !['editor', 'admin', 'chief_editor', 'correspondent', 'journalist'].includes(user.role)) {
-    return res.status(403).json({ 
-      success: false,
-      message: 'لا تملك صلاحية الوصول إلى هذه الخدمة' 
-    });
-  }
-  next();
-}
+// صلاحية تحريرية عبر RBAC — الحارس النصي القديم كان يفحص users.role فقط
+// ضد قائمة ثابتة فيرفض (403) حسابات صلاحياتها من user_roles (نص الدور
+// عندها reader أو system_admin أو reporter) رغم أنها مخوّلة فعلًا
+const isEditorOrAdmin = requireAnyPermission(
+  PERMISSION_CODES.ARTICLES_AI_GENERATE,
+  PERMISSION_CODES.ARTICLES_CREATE
+);
 
 // Request validation schemas
 const classifyRequestSchema = z.object({
