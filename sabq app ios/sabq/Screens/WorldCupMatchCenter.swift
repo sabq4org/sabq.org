@@ -11,6 +11,7 @@ struct WorldCupMatchCenter: View {
 
     @State private var detail: WCMatchDetail?
     @State private var loading = true
+    @State private var selectedPlayer: WCPlayerSelection?
 
     enum Tab: String, CaseIterable { case events = "الأحداث", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
     @State private var tab: Tab = .events
@@ -53,6 +54,10 @@ struct WorldCupMatchCenter: View {
             }
             .task { await load() }
             .refreshable { await load(force: true) }
+            .sheet(item: $selectedPlayer) { sel in
+                WCPlayerSheet(playerId: sel.id)
+                    .presentationDetents([.large])
+            }
         }
         .sabqRTL()
     }
@@ -119,11 +124,12 @@ struct WorldCupMatchCenter: View {
     }
 
     @ViewBuilder private func content(_ d: WCMatchDetail) -> some View {
+        let openPlayer: (Int?) -> Void = { selectedPlayer = WCPlayerSelection($0) }
         switch tab {
-        case .events: WCEventsTimeline(detail: d)
-        case .lineups: WCLineupsView(detail: d)
+        case .events: WCEventsTimeline(detail: d, onOpenPlayer: openPlayer)
+        case .lineups: WCLineupsView(detail: d, onOpenPlayer: openPlayer)
         case .stats: WCStatsView(detail: d)
-        case .ratings: WCRatingsView(detail: d)
+        case .ratings: WCRatingsView(detail: d, onOpenPlayer: openPlayer)
         case .prediction: WCPredictionView(detail: d)
         }
     }
@@ -133,6 +139,7 @@ struct WorldCupMatchCenter: View {
 
 struct WCEventsTimeline: View {
     let detail: WCMatchDetail
+    let onOpenPlayer: (Int?) -> Void
 
     var body: some View {
         if detail.events.isEmpty {
@@ -140,7 +147,8 @@ struct WCEventsTimeline: View {
         } else {
             VStack(spacing: 8) {
                 ForEach(sorted) { ev in
-                    row(ev)
+                    Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
+                        .buttonStyle(.plain)
                 }
             }
         }
@@ -193,6 +201,7 @@ struct WCEventsTimeline: View {
 
 struct WCLineupsView: View {
     let detail: WCMatchDetail
+    let onOpenPlayer: (Int?) -> Void
 
     var body: some View {
         if detail.lineups.isEmpty {
@@ -200,7 +209,7 @@ struct WCLineupsView: View {
         } else {
             VStack(spacing: 18) {
                 ForEach(detail.lineups) { lineup in
-                    WCPitch(lineup: lineup)
+                    WCPitch(lineup: lineup, onOpenPlayer: onOpenPlayer)
                 }
             }
         }
@@ -209,6 +218,7 @@ struct WCLineupsView: View {
 
 struct WCPitch: View {
     let lineup: WCLineup
+    let onOpenPlayer: (Int?) -> Void
 
     // صفوف اللاعبين من الشبكة "صف:عمود" (الصف 1 = الحارس)
     private var rows: [[WCLineupPlayer]] {
@@ -274,13 +284,16 @@ struct WCPitch: View {
     }
 
     private func playerDot(_ p: WCLineupPlayer) -> some View {
-        VStack(spacing: 2) {
-            Text(p.number.map { "\($0)" } ?? "•")
-                .font(.system(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
-                .frame(width: 28, height: 28).background(Circle().fill(.white))
-            Text(p.name).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
-                .lineLimit(1).frame(maxWidth: 56)
+        Button { onOpenPlayer(p.id) } label: {
+            VStack(spacing: 2) {
+                Text(p.number.map { "\($0)" } ?? "•")
+                    .font(.system(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
+                    .frame(width: 28, height: 28).background(Circle().fill(.white))
+                Text(p.name).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
+                    .lineLimit(1).frame(maxWidth: 56)
+            }
         }
+        .buttonStyle(.plain)
     }
 }
 
@@ -334,6 +347,7 @@ struct WCStatsView: View {
 
 struct WCRatingsView: View {
     let detail: WCMatchDetail
+    let onOpenPlayer: (Int?) -> Void
 
     var body: some View {
         if detail.ratings.isEmpty {
@@ -341,21 +355,25 @@ struct WCRatingsView: View {
         } else {
             VStack(spacing: 8) {
                 if let motm = detail.manOfTheMatch {
-                    HStack(spacing: 12) {
-                        Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("رجل المباراة").font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
-                            Text(motm.name).font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    Button { onOpenPlayer(motm.id) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("رجل المباراة").font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
+                                Text(motm.name).font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
+                            }
+                            Spacer()
+                            ratingBadge(motm.rating)
                         }
-                        Spacer()
-                        ratingBadge(motm.rating)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.gold.opacity(0.12)))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.gold.opacity(0.3), lineWidth: 1))
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.gold.opacity(0.12)))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.gold.opacity(0.3), lineWidth: 1))
+                    .buttonStyle(.plain)
                 }
                 ForEach(detail.ratings) { p in
-                    playerRow(p)
+                    Button { onOpenPlayer(p.id) } label: { playerRow(p) }
+                        .buttonStyle(.plain)
                 }
             }
         }
