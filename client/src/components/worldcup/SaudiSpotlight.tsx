@@ -80,13 +80,15 @@ function SaudiFixtureRow({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id:
       </div>
       <div className="flex items-center gap-2 shrink-0">
         {started ? (
-          <span className="text-lg font-black text-white tabular-nums" dir="ltr">
-            {saudiGoals ?? 0} - {opponentGoals ?? 0}
-          </span>
+          <>
+            <span className="text-lg font-black text-white tabular-nums" dir="ltr">
+              {saudiGoals ?? 0} - {opponentGoals ?? 0}
+            </span>
+            <StatusBadge fixture={fixture} />
+          </>
         ) : (
           <span className="text-sm font-bold text-emerald-200">{formatKickoffTime(fixture.date)}</span>
         )}
-        <StatusBadge fixture={fixture} />
         <ChevronLeft className="h-4 w-4 text-emerald-200/60" />
       </div>
     </button>
