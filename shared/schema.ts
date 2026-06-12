@@ -1065,6 +1065,109 @@ export const rssFeeds = pgTable("rss_feeds", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ============================================
+// رادار سبق الذكي — رصد المصادر العالمية (RSS/JSON) بأي لغة،
+// تحليل القيمة الإخبارية، ثم التحويل التحريري بمعيار سبق الموحّد.
+// ============================================
+
+export const radarSources = pgTable("radar_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  url: text("url").notNull().unique(),
+  type: text("type").notNull().default("rss"), // rss | json
+  language: text("language").notNull().default("en"), // لغة المصدر (en, es, tr, fr, ...)
+  categorySlug: text("category_slug"), // تلميح تصنيف افتراضي لمواد هذا المصدر
+  fetchIntervalMinutes: integer("fetch_interval_minutes").notNull().default(15),
+  isActive: boolean("is_active").notNull().default(true),
+  lastFetchedAt: timestamp("last_fetched_at"),
+  lastError: text("last_error"), // null = آخر جلب نجح
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const radarItems = pgTable("radar_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sourceId: varchar("source_id").references(() => radarSources.id, { onDelete: "cascade" }).notNull(),
+  guid: text("guid").notNull(), // معرف المادة لدى المصدر (guid/link) — أساس منع التكرار
+  link: text("link").notNull(),
+  originalTitle: text("original_title").notNull(),
+  originalExcerpt: text("original_excerpt"),
+  originalLanguage: text("original_language"),
+  imageUrl: text("image_url"),
+  publishedAt: timestamp("published_at"),
+  fetchedAt: timestamp("fetched_at").defaultNow().notNull(),
+  // new → analyzed → ready (مسودة جاهزة) → exported | dismissed
+  status: text("status").notNull().default("new"),
+  newsValue: integer("news_value"), // 0–100 قيمة إخبارية لجمهور سبق
+  scoreBreakdown: jsonb("score_breakdown").$type<{
+    breaking?: number;
+    saudiRelevance?: number;
+    regionalRelevance?: number;
+    novelty?: number;
+    reason?: string;
+  }>(),
+  isBreaking: boolean("is_breaking").notNull().default(false),
+  matchedKeywords: jsonb("matched_keywords").$type<string[]>(),
+  translatedTitle: text("translated_title"), // ترجمة تفسيرية لا حرفية
+  translatedSummary: text("translated_summary"),
+  suggestedCategorySlug: text("suggested_category_slug"),
+  // مسودة التحويل التحريري الكامل — تطابق حقول فورم النشر
+  draft: jsonb("draft").$type<{
+    title: string;
+    subheadline?: string;
+    content: string;
+    excerpt?: string;
+    summary?: string;
+    tags?: string[];
+    seoTitle?: string;
+    seoDescription?: string;
+    seoKeywords?: string[];
+    categorySlug?: string;
+    provider?: string;
+    model?: string;
+  }>(),
+  draftGeneratedAt: timestamp("draft_generated_at"),
+  analyzedAt: timestamp("analyzed_at"),
+  alertedAt: timestamp("alerted_at"), // أُرسل تنبيه عاجل لهذه المادة
+  exportedArticleId: varchar("exported_article_id").references(() => articles.id, { onDelete: "set null" }),
+  exportedAt: timestamp("exported_at"),
+  exportedBy: varchar("exported_by").references(() => users.id, { onDelete: "set null" }),
+  error: text("error"), // آخر خطأ تحليل/تحويل لهذه المادة
+}, (table) => [
+  uniqueIndex("uq_radar_items_source_guid").on(table.sourceId, table.guid),
+  index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
+  index("idx_radar_items_news_value").on(table.newsValue),
+]);
+
+export const radarAlertRules = pgTable("radar_alert_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(), // مثال: "المونديال 2026"
+  keywords: jsonb("keywords").$type<string[]>().notNull(), // تطابق غير حساس لحالة الأحرف على العنوان/الملخص
+  minNewsValue: integer("min_news_value").notNull().default(0),
+  markBreaking: boolean("mark_breaking").notNull().default(true),
+  notifyTelegram: boolean("notify_telegram").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertRadarSourceSchema = createInsertSchema(radarSources).omit({
+  id: true,
+  lastFetchedAt: true,
+  lastError: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertRadarAlertRuleSchema = createInsertSchema(radarAlertRules).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type RadarSource = typeof radarSources.$inferSelect;
+export type InsertRadarSource = z.infer<typeof insertRadarSourceSchema>;
+export type RadarItem = typeof radarItems.$inferSelect;
+export type RadarAlertRule = typeof radarAlertRules.$inferSelect;
+export type InsertRadarAlertRule = z.infer<typeof insertRadarAlertRuleSchema>;
+
 // User reading history for recommendations (ENHANCED for advanced analytics)
 export const readingHistory = pgTable("reading_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

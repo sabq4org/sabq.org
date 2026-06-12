@@ -1790,6 +1790,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startRadarJob } = await import("./jobs/radarJob");
+            startRadarJob();
+          } catch (error) {
+            console.error("[Server] Error starting radar job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
     // Handle server errors
     server.on("error", (error: any) => {
       console.error("[Server] ❌ Server error:", error);
