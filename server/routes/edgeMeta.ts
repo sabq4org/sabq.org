@@ -33,7 +33,7 @@ import {
   topics,
   staff,
 } from "@shared/schema";
-import { eq, or, and, desc, ne, aliasedTable, sql, inArray } from "drizzle-orm";
+import { eq, or, and, desc, ne, aliasedTable, sql, inArray, like, ilike, notIlike } from "drizzle-orm";
 import { buildNewsArticleSchemaExtras } from "../utils/newsArticleSchema";
 import {
   buildArticleAuthorPerson,
@@ -517,6 +517,19 @@ function buildArArticlePayload(
     authorStaffSlug: row.authorStaffSlug,
     fallbackName: ARTICLE_BRAND.ar.name,
   });
+  // مقالات المونديال تربط للهب برابط يراه الزاحف — يبني الرسم الداخلي الذي
+  // يدفع /world-cup كرابط فرعي (sitelink) ويغذي ترتيبه للكلمة المفتاحية.
+  const isWorldCupArticle =
+    /مونديال|كأس العالم/.test(title) && !title.includes("للأندية");
+  const worldCupHubLink = isWorldCupArticle
+    ? buildLinkListHtml("تغطية كأس العالم 2026", [
+        {
+          href: "/world-cup",
+          title: "كأس العالم 2026 — نتائج مباشرة وجدول المباريات وترتيب المجموعات",
+        },
+      ])
+    : undefined;
+
   return articleMetaPayload({
     lang: "ar",
     title,
@@ -533,12 +546,18 @@ function buildArArticlePayload(
     section: row.categoryName,
     keywords: Array.isArray(seoData.keywords) ? seoData.keywords : [],
     contentHtml: row.content,
-    semanticHtml: buildSemanticHtml({
-      title,
-      excerpt: row.excerpt || row.aiSummary || "",
-      content: row.content || "",
-      publishedAt: row.publishedAt,
-    }),
+    semanticHtml:
+      [
+        buildSemanticHtml({
+          title,
+          excerpt: row.excerpt || row.aiSummary || "",
+          content: row.content || "",
+          publishedAt: row.publishedAt,
+        }),
+        worldCupHubLink,
+      ]
+        .filter(Boolean)
+        .join("") || undefined,
   });
 }
 
@@ -1309,18 +1328,102 @@ const ROUTE_HANDLERS: RouteHandler[] = [
   // World Cup 2026 hub landing
   {
     pattern: /^\/world-cup\/?$/,
-    handle: async () => ({
-      title: "مونديال 2026 — تغطية حية لكأس العالم | سبق",
-      description:
-        "نتائج مباشرة، جدول المباريات بتوقيت الرياض، ترتيب المجموعات، الهدافون، ومشوار الأخضر في كأس العالم 2026 على صحيفة سبق.",
-      image: `${SITE_URL}/branding/world-cup-og-image.png`,
-      imageWidth: 1200,
-      imageHeight: 630,
-      canonical: `${SITE_URL}/world-cup`,
-      robots: "index,follow",
-      type: "website",
-      locale: "ar_SA",
-    }),
+    handle: async () => {
+      const description =
+        "نتائج مباشرة، جدول المباريات بتوقيت الرياض، ترتيب المجموعات، الهدافون، ومشوار الأخضر في كأس العالم 2026 على صحيفة سبق.";
+
+      // أحدث أخبار المونديال (مواد محرك wc26 + مواد غرفة الأخبار) — نفس معايير
+      // getWorldCupNews في worldCupNewsGenerator.ts، مع englishSlug للرابط
+      // القانوني مباشرة بدل المرور بتحويلة slug-redirect.
+      let newsLinks: { href: string; title: string }[] = [];
+      try {
+        const rows = await db
+          .select({
+            slug: articles.slug,
+            englishSlug: articles.englishSlug,
+            title: articles.title,
+          })
+          .from(articles)
+          .where(
+            and(
+              eq(articles.status, "published"),
+              or(
+                like(articles.slug, "wc26-%"),
+                and(
+                  or(
+                    ilike(articles.title, "%مونديال%"),
+                    ilike(articles.title, "%كأس العالم%"),
+                  ),
+                  notIlike(articles.title, "%للأندية%"),
+                ),
+              ),
+            ),
+          )
+          .orderBy(desc(articles.publishedAt))
+          .limit(20);
+        newsLinks = rows.map((r) => ({
+          href: `/article/${r.englishSlug || r.slug}`,
+          title: r.title || "",
+        }));
+      } catch {
+        // الهب يبقى قابلًا للفهرسة بوسومه حتى لو تعذر جلب قائمة الأخبار
+      }
+
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>كأس العالم 2026 — تغطية حية من سبق</h1><p>${escapeHtml(description)}</p></section>`;
+      const semanticHtml =
+        [intro, buildLinkListHtml("أحدث أخبار كأس العالم 2026", newsLinks)]
+          .filter(Boolean)
+          .join("") || undefined;
+
+      return {
+        title: "مونديال 2026 — تغطية حية لكأس العالم | سبق",
+        description,
+        image: `${SITE_URL}/branding/world-cup-og-image.png`,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/world-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "كأس العالم 2026 — تغطية حية",
+              description,
+              url: `${SITE_URL}/world-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: `${SITE_URL}/branding/world-cup-og-image.png`,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "كأس العالم 2026",
+                  item: `${SITE_URL}/world-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
   },
 ];
 

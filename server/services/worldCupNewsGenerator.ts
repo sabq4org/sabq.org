@@ -242,12 +242,17 @@ async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Pro
   if (response.error) throw new Error(`[WC News] AI generation failed: ${response.error}`);
   const generated = parseGenerated(response.content);
 
+  // رابط داخلي ثابت نحو هب المونديال — للقارئ وللزاحف معًا (يصل قوقل عبر
+  // semanticHtml للمقال في edgeMeta، ويبني إشارة الكلمة المفتاحية للهب)
+  const hubFooter =
+    '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
+
   const now = new Date();
   const published = autoPublish();
   const created = await storage.createArticle({
     title: generated.title,
     slug: slugFor(kind, detail.fixture.id),
-    content: generated.content,
+    content: `${generated.content}\n${hubFooter}`,
     excerpt: (generated.summary || generated.metaDescription).substring(0, 200),
     aiSummary: generated.summary,
     locale: "ar",
