@@ -103,7 +103,7 @@ export function OnlineModeratorsWidget() {
 
   return (
     <Card 
-      className="h-full bg-gradient-to-br from-blue-500/5 via-transparent to-transparent border-blue-200/50 dark:border-blue-800/50" 
+      className="h-full bg-gradient-to-br from-blue-500/5 via-transparent to-transparent dark:from-transparent border-blue-200/50 dark:border-border"
       data-testid="card-online-moderators"
     >
       <CardHeader className="pb-3">
