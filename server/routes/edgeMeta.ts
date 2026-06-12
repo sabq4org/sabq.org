@@ -1313,7 +1313,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       title: "مونديال 2026 — تغطية حية لكأس العالم | سبق",
       description:
         "نتائج مباشرة، جدول المباريات بتوقيت الرياض، ترتيب المجموعات، الهدافون، ومشوار الأخضر في كأس العالم 2026 على صحيفة سبق.",
-      image: BRAND_OG_IMAGE,
+      image: `${SITE_URL}/branding/world-cup-og-image.png`,
+      imageWidth: 1200,
+      imageHeight: 630,
       canonical: `${SITE_URL}/world-cup`,
       robots: "index,follow",
       type: "website",
