@@ -227,6 +227,23 @@ function stripUnsafeHtml(html: string): string {
     .replace(/(href|src)\s*=\s*'\s*javascript:[^']*'/gi, "$1='#'");
 }
 
+// مقالات المونديال تربط لهب /world-cup — الفحص مشترك بين معالج seo-meta
+// (semanticHtml لقشرة SPA الاحتياطية) و seo-bundle (متن SSR في web-next،
+// المسار الذي يخدم الزواحف فعليًا عبر dynamic rendering).
+function isWorldCupTitle(title: string): boolean {
+  return /مونديال|كأس العالم/.test(title) && !title.includes("للأندية");
+}
+
+const WORLD_CUP_HUB_FOOTER_HTML =
+  '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
+
+// مواد محرك المونديال الجديدة تحمل الرابط داخل المتن أصلًا — لا تكرار.
+function withWorldCupHubLink(html: string, title: string | null | undefined): string {
+  if (!isWorldCupTitle(title || "")) return html;
+  if (html.includes('href="/world-cup"')) return html;
+  return `${html}\n${WORLD_CUP_HUB_FOOTER_HTML}`;
+}
+
 /** Crawler-visible article body (hidden from users; React replaces #root on hydrate). */
 function buildSemanticHtml(opts: {
   title: string;
@@ -519,9 +536,7 @@ function buildArArticlePayload(
   });
   // مقالات المونديال تربط للهب برابط يراه الزاحف — يبني الرسم الداخلي الذي
   // يدفع /world-cup كرابط فرعي (sitelink) ويغذي ترتيبه للكلمة المفتاحية.
-  const isWorldCupArticle =
-    /مونديال|كأس العالم/.test(title) && !title.includes("للأندية");
-  const worldCupHubLink = isWorldCupArticle
+  const worldCupHubLink = isWorldCupTitle(title)
     ? buildLinkListHtml("تغطية كأس العالم 2026", [
         {
           href: "/world-cup",
@@ -1579,7 +1594,10 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
       englishSlug: row.englishSlug,
       title: row.title,
       excerpt: row.excerpt || row.aiSummary || "",
-      contentHtml: stripUnsafeHtml(row.content || ""),
+      contentHtml:
+        lang === "ar"
+          ? withWorldCupHubLink(stripUnsafeHtml(row.content || ""), row.title)
+          : stripUnsafeHtml(row.content || ""),
       imageUrl: abs(row.imageUrl),
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
