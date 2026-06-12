@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { apiUrl } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
   const { data, isLoading } = useQuery<ContactMessagesResponse>({
     queryKey: ["/api/admin/contact-messages", "pending-count"],
     queryFn: async () => {
-      const response = await fetch("/api/admin/contact-messages?limit=5", {
+      const response = await fetch(apiUrl("/api/admin/contact-messages?limit=5"), {
         credentials: "include",
       });
       if (!response.ok) {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useAuth, hasRole, hasPermission } from "@/hooks/useAuth";
+import { apiUrl } from "@/lib/queryClient";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
@@ -1083,7 +1084,7 @@ function UpcomingTasksWidget() {
   }>>({
     queryKey: ["/api/calendar/my-assignments"],
     queryFn: async () => {
-      const response = await fetch("/api/calendar/my-assignments?status=pending");
+      const response = await fetch(apiUrl("/api/calendar/my-assignments?status=pending"));
       if (!response.ok) {
         throw new Error("Failed to fetch tasks");
       }

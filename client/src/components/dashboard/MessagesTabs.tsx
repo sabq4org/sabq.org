@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { apiUrl } from "@/lib/queryClient";
 
 /**
  * Two prominent "inbox" tabs at the top of the admin dashboard:
@@ -124,7 +125,7 @@ export function MessagesTabs({
   const visitorQuery = useQuery<ContactMessagesResponse>({
     queryKey: ["/api/admin/contact-messages", "tabs-pending"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/contact-messages?status=pending&limit=20", {
+      const res = await fetch(apiUrl("/api/admin/contact-messages?status=pending&limit=20"), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to load contact messages");
