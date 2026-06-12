@@ -26260,6 +26260,10 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     xml += `  <url><loc>${baseUrl}</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>\n`;
     xml += `  <url><loc>${baseUrl}/en</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>\n`;
     xml += `  <url><loc>${baseUrl}/ur</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n`;
+    xml += `  <url><loc>${baseUrl}/world-cup</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>\n`;
+    for (const page of ['/gulf-live', '/world-days']) {
+      xml += `  <url><loc>${baseUrl}${page}</loc><changefreq>daily</changefreq><priority>0.5</priority></url>\n`;
+    }
     for (const page of ['/about', '/privacy', '/terms', '/contact', '/rss', '/categories', '/opinion', '/shorts', '/daily-brief']) {
       xml += `  <url><loc>${baseUrl}${page}</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n`;
     }
