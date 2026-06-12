@@ -31,28 +31,28 @@ const typeConfig: Record<string, {
   defaultIcon: typeof Info;
 }> = {
   info: {
-    bgClass: "bg-blue-50 dark:bg-blue-950/30",
+    bgClass: "bg-blue-50 dark:bg-card",
     borderClass: "border-blue-200 dark:border-blue-800",
     textClass: "text-blue-800 dark:text-blue-200",
     iconClass: "text-blue-600 dark:text-blue-400",
     defaultIcon: Info,
   },
   success: {
-    bgClass: "bg-green-50 dark:bg-green-950/30",
+    bgClass: "bg-green-50 dark:bg-card",
     borderClass: "border-green-200 dark:border-green-800",
     textClass: "text-green-800 dark:text-green-200",
     iconClass: "text-green-600 dark:text-green-400",
     defaultIcon: CheckCircle,
   },
   warning: {
-    bgClass: "bg-amber-50 dark:bg-amber-950/30",
+    bgClass: "bg-amber-50 dark:bg-card",
     borderClass: "border-amber-200 dark:border-amber-800",
     textClass: "text-amber-800 dark:text-amber-200",
     iconClass: "text-amber-600 dark:text-amber-400",
     defaultIcon: AlertTriangle,
   },
   feature: {
-    bgClass: "bg-purple-50 dark:bg-purple-950/30",
+    bgClass: "bg-purple-50 dark:bg-card",
     borderClass: "border-purple-200 dark:border-purple-800",
     textClass: "text-purple-800 dark:text-purple-200",
     iconClass: "text-purple-600 dark:text-purple-400",

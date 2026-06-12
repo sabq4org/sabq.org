@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useAuth, hasRole, hasPermission } from "@/hooks/useAuth";
+import { apiUrl } from "@/lib/queryClient";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
@@ -325,7 +326,7 @@ function Dashboard() {
         <DashboardAnnouncementBanner deferLoading={!initialLoadComplete} />
 
         {/* Welcome Section with Greeting */}
-        <Card className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 dark:from-blue-950/20 dark:via-slate-950/20 dark:to-blue-950/20 border-primary/20" data-testid="card-welcome">
+        <Card className="bg-gradient-to-r from-blue-50 via-slate-50 to-blue-50 dark:from-card dark:via-card dark:to-card border-primary/20" data-testid="card-welcome">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="flex-1 space-y-2">
@@ -388,7 +389,7 @@ function Dashboard() {
           <SectionHeader title="نظرة عامة" color="bg-blue-500" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
             {/* Articles Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30" data-testid="card-articles-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-articles-stats">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المقالات</CardTitle>
               <div className="p-2 rounded-md bg-accent-blue/30">
@@ -412,7 +413,7 @@ function Dashboard() {
           </Card>
 
             {/* Users Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-violet-950/30" data-testid="card-users-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-card" data-testid="card-users-stats">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">المستخدمون</CardTitle>
               <div className="p-2 rounded-md bg-accent-purple/30">
@@ -436,7 +437,7 @@ function Dashboard() {
           </Card>
 
             {/* Comments Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-green-950/30" data-testid="card-comments-stats">
+            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-comments-stats">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">التعليقات</CardTitle>
               <div className="p-2 rounded-md bg-accent-green/30">
@@ -462,7 +463,7 @@ function Dashboard() {
             {/* Muqtarab Review Alert — يظهر فقط عند وجود مواضيع بانتظار المراجعة */}
             {canReviewMuqtarab && muqtarabPendingCount > 0 && (
               <Link href="/dashboard/muqtarab/review" className="block" data-testid="link-muqtarab-review-alert">
-                <Card className="h-full hover-elevate active-elevate-2 transition-all border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/30 ring-1 ring-amber-200 dark:ring-amber-800/40">
+                <Card className="h-full hover-elevate active-elevate-2 transition-all border-amber-300 dark:border-amber-700/60 bg-amber-50 dark:bg-card ring-1 ring-amber-200 dark:ring-amber-800/40">
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-amber-800 dark:text-amber-300">مراجعة مُقترب</CardTitle>
                     <div className="relative p-2 rounded-md bg-amber-200/60 dark:bg-amber-800/40">
@@ -492,7 +493,7 @@ function Dashboard() {
         <div className="space-y-3">
           <SectionHeader title="إحصائيات إضافية" color="bg-slate-500" />
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4 md:gap-6">
-            <Card data-testid="card-categories-stats" className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-blue-950/30">
+            <Card data-testid="card-categories-stats" className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">التصنيفات</CardTitle>
               <FolderTree className="h-4 w-4 text-muted-foreground" />
@@ -508,7 +509,7 @@ function Dashboard() {
             </CardContent>
           </Card>
 
-            <Card data-testid="card-abtests-stats" className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30">
+            <Card data-testid="card-abtests-stats" className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">اختبارات A/B</CardTitle>
               <FlaskConical className="h-4 w-4 text-muted-foreground" />
@@ -529,7 +530,7 @@ function Dashboard() {
             </CardContent>
           </Card>
 
-            <Card data-testid="card-avg-time-stats" className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-amber-950/30">
+            <Card data-testid="card-avg-time-stats" className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">متوسط وقت القراءة</CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -557,7 +558,7 @@ function Dashboard() {
           <SectionHeader title="خدمات المنصة" color="bg-purple-500" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
             {/* Audio Newsletters */}
-            <Card data-testid="card-audio-newsletters-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+            <Card data-testid="card-audio-newsletters-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">النشرات الصوتية</CardTitle>
               <div className="p-2 rounded-md bg-purple-500/20">
@@ -581,7 +582,7 @@ function Dashboard() {
           </Card>
 
             {/* Deep Analyses */}
-            <Card data-testid="card-deep-analyses-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+            <Card data-testid="card-deep-analyses-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">التحليلات العميقة</CardTitle>
               <div className="p-2 rounded-md bg-indigo-500/20">
@@ -605,7 +606,7 @@ function Dashboard() {
           </Card>
 
             {/* Publishers */}
-            <Card data-testid="card-publishers-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+            <Card data-testid="card-publishers-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الناشرون</CardTitle>
               <div className="p-2 rounded-md bg-amber-500/20">
@@ -629,7 +630,7 @@ function Dashboard() {
           </Card>
 
             {/* Media Library */}
-            <Card data-testid="card-media-library-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-purple-950/30">
+            <Card data-testid="card-media-library-stats" className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">مكتبة الوسائط</CardTitle>
               <div className="p-2 rounded-md bg-cyan-500/20">
@@ -659,7 +660,7 @@ function Dashboard() {
           <SectionHeader title="الذكاء الاصطناعي" color="bg-emerald-500" />
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4 md:gap-6">
             {/* AI Tasks */}
-            <Card data-testid="card-ai-tasks-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30">
+            <Card data-testid="card-ai-tasks-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">مهام الذكاء الاصطناعي</CardTitle>
               <div className="p-2 rounded-md bg-emerald-500/20">
@@ -683,7 +684,7 @@ function Dashboard() {
           </Card>
 
             {/* AI Generated Images */}
-            <Card data-testid="card-ai-images-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30">
+            <Card data-testid="card-ai-images-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">صور الذكاء الاصطناعي</CardTitle>
               <div className="p-2 rounded-md bg-rose-500/20">
@@ -707,7 +708,7 @@ function Dashboard() {
           </Card>
 
             {/* Smart Blocks */}
-            <Card data-testid="card-smart-blocks-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-emerald-950/30">
+            <Card data-testid="card-smart-blocks-stats" className="hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">القوالب الذكية</CardTitle>
               <div className="p-2 rounded-md bg-sky-500/20">
@@ -823,7 +824,7 @@ function Dashboard() {
                   {stats.recentArticles.map((article) => (
                     <div
                       key={article.id}
-                      className="flex items-start justify-between p-3 border rounded-lg hover-elevate transition-all bg-blue-50 dark:bg-blue-950/30"
+                      className="flex items-start justify-between p-3 border rounded-lg hover-elevate transition-all bg-blue-50 dark:bg-card"
                       data-testid={`recent-article-${article.id}`}
                     >
                       <div className="flex-1 min-w-0">
@@ -881,7 +882,7 @@ function Dashboard() {
                   {stats.recentComments.map((comment) => (
                     <div
                       key={comment.id}
-                      className="flex items-start justify-between p-3 border rounded-lg hover-elevate transition-all bg-green-50 dark:bg-green-950/30"
+                      className="flex items-start justify-between p-3 border rounded-lg hover-elevate transition-all bg-green-50 dark:bg-card"
                       data-testid={`recent-comment-${comment.id}`}
                     >
                       <div className="flex-1 min-w-0">
@@ -949,7 +950,7 @@ function Dashboard() {
                 {stats.topArticles.map((article, index) => (
                   <div
                     key={article.id}
-                    className="flex items-center gap-4 p-3 border rounded-lg hover-elevate transition-all bg-rose-50 dark:bg-rose-950/30"
+                    className="flex items-center gap-4 p-3 border rounded-lg hover-elevate transition-all bg-rose-50 dark:bg-card"
                     data-testid={`top-article-${article.id}`}
                   >
                     <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary font-bold">
@@ -1083,7 +1084,7 @@ function UpcomingTasksWidget() {
   }>>({
     queryKey: ["/api/calendar/my-assignments"],
     queryFn: async () => {
-      const response = await fetch("/api/calendar/my-assignments?status=pending");
+      const response = await fetch(apiUrl("/api/calendar/my-assignments?status=pending"));
       if (!response.ok) {
         throw new Error("Failed to fetch tasks");
       }
@@ -1203,7 +1204,7 @@ function UrgentReminderBanner() {
 
   return (
     <div 
-      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-blue-950/30 dark:via-blue-950/20 dark:to-blue-950/30 border-r-4 border-r-blue-400 rounded-lg p-4 shadow-sm"
+      className="relative bg-gradient-to-r from-blue-50/80 via-blue-50/50 to-blue-50/80 dark:from-card dark:via-card dark:to-card border-r-4 border-r-blue-400 rounded-lg p-4 shadow-sm"
       data-testid="banner-urgent-reminder"
     >
       <div className="flex items-start gap-4">
