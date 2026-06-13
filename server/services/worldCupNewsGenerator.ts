@@ -275,7 +275,17 @@ async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Pro
     publishType: "instant",
     status: published ? "published" : "draft",
     publishedAt: published ? now : undefined,
-    aiGenerated: true,
+    // أخبار المونديال تُعرض كخبر رياضي عادي في كل الواجهات (القسم الرياضي،
+    // الرئيسية، قسم المونديال). علم aiGenerated=true يستبعدها من كل القوائم
+    // العامة (الكروسيل، آخر الأخبار، اختيارات المحرر، التحليلات) إلا بتمييز
+    // محرر، فكانت تظهر ساعات في حزام المونديال المحدود ثم تُدفَن. الإفصاح عن
+    // أنها مولّدة يبقى عبر الكاتب «سبق AI» وseoMetadata.generatedBy أدناه.
+    aiGenerated: false,
+    // صفحة القسم (getArticles) واختيارات المحرر ترتّب بـ displayOrder تنازليًا
+    // أولًا، فالخبر غير المختوم (displayOrder=0) يغرق تحت آلاف المقالات
+    // المميّزة قديمًا ولا يصل قائمة الـ50. نختمه بثوانٍ يونكس للنشر — نفس
+    // مقياس المختومين تحريريًا — ليتداخل معهم بالحداثة (نمط GREATEST نفسه).
+    displayOrder: published ? Math.floor(now.getTime() / 1000) : 0,
     seo: {
       metaTitle: generated.title,
       metaDescription: generated.metaDescription,
