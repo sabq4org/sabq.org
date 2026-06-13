@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
   trackOpinionView,
@@ -179,9 +179,9 @@ export default function OpinionDetailPage() {
       if (fired) return;
       fired = true;
       clearInterval(intervalId);
-      fetch(`/api/articles/${articleId}/view`, { method: 'POST' })
+      fetch(apiUrl(`/api/articles/${articleId}/view`), { method: 'POST' })
         .then(r => r.json())
-        .then(data => console.log('[OpinionView] Tracked:', data))
+        .then(() => {})
         .catch(err => console.error('[OpinionView] Error:', err));
     };
 
@@ -350,7 +350,7 @@ export default function OpinionDetailPage() {
           url: window.location.href,
         });
       } catch (err) {
-        console.log("Share failed:", err);
+        console.warn("Share failed:", err);
       }
     }
   };

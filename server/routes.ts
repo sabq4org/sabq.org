@@ -67,13 +67,12 @@ import { generateArticleThumbnail } from "./services/thumbnailService";
 import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
 import {
-  adminListTopicComments,
-  adminCountTopicComments,
   adminUpdateTopicCommentContent,
   adminSetTopicCommentStatus,
   adminDeleteTopicComment,
   adminTopicCommentStats,
 } from "./services/topicCommentsService";
+import { getUnifiedAdminComments } from "./services/commentModerationService";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
@@ -15928,134 +15927,16 @@ Respond in valid JSON format only:
   // الحصول على جميع التعليقات مع معلومات المقالات
   app.get("/api/admin/comments", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
-      const pageNum = Math.max(1, parseInt(req.query.page) || 1);
-      const lim = Math.max(1, parseInt(req.query.limit) || 20);
-      const offset = (pageNum - 1) * lim;
-      const status = req.query.status as string | undefined;
-      const search = req.query.search as string | undefined;
-      // Unified source filter: news (non-opinion articles) | opinion | muqtarab | all
-      const source = (req.query.source as string) || "all";
-      // Over-fetch bound: the global top (offset+lim) rows are guaranteed to sit
-      // within the top (offset+lim) of EACH table, so we fetch that many from
-      // each, merge, sort and slice. Cheap for the shallow pages moderation uses.
-      const fetchN = Math.min(offset + lim, 2000);
-
-      const wantArticles = source === "all" || source === "news" || source === "opinion";
-      const wantTopics = source === "all" || source === "muqtarab";
-
-      // ---- article + opinion comments (shared `comments` table) ----
-      let articleItems: any[] = [];
-      let articleTotal = 0;
-      if (wantArticles) {
-        const conds: any[] = [];
-        if (status && status !== "all") conds.push(eq(comments.status, status));
-        if (search) conds.push(ilike(comments.content, `%${search}%`));
-        if (source === "opinion") conds.push(eq(articles.articleType, "opinion"));
-        if (source === "news")
-          conds.push(sql`(${articles.articleType} is null or ${articles.articleType} <> 'opinion')`);
-        const whereClause = conds.length ? and(...conds) : undefined;
-
-        const rows = await db
-          .select({
-            id: comments.id,
-            articleId: comments.articleId,
-            topicId: sql<string | null>`null`,
-            userId: comments.userId,
-            content: comments.content,
-            status: comments.status,
-            parentId: comments.parentId,
-            moderatedBy: comments.moderatedBy,
-            moderatedAt: comments.moderatedAt,
-            moderationReason: comments.moderationReason,
-            currentSentiment: comments.currentSentiment,
-            aiClassification: comments.aiClassification,
-            aiDetectedIssues: comments.aiDetectedIssues,
-            aiModerationReason: comments.aiModerationReason,
-            createdAt: comments.createdAt,
-            articleTitle: articles.title,
-            articleSlug: articles.slug,
-            articleType: articles.articleType,
-            userName: users.firstName,
-            userLastName: users.lastName,
-            userEmail: users.email,
-          })
-          .from(comments)
-          .leftJoin(articles, eq(comments.articleId, articles.id))
-          .leftJoin(users, eq(comments.userId, users.id))
-          .where(whereClause as any)
-          .orderBy(desc(comments.createdAt))
-          .limit(fetchN);
-
-        articleItems = rows.map((r) => {
-          const isOpinion = r.articleType === "opinion";
-          return {
-            ...r,
-            source: isOpinion ? "opinion" : "news",
-            targetTitle: r.articleTitle,
-            targetUrl: r.articleSlug
-              ? isOpinion
-                ? `/opinion/${r.articleSlug}`
-                : `/article/${r.articleSlug}`
-              : null,
-          };
-        });
-
-        const [cnt] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(comments)
-          .leftJoin(articles, eq(comments.articleId, articles.id))
-          .where(whereClause as any);
-        articleTotal = Number(cnt?.count) || 0;
-      }
-
-      // ---- muqtarab topic comments (parallel `topic_comments` table) ----
-      let topicItems: any[] = [];
-      let topicTotal = 0;
-      if (wantTopics) {
-        const rows = await adminListTopicComments({ status, search, limit: fetchN, offset: 0 });
-        topicItems = rows.map((r) => ({
-          id: r.id,
-          articleId: r.topicId,
-          topicId: r.topicId,
-          userId: r.userId,
-          content: r.content,
-          status: r.status,
-          parentId: r.parentId,
-          moderatedBy: r.moderatedBy,
-          moderatedAt: r.moderatedAt,
-          moderationReason: r.moderationReason,
-          currentSentiment: r.currentSentiment,
-          aiClassification: r.aiClassification,
-          aiDetectedIssues: r.aiDetectedIssues,
-          aiModerationReason: r.aiModerationReason,
-          createdAt: r.createdAt,
-          articleTitle: r.topicTitle,
-          articleSlug: r.topicSlug,
-          articleType: "muqtarab",
-          userName: r.userName,
-          userLastName: r.userLastName,
-          userEmail: r.userEmail,
-          source: "muqtarab",
-          targetTitle: r.topicTitle,
-          targetUrl: r.angleSlug && r.topicSlug ? `/muqtarab/${r.angleSlug}/topic/${r.topicSlug}` : null,
-        }));
-        topicTotal = await adminCountTopicComments({ status, search });
-      }
-
-      // Merge both sources, sort newest-first, slice the requested page.
-      const merged = [...articleItems, ...topicItems].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-      const pageItems = merged.slice(offset, offset + lim);
-      const total = articleTotal + topicTotal;
-
-      res.json({
-        comments: pageItems,
-        total,
-        page: pageNum,
-        limit: lim,
-        totalPages: Math.ceil(total / lim),
+      // Unified list (news + opinion + muqtarab) with ?source= filter — see
+      // commentModerationService. Kept thin to respect the routes.ts freeze.
+      const result = await getUnifiedAdminComments({
+        status: req.query.status as string | undefined,
+        search: req.query.search as string | undefined,
+        source: req.query.source as string | undefined,
+        page: parseInt(req.query.page) || 1,
+        limit: parseInt(req.query.limit) || 20,
       });
+      res.json(result);
     } catch (error) {
       console.error("Error fetching admin comments:", error);
       res.status(500).json({ message: "Failed to fetch comments" });
