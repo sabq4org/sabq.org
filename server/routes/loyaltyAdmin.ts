@@ -340,6 +340,7 @@ const ACTION_LABELS_AR: Record<string, string> = {
   COMMENT: "تعليق",
   NOTIFICATION_OPEN: "فتح إشعار",
   DAILY_LOGIN: "دخول يومي",
+  WC_PREDICTION_WIN: "فوز بتوقّع مباراة",
 };
 
 const ACTION_ICONS: Record<string, string> = {
@@ -350,6 +351,7 @@ const ACTION_ICONS: Record<string, string> = {
   COMMENT: "💬",
   NOTIFICATION_OPEN: "🔔",
   DAILY_LOGIN: "🚪",
+  WC_PREDICTION_WIN: "🏆",
 };
 
 router.get("/action-breakdown", async (req, res) => {

@@ -1844,6 +1844,66 @@ export const userPointsTotal = pgTable("user_points_total", {
   sql`CONSTRAINT rank_level_check CHECK (rank_level BETWEEN 1 AND 5)`,
 ]);
 
+// ============================================================================
+// World Cup 2026 — Match Predictions Competition
+// Fixtures are NOT stored (fetched live from API-Football via worldCupService).
+// These two tables hold ONLY user predictions + per-fixture settlement state.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess.
+export const wcPredictions = pgTable("wc_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // API-Football fixture id is numeric; stored as text to match the
+  // userLoyaltyEvents.source convention the loyalty dedup keys off.
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  // 'pending' until the match settles, then 'correct' | 'incorrect'.
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  // One prediction per user per match — upsert anchor + dup-submit guard.
+  uniqueIndex("idx_wc_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_wc_pred_user").on(table.userId),       // "my predictions" + leaderboard
+  index("idx_wc_pred_fixture").on(table.fixtureId), // settlement scan
+]);
+
+// Per-fixture settlement state. WHY THIS TABLE EXISTS:
+//   1. Idempotency anchor — settledAt is the single guard that makes the
+//      per-minute settlement cron safe to overlap / re-run after a pod restart.
+//   2. History display — snapshots team names + logos + final score so the
+//      results UI renders settled matches WITHOUT a live API call (fixtures
+//      roll out of the 60s cache and old rounds drop from the provider list).
+//   3. Leaderboard joins — winnersCount / pointsPerWinner read straight here.
+export const wcPredictionMatches = pgTable("wc_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),   // null until settled
+  finalAway: integer("final_away"),   // null until settled
+  // 'open' (accepting predictions) | 'locked' (kicked off) | 'settled'.
+  status: text("status").notNull().default("open"),
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),  // THE idempotency guard
+}, (table) => [
+  index("idx_wc_pred_match_status").on(table.status),
+]);
+
+export type WcPrediction = typeof wcPredictions.$inferSelect;
+export type WcPredictionMatch = typeof wcPredictionMatches.$inferSelect;
+
 // Loyalty Rewards (available rewards)
 export const loyaltyRewards = pgTable("loyalty_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

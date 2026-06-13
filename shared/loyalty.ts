@@ -23,6 +23,13 @@ export const LOYALTY_ACTIONS = {
    *  `verifyEmailToken` so it fires the same moment status flips
    *  pending→active. */
   EMAIL_VERIFIED: "EMAIL_VERIFIED",
+  /** World Cup match-prediction win. Source = the API-Football fixtureId,
+   *  and `points` is ALWAYS overridden with the per-match split
+   *  (floor(500 / winners)). No daily cap; the lifetime dedup window keeps
+   *  (userId, action, fixtureId) at most once — so the per-minute settlement
+   *  cron can re-run safely without ever double-awarding a match. Awarded by
+   *  `settleFinishedMatches` in server/services/wcPredictionsService.ts. */
+  WC_PREDICTION_WIN: "WC_PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -40,6 +47,9 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   DAILY_LOGIN: 5,
   PROFILE_COMPLETE: 50,
   EMAIL_VERIFIED: 20,
+  // Nominal default only — the settlement engine ALWAYS overrides this with
+  // floor(500 / winners) when calling awardPoints.
+  WC_PREDICTION_WIN: 500,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -57,6 +67,9 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   // can only fire once per user lifetime.
   PROFILE_COMPLETE: 1,
   EMAIL_VERIFIED: 1,
+  // No daily cap — wins are inherently rate-limited by the match schedule,
+  // and the lifetime dedup below already prevents re-awarding a given match.
+  WC_PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -80,6 +93,10 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   // prevents re-issue forever even if the cap were higher.
   PROFILE_COMPLETE: 100000,
   EMAIL_VERIFIED: 100000,
+  // Lifetime window keyed on source=fixtureId — a given match can only ever
+  // award a user once, which is the last line of defense that lets the
+  // settlement cron re-run / reconcile without double-paying.
+  WC_PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------

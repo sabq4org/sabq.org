@@ -8,6 +8,7 @@ import { HeroSection } from "@/components/worldcup/HeroSection";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { MatchesSection } from "@/components/worldcup/MatchesSection";
 import { NewsSection } from "@/components/worldcup/NewsSection";
+import { PredictionsCTA } from "@/components/worldcup/PredictionsCTA";
 import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
 import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
@@ -75,6 +76,7 @@ export default function WorldCup() {
           onOpenPlayer={setOpenPlayerId}
         />
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
+        <PredictionsCTA />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
         <ScorersSection
           scorers={scorers}

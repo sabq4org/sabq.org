@@ -34,6 +34,7 @@ import { registerWorldCupRoutes } from "./worldCup";
 import { registerRadarRoutes } from "./radar";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
+import wcPredictionsRouter from "./wcPredictions";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -76,4 +77,5 @@ export function registerSplitRoutes(app: Express) {
   registerRadarRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
+  app.use(wcPredictionsRouter);
 }
