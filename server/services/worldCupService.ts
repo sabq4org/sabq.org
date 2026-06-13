@@ -993,7 +993,10 @@ export interface WcMatchDetail {
   headToHead: WcFixture[];
 }
 
-export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail | null> {
+export async function getMatchDetail(
+  fixtureId: number,
+  opts: { forceFresh?: boolean } = {}
+): Promise<WcMatchDetail | null> {
   // مباراة حية تُحدَّث كل 20 ثانية، وقبيل الانطلاق كل دقيقة (لالتقاط التشكيلات فور نشرها)،
   // والمنتهية/البعيدة كل 5 دقائق
   const known = (await getFixtures()).find((f) => f.id === fixtureId);
@@ -1005,6 +1008,10 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
     if (msToKickoff < PREKICKOFF_WINDOW_MS) ttl = MATCH_DETAIL_PREKICKOFF_TTL;
   }
 
+  // forceFresh يتجاوز كاش SWR ويعيد الجلب من المزود فورًا. مولّد تقرير ما بعد
+  // المباراة يحتاجه: لقطة حيّة قديمة (سُجّلت بـ ttl قصير قبل هدف التعادل
+  // الأخير) قد تبقى ضمن نافذة الـ SWR وتُقدَّم كأنها "النتيجة النهائية" —
+  // وهذا جذر حادثة نشر مباراة متعادلة كأنها فوز.
   const detail = await withSWR(`wc:match:${fixtureId}`, ttl, ttl * 2, async () => {
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
@@ -1099,7 +1106,7 @@ export async function getMatchDetail(fixtureId: number): Promise<WcMatchDetail |
       });
 
     return { fixture: localizeFixture(item), events, lineups, statistics, ratings };
-  });
+  }, opts.forceFresh ?? false);
 
   if (!detail) return null;
 

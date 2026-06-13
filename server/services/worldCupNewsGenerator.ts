@@ -148,6 +148,110 @@ function statsBrief(detail: WcMatchDetail): string {
   return `إحصائيات المباراة:\n${lines.join("\n")}`;
 }
 
+// ---------- حسم النتيجة حتميًا (لا يُترك للنموذج أن يستنتجها) ----------
+// حادثة 2026-06-14: نُشر تقرير «سويسرا تهزم قطر بهدف إمبولو» بينما انتهت
+// المباراة بالتعادل. الدرس: النتيجة (فوز/تعادل/من الفائز) تُحسب من الأرقام
+// هنا، وتُحقن في البرومبت كحقيقة قطعية، ويُفحص العنوان بعد التوليد قبل النشر.
+
+interface WcOutcome {
+  kind: "draw" | "home" | "away";
+  winnerName: string | null; // null عند التعادل
+  loserName: string | null;
+  viaPenalties: boolean;
+  /** جملة عربية قاطعة تُحقن في البرومبت */
+  line: string;
+}
+
+function describeOutcome(f: WcFixture): WcOutcome {
+  const h = f.goals.home ?? 0;
+  const a = f.goals.away ?? 0;
+  const ph = f.penalties?.home ?? null;
+  const pa = f.penalties?.away ?? null;
+  const hasPens = ph != null && pa != null && ph !== pa;
+
+  let kind: "draw" | "home" | "away";
+  let viaPenalties = false;
+  if (h > a) kind = "home";
+  else if (a > h) kind = "away";
+  else if (hasPens) {
+    kind = (ph as number) > (pa as number) ? "home" : "away";
+    viaPenalties = true;
+  } else kind = "draw";
+
+  const winnerName = kind === "home" ? f.home.name : kind === "away" ? f.away.name : null;
+  const loserName = kind === "home" ? f.away.name : kind === "away" ? f.home.name : null;
+
+  let line: string;
+  if (kind === "draw") {
+    line = `انتهت المباراة بالتعادل ${h} - ${a} بين ${f.home.name} و${f.away.name}. لا يوجد فائز ولا خاسر — يُمنع منعًا باتًا وصف أي منتخب بأنه «فاز» أو «هزم» أو «تغلّب على» الآخر.`;
+  } else if (viaPenalties) {
+    const pensFor = kind === "home" ? `${ph} - ${pa}` : `${pa} - ${ph}`;
+    line = `انتهى الوقتان الأصلي والإضافي بالتعادل ${h} - ${a}، وحُسمت المباراة بركلات الترجيح لصالح ${winnerName} (${pensFor}). الفائز المتأهل هو ${winnerName} حصرًا، والخاسر ${loserName}.`;
+  } else {
+    line = `الفائز هو ${winnerName} بنتيجة ${Math.max(h, a)} - ${Math.min(h, a)} على ${loserName}. يُمنع عكس الفائز والخاسر.`;
+  }
+  return { kind, winnerName, loserName, viaPenalties, line };
+}
+
+// ألفاظ الفوز/الهزيمة والتعادل لفحص اتساق العنوان مع النتيجة الحتمية
+const WIN_TOKENS = [
+  "يفوز", "فوز", "فاز", "تفوز", "يهزم", "هزم", "تهزم", "ينتصر", "انتصار",
+  "تنتصر", "يتغلب", "تغلب", "تتغلب", "يكتسح", "اكتسح", "كاسح", "يتخطى",
+  "تخطى", "يقهر", "قهر", "يطيح", "ثلاثية", "رباعية",
+];
+const DRAW_TOKENS = ["تعادل", "التعادل", "يتعادل", "تتعادل", "يتعادلان", "بالتعادل", "تعادلا"];
+
+const containsAny = (text: string, tokens: string[]): boolean =>
+  tokens.some((t) => text.includes(t));
+
+/**
+ * يفحص أن العنوان (والملخّص) لا يناقض النتيجة الحتمية. يُعيد سبب الحجب نصًّا
+ * عند التناقض، أو null إذا كان متّسقًا. متحفّظ عمدًا (دقّة عالية، إنذارات
+ * كاذبة قليلة): الحجب يحوّل المادة لمسودة لا يحذفها، فالأسوأ مادة صحيحة
+ * تُراجَع يدويًا — أهون من نشر نتيجة مغلوطة.
+ */
+function detectOutcomeContradiction(
+  title: string,
+  summary: string,
+  outcome: WcOutcome
+): string | null {
+  const text = `${title} ${summary || ""}`;
+  const winClaimed = containsAny(text, WIN_TOKENS);
+  const drawClaimed = containsAny(text, DRAW_TOKENS);
+
+  if (outcome.kind === "draw") {
+    // الحالة الحرجة (نفس الحادثة): تعادلٌ صُوِّر كفوز
+    if (winClaimed && !drawClaimed) return "drew_but_title_claims_a_win";
+    return null;
+  }
+  // مباراة محسومة لكن العنوان يصفها تعادلًا (وليست مُحسومة بالترجيح حيث يَرِد
+  // ذكر التعادل مشروعًا)
+  if (drawClaimed && !winClaimed && !outcome.viaPenalties) {
+    return "decisive_but_title_says_draw";
+  }
+  return null;
+}
+
+/**
+ * بوابة «النتيجة نهائية ومستقرة» قبل توليد التقرير. تمنع نشر لقطة غير
+ * نهائية: المُشغِّل (جدول getFixtures) ومصدر التقرير (getMatchDetail الطازج)
+ * يجب أن يتفقا على النتيجة، وكلاهما «انتهت»، والأهداف غير فارغة.
+ */
+function isReportDataFinal(trigger: WcFixture, detail: WcMatchDetail): boolean {
+  const d = detail.fixture;
+  if (!trigger.status.finished || !d.status.finished) return false;
+  if (d.goals.home == null || d.goals.away == null) return false;
+  if (trigger.goals.home == null || trigger.goals.away == null) return false;
+  // الجدول والتفاصيل مصدران بكاشين منفصلين — لو اختلفا فالنتيجة لم تستقر بعد
+  if (trigger.goals.home !== d.goals.home || trigger.goals.away !== d.goals.away) return false;
+  // مباراة خروج المغلوب لا تنتهي بتعادل: تعادلٌ بلا ركلات ترجيح يعني أن
+  // الحالة في طور الانتقال (ستذهب لوقت إضافي/ترجيح) — نؤجّل
+  if (d.goals.home === d.goals.away && !/^group/i.test(d.roundEn)) {
+    if (d.penalties?.home == null || d.penalties?.away == null) return false;
+  }
+  return true;
+}
+
 // ---------- البرومبتات ----------
 
 const EDITORIAL_RULES = `أنت محرر رياضي محترف في صحيفة "سبق" الإلكترونية السعودية.
@@ -189,7 +293,7 @@ ${predictionBrief(detail)}
 ${JSON_CONTRACT}`;
 }
 
-function buildReportPrompt(detail: WcMatchDetail): string {
+function buildReportPrompt(detail: WcMatchDetail, outcome: WcOutcome): string {
   const f = detail.fixture;
   const score = `${f.goals.home ?? 0} - ${f.goals.away ?? 0}`;
   const pens = f.penalties
@@ -198,9 +302,15 @@ function buildReportPrompt(detail: WcMatchDetail): string {
   const motm = detail.manOfTheMatch
     ? `\n- أفضل لاعب في المباراة (وفق تقييم المزود): ${detail.manOfTheMatch.name} بتقييم ${detail.manOfTheMatch.rating}`
     : "";
+  const titleRule =
+    outcome.kind === "draw"
+      ? `هذه مباراة انتهت بالتعادل: يجب أن يعكس العنوان والمتن التعادل صراحةً، ويُمنع منعًا باتًا قول إن أيًّا من المنتخبين «فاز» أو «هزم» أو «تغلّب على» الآخر.`
+      : `الفائز هو ${outcome.winnerName} والخاسر ${outcome.loserName}؛ يجب أن يطابق العنوان والمتن هذا الاتجاه، ويُمنع عكس الفائز والخاسر.`;
   return `${EDITORIAL_RULES}
 
 المطلوب: تقرير صحفي لنتيجة مباراة انتهت في كأس العالم 2026.
+
+⚠️ نتيجة المباراة القطعية (لا تُخالَف بأي حال): ${outcome.line}
 
 موجز البيانات (المصدر الوحيد المسموح):
 - المباراة: ${f.home.name} × ${f.away.name}
@@ -211,6 +321,7 @@ ${eventsBrief(detail)}
 ${statsBrief(detail)}
 
 ابنِ التقرير على: النتيجة ودلالتها في سياق الدور أولًا، ثم سرد الأهداف واللحظات المفصلية بالدقائق من الوقائع، ثم قراءة الإحصائيات (الاستحواذ والتسديد)، وأفضل لاعب إن وُجد.
+قاعدة العنوان الحاسمة: ${titleRule}
 
 ${JSON_CONTRACT}`;
 }
@@ -245,12 +356,33 @@ function parseGenerated(raw: string): GeneratedWcArticle {
   };
 }
 
-async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Promise<string> {
-  const prompt = kind === "preview" ? buildPreviewPrompt(detail, await safeStandings()) : buildReportPrompt(detail);
+async function generateAndStore(
+  kind: WcArticleKind,
+  detail: WcMatchDetail
+): Promise<{ id: string; published: boolean }> {
+  const outcome = kind === "report" ? describeOutcome(detail.fixture) : null;
+  const prompt =
+    kind === "preview"
+      ? buildPreviewPrompt(detail, await safeStandings())
+      : buildReportPrompt(detail, outcome!);
 
   const response = await aiManager.generate(prompt, { provider: "openai", model: "gpt-5.1" });
   if (response.error) throw new Error(`[WC News] AI generation failed: ${response.error}`);
   const generated = parseGenerated(response.content);
+
+  // شبكة الأمان الأخيرة: لو ناقض العنوان النتيجة الحتمية (تعادلٌ صُوِّر فوزًا
+  // مثلًا) لا نَنشر — نحفظها مسودة للمراجعة بدل تكرار الإحراج. البيانات هنا
+  // نهائية ومتّسقة (مرّت بـ isReportDataFinal)، فالخطأ في الصياغة لا في الرقم.
+  let published = autoPublish();
+  if (kind === "report" && outcome) {
+    const contradiction = detectOutcomeContradiction(generated.title, generated.summary, outcome);
+    if (contradiction) {
+      published = false;
+      console.error(
+        `[WC News] 🚨 تناقض النتيجة مع العنوان — حُفظ كمسودة للمراجعة. fixture ${detail.fixture.id} (${detail.fixture.home.name} × ${detail.fixture.away.name})؛ السبب=${contradiction}؛ العنوان="${generated.title}"؛ النتيجة الفعلية: ${outcome.line}`
+      );
+    }
+  }
 
   // رابط داخلي ثابت نحو هب المونديال — للقارئ وللزاحف معًا (يصل قوقل عبر
   // semanticHtml للمقال في edgeMeta، ويبني إشارة الكلمة المفتاحية للهب)
@@ -258,7 +390,6 @@ async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Pro
     '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
 
   const now = new Date();
-  const published = autoPublish();
   const created = await storage.createArticle({
     title: generated.title,
     slug: slugFor(kind, detail.fixture.id),
@@ -301,7 +432,7 @@ async function generateAndStore(kind: WcArticleKind, detail: WcMatchDetail): Pro
     sourceMetadata: { type: "manual" },
   } as any); // authorId/aiGenerated خارج insertArticleSchema — نفس نمط iFox
 
-  return created.id;
+  return { id: created.id, published };
 }
 
 async function safeStandings(): Promise<WcGroup[]> {
@@ -350,17 +481,28 @@ export async function runWorldCupNewsCycle(): Promise<WcNewsRunSummary> {
         summary.skipped++;
         continue;
       }
-      const detail = await getMatchDetail(fixture.id);
+      // التقرير يتجاوز كاش SWR (forceFresh) كي لا يُبنى على لقطة حيّة قديمة
+      // سُجّلت قبل هدف التعادل الأخير — جذر حادثة نشر مباراة متعادلة كأنها فوز.
+      const detail = await getMatchDetail(fixture.id, { forceFresh: kind === "report" });
       if (!detail) {
         summary.skipped++;
         continue;
       }
-      const articleId = await generateAndStore(kind, detail);
+      // بوابة «النتيجة نهائية ومستقرة»: لو لم يتفق الجدول مع التفاصيل الطازجة،
+      // أو لم تكتمل النتيجة بعد، نؤجّل للدقيقة القادمة بدل نشر نتيجة غير نهائية.
+      if (kind === "report" && !isReportDataFinal(fixture, detail)) {
+        console.warn(
+          `[WC News] ⏸️ تأجيل تقرير fixture ${fixture.id} — النتيجة لم تستقر/تتطابق بعد (الجدول ${fixture.goals.home}-${fixture.goals.away}/${fixture.status.code}، التفاصيل ${detail.fixture.goals.home}-${detail.fixture.goals.away}/${detail.fixture.status.code})`
+        );
+        summary.skipped++;
+        continue;
+      }
+      const { id: articleId, published } = await generateAndStore(kind, detail);
       generated++;
       if (kind === "preview") summary.previews++;
       else summary.reports++;
       console.log(
-        `[WC News] ✅ ${kind} for fixture ${fixture.id} (${fixture.home.name} × ${fixture.away.name}) → article ${articleId}`
+        `[WC News] ✅ ${kind} ${published ? "نُشر" : "مسودة (محجوب للمراجعة)"} for fixture ${fixture.id} (${fixture.home.name} × ${fixture.away.name}) → article ${articleId}`
       );
     } catch (error) {
       summary.errors++;
