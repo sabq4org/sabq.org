@@ -24,9 +24,14 @@ const POINTS_POOL = 500;
 /** معرّف المباراة الرقمي عند المزود يُخزَّن نصًّا (مفتاح الـ dedup في الولاء). */
 const fid = (fixtureId: number | string): string => String(fixtureId);
 
-/** "اليوم" بتوقيت الرياض — تواريخ المزود تصل أصلًا بإزاحة +03:00. */
-function riyadhTodayKey(): string {
-  return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+/**
+ * مفتاح يوم بتوقيت الرياض (تواريخ المزود تصل أصلًا بإزاحة +03:00).
+ * offsetDays=0 اليوم، 1 الغد… — يُستخدم لفتح نافذة التوقّع لليوم والغد معًا.
+ */
+function riyadhDateKey(offsetDays = 0): string {
+  return new Date(Date.now() + (3 * 60 * 60 + offsetDays * 24 * 60 * 60) * 1000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 /**
@@ -148,11 +153,16 @@ export async function submitPrediction(
 // قراءات الواجهة
 // ---------------------------------------------------------------------------
 
-/** مباريات اليوم + توقّع المستخدم + حالة القفل/التسوية + عدد المشاركين. */
-export async function getTodayPredictableMatches(userId?: string): Promise<PredictableMatch[]> {
+/**
+ * مباريات اليوم والغد (بتوقيت الرياض) + توقّع المستخدم + حالة القفل/التسوية
+ * + عدد المشاركين. فتح نافذة يومين يمنح وقتًا كافيًا للاستقطاب ويُظهر مباريات
+ * ما بعد منتصف الليل (تاريخها = الغد) فورًا بدل انتظار يوم لعبها.
+ */
+export async function getUpcomingPredictableMatches(userId?: string): Promise<PredictableMatch[]> {
   const fixtures = await getFixtures();
-  const todayKey = riyadhTodayKey();
-  const today = fixtures.filter((f) => (f.date ?? "").slice(0, 10) === todayKey);
+  const days = new Set([riyadhDateKey(0), riyadhDateKey(1)]);
+  // getFixtures مرتّبة زمنيًا أصلًا فالنتيجة تبقى بالترتيب الكرونولوجي.
+  const today = fixtures.filter((f) => days.has((f.date ?? "").slice(0, 10)));
   if (today.length === 0) return [];
 
   const ids = today.map((f) => fid(f.id));

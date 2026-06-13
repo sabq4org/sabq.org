@@ -7,6 +7,7 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatKickoffDay, riyadhDayKey, todayRiyadhKey } from "@/components/worldcup/wcTypes";
 import { PredictionMatchCard } from "@/components/worldcup/predictions/PredictionMatchCard";
 import { PredictionsLeaderboard } from "@/components/worldcup/predictions/PredictionsLeaderboard";
 import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictionsList";
@@ -19,7 +20,7 @@ import type {
 type Tab = "today" | "mine" | "leaders";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "today", label: "مباريات اليوم" },
+  { key: "today", label: "المباريات" },
   { key: "mine", label: "توقّعاتي" },
   { key: "leaders", label: "المتصدّرون" },
 ];
@@ -218,23 +219,48 @@ function TodayTab({
     return (
       <div className="rounded-2xl border border-dashed border-border py-14 text-center">
         <Target className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
-        <p className="font-bold">لا مباريات اليوم</p>
-        <p className="mt-1 text-sm text-muted-foreground">عُد قريبًا — تظهر مباريات اليوم هنا فور جدولتها.</p>
+        <p className="font-bold">لا مباريات اليوم أو غدًا</p>
+        <p className="mt-1 text-sm text-muted-foreground">عُد قريبًا — تُفتح مباريات اليوم والغد للتوقّع هنا فور جدولتها.</p>
       </div>
     );
   }
 
+  // تجميع حسب اليوم (المباريات تصل مرتّبة زمنيًا من الخادم) مع وسم نسبي اليوم/غدًا
+  const todayKey = todayRiyadhKey();
+  const tomorrowKey = new Date(Date.now() + 27 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const groups: { key: string; label: string; items: PredictableMatch[] }[] = [];
+  for (const m of matches) {
+    const key = riyadhDayKey(m.fixture.date);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(m);
+    else {
+      const rel = key === todayKey ? "اليوم · " : key === tomorrowKey ? "غدًا · " : "";
+      groups.push({ key, label: rel + formatKickoffDay(m.fixture.date), items: [m] });
+    }
+  }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {matches.map((m) => (
-        <PredictionMatchCard
-          key={m.fixture.id}
-          match={m}
-          isAuthenticated={isAuthenticated}
-          isSubmitting={submittingFixtureId === m.fixture.id}
-          onSubmit={onSubmit}
-          onRequireLogin={onRequireLogin}
-        />
+    <div className="space-y-6">
+      {groups.map((g) => (
+        <section key={g.key}>
+          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
+            <span className="h-4 w-1 rounded-full bg-emerald-500" />
+            {g.label}
+            <span className="text-xs font-normal text-muted-foreground">({g.items.length.toLocaleString("ar-SA")})</span>
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {g.items.map((m) => (
+              <PredictionMatchCard
+                key={m.fixture.id}
+                match={m}
+                isAuthenticated={isAuthenticated}
+                isSubmitting={submittingFixtureId === m.fixture.id}
+                onSubmit={onSubmit}
+                onRequireLogin={onRequireLogin}
+              />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   );
