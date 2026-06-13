@@ -66,6 +66,13 @@ import { buildArabicPassport, buildEnglishPassport, buildUrduPassport, isStaffRo
 import { generateArticleThumbnail } from "./services/thumbnailService";
 import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
+import {
+  adminUpdateTopicCommentContent,
+  adminSetTopicCommentStatus,
+  adminDeleteTopicComment,
+  adminTopicCommentStats,
+} from "./services/topicCommentsService";
+import { getUnifiedAdminComments } from "./services/commentModerationService";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
@@ -13513,7 +13520,15 @@ Respond in valid JSON format only:
     try {
       const userId = req.user.id;
       const userRole = req.user.role;
-      const article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
+      let article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
+
+      // Slug-or-id fallback: opinion pages (and any UUID-form article URL) post
+      // by article id, but getArticleBySlug only matches slug/englishSlug, so
+      // every such comment 404'd with "Article not found" for all users. Mirror
+      // the UUID fallback the GET /api/articles/:slug route already uses.
+      if (!article && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.slug)) {
+        article = await storage.getArticleById(req.params.slug, userId);
+      }
 
       if (!article) {
         return res.status(404).json({ message: "Article not found" });
@@ -15912,59 +15927,16 @@ Respond in valid JSON format only:
   // الحصول على جميع التعليقات مع معلومات المقالات
   app.get("/api/admin/comments", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
-      const { status, page = 1, limit = 20, search } = req.query;
-      const offset = (parseInt(page) - 1) * parseInt(limit);
-
-      let query: any = db
-        .select({
-          id: comments.id,
-          articleId: comments.articleId,
-          userId: comments.userId,
-          content: comments.content,
-          status: comments.status,
-          parentId: comments.parentId,
-          moderatedBy: comments.moderatedBy,
-          moderatedAt: comments.moderatedAt,
-          moderationReason: comments.moderationReason,
-          currentSentiment: comments.currentSentiment,
-          aiClassification: comments.aiClassification,
-          aiDetectedIssues: comments.aiDetectedIssues,
-          aiModerationReason: comments.aiModerationReason,
-          createdAt: comments.createdAt,
-          articleTitle: articles.title,
-          articleSlug: articles.slug,
-          userName: users.firstName,
-          userLastName: users.lastName,
-          userEmail: users.email,
-        })
-        .from(comments)
-        .leftJoin(articles, eq(comments.articleId, articles.id))
-        .leftJoin(users, eq(comments.userId, users.id))
-        .orderBy(desc(comments.createdAt));
-
-      if (status && status !== "all") {
-        query = query.where(eq(comments.status, status));
-      }
-
-      if (search) {
-        query = query.where(ilike(comments.content, `%${search}%`));
-      }
-
-      const allComments = await query.limit(parseInt(limit)).offset(offset);
-
-      // Get total count
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(comments)
-        .where(status && status !== "all" ? eq(comments.status, status) : sql`1=1`);
-
-      res.json({
-        comments: allComments,
-        total: Number(count),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(Number(count) / parseInt(limit)),
+      // Unified list (news + opinion + muqtarab) with ?source= filter — see
+      // commentModerationService. Kept thin to respect the routes.ts freeze.
+      const result = await getUnifiedAdminComments({
+        status: req.query.status as string | undefined,
+        search: req.query.search as string | undefined,
+        source: req.query.source as string | undefined,
+        page: parseInt(req.query.page) || 1,
+        limit: parseInt(req.query.limit) || 20,
       });
+      res.json(result);
     } catch (error) {
       console.error("Error fetching admin comments:", error);
       res.status(500).json({ message: "Failed to fetch comments" });
@@ -15978,9 +15950,18 @@ Respond in valid JSON format only:
     try {
       const { id } = req.params;
       const { content } = req.body;
+      const source = (req.query.source as string) || (req.body?.source as string);
 
       if (!content || content.trim().length === 0) {
         return res.status(400).json({ message: "محتوى التعليق مطلوب" });
+      }
+
+      if (source === "muqtarab") {
+        const updatedTopic = await adminUpdateTopicCommentContent(id, content, req.user.id);
+        if (!updatedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم تعديل التعليق بنجاح", comment: updatedTopic });
       }
 
       const [updated] = await db
@@ -16010,6 +15991,15 @@ Respond in valid JSON format only:
   app.delete("/api/admin/comments/:id", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
       const { id } = req.params;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const deletedTopic = await adminDeleteTopicComment(id);
+        if (!deletedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم حذف التعليق بنجاح" });
+      }
 
       const [deleted] = await db
         .delete(comments)
@@ -16033,6 +16023,18 @@ Respond in valid JSON format only:
   app.patch("/api/admin/comments/:id/approve", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
       const { id } = req.params;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const approvedTopic = await adminSetTopicCommentStatus(id, {
+          status: "approved",
+          moderatedBy: req.user.id,
+        });
+        if (!approvedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تمت الموافقة على التعليق", comment: approvedTopic });
+      }
 
       const [updated] = await db
         .update(comments)
@@ -16062,6 +16064,19 @@ Respond in valid JSON format only:
     try {
       const { id } = req.params;
       const { reason } = req.body;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const rejectedTopic = await adminSetTopicCommentStatus(id, {
+          status: "rejected",
+          moderatedBy: req.user.id,
+          moderationReason: reason || null,
+        });
+        if (!rejectedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم رفض التعليق", comment: rejectedTopic });
+      }
 
       const [updated] = await db
         .update(comments)
@@ -16470,13 +16485,28 @@ Respond in valid JSON format only:
         .from(suspiciousWords)
         .where(eq(suspiciousWords.isActive, true));
 
+      // Fold Muqtarab topic comments into the same KPI strip so moderators see
+      // one unified total across news, opinion and muqtarab.
+      const topicStats = await adminTopicCommentStats();
+
       res.json({
         comments: {
-          total: Number(stats.total),
-          pending: Number(stats.pending),
-          approved: Number(stats.approved),
-          rejected: Number(stats.rejected),
-          flagged: Number(stats.flagged),
+          total: Number(stats.total) + topicStats.total,
+          pending: Number(stats.pending) + topicStats.pending,
+          approved: Number(stats.approved) + topicStats.approved,
+          rejected: Number(stats.rejected) + topicStats.rejected,
+          flagged: Number(stats.flagged) + topicStats.flagged,
+        },
+        // Per-source breakdown for any UI that wants it (articles = news+opinion).
+        bySource: {
+          articles: {
+            total: Number(stats.total),
+            pending: Number(stats.pending),
+            approved: Number(stats.approved),
+            rejected: Number(stats.rejected),
+            flagged: Number(stats.flagged),
+          },
+          muqtarab: topicStats,
         },
         suspiciousWords: {
           active: Number(wordsCount.count),

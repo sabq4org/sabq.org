@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { useArticleReadTracking } from "@/hooks/useArticleReadTracking";
 import { useCanonical } from "@/hooks/useCanonical";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import {
   trackOpinionView,
@@ -91,6 +91,14 @@ export default function OpinionDetailPage() {
     enabled: !!slug,
   });
   const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
+
+  // Per-user liked-comment overlay (kept out of the cached comments payload).
+  // Keyed by article id so the my-likes endpoint resolves via its UUID branch.
+  const { data: myLikesRaw } = useQuery<string[]>({
+    queryKey: ["/api/articles", article?.id, "comments", "my-likes"],
+    enabled: !!article?.id && !!user?.id,
+  });
+  const likedCommentIds = Array.isArray(myLikesRaw) ? myLikesRaw : [];
 
   const { data: relatedArticlesRaw } = useQuery<ArticleWithDetails[]>({
     queryKey: ["/api/opinion", slug, "related"],
@@ -171,9 +179,9 @@ export default function OpinionDetailPage() {
       if (fired) return;
       fired = true;
       clearInterval(intervalId);
-      fetch(`/api/articles/${articleId}/view`, { method: 'POST' })
+      fetch(apiUrl(`/api/articles/${articleId}/view`), { method: 'POST' })
         .then(r => r.json())
-        .then(data => console.log('[OpinionView] Tracked:', data))
+        .then(() => {})
         .catch(err => console.error('[OpinionView] Error:', err));
     };
 
@@ -342,13 +350,21 @@ export default function OpinionDetailPage() {
           url: window.location.href,
         });
       } catch (err) {
-        console.log("Share failed:", err);
+        console.warn("Share failed:", err);
       }
     }
   };
 
   const handleComment = async (content: string, parentId?: string) => {
     commentMutation.mutate({ content, parentId });
+  };
+
+  // Toggle a like on a comment. Throws on failure so CommentSection rolls back
+  // its optimistic state; on success refresh authoritative counts + overlay.
+  const handleLikeComment = async (commentId: string, nextLiked: boolean) => {
+    await apiRequest(`/api/comments/${commentId}/like`, { method: nextLiked ? "POST" : "DELETE" });
+    queryClient.invalidateQueries({ queryKey: ["/api/opinion", slug, "comments"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/articles", article?.id, "comments", "my-likes"] });
   };
 
   // Handle audio playback using ElevenLabs (same as ArticleDetail)
@@ -815,6 +831,9 @@ export default function OpinionDetailPage() {
                 comments={comments}
                 currentUser={user}
                 onSubmitComment={handleComment}
+                onLikeComment={handleLikeComment}
+                likedCommentIds={likedCommentIds}
+                subjectNoun="المقال"
               />
             </article>
 
