@@ -1412,8 +1412,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       } = req.query;
 
       const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      // radix MUST be 10. Was `parseInt(limit, 20)` which read "20" as base-20
-      // (=40) and "50" as 100, corrupting every page size and the pagination math.
+      // radix MUST be 10 (was 20 → "20" parsed as base-20 = 40, corrupting paging).
       const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 20));
       const offset = (pageNum - 1) * limitNum;
 
@@ -1449,8 +1448,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         conditions.push(eq(mediaFiles.isFavorite, isFavorite === 'true'));
       }
 
-      // The picker sends `since` (ISO date) to show recently-added assets.
-      // It was silently ignored before, forcing a full scan and a dead filter.
+      // The picker sends `since` (ISO) for recently-added assets (was ignored).
       if (since) {
         const sinceDate = new Date(since as string);
         if (!isNaN(sinceDate.getTime())) {
@@ -1458,18 +1456,31 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
+      // Smart collection presets (Phase 1). `most_used` changes ordering (below);
+      // usage is checked LIVE so "unused"/"most used" stay accurate (usageCount drifts).
+      const collection = req.query.collection as string | undefined;
+      const orderByMostUsed = collection === 'most_used';
+      if (collection === 'favorites') {
+        conditions.push(eq(mediaFiles.isFavorite, true));
+      } else if (collection === 'no_alt') {
+        conditions.push(sql`(${mediaFiles.altText} IS NULL OR ${mediaFiles.altText} = '')`);
+      } else if (collection === 'unused') {
+        conditions.push(sql`NOT EXISTS (SELECT 1 FROM ${articleMediaAssets} WHERE ${articleMediaAssets.mediaFileId} = ${mediaFiles.id})`);
+        conditions.push(sql`NOT EXISTS (SELECT 1 FROM ${mediaUsageLog} WHERE ${mediaUsageLog.mediaId} = ${mediaFiles.id})`);
+      }
+
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Deduplicate by URL and paginate in SQL instead of pulling every
-      // matching row into memory (the old code fetched the whole table to
-      // dedupe + slice in JS, which did not scale). `DISTINCT ON (url)` keeps
-      // the newest row per URL via the inner ORDER BY, then the outer query
-      // re-orders by recency and applies LIMIT/OFFSET.
+      // Dedupe by URL + paginate in SQL (DISTINCT ON keeps the newest row per
+      // URL; the outer query re-orders + LIMIT/OFFSET). Live usage is computed
+      // ONLY for most_used so the default path stays cheap.
+      const usageExpr = sql<number>`((SELECT count(*) FROM ${articleMediaAssets} WHERE ${articleMediaAssets.mediaFileId} = ${mediaFiles.id}) + (SELECT count(*) FROM ${mediaUsageLog} WHERE ${mediaUsageLog.mediaId} = ${mediaFiles.id}))`;
       const dedupSub = db
         .selectDistinctOn([mediaFiles.url], {
           id: mediaFiles.id,
           url: mediaFiles.url,
           createdAt: mediaFiles.createdAt,
+          usage: orderByMostUsed ? usageExpr : sql<number>`0`,
         })
         .from(mediaFiles)
         .where(whereClause)
@@ -1479,7 +1490,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const pagedRows = await db
         .select({ id: dedupSub.id })
         .from(dedupSub)
-        .orderBy(desc(dedupSub.createdAt), desc(dedupSub.id))
+        .orderBy(
+          orderByMostUsed ? desc(dedupSub.usage) : desc(dedupSub.createdAt),
+          desc(dedupSub.id),
+        )
         .limit(limitNum)
         .offset(offset);
 
@@ -1596,13 +1610,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // NOTE: This is the platform-wide generic image upload pipe — it backs avatars
-  // (Profile), category/topic images, the rich editor, and angle-writer topic
-  // images, NOT just the media library. It is intentionally gated by
-  // authentication ONLY (no media.* permission): angle writers and regular
-  // profile-avatar uploaders deliberately have no media.* permissions. Do NOT
-  // add requirePermission("media.upload") here — it would break those flows.
-  // (Library *management* — list/edit/delete/folders — is permission-gated.)
+  // NOTE: platform-wide generic image upload pipe (avatars, category/topic
+  // images, rich editor, angle-writer topic images) — NOT just the media library.
+  // Intentionally auth-only: angle writers and avatar uploaders have no media.*
+  // permission, so do NOT add requirePermission("media.upload") — it'd break them.
   app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, mediaUpload.single('file'), async (req: any, res) => {
     try {
       const userId = req.user.id;
