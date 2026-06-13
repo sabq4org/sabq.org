@@ -115,25 +115,31 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
     },
   });
 
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // matches the server's 10MB cap
+
   const handleFileSelect = (file: File) => {
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+    if (!file.type.startsWith("image/")) {
       toast({
         title: "نوع ملف غير مدعوم",
-        description: "يرجى اختيار صورة أو فيديو",
+        description: "يرجى اختيار صورة (JPEG أو PNG أو WEBP)",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast({
+        title: "الملف كبير جداً",
+        description: "الحد الأقصى لحجم الصورة 10 ميجابايت",
         variant: "destructive",
       });
       return;
     }
 
     setSelectedFile(file);
-    
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => setPreviewUrl(e.target?.result as string);
-      reader.readAsDataURL(file);
-    } else {
-      setPreviewUrl(null);
-    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => setPreviewUrl(e.target?.result as string);
+    reader.readAsDataURL(file);
 
     // Auto-fill title with filename
     if (!form.getValues("title")) {
@@ -184,22 +190,13 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
       : undefined;
 
     setUploadProgress(0);
+    // Real progress comes from apiRequest's onUploadProgress (XHR) in the
+    // mutation — no fake simulated interval needed.
     uploadMutation.mutate({
       ...data,
       keywords: keywords?.join(','),
       file: selectedFile,
     });
-    
-    // Simulate progress
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 10;
-      });
-    }, 200);
   };
 
   return (
@@ -208,7 +205,7 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
         <DialogHeader>
           <DialogTitle data-testid="heading-upload-media">رفع ملف جديد</DialogTitle>
           <DialogDescription>
-            قم برفع صورة أو فيديو إلى مكتبة الوسائط
+            قم برفع صورة إلى مكتبة الوسائط
           </DialogDescription>
         </DialogHeader>
 
@@ -237,7 +234,7 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
                   id="file-input"
                   type="file"
                   className="hidden"
-                  accept="image/*,video/*"
+                  accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);

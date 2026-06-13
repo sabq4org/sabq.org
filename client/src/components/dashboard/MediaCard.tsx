@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Star, Download, Trash2, Image as ImageIcon } from "lucide-react";
+import { Star, Download, Trash2, Image as ImageIcon, ImageOff } from "lucide-react";
 import { format } from "date-fns";
 import type { MediaFile } from "@shared/schema";
 
@@ -10,9 +11,11 @@ interface MediaCardProps {
   onPreview: (file: MediaFile) => void;
   onToggleFavorite: (file: MediaFile) => void;
   onDelete: (file: MediaFile) => void;
+  canDelete?: boolean;
 }
 
-export function MediaCard({ file, onPreview, onToggleFavorite, onDelete }: MediaCardProps) {
+export function MediaCard({ file, onPreview, onToggleFavorite, onDelete, canDelete = true }: MediaCardProps) {
+  const [imgError, setImgError] = useState(false);
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -28,16 +31,21 @@ export function MediaCard({ file, onPreview, onToggleFavorite, onDelete }: Media
       data-testid={`card-media-${file.id}`}
     >
       <div className="aspect-square relative bg-muted overflow-hidden">
-        {file.type === "image" ? (
+        {file.type === "image" && !imgError ? (
           <img
             src={file.thumbnailUrl || file.url}
             alt={file.altText || file.title || file.originalName}
             className="w-full h-full object-cover transition-transform group-hover:scale-105"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <ImageIcon className="h-16 w-16 text-muted-foreground" />
+            {imgError ? (
+              <ImageOff className="h-16 w-16 text-muted-foreground" />
+            ) : (
+              <ImageIcon className="h-16 w-16 text-muted-foreground" />
+            )}
           </div>
         )}
         
@@ -106,19 +114,21 @@ export function MediaCard({ file, onPreview, onToggleFavorite, onDelete }: Media
             <Download className="h-3 w-3 ml-1" />
             تحميل
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="flex-1 h-7 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(file);
-            }}
-            data-testid={`button-delete-${file.id}`}
-          >
-            <Trash2 className="h-3 w-3 ml-1" />
-            حذف
-          </Button>
+          {canDelete && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="flex-1 h-7 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(file);
+              }}
+              data-testid={`button-delete-${file.id}`}
+            >
+              <Trash2 className="h-3 w-3 ml-1" />
+              حذف
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

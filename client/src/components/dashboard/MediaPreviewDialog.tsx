@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/form";
 import { Download, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import type { MediaFile, MediaFolder } from "@shared/schema";
@@ -64,6 +65,7 @@ export function MediaPreviewDialog({
   folders,
 }: MediaPreviewDialogProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const form = useForm<UpdateFormValues>({
@@ -148,6 +150,11 @@ export function MediaPreviewDialog({
   };
 
   if (!file) return null;
+
+  // Owner can edit/delete their own file; otherwise media.edit / media.delete
+  // is required (mirrors the backend so we don't surface a silent 403).
+  const canEdit = file.uploadedBy === user?.id || hasPermission(user, "media.edit");
+  const canDelete = file.uploadedBy === user?.id || hasPermission(user, "media.delete");
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
@@ -243,15 +250,17 @@ export function MediaPreviewDialog({
                   <Download className="h-4 w-4 ml-2" />
                   تحميل
                 </Button>
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => setShowDeleteDialog(true)}
-                  data-testid="button-delete"
-                >
-                  <Trash2 className="h-4 w-4 ml-2" />
-                  حذف
-                </Button>
+                {canDelete && (
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => setShowDeleteDialog(true)}
+                    data-testid="button-delete"
+                  >
+                    <Trash2 className="h-4 w-4 ml-2" />
+                    حذف
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -413,7 +422,7 @@ export function MediaPreviewDialog({
                     </Button>
                     <Button
                       type="submit"
-                      disabled={updateMutation.isPending}
+                      disabled={updateMutation.isPending || !canEdit}
                       data-testid="button-save-changes"
                     >
                       {updateMutation.isPending ? "جاري الحفظ..." : "حفظ التعديلات"}

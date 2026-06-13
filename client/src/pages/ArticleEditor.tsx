@@ -953,9 +953,13 @@ export default function ArticleEditor() {
         const response = await apiRequest(`/api/media?url=${encodeURIComponent(url)}`, {
           method: "GET",
         }) as any;
-        
-        if (response && response.length > 0) {
-          const media = response[0];
+
+        // GET /api/media returns an object { files, total, ... }, not an array.
+        // The old code read response.length/response[0] (always undefined), so
+        // it never matched and silently auto-saved a duplicate row on every edit.
+        const matchedFiles = Array.isArray(response?.files) ? response.files : [];
+        if (matchedFiles.length > 0) {
+          const media = matchedFiles[0];
           
           // Only update state if this is still the current request
           if (imageRequestTokenRef.current === requestToken) {

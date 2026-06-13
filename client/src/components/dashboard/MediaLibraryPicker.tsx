@@ -206,6 +206,9 @@ export function MediaLibraryPicker({
         method: "POST",
         body: formData,
         isFormData: true,
+        onUploadProgress: (progress) => {
+          setUploadProgress(Math.round((progress.loaded / progress.total) * 100));
+        },
       });
     },
     onSuccess: (uploadedMedia) => {
@@ -244,11 +247,21 @@ export function MediaLibraryPicker({
     onClose();
   };
 
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // matches the server's 10MB cap
+
   const handleFileSelect = (file: File) => {
-    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+    if (!file.type.startsWith("image/")) {
       toast({
         title: "نوع ملف غير مدعوم",
-        description: "يرجى اختيار صورة أو فيديو",
+        description: "يرجى اختيار صورة (JPEG أو PNG أو WEBP)",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast({
+        title: "الملف كبير جداً",
+        description: "الحد الأقصى لحجم الصورة 10 ميجابايت",
         variant: "destructive",
       });
       return;
@@ -256,13 +269,9 @@ export function MediaLibraryPicker({
 
     setSelectedFile(file);
 
-    if (file.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = (e) => setPreviewUrl(e.target?.result as string);
-      reader.readAsDataURL(file);
-    } else {
-      setPreviewUrl(null);
-    }
+    const reader = new FileReader();
+    reader.onload = (e) => setPreviewUrl(e.target?.result as string);
+    reader.readAsDataURL(file);
 
     if (!form.getValues("title")) {
       form.setValue("title", file.name.replace(/\.[^/.]+$/, ""));
@@ -299,21 +308,12 @@ export function MediaLibraryPicker({
     }
 
     setUploadProgress(0);
+    // Real progress comes from apiRequest's onUploadProgress (XHR) in the
+    // mutation — no fake simulated interval needed.
     uploadMutation.mutate({
       ...data,
       file: selectedFile,
     });
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 10;
-      });
-    }, 200);
   };
 
   const handleMediaSelect = (media: MediaFile) => {
@@ -600,7 +600,7 @@ export function MediaLibraryPicker({
                       id="file-input-picker"
                       type="file"
                       className="hidden"
-                      accept="image/*,video/*"
+                      accept="image/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileSelect(file);
