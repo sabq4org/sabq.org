@@ -60,11 +60,14 @@ struct WorldCupView: View {
 
     private func open(_ fixtureId: Int) { selectedMatch = WCMatchSelection(id: fixtureId) }
 
+    // عند السحب للتحديث (force=true) نمرّر تجاوز الكاش لكل النقاط، وإلا
+    // بقيت النتائج/الجدول/الترتيب من URLCache (الخادم يضع max-age=30/120/300)
+    // فلا تتغيّر النتائج الحيّة إلا بعد انتهاء المهلة → «لازم سحبتين أو ثلاث».
     private func loadAll(force: Bool = false) async {
         async let a: Void = loadOverview(force: force)
-        async let b: Void = loadFixtures()
-        async let c: Void = loadStandings()
-        async let d: Void = loadScorers()
+        async let b: Void = loadFixtures(force: force)
+        async let c: Void = loadStandings(force: force)
+        async let d: Void = loadScorers(force: force)
         _ = await (a, b, c, d)
     }
 
@@ -74,21 +77,21 @@ struct WorldCupView: View {
             await MainActor.run { overview = r; overviewLoading = false }
         } catch { await MainActor.run { overviewLoading = false } }
     }
-    private func loadFixtures() async {
+    private func loadFixtures(force: Bool = false) async {
         do {
-            let r = try await APIClient.shared.fetchWorldCupFixtures()
+            let r = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
             await MainActor.run { fixtures = r; fixturesLoading = false }
         } catch { await MainActor.run { fixturesLoading = false } }
     }
-    private func loadStandings() async {
+    private func loadStandings(force: Bool = false) async {
         do {
-            let r = try await APIClient.shared.fetchWorldCupStandings()
+            let r = try await APIClient.shared.fetchWorldCupStandings(ignoreCache: force)
             await MainActor.run { standings = r; standingsLoading = false }
         } catch { await MainActor.run { standingsLoading = false } }
     }
-    private func loadScorers() async {
+    private func loadScorers(force: Bool = false) async {
         do {
-            let r = try await APIClient.shared.fetchWorldCupScorers()
+            let r = try await APIClient.shared.fetchWorldCupScorers(ignoreCache: force)
             await MainActor.run { scorers = r; scorersLoading = false }
         } catch { await MainActor.run { scorersLoading = false } }
     }

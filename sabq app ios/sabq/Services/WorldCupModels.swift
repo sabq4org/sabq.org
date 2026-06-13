@@ -323,19 +323,19 @@ extension APIClient {
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
-    func fetchWorldCupFixtures() async throws -> [WCFixture] {
+    func fetchWorldCupFixtures(ignoreCache: Bool = false) async throws -> [WCFixture] {
         try await get(WCFixturesResponse.self, path: "/world-cup/fixtures",
-                      apiRoot: URLConstants.publicAPI).fixtures
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).fixtures
     }
 
-    func fetchWorldCupStandings() async throws -> [WCGroup] {
+    func fetchWorldCupStandings(ignoreCache: Bool = false) async throws -> [WCGroup] {
         try await get(WCStandingsResponse.self, path: "/world-cup/standings",
-                      apiRoot: URLConstants.publicAPI).groups
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).groups
     }
 
-    func fetchWorldCupScorers() async throws -> [WCScorer] {
+    func fetchWorldCupScorers(ignoreCache: Bool = false) async throws -> [WCScorer] {
         try await get(WCScorersResponse.self, path: "/world-cup/scorers",
-                      apiRoot: URLConstants.publicAPI).scorers
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).scorers
     }
 
     func fetchWorldCupAssists() async throws -> [WCLeader] {
