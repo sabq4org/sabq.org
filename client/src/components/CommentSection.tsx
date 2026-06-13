@@ -6,8 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageCircle, Send, CornerDownLeft, UserPlus, UserCheck, Sparkles, Clock, TrendingUp } from "lucide-react";
-import type { CommentWithUser } from "@shared/schema";
+import { MessageCircle, Send, CornerDownLeft, UserPlus, UserCheck, Sparkles, Clock, TrendingUp, ThumbsUp } from "lucide-react";
+import type { DisplayComment } from "@shared/schema";
 import { TierPill } from "@/components/loyalty/LoyaltyBlock";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -17,28 +17,73 @@ import { formatNumber } from "@/lib/format";
 
 interface CommentSectionProps {
   articleId: string;
-  comments: CommentWithUser[];
-  currentUser?: { 
-    id: string; 
-    email?: string; 
+  comments: DisplayComment[];
+  currentUser?: {
+    id: string;
+    email?: string;
     firstName?: string | null;
     lastName?: string | null;
   };
   onSubmitComment?: (content: string, parentId?: string) => void;
+  // Like a comment (toggle). Returns a promise so the optimistic UI can roll
+  // back on failure. Same contract for article and topic comments — the parent
+  // wires the right endpoint.
+  onLikeComment?: (commentId: string, nextLiked: boolean) => Promise<void>;
+  // Comment ids the current viewer already liked (per-user overlay fetched
+  // separately from the cached comments payload).
+  likedCommentIds?: string[];
+  // Noun used in the prompts ("الخبر" for news, "الموضوع" for Muqtarab topics).
+  subjectNoun?: string;
 }
 
-export function CommentSection({ 
-  articleId, 
+export function CommentSection({
+  articleId,
   comments,
-  currentUser, 
-  onSubmitComment 
+  currentUser,
+  onSubmitComment,
+  onLikeComment,
+  likedCommentIds,
+  subjectNoun = "الخبر",
 }: CommentSectionProps) {
   const { toast } = useToast();
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [followingState, setFollowingState] = useState<Record<string, boolean>>({});
-  const [sortBy, setSortBy] = useState<"recent" | "popular">("recent");
+  const [sortBy, setSortBy] = useState<"recent" | "popular" | "liked">("recent");
+  // Optimistic per-comment like overrides: { liked, count }. Seeded from
+  // likedCommentIds + comment.likesCount, overridden on click.
+  const [localLikes, setLocalLikes] = useState<Record<string, { liked: boolean; count: number }>>({});
+
+  const likedSet = useMemo(() => new Set(likedCommentIds ?? []), [likedCommentIds]);
+
+  const getLikeState = (comment: DisplayComment) => {
+    const override = localLikes[comment.id];
+    if (override) return override;
+    return { liked: likedSet.has(comment.id), count: comment.likesCount ?? 0 };
+  };
+
+  const handleLike = async (comment: DisplayComment) => {
+    if (!currentUser) {
+      window.location.href = "/login";
+      return;
+    }
+    const { liked, count } = getLikeState(comment);
+    const nextLiked = !liked;
+    const nextCount = Math.max(0, count + (nextLiked ? 1 : -1));
+    setLocalLikes((prev) => ({ ...prev, [comment.id]: { liked: nextLiked, count: nextCount } }));
+    try {
+      await onLikeComment?.(comment.id, nextLiked);
+    } catch {
+      // roll back on failure
+      setLocalLikes((prev) => ({ ...prev, [comment.id]: { liked, count } }));
+      toast({
+        title: "خطأ",
+        description: "تعذّر تسجيل الإعجاب. حاول مرة أخرى.",
+        variant: "destructive",
+      });
+    }
+  };
   
   // Progressive loading: show 3 comments initially, add 5 more each click
   const INITIAL_COMMENTS = 3;
@@ -125,6 +170,11 @@ export function CommentSection({
 
   const sortedComments = useMemo(() => {
     const topLevelComments = comments.filter(c => !c.parentId);
+    if (sortBy === "liked") {
+      // Sort by the stable base count (not the optimistic override) so liking a
+      // comment doesn't make the list jump around under the user's cursor.
+      return [...topLevelComments].sort((a, b) => (b.likesCount ?? 0) - (a.likesCount ?? 0));
+    }
     if (sortBy === "popular") {
       return [...topLevelComments].sort((a, b) => {
         const aReplies = a.replies?.length || 0;
@@ -132,16 +182,17 @@ export function CommentSection({
         return bReplies - aReplies;
       });
     }
-    return [...topLevelComments].sort((a, b) => 
+    return [...topLevelComments].sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [comments, sortBy]);
 
-  const renderComment = (comment: CommentWithUser, depth = 0) => {
+  const renderComment = (comment: DisplayComment, depth = 0) => {
     const repliesCount = comment.replies?.length || 0;
     const isReply = depth > 0;
     const maxDepth = 3;
     const canReply = depth < maxDepth;
+    const { liked, count: likeCount } = getLikeState(comment);
     
     return (
       <div 
@@ -230,8 +281,22 @@ export function CommentSection({
               )}
             </div>
 
-            {currentUser && canReply && (
-              <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`text-xs hover-elevate gap-1 ${liked ? "text-primary" : "text-muted-foreground"}`}
+                onClick={() => handleLike(comment)}
+                aria-pressed={liked}
+                data-testid={`button-like-comment-${comment.id}`}
+              >
+                <ThumbsUp className={`h-3 w-3 ${liked ? "fill-current" : ""}`} />
+                {liked ? "أعجبني" : "إعجاب"}
+                {likeCount > 0 && (
+                  <span className="text-muted-foreground">({formatNumber(likeCount)})</span>
+                )}
+              </Button>
+              {currentUser && canReply && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -245,8 +310,8 @@ export function CommentSection({
                     <span className="text-muted-foreground">({repliesCount.toLocaleString('en-US')})</span>
                   )}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
 
             {replyingTo === comment.id && (
               <div className="mt-3 flex gap-2">
@@ -323,8 +388,8 @@ export function CommentSection({
             <div>
               <h2 className="text-lg font-bold">النقاش</h2>
               <p className="text-sm text-muted-foreground">
-                {commentsCount === 0 
-                  ? "كن أول من يشارك رأيه في هذا الخبر" 
+                {commentsCount === 0
+                  ? `كن أول من يشارك رأيه في هذا ${subjectNoun}`
                   : `${formatNumber(commentsCount)} ${commentsCount <= 10 ? 'تعليقات' : 'تعليق'} من القراء`
                 }
               </p>
@@ -332,11 +397,15 @@ export function CommentSection({
           </div>
           
           {commentsCount > 1 && (
-            <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as "recent" | "popular")}>
+            <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as "recent" | "popular" | "liked")}>
               <TabsList className="bg-muted/50">
                 <TabsTrigger value="recent" className="gap-1.5 text-xs" data-testid="tab-recent-comments">
                   <Clock className="h-3.5 w-3.5" />
                   الأحدث
+                </TabsTrigger>
+                <TabsTrigger value="liked" className="gap-1.5 text-xs" data-testid="tab-liked-comments">
+                  <ThumbsUp className="h-3.5 w-3.5" />
+                  الأكثر إعجاباً
                 </TabsTrigger>
                 <TabsTrigger value="popular" className="gap-1.5 text-xs" data-testid="tab-popular-comments">
                   <TrendingUp className="h-3.5 w-3.5" />
@@ -359,7 +428,7 @@ export function CommentSection({
               </Avatar>
               <div className="flex-1">
                 <Textarea
-                  placeholder="ما رأيك في هذا الخبر؟ شاركنا وجهة نظرك..."
+                  placeholder={`ما رأيك في هذا ${subjectNoun}؟ شاركنا وجهة نظرك...`}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   className="min-h-[100px] resize-none bg-muted/30 border-muted-foreground/20 focus:border-primary/50"
@@ -382,7 +451,7 @@ export function CommentSection({
         ) : (
           <div className="bg-muted/30 rounded-lg p-6 text-center">
             <MessageCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground mb-3">سجل دخولك لتشارك رأيك في هذا الخبر</p>
+            <p className="text-sm text-muted-foreground mb-3">سجل دخولك لتشارك رأيك في هذا {subjectNoun}</p>
             <Button variant="default" size="sm" onClick={() => window.location.href = '/login'} data-testid="button-login-to-comment">
               تسجيل الدخول
             </Button>

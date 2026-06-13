@@ -66,6 +66,14 @@ import { buildArabicPassport, buildEnglishPassport, buildUrduPassport, isStaffRo
 import { generateArticleThumbnail } from "./services/thumbnailService";
 import { liveVisitorTracker } from "./services/liveVisitorTracker";
 import { checkTextForSuspiciousWords, incrementSuspiciousWordFlagCount } from "./utils/suspiciousWordsChecker";
+import {
+  adminListTopicComments,
+  adminCountTopicComments,
+  adminUpdateTopicCommentContent,
+  adminSetTopicCommentStatus,
+  adminDeleteTopicComment,
+  adminTopicCommentStats,
+} from "./services/topicCommentsService";
 import { hybridRecommendationEngine } from "./recommendation-engine";
 import { sendVerificationEmail, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail, sendEmailNotification } from "./services/email";
 import { provisionAngleFromSubmission, resendAngleWriterCredentials } from "./services/muqtarabProvisioning";
@@ -13513,7 +13521,15 @@ Respond in valid JSON format only:
     try {
       const userId = req.user.id;
       const userRole = req.user.role;
-      const article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
+      let article = await storage.getArticleBySlug(req.params.slug, userId, userRole);
+
+      // Slug-or-id fallback: opinion pages (and any UUID-form article URL) post
+      // by article id, but getArticleBySlug only matches slug/englishSlug, so
+      // every such comment 404'd with "Article not found" for all users. Mirror
+      // the UUID fallback the GET /api/articles/:slug route already uses.
+      if (!article && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.slug)) {
+        article = await storage.getArticleById(req.params.slug, userId);
+      }
 
       if (!article) {
         return res.status(404).json({ message: "Article not found" });
@@ -15912,58 +15928,133 @@ Respond in valid JSON format only:
   // الحصول على جميع التعليقات مع معلومات المقالات
   app.get("/api/admin/comments", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
-      const { status, page = 1, limit = 20, search } = req.query;
-      const offset = (parseInt(page) - 1) * parseInt(limit);
+      const pageNum = Math.max(1, parseInt(req.query.page) || 1);
+      const lim = Math.max(1, parseInt(req.query.limit) || 20);
+      const offset = (pageNum - 1) * lim;
+      const status = req.query.status as string | undefined;
+      const search = req.query.search as string | undefined;
+      // Unified source filter: news (non-opinion articles) | opinion | muqtarab | all
+      const source = (req.query.source as string) || "all";
+      // Over-fetch bound: the global top (offset+lim) rows are guaranteed to sit
+      // within the top (offset+lim) of EACH table, so we fetch that many from
+      // each, merge, sort and slice. Cheap for the shallow pages moderation uses.
+      const fetchN = Math.min(offset + lim, 2000);
 
-      let query: any = db
-        .select({
-          id: comments.id,
-          articleId: comments.articleId,
-          userId: comments.userId,
-          content: comments.content,
-          status: comments.status,
-          parentId: comments.parentId,
-          moderatedBy: comments.moderatedBy,
-          moderatedAt: comments.moderatedAt,
-          moderationReason: comments.moderationReason,
-          currentSentiment: comments.currentSentiment,
-          aiClassification: comments.aiClassification,
-          aiDetectedIssues: comments.aiDetectedIssues,
-          aiModerationReason: comments.aiModerationReason,
-          createdAt: comments.createdAt,
-          articleTitle: articles.title,
-          articleSlug: articles.slug,
-          userName: users.firstName,
-          userLastName: users.lastName,
-          userEmail: users.email,
-        })
-        .from(comments)
-        .leftJoin(articles, eq(comments.articleId, articles.id))
-        .leftJoin(users, eq(comments.userId, users.id))
-        .orderBy(desc(comments.createdAt));
+      const wantArticles = source === "all" || source === "news" || source === "opinion";
+      const wantTopics = source === "all" || source === "muqtarab";
 
-      if (status && status !== "all") {
-        query = query.where(eq(comments.status, status));
+      // ---- article + opinion comments (shared `comments` table) ----
+      let articleItems: any[] = [];
+      let articleTotal = 0;
+      if (wantArticles) {
+        const conds: any[] = [];
+        if (status && status !== "all") conds.push(eq(comments.status, status));
+        if (search) conds.push(ilike(comments.content, `%${search}%`));
+        if (source === "opinion") conds.push(eq(articles.articleType, "opinion"));
+        if (source === "news")
+          conds.push(sql`(${articles.articleType} is null or ${articles.articleType} <> 'opinion')`);
+        const whereClause = conds.length ? and(...conds) : undefined;
+
+        const rows = await db
+          .select({
+            id: comments.id,
+            articleId: comments.articleId,
+            topicId: sql<string | null>`null`,
+            userId: comments.userId,
+            content: comments.content,
+            status: comments.status,
+            parentId: comments.parentId,
+            moderatedBy: comments.moderatedBy,
+            moderatedAt: comments.moderatedAt,
+            moderationReason: comments.moderationReason,
+            currentSentiment: comments.currentSentiment,
+            aiClassification: comments.aiClassification,
+            aiDetectedIssues: comments.aiDetectedIssues,
+            aiModerationReason: comments.aiModerationReason,
+            createdAt: comments.createdAt,
+            articleTitle: articles.title,
+            articleSlug: articles.slug,
+            articleType: articles.articleType,
+            userName: users.firstName,
+            userLastName: users.lastName,
+            userEmail: users.email,
+          })
+          .from(comments)
+          .leftJoin(articles, eq(comments.articleId, articles.id))
+          .leftJoin(users, eq(comments.userId, users.id))
+          .where(whereClause as any)
+          .orderBy(desc(comments.createdAt))
+          .limit(fetchN);
+
+        articleItems = rows.map((r) => {
+          const isOpinion = r.articleType === "opinion";
+          return {
+            ...r,
+            source: isOpinion ? "opinion" : "news",
+            targetTitle: r.articleTitle,
+            targetUrl: r.articleSlug
+              ? isOpinion
+                ? `/opinion/${r.articleSlug}`
+                : `/article/${r.articleSlug}`
+              : null,
+          };
+        });
+
+        const [cnt] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(comments)
+          .leftJoin(articles, eq(comments.articleId, articles.id))
+          .where(whereClause as any);
+        articleTotal = Number(cnt?.count) || 0;
       }
 
-      if (search) {
-        query = query.where(ilike(comments.content, `%${search}%`));
+      // ---- muqtarab topic comments (parallel `topic_comments` table) ----
+      let topicItems: any[] = [];
+      let topicTotal = 0;
+      if (wantTopics) {
+        const rows = await adminListTopicComments({ status, search, limit: fetchN, offset: 0 });
+        topicItems = rows.map((r) => ({
+          id: r.id,
+          articleId: r.topicId,
+          topicId: r.topicId,
+          userId: r.userId,
+          content: r.content,
+          status: r.status,
+          parentId: r.parentId,
+          moderatedBy: r.moderatedBy,
+          moderatedAt: r.moderatedAt,
+          moderationReason: r.moderationReason,
+          currentSentiment: r.currentSentiment,
+          aiClassification: r.aiClassification,
+          aiDetectedIssues: r.aiDetectedIssues,
+          aiModerationReason: r.aiModerationReason,
+          createdAt: r.createdAt,
+          articleTitle: r.topicTitle,
+          articleSlug: r.topicSlug,
+          articleType: "muqtarab",
+          userName: r.userName,
+          userLastName: r.userLastName,
+          userEmail: r.userEmail,
+          source: "muqtarab",
+          targetTitle: r.topicTitle,
+          targetUrl: r.angleSlug && r.topicSlug ? `/muqtarab/${r.angleSlug}/topic/${r.topicSlug}` : null,
+        }));
+        topicTotal = await adminCountTopicComments({ status, search });
       }
 
-      const allComments = await query.limit(parseInt(limit)).offset(offset);
-
-      // Get total count
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(comments)
-        .where(status && status !== "all" ? eq(comments.status, status) : sql`1=1`);
+      // Merge both sources, sort newest-first, slice the requested page.
+      const merged = [...articleItems, ...topicItems].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      const pageItems = merged.slice(offset, offset + lim);
+      const total = articleTotal + topicTotal;
 
       res.json({
-        comments: allComments,
-        total: Number(count),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(Number(count) / parseInt(limit)),
+        comments: pageItems,
+        total,
+        page: pageNum,
+        limit: lim,
+        totalPages: Math.ceil(total / lim),
       });
     } catch (error) {
       console.error("Error fetching admin comments:", error);
@@ -15978,9 +16069,18 @@ Respond in valid JSON format only:
     try {
       const { id } = req.params;
       const { content } = req.body;
+      const source = (req.query.source as string) || (req.body?.source as string);
 
       if (!content || content.trim().length === 0) {
         return res.status(400).json({ message: "محتوى التعليق مطلوب" });
+      }
+
+      if (source === "muqtarab") {
+        const updatedTopic = await adminUpdateTopicCommentContent(id, content, req.user.id);
+        if (!updatedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم تعديل التعليق بنجاح", comment: updatedTopic });
       }
 
       const [updated] = await db
@@ -16010,6 +16110,15 @@ Respond in valid JSON format only:
   app.delete("/api/admin/comments/:id", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
       const { id } = req.params;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const deletedTopic = await adminDeleteTopicComment(id);
+        if (!deletedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم حذف التعليق بنجاح" });
+      }
 
       const [deleted] = await db
         .delete(comments)
@@ -16033,6 +16142,18 @@ Respond in valid JSON format only:
   app.patch("/api/admin/comments/:id/approve", requireAuth, requirePermission("comments.moderate"), async (req: any, res) => {
     try {
       const { id } = req.params;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const approvedTopic = await adminSetTopicCommentStatus(id, {
+          status: "approved",
+          moderatedBy: req.user.id,
+        });
+        if (!approvedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تمت الموافقة على التعليق", comment: approvedTopic });
+      }
 
       const [updated] = await db
         .update(comments)
@@ -16062,6 +16183,19 @@ Respond in valid JSON format only:
     try {
       const { id } = req.params;
       const { reason } = req.body;
+      const source = (req.query.source as string) || (req.body?.source as string);
+
+      if (source === "muqtarab") {
+        const rejectedTopic = await adminSetTopicCommentStatus(id, {
+          status: "rejected",
+          moderatedBy: req.user.id,
+          moderationReason: reason || null,
+        });
+        if (!rejectedTopic) {
+          return res.status(404).json({ message: "التعليق غير موجود" });
+        }
+        return res.json({ message: "تم رفض التعليق", comment: rejectedTopic });
+      }
 
       const [updated] = await db
         .update(comments)
@@ -16470,13 +16604,28 @@ Respond in valid JSON format only:
         .from(suspiciousWords)
         .where(eq(suspiciousWords.isActive, true));
 
+      // Fold Muqtarab topic comments into the same KPI strip so moderators see
+      // one unified total across news, opinion and muqtarab.
+      const topicStats = await adminTopicCommentStats();
+
       res.json({
         comments: {
-          total: Number(stats.total),
-          pending: Number(stats.pending),
-          approved: Number(stats.approved),
-          rejected: Number(stats.rejected),
-          flagged: Number(stats.flagged),
+          total: Number(stats.total) + topicStats.total,
+          pending: Number(stats.pending) + topicStats.pending,
+          approved: Number(stats.approved) + topicStats.approved,
+          rejected: Number(stats.rejected) + topicStats.rejected,
+          flagged: Number(stats.flagged) + topicStats.flagged,
+        },
+        // Per-source breakdown for any UI that wants it (articles = news+opinion).
+        bySource: {
+          articles: {
+            total: Number(stats.total),
+            pending: Number(stats.pending),
+            approved: Number(stats.approved),
+            rejected: Number(stats.rejected),
+            flagged: Number(stats.flagged),
+          },
+          muqtarab: topicStats,
         },
         suspiciousWords: {
           active: Number(wordsCount.count),

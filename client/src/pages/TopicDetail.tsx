@@ -1,6 +1,6 @@
 import { useParams, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -12,7 +12,9 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { apiUrl } from "@/lib/queryClient";
+import { apiUrl, apiRequest, queryClient } from "@/lib/queryClient";
+import { CommentsTeaser } from "@/components/CommentsTeaser";
+import { CommentSection } from "@/components/CommentSection";
 import {
   ArrowRight,
   ArrowUp,
@@ -34,7 +36,7 @@ import {
 } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
-import type { Topic, Angle } from "@shared/schema";
+import type { Topic, Angle, DisplayComment } from "@shared/schema";
 
 type AngleWriter = {
   name: string;
@@ -330,6 +332,86 @@ export default function TopicDetail() {
   const writer = topicData?.writer ?? null;
 
   const relatedTopics = (relatedData?.topics ?? []).filter((t) => t.id !== topic?.id).slice(0, 3);
+
+  // ---- التعليقات (نفس نظام تعليقات الأخبار/الرأي) ----
+  const { data: commentsRaw } = useQuery<DisplayComment[]>({
+    queryKey: ["/api/muqtarab/topics", topic?.id, "comments"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/muqtarab/topics/${topic!.id}/comments`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch comments");
+      return res.json();
+    },
+    enabled: !!topic?.id,
+  });
+  const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
+
+  // Per-user liked-comment overlay (kept out of the cached comments payload).
+  const { data: myLikesRaw } = useQuery<string[]>({
+    queryKey: ["/api/muqtarab/topics", topic?.id, "comments", "my-likes"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/muqtarab/topics/${topic!.id}/comments/my-likes`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch liked comments");
+      return res.json();
+    },
+    enabled: !!topic?.id && !!user?.id,
+  });
+  const likedCommentIds = Array.isArray(myLikesRaw) ? myLikesRaw : [];
+
+  const recentCommenters = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; firstName?: string | null; lastName?: string | null; profileImageUrl?: string | null }> = [];
+    for (const c of comments) {
+      const u = (c as any).user;
+      if (u && !seen.has(u.id)) {
+        seen.add(u.id);
+        out.push({ id: u.id, firstName: u.firstName, lastName: u.lastName, profileImageUrl: u.profileImageUrl });
+      }
+      if (out.length >= 3) break;
+    }
+    return out;
+  }, [comments]);
+
+  const commentMutation = useMutation({
+    mutationFn: async (data: { content: string; parentId?: string }) => {
+      if (!topic) return;
+      return await apiRequest(`/api/muqtarab/topics/${topic.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/muqtarab/topics", topic?.id, "comments"] });
+      toast({
+        title: "شكراً لمشاركتك",
+        description:
+          "يتم تحليل تعليقك الآن بواسطة الذكاء الاصطناعي للتأكد من التزامه بمعايير المجتمع. سيُنشر تلقائياً إذا كان آمناً.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: error?.status === 401 ? "تسجيل دخول مطلوب" : "خطأ",
+        description:
+          error?.status === 401 ? "يجب تسجيل الدخول لإضافة تعليق" : error?.message || "فشل في إضافة التعليق",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleComment = (content: string, parentId?: string) => {
+    commentMutation.mutate({ content, parentId });
+  };
+
+  // Toggle a like on a topic comment. Throws on failure so CommentSection
+  // rolls back its optimistic state.
+  const handleLikeComment = async (commentId: string, nextLiked: boolean) => {
+    await apiRequest(`/api/topic-comments/${commentId}/like`, { method: nextLiked ? "POST" : "DELETE" });
+    queryClient.invalidateQueries({ queryKey: ["/api/muqtarab/topics", topic?.id, "comments"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/muqtarab/topics", topic?.id, "comments", "my-likes"] });
+  };
 
   // ---- تتبع المشاهدة ----
   const viewedRef = useRef<string | null>(null);
@@ -921,6 +1003,26 @@ export default function TopicDetail() {
                     {angle.writerSignature}
                   </p>
                 </div>
+              </div>
+            )}
+
+            {/* ---- النقاش / التعليقات ---- */}
+            {topic && (
+              <div className="mt-14 space-y-6">
+                <CommentsTeaser
+                  articleId={topic.id}
+                  commentsCount={comments.length}
+                  recentCommenters={recentCommenters}
+                />
+                <CommentSection
+                  articleId={topic.id}
+                  comments={comments}
+                  currentUser={user}
+                  onSubmitComment={handleComment}
+                  onLikeComment={handleLikeComment}
+                  likedCommentIds={likedCommentIds}
+                  subjectNoun="الموضوع"
+                />
               </div>
             )}
 

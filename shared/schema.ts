@@ -1251,12 +1251,30 @@ export const comments = pgTable("comments", {
   // platform, web hardcodes "web"). Default "web" keeps existing rows
   // sensible after migration.
   platform: text("platform").default("web").notNull(), // web, ios, android
+  // Denormalised like counter — kept in sync by the comment-reaction routes so
+  // the public (cacheable) comments payload can show counts without a per-user
+  // join. Per-user "did I like this" is overlaid client-side via /my-likes.
+  likesCount: integer("likes_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_comments_article_status").on(table.articleId, table.status),
   index("idx_comments_user").on(table.userId),
   index("idx_comments_status").on(table.status),
   index("idx_comments_ai_classification").on(table.aiClassification),
+]);
+
+// Likes on individual comments (news + opinion share the comments table).
+// Mirrors the article `reactions` table; unique(comment,user) makes a like
+// idempotent. likesCount on comments is the denormalised counter.
+export const commentReactions = pgTable("comment_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  commentId: varchar("comment_id").references(() => comments.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: text("type").notNull().default("like"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_comment_reactions_comment").on(table.commentId),
+  uniqueIndex("idx_comment_reactions_unique").on(table.commentId, table.userId),
 ]);
 
 // Comment sentiment analysis (tracks sentiment history)
@@ -1992,6 +2010,54 @@ export const topics = pgTable("topics", {
   uniqueIndex("idx_topics_angle_slug").on(table.angleId, table.slug),
 ]);
 
+// Comments on Muqtarab topics. A parallel family to `comments` (topics live in
+// their own table, not `articles`, so the comments.articleId FK can't be
+// reused). Mirrors the full comments feature set — threaded replies, AI
+// moderation, suspicious-words flagging, sentiment, platform attribution and
+// the likesCount counter — so the shared <CommentSection> and the unified
+// moderation dashboard work without special-casing.
+export const topicComments = pgTable("topic_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  topicId: varchar("topic_id").references(() => topics.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  content: text("content").notNull(),
+  status: text("status").default("pending").notNull(), // pending, approved, rejected, flagged
+  parentId: varchar("parent_id"),
+  moderatedBy: varchar("moderated_by").references(() => users.id),
+  moderatedAt: timestamp("moderated_at"),
+  moderationReason: text("moderation_reason"),
+  // Sentiment analysis fields (denormalised current value for performance)
+  currentSentiment: text("current_sentiment"), // positive, neutral, negative
+  currentSentimentConfidence: real("current_sentiment_confidence"), // 0-1
+  sentimentAnalyzedAt: timestamp("sentiment_analyzed_at"),
+  // AI Moderation fields - نظام الرقابة الذكية
+  aiModerationScore: integer("ai_moderation_score"), // 0-100
+  aiClassification: text("ai_classification"), // safe, review, reject
+  aiDetectedIssues: jsonb("ai_detected_issues").$type<string[]>(),
+  aiModerationReason: text("ai_moderation_reason"),
+  aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  platform: text("platform").default("web").notNull(), // web, ios, android
+  likesCount: integer("likes_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_topic_comments_topic_status").on(table.topicId, table.status),
+  index("idx_topic_comments_user").on(table.userId),
+  index("idx_topic_comments_status").on(table.status),
+  index("idx_topic_comments_ai_classification").on(table.aiClassification),
+]);
+
+// Likes on individual Muqtarab topic comments (mirrors commentReactions).
+export const topicCommentReactions = pgTable("topic_comment_reactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  topicCommentId: varchar("topic_comment_id").references(() => topicComments.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: text("type").notNull().default("like"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_topic_comment_reactions_comment").on(table.topicCommentId),
+  uniqueIndex("idx_topic_comment_reactions_unique").on(table.topicCommentId, table.userId),
+]);
+
 // Angle Submissions table - طلبات كتابة الزوايا
 export const angleSubmissions = pgTable("angle_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2498,6 +2564,19 @@ export const insertCommentSentimentSchema = createInsertSchema(commentSentiments
 });
 export const insertReactionSchema = createInsertSchema(reactions).omit({ id: true, createdAt: true });
 export const insertBookmarkSchema = createInsertSchema(bookmarks).omit({ id: true, createdAt: true });
+export const insertCommentReactionSchema = createInsertSchema(commentReactions).omit({ id: true, createdAt: true });
+
+// Muqtarab topic comments — same omit set as insertCommentSchema. likesCount is
+// managed by the reaction routes, not the create path, so it's omitted too.
+export const insertTopicCommentSchema = createInsertSchema(topicComments).omit({
+  id: true,
+  createdAt: true,
+  moderatedBy: true,
+  moderatedAt: true,
+  moderationReason: true,
+  likesCount: true,
+});
+export const insertTopicCommentReactionSchema = createInsertSchema(topicCommentReactions).omit({ id: true, createdAt: true });
 
 // Focus mode reading sessions insert schema (Task #80)
 // `startedAt` is left in so the guest-session sync route can backfill the
@@ -3257,6 +3336,38 @@ export type CommentWithUser = Comment & {
   user: User;
   replies?: CommentWithUser[];
   moderator?: User;
+  // Injected client-side from the per-user /my-likes overlay (never part of the
+  // shared cacheable payload — see per-user-data-shared-cache-trap).
+  hasLiked?: boolean;
+};
+
+export type TopicComment = typeof topicComments.$inferSelect;
+export type InsertTopicComment = z.infer<typeof insertTopicCommentSchema>;
+export type CommentReaction = typeof commentReactions.$inferSelect;
+export type TopicCommentReaction = typeof topicCommentReactions.$inferSelect;
+
+export type TopicCommentWithUser = TopicComment & {
+  user: User;
+  replies?: TopicCommentWithUser[];
+  moderator?: User;
+  hasLiked?: boolean;
+};
+
+// Minimal structural shape the shared <CommentSection> renders, so one
+// component can display both article comments and Muqtarab topic comments.
+// Both CommentWithUser and TopicCommentWithUser are assignable to it.
+export type DisplayComment = {
+  id: string;
+  content: string;
+  status: string;
+  parentId?: string | null;
+  createdAt: Date | string;
+  likesCount?: number;
+  hasLiked?: boolean;
+  aiClassification?: string | null;
+  moderationReason?: string | null;
+  user: User;
+  replies?: DisplayComment[];
 };
 
 export type RoleWithPermissions = Role & {

@@ -256,6 +256,20 @@ export default function ArticleDetail() {
   });
   const comments = Array.isArray(commentsRaw) ? commentsRaw : [];
 
+  // Per-user liked-comment overlay (kept out of the cached comments payload).
+  const { data: myLikesRaw } = useQuery<string[]>({
+    queryKey: ["/api/articles", slug, "comments", "my-likes"],
+    enabled: !!slug && !!user?.id,
+  });
+  const likedCommentIds = Array.isArray(myLikesRaw) ? myLikesRaw : [];
+
+  // Toggle a like on a comment. Throws on failure so CommentSection rolls back.
+  const handleLikeComment = async (commentId: string, nextLiked: boolean) => {
+    await apiRequest(`/api/comments/${commentId}/like`, { method: nextLiked ? "POST" : "DELETE" });
+    queryClient.invalidateQueries({ queryKey: ["/api/articles", slug, "comments"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/articles", slug, "comments", "my-likes"] });
+  };
+
   // Combined sidebar data for faster loading (fetches related, tags, and media in parallel)
   const { data: sidebarData } = useQuery<{
     related: ArticleWithDetails[];
@@ -1108,6 +1122,8 @@ export default function ArticleDetail() {
               comments={comments}
               currentUser={user}
               onSubmitComment={handleComment}
+              onLikeComment={handleLikeComment}
+              likedCommentIds={likedCommentIds}
             />
           </div>
         </div>
@@ -1142,6 +1158,8 @@ export default function ArticleDetail() {
             comments={comments}
             currentUser={user}
             onSubmitComment={handleComment}
+            onLikeComment={handleLikeComment}
+            likedCommentIds={likedCommentIds}
           />
         </div>
       </div>
@@ -1752,6 +1770,8 @@ export default function ArticleDetail() {
               comments={comments}
               currentUser={user}
               onSubmitComment={handleComment}
+              onLikeComment={handleLikeComment}
+              likedCommentIds={likedCommentIds}
             />
           </article>
 

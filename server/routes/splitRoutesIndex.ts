@@ -32,6 +32,8 @@ import { registerTaskRoutes } from "./tasks";
 import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
 import { registerRadarRoutes } from "./radar";
+import commentReactionsRouter from "./commentReactions";
+import topicCommentsRouter from "./topicComments";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -72,4 +74,6 @@ export function registerSplitRoutes(app: Express) {
   registerWalletRoutes(app);
   registerWorldCupRoutes(app);
   registerRadarRoutes(app);
+  app.use(commentReactionsRouter);
+  app.use(topicCommentsRouter);
 }

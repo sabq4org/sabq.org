@@ -74,6 +74,11 @@ interface Comment {
   userName?: string;
   userLastName?: string;
   userEmail?: string;
+  // Unified moderation: which surface this comment belongs to. Drives the badge
+  // and is echoed back in moderation actions so they hit the right table.
+  source?: "news" | "opinion" | "muqtarab";
+  targetTitle?: string;
+  targetUrl?: string | null;
 }
 
 interface CommentsResponse {
@@ -101,6 +106,7 @@ export default function CommentsModeration() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "news" | "opinion" | "muqtarab">("all");
   const [page, setPage] = useState(1);
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -115,12 +121,13 @@ export default function CommentsModeration() {
   });
 
   const { data: commentsData, isLoading } = useQuery<CommentsResponse>({
-    queryKey: ["/api/admin/comments", activeTab, page, searchQuery],
+    queryKey: ["/api/admin/comments", activeTab, page, searchQuery, sourceFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: activeTab,
         page: page.toString(),
         limit: "20",
+        source: sourceFilter,
       });
       if (searchQuery) params.append("search", searchQuery);
       const res = await fetch(apiUrl(`/api/admin/comments?${params}`));
@@ -129,9 +136,12 @@ export default function CommentsModeration() {
     },
   });
 
+  // Build the ?source= suffix so each action targets the right table.
+  const sourceQ = (source?: string) => (source && source !== "news" ? `?source=${source}` : "");
+
   const approveMutation = useMutation({
-    mutationFn: async (commentId: string) => {
-      return await apiRequest(`/api/admin/comments/${commentId}/approve`, {
+    mutationFn: async ({ commentId, source }: { commentId: string; source?: string }) => {
+      return await apiRequest(`/api/admin/comments/${commentId}/approve${sourceQ(source)}`, {
         method: "PATCH",
       });
     },
@@ -146,8 +156,8 @@ export default function CommentsModeration() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: async ({ commentId, reason }: { commentId: string; reason?: string }) => {
-      return await apiRequest(`/api/admin/comments/${commentId}/reject`, {
+    mutationFn: async ({ commentId, reason, source }: { commentId: string; reason?: string; source?: string }) => {
+      return await apiRequest(`/api/admin/comments/${commentId}/reject${sourceQ(source)}`, {
         method: "PATCH",
         body: JSON.stringify({ reason }),
       });
@@ -166,8 +176,8 @@ export default function CommentsModeration() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ commentId, content }: { commentId: string; content: string }) => {
-      return await apiRequest(`/api/admin/comments/${commentId}`, {
+    mutationFn: async ({ commentId, content, source }: { commentId: string; content: string; source?: string }) => {
+      return await apiRequest(`/api/admin/comments/${commentId}${sourceQ(source)}`, {
         method: "PATCH",
         body: JSON.stringify({ content }),
       });
@@ -185,8 +195,8 @@ export default function CommentsModeration() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (commentId: string) => {
-      return await apiRequest(`/api/admin/comments/${commentId}`, {
+    mutationFn: async ({ commentId, source }: { commentId: string; source?: string }) => {
+      return await apiRequest(`/api/admin/comments/${commentId}${sourceQ(source)}`, {
         method: "DELETE",
       });
     },
@@ -203,7 +213,7 @@ export default function CommentsModeration() {
   });
 
   const handleApprove = (comment: Comment) => {
-    approveMutation.mutate(comment.id);
+    approveMutation.mutate({ commentId: comment.id, source: comment.source });
   };
 
   const handleRejectClick = (comment: Comment) => {
@@ -216,6 +226,7 @@ export default function CommentsModeration() {
       rejectMutation.mutate({
         commentId: selectedComment.id,
         reason: rejectionReason || undefined,
+        source: selectedComment.source,
       });
     }
   };
@@ -231,6 +242,7 @@ export default function CommentsModeration() {
       editMutation.mutate({
         commentId: selectedComment.id,
         content: editedContent.trim(),
+        source: selectedComment.source,
       });
     }
   };
@@ -242,7 +254,7 @@ export default function CommentsModeration() {
 
   const handleDeleteConfirm = () => {
     if (selectedComment) {
-      deleteMutation.mutate(selectedComment.id);
+      deleteMutation.mutate({ commentId: selectedComment.id, source: selectedComment.source });
     }
   };
 
@@ -258,6 +270,19 @@ export default function CommentsModeration() {
         return <Badge className="bg-orange-500 hover:bg-orange-600">مُبلَّغ عنه</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getSourceBadge = (source?: string) => {
+    switch (source) {
+      case "opinion":
+        return <Badge variant="outline" className="text-purple-600 border-purple-500">رأي</Badge>;
+      case "muqtarab":
+        return <Badge variant="outline" className="text-teal-600 border-teal-500">مقترب</Badge>;
+      case "news":
+        return <Badge variant="outline" className="text-blue-600 border-blue-500">أخبار</Badge>;
+      default:
+        return null;
     }
   };
 
@@ -388,7 +413,7 @@ export default function CommentsModeration() {
         </Card>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -401,6 +426,28 @@ export default function CommentsModeration() {
             className="pr-10"
             data-testid="input-search"
           />
+        </div>
+        {/* فلتر المصدر: أخبار / رأي / مقترب */}
+        <div className="flex items-center gap-1.5 flex-wrap" data-testid="source-filter">
+          {([
+            { value: "all", label: "كل المصادر" },
+            { value: "news", label: "الأخبار" },
+            { value: "opinion", label: "الرأي" },
+            { value: "muqtarab", label: "مقترب" },
+          ] as const).map((opt) => (
+            <Button
+              key={opt.value}
+              variant={sourceFilter === opt.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setSourceFilter(opt.value);
+                setPage(1);
+              }}
+              data-testid={`source-filter-${opt.value}`}
+            >
+              {opt.label}
+            </Button>
+          ))}
         </div>
       </div>
 
@@ -444,11 +491,12 @@ export default function CommentsModeration() {
                             {getUserName(comment)}
                           </span>
                           {getStatusBadge(comment.status)}
+                          {getSourceBadge(comment.source)}
                           {getAIClassificationBadge(comment.aiClassification)}
                         </div>
 
                         {comment.articleTitle && (
-                          <Link href={`/article/${comment.articleSlug}`}>
+                          <Link href={comment.targetUrl || `/article/${comment.articleSlug}`}>
                             <div className="flex items-center gap-2 text-sm text-primary hover:underline cursor-pointer" data-testid={`article-link-${comment.id}`}>
                               <Link2 className="h-4 w-4" />
                               <span>{comment.articleTitle}</span>
