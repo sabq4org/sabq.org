@@ -16,7 +16,7 @@ import {
   submitPrediction,
   getMyPredictions,
   getLeaderboard,
-  getTodayPredictableMatches,
+  getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/wcPredictionsService";
 
@@ -40,7 +40,7 @@ router.get("/api/world-cup/predictions/today", async (req: any, res) => {
   if (!guard(res)) return;
   try {
     const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
-    const matches = await getTodayPredictableMatches(userId);
+    const matches = await getUpcomingPredictableMatches(userId);
     if (userId) {
       noStore(res);
     } else {
