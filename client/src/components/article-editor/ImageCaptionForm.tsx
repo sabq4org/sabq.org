@@ -3,7 +3,10 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Save, Sparkles, AlertTriangle, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ImageCaptionFormProps {
   imageUrl: string;
@@ -14,6 +17,16 @@ interface ImageCaptionFormProps {
   existingCaption?: any;
   onSave: (data: any) => void;
   onDelete?: (id: string) => void;
+  /** Optional article context — enables AI relevance scoring for the hero image. */
+  articleTitle?: string;
+  articleContent?: string;
+}
+
+interface AiMeta {
+  relevanceScore: number | null;
+  qualityScore: number | null;
+  contentWarnings: string[];
+  hasSensitiveContent: boolean;
 }
 
 export function ImageCaptionForm({
@@ -25,12 +38,17 @@ export function ImageCaptionForm({
   existingCaption,
   onSave,
   onDelete,
+  articleTitle,
+  articleContent,
 }: ImageCaptionFormProps) {
+  const { toast } = useToast();
   const [altText, setAltText] = useState(existingCaption?.altText || "");
   const [captionPlain, setCaptionPlain] = useState(existingCaption?.captionPlain || "");
   const [sourceName, setSourceName] = useState(existingCaption?.sourceName || "");
   const [sourceUrl, setSourceUrl] = useState(existingCaption?.sourceUrl || "");
   const [keywordTags, setKeywordTags] = useState<string[]>(existingCaption?.keywordTags || []);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiMeta, setAiMeta] = useState<AiMeta | null>(null);
 
   // Update form fields when existingCaption changes (e.g., when data loads from API)
   useEffect(() => {
@@ -42,6 +60,49 @@ export function ImageCaptionForm({
       setKeywordTags(existingCaption.keywordTags || []);
     }
   }, [existingCaption]);
+
+  // "صورة جاهزة للخبر" — AI generates Arabic alt text + caption (+ keywords) and
+  // reports relevance/quality/content-warnings. On-demand (writer clicks).
+  const handleGenerate = async () => {
+    if (!imageUrl) return;
+    setAnalyzing(true);
+    try {
+      const r = (await apiRequest("/api/media/analyze", {
+        method: "POST",
+        body: JSON.stringify({ imageUrl, articleTitle, articleContent }),
+        headers: { "Content-Type": "application/json" },
+      })) as {
+        altText: string;
+        caption: string;
+        keywords: string[];
+        relevanceScore: number | null;
+        qualityScore: number | null;
+        contentWarnings: string[];
+        hasSensitiveContent: boolean;
+      };
+      if (r.altText) setAltText(r.altText);
+      if (r.caption) setCaptionPlain(r.caption);
+      if (r.keywords?.length) setKeywordTags(r.keywords);
+      setAiMeta({
+        relevanceScore: r.relevanceScore,
+        qualityScore: r.qualityScore,
+        contentWarnings: r.contentWarnings || [],
+        hasSensitiveContent: r.hasSensitiveContent,
+      });
+      toast({
+        title: "تم التوليد بالذكاء",
+        description: "تم ملء التعليق والنص البديل — راجِعهما وعدّلهما قبل الحفظ",
+      });
+    } catch (error: any) {
+      toast({
+        title: "تعذّر التوليد",
+        description: error.message || "حدث خطأ أثناء تحليل الصورة",
+        variant: "destructive",
+      });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const handleSave = () => {
     onSave({
@@ -60,6 +121,44 @@ export function ImageCaptionForm({
 
   return (
     <div className="space-y-3 mt-3">
+      {/* AI: صورة جاهزة للخبر */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={handleGenerate}
+          disabled={!imageUrl || analyzing}
+          className="gap-1.5"
+          data-testid="button-ai-caption"
+        >
+          {analyzing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-purple-500" />}
+          {analyzing ? "جارٍ التحليل..." : "توليد تعليق ووصف بالذكاء"}
+        </Button>
+
+        {aiMeta?.relevanceScore != null && (
+          <Badge variant="outline" className="text-xs" data-testid="badge-ai-relevance">
+            ملاءمة {aiMeta.relevanceScore}%
+          </Badge>
+        )}
+        {aiMeta?.qualityScore != null && (
+          <Badge variant="outline" className="text-xs" data-testid="badge-ai-quality">
+            جودة {aiMeta.qualityScore}%
+          </Badge>
+        )}
+        {aiMeta?.hasSensitiveContent && (
+          <Badge variant="destructive" className="text-xs gap-1" data-testid="badge-ai-warning">
+            <AlertTriangle className="h-3 w-3" /> محتوى حسّاس
+          </Badge>
+        )}
+      </div>
+
+      {aiMeta?.contentWarnings && aiMeta.contentWarnings.length > 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          تنبيه: {aiMeta.contentWarnings.join(" · ")}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 gap-3">
         <div className="space-y-1">
           <Label htmlFor="altText" className="text-xs text-muted-foreground">النص البديل للصورة</Label>
