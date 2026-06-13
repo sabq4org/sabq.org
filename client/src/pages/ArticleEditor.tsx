@@ -2763,6 +2763,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                         articleId={article?.id}
                         locale="ar"
                         displayOrder={0}
+                        articleTitle={title}
+                        articleContent={content}
                         existingCaption={mediaAssets.find((asset: any) => asset.displayOrder === 0)}
                         onSave={(data) => {
                           const existingCaption = mediaAssets.find((asset: any) => asset.displayOrder === 0);
