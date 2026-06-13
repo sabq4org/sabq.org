@@ -53,6 +53,7 @@ const ACTION_LABEL_AR: Record<string, string> = {
   SHARE: "مشاركة",
   NOTIFICATION_OPEN: "فتح إشعار",
   DAILY_LOGIN: "دخول يومي",
+  WC_PREDICTION_WIN: "فوز بتوقّع مباراة",
   ADMIN_ADJUSTMENT: "تعديل من الإدارة",
 };
 

@@ -351,6 +351,7 @@ const DataInfographicDemo = lazy(() => retryImport(() => import("@/pages/DataInf
 const LiteFeedPage = lazy(() => retryImport(() => import("@/pages/lite/LiteFeedPage")));
 const GulfLiveCoverage = lazy(() => retryImport(() => import("@/pages/GulfLiveCoverage")));
 const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
+const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -848,6 +849,7 @@ function Router() {
         <Route path="/moment-by-moment">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/live">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/gulf-live">{() => <LazyRoute component={GulfLiveCoverage} />}</Route>
+        <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
