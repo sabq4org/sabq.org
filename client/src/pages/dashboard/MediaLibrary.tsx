@@ -83,13 +83,9 @@ export default function MediaLibrary() {
       if (selectedCategory && selectedCategory !== "all") params.append("category", selectedCategory);
       if (isFavoritesView) params.append("isFavorite", "true");
 
-      const response = await fetch(`/api/media?${params.toString()}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch media files");
-      }
-      return response.json();
+      // apiRequest (not raw fetch) so this stays correct in DIRECT mode and
+      // handles credentials/error-throwing/json parsing for us.
+      return apiRequest(`/api/media?${params.toString()}`, { method: "GET" });
     },
     enabled: !!user,
   });
