@@ -6,6 +6,8 @@ import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
 import { verifyImageMagicBytes } from "./utils/imageVerify";
+import { isAllowedMediaUrl } from "./utils/mediaUrl";
+import { deleteMediaBlob } from "./services/mediaStorage";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -1395,7 +1397,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ============================================================
 
   // GET /api/media - List all media files with pagination, search, and filtering
-  app.get("/api/media", isAuthenticated, async (req: any, res) => {
+  app.get("/api/media", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       const {
         search,
@@ -1404,12 +1406,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         folderId,
         category,
         isFavorite,
+        since,
         page = 1,
         limit = 20,
       } = req.query;
 
       const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-      const limitNum = parseInt(limit as string, 20);
+      // radix MUST be 10. Was `parseInt(limit, 20)` which read "20" as base-20
+      // (=40) and "50" as 100, corrupting every page size and the pagination math.
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 20));
       const offset = (pageNum - 1) * limitNum;
 
       // Build where conditions
@@ -1444,34 +1449,47 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         conditions.push(eq(mediaFiles.isFavorite, isFavorite === 'true'));
       }
 
+      // The picker sends `since` (ISO date) to show recently-added assets.
+      // It was silently ignored before, forcing a full scan and a dead filter.
+      if (since) {
+        const sinceDate = new Date(since as string);
+        if (!isNaN(sinceDate.getTime())) {
+          conditions.push(gte(mediaFiles.createdAt, sinceDate));
+        }
+      }
+
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      // Use ORM-based approach for better compatibility
-      // First, get all matching files with filters
-      const allMatchingFiles = await db
-        .select({
+      // Deduplicate by URL and paginate in SQL instead of pulling every
+      // matching row into memory (the old code fetched the whole table to
+      // dedupe + slice in JS, which did not scale). `DISTINCT ON (url)` keeps
+      // the newest row per URL via the inner ORDER BY, then the outer query
+      // re-orders by recency and applies LIMIT/OFFSET.
+      const dedupSub = db
+        .selectDistinctOn([mediaFiles.url], {
           id: mediaFiles.id,
           url: mediaFiles.url,
           createdAt: mediaFiles.createdAt,
         })
         .from(mediaFiles)
         .where(whereClause)
-        .orderBy(desc(mediaFiles.createdAt), desc(mediaFiles.id));
+        .orderBy(mediaFiles.url, desc(mediaFiles.createdAt), desc(mediaFiles.id))
+        .as("dedup");
 
-      // Deduplicate by URL in JavaScript (keep newest per URL)
-      const seenUrls = new Set<string>();
-      const uniqueFileIds: string[] = [];
-      for (const file of allMatchingFiles) {
-        if (!seenUrls.has(file.url)) {
-          seenUrls.add(file.url);
-          uniqueFileIds.push(file.id);
-        }
-      }
+      const pagedRows = await db
+        .select({ id: dedupSub.id })
+        .from(dedupSub)
+        .orderBy(desc(dedupSub.createdAt), desc(dedupSub.id))
+        .limit(limitNum)
+        .offset(offset);
 
-      const total = uniqueFileIds.length;
+      const fileIds = pagedRows.map((r) => r.id);
 
-      // Apply pagination to the deduplicated IDs
-      const fileIds = uniqueFileIds.slice(offset, offset + limitNum);
+      const [totalRow] = await db
+        .select({ total: sql<number>`count(distinct ${mediaFiles.url})` })
+        .from(mediaFiles)
+        .where(whereClause);
+      const total = Number(totalRow?.total) || 0;
 
       // Fetch full details for the deduplicated, paginated IDs
       let deduplicatedItems: any[] = [];
@@ -1544,6 +1562,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         total,
         page: pageNum,
         limit: limitNum,
+        hasMore, // the picker's "load more" button depends on this flag
       });
     } catch (error) {
       console.error("Error fetching media files:", error);
@@ -1570,13 +1589,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, GIF'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP'));
       }
     },
   });
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // NOTE: This is the platform-wide generic image upload pipe — it backs avatars
+  // (Profile), category/topic images, the rich editor, and angle-writer topic
+  // images, NOT just the media library. It is intentionally gated by
+  // authentication ONLY (no media.* permission): angle writers and regular
+  // profile-avatar uploaders deliberately have no media.* permissions. Do NOT
+  // add requirePermission("media.upload") here — it would break those flows.
+  // (Library *management* — list/edit/delete/folders — is permission-gated.)
   app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, mediaUpload.single('file'), async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -1696,27 +1722,26 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Extract metadata (width, height for images)
+      // Extract real dimensions for images via sharp (the columns existed but
+      // were always left NULL before). Best-effort — a metadata failure must
+      // not block the upload.
       let width: number | undefined;
       let height: number | undefined;
 
       if (req.file.mimetype.startsWith('image/')) {
-    try {
-          // Use sharp or image-size library to extract dimensions
-          // For now, we'll leave them as undefined and can be updated later
-          // In production, you'd use: const { width: w, height: h } = await sharp(req.file.buffer).metadata();
+        try {
+          const meta = await sharp(req.file.buffer).metadata();
+          width = meta.width;
+          height = meta.height;
         } catch (err) {
           console.log("[Media Upload] Could not extract image dimensions:", err);
         }
       }
 
-      // Determine file type
-      let fileType = 'document';
-      if (req.file.mimetype.startsWith('image/')) {
-        fileType = 'image';
-      } else if (req.file.mimetype.startsWith('video/')) {
-        fileType = 'video';
-      }
+      // Upload is image-only (the multer fileFilter rejects everything else),
+      // so the type is always "image". Real video/document support is a
+      // separate planned feature, not this endpoint.
+      const fileType = 'image';
 
       // Parse additional metadata from request body
       const {
@@ -1878,9 +1903,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Handle different URL types
       
-      // Type 1: Public URLs (https://) - redirect or return URL
+      // Type 1: Public URLs (https://) - redirect only to known storage hosts.
+      // An unvalidated redirect to a stored (possibly user-supplied) value is
+      // an open redirect, so reject anything outside our storage origins.
       if (storagePath.startsWith('https://') || storagePath.startsWith('http://')) {
-        return res.redirect(storagePath);
+        if (isAllowedMediaUrl(storagePath, req.get('host'))) {
+          return res.redirect(storagePath);
+        }
+        console.warn('[Media Proxy] Blocked redirect to non-allowlisted host:', storagePath);
+        return res.status(400).json({ message: "مسار التخزين غير صحيح" });
       }
       
       // Type 2: Public object paths (/public-objects/) - redirect to public route
@@ -1961,15 +1992,39 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/save-existing - Save existing image to media library (JSON endpoint for auto-save from editor)
-  app.post("/api/media/save-existing", isAuthenticated, async (req: any, res) => {
+  app.post("/api/media/save-existing", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       const userId = req.user.id;
       const { url, fileName, title, description, category } = req.body;
-      
+
       // Validation
       if (!url || !fileName) {
         return res.status(400).json({ message: "URL والاسم مطلوبان" });
       }
+      // Only accept URLs from our own storage origins (prevents storing an
+      // attacker-controlled URL that the media proxy would later redirect to).
+      if (typeof url !== 'string' || !isAllowedMediaUrl(url, req.get('host'))) {
+        return res.status(400).json({ message: "رابط غير صالح" });
+      }
+
+      // Reuse the existing row if this URL is already registered — stops the
+      // unbounded duplicate rows that accumulated on every article edit/save.
+      const [existing] = await db
+        .select()
+        .from(mediaFiles)
+        .where(eq(mediaFiles.url, url))
+        .limit(1);
+      if (existing) {
+        return res.json(existing);
+      }
+
+      // Infer the mime type from the extension instead of hardcoding jpeg.
+      const ext = (String(fileName).split('.').pop() || '').toLowerCase();
+      const extMime: Record<string, string> = {
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif',
+      };
+      const mimeType = extMime[ext] || 'image/jpeg';
 
       // Create media file record
       const [mediaFile] = await db.insert(mediaFiles).values({
@@ -1977,8 +2032,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         originalName: fileName,
         url,
         type: "image",
-        mimeType: "image/jpeg",
-        size: 0, // Unknown for existing URLs
+        mimeType,
+        size: 0, // Unknown for externally-referenced URLs
         title: title || fileName,
         description,
         category: category || "articles",
@@ -1995,7 +2050,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // PUT /api/media/:id - Update media file metadata
-  app.put("/api/media/:id", isAuthenticated, async (req: any, res) => {
+  app.put("/api/media/:id", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       const mediaId = req.params.id;
       const userId = req.user.id;
@@ -2011,12 +2066,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "ملف الوسائط غير موجود" });
       }
 
-      // Check if user is owner or admin
+      // Owner can always edit their own file; otherwise media.edit is required
+      // (editors and media managers have it; admins via wildcard). The old code
+      // checked the non-existent code 'media:manage' (colon), so the override
+      // was dead even for admins and media managers.
       const isOwner = existingMedia.uploadedBy === userId;
-      const userPermissions = await getUserPermissions(userId);
-      const isAdmin = userPermissions.includes('media:manage');
+      const canManageAny = await userHasPermission(userId, 'media.edit');
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !canManageAny) {
         return res.status(403).json({ message: "غير مصرح لك بتحديث هذا الملف" });
       }
 
@@ -2051,7 +2108,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/media/:id - Delete media file
-  app.delete("/api/media/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/media/:id", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       const mediaId = req.params.id;
       const userId = req.user.id;
@@ -2067,43 +2124,45 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "ملف الوسائط غير موجود" });
       }
 
-      // Check if user is owner or admin
+      // Owner can delete their own file; otherwise media.delete is required
+      // (media managers have it; admins via wildcard). The old code checked the
+      // non-existent code 'media:manage' (colon), so the override never worked.
       const isOwner = existingMedia.uploadedBy === userId;
-      const userPermissions = await getUserPermissions(userId);
-      const isAdmin = userPermissions.includes('media:manage');
+      const canManageAny = await userHasPermission(userId, 'media.delete');
 
-      if (!isOwner && !isAdmin) {
+      if (!isOwner && !canManageAny) {
         return res.status(403).json({ message: "غير مصرح لك بحذف هذا الملف" });
       }
 
-      // Check if file is used in articles
-      if (existingMedia.usedIn && existingMedia.usedIn.length > 0) {
+      // Live referential check. The legacy `usedIn` array was written only at
+      // upload time and never updated, so it almost never reflected reality —
+      // meanwhile article_media_assets.media_file_id is ON DELETE CASCADE, so
+      // deleting here would silently destroy every per-article alt/caption/SEO
+      // row across all locales. Block the delete if the file is still referenced.
+      const [assetRef] = await db
+        .select({ articleId: articleMediaAssets.articleId })
+        .from(articleMediaAssets)
+        .where(eq(articleMediaAssets.mediaFileId, mediaId))
+        .limit(1);
+      const [usageRef] = await db
+        .select({ id: mediaUsageLog.id })
+        .from(mediaUsageLog)
+        .where(eq(mediaUsageLog.mediaId, mediaId))
+        .limit(1);
+      const legacyUsed = !!(existingMedia.usedIn && existingMedia.usedIn.length > 0);
+
+      if (assetRef || usageRef || legacyUsed) {
+        const articleIds = new Set<string>();
+        if (assetRef?.articleId) articleIds.add(assetRef.articleId);
+        (existingMedia.usedIn || []).forEach((x) => { if (x) articleIds.add(x); });
         return res.status(400).json({
           message: "لا يمكن حذف الملف لأنه مستخدم في مقالات أو محتوى آخر",
-          usedIn: existingMedia.usedIn,
+          usedIn: Array.from(articleIds),
         });
       }
 
-      // Delete from GCS
-    try {
-        const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
-        const url = new URL(existingMedia.url);
-        const pathParts = url.pathname.split('/').filter(Boolean);
-        // Use the actual Replit bucket ID
-        // Extract bucket name from PRIVATE_OBJECT_DIR path
-      const bucketName = pathParts[0];
-        // Treat the entire path as the object path
-        const objectPath = pathParts.join('/');
-
-        const bucket = objectStorageClient.bucket(bucketName);
-        const file = bucket.file(objectPath);
-        await file.delete();
-
-        console.log("[Media Delete] File deleted from GCS:", objectPath);
-      } catch (gcsError) {
-        console.error("[Media Delete] Error deleting from GCS:", gcsError);
-        // Continue with database deletion even if GCS deletion fails
-      }
+      // Remove the underlying blob from the correct backend (CF Images vs GCS/S3).
+      await deleteMediaBlob(existingMedia.url);
 
       // Delete from database
       await db.delete(mediaFiles).where(eq(mediaFiles.id, mediaId));
@@ -2118,7 +2177,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/media/folders - List all folders as flat array (frontend builds tree)
-  app.get("/api/media/folders", isAuthenticated, async (req: any, res) => {
+  app.get("/api/media/folders", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       // Get all folders as flat array - frontend FolderTree component builds tree using parentId
       const allFolders = await db
@@ -2155,7 +2214,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/folders - Create new folder
-  app.post("/api/media/folders", isAuthenticated, async (req: any, res) => {
+  app.post("/api/media/folders", isAuthenticated, requirePermission("media.upload"), async (req: any, res) => {
     try {
       const { insertMediaFolderSchema } = await import('@shared/schema');
       
@@ -2222,7 +2281,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // PUT /api/media/folders/:id - Update folder
-  app.put("/api/media/folders/:id", isAuthenticated, async (req: any, res) => {
+  app.put("/api/media/folders/:id", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
     try {
       const folderId = req.params.id;
 
@@ -2317,18 +2376,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/make-public - Admin endpoint to make all existing media files public
-  app.post("/api/media/make-public", isAuthenticated, async (req: any, res) => {
+  app.post("/api/media/make-public", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      
-      // Check if user is admin
-      const userPermissions = await getUserPermissions(userId);
-      const isAdmin = userPermissions.includes('media:manage');
-      
-      if (!isAdmin) {
-        return res.status(403).json({ message: "غير مصرح لك بتنفيذ هذه العملية" });
-      }
-
       console.log("[Make Public] Starting bulk public access for media files...");
 
       // Get all media files with gs:// URLs
@@ -2401,7 +2450,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/media/folders/:id - Delete folder
-  app.delete("/api/media/folders/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/media/folders/:id", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
     try {
       const folderId = req.params.id;
 
@@ -2461,7 +2510,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   }>();
   const MEDIA_SUGGESTIONS_TTL = 15 * 60 * 1000; // 15 minutes
 
-  app.get("/api/media/suggestions", isAuthenticated, async (req: any, res) => {
+  app.get("/api/media/suggestions", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
       const { title, content, keywords: userKeywords, limit = 10 } = req.query;
 
@@ -13890,7 +13939,10 @@ Respond in valid JSON format only:
   // PATCH /api/media-assets/:id - Update media asset
   app.patch("/api/media-assets/:id",
     requireAuth,
-    requireRole("reporter", "editor", "admin"),
+    // Was requireRole("reporter","editor","admin") — a fixed role-name guard
+    // that 403s accounts whose real roles come from user_roles under a different
+    // name (legacy role-text trap). Gate on the equivalent permissions instead.
+    requireAnyPermission("articles.edit_own", "articles.edit_any", "media.edit"),
     async (req: any, res) => {
     try {
         const { id } = req.params;
@@ -13930,7 +13982,8 @@ Respond in valid JSON format only:
   // DELETE /api/media-assets/:id - Delete media asset
   app.delete("/api/media-assets/:id",
     requireAuth,
-    requireRole("editor", "admin"),
+    // Was requireRole("editor","admin") — see PATCH note (legacy role-text trap).
+    requireAnyPermission("articles.edit_any", "media.delete"),
     async (req: any, res) => {
     try {
         const { id } = req.params;

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -97,6 +97,13 @@ export default function MediaLibrary() {
   const files: MediaFile[] = mediaData?.files || [];
   const totalCount = mediaData?.total || 0;
   const totalPages = Math.ceil(totalCount / limit);
+
+  // Permission gates — keep the UI honest with the backend (upload is open to
+  // any media role; edit/delete need ownership or media.edit/media.delete) so
+  // users don't click an action that then silently 403s.
+  const canUpload = hasPermission(user, "media.upload");
+  const canDeleteFile = (file: MediaFile) =>
+    file.uploadedBy === user?.id || hasPermission(user, "media.delete");
 
   // Calculate file counts per folder
   const fileCounts = useMemo(() => {
@@ -195,14 +202,16 @@ export default function MediaLibrary() {
               إدارة الصور والفيديوهات والملفات
             </p>
           </div>
-          <Button
-            onClick={() => setUploadDialogOpen(true)}
-            className="gap-2"
-            data-testid="button-upload"
-          >
-            <Upload className="h-4 w-4" />
-            رفع ملف
-          </Button>
+          {canUpload && (
+            <Button
+              onClick={() => setUploadDialogOpen(true)}
+              className="gap-2"
+              data-testid="button-upload"
+            >
+              <Upload className="h-4 w-4" />
+              رفع ملف
+            </Button>
+          )}
         </div>
 
         {/* Filters Bar */}
@@ -272,15 +281,17 @@ export default function MediaLibrary() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-sm">المجلدات</h3>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setFolderDialogOpen(true)}
-                  data-testid="button-create-folder"
-                >
-                  <FolderPlus className="h-4 w-4" />
-                </Button>
+                {canUpload && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setFolderDialogOpen(true)}
+                    data-testid="button-create-folder"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
 
               {foldersLoading ? (
@@ -343,10 +354,12 @@ export default function MediaLibrary() {
                   <p className="text-sm text-muted-foreground mb-4">
                     ابدأ برفع ملفك الأول إلى المكتبة
                   </p>
-                  <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-first">
-                    <Upload className="h-4 w-4 ml-2" />
-                    ارفع أول ملف
-                  </Button>
+                  {canUpload && (
+                    <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-first">
+                      <Upload className="h-4 w-4 ml-2" />
+                      ارفع أول ملف
+                    </Button>
+                  )}
                 </div>
               </Card>
             )}
@@ -361,6 +374,7 @@ export default function MediaLibrary() {
                     onPreview={handlePreview}
                     onToggleFavorite={handleToggleFavorite}
                     onDelete={handleDelete}
+                    canDelete={canDeleteFile(file)}
                   />
                 ))}
               </div>
@@ -439,18 +453,20 @@ export default function MediaLibrary() {
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(file);
-                                }}
-                                data-testid={`button-delete-row-${file.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {canDeleteFile(file) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(file);
+                                  }}
+                                  data-testid={`button-delete-row-${file.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
