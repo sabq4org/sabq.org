@@ -17,6 +17,15 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
     m.includes("is not found") ||
     m.includes("unable to preload css") ||
     m.includes("missing export") ||
+    // Stale-deploy poison on Cloudflare Pages: a rotated/missing /assets/*.js is
+    // served the SPA index.html (text/html) instead of a 404, so the browser
+    // refuses to run it as a module. Phrasings differ by browser but always pair
+    // "mime type" with module/script/javascript — Safari: "'text/html' is not a
+    // valid JavaScript MIME type"; Chrome/FF: "...responded with a MIME type of
+    // 'text/html'" / "disallowed MIME type". Without this the error evades
+    // detection and the user is stuck on "حدث خطأ" with no auto-recovery.
+    (m.includes("mime type") &&
+      (m.includes("module") || m.includes("script") || m.includes("javascript"))) ||
     m.includes("_result.default") ||
     m.includes("reading 'default'") ||
     m.includes("تعذر تحميل الصفحة") ||
