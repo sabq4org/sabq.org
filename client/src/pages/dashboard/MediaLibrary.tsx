@@ -56,20 +56,6 @@ const SMART_COLLECTIONS: { value: Collection; label: string; icon: typeof Star }
   { value: "no_alt", label: "بلا نص بديل", icon: AlertCircle },
 ];
 
-// Group label for a media file's creation date (newest buckets first).
-function dateBucket(value: string | Date): string {
-  const d = new Date(value);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((today.getTime() - day.getTime()) / 86_400_000);
-  if (diffDays <= 0) return "اليوم";
-  if (diffDays === 1) return "أمس";
-  if (diffDays < 7) return "هذا الأسبوع";
-  if (diffDays < 30) return "هذا الشهر";
-  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory", { month: "long", year: "numeric" }).format(d);
-}
-
 export default function MediaLibrary() {
   const { user } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
@@ -273,19 +259,6 @@ export default function MediaLibrary() {
     bulkMutation.mutate({ action, ids, folderId });
   };
 
-  // Group by date (grid view, recency-ordered collections only)
-  const groupByDate = viewMode === "grid" && collection !== "most_used";
-  const grouped = useMemo(() => {
-    if (!groupByDate) return null;
-    const map = new Map<string, MediaFile[]>();
-    for (const f of files) {
-      const key = dateBucket(f.createdAt);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(f);
-    }
-    return Array.from(map.entries());
-  }, [files, groupByDate]);
-
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes";
     const k = 1024;
@@ -294,7 +267,7 @@ export default function MediaLibrary() {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
-  const masonryClasses = "columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-3";
+  const gridClasses = "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4";
 
   const renderCard = (file: MediaFile) => (
     <MediaCard
@@ -304,7 +277,7 @@ export default function MediaLibrary() {
       onToggleFavorite={handleToggleFavorite}
       onDelete={handleDelete}
       canDelete={canDeleteFile(file)}
-      layout="masonry"
+      layout="grid"
       selectionMode={selectionMode}
       selected={selectedIds.has(file.id)}
       onToggleSelect={handleToggleSelect}
@@ -457,9 +430,9 @@ export default function MediaLibrary() {
 
             {/* Loading skeletons */}
             {isLoading && files.length === 0 && (
-              <div className={masonryClasses}>
+              <div className={gridClasses}>
                 {Array.from({ length: 10 }).map((_, i) => (
-                  <Skeleton key={i} className="mb-3 w-full break-inside-avoid" style={{ height: 120 + (i % 4) * 60 }} />
+                  <Skeleton key={i} className="aspect-square" />
                 ))}
               </div>
             )}
@@ -480,20 +453,9 @@ export default function MediaLibrary() {
               </Card>
             )}
 
-            {/* Grid (masonry) view */}
+            {/* Grid view */}
             {viewMode === "grid" && files.length > 0 && (
-              groupByDate && grouped ? (
-                <div className="space-y-6">
-                  {grouped.map(([label, items]) => (
-                    <section key={label} className="space-y-2">
-                      <h3 className="text-sm font-semibold text-muted-foreground">{label}</h3>
-                      <div className={masonryClasses}>{items.map(renderCard)}</div>
-                    </section>
-                  ))}
-                </div>
-              ) : (
-                <div className={masonryClasses}>{files.map(renderCard)}</div>
-              )
+              <div className={gridClasses}>{files.map(renderCard)}</div>
             )}
 
             {/* List view */}
