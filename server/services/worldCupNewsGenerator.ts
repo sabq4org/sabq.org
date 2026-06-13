@@ -16,9 +16,9 @@
  * العنوان بدّل الـ slug فولّد المحرك التقرير مرة ثانية بعد 34 ثانية).
  * legacySlug لا يلمسه المحرر، ففحص الوجود يبحث في العمودين معًا.
  */
-import { eq, like, ilike, notIlike, and, or, desc } from "drizzle-orm";
+import { eq, like, ilike, notIlike, and, or, desc, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles, categories } from "@shared/schema";
+import { articles, categories, tags, articleTags } from "@shared/schema";
 import { storage } from "../storage";
 import { aiManager } from "../ai-manager";
 import {
@@ -32,6 +32,11 @@ import {
 
 const SABQ_AI_AUTHOR_ID = "bkIhDx7BM8quPu2W1tB6Z"; // "سبق AI" (sabqai@sabq.org)
 const SLUG_PREFIX = "wc26";
+
+// صيغ التقاط أخبار المونديال التحريرية (تطابق جزئي غير حساس لحالة الأحرف —
+// «كأس العالم» تشمل «كأس العالم 2026» تلقائيًا). تُفحص في العنوان والكلمات
+// المفتاحية (SEO) والوسوم فقط، لا في المتن، تجنّبًا للالتقاط العَرَضي.
+const WORLD_CUP_NEWS_TERMS = ["مونديال", "كأس العالم"] as const;
 
 // نوافذ العمل — قابلة للضبط بمتغيرات بيئة عند الحاجة
 const PREVIEW_WINDOW_MS = 26 * 60 * 60 * 1000; // معاينة لكل مباراة تنطلق خلال 26 ساعة
@@ -374,16 +379,38 @@ export interface WcNewsItem {
 
 const SLUG_RE = new RegExp(`^${SLUG_PREFIX}-(preview|report)-(\\d+)$`);
 
+// خبر تحريري يُعدّ «مونديالياً» إذا ظهرت أي صيغة من WORLD_CUP_NEWS_TERMS في
+// العنوان، أو ضمن الكلمات المفتاحية (seo.keywords)، أو في أحد وسومه المرتبطة
+// (الاسم العربي/الإنجليزي/الـ slug). التطابق جزئي وغير حساس لحالة الأحرف.
+function worldCupKeywordPredicate() {
+  return or(
+    ...WORLD_CUP_NEWS_TERMS.map((term) => {
+      const pat = `%${term}%`;
+      return or(
+        ilike(articles.title, pat),
+        sql`(${articles.seo} -> 'keywords')::text ILIKE ${pat}`,
+        sql`EXISTS (
+          SELECT 1 FROM ${articleTags} AS atg
+          JOIN ${tags} AS tg ON tg.id = atg.tag_id
+          WHERE atg.article_id = ${articles.id}
+            AND (tg.name_ar ILIKE ${pat} OR tg.name_en ILIKE ${pat} OR tg.slug ILIKE ${pat})
+        )`
+      );
+    })
+  );
+}
+
 export async function getWorldCupNews(limit: number): Promise<WcNewsItem[]> {
   const capped = Math.min(Math.max(limit, 1), 12);
 
-  // مواد غرفة الأخبار اليدوية عن المونديال تُلتقط بعنوانها من قسم الرياضة —
+  // مواد غرفة الأخبار اليدوية عن المونديال تُلتقط من قسم الرياضة عبر صيغ
+  // الكلمات في العنوان أو الكلمات المفتاحية (SEO) أو الوسوم المرتبطة —
   // لا اعتماد على فهرسة search_vector (عمود إنتاج يدوي خارج drizzle)
   const sportsId = await getSportsCategoryId().catch(() => null);
   const manualWorldCupNews = sportsId
     ? and(
         eq(articles.categoryId, sportsId),
-        or(ilike(articles.title, "%مونديال%"), ilike(articles.title, "%كأس العالم%")),
+        worldCupKeywordPredicate(),
         notIlike(articles.title, "%للأندية%") // كأس العالم للأندية بطولة أخرى
       )
     : undefined;
