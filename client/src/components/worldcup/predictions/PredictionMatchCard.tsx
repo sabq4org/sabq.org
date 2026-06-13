@@ -95,8 +95,8 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
           <div className="flex flex-1 flex-col items-center justify-center pt-1">
             {settled || started ? (
-              // النتيجة الفعلية (حيّة أو نهائية)
-              <div className="flex items-center gap-3 text-4xl font-black tabular-nums" dir="ltr">
+              // النتيجة الفعلية (حيّة أو نهائية) — RTL: رقم المضيف يمين (تحت علمه)؛ لا تضِف dir="ltr" وإلا انقلبت النتيجة تحت الأعلام
+              <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
                 <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
                 <span className="text-muted-foreground text-2xl">-</span>
                 <span>{settled ? settlement!.finalAway : fixture.goals.away ?? 0}</span>
@@ -170,8 +170,10 @@ function LockedFooter({ match }: { match: PredictableMatch }) {
   return (
     <p className="rounded-lg bg-muted/60 px-3 py-2 text-center text-xs">
       <span className="text-muted-foreground">توقّعك: </span>
-      <span className="font-bold tabular-nums" dir="ltr">
-        {myPrediction.predHome} - {myPrediction.predAway}
+      <span className="inline-flex items-center gap-1 align-baseline font-bold tabular-nums">
+        <span>{myPrediction.predHome}</span>
+        <span>-</span>
+        <span>{myPrediction.predAway}</span>
       </span>
     </p>
   );
@@ -210,8 +212,10 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
           <span className={isWin ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>
             توقّعك:
           </span>
-          <span className="tabular-nums font-black" dir="ltr">
-            {myPrediction.predHome} - {myPrediction.predAway}
+          <span className="inline-flex items-center gap-1 tabular-nums font-black">
+            <span>{myPrediction.predHome}</span>
+            <span>-</span>
+            <span>{myPrediction.predAway}</span>
           </span>
         </span>
         {isWin ? (
