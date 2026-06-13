@@ -885,9 +885,26 @@ export async function getTopAssists(): Promise<WcLeader[]> {
 
 export async function getTopCards(): Promise<WcLeader[]> {
   const provider = await withSWR("wc:cards", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
-    const rows = (await apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
-    const tr = await resolveNames(rows.map((row: any) => row.player?.name));
-    return rows.map((row: any, i: number) => mapLeader(row, i, tr));
+    // المزود يرتّب البطاقات في قائمتين منفصلتين: أعلى صفراء وأعلى حمراء. لو اكتفينا
+    // بالصفراء وحدها فاللاعب الذي نال طردًا مباشرًا دون إنذارات كافية لا يظهر إطلاقًا،
+    // فيبقى عمود الحمراء صفرًا. نجلب القائمتين معًا ونوحّدهما حسب معرّف اللاعب —
+    // كلتاهما تحملان إحصاءات الموسم الكاملة (صفراء + حمراء)، فالدمج بلا تكرار.
+    const [yellowRows, redRows] = await Promise.all([
+      apiGet("players/topyellowcards", { league: LEAGUE_ID, season: SEASON }),
+      apiGet("players/topredcards", { league: LEAGUE_ID, season: SEASON }),
+    ]);
+    const byId = new Map<number, any>();
+    for (const row of [...yellowRows, ...redRows]) {
+      const id = row.player?.id ?? 0;
+      if (id && !byId.has(id)) byId.set(id, row);
+    }
+    const merged = [...byId.values()];
+    const tr = await resolveNames(merged.map((row: any) => row.player?.name));
+    return merged
+      .map((row: any) => mapLeader(row, 0, tr))
+      .sort((a, b) => b.yellow + b.red - (a.yellow + a.red) || b.red - a.red)
+      .slice(0, 10)
+      .map((leader, i) => ({ ...leader, rank: i + 1 }));
   });
   return freshestBoard(provider, (await aggregateRacesFromEvents()).cards, (r) => r.yellow + r.red);
 }
