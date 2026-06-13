@@ -867,7 +867,9 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         .map(toLeader),
       cards: all
         .filter((t) => t.yellow + t.red > 0)
-        .sort((a, b) => b.yellow - a.yellow || b.red - a.red)
+        // الطرد أهمّ حدث انضباطي وأندر من الإنذار — نرتّب بالحمراء أولًا كي لا
+        // يغرق اللاعب المطرود تحت أصحاب الإنذار الواحد فيُقتطع خارج العشرة الأوائل
+        .sort((a, b) => b.red - a.red || b.yellow - a.yellow)
         .slice(0, 10)
         .map(toLeader),
     };
@@ -902,7 +904,8 @@ export async function getTopCards(): Promise<WcLeader[]> {
     const tr = await resolveNames(merged.map((row: any) => row.player?.name));
     return merged
       .map((row: any) => mapLeader(row, 0, tr))
-      .sort((a, b) => b.yellow + b.red - (a.yellow + a.red) || b.red - a.red)
+      // نفس ترتيب لوحة الأحداث: الحمراء أولًا ثم الصفراء حتى لا تختفي الطرود
+      .sort((a, b) => b.red - a.red || b.yellow - a.yellow)
       .slice(0, 10)
       .map((leader, i) => ({ ...leader, rank: i + 1 }));
   });
