@@ -1340,6 +1340,63 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // World Cup 2026 predictions competition landing — لا بد أن يسبق معالج الهب
+  // (نمط الهب مثبّت بـ $ فلا يلتقطها، لكن نُبقيها أولًا للوضوح).
+  {
+    pattern: /^\/world-cup\/predictions\/?$/,
+    handle: async () => {
+      const description =
+        "توقّع النتيجة الدقيقة بالأهداف لمباريات كأس العالم 2026 قبل صافرة البداية، واربح من جائزة 500 نقطة ولاء لكل مباراة على صحيفة سبق.";
+      return {
+        title: "توقّعات المونديال — توقّع النتيجة واربح نقاط الولاء | سبق",
+        description,
+        image: `${SITE_URL}/branding/world-cup-og-image.png`,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/world-cup/predictions`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              name: "توقّعات كأس العالم 2026",
+              description,
+              url: `${SITE_URL}/world-cup/predictions`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: `${SITE_URL}/branding/world-cup-og-image.png`,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: "كأس العالم 2026", item: `${SITE_URL}/world-cup` },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: "توقّعات المونديال",
+                  item: `${SITE_URL}/world-cup/predictions`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
   // World Cup 2026 hub landing
   {
     pattern: /^\/world-cup\/?$/,
