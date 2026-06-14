@@ -44,10 +44,12 @@ import {
   Filter,
   Star,
   Clock,
+  Folder,
+  FolderOpen,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { MediaFile } from "@shared/schema";
+import type { MediaFile, MediaFolder } from "@shared/schema";
 
 interface MediaLibraryPickerProps {
   onSelect: (media: MediaFile) => void;
@@ -89,6 +91,7 @@ export function MediaLibraryPicker({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [showFavorites, setShowFavorites] = useState(false);
   const [showRecent, setShowRecent] = useState(false);
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
@@ -135,6 +138,7 @@ export function MediaLibraryPicker({
     params.set("limit", "20");
     if (debouncedSearch) params.set("search", debouncedSearch);
     if (selectedCategory !== "all") params.set("category", selectedCategory);
+    if (selectedFolderId) params.set("folderId", selectedFolderId);
     if (showFavorites) params.set("isFavorite", "true");
     if (showRecent) {
       const sevenDaysAgo = new Date();
@@ -142,7 +146,14 @@ export function MediaLibraryPicker({
       params.set("since", sevenDaysAgo.toISOString());
     }
     return `/api/media?${params.toString()}`;
-  }, [page, debouncedSearch, selectedCategory, showFavorites, showRecent]);
+  }, [page, debouncedSearch, selectedCategory, selectedFolderId, showFavorites, showRecent]);
+
+  // Fetch folders so the user can open a folder and pick from inside it.
+  const { data: foldersRaw } = useQuery<MediaFolder[]>({
+    queryKey: ["/api/media/folders"],
+    enabled: isOpen && activeTab === "library",
+  });
+  const folders = Array.isArray(foldersRaw) ? foldersRaw : [];
 
   // Fetch media library
   const { data: mediaData, isLoading: isLoadingMedia, isFetching } = useQuery<{
@@ -173,7 +184,7 @@ export function MediaLibraryPicker({
   useEffect(() => {
     setAllFiles([]);
     setPage(1);
-  }, [debouncedSearch, selectedCategory, showFavorites, showRecent]);
+  }, [debouncedSearch, selectedCategory, selectedFolderId, showFavorites, showRecent]);
 
   // Fetch AI suggestions (conditional)
   const suggestionsQueryUrl = useMemo(() => {
@@ -235,6 +246,7 @@ export function MediaLibraryPicker({
     setSearchQuery("");
     setDebouncedSearch("");
     setSelectedCategory("all");
+    setSelectedFolderId(null);
     setShowFavorites(false);
     setShowRecent(false);
     setSelectedMediaId(null);
@@ -333,6 +345,7 @@ export function MediaLibraryPicker({
     setSearchQuery("");
     setDebouncedSearch("");
     setSelectedCategory("all");
+    setSelectedFolderId(null);
     setShowFavorites(false);
     setShowRecent(false);
     setPage(1);
@@ -341,10 +354,11 @@ export function MediaLibraryPicker({
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedCategory !== "all") count++;
+    if (selectedFolderId) count++;
     if (showFavorites) count++;
     if (showRecent) count++;
     return count;
-  }, [selectedCategory, showFavorites, showRecent]);
+  }, [selectedCategory, selectedFolderId, showFavorites, showRecent]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -475,6 +489,46 @@ export function MediaLibraryPicker({
                 data-testid="input-search"
               />
             </div>
+
+            {/* Folders — open a folder to pick from inside it */}
+            {folders.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={selectedFolderId === null ? "default" : "outline"}
+                  className="cursor-pointer hover-elevate gap-1"
+                  onClick={() => {
+                    setSelectedFolderId(null);
+                    setPage(1);
+                  }}
+                  data-testid="folder-all"
+                >
+                  <Folder className="h-3 w-3" />
+                  كل المجلدات
+                </Badge>
+                {folders.map((folder) => {
+                  const active = selectedFolderId === folder.id;
+                  const count = (folder as MediaFolder & { fileCount?: number }).fileCount;
+                  return (
+                    <Badge
+                      key={folder.id}
+                      variant={active ? "default" : "outline"}
+                      className="cursor-pointer hover-elevate gap-1"
+                      onClick={() => {
+                        setSelectedFolderId(active ? null : folder.id);
+                        setPage(1);
+                      }}
+                      data-testid={`folder-${folder.id}`}
+                    >
+                      {active ? <FolderOpen className="h-3 w-3" /> : <Folder className="h-3 w-3" />}
+                      {folder.name}
+                      {typeof count === "number" && count > 0 && (
+                        <span className="opacity-70">({count})</span>
+                      )}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-2">
