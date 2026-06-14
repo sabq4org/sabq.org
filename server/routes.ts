@@ -27407,11 +27407,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
         hasReacted = reactionResult.length > 0;
       }
 
-      // Fire-and-forget view increment (don't block response)
-      db.update(enArticles)
-        .set({ views: sql`${enArticles.views} + ${Math.floor(Math.random() * 6) + 5}` })
-        .where(eq(enArticles.id, baseData.article.id))
-        .catch(err => console.error("[EN article] view increment failed:", err));
+      // Fire-and-forget view increment (don't block response).
+      // Skipped on the read-only mirror (mirror_reader is SELECT-only).
+      if (process.env.READ_ONLY_MODE !== "true") {
+        db.update(enArticles)
+          .set({ views: sql`${enArticles.views} + ${Math.floor(Math.random() * 6) + 5}` })
+          .where(eq(enArticles.id, baseData.article.id))
+          .catch(err => console.error("[EN article] view increment failed:", err));
+      }
 
       const displayAuthor = baseData.reporterData || baseData.authorData;
       const articleWithDetails: EnArticleWithDetails = {
@@ -28485,11 +28488,15 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const reactionsCount = Number(reactionsCountResult[0].count);
       const commentsCount = Number(commentsCountResult[0].count);
 
-      // Increment views
-      await db
-        .update(urArticles)
-        .set({ views: sql`${urArticles.views} + ${Math.floor(Math.random() * 6) + 5}` })
-        .where(eq(urArticles.id, article.id));
+      // Increment views — skipped on the read-only mirror (mirror_reader has
+      // SELECT only; this awaited write would otherwise be caught by the
+      // handler's try/catch and surface as a 500 for every Urdu article).
+      if (process.env.READ_ONLY_MODE !== "true") {
+        await db
+          .update(urArticles)
+          .set({ views: sql`${urArticles.views} + ${Math.floor(Math.random() * 6) + 5}` })
+          .where(eq(urArticles.id, article.id));
+      }
 
       // Priority: reporter > author (same as dashboard)
       const displayAuthor = reporterData || authorData;
