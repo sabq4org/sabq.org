@@ -42,7 +42,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Download, Trash2, X } from "lucide-react";
+import { Download, Trash2, X, ShieldCheck, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -78,6 +78,11 @@ export function MediaPreviewDialog({
       category: "",
       isFavorite: false,
       folderId: null,
+      licenseType: "",
+      creditText: "",
+      copyrightHolder: "",
+      rightsVerified: false,
+      rightsNote: "",
     },
   });
 
@@ -92,6 +97,11 @@ export function MediaPreviewDialog({
         category: file.category || "",
         isFavorite: file.isFavorite,
         folderId: file.folderId || null,
+        licenseType: file.licenseType || "",
+        creditText: file.creditText || "",
+        copyrightHolder: file.copyrightHolder || "",
+        rightsVerified: file.rightsVerified ?? false,
+        rightsNote: file.rightsNote || "",
       });
     }
   }, [file?.id, open]);
@@ -409,6 +419,110 @@ export function MediaPreviewDialog({
                       </FormItem>
                     )}
                   />
+
+                  {/* Rights & credibility (Phase 6) */}
+                  <div className="rounded-lg border p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        الحقوق والمصداقية
+                      </p>
+                      {file.isAiGenerated && (
+                        <Badge variant="secondary" className="gap-1 text-xs" data-testid="badge-ai-generated">
+                          <Sparkles className="h-3 w-3 text-purple-500" /> مولّدة بالذكاء
+                        </Badge>
+                      )}
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="licenseType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">نوع الترخيص</FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value === "none" ? "" : value)}
+                            value={field.value || "none"}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-edit-license">
+                                <SelectValue placeholder="اختر الترخيص" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">غير محدّد</SelectItem>
+                              <SelectItem value="own_work">عمل خاص (سبق)</SelectItem>
+                              <SelectItem value="agency">وكالة أنباء</SelectItem>
+                              <SelectItem value="stock">بنك صور (مرخّص)</SelectItem>
+                              <SelectItem value="creative_commons">المشاع الإبداعي</SelectItem>
+                              <SelectItem value="public_domain">ملكية عامة</SelectItem>
+                              <SelectItem value="unknown">غير معروف</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="creditText"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">سطر الإسناد (Credit)</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} placeholder="© واس / تصوير ..." data-testid="input-edit-credit" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="copyrightHolder"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">صاحب الحقوق</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} placeholder="اسم الجهة أو المصوّر" data-testid="input-edit-copyright" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="rightsNote"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs text-muted-foreground">قيود الاستخدام (اختياري)</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} placeholder="مثل: للاستخدام التحريري فقط" data-testid="input-edit-rights-note" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="rightsVerified"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-rights-verified"
+                            />
+                          </FormControl>
+                          <FormLabel className="!mt-0">حقوق الاستخدام موثّقة ومخلَّصة</FormLabel>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
                   <DialogFooter>
                     <Button

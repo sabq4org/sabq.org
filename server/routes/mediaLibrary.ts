@@ -5,6 +5,7 @@ import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
 import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
 import { saveGeneratedImage } from "../services/mediaGenerationService";
+import { getMediaStats } from "../services/mediaStatsService";
 import { isAllowedMediaUrl } from "../utils/mediaUrl";
 
 const router: Router = Router();
@@ -172,6 +173,23 @@ router.post(
     } catch (error: any) {
       console.error("Error saving generated image:", error);
       res.status(500).json({ message: "فشل في حفظ الصورة المولّدة" });
+    }
+  },
+);
+
+// GET /api/media/stats - library governance dashboard (Phase 6): totals, license
+// mix, storage, top-used. Gated by media.view.
+router.get(
+  "/api/media/stats",
+  requireAuth,
+  requirePermission("media.view"),
+  async (_req: any, res) => {
+    try {
+      const stats = await getMediaStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error fetching media stats:", error);
+      res.status(500).json({ message: "فشل في جلب إحصائيات المكتبة" });
     }
   },
 );
