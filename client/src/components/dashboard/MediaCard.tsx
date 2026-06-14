@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Star, Download, Trash2, Image as ImageIcon, ImageOff, Check } from "lucide-react";
+import { Star, Download, Trash2, Image as ImageIcon, ImageOff, Check, Wand2, AlertTriangle, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { MediaFile } from "@shared/schema";
@@ -133,6 +133,31 @@ export function MediaCard({
             استخدم {file.usageCount} مرة
           </Badge>
         )}
+
+        {/* AI status indicators (Phase 2) */}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1">
+          {file.aiHasSensitiveContent && (
+            <Badge
+              variant="destructive"
+              className="h-5 px-1.5 text-[10px]"
+              title="محتوى حسّاس"
+              data-testid={`badge-ai-sensitive-${file.id}`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+            </Badge>
+          )}
+          {file.type === "image" &&
+            (!file.aiAnalysisStatus || file.aiAnalysisStatus === "pending" || file.aiAnalysisStatus === "failed") && (
+              <Badge
+                variant="secondary"
+                className="h-5 px-1.5 text-[10px] opacity-80"
+                title="بانتظار التحليل بالذكاء"
+                data-testid={`badge-ai-pending-${file.id}`}
+              >
+                <Wand2 className="h-3 w-3" />
+              </Badge>
+            )}
+        </div>
       </div>
 
       <CardContent className="p-3">
@@ -153,10 +178,25 @@ export function MediaCard({
           </span>
         </div>
 
-        {file.category && (
-          <Badge variant="outline" className="mt-2 text-xs">
-            {file.category}
-          </Badge>
+        {(file.category || file.aiQualityScore != null) && (
+          <div className="flex items-center gap-1 mt-2 flex-wrap">
+            {file.category && (
+              <Badge variant="outline" className="text-xs">
+                {file.category}
+              </Badge>
+            )}
+            {file.aiQualityScore != null && (
+              <Badge
+                variant="outline"
+                className="text-xs gap-0.5"
+                title="درجة جودة الصورة (تحليل ذكاء)"
+                data-testid={`badge-ai-quality-${file.id}`}
+              >
+                <Sparkles className="h-3 w-3 text-purple-500" />
+                {file.aiQualityScore}
+              </Badge>
+            )}
+          </div>
         )}
 
         {/* Quick Actions (hidden while selecting) */}

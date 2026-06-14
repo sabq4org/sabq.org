@@ -5848,7 +5848,15 @@ export const mediaFiles = pgTable("media_files", {
   isAiGenerated: boolean("is_ai_generated").default(false).notNull(),
   aiGenerationModel: text("ai_generation_model"), // gemini-3-pro, nano-banana-pro, etc.
   aiGenerationPrompt: text("ai_generation_prompt"), // The prompt used to generate the image
-  
+
+  // AI auto-tagging (Phase 2) — every library image is analyzed on upload to
+  // fill keywords/altText/quality. Status drives the "بانتظار التحليل" collection
+  // and the per-card badge. "skipped" = non-fetchable URL or non-library asset.
+  aiAnalysisStatus: text("ai_analysis_status").default("pending"), // pending | done | failed | skipped
+  aiAnalyzedAt: timestamp("ai_analyzed_at"),
+  aiQualityScore: integer("ai_quality_score"), // 0-100
+  aiHasSensitiveContent: boolean("ai_has_sensitive_content").default(false).notNull(),
+
   // Organization
   isFavorite: boolean("is_favorite").default(false).notNull(),
   category: text("category"), // articles, logos, reporters, banners, general
@@ -5868,6 +5876,7 @@ export const mediaFiles = pgTable("media_files", {
   index("idx_media_files_created_at").on(table.createdAt.desc()),
   index("idx_media_files_is_favorite").on(table.isFavorite),
   index("idx_media_files_category").on(table.category),
+  index("idx_media_files_ai_status").on(table.aiAnalysisStatus),
 ]);
 
 // Media Usage Log - track where and when media is used
