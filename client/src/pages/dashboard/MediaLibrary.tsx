@@ -67,6 +67,7 @@ export default function MediaLibrary() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchMode, setSearchMode] = useState<"literal" | "semantic">("literal");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [collection, setCollection] = useState<Collection>("");
@@ -83,6 +84,10 @@ export default function MediaLibrary() {
   // Auto-tag backfill state (Phase 2)
   const [backfilling, setBackfilling] = useState(false);
   const [backfillProgress, setBackfillProgress] = useState<{ done: number; remaining: number } | null>(null);
+
+  // Semantic-index backfill state (Phase 3)
+  const [indexing, setIndexing] = useState(false);
+  const [indexProgress, setIndexProgress] = useState<{ done: number; remaining: number } | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -137,6 +142,35 @@ export default function MediaLibrary() {
     [mediaData],
   );
   const totalCount = mediaData?.pages?.[0]?.total ?? 0;
+
+  // Semantic search (Phase 3) — ranks by meaning. Active only in "semantic" mode
+  // with a query; otherwise the literal infinite list above is shown.
+  const semanticActive = searchMode === "semantic" && !!searchTerm;
+  const { data: semanticData, isLoading: semanticLoading } = useQuery({
+    queryKey: ["/api/media/semantic-search", searchTerm, selectedFolderId, selectedCategory],
+    enabled: !!user && semanticActive,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("q", searchTerm);
+      params.set("limit", "60");
+      if (selectedFolderId) params.set("folderId", selectedFolderId);
+      if (selectedCategory && selectedCategory !== "all") params.set("category", selectedCategory);
+      return apiRequest(`/api/media/semantic-search?${params.toString()}`, { method: "GET" }) as Promise<{
+        files: (MediaFile & { relevanceScore: number })[];
+        total: number;
+        capped: boolean;
+      }>;
+    },
+  });
+
+  // What the grid/list actually renders — semantic results, or the infinite list.
+  const displayFiles: MediaFile[] = semanticActive ? (semanticData?.files ?? []) : files;
+  const displayLoading = semanticActive ? semanticLoading : mediaLoading;
+  const relevanceById = useMemo(() => {
+    const m = new Map<string, number>();
+    if (semanticActive) for (const f of semanticData?.files ?? []) m.set(f.id, (f as any).relevanceScore);
+    return m;
+  }, [semanticActive, semanticData]);
 
   // Infinite-scroll sentinel
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -210,6 +244,36 @@ export default function MediaLibrary() {
       setBackfilling(false);
     }
   }, [backfilling, toast]);
+
+  // "فهرسة دلالية" — embed not-yet-indexed images in batches until the library is
+  // fully searchable by meaning. Stops on no-progress or empty (no infinite spin).
+  const runEmbedBackfill = useCallback(async () => {
+    if (indexing) return;
+    setIndexing(true);
+    setIndexProgress(null);
+    let totalDone = 0;
+    try {
+      for (let i = 0; i < 120; i++) {
+        const r = (await apiRequest("/api/media/embeddings/backfill", {
+          method: "POST",
+          body: JSON.stringify({ batchSize: 8 }),
+          headers: { "Content-Type": "application/json" },
+        })) as { processed: number; embedded: number; remaining: number };
+        totalDone += r.embedded;
+        setIndexProgress({ done: totalDone, remaining: r.remaining });
+        if (r.processed === 0 || r.embedded === 0 || r.remaining === 0) break;
+      }
+      toast({ title: "اكتملت الفهرسة الدلالية", description: `فُهرست ${totalDone} صورة` });
+    } catch (error: any) {
+      toast({
+        title: "تعذّرت الفهرسة الدلالية",
+        description: error?.message || "حدث خطأ أثناء فهرسة الصور",
+        variant: "destructive",
+      });
+    } finally {
+      setIndexing(false);
+    }
+  }, [indexing, toast]);
 
   // Toggle favorite (single)
   const toggleFavoriteMutation = useMutation({
@@ -321,10 +385,11 @@ export default function MediaLibrary() {
       selectionMode={selectionMode}
       selected={selectedIds.has(file.id)}
       onToggleSelect={handleToggleSelect}
+      relevanceScore={relevanceById.get(file.id)}
     />
   );
 
-  const isLoading = foldersLoading || mediaLoading;
+  const isLoading = foldersLoading || displayLoading;
 
   return (
     <DashboardLayout>
@@ -349,12 +414,35 @@ export default function MediaLibrary() {
             <div className="relative flex-1 w-full md:max-w-sm">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="بحث في الملفات..."
+                placeholder={searchMode === "semantic" ? "ابحث بالمعنى… مثل: ملعب ليلي" : "بحث في الملفات..."}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="pr-9"
                 data-testid="input-search"
               />
+            </div>
+
+            {/* Literal / semantic search toggle (Phase 3) */}
+            <div className="inline-flex rounded-md border p-0.5 gap-0.5" data-testid="toggle-search-mode">
+              <Button
+                size="sm"
+                variant={searchMode === "literal" ? "default" : "ghost"}
+                className="h-8 px-3"
+                onClick={() => setSearchMode("literal")}
+                data-testid="button-search-literal"
+              >
+                حرفي
+              </Button>
+              <Button
+                size="sm"
+                variant={searchMode === "semantic" ? "default" : "ghost"}
+                className="h-8 px-3 gap-1.5"
+                onClick={() => setSearchMode("semantic")}
+                data-testid="button-search-semantic"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                دلالي
+              </Button>
             </div>
 
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -399,22 +487,41 @@ export default function MediaLibrary() {
             ))}
 
             {canManageMedia && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="gap-1.5 mr-auto h-7"
-                onClick={runBackfill}
-                disabled={backfilling}
-                data-testid="button-backfill-tags"
-                title="تحليل الصور غير الموسومة بالذكاء وملء الوسوم والنص البديل تلقائياً"
-              >
-                {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 text-purple-500" />}
-                {backfilling
-                  ? backfillProgress
-                    ? `جارٍ التحليل… (${backfillProgress.done} ✓ / ${backfillProgress.remaining} متبقٍ)`
-                    : "جارٍ التحليل…"
-                  : "تحليل تلقائي"}
-              </Button>
+              <div className="flex items-center gap-2 mr-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 h-7"
+                  onClick={runBackfill}
+                  disabled={backfilling}
+                  data-testid="button-backfill-tags"
+                  title="تحليل الصور غير الموسومة بالذكاء وملء الوسوم والنص البديل تلقائياً"
+                >
+                  {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 text-purple-500" />}
+                  {backfilling
+                    ? backfillProgress
+                      ? `جارٍ التحليل… (${backfillProgress.done} ✓ / ${backfillProgress.remaining} متبقٍ)`
+                      : "جارٍ التحليل…"
+                    : "تحليل تلقائي"}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 h-7"
+                  onClick={runEmbedBackfill}
+                  disabled={indexing}
+                  data-testid="button-backfill-embeddings"
+                  title="فهرسة الصور للبحث الدلالي (بالمعنى) — تشمل الأرشيف القديم"
+                >
+                  {indexing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-purple-500" />}
+                  {indexing
+                    ? indexProgress
+                      ? `جارٍ الفهرسة… (${indexProgress.done} ✓ / ${indexProgress.remaining} متبقٍ)`
+                      : "جارٍ الفهرسة…"
+                    : "فهرسة دلالية"}
+                </Button>
+              </div>
             )}
           </div>
         </Card>
@@ -482,13 +589,20 @@ export default function MediaLibrary() {
             ) : (
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span data-testid="text-results-count">
-                  {totalCount} {totalCount === 1 ? "ملف" : "ملفات"}
+                  {semanticActive
+                    ? `${displayFiles.length} نتيجة دلالية`
+                    : `${totalCount} ${totalCount === 1 ? "ملف" : "ملفات"}`}
                 </span>
+                {semanticActive && (
+                  <span className="text-xs flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                    <Sparkles className="h-3 w-3" /> مرتّبة حسب الملاءمة
+                  </span>
+                )}
               </div>
             )}
 
             {/* Loading skeletons */}
-            {isLoading && files.length === 0 && (
+            {isLoading && displayFiles.length === 0 && (
               <div className={gridClasses}>
                 {Array.from({ length: 10 }).map((_, i) => (
                   <Skeleton key={i} className="aspect-square" />
@@ -497,28 +611,39 @@ export default function MediaLibrary() {
             )}
 
             {/* Empty state */}
-            {!isLoading && files.length === 0 && (
+            {!isLoading && displayFiles.length === 0 && (
               <Card className="p-12">
                 <div className="text-center">
                   <ImageIcon className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-medium mb-2">لا توجد ملفات</h3>
-                  <p className="text-sm text-muted-foreground mb-4">جرّب تغيير الفلاتر أو ارفع ملفاً جديداً</p>
-                  {canUpload && (
-                    <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-first">
-                      <Upload className="h-4 w-4 ml-2" /> ارفع أول ملف
-                    </Button>
+                  {semanticActive ? (
+                    <>
+                      <h3 className="text-lg font-medium mb-2">لا نتائج دلالية</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        جرّب صياغة أخرى، أو شغّل «فهرسة دلالية» إن لم تُفهرَس المكتبة بعد
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-lg font-medium mb-2">لا توجد ملفات</h3>
+                      <p className="text-sm text-muted-foreground mb-4">جرّب تغيير الفلاتر أو ارفع ملفاً جديداً</p>
+                      {canUpload && (
+                        <Button onClick={() => setUploadDialogOpen(true)} data-testid="button-upload-first">
+                          <Upload className="h-4 w-4 ml-2" /> ارفع أول ملف
+                        </Button>
+                      )}
+                    </>
                   )}
                 </div>
               </Card>
             )}
 
             {/* Grid view */}
-            {viewMode === "grid" && files.length > 0 && (
-              <div className={gridClasses}>{files.map(renderCard)}</div>
+            {viewMode === "grid" && displayFiles.length > 0 && (
+              <div className={gridClasses}>{displayFiles.map(renderCard)}</div>
             )}
 
             {/* List view */}
-            {viewMode === "list" && files.length > 0 && (
+            {viewMode === "list" && displayFiles.length > 0 && (
               <Card className="overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -533,7 +658,7 @@ export default function MediaLibrary() {
                       </tr>
                     </thead>
                     <tbody>
-                      {files.map((file) => (
+                      {displayFiles.map((file) => (
                         <tr key={file.id} className="border-b hover:bg-muted/30 cursor-pointer" onClick={() => handlePreview(file)} data-testid={`row-media-${file.id}`}>
                           <td className="py-3 px-4">
                             {file.type === "image" ? (
@@ -569,9 +694,10 @@ export default function MediaLibrary() {
               </Card>
             )}
 
-            {/* Infinite-scroll sentinel + loader */}
-            <div ref={sentinelRef} />
-            {isFetchingNextPage && (
+            {/* Infinite-scroll sentinel + loader (literal mode only — semantic
+                returns a single ranked page) */}
+            {!semanticActive && <div ref={sentinelRef} />}
+            {!semanticActive && isFetchingNextPage && (
               <div className="text-center py-4 text-sm text-muted-foreground">جاري التحميل...</div>
             )}
           </div>

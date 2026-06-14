@@ -3,6 +3,7 @@ import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
+import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
 
 const router: Router = Router();
 
@@ -93,6 +94,50 @@ router.post(
     } catch (error: any) {
       console.error("Error backfilling media tags:", error);
       res.status(500).json({ message: "فشل في تحليل دفعة الصور" });
+    }
+  },
+);
+
+// GET /api/media/semantic-search - "بحث دلالي": rank library images by meaning
+// against an embedding of the query (not keyword match). Gated by media.view.
+router.get(
+  "/api/media/semantic-search",
+  requireAuth,
+  requirePermission("media.view"),
+  async (req: any, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : "";
+      if (!q.trim()) {
+        return res.json({ files: [], total: 0, capped: false });
+      }
+      const limit = Number(req.query.limit) || 30;
+      const folderId = typeof req.query.folderId === "string" ? req.query.folderId : null;
+      const category = typeof req.query.category === "string" ? req.query.category : null;
+
+      const result = await semanticSearchMedia(q, { limit, folderId, category });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in semantic media search:", error);
+      res.status(500).json({ message: "فشل في البحث الدلالي" });
+    }
+  },
+);
+
+// POST /api/media/embeddings/backfill - index a bounded batch of not-yet-embedded
+// archive images for semantic search, reporting how many remain so the UI can
+// loop until the library is fully indexed. Gated by media.edit.
+router.post(
+  "/api/media/embeddings/backfill",
+  requireAuth,
+  requirePermission("media.edit"),
+  async (req: any, res) => {
+    try {
+      const batch = Number(req.body?.batchSize) || 8;
+      const result = await backfillMediaEmbeddings(batch);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error backfilling media embeddings:", error);
+      res.status(500).json({ message: "فشل في فهرسة دفعة الصور" });
     }
   },
 );
