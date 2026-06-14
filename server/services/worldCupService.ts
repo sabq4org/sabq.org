@@ -221,9 +221,11 @@ export interface WcScorer {
 export async function getTopScorers(): Promise<WcScorer[]> {
   const provider = await withSWR("wc:scorers", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
+    // المجموع الكامل لكل صفوف المزود قبل الاقتطاع — يُقارَن بمجموع لوحة الأحداث
+    const total = rows.reduce((sum: number, row: any) => sum + (row.statistics?.[0]?.goals?.total ?? 0), 0);
     const top = rows.slice(0, 10);
     const tr = await resolveNames(top.map((row: any) => row.player?.name));
-    return top.map((row: any, index: number): WcScorer => {
+    const board = top.map((row: any, index: number): WcScorer => {
       const stats = row.statistics?.[0] ?? {};
       return {
         rank: index + 1,
@@ -238,8 +240,10 @@ export async function getTopScorers(): Promise<WcScorer[]> {
         matches: stats.games?.appearences ?? 0,
       };
     });
+    return { board, total };
   });
-  return freshestBoard(provider, (await aggregateRacesFromEvents()).scorers, (r) => r.goals);
+  const events = await aggregateRacesFromEvents();
+  return freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals);
 }
 
 export interface WcPrediction {
@@ -720,14 +724,17 @@ function mapLeader(row: any, index: number, tr: (n: string | null | undefined) =
 // إن كان مجموع عدّنا أعلى فلوحة المزود متأخرة ونعرض تجميعنا، وإلا فلوحته الأكمل
 // (دقائق اللعب والصور وعدد المباريات) هي المرجع.
 
+// المقارنة تعتمد المجموع الكامل لكل مصدر (لا مجموع العشرة الأوائل المقتطعة): أوائل
+// البطولة يتعادل عشرات اللاعبين عند هدف/بطاقة واحدة، فيتساوى مجموعا العشرة بين لوحة
+// المزود المتأخرة ولوحتنا الحية — وكانت المساواة تُرجّح المزود فتتجمّد الأسماء يومين
+// حتى يحدّث المزود تجميعه. المجموع الكامل يكشف تأخّر المزود فورًا فنعرض لوحة الأحداث.
 function freshestBoard<T extends { id: number; photo: string; minutes: number; matches: number }>(
   provider: T[] | null | undefined,
+  providerTotal: number,
   fromEvents: T[],
-  count: (row: T) => number
+  eventsTotal: number
 ): T[] {
   const board = provider ?? [];
-  const providerTotal = board.reduce((sum, row) => sum + count(row), 0);
-  const eventsTotal = fromEvents.reduce((sum, row) => sum + count(row), 0);
   if (board.length > 0 && providerTotal >= eventsTotal) return board;
   // المزود متأخر — تجميعنا هو الأحدث، ونثريه بدقائق/مباريات/صور صفه المطابق
   const byId = new Map(board.map((row) => [row.id, row]));
@@ -749,12 +756,17 @@ interface WcRaceTally {
   assists: number;
   yellow: number;
   red: number;
+  // أحدث مساهمة (بدء المباراة + دقيقة الحدث) — كاسر تعادل يرفع صاحب أحدث هدف/بطاقة
+  // فوق صاحب أول أمس عند تساوي العدد، فلا تبدو اللوحة جامدة بينما المباريات تُلعب
+  lastAt: number;
 }
 
 interface WcRacesFromEvents {
   scorers: WcScorer[];
   assists: WcLeader[];
   cards: WcLeader[];
+  // مجاميع كاملة (كل اللاعبين لا العشرة الأوائل) لمقارنة الحداثة مع لوحة المزود
+  totals: { goals: number; assists: number; cards: number };
 }
 
 async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
@@ -771,6 +783,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
       name: string | null,
       playerId: number | null,
       teamId: number,
+      at: number,
       apply: (t: WcRaceTally) => void
     ) => {
       const team = teamById.get(teamId);
@@ -780,11 +793,14 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
       if (!tally) {
         // صور المزود تتبع معرف اللاعب مباشرة
         const photo = playerId ? `https://media.api-sports.io/football/players/${playerId}.png` : "";
-        tally = { playerId, name, team, photo, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0 };
+        tally = { playerId, name, team, photo, goals: 0, penalties: 0, assists: 0, yellow: 0, red: 0, lastAt: at };
         tallies.set(key, tally);
-      } else if (!tally.photo && playerId) {
-        tally.playerId = playerId;
-        tally.photo = `https://media.api-sports.io/football/players/${playerId}.png`;
+      } else {
+        if (!tally.photo && playerId) {
+          tally.playerId = playerId;
+          tally.photo = `https://media.api-sports.io/football/players/${playerId}.png`;
+        }
+        if (at > tally.lastAt) tally.lastAt = at;
       }
       apply(tally);
     };
@@ -793,38 +809,40 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     // الدوري (كل 30 ثانية) حصة المزود بإعادة جلب تفاصيل كل مباريات البطولة
     const FINISHED_EVENTS_TTL = 60 * 60 * 1000;
     const eventLists = await Promise.all(
-      started.map(async (f): Promise<WcMatchEvent[]> => {
+      started.map(async (f): Promise<{ at: number; events: WcMatchEvent[] }> => {
         try {
-          if (f.status.finished) {
-            return await withSWR(
-              `wc:raceEvents:${f.id}`,
-              FINISHED_EVENTS_TTL,
-              FINISHED_EVENTS_TTL * 2,
-              async () => (await getMatchDetail(f.id))?.events ?? []
-            );
-          }
-          return (await getMatchDetail(f.id))?.events ?? [];
+          const events = f.status.finished
+            ? await withSWR(
+                `wc:raceEvents:${f.id}`,
+                FINISHED_EVENTS_TTL,
+                FINISHED_EVENTS_TTL * 2,
+                async () => (await getMatchDetail(f.id))?.events ?? []
+              )
+            : (await getMatchDetail(f.id))?.events ?? [];
+          return { at: f.timestamp, events };
         } catch {
-          return [];
+          return { at: f.timestamp, events: [] };
         }
       })
     );
-    for (const events of eventLists) {
+    for (const { at, events } of eventLists) {
       for (const ev of events) {
+        // ترتيب زمني داخل البطولة: بدء المباراة + دقيقة الحدث — يُرجّح الأحدث عند التعادل
+        const evAt = at + (ev.minute ?? 0) * 60;
         if (ev.type === "goal" && ev.detail !== "Own Goal") {
           // الهدف العكسي لا يدخل سباق الهداف، وركلة الجزاء الضائعة نوع مستقل أصلًا
-          bump(ev.player, ev.playerId, ev.teamId, (t) => {
+          bump(ev.player, ev.playerId, ev.teamId, evAt, (t) => {
             t.goals += 1;
             if (ev.detail === "Penalty") t.penalties += 1;
           });
-          if (ev.assist) bump(ev.assist, ev.assistId, ev.teamId, (t) => { t.assists += 1; });
+          if (ev.assist) bump(ev.assist, ev.assistId, ev.teamId, evAt, (t) => { t.assists += 1; });
         } else if (ev.type === "yellow-card") {
-          bump(ev.player, ev.playerId, ev.teamId, (t) => {
+          bump(ev.player, ev.playerId, ev.teamId, evAt, (t) => {
             t.yellow += 1;
             if (ev.detail === "Second Yellow card") t.red += 1; // طرد بإنذارين
           });
         } else if (ev.type === "red-card") {
-          bump(ev.player, ev.playerId, ev.teamId, (t) => { t.red += 1; });
+          bump(ev.player, ev.playerId, ev.teamId, evAt, (t) => { t.red += 1; });
         }
       }
     }
@@ -846,7 +864,9 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     return {
       scorers: all
         .filter((t) => t.goals > 0)
-        .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+        // عند تساوي الأهداف ثم الصناعة نرفع صاحب أحدث هدف — وإلا بقي هدّاف اليوم
+        // تحت هدّاف أول أمس فتبدو اللوحة جامدة رغم استمرار المباريات
+        .sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.lastAt - a.lastAt)
         .slice(0, 10)
         .map((t, i): WcScorer => ({
           rank: i + 1,
@@ -862,27 +882,36 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         })),
       assists: all
         .filter((t) => t.assists > 0)
-        .sort((a, b) => b.assists - a.assists || b.goals - a.goals)
+        .sort((a, b) => b.assists - a.assists || b.goals - a.goals || b.lastAt - a.lastAt)
         .slice(0, 10)
         .map(toLeader),
       cards: all
         .filter((t) => t.yellow + t.red > 0)
         // الطرد أهمّ حدث انضباطي وأندر من الإنذار — نرتّب بالحمراء أولًا كي لا
         // يغرق اللاعب المطرود تحت أصحاب الإنذار الواحد فيُقتطع خارج العشرة الأوائل
-        .sort((a, b) => b.red - a.red || b.yellow - a.yellow)
+        .sort((a, b) => b.red - a.red || b.yellow - a.yellow || b.lastAt - a.lastAt)
         .slice(0, 10)
         .map(toLeader),
+      totals: {
+        goals: all.reduce((sum, t) => sum + t.goals, 0),
+        assists: all.reduce((sum, t) => sum + t.assists, 0),
+        cards: all.reduce((sum, t) => sum + t.yellow + t.red, 0),
+      },
     };
   });
 }
 
 export async function getTopAssists(): Promise<WcLeader[]> {
   const provider = await withSWR("wc:assists", CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
-    const rows = (await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON })).slice(0, 10);
-    const tr = await resolveNames(rows.map((row: any) => row.player?.name));
-    return rows.map((row: any, i: number) => mapLeader(row, i, tr));
+    const rows = await apiGet("players/topassists", { league: LEAGUE_ID, season: SEASON });
+    const total = rows.reduce((sum: number, row: any) => sum + (row.statistics?.[0]?.goals?.assists ?? 0), 0);
+    const top = rows.slice(0, 10);
+    const tr = await resolveNames(top.map((row: any) => row.player?.name));
+    const board = top.map((row: any, i: number) => mapLeader(row, i, tr));
+    return { board, total };
   });
-  return freshestBoard(provider, (await aggregateRacesFromEvents()).assists, (r) => r.assists);
+  const events = await aggregateRacesFromEvents();
+  return freshestBoard(provider.board, provider.total, events.assists, events.totals.assists);
 }
 
 export async function getTopCards(): Promise<WcLeader[]> {
@@ -901,15 +930,22 @@ export async function getTopCards(): Promise<WcLeader[]> {
       if (id && !byId.has(id)) byId.set(id, row);
     }
     const merged = [...byId.values()];
+    // المجموع الكامل (صفراء + حمراء + طرد بإنذارين) عبر كل اللاعبين قبل الاقتطاع
+    const total = merged.reduce((sum: number, row: any) => {
+      const c = row.statistics?.[0]?.cards ?? {};
+      return sum + (c.yellow ?? 0) + (c.red ?? 0) + (c.yellowred ?? 0);
+    }, 0);
     const tr = await resolveNames(merged.map((row: any) => row.player?.name));
-    return merged
+    const board = merged
       .map((row: any) => mapLeader(row, 0, tr))
       // نفس ترتيب لوحة الأحداث: الحمراء أولًا ثم الصفراء حتى لا تختفي الطرود
       .sort((a, b) => b.red - a.red || b.yellow - a.yellow)
       .slice(0, 10)
       .map((leader, i) => ({ ...leader, rank: i + 1 }));
+    return { board, total };
   });
-  return freshestBoard(provider, (await aggregateRacesFromEvents()).cards, (r) => r.yellow + r.red);
+  const events = await aggregateRacesFromEvents();
+  return freshestBoard(provider.board, provider.total, events.cards, events.totals.cards);
 }
 
 export interface WcMatchEvent {
