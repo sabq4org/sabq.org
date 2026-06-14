@@ -1873,6 +1873,53 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     },
   });
 
+  // "وصف وتعليق ذكي": one-click AI alt text + caption for the hero image, saved
+  // straight into the hero media asset (displayOrder 0). Requires a saved
+  // article (article_media_assets needs an articleId) — the button is disabled
+  // with a "متاح بعد حفظ الخبر" hint until then.
+  const [generatingCaption, setGeneratingCaption] = useState(false);
+  const handleGenerateHeroCaption = async () => {
+    if (!imageUrl || !article?.id) return;
+    setGeneratingCaption(true);
+    try {
+      const r = (await apiRequest("/api/media/analyze", {
+        method: "POST",
+        body: JSON.stringify({ imageUrl, articleTitle: title, articleContent: content }),
+        headers: { "Content-Type": "application/json" },
+      })) as {
+        altText: string;
+        caption: string;
+        keywords: string[];
+        relevanceScore: number | null;
+        qualityScore: number | null;
+        hasSensitiveContent: boolean;
+      };
+      const data = {
+        mediaFileId: heroImageMediaId || null,
+        locale: "ar",
+        altText: r.altText || null,
+        captionPlain: r.caption || null,
+        keywordTags: r.keywords?.length ? r.keywords : null,
+        displayOrder: 0,
+      };
+      const existing = mediaAssets.find((a: any) => a.displayOrder === 0);
+      if (existing?.id) {
+        updateCaptionMutation.mutate({ id: existing.id, data });
+      } else {
+        createCaptionMutation.mutate(data);
+      }
+      const bits: string[] = [];
+      if (r.relevanceScore != null) bits.push(`ملاءمة ${r.relevanceScore}%`);
+      if (r.qualityScore != null) bits.push(`جودة ${r.qualityScore}%`);
+      if (r.hasSensitiveContent) bits.push("⚠️ محتوى حسّاس");
+      toast({ title: "تم توليد الوصف والتعليق", description: bits.join(" · ") || "تم حفظه في تعريف الصورة" });
+    } catch (error: any) {
+      toast({ title: "تعذّر التوليد", description: error.message || "حدث خطأ", variant: "destructive" });
+    } finally {
+      setGeneratingCaption(false);
+    }
+  };
+
   // Delete media attachment
   const deleteAttachmentMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -2658,6 +2705,24 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       <ImageIcon className="h-4 w-4" />
                       اختر من المكتبة
                     </Button>
+                  )}
+                  {!isOpinionAuthor && imageUrl && (
+                    <span title={!article?.id ? "متاح بعد حفظ الخبر" : undefined}>
+                      <Button
+                        variant="outline"
+                        onClick={handleGenerateHeroCaption}
+                        disabled={!article?.id || generatingCaption}
+                        className="gap-2"
+                        data-testid="button-ai-hero-caption"
+                      >
+                        {generatingCaption ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-primary" />
+                        )}
+                        وصف وتعليق ذكي
+                      </Button>
+                    </span>
                   )}
                   {canGenerateImages && (
                     <Button
