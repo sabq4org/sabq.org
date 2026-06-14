@@ -179,27 +179,56 @@ export async function getStandings(): Promise<WcGroup[]> {
     const tables: any[][] = rows[0]?.league?.standings ?? [];
     // المزود يسمي المجموعات "Group A" قبل البطولة و"Group Stage - Group A" بعد
     // أول إعادة حساب، وجدول أفضل الثوالث يأتي باسم "Group Stage" بلا حرف — نستبعده
-    const groupLetter = (table: any[]): string | null =>
-      (table[0]?.group ?? "").match(/Group\s+([A-L])\s*$/i)?.[1]?.toUpperCase() ?? null;
-    return tables
-      .filter((table) => groupLetter(table) !== null)
-      .sort((a, b) => groupLetter(a)!.localeCompare(groupLetter(b)!))
-      .map((table) => ({
-        group: localizeGroup(table[0]?.group ?? ""),
-        groupEn: `Group ${groupLetter(table)}`,
-        rows: table.map((row: any): WcStandingRow => ({
-          rank: row.rank,
-          team: localizeTeam(row.team),
-          played: row.all?.played ?? 0,
-          win: row.all?.win ?? 0,
-          draw: row.all?.draw ?? 0,
-          lose: row.all?.lose ?? 0,
-          goalsFor: row.all?.goals?.for ?? 0,
-          goalsAgainst: row.all?.goals?.against ?? 0,
-          goalsDiff: row.goalsDiff ?? 0,
-          points: row.points ?? 0,
-          form: row.form ?? null,
-        })),
+    const groupLetter = (group: string): string | null =>
+      (group ?? "").match(/Group\s+([A-L])\s*$/i)?.[1]?.toUpperCase() ?? null;
+
+    // المزود يكرّر صفوف المنتخبات داخل الجدول الواحد (أحيانًا مرتين بنفس القيم) عند
+    // انتقال المرحلة، وقد يُرسل جدولين للحرف نفسه ("Group A" و"Group Stage - Group A").
+    // نوحّد الكل حسب الحرف ثم نُزيل التكرار حسب معرّف المنتخب مُبقين أحدث صف (الأكثر
+    // مباريات)، فتظهر كل مجموعة بأربعة منتخبات لا ثمانية.
+    const byLetter = new Map<string, Map<number, any>>();
+    for (const table of tables) {
+      const letter = groupLetter(table[0]?.group ?? "");
+      if (!letter) continue;
+      let teams = byLetter.get(letter);
+      if (!teams) {
+        teams = new Map();
+        byLetter.set(letter, teams);
+      }
+      for (const row of table) {
+        const id = row.team?.id ?? 0;
+        if (!id) continue;
+        const prev = teams.get(id);
+        if (!prev || (row.all?.played ?? 0) > (prev.all?.played ?? 0)) teams.set(id, row);
+      }
+    }
+
+    return [...byLetter.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([letter, teams]) => ({
+        group: localizeGroup(`Group ${letter}`),
+        groupEn: `Group ${letter}`,
+        rows: [...teams.values()]
+          // ترتيب المزود الرسمي (rank) يراعي المواجهات المباشرة؛ النقاط والفارق احتياط
+          .sort(
+            (a, b) =>
+              (a.rank ?? 99) - (b.rank ?? 99) ||
+              (b.points ?? 0) - (a.points ?? 0) ||
+              (b.goalsDiff ?? 0) - (a.goalsDiff ?? 0)
+          )
+          .map((row: any): WcStandingRow => ({
+            rank: row.rank,
+            team: localizeTeam(row.team),
+            played: row.all?.played ?? 0,
+            win: row.all?.win ?? 0,
+            draw: row.all?.draw ?? 0,
+            lose: row.all?.lose ?? 0,
+            goalsFor: row.all?.goals?.for ?? 0,
+            goalsAgainst: row.all?.goals?.against ?? 0,
+            goalsDiff: row.goalsDiff ?? 0,
+            points: row.points ?? 0,
+            form: row.form ?? null,
+          })),
       }));
   });
 }

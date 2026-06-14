@@ -33,6 +33,8 @@ import {
   FolderInput,
   Download,
   X,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { MediaCard } from "@/components/dashboard/MediaCard";
 import { FolderTree } from "@/components/dashboard/FolderTree";
@@ -44,7 +46,7 @@ import { cn } from "@/lib/utils";
 import type { MediaFile, MediaFolder } from "@shared/schema";
 
 type ViewMode = "grid" | "list";
-type Collection = "" | "favorites" | "most_used" | "unused" | "no_alt";
+type Collection = "" | "favorites" | "most_used" | "unused" | "no_alt" | "pending";
 
 const PAGE_SIZE = 30;
 
@@ -54,6 +56,7 @@ const SMART_COLLECTIONS: { value: Collection; label: string; icon: typeof Star }
   { value: "most_used", label: "الأكثر استخداماً", icon: TrendingUp },
   { value: "unused", label: "غير المستخدمة", icon: EyeOff },
   { value: "no_alt", label: "بلا نص بديل", icon: AlertCircle },
+  { value: "pending", label: "بانتظار التحليل", icon: Wand2 },
 ];
 
 export default function MediaLibrary() {
@@ -76,6 +79,10 @@ export default function MediaLibrary() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<MediaFile | null>(null);
+
+  // Auto-tag backfill state (Phase 2)
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{ done: number; remaining: number } | null>(null);
 
   // Debounce search
   useEffect(() => {
@@ -150,6 +157,7 @@ export default function MediaLibrary() {
 
   // Permission gates
   const canUpload = hasPermission(user, "media.upload");
+  const canManageMedia = hasPermission(user, "media.edit");
   const canDeleteFile = (file: MediaFile) =>
     file.uploadedBy === user?.id || hasPermission(user, "media.delete");
 
@@ -170,6 +178,38 @@ export default function MediaLibrary() {
     setSelectedFolderId(null);
     resetSelection();
   };
+
+  // "تحليل تلقائي" — loop the backfill endpoint in batches until the archive is
+  // fully tagged (or nothing remains). Bounded by a safety counter so a stuck
+  // batch can't spin forever.
+  const runBackfill = useCallback(async () => {
+    if (backfilling) return;
+    setBackfilling(true);
+    setBackfillProgress(null);
+    let totalDone = 0;
+    try {
+      for (let i = 0; i < 80; i++) {
+        const r = (await apiRequest("/api/media/backfill-tags", {
+          method: "POST",
+          body: JSON.stringify({ batchSize: 6 }),
+          headers: { "Content-Type": "application/json" },
+        })) as { processed: number; done: number; remaining: number };
+        totalDone += r.done;
+        setBackfillProgress({ done: totalDone, remaining: r.remaining });
+        if (r.processed === 0 || r.remaining === 0) break;
+      }
+      toast({ title: "اكتمل التحليل التلقائي", description: `حُلِّلت ${totalDone} صورة` });
+      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+    } catch (error: any) {
+      toast({
+        title: "تعذّر التحليل التلقائي",
+        description: error?.message || "حدث خطأ أثناء تحليل الصور",
+        variant: "destructive",
+      });
+    } finally {
+      setBackfilling(false);
+    }
+  }, [backfilling, toast]);
 
   // Toggle favorite (single)
   const toggleFavoriteMutation = useMutation({
@@ -357,6 +397,25 @@ export default function MediaLibrary() {
                 {label}
               </Badge>
             ))}
+
+            {canManageMedia && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-1.5 mr-auto h-7"
+                onClick={runBackfill}
+                disabled={backfilling}
+                data-testid="button-backfill-tags"
+                title="تحليل الصور غير الموسومة بالذكاء وملء الوسوم والنص البديل تلقائياً"
+              >
+                {backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5 text-purple-500" />}
+                {backfilling
+                  ? backfillProgress
+                    ? `جارٍ التحليل… (${backfillProgress.done} ✓ / ${backfillProgress.remaining} متبقٍ)`
+                    : "جارٍ التحليل…"
+                  : "تحليل تلقائي"}
+              </Button>
+            )}
           </div>
         </Card>
 

@@ -8,6 +8,7 @@ import { validatePassword } from "./utils/passwordPolicy";
 import { verifyImageMagicBytes } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { deleteMediaBlob } from "./services/mediaStorage";
+import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -1467,6 +1468,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       } else if (collection === 'unused') {
         conditions.push(sql`NOT EXISTS (SELECT 1 FROM ${articleMediaAssets} WHERE ${articleMediaAssets.mediaFileId} = ${mediaFiles.id})`);
         conditions.push(sql`NOT EXISTS (SELECT 1 FROM ${mediaUsageLog} WHERE ${mediaUsageLog.mediaId} = ${mediaFiles.id})`);
+      } else if (collection === 'pending') {
+        // Phase 2: images awaiting / failed AI analysis (not yet auto-tagged).
+        conditions.push(eq(mediaFiles.type, 'image'));
+        conditions.push(sql`(${mediaFiles.aiAnalysisStatus} IS NULL OR ${mediaFiles.aiAnalysisStatus} IN ('pending','failed'))`);
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1528,6 +1533,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             keywords: mediaFiles.keywords,
             isFavorite: mediaFiles.isFavorite,
             category: mediaFiles.category,
+            aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
+            aiQualityScore: mediaFiles.aiQualityScore,
+            aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
             usedIn: mediaFiles.usedIn,
             usageCount: mediaFiles.usageCount,
             uploadedBy: mediaFiles.uploadedBy,
@@ -1845,6 +1853,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           keywords: mediaFiles.keywords,
           isFavorite: mediaFiles.isFavorite,
           category: mediaFiles.category,
+          aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
+          aiQualityScore: mediaFiles.aiQualityScore,
+          aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
           usedIn: mediaFiles.usedIn,
           usageCount: mediaFiles.usageCount,
           uploadedBy: mediaFiles.uploadedBy,
@@ -1865,6 +1876,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(mediaFiles.id, mediaFile.id));
 
       console.log("[Media Upload] Media file created:", mediaFileWithDetails.id);
+
+      // Phase 2: auto-tag library images in the background. Fire-and-forget —
+      // never blocks the upload response. Skips avatars/logos/reporter photos
+      // and any non-public-https URL (analysis can't fetch it).
+      if (shouldAutoTag({ mimeType: req.file.mimetype, url: storagePath, category, entityType })) {
+        enqueueAutoTag(mediaFile.id);
+      }
 
       // Return appropriate URL:
       // - If public: use stored public URL
