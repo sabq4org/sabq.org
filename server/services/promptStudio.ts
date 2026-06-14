@@ -182,10 +182,13 @@ export async function optimizePrompt(
   // invalid/expired (e.g. a bad Gemini key in production returns 400), so if the
   // chosen provider throws we move on to the next instead of surfacing a 400.
   const requested: AIProvider = input.provider || "anthropic";
-  const seen = new Set<AIProvider>();
-  const order: AIProvider[] = [requested, "anthropic", "openai", "gemini"].filter(
-    (p) => aiManager.isProviderConfigured(p) && !seen.has(p) && (seen.add(p), true),
-  );
+  const candidates: AIProvider[] = [requested, "anthropic", "openai", "gemini"];
+  const order: AIProvider[] = [];
+  for (const p of candidates) {
+    if (!order.includes(p) && aiManager.isProviderConfigured(p)) {
+      order.push(p);
+    }
+  }
   if (order.length === 0) {
     throw new Error(
       "لا يوجد محرّك ذكاء اصطناعي مهيّأ — اضبط أحد المفاتيح: ANTHROPIC_API_KEY أو OPENAI_API_KEY أو GEMINI_API_KEY",
