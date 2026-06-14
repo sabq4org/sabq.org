@@ -59,10 +59,34 @@ class AIManager {
       baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
     });
 
-    // Gemini - Use Replit AI Integrations
+    // Gemini - Use Replit AI Integrations, then GEMINI_API_KEY (used by the
+    // rest of the codebase / startup warnings), then GOOGLE_API_KEY (the var
+    // name the production env actually stores the key under).
     this.gemini = new GoogleGenerativeAI(
-      process.env.AI_INTEGRATIONS_GEMINI_API_KEY!
+      (process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.GOOGLE_API_KEY)!
     );
+  }
+
+  // Returns true when the provider has an API key configured. Used by callers
+  // (e.g. Prompt Studio) to fall back to an available provider instead of
+  // letting the SDK throw a cryptic "Could not resolve authentication" error.
+  isProviderConfigured(provider: AIProvider): boolean {
+    switch (provider) {
+      case 'openai':
+        return Boolean(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
+      case 'anthropic':
+        return Boolean(process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY);
+      case 'gemini':
+        return Boolean(
+          process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
+            process.env.GEMINI_API_KEY ||
+            process.env.GOOGLE_API_KEY,
+        );
+      default:
+        return false;
+    }
   }
 
   // Generate text with a single model
