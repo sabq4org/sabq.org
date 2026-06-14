@@ -587,6 +587,15 @@ export const navConfig: NavItem[] = [
         permissions: ["ai.view", "tools.view"],
       },
       {
+        id: "prompt_studio",
+        labelKey: "nav.prompt_studio",
+        labelAr: "مختبر البرومبت",
+        path: "/dashboard/prompt-studio",
+        icon: Wand2,
+        roles: ["admin", "editor"],
+        permissions: ["ai.view", "ai.manage", "tools.view"],
+      },
+      {
         id: "voice_management",
         labelKey: "nav.voice_management",
         labelAr: "إدارة الأصوات",
