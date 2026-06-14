@@ -18,6 +18,8 @@ interface MediaCardProps {
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (file: MediaFile, shiftKey: boolean) => void;
+  /** Semantic-search relevance (0-100). When set, shows a ملاءمة badge. */
+  relevanceScore?: number;
 }
 
 export function MediaCard({
@@ -30,6 +32,7 @@ export function MediaCard({
   selectionMode = false,
   selected = false,
   onToggleSelect,
+  relevanceScore,
 }: MediaCardProps) {
   const [imgError, setImgError] = useState(false);
 
@@ -134,8 +137,18 @@ export function MediaCard({
           </Badge>
         )}
 
-        {/* AI status indicators (Phase 2) */}
+        {/* AI status indicators (Phase 2) + semantic relevance (Phase 3) */}
         <div className="absolute bottom-2 left-2 flex items-center gap-1">
+          {typeof relevanceScore === "number" && (
+            <Badge
+              variant="default"
+              className="h-5 px-1.5 text-[10px] bg-purple-600 hover:bg-purple-600 text-white border-0"
+              title="درجة ملاءمة البحث الدلالي"
+              data-testid={`badge-relevance-${file.id}`}
+            >
+              ملاءمة {relevanceScore}%
+            </Badge>
+          )}
           {file.aiHasSensitiveContent && (
             <Badge
               variant="destructive"

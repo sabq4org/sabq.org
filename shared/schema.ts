@@ -5892,6 +5892,20 @@ export const mediaUsageLog = pgTable("media_usage_log", {
   index("idx_media_usage_log_entity").on(table.entityType, table.entityId),
 ]);
 
+// Media vectors (embeddings for semantic search — Phase 3). Mirrors
+// content_vectors for articles: 1536-dim text-embedding-3-large vector stored as
+// jsonb; cosine similarity is computed in JS. Kept in a separate table so the
+// large vector never loads in the common media list query.
+export const mediaVectors = pgTable("media_vectors", {
+  mediaFileId: varchar("media_file_id").primaryKey().references(() => mediaFiles.id, { onDelete: "cascade" }),
+  embedding: jsonb("embedding").$type<number[]>(), // 1536-dim vector
+  embeddingText: text("embedding_text"), // the source text the vector was built from
+  embeddingModel: text("embedding_model").default("text-embedding-3-large"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_media_vectors_updated").on(table.updatedAt),
+]);
+
 // ============================================
 // MEDIA LIBRARY - INSERT SCHEMAS
 // ============================================

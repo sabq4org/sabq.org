@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { mediaFiles } from "@shared/schema";
 import { analyzeImage } from "./visualAiService";
+import { embedMediaFile } from "./mediaSearchService";
 
 // The /api/media/upload pipe is platform-wide (avatars, logos, reporter photos,
 // rich-editor inline images). Auto-tagging those wastes AI budget on assets that
@@ -131,6 +132,12 @@ export async function analyzeAndTagMedia(mediaFileId: string): Promise<"done" | 
     }
 
     await db.update(mediaFiles).set(updates).where(eq(mediaFiles.id, mediaFileId));
+
+    // Phase 3: generate the semantic-search embedding from the now-enriched
+    // metadata. Best-effort — embedMediaFile never throws, and a missing vector
+    // only means this image is absent from semantic results until backfilled.
+    void embedMediaFile(mediaFileId);
+
     return "done";
   } catch (error: any) {
     console.warn("[Media Auto-Tag] analysis failed:", mediaFileId, error?.message || error);
