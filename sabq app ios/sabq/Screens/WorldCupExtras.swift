@@ -259,7 +259,7 @@ struct WCTeamsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             WCSectionHeader(icon: "person.3.fill", title: "المنتخبات",
-                            subtitle: "48 منتخبًا — اضغط على أي منتخب لعرض قائمته")
+                            subtitle: "48 منتخبًا — اضغط على أي منتخب لعرض صفحته الكاملة")
                 .padding(.horizontal, 16)
 
             if loading {
@@ -280,7 +280,7 @@ struct WCTeamsSection: View {
             } else { await MainActor.run { loading = false } }
         }
         .sheet(item: $selected) { team in
-            WCSquadSheet(team: team)
+            WCTeamSheet(team: team)
                 .presentationDetents([.large])
         }
     }
@@ -307,13 +307,40 @@ struct WCTeamsSection: View {
     }
 }
 
-/// قائمة المنتخب — تُعرض كـsheet مجمعة بالمراكز.
-struct WCSquadSheet: View {
+/// وجهة فتح من داخل صفحة المنتخب — مركز مباراة أو بطاقة لاعب.
+/// سهم واحد (.sheet) بدل اثنين على نفس العرض تفاديًا لتعارض الأوراق المتعددة.
+private enum WCTeamRoute: Identifiable {
+    case match(Int)
+    case player(Int)
+    var id: String {
+        switch self {
+        case .match(let id): return "m\(id)"
+        case .player(let id): return "p\(id)"
+        }
+    }
+}
+
+/// صفحة المنتخب المتكاملة — تُعرض كـsheet: ترويسة (الشعار + المجموعة +
+/// المدرّب) ثم ترتيب مجموعته ثم مبارياته (مباشر/قادم/نتائج) ثم قائمته
+/// مجمعة بالمراكز. تستهلك /world-cup/team/:id (تكافؤ مع WorldCupTeam على
+/// الويب). الضغط على منتخب آخر في الترتيب يفتح صفحته مكانه، وعلى مباراة
+/// يفتح مركزها، وعلى لاعب يفتح بطاقته الشاملة.
+struct WCTeamSheet: View {
     let team: WCTeam
     @Environment(\.dismiss) private var dismiss
-    @State private var squad: WCSquad?
+
+    @State private var teamId: Int
+    /// هوية الترويسة الفورية أثناء التحميل/التبديل قبل وصول الملف الكامل
+    @State private var headerTeam: WCTeam
+    @State private var profile: WCTeamProfile?
     @State private var loading = true
-    @State private var selectedPlayer: WCPlayerSelection?
+    @State private var route: WCTeamRoute?
+
+    init(team: WCTeam) {
+        self.team = team
+        _teamId = State(initialValue: team.id)
+        _headerTeam = State(initialValue: team)
+    }
 
     private let sections: [(en: String, label: String)] = [
         ("Goalkeeper", "حراسة المرمى"), ("Defender", "الدفاع"),
@@ -323,29 +350,22 @@ struct WCSquadSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                if loading {
+                if loading && profile == nil {
                     WCLoading().padding(.top, 40)
-                } else if let squad, !squad.players.isEmpty {
-                    VStack(alignment: .leading, spacing: 18) {
-                        ForEach(sections, id: \.en) { sec in
-                            let players = squad.players.filter { $0.positionEn == sec.en }
-                            if !players.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(sec.label).font(.system(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
-                                    ForEach(players) { p in playerRow(p) }
-                                }
-                            }
+                } else {
+                    VStack(alignment: .leading, spacing: 22) {
+                        headerCard
+                        if let group = profile?.group, !group.rows.isEmpty {
+                            groupTable(group)
                         }
+                        matchesSection
+                        squadSection
                     }
                     .padding(16)
-                } else {
-                    Text("القائمة الرسمية لم تُعلن بعد")
-                        .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
-                        .frame(maxWidth: .infinity).padding(.top, 50)
                 }
             }
             .background(WCTheme.sectionBackground.ignoresSafeArea())
-            .navigationTitle("قائمة \(team.name)")
+            .navigationTitle(headerTeam.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(WCTheme.stadiumTop, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -355,24 +375,189 @@ struct WCSquadSheet: View {
                     Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.white) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    WCTeamLogo(team: team, size: 30, ring: WCTheme.cardStroke)
+                    WCTeamLogo(team: headerTeam, size: 30, ring: WCTheme.cardStroke)
                 }
             }
-            .task {
-                if let r = try? await APIClient.shared.fetchWorldCupSquad(teamId: team.id) {
-                    await MainActor.run { squad = r; loading = false }
-                } else { await MainActor.run { loading = false } }
-            }
-            .sheet(item: $selectedPlayer) { sel in
-                WCPlayerSheet(playerId: sel.id)
-                    .presentationDetents([.large])
+            .task(id: teamId) { await load() }
+            .refreshable { await load(force: true) }
+            .sheet(item: $route) { r in
+                switch r {
+                case .match(let id): WorldCupMatchCenter(fixtureId: id)
+                case .player(let id): WCPlayerSheet(playerId: id).presentationDetents([.large])
+                }
             }
         }
         .sabqRTL()
     }
 
+    private func load(force: Bool = false) async {
+        if let p = try? await APIClient.shared.fetchWorldCupTeamProfile(teamId: teamId, ignoreCache: force) {
+            await MainActor.run { profile = p; headerTeam = p.team; loading = false }
+        } else {
+            await MainActor.run { loading = false }
+        }
+    }
+
+    /// تبديل لمنتخب آخر بالضغط على صفّه في الترتيب — يعيد تشغيل task(id:)
+    private func switchTeam(to t: WCTeam) {
+        guard t.id != teamId else { return }
+        headerTeam = t
+        profile = nil
+        loading = true
+        teamId = t.id
+    }
+
+    // MARK: الترويسة
+
+    private var headerCard: some View {
+        let isSaudi = profile?.isSaudi ?? (headerTeam.id == WCTheme.saudiId)
+        return HStack(spacing: 14) {
+            WCTeamLogo(team: headerTeam, size: 72, ring: .white.opacity(0.18))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(headerTeam.name)
+                        .font(SabqFonts.headline(size: 24)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    if isSaudi {
+                        Text("الأخضر")
+                            .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Capsule().fill(WCTheme.emeraldDeep))
+                    }
+                }
+                if let group = profile?.group {
+                    Label(group.group, systemImage: "list.number")
+                        .font(.system(size: 12)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                        .labelStyle(.titleAndIcon)
+                }
+                if let coach = profile?.coach, !coach.isEmpty {
+                    Label("المدرّب: \(coach)", systemImage: "person.crop.square")
+                        .font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [WCTheme.emeraldDeep, WCTheme.stadiumTop],
+                           startPoint: .topTrailing, endPoint: .bottomLeading)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    // MARK: ترتيب المجموعة
+
+    private func groupTable(_ group: WCGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(group.group).font(.system(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
+                Spacer()
+                HStack(spacing: 0) {
+                    Text("لعب").frame(width: 28); Text("فارق").frame(width: 36); Text("نقاط").frame(width: 28)
+                }
+                .font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            ForEach(group.rows) { row in groupRow(row) }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+    }
+
+    @ViewBuilder private func groupRow(_ row: WCStandingRow) -> some View {
+        let isCurrent = row.team.id == teamId
+        let qualify: Color = row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear)
+        let content = HStack(spacing: 8) {
+            Text("\(row.rank)").foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
+            WCTeamLogo(team: row.team, size: 20, ring: WCTheme.cardStroke)
+            Text(row.team.name)
+                .font(.system(size: 13, weight: isCurrent ? .black : .semibold))
+                .foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Spacer()
+            Text("\(row.played)").frame(width: 28)
+            Text(row.goalsDiff > 0 ? "+\(row.goalsDiff)" : "\(row.goalsDiff)").frame(width: 36)
+                .environment(\.layoutDirection, .leftToRight)
+            Text("\(row.points)").font(.system(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark).frame(width: 28)
+        }
+        .font(.system(size: 12).monospacedDigit())
+        .foregroundStyle(WCTheme.onDarkDim)
+        .padding(.vertical, 5).padding(.horizontal, 6)
+        .background(
+            HStack { Rectangle().fill(qualify).frame(width: 3); Spacer() }
+                .background(isCurrent ? WCTheme.emeraldDeep.opacity(0.16) : (qualify == .clear ? Color.clear : qualify.opacity(0.07)))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        )
+
+        if isCurrent {
+            content
+        } else {
+            Button { switchTeam(to: row.team) } label: { content }.buttonStyle(.plain)
+        }
+    }
+
+    // MARK: المباريات
+
+    @ViewBuilder private var matchesSection: some View {
+        let fixtures = profile?.fixtures ?? []
+        let live = fixtures.filter { $0.status.live }
+        let upcoming = fixtures.filter { !$0.status.live && !$0.status.finished }
+        let finished = Array(fixtures.filter { $0.status.finished }.reversed())
+        VStack(alignment: .leading, spacing: 12) {
+            Text("المباريات").font(.system(size: 17, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            if fixtures.isEmpty {
+                Text("لا توجد مباريات معلنة لهذا المنتخب بعد")
+                    .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
+                    .frame(maxWidth: .infinity).padding(.vertical, 20)
+            } else {
+                matchGroup("مباشر الآن", live)
+                matchGroup("المباريات القادمة", upcoming)
+                matchGroup("النتائج", finished)
+            }
+        }
+    }
+
+    @ViewBuilder private func matchGroup(_ label: String, _ fixtures: [WCFixture]) -> some View {
+        if !fixtures.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Circle().fill(WCTheme.emeraldDeep).frame(width: 7, height: 7)
+                    Text(label).font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("(\(fixtures.count))").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                }
+                ForEach(fixtures) { f in
+                    WCMatchCard(fixture: f) { route = .match(f.id) }
+                }
+            }
+        }
+    }
+
+    // MARK: القائمة
+
+    @ViewBuilder private var squadSection: some View {
+        let squad = profile?.squad ?? []
+        VStack(alignment: .leading, spacing: 12) {
+            Text("القائمة").font(.system(size: 17, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            if squad.isEmpty {
+                Text("القائمة الرسمية لم تُعلن بعد")
+                    .font(.system(size: 13)).foregroundStyle(WCTheme.onDarkDim)
+                    .frame(maxWidth: .infinity).padding(.vertical, 20)
+            } else {
+                ForEach(sections, id: \.en) { sec in
+                    let players = squad.filter { $0.positionEn == sec.en }
+                    if !players.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(sec.label).font(.system(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                            ForEach(players) { p in playerRow(p) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func playerRow(_ p: WCSquadPlayer) -> some View {
-        Button { selectedPlayer = WCPlayerSelection(p.id) } label: {
+        Button { if let sel = WCPlayerSelection(p.id) { route = .player(sel.id) } } label: {
             HStack(spacing: 10) {
                 if p.photo.isEmpty {
                     Circle().fill(WCTheme.chipFill).frame(width: 36, height: 36)

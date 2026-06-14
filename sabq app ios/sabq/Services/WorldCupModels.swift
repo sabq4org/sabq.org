@@ -228,6 +228,22 @@ nonisolated struct WCSquad: Decodable, Hashable {
     let players: [WCSquadPlayer]
 }
 
+// MARK: - صفحة المنتخب المتكاملة (/world-cup/team/:id)
+//
+// تجمّع الخادم لكل ما يخص منتخبًا واحدًا: هويته + مجموعته وترتيبها +
+// كل مبارياته (منتهية/مباشرة/قادمة) + قائمته الكاملة + المدرّب.
+
+nonisolated struct WCTeamProfile: Decodable, Hashable {
+    let team: WCTeam
+    let isSaudi: Bool
+    /// المدرّب الحالي — null إن لم يوفّره المزود
+    let coach: String?
+    /// مجموعة المنتخب كاملة (لتظليل صفّه) — null قبل اعتماد القرعة/الجداول
+    let group: WCGroup?
+    let fixtures: [WCFixture]
+    let squad: [WCSquadPlayer]
+}
+
 // MARK: - بطاقة اللاعب الشاملة (/world-cup/player/:id)
 
 nonisolated struct WCPlayerCareerStop: Decodable, Identifiable, Hashable {
@@ -356,6 +372,11 @@ extension APIClient {
     func fetchWorldCupSquad(teamId: Int) async throws -> WCSquad {
         try await get(WCSquad.self, path: "/world-cup/squad/\(teamId)",
                       apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupTeamProfile(teamId: Int, ignoreCache: Bool = false) async throws -> WCTeamProfile {
+        try await get(WCTeamProfile.self, path: "/world-cup/team/\(teamId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
     func fetchWorldCupMatch(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCMatchDetail {
