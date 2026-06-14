@@ -32,6 +32,8 @@ interface AIImageGeneratorDialogProps {
   onClose: () => void;
   onImageGenerated: (imageUrl: string, alt?: string) => void;
   initialPrompt?: string;
+  /** Label for the confirm action (default "إدراج في المقال"). */
+  insertLabel?: string;
 }
 
 // Color style options for news graphics - Sabq branding, minimal and elegant
@@ -95,6 +97,7 @@ export function AIImageGeneratorDialog({
   onClose,
   onImageGenerated,
   initialPrompt = "",
+  insertLabel = "إدراج في المقال",
 }: AIImageGeneratorDialogProps) {
   const [activeTab, setActiveTab] = useState("custom");
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -156,7 +159,6 @@ export function AIImageGeneratorDialog({
           finalPrompt = finalPrompt.replace("{colorStyle}", colorStyle.prompt);
           
           // For "breaking" template, add text overlay with the headline
-          console.log("[AIImageGeneratorDialog DEBUG] activeTab:", activeTab, "headline:", templateFields.headline, "will set overlay:", activeTab === "breaking" && templateFields.headline ? "YES" : "NO");
           if (activeTab === "breaking" && templateFields.headline) {
             overlayText = templateFields.headline;
             overlayOptions = {
@@ -188,7 +190,6 @@ export function AIImageGeneratorDialog({
       overlayText,
       overlayOptions,
     };
-    console.log("[AIImageGeneratorDialog] Sending payload:", JSON.stringify(payload, null, 2));
     generateMutation.mutate(payload);
   };
 
@@ -421,7 +422,7 @@ export function AIImageGeneratorDialog({
               </Button>
               <Button onClick={handleInsertImage}>
                 <Image className="ml-2 h-4 w-4" />
-                إدراج في المقال
+                {insertLabel}
               </Button>
             </>
           )}
