@@ -1472,6 +1472,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         // Phase 2: images awaiting / failed AI analysis (not yet auto-tagged).
         conditions.push(eq(mediaFiles.type, 'image'));
         conditions.push(sql`(${mediaFiles.aiAnalysisStatus} IS NULL OR ${mediaFiles.aiAnalysisStatus} IN ('pending','failed'))`);
+      } else if (collection === 'no_rights') {
+        // Phase 6: images whose usage rights haven't been verified yet.
+        conditions.push(eq(mediaFiles.type, 'image'));
+        conditions.push(eq(mediaFiles.rightsVerified, false));
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -1536,6 +1540,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
             aiQualityScore: mediaFiles.aiQualityScore,
             aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
+            isAiGenerated: mediaFiles.isAiGenerated,
+            licenseType: mediaFiles.licenseType,
+            creditText: mediaFiles.creditText,
+            copyrightHolder: mediaFiles.copyrightHolder,
+            rightsVerified: mediaFiles.rightsVerified,
+            rightsNote: mediaFiles.rightsNote,
             usedIn: mediaFiles.usedIn,
             usageCount: mediaFiles.usageCount,
             uploadedBy: mediaFiles.uploadedBy,
@@ -1854,6 +1864,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
           aiQualityScore: mediaFiles.aiQualityScore,
           aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
+          isAiGenerated: mediaFiles.isAiGenerated,
+          licenseType: mediaFiles.licenseType,
+          creditText: mediaFiles.creditText,
+          copyrightHolder: mediaFiles.copyrightHolder,
+          rightsVerified: mediaFiles.rightsVerified,
+          rightsNote: mediaFiles.rightsNote,
           usedIn: mediaFiles.usedIn,
           usageCount: mediaFiles.usageCount,
           uploadedBy: mediaFiles.uploadedBy,
@@ -3620,7 +3636,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get AI metrics for footer
   app.get("/api/ai-metrics", async (req, res) => {
@@ -3661,7 +3676,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get single category by ID
   app.get("/api/categories/:id", async (req, res) => {
@@ -3677,7 +3691,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Create new category (requires permission)
   app.post("/api/categories", requireAuth, requirePermission("categories.create"), async (req: any, res) => {
@@ -3728,7 +3741,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Update category (requires permission)
   app.patch("/api/categories/:id", requireAuth, requirePermission("categories.update"), async (req: any, res) => {
@@ -3798,7 +3810,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Delete category (requires permission)
   app.delete("/api/categories/:id", requireAuth, requirePermission("categories.delete"), async (req: any, res) => {
@@ -3842,7 +3853,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Seed smart categories from config (admin only, for production deployment)
   app.post("/api/admin/categories/seed-smart", requireAuth, requireRole("admin"), async (req: any, res) => {
@@ -4063,7 +4073,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Update categories order (requires permission)
   app.post("/api/categories/reorder", requireAuth, requirePermission("categories.update"), async (req: any, res) => {
@@ -4111,7 +4120,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // USERS MANAGEMENT ROUTES
@@ -4134,7 +4142,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   app.post("/api/upload/profile-image", isAuthenticated, strictLimiter, profileImageUpload.single('file'), async (req: any, res) => {
     const parseObjectPath = (path: string): { bucketName: string; objectName: string } => {
@@ -4241,7 +4248,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get users list (admin only, supports role filtering)
 
@@ -4261,7 +4267,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   app.post("/api/upload/video", isAuthenticated, videoUpload.single('file'), async (req: any, res) => {
     try {
@@ -4333,7 +4338,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
   // Get suggested users for discovery/follow (for logged-in users)
   // Get suggested users for discovery/follow (for logged-in users)
   // Rewritten to use staff table as primary source for better Arabic name support and reporter data
@@ -4500,7 +4504,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
   app.get("/api/users", requireAuth, requirePermission('admin.manage_settings'), async (req, res) => {
     try {
       const { role } = req.query;
@@ -4548,7 +4551,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get public user profile (no auth required)
   app.get("/api/users/:id/public", async (req, res) => {
@@ -4628,7 +4630,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get all users with filtering (admin only)
   app.get("/api/admin/users", requireAuth, requirePermission("users.view"), async (req: any, res) => {
@@ -4917,7 +4918,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get user by ID (admin only)
   app.get("/api/admin/users/:id", requireAuth, requirePermission("users.view"), async (req: any, res) => {
@@ -4974,7 +4974,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Update user (status, role assignment)
   app.patch("/api/admin/users/:id", requireAuth, requirePermission("users.update"), async (req: any, res) => {
@@ -5203,7 +5202,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Delete/Ban user
   app.delete("/api/admin/users/:id", requireAuth, requirePermission("users.delete"), async (req: any, res) => {
@@ -5256,7 +5254,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Preview user deletion - shows what will be deleted without actually deleting
   app.get("/api/admin/users/:id/delete-preview", requireAuth, requirePermission("users.delete"), async (req: any, res) => {
@@ -5296,7 +5293,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Permanently delete user and all related data (admin only)
   app.delete("/api/admin/users/:id/permanent", requireAuth, requirePermission("users.delete"), async (req: any, res) => {
@@ -5372,7 +5368,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Reset user password (admin only)
   app.post("/api/admin/users/:id/reset-password", requireAuth, requirePermission("users.update"), async (req: any, res) => {
@@ -5440,7 +5435,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // RBAC ROUTES - User & Role Management
@@ -5530,7 +5524,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get user roles by user ID
   app.get("/api/admin/users/:id/roles", requireAuth, requirePermission("users.view"), async (req: any, res) => {
@@ -5550,7 +5543,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Update user roles
   app.patch("/api/admin/users/:id/roles", requireAuth, requirePermission("users.change_role"), async (req: any, res) => {
@@ -5636,7 +5628,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get staff data for a user
   app.get("/api/admin/users/:id/staff", requireAuth, requirePermission("users.view"), async (req: any, res) => {
@@ -5650,7 +5641,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Update or create staff data for a user
   app.patch("/api/admin/users/:id/staff", requireAuth, requirePermission("users.update"), async (req: any, res) => {
@@ -5673,7 +5663,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // USER PERMISSION OVERRIDES - إدارة الصلاحيات الشخصية للمستخدمين
@@ -5692,7 +5681,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Set/update a user's permission override
   app.post("/api/admin/users/:id/permission-overrides", requireAuth, requirePermission("users.change_role"), async (req: any, res) => {
@@ -5751,7 +5739,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Delete a user's permission override (return to role default)
   app.delete("/api/admin/users/:id/permission-overrides/:permissionCode", requireAuth, requirePermission("users.change_role"), async (req: any, res) => {
@@ -5780,7 +5767,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Send login credentials to all staff members
   const STAFF_ROLES = ["admin", "system_admin", "editor", "reporter", "comments_moderator", "content_manager", "opinion_author", "publisher"];
@@ -5956,7 +5942,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get all available article editor permissions (for UI display)
   app.get("/api/admin/article-editor-permissions", requireAuth, requirePermission("users.view"), async (req: any, res) => {
@@ -5969,7 +5954,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get role permissions by role ID
   app.get("/api/admin/roles/:id/permissions", requireAuth, async (req: any, res) => {

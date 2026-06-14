@@ -35,6 +35,11 @@ import {
   X,
   Wand2,
   Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  BarChart3,
+  ChevronDown,
+  HardDrive,
 } from "lucide-react";
 import { MediaCard } from "@/components/dashboard/MediaCard";
 import { FolderTree } from "@/components/dashboard/FolderTree";
@@ -47,7 +52,7 @@ import { cn } from "@/lib/utils";
 import type { MediaFile, MediaFolder } from "@shared/schema";
 
 type ViewMode = "grid" | "list";
-type Collection = "" | "favorites" | "most_used" | "unused" | "no_alt" | "pending";
+type Collection = "" | "favorites" | "most_used" | "unused" | "no_alt" | "pending" | "no_rights";
 
 const PAGE_SIZE = 30;
 
@@ -58,7 +63,36 @@ const SMART_COLLECTIONS: { value: Collection; label: string; icon: typeof Star }
   { value: "unused", label: "غير المستخدمة", icon: EyeOff },
   { value: "no_alt", label: "بلا نص بديل", icon: AlertCircle },
   { value: "pending", label: "بانتظار التحليل", icon: Wand2 },
+  { value: "no_rights", label: "بلا حقوق موثّقة", icon: ShieldAlert },
 ];
+
+interface MediaStats {
+  totalImages: number;
+  aiGenerated: number;
+  rightsVerified: number;
+  pendingAnalysis: number;
+  indexed: number;
+  sensitive: number;
+  totalStorageBytes: number;
+  byLicense: { licenseType: string; count: number }[];
+  topUsed: { id: string; title: string | null; originalName: string; url: string; usage: number }[];
+}
+
+const LICENSE_LABELS: Record<string, string> = {
+  own_work: "عمل خاص",
+  agency: "وكالة",
+  stock: "بنك صور",
+  creative_commons: "مشاع إبداعي",
+  public_domain: "ملكية عامة",
+  unknown: "غير معروف",
+};
+
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 ب";
+  const units = ["ب", "ك.ب", "م.ب", "ج.ب"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${Math.round((bytes / Math.pow(1024, i)) * 10) / 10} ${units[i]}`;
+}
 
 export default function MediaLibrary() {
   const { user } = useAuth({ redirectToLogin: true });
@@ -69,6 +103,7 @@ export default function MediaLibrary() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [searchMode, setSearchMode] = useState<"literal" | "semantic">("literal");
+  const [statsOpen, setStatsOpen] = useState(false);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [collection, setCollection] = useState<Collection>("");
@@ -110,6 +145,12 @@ export default function MediaLibrary() {
     }
     return counts;
   }, [folders]);
+
+  // Library governance stats (Phase 6) — fetched lazily when the panel is opened.
+  const { data: stats } = useQuery<MediaStats>({
+    queryKey: ["/api/media/stats"],
+    enabled: !!user && statsOpen,
+  });
 
   // Fetch media with infinite scroll
   const {
@@ -442,6 +483,81 @@ export default function MediaLibrary() {
             </div>
           )}
         </div>
+
+        {/* Library stats (Phase 6) — collapsible governance dashboard */}
+        <Card className="overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setStatsOpen((v) => !v)}
+            className="w-full flex items-center justify-between p-3 hover-elevate"
+            data-testid="button-toggle-stats"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              إحصائيات المكتبة
+            </span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", statsOpen && "rotate-180")} />
+          </button>
+          {statsOpen && (
+            <div className="px-4 pb-4 pt-1 space-y-4 border-t">
+              {!stats ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {[
+                      { label: "إجمالي الصور", value: stats.totalImages, icon: ImageIcon, tone: "text-foreground" },
+                      { label: "حقوق موثّقة", value: stats.rightsVerified, icon: ShieldCheck, tone: "text-emerald-600" },
+                      { label: "مولّدة بالذكاء", value: stats.aiGenerated, icon: Sparkles, tone: "text-purple-500" },
+                      { label: "مفهرسة دلالياً", value: stats.indexed, icon: Search, tone: "text-blue-500" },
+                      { label: "بانتظار التحليل", value: stats.pendingAnalysis, icon: Wand2, tone: "text-amber-500" },
+                      { label: "حجم التخزين", value: formatBytes(stats.totalStorageBytes), icon: HardDrive, tone: "text-foreground" },
+                    ].map((tile) => (
+                      <div key={tile.label} className="rounded-lg border p-3" data-testid={`stat-${tile.label}`}>
+                        <tile.icon className={cn("h-4 w-4 mb-1", tile.tone)} />
+                        <div className="text-lg font-bold leading-tight">{tile.value}</div>
+                        <div className="text-xs text-muted-foreground">{tile.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {stats.byLicense.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">توزيع التراخيص</p>
+                      <div className="flex flex-wrap gap-2">
+                        {stats.byLicense.map((l) => (
+                          <Badge key={l.licenseType} variant="outline" className="gap-1 text-xs">
+                            {LICENSE_LABELS[l.licenseType] || l.licenseType}
+                            <span className="font-bold">{l.count}</span>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {stats.topUsed.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">الأكثر استخداماً</p>
+                      <div className="flex flex-wrap gap-3">
+                        {stats.topUsed.map((t) => (
+                          <div key={t.id} className="flex items-center gap-2 text-xs" data-testid={`top-used-${t.id}`}>
+                            <img src={t.url} alt={t.title || t.originalName} className="h-9 w-9 rounded object-cover" loading="lazy" />
+                            <div className="max-w-[120px]">
+                              <div className="truncate font-medium">{t.title || t.originalName}</div>
+                              <div className="text-muted-foreground">{t.usage} استخدام</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </Card>
 
         {/* Filters Bar */}
         <Card className="p-4">

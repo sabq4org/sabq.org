@@ -5857,6 +5857,14 @@ export const mediaFiles = pgTable("media_files", {
   aiQualityScore: integer("ai_quality_score"), // 0-100
   aiHasSensitiveContent: boolean("ai_has_sensitive_content").default(false).notNull(),
 
+  // Rights & credibility (Phase 6). isAiGenerated above already records AI
+  // provenance; these capture licensing + a librarian's rights clearance.
+  licenseType: text("license_type"), // own_work | agency | stock | creative_commons | public_domain | unknown
+  creditText: text("credit_text"), // attribution line, e.g. "© واس"
+  copyrightHolder: text("copyright_holder"),
+  rightsVerified: boolean("rights_verified").default(false).notNull(), // a librarian confirmed usage rights
+  rightsNote: text("rights_note"), // restrictions / expiry note
+
   // Organization
   isFavorite: boolean("is_favorite").default(false).notNull(),
   category: text("category"), // articles, logos, reporters, banners, general
@@ -5877,6 +5885,7 @@ export const mediaFiles = pgTable("media_files", {
   index("idx_media_files_is_favorite").on(table.isFavorite),
   index("idx_media_files_category").on(table.category),
   index("idx_media_files_ai_status").on(table.aiAnalysisStatus),
+  index("idx_media_files_rights_verified").on(table.rightsVerified),
 ]);
 
 // Media Usage Log - track where and when media is used
@@ -5948,6 +5957,12 @@ export const updateMediaFileSchema = z.object({
   category: z.string().optional(),
   isFavorite: z.boolean().optional(),
   folderId: z.string().nullable().optional(),
+  // Rights & credibility (Phase 6)
+  licenseType: z.string().nullable().optional(),
+  creditText: z.string().nullable().optional(),
+  copyrightHolder: z.string().nullable().optional(),
+  rightsVerified: z.boolean().optional(),
+  rightsNote: z.string().nullable().optional(),
 });
 
 export const updateMediaFolderSchema = z.object({

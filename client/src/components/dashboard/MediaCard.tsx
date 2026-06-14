@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Star, Download, Trash2, Image as ImageIcon, ImageOff, Check, Wand2, AlertTriangle, Sparkles } from "lucide-react";
+import { Star, Download, Trash2, Image as ImageIcon, ImageOff, Check, Wand2, AlertTriangle, Sparkles, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { MediaFile } from "@shared/schema";
@@ -170,6 +170,25 @@ export function MediaCard({
                 <Wand2 className="h-3 w-3" />
               </Badge>
             )}
+          {file.isAiGenerated && (
+            <Badge
+              variant="secondary"
+              className="h-5 px-1.5 text-[10px]"
+              title="صورة مولّدة بالذكاء"
+              data-testid={`badge-ai-generated-${file.id}`}
+            >
+              <Sparkles className="h-3 w-3 text-purple-500" />
+            </Badge>
+          )}
+          {file.rightsVerified && (
+            <Badge
+              className="h-5 px-1.5 text-[10px] bg-emerald-600 hover:bg-emerald-600 text-white border-0"
+              title="حقوق موثّقة"
+              data-testid={`badge-rights-${file.id}`}
+            >
+              <ShieldCheck className="h-3 w-3" />
+            </Badge>
+          )}
         </div>
       </div>
 
