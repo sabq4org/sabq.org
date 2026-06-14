@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { ListOrdered } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,8 +38,13 @@ function StandingRowItem({ row }: { row: WcStandingRow }) {
     <div className={`grid grid-cols-[1.25rem_1fr_2rem_2.5rem_2rem] items-center gap-1 rounded-md px-2 py-1.5 text-sm ${highlight}`}>
       <span className="text-center text-xs text-muted-foreground tabular-nums">{row.rank}</span>
       <div className="flex items-center gap-2 min-w-0">
-        <img src={row.team.logo} alt={row.team.name} className="h-4.5 w-4.5 h-[18px] w-[18px] object-contain shrink-0" loading="lazy" />
-        <span className="truncate font-semibold">{row.team.name}</span>
+        <Link
+          href={`/world-cup/team/${row.team.id}`}
+          className="flex items-center gap-2 min-w-0 rounded hover-elevate active-elevate-2 px-1 -mx-1 transition-all"
+        >
+          <img src={row.team.logo} alt={row.team.name} className="h-[18px] w-[18px] object-contain shrink-0" loading="lazy" />
+          <span className="truncate font-semibold">{row.team.name}</span>
+        </Link>
         <FormDots form={row.form} />
       </div>
       <span className="text-center text-xs text-muted-foreground tabular-nums">{row.played}</span>

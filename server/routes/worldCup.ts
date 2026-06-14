@@ -12,6 +12,7 @@ import {
   getPlayerCard,
   getSquad,
   getStandings,
+  getTeamProfile,
   getTeams,
   getTopAssists,
   getTopCards,
@@ -128,6 +129,24 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] squad ${teamId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب قائمة المنتخب حاليًا" });
+    }
+  });
+
+  // صفحة المنتخب المتكاملة: الهوية + المجموعة والترتيب + كل المباريات + القائمة + المدرّب
+  app.get("/api/world-cup/team/:teamId", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = parseInt(String(req.params.teamId), 10);
+    if (!Number.isFinite(teamId) || teamId <= 0) {
+      return res.status(400).json({ message: "معرّف منتخب غير صالح" });
+    }
+    try {
+      const profile = await getTeamProfile(teamId);
+      if (!profile) return res.status(404).json({ message: "المنتخب غير موجود" });
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.json(profile);
+    } catch (error) {
+      console.error(`[WorldCup] team ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب صفحة المنتخب حاليًا" });
     }
   });
 

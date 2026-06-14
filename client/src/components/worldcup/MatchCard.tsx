@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { MapPin, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,12 +7,17 @@ import { formatKickoffTime, type WcFixture, type WcTeam } from "./wcTypes";
 function TeamRow({ team, goals, winner }: { team: WcTeam; goals: number | null; winner: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0">
+      {/* رابط لصفحة المنتخب — يوقف النقر عن فتح مركز المباراة (نقر البطاقة) */}
+      <Link
+        href={`/world-cup/team/${team.id}`}
+        onClick={(e) => e.stopPropagation()}
+        className="flex items-center gap-2 min-w-0 rounded hover-elevate active-elevate-2 px-1 -mx-1 transition-all"
+      >
         <div className="h-7 w-7 shrink-0 rounded-full bg-white ring-1 ring-border p-0.5">
           <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
         </div>
         <span className={`truncate text-sm ${winner ? "font-extrabold" : "font-semibold"}`}>{team.name}</span>
-      </div>
+      </Link>
       {goals != null && (
         <span className={`text-base tabular-nums ${winner ? "font-black text-emerald-600 dark:text-emerald-400" : "font-bold"}`}>
           {goals}

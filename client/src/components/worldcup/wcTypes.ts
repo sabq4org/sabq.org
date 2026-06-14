@@ -163,6 +163,15 @@ export interface WcSquad {
   players: WcSquadPlayer[];
 }
 
+export interface WcTeamProfile {
+  team: WcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  group: WcGroup | null;
+  fixtures: WcFixture[];
+  squad: WcSquadPlayer[];
+}
+
 export interface WcPlayerCareerStop {
   teamId: number;
   team: string;
