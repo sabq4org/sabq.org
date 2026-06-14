@@ -122,6 +122,12 @@ const EXEMPT_PATHS = [
   // Before adding new state-changing routes under this prefix, confirm they
   // are safe to expose without CSRF or move them to a different prefix.
   "/api/shortlinks",
+  // Public prompt-studio optimizer — shared-password gated (not session auth),
+  // used by external collaborators without a Sabq account. Protected by its own
+  // password check + rate limiting, so the session-bound CSRF token adds no
+  // real protection. Exact route only (the authenticated /optimize variant
+  // does NOT start with this string and remains CSRF-protected).
+  "/api/prompt-studio/optimize-public",
 ];
 
 // Precise exemptions for anonymous, header-less telemetry routes that live

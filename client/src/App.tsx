@@ -231,6 +231,7 @@ const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/Medi
 const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
 const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
 const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
+const PromptStudioPublic = lazy(() => retryImport(() => import("@/pages/PromptStudioPublic")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
 const DeepAnalysisList = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysisList")));
 const TasksPage = lazy(() => retryImport(() => import("@/pages/dashboard/TasksPage")));
@@ -577,6 +578,7 @@ function Router() {
         <Route path="/categories">{() => <LazyRoute component={CategoriesListPage} />}</Route>
         <Route path="/shorts">{() => <LazyRoute component={ShortsPage} />}</Route>
         <Route path="/lite">{() => <LazyRoute component={LiteFeedPage} />}</Route>
+        <Route path="/prompt-studio">{() => <LazyRoute component={PromptStudioPublic} />}</Route>
         <Route path="/admin/login">{() => <LazyRoute component={AdminLogin} />}</Route>
         <Route path="/dashboard/payment-analytics">{() => <LazyRoute component={PaymentsDashboard} />}</Route>
         <Route path="/dashboard/media-store-orders">{() => <LazyRoute component={MediaStoreOrders} />}</Route>
