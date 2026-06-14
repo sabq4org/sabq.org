@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibraryService";
-import { analyzeImage } from "../services/visualAiService";
+import { generateSmartCaption } from "../services/mediaCaptionService";
 
 const router: Router = Router();
 
@@ -42,30 +42,17 @@ router.post(
         return res.status(400).json({ message: "رابط الصورة مطلوب" });
       }
 
-      const result = await analyzeImage({
+      const result = await generateSmartCaption({
         imageUrl,
         articleTitle: typeof articleTitle === "string" ? articleTitle : undefined,
-        articleContent: typeof articleContent === "string" ? articleContent.slice(0, 1500) : undefined,
-        generateAltText: true,
-        detectContent: true,
-        checkRelevance: !!articleTitle,
-        checkQuality: true,
+        articleContent: typeof articleContent === "string" ? articleContent : undefined,
       });
 
-      if (!result.success) {
-        return res.status(502).json({ message: result.error || "تعذّر تحليل الصورة" });
-      }
-
-      res.json({
-        altText: result.altTextAr || "",
-        caption: result.contentDescription?.ar || "",
-        keywords: result.tags || [],
-        relevanceScore: result.relevanceScore ?? null,
-        qualityScore: result.qualityScore ?? null,
-        contentWarnings: result.contentWarnings || [],
-        hasSensitiveContent: !!(result.hasSensitiveContent || result.hasAdultContent),
-      });
+      res.json(result);
     } catch (error: any) {
+      if (error?.statusCode === 502) {
+        return res.status(502).json({ message: error.message });
+      }
       console.error("Error analyzing media image:", error);
       res.status(500).json({ message: "فشل في تحليل الصورة" });
     }
