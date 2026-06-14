@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
+import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
 
 const router: Router = Router();
 
@@ -55,6 +56,43 @@ router.post(
       }
       console.error("Error analyzing media image:", error);
       res.status(500).json({ message: "فشل في تحليل الصورة" });
+    }
+  },
+);
+
+// POST /api/media/:id/retag - re-run AI auto-tagging for a single image (e.g. to
+// retry a "failed" row, or refresh tags). Gated by media.edit. Non-destructive:
+// only fills empty keywords/altText/description.
+router.post(
+  "/api/media/:id/retag",
+  requireAuth,
+  requirePermission("media.edit"),
+  async (req: any, res) => {
+    try {
+      const status = await analyzeAndTagMedia(req.params.id);
+      res.json({ status });
+    } catch (error: any) {
+      console.error("Error retagging media:", error);
+      res.status(500).json({ message: "فشل في تحليل الصورة" });
+    }
+  },
+);
+
+// POST /api/media/backfill-tags - analyze a bounded batch of not-yet-tagged
+// archive images and report how many remain, so the UI can loop until done.
+// Gated by media.edit.
+router.post(
+  "/api/media/backfill-tags",
+  requireAuth,
+  requirePermission("media.edit"),
+  async (req: any, res) => {
+    try {
+      const batch = Number(req.body?.batchSize) || 6;
+      const result = await backfillUntagged(batch);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error backfilling media tags:", error);
+      res.status(500).json({ message: "فشل في تحليل دفعة الصور" });
     }
   },
 );
