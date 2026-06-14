@@ -2,6 +2,11 @@ import memoizee from 'memoizee';
 import type { Response } from 'express';
 import Redis from 'ioredis';
 
+// On the read-only mirror (READ_ONLY_MODE=true) all cache TTLs are capped to
+// this many ms so published content appears almost instantly instead of being
+// held by the normal 2–15 min content caches.
+const READ_ONLY_CACHE_CAP_MS = 5000;
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -337,6 +342,13 @@ export class MemoryCache {
   }
 
   set<T>(key: string, data: T, ttlMs: number = 60000): void {
+    // Read-only mirror (news.sabq.org): cap every TTL to a few seconds so
+    // freshly published content shows almost live instead of waiting out the
+    // 2–15 min content TTLs. The mirror reads a Neon replica, so the extra
+    // queries are cheap.
+    if (process.env.READ_ONLY_MODE === "true" && ttlMs > READ_ONLY_CACHE_CAP_MS) {
+      ttlMs = READ_ONLY_CACHE_CAP_MS;
+    }
     if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
       this.evictForSpace();
     }
@@ -575,6 +587,11 @@ export class StaleWhileRevalidateCache {
   }
 
   set<T>(key: string, data: T, ttlMs: number, staleWhileRevalidateMs: number = ttlMs): void {
+    // Read-only mirror: keep content near-live (see MemoryCache.set note).
+    if (process.env.READ_ONLY_MODE === "true") {
+      if (ttlMs > READ_ONLY_CACHE_CAP_MS) ttlMs = READ_ONLY_CACHE_CAP_MS;
+      if (staleWhileRevalidateMs > READ_ONLY_CACHE_CAP_MS) staleWhileRevalidateMs = READ_ONLY_CACHE_CAP_MS;
+    }
     if (!this.cache.has(key) && this.cache.size >= this.maxEntries) {
       this.evictForSpace();
     }
