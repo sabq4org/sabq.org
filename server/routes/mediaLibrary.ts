@@ -4,6 +4,8 @@ import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibra
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
 import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { saveGeneratedImage } from "../services/mediaGenerationService";
+import { isAllowedMediaUrl } from "../utils/mediaUrl";
 
 const router: Router = Router();
 
@@ -138,6 +140,38 @@ router.post(
     } catch (error: any) {
       console.error("Error backfilling media embeddings:", error);
       res.status(500).json({ message: "فشل في فهرسة دفعة الصور" });
+    }
+  },
+);
+
+// POST /api/media/save-generated - persist an AI-generated image (Phase 5) into
+// the library. The image URL must already point at our own storage (the
+// nano-banana service uploaded it). Gated by media.upload. Auto-tags + embeds.
+router.post(
+  "/api/media/save-generated",
+  requireAuth,
+  requirePermission("media.upload"),
+  async (req: any, res) => {
+    try {
+      const { imageUrl, thumbnailUrl, prompt, model, folderId } = req.body || {};
+      if (!imageUrl || typeof imageUrl !== "string") {
+        return res.status(400).json({ message: "رابط الصورة مطلوب" });
+      }
+      if (!isAllowedMediaUrl(imageUrl, req.headers?.host)) {
+        return res.status(400).json({ message: "رابط الصورة غير مسموح" });
+      }
+      const result = await saveGeneratedImage({
+        imageUrl,
+        thumbnailUrl: typeof thumbnailUrl === "string" ? thumbnailUrl : null,
+        prompt: typeof prompt === "string" ? prompt : "",
+        model: typeof model === "string" ? model : null,
+        folderId: typeof folderId === "string" ? folderId : null,
+        userId: req.user.id,
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error saving generated image:", error);
+      res.status(500).json({ message: "فشل في حفظ الصورة المولّدة" });
     }
   },
 );

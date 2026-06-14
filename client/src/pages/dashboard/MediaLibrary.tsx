@@ -41,6 +41,7 @@ import { FolderTree } from "@/components/dashboard/FolderTree";
 import { MediaUploadDialog } from "@/components/dashboard/MediaUploadDialog";
 import { MediaPreviewDialog } from "@/components/dashboard/MediaPreviewDialog";
 import { CreateFolderDialog } from "@/components/dashboard/CreateFolderDialog";
+import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { MediaFile, MediaFolder } from "@shared/schema";
@@ -79,6 +80,7 @@ export default function MediaLibrary() {
   // Dialog State
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<MediaFile | null>(null);
 
   // Auto-tag backfill state (Phase 2)
@@ -275,6 +277,33 @@ export default function MediaLibrary() {
     }
   }, [indexing, toast]);
 
+  // Save an AI-generated image (Phase 5) into the library. The dialog auto-closes
+  // on confirm; we persist + auto-tag/index in the background and toast on done.
+  const handleSaveGenerated = useCallback(
+    async (imageUrl: string, alt?: string) => {
+      try {
+        await apiRequest("/api/media/save-generated", {
+          method: "POST",
+          body: JSON.stringify({
+            imageUrl,
+            prompt: alt || "",
+            folderId: selectedFolderId || undefined,
+          }),
+          headers: { "Content-Type": "application/json" },
+        });
+        toast({ title: "تمت إضافة الصورة المولّدة", description: "ستظهر في المكتبة ويُكمل تحليلها تلقائياً" });
+        queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+      } catch (error: any) {
+        toast({
+          title: "تعذّر حفظ الصورة",
+          description: error?.message || "حدث خطأ أثناء حفظ الصورة المولّدة",
+          variant: "destructive",
+        });
+      }
+    },
+    [selectedFolderId, toast],
+  );
+
   // Toggle favorite (single)
   const toggleFavoriteMutation = useMutation({
     mutationFn: async (file: MediaFile) =>
@@ -401,10 +430,16 @@ export default function MediaLibrary() {
             <p className="text-sm text-muted-foreground">إدارة الصور والملفات</p>
           </div>
           {canUpload && (
-            <Button onClick={() => setUploadDialogOpen(true)} className="gap-2" data-testid="button-upload">
-              <Upload className="h-4 w-4" />
-              رفع ملف
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} className="gap-2" data-testid="button-generate-ai">
+                <Sparkles className="h-4 w-4 text-purple-500" />
+                توليد بالذكاء
+              </Button>
+              <Button onClick={() => setUploadDialogOpen(true)} className="gap-2" data-testid="button-upload">
+                <Upload className="h-4 w-4" />
+                رفع ملف
+              </Button>
+            </div>
           )}
         </div>
 
@@ -708,6 +743,12 @@ export default function MediaLibrary() {
       <MediaUploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} folders={folders} />
       <MediaPreviewDialog file={previewFile} open={!!previewFile} onOpenChange={(open) => !open && setPreviewFile(null)} folders={folders} />
       <CreateFolderDialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen} folders={folders} />
+      <AIImageGeneratorDialog
+        open={generateDialogOpen}
+        onClose={() => setGenerateDialogOpen(false)}
+        onImageGenerated={handleSaveGenerated}
+        insertLabel="حفظ في المكتبة"
+      />
     </DashboardLayout>
   );
 }
