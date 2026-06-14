@@ -1,0 +1,67 @@
+# ============================================================
+# Sabq MIRROR Dockerfile (news.sabq.org — read-only full-stack)
+# ============================================================
+# Unlike the headless production Dockerfile (which builds ONLY the
+# server because Cloudflare Pages serves the SPA), the mirror is a
+# single self-contained service: it builds the client AND the server,
+# then serves both on one port (SERVE_SPA=true).
+#
+# Pair this with:
+#   READ_ONLY_MODE=true   → blocks all writes + X-Robots-Tag noindex
+#   DATABASE_URL=<replica> → mirror_reader (SELECT-only) on Neon RO replica
+#   DB_DRIVER=pg
+# See railway.mirror.json (set this service's config-as-code path to it).
+
+# Stage 1: Builder
+FROM node:20-alpine AS builder
+
+ARG DEPLOY_MARKER=2026-06-14-mirror
+ENV DEPLOY_MARKER=$DEPLOY_MARKER
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+# Full build: client (Vite → dist/public) + server (esbuild → dist/index.js).
+RUN npm run build
+
+# Stage 2: Production
+FROM node:20-alpine AS production
+
+WORKDIR /app
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/drizzle.config.ts ./
+
+# Runtime assets the Express server reads from disk (kept identical to the
+# main image so no import-time path lookups fail even in read-only mode).
+COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/passkit/pass-template.pass
+COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
+COPY --from=builder /app/certs ./certs
+COPY --from=builder /app/server/fonts ./server/fonts
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S sabq -u 1001
+
+RUN mkdir -p /app/uploads && chown sabq:nodejs /app/uploads
+RUN chown -R sabq:nodejs /app/dist
+
+USER sabq
+
+ENV NODE_ENV=production
+ENV PORT=5000
+# The mirror serves the prebuilt SPA itself (single full-stack service).
+ENV SERVE_SPA=true
+
+EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
+
+CMD ["node", "dist/index.js"]

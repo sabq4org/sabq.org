@@ -1594,6 +1594,13 @@ export async function seoInjectorMiddleware(req: Request, res: Response, next: N
       seoData.robots = 'noindex, follow';
     }
 
+    // المرآة للقراءة فقط (news.sabq.org) تُخفى بالكامل عن محركات البحث.
+    // الترويسة X-Robots-Tag تُضبط أيضًا في readOnlyMirrorGuard؛ هذا تأمين
+    // مزدوج على مستوى الـ meta tag للزواحف التي تقرأ الوسم من HTML.
+    if (process.env.READ_ONLY_MODE === 'true') {
+      seoData.robots = 'noindex, nofollow';
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
 
     if (isProduction) {

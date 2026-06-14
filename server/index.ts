@@ -12,6 +12,7 @@ import fs from "fs";
 import path from "path";
 import { randomBytes, createHash } from "crypto";
 import { isNoindexPath } from "./utils/noindexPaths";
+import { readOnlyMirrorGuard, isReadOnlyMirror } from "./middleware/readOnlyMirror";
 
 process.on('uncaughtException', (error) => {
   console.error('[CRITICAL] Uncaught Exception:', error.message);
@@ -42,6 +43,10 @@ app.get("/health", async (_req, res) => {
     database: dbReady ? "connected" : "warming-up",
   });
 });
+
+// وضع المرآة للقراءة فقط (news.sabq.org): يمنع كل كتابة ويُخفي النسخة عن Google.
+// يُسجَّل مبكرًا — بعد /health مباشرة — كي يحرس كل المسارات اللاحقة.
+app.use(readOnlyMirrorGuard);
 
 const serverBootedAt = new Date().toISOString();
 const deployCommit =
@@ -1341,7 +1346,11 @@ if (!(globalThis as any).__sabqServer) {
         isServerReady = true;
       }
 
-      const enableBackgroundWorkers = process.env.ENABLE_BACKGROUND_WORKERS === "true";
+      // المرآة للقراءة فقط لا تشغّل أي وظيفة خلفية (cron/workers): تشغيلها على
+      // نسختين = إشعارات مكررة، ingest مزدوج، وتنظيف متضارب. علاوة على أنها
+      // تكتب في قاعدة البيانات، وهو ممنوع على الـ replica (مستخدم SELECT-only).
+      const enableBackgroundWorkers =
+        process.env.ENABLE_BACKGROUND_WORKERS === "true" && !isReadOnlyMirror();
       
       const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop, onBecomeLeader } = await import("./leaderElection");
       await tryBecomeLeader();
