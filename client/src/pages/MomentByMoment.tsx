@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { formatTime, formatNumber } from "@/lib/format";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { OptimizedImage } from "@/components/OptimizedImage";
@@ -258,7 +258,7 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
       {statCards.map((stat, index) => (
         <div
           key={stat.id}
-          className={`${stat.gradient} rounded-lg sm:rounded-xl p-1.5 sm:p-5 hover-elevate border`}
+          className="bg-card rounded-lg sm:rounded-xl p-1.5 sm:p-5 hover-elevate border border-border shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
           data-testid={`stat-${stat.id}`}
         >
           {/* Mobile: Ultra compact vertical layout */}
@@ -320,10 +320,7 @@ function TimelineEntry({ item }: TimelineEntryProps) {
           data-testid={`node-${item.id}`}
         />
 
-        <div
-          className="rounded-xl border bg-card hover-elevate active-elevate-2 transition-all p-3 sm:p-4"
-          style={{ borderRightColor: color, borderRightWidth: 3 }}
-        >
+        <div className="rounded-xl bg-card border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-all duration-300 p-3 sm:p-4">
           {/* Meta row: clock + category + state badges */}
           <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2 flex-wrap">
             <span
@@ -350,7 +347,8 @@ function TimelineEntry({ item }: TimelineEntryProps) {
               </Badge>
             )}
             {isNew && (
-              <Badge className="text-[10px] sm:text-xs bg-green-600 text-white shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-5" data-testid={`badge-new-${item.id}`}>
+              <Badge className="text-[10px] sm:text-xs bg-emerald-500 text-white border-0 shadow-sm gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0 h-4 sm:h-5 animate-pulse" data-testid={`badge-new-${item.id}`}>
+                <Zap className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
                 جديد
               </Badge>
             )}
@@ -362,12 +360,12 @@ function TimelineEntry({ item }: TimelineEntryProps) {
 
           <div className="flex gap-3 sm:gap-4">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-sm sm:text-base mb-1 sm:mb-1.5 line-clamp-2 leading-snug group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
+              <h3 className="font-semibold text-sm sm:text-[17px] mb-1 sm:mb-1.5 line-clamp-2 leading-relaxed text-[#0F172A] dark:text-foreground group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
                 {item.title}
               </h3>
 
               {item.summary && (
-                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed hidden sm:block mb-2" data-testid={`text-summary-${item.id}`}>
+                <p className="text-xs sm:text-sm text-[#475569] dark:text-muted-foreground line-clamp-2 leading-relaxed hidden sm:block mb-2" data-testid={`text-summary-${item.id}`}>
                   {item.summary}
                 </p>
               )}
@@ -426,7 +424,7 @@ function TimelineSkeleton({ count = 8 }: { count?: number }) {
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="relative">
             <span className="absolute top-4 right-[9px] z-[1] h-3.5 w-3.5 rounded-full ring-4 ring-background bg-muted" />
-            <div className="rounded-xl border border-r-[3px] border-r-muted p-3 sm:p-4">
+            <div className="rounded-xl bg-card border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-3 sm:p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Skeleton className="h-4 w-12" />
                 <Skeleton className="h-4 w-16 rounded-full" />
@@ -515,11 +513,7 @@ export default function MomentByMoment() {
 
   const { data: categoriesDataRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
-    queryFn: async () => {
-      const res = await fetch("/api/categories", { credentials: 'include' });
-      if (!res.ok) throw new Error("Failed to fetch categories");
-      return res.json();
-    },
+    queryFn: () => apiRequest<Category[]>("/api/categories"),
   });
   const categoriesData = Array.isArray(categoriesDataRaw) ? categoriesDataRaw : [];
 
@@ -553,9 +547,7 @@ export default function MomentByMoment() {
         params.set("cursor", pageParam as string);
       }
 
-      const res = await fetch(`/api/live/updates?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
+      return apiRequest<LiveUpdatesResponse>(`/api/live/updates?${params}`);
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined,
@@ -727,11 +719,12 @@ export default function MomentByMoment() {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl" data-testid="page-moment-by-moment">
-      {/* Hero Section with Glassmorphism - Compact on mobile */}
-      <div className="glass-hero border-b" data-testid="header-hero">
-        <div className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-8">
+      {/* Slim, on-brand page heading (replaces the standalone glassmorphism hero
+          so the page reads as part of سبق, not a separate micro-site). */}
+      <div className="border-b bg-background" data-testid="header-hero">
+        <div className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-5">
           {/* Breadcrumb / Home Navigation */}
-          <div className="flex items-center gap-1 sm:gap-2 mb-2 sm:mb-4 text-[10px] sm:text-sm">
+          <div className="flex items-center gap-1 sm:gap-2 mb-2 sm:mb-3 text-[10px] sm:text-sm">
             <Link href="/" data-testid="link-home">
               <Button variant="ghost" size="sm" className="gap-1 sm:gap-2 text-muted-foreground hover:text-foreground h-6 sm:h-8 px-1 sm:px-3 text-[10px] sm:text-sm">
                 <Home className="h-3 sm:h-4 w-3 sm:w-4" />
@@ -742,33 +735,27 @@ export default function MomentByMoment() {
             <span className="font-medium">لحظة بلحظة</span>
           </div>
 
-          <div className="flex items-start gap-2 sm:gap-4">
-            <div className="relative">
-              <div className="p-1.5 sm:p-3 bg-destructive rounded-lg sm:rounded-xl" data-testid="icon-live">
-                <Radio className="h-4 sm:h-8 w-4 sm:w-8 text-destructive-foreground" />
-              </div>
-              <div className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 h-2 sm:h-3 w-2 sm:w-3 rounded-full bg-destructive live-pulse-ring" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 sm:gap-3 mb-1 sm:mb-2 flex-wrap">
-                <h1 className="text-lg sm:text-3xl md:text-4xl font-bold tracking-tight" data-testid="text-page-title">
-                  لحظة بلحظة
-                </h1>
-                <Badge 
-                  variant="destructive" 
-                  className="text-[9px] sm:text-sm px-1.5 sm:px-3 py-0 sm:py-1 h-4 sm:h-auto"
-                  data-testid="badge-live"
-                >
-                  <span className="flex items-center gap-1 sm:gap-2">
-                    <span className="h-1.5 sm:h-2 w-1.5 sm:w-2 rounded-full bg-white animate-pulse" />
-                    LIVE
-                  </span>
-                </Badge>
-              </div>
-              <p className="text-muted-foreground text-[10px] sm:text-base md:text-lg max-w-2xl" data-testid="text-page-subtitle">
-                متابعة مباشرة للأخبار العاجلة والتحديثات اللحظية
-              </p>
-            </div>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <span className="relative inline-flex items-center justify-center p-1.5 sm:p-2.5 bg-destructive rounded-lg" data-testid="icon-live">
+              <Radio className="h-4 sm:h-6 w-4 sm:w-6 text-destructive-foreground" />
+              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive live-pulse-ring" />
+            </span>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight" data-testid="text-page-title">
+              لحظة بلحظة
+            </h1>
+            <Badge
+              variant="destructive"
+              className="text-[9px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5 h-4 sm:h-auto"
+              data-testid="badge-live"
+            >
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                LIVE
+              </span>
+            </Badge>
+            <p className="w-full sm:w-auto sm:mr-1 text-muted-foreground text-[10px] sm:text-sm" data-testid="text-page-subtitle">
+              متابعة مباشرة للأخبار العاجلة والتحديثات اللحظية
+            </p>
           </div>
         </div>
       </div>
@@ -776,198 +763,235 @@ export default function MomentByMoment() {
       {/* Breaking News Ticker */}
       <BreakingTicker items={breakingNews} />
 
-      {/* DMS Ads - Leaderboard for desktop, MPU for mobile */}
-      <div className="container max-w-6xl px-6 pt-6">
+      {/* Content container — leaderboard + statistics span the full width; the
+          live feed then occupies the right (main) column with a sidebar on the
+          left, so the page mirrors the rest of سبق's two-column news layout. */}
+      <div className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-6">
+        {/* DMS Leaderboard (full width) */}
         <DmsLeaderboardAd />
-        <DmsMpuAd />
-      </div>
 
-      {/* Statistics Section - Compact on mobile */}
-      <section className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-8">
-        {isLoading ? (
-          <StatisticsSkeleton />
-        ) : (
-          <StatisticsCards items={allItems} />
-        )}
-      </section>
+        {/* Statistics Section - Compact on mobile */}
+        <section className="mb-4 sm:mb-6" data-testid="section-statistics">
+          {isLoading ? (
+            <StatisticsSkeleton />
+          ) : (
+            <StatisticsCards items={allItems} />
+          )}
+        </section>
 
-      {/* Enhanced Sticky Filter Bar - Compact on mobile */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b py-2 sm:py-4" data-testid="header-status-bar">
-        <div className="container max-w-6xl px-3 sm:px-6">
-          {/* Status Row - Ultra compact on mobile */}
-          <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2 sm:mb-4">
-            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
-              {/* Live Indicator with Pulse Ring */}
-              <div className="flex items-center gap-1 sm:gap-2 bg-destructive/10 px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-full">
-                <div className="relative">
-                  <div className="h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive animate-pulse" data-testid="indicator-live" />
-                  <div className="absolute inset-0 h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive live-pulse-ring" />
-                </div>
-                <span className="text-[10px] sm:text-sm font-semibold text-destructive" data-testid="text-live">مباشر</span>
-              </div>
-              
-              {lastUpdate && (
-                <Badge variant="outline" className="text-[9px] sm:text-xs gap-0.5 sm:gap-1.5 px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-last-update">
-                  <Clock className="h-2 sm:h-3 w-2 sm:w-3" />
-                  <span className="hidden sm:inline">آخر تحديث:</span> {lastUpdate}
-                </Badge>
-              )}
-
-              <Badge variant="secondary" className="text-[9px] sm:text-xs px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-items-count">
-                {filteredItems.length} <span className="hidden sm:inline">تحديث</span>
-              </Badge>
-            </div>
-
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleManualRefresh}
-              className="gap-1 sm:gap-2 h-6 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-sm"
-              data-testid="button-refresh"
-            >
-              <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4" />
-              <span className="hidden sm:inline">تحديث</span>
-            </Button>
-          </div>
-
-          {/* Pill-Style Filters Row - Compact on mobile */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
-            {/* Filter Pills */}
-            <div className="flex gap-1 sm:gap-2">
-              <button
-                onClick={() => setFilter("all")}
-                className={`px-2 sm:px-4 py-1 sm:py-2 rounded-full text-[10px] sm:text-sm font-medium transition-all ${
-                  filter === "all" 
-                    ? "filter-pill-active" 
-                    : "bg-muted/60 text-foreground hover-elevate"
-                }`}
-                data-testid="button-filter-all"
-              >
-                الكل
-              </button>
-              <button
-                onClick={() => setFilter("breaking")}
-                className={`px-2 sm:px-4 py-1 sm:py-2 rounded-full text-[10px] sm:text-sm font-medium transition-all flex items-center gap-0.5 sm:gap-1.5 ${
-                  filter === "breaking" 
-                    ? "filter-pill-breaking-active" 
-                    : "bg-muted/60 text-foreground hover-elevate"
-                }`}
-                data-testid="button-filter-breaking"
-              >
-                <Zap className="h-2.5 sm:h-3.5 w-2.5 sm:w-3.5" />
-                عاجل
-              </button>
-            </div>
-
-            <div className="h-4 sm:h-6 w-px bg-border hidden sm:block" />
-
-            {/* Time Range Select - Compact on mobile */}
-            <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
-              <SelectTrigger className="w-[90px] sm:w-[160px] h-6 sm:h-9 rounded-full bg-muted/60 text-[10px] sm:text-sm px-2 sm:px-3" data-testid="select-time-range">
-                <Clock className="h-2.5 sm:h-4 w-2.5 sm:w-4 ml-1 sm:ml-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1h" data-testid="option-1h">آخر ساعة</SelectItem>
-                <SelectItem value="3h" data-testid="option-3h">آخر 3 ساعات</SelectItem>
-                <SelectItem value="today" data-testid="option-today">اليوم</SelectItem>
-                <SelectItem value="yesterday" data-testid="option-yesterday">الأمس</SelectItem>
-                <SelectItem value="7d" data-testid="option-7d">آخر 7 أيام</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Category Select - Compact on mobile */}
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[90px] sm:w-[180px] h-6 sm:h-9 rounded-full bg-muted/60 text-[10px] sm:text-sm px-2 sm:px-3" data-testid="select-category">
-                <FolderOpen className="h-2.5 sm:h-4 w-2.5 sm:w-4 ml-1 sm:ml-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" data-testid="option-all-categories">كل التصنيفات</SelectItem>
-                {activeCategories.map((category) => (
-                  <SelectItem 
-                    key={category.id} 
-                    value={category.id}
-                    data-testid={`option-category-${category.id}`}
-                  >
-                    {category.nameAr}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Live Timeline Feed */}
-      <main className="container max-w-3xl px-3 sm:px-6 py-3 sm:py-8" data-testid="main-content">
-        {/* "New updates" live pill */}
-        {newCount > 0 && (
-          <div className="sticky top-2 z-30 flex justify-center pointer-events-none mb-3">
-            <button
-              onClick={revealNewUpdates}
-              className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
-              data-testid="button-new-updates"
-            >
-              <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-              {newCount} تحديث جديد · اضغط للعرض
-              <ChevronUp className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        {isLoading && <TimelineSkeleton count={8} />}
-
-        {!isLoading && filteredItems.length === 0 && <EmptyState />}
-
-        {!isLoading && timelineGroups.length > 0 && (
-          <div className="space-y-6 sm:space-y-8" data-testid="list-news">
-            {(() => {
-              let globalIndex = -1;
-              return timelineGroups.map((group) => (
-                <section key={group.key} className="relative pr-7 sm:pr-8" data-testid={`group-${group.key}`}>
-                  {/* Continuous spine for this time bucket */}
-                  <div className="mbm-spine pointer-events-none absolute top-7 bottom-0 right-[15px] w-0.5" />
-                  <TimelineGroupHeader label={group.label} count={group.items.length} icon={group.icon} />
-                  <div className="space-y-3 sm:space-y-4">
-                    {group.items.map((item) => {
-                      globalIndex += 1;
-                      const showAd = (globalIndex + 1) % 6 === 0;
-                      return (
-                        <Fragment key={item.id}>
-                          <TimelineEntry item={item} />
-                          {showAd && (
-                            <div className="pr-0">
-                              <DmsMpuAd id={`MPU-mbm-${Math.floor(globalIndex / 6)}`} lazyLoad={true} />
-                            </div>
-                          )}
-                        </Fragment>
-                      );
-                    })}
+        {/* Two-column layout: live feed (right) + sidebar (left) in RTL */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
+          {/* MAIN — live feed, occupies the right side of the page */}
+          <main data-testid="main-content">
+            {/* Enhanced Sticky Filter Bar - Compact on mobile */}
+            <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b py-2 sm:py-3 mb-4 sm:mb-6" data-testid="header-status-bar">
+              {/* Status Row - Ultra compact on mobile */}
+              <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2 sm:mb-3">
+                <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
+                  {/* Live Indicator with Pulse Ring */}
+                  <div className="flex items-center gap-1 sm:gap-2 bg-destructive/10 px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-full">
+                    <div className="relative">
+                      <div className="h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive animate-pulse" data-testid="indicator-live" />
+                      <div className="absolute inset-0 h-1.5 sm:h-2.5 w-1.5 sm:w-2.5 rounded-full bg-destructive live-pulse-ring" />
+                    </div>
+                    <span className="text-[10px] sm:text-sm font-semibold text-destructive" data-testid="text-live">مباشر</span>
                   </div>
-                </section>
-              ));
-            })()}
-          </div>
-        )}
 
-        {/* Load More Trigger */}
-        <div ref={loadMoreRef} className="py-8 text-center" data-testid="div-load-more">
-          {isFetchingNextPage && (
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" data-testid="loader-fetching" />
-              <span className="text-sm text-muted-foreground">جاري تحميل المزيد...</span>
+                  {lastUpdate && (
+                    <Badge variant="outline" className="text-[9px] sm:text-xs gap-0.5 sm:gap-1.5 px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-last-update">
+                      <Clock className="h-2 sm:h-3 w-2 sm:w-3" />
+                      <span className="hidden sm:inline">آخر تحديث:</span> {lastUpdate}
+                    </Badge>
+                  )}
+
+                  <Badge variant="secondary" className="text-[9px] sm:text-xs px-1 sm:px-2 py-0 sm:py-0.5 h-4 sm:h-auto" data-testid="badge-items-count">
+                    {filteredItems.length} <span className="hidden sm:inline">تحديث</span>
+                  </Badge>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManualRefresh}
+                  className="gap-1 sm:gap-2 h-6 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-sm"
+                  data-testid="button-refresh"
+                >
+                  <RefreshCw className="h-3 sm:h-4 w-3 sm:w-4" />
+                  <span className="hidden sm:inline">تحديث</span>
+                </Button>
+              </div>
+
+              {/* Pill-Style Filters Row - Compact on mobile */}
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+                {/* Filter Pills */}
+                <div className="flex gap-1 sm:gap-2">
+                  <button
+                    onClick={() => setFilter("all")}
+                    className={`px-2 sm:px-4 py-1 sm:py-2 rounded-full text-[10px] sm:text-sm font-medium transition-all ${
+                      filter === "all"
+                        ? "filter-pill-active"
+                        : "bg-muted/60 text-foreground hover-elevate"
+                    }`}
+                    data-testid="button-filter-all"
+                  >
+                    الكل
+                  </button>
+                  <button
+                    onClick={() => setFilter("breaking")}
+                    className={`px-2 sm:px-4 py-1 sm:py-2 rounded-full text-[10px] sm:text-sm font-medium transition-all flex items-center gap-0.5 sm:gap-1.5 ${
+                      filter === "breaking"
+                        ? "filter-pill-breaking-active"
+                        : "bg-muted/60 text-foreground hover-elevate"
+                    }`}
+                    data-testid="button-filter-breaking"
+                  >
+                    <Zap className="h-2.5 sm:h-3.5 w-2.5 sm:w-3.5" />
+                    عاجل
+                  </button>
+                </div>
+
+                <div className="h-4 sm:h-6 w-px bg-border hidden sm:block" />
+
+                {/* Time Range Select - Compact on mobile */}
+                <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
+                  <SelectTrigger className="w-[90px] sm:w-[160px] h-6 sm:h-9 rounded-full bg-muted/60 text-[10px] sm:text-sm px-2 sm:px-3" data-testid="select-time-range">
+                    <Clock className="h-2.5 sm:h-4 w-2.5 sm:w-4 ml-1 sm:ml-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1h" data-testid="option-1h">آخر ساعة</SelectItem>
+                    <SelectItem value="3h" data-testid="option-3h">آخر 3 ساعات</SelectItem>
+                    <SelectItem value="today" data-testid="option-today">اليوم</SelectItem>
+                    <SelectItem value="yesterday" data-testid="option-yesterday">الأمس</SelectItem>
+                    <SelectItem value="7d" data-testid="option-7d">آخر 7 أيام</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Category Select - Compact on mobile */}
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-[90px] sm:w-[180px] h-6 sm:h-9 rounded-full bg-muted/60 text-[10px] sm:text-sm px-2 sm:px-3" data-testid="select-category">
+                    <FolderOpen className="h-2.5 sm:h-4 w-2.5 sm:w-4 ml-1 sm:ml-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" data-testid="option-all-categories">كل التصنيفات</SelectItem>
+                    {activeCategories.map((category) => (
+                      <SelectItem
+                        key={category.id}
+                        value={category.id}
+                        data-testid={`option-category-${category.id}`}
+                      >
+                        {category.nameAr}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
-          {!hasNextPage && filteredItems.length > 0 && (
-            <div className="inline-block px-6 py-3 rounded-full bg-muted/50">
-              <p className="text-sm text-muted-foreground" data-testid="text-no-more">
-                لا توجد تحديثات أقدم
-              </p>
+
+            {/* "New updates" live pill */}
+            {newCount > 0 && (
+              <div className="sticky top-20 z-30 flex justify-center pointer-events-none mb-3">
+                <button
+                  onClick={revealNewUpdates}
+                  className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
+                  data-testid="button-new-updates"
+                >
+                  <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                  {newCount} تحديث جديد · اضغط للعرض
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {isLoading && <TimelineSkeleton count={8} />}
+
+            {!isLoading && filteredItems.length === 0 && <EmptyState />}
+
+            {!isLoading && timelineGroups.length > 0 && (
+              <div className="space-y-6 sm:space-y-8" data-testid="list-news">
+                {(() => {
+                  let globalIndex = -1;
+                  return timelineGroups.map((group) => (
+                    <section key={group.key} className="relative pr-7 sm:pr-8" data-testid={`group-${group.key}`}>
+                      {/* Continuous spine for this time bucket */}
+                      <div className="mbm-spine pointer-events-none absolute top-7 bottom-0 right-[15px] w-0.5" />
+                      <TimelineGroupHeader label={group.label} count={group.items.length} icon={group.icon} />
+                      <div className="space-y-3 sm:space-y-4">
+                        {group.items.map((item) => {
+                          globalIndex += 1;
+                          const showAd = (globalIndex + 1) % 6 === 0;
+                          return (
+                            <Fragment key={item.id}>
+                              <TimelineEntry item={item} />
+                              {showAd && (
+                                <div className="pr-0">
+                                  <DmsMpuAd id={`MPU-mbm-${Math.floor(globalIndex / 6)}`} lazyLoad={true} />
+                                </div>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* Load More Trigger */}
+            <div ref={loadMoreRef} className="py-8 text-center" data-testid="div-load-more">
+              {isFetchingNextPage && (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" data-testid="loader-fetching" />
+                  <span className="text-sm text-muted-foreground">جاري تحميل المزيد...</span>
+                </div>
+              )}
+              {!hasNextPage && filteredItems.length > 0 && (
+                <div className="inline-block px-6 py-3 rounded-full bg-muted/50">
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-more">
+                    لا توجد تحديثات أقدم
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </main>
+
+          {/* SIDEBAR — secondary content, occupies the left side of the page */}
+          <aside className="mt-6 lg:mt-0" data-testid="sidebar">
+            <div className="lg:sticky lg:top-4 space-y-4 sm:space-y-6">
+              {/* MPU ad (moved out of the main feed top into the sidebar) */}
+              <DmsMpuAd />
+
+              {/* Breaking highlights */}
+              {breakingNews.length > 0 && (
+                <div className="rounded-xl bg-card border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-4" data-testid="sidebar-breaking">
+                  <h2 className="flex items-center gap-2 text-sm font-bold mb-3">
+                    <span className="relative flex h-2 w-2">
+                      <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                      <span className="absolute inset-0 h-2 w-2 rounded-full bg-destructive live-pulse-ring" />
+                    </span>
+                    أبرز العاجل
+                  </h2>
+                  <ul className="space-y-3">
+                    {breakingNews.slice(0, 6).map((item) => (
+                      <li key={item.id} className="border-b border-border/40 last:border-0 pb-3 last:pb-0">
+                        <Link
+                          href={`/article/${item.englishSlug || item.slug}`}
+                          className="block text-xs sm:text-sm leading-relaxed text-foreground hover:text-destructive transition-colors line-clamp-2"
+                          data-testid={`sidebar-breaking-${item.id}`}
+                        >
+                          {item.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </aside>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
