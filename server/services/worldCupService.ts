@@ -352,6 +352,74 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
   });
 }
 
+// المدرّب الحالي للمنتخب — المزود يُعيد كل من درّبه عبر التاريخ، والحالي
+// هو من «فريقه الحالي» = هذا المنتخب. الاسم بنقل صوتي كبقية القسم.
+export async function getCoach(teamId: number): Promise<string | null> {
+  return withSWR(`wc:coach:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("coachs", { team: teamId });
+    const current = rows.find((r: any) => r.team?.id === teamId) ?? rows[0];
+    const raw: string | undefined = current?.name;
+    if (!raw) return null;
+    const tr = await resolveNames([raw]);
+    return tr(raw);
+  });
+}
+
+// ---------- صفحة المنتخب المتكاملة ----------
+// تجمّع كل ما يخص منتخبًا واحدًا في طلب واحد: هويته + مجموعته وترتيبه +
+// كل مبارياته (منتهية/مباشرة/قادمة) + قائمته الكاملة + المدرّب. كلها مبنية
+// على دوال مكاشة بـ SWR، فالتجميع لا يكلّف المزود نداءات تُذكر.
+
+export interface WcTeamProfile {
+  team: WcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  /** مجموعة المنتخب كاملة (الأربعة) لتظليل صفّه — null قبل اعتماد القرعة/الجداول */
+  group: WcGroup | null;
+  fixtures: WcFixture[];
+  squad: WcSquadPlayer[];
+}
+
+export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | null> {
+  const [fixtures, squad, groups, teams] = await Promise.all([
+    getFixtures(),
+    getSquad(teamId).catch(() => null),
+    getStandings().catch(() => [] as WcGroup[]),
+    getTeams().catch(() => [] as WcTeam[]),
+  ]);
+
+  const teamFixtures = fixtures
+    .filter((f) => f.home.id === teamId || f.away.id === teamId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  // هوية المنتخب: القائمة أولًا (اسم + شعار)، ثم قائمة المنتخبات، ثم من أي مباراة له
+  let team: WcTeam | null = squad?.team ?? teams.find((t) => t.id === teamId) ?? null;
+  if (!team && teamFixtures.length > 0) {
+    const fx = teamFixtures[0];
+    team = fx.home.id === teamId ? fx.home : fx.away;
+  }
+  if (!team || !team.id) return null;
+
+  const group = groups.find((g) => g.rows.some((r) => r.team.id === teamId)) ?? null;
+
+  // المدرّب أفضل جهد — لا يُفشل الصفحة إن غاب
+  let coach: string | null = null;
+  try {
+    coach = await getCoach(teamId);
+  } catch (error) {
+    console.warn(`[WorldCup] coach ${teamId} failed:`, error);
+  }
+
+  return {
+    team,
+    isSaudi: teamId === SAUDI_TEAM_ID,
+    coach,
+    group,
+    fixtures: teamFixtures,
+    squad: squad?.players ?? [],
+  };
+}
+
 // ---------- بطاقة اللاعب الشاملة ----------
 // تجمع كل ما يوفره المزود عن اللاعب: الملف الشخصي + المسيرة + الألقاب +
 // أرقام البطولة + حالة الإصابة. كل نداء يفشل بمعزل عن الآخرين —

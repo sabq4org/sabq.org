@@ -1,124 +1,14 @@
-import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SAUDI_TEAM_ID, type WcSquad, type WcTeam } from "./wcTypes";
+import { SAUDI_TEAM_ID, type WcTeam } from "./wcTypes";
 
-/** المنتخبات الـ48 — والضغط على أي منتخب يفتح قائمته الكاملة */
+/** المنتخبات الـ48 — والضغط على أي منتخب يفتح صفحته المتكاملة */
 
-const POSITION_SECTIONS = [
-  { en: "Goalkeeper", label: "حراسة المرمى" },
-  { en: "Defender", label: "الدفاع" },
-  { en: "Midfielder", label: "الوسط" },
-  { en: "Attacker", label: "الهجوم" },
-];
-
-function TeamSquadDialog({
-  team,
-  onClose,
-  onOpenPlayer,
-}: {
-  team: WcTeam | null;
-  onClose: () => void;
-  onOpenPlayer: (playerId: number) => void;
-}) {
-  const { data: squad, isLoading } = useQuery<WcSquad>({
-    queryKey: [`/api/world-cup/squad/${team?.id}`],
-    enabled: team != null,
-    staleTime: 60 * 60 * 1000,
-  });
-
-  return (
-    <Dialog open={team != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        className="max-w-lg max-h-[85vh] overflow-hidden flex flex-col [&>button]:left-4 [&>button]:right-auto"
-        dir="rtl"
-      >
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            {team && (
-              <>
-                <span className="h-10 w-10 rounded-full bg-white ring-1 ring-border p-1 shrink-0">
-                  <img src={team.logo} alt={team.name} className="h-full w-full object-contain" />
-                </span>
-                قائمة منتخب {team.name}
-              </>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* تمرير أصلي — react-remove-scroll في نافذة Radix يحجب ScrollArea على اللمس */}
-        <div
-          className="flex-1 overflow-y-auto overscroll-contain pe-2"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {isLoading && (
-            <div className="space-y-2 py-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 rounded-lg" />
-              ))}
-            </div>
-          )}
-
-          {!isLoading && (!squad || squad.players.length === 0) && (
-            <p className="text-center text-sm text-muted-foreground py-8">
-              القائمة الرسمية لم تُعلن بعد
-            </p>
-          )}
-
-          {squad && squad.players.length > 0 && (
-            <div className="space-y-4 py-1">
-              {POSITION_SECTIONS.map((section) => {
-                const players = squad.players.filter((p) => p.positionEn === section.en);
-                if (players.length === 0) return null;
-                return (
-                  <div key={section.en}>
-                    <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2">
-                      {section.label}
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {players.map((player) => (
-                        <button
-                          key={player.id || `${player.name}-${player.number}`}
-                          type="button"
-                          onClick={() => player.id > 0 && onOpenPlayer(player.id)}
-                          disabled={player.id <= 0}
-                          className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-1.5 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
-                          data-testid={`wc-player-${player.id}`}
-                        >
-                          <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
-                            {player.photo && (
-                              <img src={player.photo} alt={player.name} className="h-full w-full object-cover" loading="lazy" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold truncate">{player.name}</p>
-                            {player.age != null && (
-                              <p className="text-[10px] text-muted-foreground">{player.age} سنة</p>
-                            )}
-                          </div>
-                          <span className="text-sm font-black text-muted-foreground tabular-nums shrink-0">
-                            {player.number ?? "—"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function TeamsSection({ onOpenPlayer }: { onOpenPlayer: (playerId: number) => void }) {
-  const [openTeam, setOpenTeam] = useState<WcTeam | null>(null);
+export function TeamsSection() {
   const { data, isLoading } = useQuery<{ teams: WcTeam[] }>({
     queryKey: ["/api/world-cup/teams"],
     staleTime: 60 * 60 * 1000,
@@ -134,7 +24,7 @@ export function TeamsSection({ onOpenPlayer }: { onOpenPlayer: (playerId: number
           </div>
           <div>
             <h2 className="text-2xl font-bold">المنتخبات</h2>
-            <p className="text-sm text-muted-foreground">48 منتخبًا — اضغط على أي منتخب لعرض قائمته الكاملة</p>
+            <p className="text-sm text-muted-foreground">48 منتخبًا — اضغط على أي منتخب لفتح صفحته</p>
           </div>
         </div>
 
@@ -155,10 +45,9 @@ export function TeamsSection({ onOpenPlayer }: { onOpenPlayer: (playerId: number
             {teams.map((team) => {
               const isSaudi = team.id === SAUDI_TEAM_ID;
               return (
-                <button
+                <Link
                   key={team.id}
-                  type="button"
-                  onClick={() => setOpenTeam(team)}
+                  href={`/world-cup/team/${team.id}`}
                   className={`flex flex-col items-center gap-1.5 rounded-xl bg-card px-2 py-3 hover-elevate active-elevate-2 transition-all dark:border dark:border-card-border ${
                     isSaudi ? "ring-2 ring-emerald-500" : ""
                   }`}
@@ -171,14 +60,12 @@ export function TeamsSection({ onOpenPlayer }: { onOpenPlayer: (playerId: number
                   {isSaudi && (
                     <Badge className="bg-emerald-500 text-white border-0 text-[9px] px-1.5 py-0">الأخضر</Badge>
                   )}
-                </button>
+                </Link>
               );
             })}
           </motion.div>
         )}
       </div>
-
-      <TeamSquadDialog team={openTeam} onClose={() => setOpenTeam(null)} onOpenPlayer={onOpenPlayer} />
     </section>
   );
 }

@@ -84,7 +84,7 @@ export default function WorldCup() {
           tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
           onOpenPlayer={setOpenPlayerId}
         />
-        <TeamsSection onOpenPlayer={setOpenPlayerId} />
+        <TeamsSection />
         <NewsSection />
       </main>
 
