@@ -230,6 +230,7 @@ const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartR
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
 const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
 const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
+const PromptStudio = lazy(() => retryImport(() => import("@/pages/PromptStudio")));
 const DeepAnalysis = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysis")));
 const DeepAnalysisList = lazy(() => retryImport(() => import("@/pages/dashboard/DeepAnalysisList")));
 const TasksPage = lazy(() => retryImport(() => import("@/pages/dashboard/TasksPage")));
@@ -860,6 +861,7 @@ function Router() {
         <Route path="/dashboard/ai-moderation">{() => <LazyRoute component={AIModerationDashboard} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
         <Route path="/dashboard/data-stories">{() => <LazyRoute component={DataStoryGenerator} />}</Route>
+        <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>
         <Route path="/dashboard/smart-journalist">{() => <LazyRoute component={SmartJournalist} />}</Route>
         <Route path="/dashboard/tasks">{() => <LazyRoute component={TasksPage} />}</Route>
         <Route path="/dashboard/ai/summaries">{() => <LazyRoute component={ComingSoon} />}</Route>
