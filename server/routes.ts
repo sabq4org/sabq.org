@@ -1592,7 +1592,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/upload - Upload media file to GCS
   const mediaUpload = multer({
@@ -1616,7 +1615,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // NOTE: platform-wide generic image upload pipe (avatars, category/topic
   // images, rich editor, angle-writer topic images) — NOT just the media library.
@@ -1911,7 +1909,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/media/proxy/:id - Proxy endpoint to serve media files from Object Storage
   app.get("/api/media/proxy/:id", async (req, res) => {
@@ -2018,7 +2015,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/save-existing - Save existing image to media library (JSON endpoint for auto-save from editor)
   app.post("/api/media/save-existing", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
@@ -2076,7 +2072,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // PUT /api/media/:id - Update media file metadata
   app.put("/api/media/:id", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
@@ -2134,7 +2129,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/media/:id - Delete media file
   app.delete("/api/media/:id", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
@@ -2203,7 +2197,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/media/folders - List all folders as flat array (frontend builds tree)
   app.get("/api/media/folders", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
@@ -2240,7 +2233,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/folders - Create new folder
   app.post("/api/media/folders", isAuthenticated, requirePermission("media.upload"), async (req: any, res) => {
@@ -2307,7 +2299,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // PUT /api/media/folders/:id - Update folder
   app.put("/api/media/folders/:id", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
@@ -2402,7 +2393,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // POST /api/media/make-public - Admin endpoint to make all existing media files public
   app.post("/api/media/make-public", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
@@ -2476,7 +2466,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // DELETE /api/media/folders/:id - Delete folder
   app.delete("/api/media/folders/:id", isAuthenticated, requirePermission("media.edit"), async (req: any, res) => {
@@ -2530,7 +2519,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // AI-powered media suggestions with caching
   const mediaSuggestionsCache = new Map<string, {
@@ -2752,7 +2740,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // END OF MEDIA LIBRARY API ENDPOINTS
@@ -2774,7 +2761,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   app.post("/api/profile/upload-avatar", isAuthenticated, strictLimiter, avatarUpload.single('avatar'), async (req: any, res) => {
     try {
@@ -2872,7 +2858,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/media/proxy-avatar/:storagePath - Proxy endpoint for avatar images
   app.get("/api/media/proxy-avatar/:storagePath", async (req, res) => {
@@ -2960,7 +2945,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/public-media/* - Proxy endpoint for public media files (email/whatsapp attachments)
 
@@ -3045,7 +3029,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
   app.get("/api/public-media/*", async (req: any, res) => {
     try {
       // Extract the full path after /api/public-media/
@@ -3123,27 +3106,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // TWO-FACTOR AUTHENTICATION (2FA) ROUTES — moved to server/routes/twoFactorRoutes.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // INTERESTS & ONBOARDING ROUTES — moved to server/routes/interests.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // SMART INTERESTS, PERSONAL FEED, DAILY BRIEF & AI DAILY SUMMARY ROUTES — moved to server/routes/smartInterests.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // SYSTEM ANNOUNCEMENT ROUTES — moved to server/routes/systemSettings.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // CATEGORY ROUTES (CMS Module 1)
@@ -3179,7 +3157,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get all English categories
   app.get("/api/en/categories", cacheControl({ maxAge: CACHE_DURATIONS.LONG, staleWhileRevalidate: CACHE_DURATIONS.LONG }), async (req, res) => {
@@ -3275,7 +3252,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get category by slug
   app.get("/api/categories/slug/:slug", async (req, res) => {
@@ -3294,7 +3270,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Get articles by category slug
   app.get("/api/categories/:slug/articles", cacheControl({ maxAge: CACHE_DURATIONS.SHORT, sMaxAge: 300, staleWhileRevalidate: 120 }), async (req, res) => {
@@ -3355,7 +3330,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // Category Analytics Endpoint - Statistics for a specific category
   app.get("/api/categories/:slug/analytics", async (req, res) => {
@@ -3556,7 +3530,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
 
   // GET /api/categories/smart - Get categories with filtering support
   app.get("/api/categories/smart", cacheControl({ maxAge: CACHE_DURATIONS.MEDIUM }), async (req, res) => {
