@@ -28,7 +28,8 @@ import {
   Calendar,
   ArrowUpDown,
   ExternalLink,
-  Users
+  Users,
+  Network
 } from "lucide-react";
 import { format, subDays, subMonths } from "date-fns";
 import { arSA } from "date-fns/locale";
@@ -36,6 +37,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { formatNumber } from "@/lib/format";
+import { apiUrl } from "@/lib/queryClient";
 
 interface Category {
   id: string;
@@ -265,11 +267,81 @@ function ArticleCard({
   );
 }
 
-function ArticleDetailPanel({ 
-  articleId, 
+interface ArticleIpBreakdown {
+  distinctIps: number;
+  totalCountedViews: number;
+  storedViews: number;
+  topIps: Array<{ ipRef: string; views: number; firstSeen: string; lastSeen: string }>;
+}
+
+// Per-IP visit breakdown — answers "is this article's traffic from one IP?".
+// Forward-only: only fills for views that happen after the feature is deployed.
+function IpBreakdownSection({ articleId }: { articleId: string }) {
+  const { data, isLoading } = useQuery<ArticleIpBreakdown>({
+    queryKey: ["/api/admin/articles", articleId, "ip-views"],
+    enabled: !!articleId,
+  });
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <Network className="h-4 w-4" />
+        الزيارات حسب عنوان IP
+      </h3>
+      {isLoading ? (
+        <Skeleton className="h-24" />
+      ) : !data || data.distinctIps === 0 ? (
+        <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground" data-testid="ip-breakdown-empty">
+          لا توجد بيانات IP لهذا المقال بعد — يبدأ التجميع للزيارات الجديدة فقط (ميزة تقدمية).
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div className="p-3 rounded-lg bg-muted/50 text-center">
+              <p className="text-xs text-muted-foreground">عناوين مختلفة</p>
+              <p className="text-lg font-bold" data-testid="ip-distinct">{formatNumber(data.distinctIps)}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 text-center">
+              <p className="text-xs text-muted-foreground">زيارات محتسَبة</p>
+              <p className="text-lg font-bold">{formatNumber(data.totalCountedViews)}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 text-center">
+              <p className="text-xs text-muted-foreground">العدّاد المعروض</p>
+              <p className="text-lg font-bold">{formatNumber(data.storedViews)}</p>
+            </div>
+          </div>
+          {data.distinctIps === 1 && (
+            <div className="mb-3 p-2 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs text-center" data-testid="ip-single-warning">
+              ⚠️ كل الزيارات المحتسَبة من عنوان IP واحد
+            </div>
+          )}
+          <div className="space-y-1">
+            {data.topIps.map((row) => (
+              <div key={row.ipRef} className="flex items-center justify-between p-2 rounded-lg bg-muted/30 text-xs">
+                <span className="font-mono text-muted-foreground">{row.ipRef}…</span>
+                <span className="flex items-center gap-3">
+                  <span className="font-medium">{formatNumber(row.views)} زيارة</span>
+                  <span className="text-muted-foreground">
+                    {row.lastSeen ? format(new Date(row.lastSeen), "dd MMM HH:mm", { locale: arSA }) : "—"}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            العناوين مُجزّأة (hash) لحماية الخصوصية. تُحتسب زيارة واحدة لكل IP كل 5 دقائق.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ArticleDetailPanel({
+  articleId,
   onClose,
-  onExportPDF 
-}: { 
+  onExportPDF
+}: {
   articleId: string; 
   onClose: () => void;
   onExportPDF: (article: ArticleDetail) => void;
@@ -370,6 +442,8 @@ function ArticleDetailPanel({
             />
           </div>
         </div>
+
+        <IpBreakdownSection articleId={article.id} />
 
         {article.readingStats.avgScrollDepth > 0 && (
           <div>
@@ -543,7 +617,7 @@ export default function ArticleAnalyticsDashboard() {
   const handleExportPDF = useCallback(async (article: ArticleDetail) => {
     setIsExporting(true);
     try {
-      const response = await fetch(`/api/admin/article-analytics/${article.id}/export`, {
+      const response = await fetch(apiUrl(`/api/admin/article-analytics/${article.id}/export`), {
         method: 'GET',
         credentials: 'include',
       });
