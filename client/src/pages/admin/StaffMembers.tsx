@@ -207,7 +207,9 @@ export default function StaffMembers() {
 
   const filteredUsers = useMemo(() => {
     return allUsers.filter((u) => {
-      if (statusFilter !== "all" && u.status !== statusFilter) return false;
+      const effectiveStatus =
+        u.status === "pending" && u.emailVerified ? "active" : u.status;
+      if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
       // Use userRolesMap to check if user has the filtered role
       if (roleFilter !== "all") {
         const userRoles = userRolesMap.get(u.id) || [];
@@ -391,6 +393,10 @@ export default function StaffMembers() {
       header: "الحالة",
       cell: (info) => {
         const status = info.getValue();
+        // عضو بريده مُفعّل ومخزّن "pending" (بقايا المفتاح القديم) هو نشط فعلياً —
+        // نعرض حالته الحقيقية لا اللصاقة القديمة المضلِّلة.
+        const effectiveStatus =
+          status === "pending" && info.row.original.emailVerified ? "active" : status;
         const variants: Record<string, any> = {
           active: { variant: "default" as const, label: "نشط" },
           pending: { variant: "outline" as const, label: "بانتظار التفعيل" },
@@ -399,7 +405,7 @@ export default function StaffMembers() {
           locked: { variant: "secondary" as const, label: "مقفل" },
           deleted: { variant: "destructive" as const, label: "محذوف" },
         };
-        const config = variants[status] || { variant: "outline" as const, label: status || "غير معروف" };
+        const config = variants[effectiveStatus] || { variant: "outline" as const, label: effectiveStatus || "غير معروف" };
         return (
           <Badge variant={config.variant} data-testid={`badge-staff-status-${info.row.original.id}`}>
             {config.label}
