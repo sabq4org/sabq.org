@@ -129,11 +129,38 @@ async function runStartupMaintenance(): Promise<void> {
   } finally {
     try { await pool.query(`SET statement_timeout = '0'`); } catch {}
   }
+  // Trigram index backing the /api/search title fallback (lower(title) LIKE
+  // '%q%'). Without it, numeric/no-FTS-match queries (e.g. "4220449") force a
+  // full seq scan and hit the 3s timeout. gin_trgm_ops serves leading-wildcard
+  // ILIKE. Built on lower(title) to match the query's lower(a.title) predicate.
+  try {
+    await pool.query(`SET statement_timeout = '20s'`);
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_title_trgm ON articles USING gin(lower(title) gin_trgm_ops) WHERE status = 'published'`);
+    console.log('[DB] Title trigram index ensured');
+  } catch (err: any) {
+    console.warn('[DB] Title trigram index creation skipped:', err.message);
+  } finally {
+    try { await pool.query(`SET statement_timeout = '0'`); } catch {}
+  }
   try {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_published_status ON articles (published_at DESC) WHERE status = 'published'`);
     console.log('[DB] Published status index ensured');
   } catch (err: any) {
     console.warn('[DB] Published status index creation skipped:', err.message);
+  }
+  // GIN index backing the /api/keyword/:kw SEO-keywords fallback. The exact-match
+  // fast path queries (seo -> 'keywords') @> to_jsonb('kw'); jsonb_path_ops is the
+  // smallest opclass that serves @> containment. Without it that fallback runs a
+  // full jsonb_array_elements_text scan over every published article (~3.5s).
+  try {
+    await pool.query(`SET statement_timeout = '20s'`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_seo_keywords_gin ON articles USING gin((seo -> 'keywords') jsonb_path_ops) WHERE status = 'published'`);
+    console.log('[DB] SEO keywords GIN index ensured');
+  } catch (err: any) {
+    console.warn('[DB] SEO keywords GIN index creation skipped:', err.message);
+  } finally {
+    try { await pool.query(`SET statement_timeout = '0'`); } catch {}
   }
   try {
     await pool.query(`
