@@ -112,11 +112,14 @@ import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { getRealIp, cfKeyGenerator, cfValidate } from "./utils/rateLimiting";
 
-// A genuine article view counts ONCE per visitor per article within this window.
-// Rapid repeats (refresh-mashing, scripted replays of POST /api/articles/:id/view)
-// are accepted but not counted, so they can no longer inflate the view counter.
-// Tunable: lower it to allow legitimate re-reads to recount sooner.
-const VIEW_DEDUP_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+// A genuine article view counts ONCE per visitor (logged-in user, else real
+// client IP) per article within this window. Rapid repeats (refresh-mashing,
+// scripted replays of POST /api/articles/:id/view) are accepted but not counted,
+// so they can no longer inflate the view counter. After the window elapses, the
+// same IP/user is allowed to count again — each counted view still adds the
+// 5-10 random boost. Tunable: lower it to allow legitimate re-reads to recount
+// sooner.
+const VIEW_DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes (once per IP per 5 min)
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
