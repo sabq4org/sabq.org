@@ -470,12 +470,11 @@ export default function StaffMembers() {
             </Button>
             {status === "banned" ? (
               <Button
-                variant="ghost"
-                size="icon"
+                variant="outline"
+                size="sm"
                 onClick={() => unbanMutation.mutate(rowUser.id)}
                 disabled={isCurrentUser || unbanMutation.isPending}
-                title="رفع الحظر"
-                className="text-emerald-600 hover:text-emerald-600"
+                className="gap-1.5 text-emerald-600 border-emerald-200 hover:text-emerald-700"
                 data-testid={`action-staff-unban-${rowUser.id}`}
               >
                 {unbanMutation.isPending && unbanMutation.variables === rowUser.id ? (
@@ -483,40 +482,40 @@ export default function StaffMembers() {
                 ) : (
                   <RotateCcw className="w-4 h-4" />
                 )}
+                رفع الحظر
+              </Button>
+            ) : status === "suspended" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => unsuspendMutation.mutate(rowUser.id)}
+                disabled={isCurrentUser || unsuspendMutation.isPending}
+                className="gap-1.5 text-emerald-600 border-emerald-200 hover:text-emerald-700"
+                data-testid={`action-staff-unsuspend-${rowUser.id}`}
+              >
+                {unsuspendMutation.isPending && unsuspendMutation.variables === rowUser.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UserCheck className="w-4 h-4" />
+                )}
+                إلغاء التعليق
               </Button>
             ) : (
               <>
-                {status === "suspended" ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => unsuspendMutation.mutate(rowUser.id)}
-                    disabled={isCurrentUser || unsuspendMutation.isPending}
-                    title="إلغاء التعليق"
-                    className="text-emerald-600 hover:text-emerald-600"
-                    data-testid={`action-staff-unsuspend-${rowUser.id}`}
-                  >
-                    {unsuspendMutation.isPending && unsuspendMutation.variables === rowUser.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <UserCheck className="w-4 h-4" />
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setSelectedUser(rowUser);
-                      setSuspendDialogOpen(true);
-                    }}
-                    disabled={isCurrentUser}
-                    title="تعليق"
-                    data-testid={`action-staff-suspend-${rowUser.id}`}
-                  >
-                    <UserX className="w-4 h-4" />
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedUser(rowUser);
+                    setSuspendDialogOpen(true);
+                  }}
+                  disabled={isCurrentUser}
+                  className="gap-1.5"
+                  data-testid={`action-staff-suspend-${rowUser.id}`}
+                >
+                  <UserX className="w-4 h-4" />
+                  تعليق
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
