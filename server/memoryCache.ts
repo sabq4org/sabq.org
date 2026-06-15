@@ -302,10 +302,12 @@ export class MemoryCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly maxEntries: number;
+  private readonly name: string;
   private lastEvictionLogAt = 0;
 
-  constructor(maxEntries: number = 5000) {
+  constructor(maxEntries: number = 5000, name: string = 'memoryCache') {
     this.maxEntries = maxEntries;
+    this.name = name;
     this.startCleanup();
   }
 
@@ -373,7 +375,7 @@ export class MemoryCache {
     if (now - this.lastEvictionLogAt > 60_000) {
       this.lastEvictionLogAt = now;
       console.warn(
-        `[Cache] memoryCache hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
+        `[Cache] ${this.name} hit the ${this.maxEntries}-entry cap — evicted ${oldest.length} oldest entries. ` +
           `If this repeats, some caller is generating unbounded cache keys.`,
       );
     }
