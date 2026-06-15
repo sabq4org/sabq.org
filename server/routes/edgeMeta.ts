@@ -83,6 +83,23 @@ const LEGACY_ARTICLE_PREFIXES = new Set([
   "mylife", "stations", "articles",
 ]);
 
+// Fast structural test: can this path EVER produce a redirect or gone=true?
+// computeSlugRedirect only matches /article|news/…, /category/…, and the legacy
+// /<prefix>/…/slug shapes; computeArticleGone only matches (en|ur)?/article/….
+// For anything else BOTH are a pure-regex non-match (no DB query), so the result
+// is deterministically {redirect:null, gone:false}. We skip the cache write for
+// such paths — this is the root cause of the unbounded edgeSlugRedirectCache key
+// growth: bot/crawler 404 probes on random /foo/bar/baz paths each minted a
+// distinct (never-reused) negative entry, pinning the cache at its cap. Being
+// permissive here is safe — a false positive only means we cache as before.
+function isRedirectCandidate(path: string): boolean {
+  if (/^\/(?:en\/|ur\/)?article\//.test(path)) return true;
+  if (/^\/news\//.test(path)) return true;
+  if (/^\/category\//.test(path)) return true;
+  const seg = path.match(/^\/([a-z]+)(?:\/|$)/i);
+  return !!seg && LEGACY_ARTICLE_PREFIXES.has(seg[1].toLowerCase());
+}
+
 const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
@@ -227,12 +244,18 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // canonical key per path → far higher hit rate + correct legacy redirects.
     const path = raw.replace(/[?#].*$/, "");
 
+    // Skip the cache (and the DB) for paths that can NEVER redirect: the result
+    // is a deterministic regex non-match. This stops bot/crawler 404 probes from
+    // minting unbounded negative cache keys (the recurring edgeSlugRedirectCache
+    // cap warning). The edge HTTP Cache-Control above still absorbs repeats.
+    if (!isRedirectCandidate(path)) {
+      return res.json({ redirect: null, gone: false });
+    }
+
     // In-process cache: this endpoint is hit on (nearly) every HTML pageview by
     // the CF worker, but the redirect decision for a given path is stable. Cache
     // both positive AND negative ({redirect:null}) results to avoid a DB
-    // round-trip on the hot path. 15 min keeps the DB off the hot path even
-    // across the 5-min edge window; 301 targets are stable so this is safe for
-    // crawlers/indexing.
+    // round-trip on the hot path.
     const cacheKey = `edge:slug-redirect:${path}`;
     const cached = edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
@@ -243,7 +266,14 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // DB lookup on the (Arabic-slug) redirect path.
     const gone = redirect ? false : await computeArticleGone(path);
     const payload = { redirect, gone };
-    edgeRedirectCache.set(cacheKey, payload, CACHE_TTL.LONG);
+    // Positive results (a real 301 target, or an existing-but-unpublished "gone"
+    // article) are stable AND bounded by article/category count → cache LONG.
+    // Negative results are dominated by non-existent-slug probes (high
+    // cardinality, low value): give them MEDIUM TTL (matches the 5-min edge
+    // s-maxage) so the periodic sweep reclaims them ~3x faster and they don't
+    // pin the bucket at its cap.
+    const ttl = redirect || gone ? CACHE_TTL.LONG : CACHE_TTL.MEDIUM;
+    edgeRedirectCache.set(cacheKey, payload, ttl);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
