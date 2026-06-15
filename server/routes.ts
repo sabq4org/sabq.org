@@ -7047,13 +7047,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
             await logActivity({
               userId: newArticle.reporterId!,
               action: 'draft_submitted',
-              targetType: 'article',
-              targetId: newArticle.id,
+              entityType: 'article',
+              entityId: newArticle.id,
               metadata: {
                 articleTitle: newArticle.title,
                 reporterName,
               },
-            } as any);
+            });
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }
@@ -15528,13 +15528,13 @@ Respond in valid JSON format only:
             await logActivity({
               userId: article.reporterId!,
               action: 'draft_submitted',
-              targetType: 'article',
-              targetId: article.id,
+              entityType: 'article',
+              entityId: article.id,
               metadata: {
                 articleTitle: article.title,
                 reporterName,
               },
-            } as any);
+            });
           } catch (err) {
             console.error("[DRAFT NOTIFY] Error:", err);
           }

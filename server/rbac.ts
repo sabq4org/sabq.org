@@ -363,7 +363,17 @@ export async function logActivity(params: {
   };
 }) {
   const { activityLogs } = await import("@shared/schema");
-  
+
+  // entity_type and entity_id are NOT NULL in the schema; bail out early with a
+  // clear warning instead of issuing an insert that is guaranteed to violate the
+  // constraint (avoids noisy DrizzleQueryError stacks in production logs).
+  if (!params.entityType || !params.entityId) {
+    console.warn(
+      `[logActivity] skipped: missing entityType/entityId for action="${params.action}" (userId=${params.userId})`,
+    );
+    return;
+  }
+
   try {
     await db.insert(activityLogs).values({
       userId: params.userId,
