@@ -26686,28 +26686,16 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /dashboard/
-Disallow: /admin/
-Disallow: /ifox/
-Disallow: /login
-Disallow: /register
-Disallow: /logout
-Disallow: /verify-email
-Disallow: /forgot-password
-Disallow: /reset-password
-Disallow: /set-password
-Disallow: /2fa-verify
-Disallow: /onboarding/
-Disallow: /select-interests
-Disallow: /profile
-Disallow: /bookmarks
-Disallow: /reading-history
-Disallow: /my-follows
-Disallow: /my-keywords
-Disallow: /my-votes
-Disallow: /notification-settings
-Disallow: /recommendation-settings
-Disallow: /payment/
+
+# ملاحظة: صفحات الحساب والمصادقة (login, register, logout, *-password,
+# 2fa-verify, verify-email, profile, bookmarks, reading-history, my-*,
+# notification-settings, recommendation-settings, select-interests,
+# dashboard, admin, ifox, onboarding, payment) لم تَعُد محظورة هنا عمدًا.
+# حظرها بـ robots.txt كان يُبقيها "مفهرسة رغم الحظر بواسطة robots.txt" في
+# Search Console: لأن Google لا يستطيع زحفها، فلا يرى وسم noindex ولا يُسقطها.
+# الآن يستطيع زحفها ويرى X-Robots-Tag: noindex (يضيفه وسيط Cloudflare Pages
+# لكل مسارات noindex — راجع functions/_middleware.js) فيُسقطها من الفهرس.
+# /api/ يبقى محظورًا لأنه نقاط نهاية JSON (ليست HTML) ولا يمكن وسمها بـ noindex.
 
 # Googlebot-News intentionally has NO separate group — a previous
 # "Disallow: /" (with a few Allow exceptions) blocked it from the homepage
