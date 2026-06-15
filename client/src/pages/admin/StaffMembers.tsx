@@ -63,6 +63,7 @@ import {
   UserCog,
   Send,
   Mail,
+  RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -275,6 +276,38 @@ export default function StaffMembers() {
     },
   });
 
+  const unsuspendMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest(`/api/dashboard/users/${userId}/unsuspend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "تم إلغاء التعليق", description: "أصبحت عضوية الموظف نشطة مرة أخرى" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error.message || "فشل إلغاء تعليق المستخدم", variant: "destructive" });
+    },
+  });
+
+  const unbanMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      return await apiRequest(`/api/dashboard/users/${userId}/unban`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "تم رفع الحظر", description: "أصبحت عضوية الموظف نشطة مرة أخرى" });
+    },
+    onError: (error: any) => {
+      toast({ title: "خطأ", description: error.message || "فشل رفع الحظر عن المستخدم", variant: "destructive" });
+    },
+  });
+
   const changeRoleMutation = useMutation({
     mutationFn: async ({ userId, roleId }: { userId: string; roleId: string }) => {
       return await apiRequest(`/api/admin/users/${userId}`, {
@@ -360,10 +393,13 @@ export default function StaffMembers() {
         const status = info.getValue();
         const variants: Record<string, any> = {
           active: { variant: "default" as const, label: "نشط" },
+          pending: { variant: "outline" as const, label: "بانتظار التفعيل" },
           suspended: { variant: "secondary" as const, label: "معلق" },
           banned: { variant: "destructive" as const, label: "محظور" },
+          locked: { variant: "secondary" as const, label: "مقفل" },
+          deleted: { variant: "destructive" as const, label: "محذوف" },
         };
-        const config = variants[status] || variants.active;
+        const config = variants[status] || { variant: "outline" as const, label: status || "غير معروف" };
         return (
           <Badge variant={config.variant} data-testid={`badge-staff-status-${info.row.original.id}`}>
             {config.label}
@@ -388,6 +424,7 @@ export default function StaffMembers() {
       cell: (info) => {
         const rowUser = info.row.original;
         const isCurrentUser = rowUser.id === user?.id;
+        const status = rowUser.status;
         return (
           <div className="flex items-center gap-1">
             <Button
@@ -425,33 +462,71 @@ export default function StaffMembers() {
             >
               <Shield className="w-4 h-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setSelectedUser(rowUser);
-                setSuspendDialogOpen(true);
-              }}
-              disabled={isCurrentUser}
-              title="تعليق"
-              data-testid={`action-staff-suspend-${rowUser.id}`}
-            >
-              <UserX className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                setSelectedUser(rowUser);
-                setBanDialogOpen(true);
-              }}
-              disabled={isCurrentUser}
-              title="حظر"
-              className="text-destructive hover:text-destructive"
-              data-testid={`action-staff-ban-${rowUser.id}`}
-            >
-              <Ban className="w-4 h-4" />
-            </Button>
+            {status === "banned" ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => unbanMutation.mutate(rowUser.id)}
+                disabled={isCurrentUser || unbanMutation.isPending}
+                title="رفع الحظر"
+                className="text-emerald-600 hover:text-emerald-600"
+                data-testid={`action-staff-unban-${rowUser.id}`}
+              >
+                {unbanMutation.isPending && unbanMutation.variables === rowUser.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+              </Button>
+            ) : (
+              <>
+                {status === "suspended" ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => unsuspendMutation.mutate(rowUser.id)}
+                    disabled={isCurrentUser || unsuspendMutation.isPending}
+                    title="إلغاء التعليق"
+                    className="text-emerald-600 hover:text-emerald-600"
+                    data-testid={`action-staff-unsuspend-${rowUser.id}`}
+                  >
+                    {unsuspendMutation.isPending && unsuspendMutation.variables === rowUser.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <UserCheck className="w-4 h-4" />
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setSelectedUser(rowUser);
+                      setSuspendDialogOpen(true);
+                    }}
+                    disabled={isCurrentUser}
+                    title="تعليق"
+                    data-testid={`action-staff-suspend-${rowUser.id}`}
+                  >
+                    <UserX className="w-4 h-4" />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelectedUser(rowUser);
+                    setBanDialogOpen(true);
+                  }}
+                  disabled={isCurrentUser}
+                  title="حظر"
+                  className="text-destructive hover:text-destructive"
+                  data-testid={`action-staff-ban-${rowUser.id}`}
+                >
+                  <Ban className="w-4 h-4" />
+                </Button>
+              </>
+            )}
           </div>
         );
       },
@@ -587,6 +662,7 @@ export default function StaffMembers() {
                   <SelectContent>
                     <SelectItem value="all">كل الحالات</SelectItem>
                     <SelectItem value="active">نشط</SelectItem>
+                    <SelectItem value="pending">بانتظار التفعيل</SelectItem>
                     <SelectItem value="suspended">معلق</SelectItem>
                     <SelectItem value="banned">محظور</SelectItem>
                   </SelectContent>
