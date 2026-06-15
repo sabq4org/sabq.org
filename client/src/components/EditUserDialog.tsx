@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { Loader2, IdCard, User, UserCheck, Phone, Briefcase, Shield, Key, Eye, EyeOff, Mail } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -95,7 +95,6 @@ const editUserSchema = z.object({
   titleAr: z.string().optional().or(z.literal("")),
   title: z.string().optional().or(z.literal("")),
   roleIds: z.array(z.string().uuid("معرف الدور غير صحيح")).min(1, "يجب اختيار دور واحد على الأقل"),
-  status: z.enum(["active", "pending", "suspended", "banned", "locked"]).default("active"),
   emailVerified: z.boolean().default(false),
   phoneVerified: z.boolean().default(false),
   hasPressCard: z.boolean().optional(),
@@ -155,7 +154,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     queryKey: ["/api/admin/roles"],
     enabled: open,
     queryFn: async () => {
-      const res = await fetch("/api/admin/roles");
+      const res = await fetch(apiUrl("/api/admin/roles"));
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data) ? data : [];
@@ -167,7 +166,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     queryKey: ["/api/admin/users", userId],
     enabled: open && !!userId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}`);
+      const res = await fetch(apiUrl(`/api/admin/users/${userId}`));
       if (!res.ok) throw new Error("Failed to fetch user");
       return res.json();
     },
@@ -177,7 +176,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     queryKey: ["/api/admin/users", userId, "staff"],
     enabled: open && !!userId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}/staff`);
+      const res = await fetch(apiUrl(`/api/admin/users/${userId}/staff`));
       if (!res.ok) return null;
       return res.json();
     },
@@ -187,7 +186,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     queryKey: ["/api/admin/article-editor-permissions"],
     enabled: open && !!userId,
     queryFn: async () => {
-      const res = await fetch("/api/admin/article-editor-permissions");
+      const res = await fetch(apiUrl("/api/admin/article-editor-permissions"));
       if (!res.ok) return [];
       return res.json();
     },
@@ -198,7 +197,7 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
     queryKey: ["/api/admin/users", userId, "permission-overrides"],
     enabled: open && !!userId,
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}/permission-overrides`);
+      const res = await fetch(apiUrl(`/api/admin/users/${userId}/permission-overrides`));
       if (!res.ok) return [];
       return res.json();
     },
@@ -283,7 +282,6 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
       titleAr: "",
       title: "",
       roleIds: [],
-      status: "active",
       emailVerified: false,
       phoneVerified: false,
       hasPressCard: false,
@@ -316,7 +314,6 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
         titleAr: staffData?.titleAr || "",
         title: staffData?.title || "",
         roleIds: user.roles?.map(r => r.id) || [],
-        status: user.status as any,
         emailVerified: user.emailVerified,
         phoneVerified: user.phoneVerified,
         hasPressCard: user.hasPressCard || false,
@@ -383,9 +380,6 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
   });
 
   const onSubmit = (data: FormData) => {
-    // Log form state for debugging
-    console.log('📝 Form submission data:', data);
-    console.log('📝 Form errors:', form.formState.errors);
     updateUserMutation.mutate(data);
   };
   
@@ -711,29 +705,9 @@ export function EditUserDialog({ open, onOpenChange, userId }: EditUserDialogPro
                   </div>
 
                   <div className="space-y-3 mt-4">
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between gap-2 rounded-lg border p-3 bg-muted/30">
-                          <div className="space-y-0.5">
-                            <FormLabel data-testid="label-status">حالة الحساب</FormLabel>
-                            <FormDescription data-testid="description-status">
-                              {field.value === "active" ? "الحساب نشط" : "الحساب معطل"}
-                            </FormDescription>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              data-testid="switch-status"
-                              checked={field.value === "active"}
-                              onCheckedChange={(checked) =>
-                                field.onChange(checked ? "active" : "pending")
-                              }
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
+                    <p className="text-xs text-muted-foreground" data-testid="hint-account-status">
+                      لتعليق العضوية أو حظرها أو استعادتها، استخدم أزرار الإجراءات في جدول «منسوبي سبق».
+                    </p>
                     <FormField
                       control={form.control}
                       name="emailVerified"
