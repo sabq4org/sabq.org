@@ -7,7 +7,7 @@
 
 import { db } from "../db";
 import { pushDevices, pushCampaigns, pushCampaignEvents } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import jwt from "jsonwebtoken";
 import https from "https";
 import http2 from "http2";
@@ -295,67 +295,92 @@ export async function sendBatchPushNotifications(
   }
 
   for (const batch of batches) {
-    const promises = batch.map(async (token) => {
-      const response = await sendPushNotification(token, payload);
-      // Only log failures: per-token success lines were emitted for every
-      // device in a broadcast (thousands), flooding Railway logs and hitting
-      // its log rate limit. Failures stay logged so error tracking is intact.
-      if (!response.success) {
-        console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
-      }
-      
-      // Record event if campaignId provided
-      if (campaignId) {
-        try {
-          const [device] = await db
-            .select({ id: pushDevices.id, userId: pushDevices.userId })
-            .from(pushDevices)
-            .where(eq(pushDevices.deviceToken, token))
-            .limit(1);
-
-          await db.insert(pushCampaignEvents).values({
-            campaignId,
-            deviceId: device?.id || null,
-            userId: device?.userId || null,
-            eventType: response.success ? "sent" : "failed",
-            apnsId: response.apnsId,
-            errorCode: response.reason,
-            errorMessage: response.reason,
-          });
-        } catch (err) {
-          console.error("[APNs] Failed to record event:", err);
+    // Pre-resolve device rows for the whole batch in ONE query instead of one
+    // SELECT per token. During a large broadcast the previous per-token SELECT
+    // + per-token INSERT + per-token UPDATE (all fired via Promise.all over 100
+    // tokens) saturated the 15-connection pool, which surfaced as
+    // "[APM] ⚠️ Slow request" on unrelated requests waiting for a connection.
+    const deviceByToken = new Map<string, { id: string; userId: string | null }>();
+    if (campaignId) {
+      try {
+        const devices = await db
+          .select({ id: pushDevices.id, userId: pushDevices.userId, deviceToken: pushDevices.deviceToken })
+          .from(pushDevices)
+          .where(inArray(pushDevices.deviceToken, batch));
+        for (const d of devices) {
+          deviceByToken.set(d.deviceToken, { id: d.id, userId: d.userId });
         }
+      } catch (err) {
+        console.error("[APNs] Failed to load devices for batch:", err);
       }
+    }
 
-      // Automatically deactivate bad/unregistered device tokens.
-      // `DeviceTokenNotForTopic` is what APNs returns when a token was
-      // registered under a different bundle ID than the one we're
-      // sending under — exactly the state of every token saved before
-      // the `com.sabq.sabqapp` → `com.sabq.sabqorg` migration. Without
-      // this branch those rows would stay `is_active = true` forever
-      // and every broadcast would re-attempt them.
-      if (!response.success && (
+    // Network sends still run concurrently across the batch — send throughput
+    // is unchanged. Only the DB writes are pulled out of the per-token path and
+    // flushed in bulk below.
+    const sendResults = await Promise.all(
+      batch.map(async (token) => {
+        const response = await sendPushNotification(token, payload);
+        // Only log failures: per-token success lines were emitted for every
+        // device in a broadcast (thousands), flooding Railway logs and hitting
+        // its log rate limit. Failures stay logged so error tracking is intact.
+        if (!response.success) {
+          console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
+        }
+        return { token, response };
+      })
+    );
+
+    // Record events for the whole batch in a single INSERT instead of one row
+    // per token. Same rows, same eventType, same apnsId/error fields as before.
+    if (campaignId && sendResults.length > 0) {
+      const eventRows = sendResults.map(({ token, response }) => {
+        const device = deviceByToken.get(token);
+        return {
+          campaignId,
+          deviceId: device?.id || null,
+          userId: device?.userId || null,
+          eventType: response.success ? "sent" : "failed",
+          apnsId: response.apnsId,
+          errorCode: response.reason,
+          errorMessage: response.reason,
+        };
+      });
+      try {
+        await db.insert(pushCampaignEvents).values(eventRows);
+      } catch (err) {
+        console.error("[APNs] Failed to record batch events:", err);
+      }
+    }
+
+    // Automatically deactivate bad/unregistered device tokens in a single
+    // UPDATE ... WHERE token IN (...) instead of one UPDATE per token.
+    // `DeviceTokenNotForTopic` is what APNs returns when a token was
+    // registered under a different bundle ID than the one we're sending
+    // under — exactly the state of every token saved before the
+    // `com.sabq.sabqapp` → `com.sabq.sabqorg` migration. Without this those
+    // rows would stay `is_active = true` forever and every broadcast would
+    // re-attempt them.
+    const invalidTokens = sendResults
+      .filter(({ response }) => !response.success && (
         response.reason === 'BadDeviceToken' ||
         response.reason === 'Unregistered' ||
         response.reason === 'DeviceTokenNotForTopic'
-      )) {
-        try {
-          await db
-            .update(pushDevices)
-            .set({ isActive: false, updatedAt: new Date() })
-            .where(eq(pushDevices.deviceToken, token));
-          console.log(`[APNs] Deactivated invalid token: ${token.substring(0, 16)}... (${response.reason})`);
-        } catch (err) {
-          console.error("[APNs] Failed to deactivate token:", err);
-        }
+      ))
+      .map(({ token }) => token);
+    if (invalidTokens.length > 0) {
+      try {
+        await db
+          .update(pushDevices)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(inArray(pushDevices.deviceToken, invalidTokens));
+        console.log(`[APNs] Deactivated ${invalidTokens.length} invalid token(s)`);
+      } catch (err) {
+        console.error("[APNs] Failed to deactivate tokens:", err);
       }
+    }
 
-      return response;
-    });
-
-    const responses = await Promise.all(promises);
-    
-    for (const response of responses) {
+    for (const { response } of sendResults) {
       if (response.success) {
         results.success++;
       } else {
