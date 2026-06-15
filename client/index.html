@@ -33,6 +33,191 @@
       })();
     </script>
 
+    <!--
+      شبكة أمان "الصفحة البيضاء" — تعيش داخل HTML (وليست ضمن الحزمة) كي تعمل
+      حتى عندما يفشل تحميل ملف الدخول نفسه — وهو السيناريو الذي يضرب المستخدمين
+      بعد كل نشر: متصفّحهم يحتفظ بنسخة HTML قديمة تشير إلى أسماء chunks لم تعد
+      موجودة على الحافة. المعالجات داخل الحزمة (main.tsx / deployRecovery.ts) لا
+      تُسجَّل أصلاً في تلك الحالة. هذا السكربت يسدّ الفجوة. ملاحظة مهمة: يجب أن
+      يبقى في <head> مبكراً — قبل سكربت الدخول الذي يحقنه Vite في نهاية <head>
+      وقبل وسوم modulepreload — كي يُسجَّل مستمع الـ error قبل أي فشل تحميل.
+        1. يلغي تسجيل أي service worker قديم عالق قد يخدم HTML بائتاً.
+        2. يلتقط في طور الالتقاط (capture) فشل تحميل <script src="/assets/*.js">
+           و<link rel="modulepreload"> ويفرض إعادة تحميل مع كاسر كاش.
+        3. watchdog للإقلاع: إن بقي #root على الـ instant-loader بعد ~8 ثوانٍ
+           (أي React لم يُقلع) يحاول إعادة التحميل، وإلا يعرض واجهة استرداد ظاهرة.
+        4. Safari BFCache: pageshow مع persisted=true يعيد التحميل مع كاسر كاش.
+      الحد الصارم: إعادة تحميل واحدة كل 30 ثانية + 3 كحد أقصى خلال 5 دقائق لمنع
+      حلقات إعادة التحميل اللانهائية. الكاسر هو `_dr` ليتطابق مع deployRecovery.ts
+      ومع مفتاح كاش الحافة الذي يحذف `_dr`. data-cfasync="false" يمنع Rocket Loader.
+    -->
+    <script data-cfasync="false">
+      (function() {
+        var RELOAD_TS_KEY = '__sabq_safety_reload_ts';
+        var RELOAD_COUNT_KEY = '__sabq_safety_reload_count';
+        var RELOAD_WINDOW_KEY = '__sabq_safety_reload_window';
+        var MIN_GAP_MS = 30 * 1000;
+        var MAX_PER_WINDOW = 3;
+        var WINDOW_MS = 5 * 60 * 1000;
+        var recoveryShown = false;
+
+        function reloadWithBust() {
+          try {
+            var now = Date.now();
+            var last = parseInt(sessionStorage.getItem(RELOAD_TS_KEY) || '0', 10);
+            if (last && now - last < MIN_GAP_MS) return false;
+            var winStart = parseInt(sessionStorage.getItem(RELOAD_WINDOW_KEY) || '0', 10);
+            var count = parseInt(sessionStorage.getItem(RELOAD_COUNT_KEY) || '0', 10);
+            if (!winStart || now - winStart > WINDOW_MS) {
+              winStart = now; count = 0;
+              sessionStorage.setItem(RELOAD_WINDOW_KEY, String(winStart));
+            }
+            if (count >= MAX_PER_WINDOW) return false;
+            sessionStorage.setItem(RELOAD_TS_KEY, String(now));
+            sessionStorage.setItem(RELOAD_COUNT_KEY, String(count + 1));
+            var url = new URL(location.href);
+            url.searchParams.set('_dr', String(now));
+            location.replace(url.toString());
+            return true;
+          } catch (_) {
+            try { location.reload(); return true; } catch (__) {}
+            return false;
+          }
+        }
+
+        function bootStalled() {
+          // الإقلاع "متعثّر" إذا: #root فارغ (React أقلع ثم انهار فأفرغ الغلاف)
+          // أو لا يزال يحمل هيكل instant-loader (React لم يستبدله). بدون الفحص
+          // الثاني يبدو الهيكل المكتمل مطابقاً لحالة "جارٍ التحميل" فيتخطّى الـ
+          // watchdog التدخّل رغم أن الحزمة ماتت بصمت.
+          var root = document.getElementById('root');
+          if (!root) return false;
+          if (root.childElementCount === 0) return true;
+          var first = root.firstElementChild;
+          if (first && first.classList && first.classList.contains('instant-loader')) {
+            return true;
+          }
+          return false;
+        }
+
+        function renderRecoveryUI() {
+          if (recoveryShown) return;
+          recoveryShown = true;
+          var root = document.getElementById('root');
+          if (!root) return;
+          var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var bg = dark ? '#0a0a0a' : '#ffffff';
+          var fg = dark ? '#fafafa' : '#0a0a0a';
+          var mute = dark ? '#a3a3a3' : '#525252';
+          root.innerHTML =
+            '<div style="min-height:100vh;background:' + bg + ';color:' + fg + ';display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;font-family:\'IBM Plex Sans Arabic\',\'Tajawal\',-apple-system,BlinkMacSystemFont,sans-serif;direction:rtl">' +
+              '<div style="font-size:48px;margin-bottom:16px" aria-hidden="true">⚠️</div>' +
+              '<h1 style="font-size:24px;margin:0 0 12px;font-weight:700">تعذّر تحميل الصفحة</h1>' +
+              '<p style="margin:0 0 24px;color:' + mute + ';max-width:480px;line-height:1.7;font-size:15px">يبدو أن متصفّحك يحتفظ بنسخة قديمة من الموقع بعد آخر تحديث. اضغط الزر بالأسفل لمسح الذاكرة المؤقتة وإعادة التحميل.</p>' +
+              '<button id="__sabq_recover_btn" style="padding:12px 32px;background:#1a73e8;color:#fff;border:0;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit">مسح الذاكرة وإعادة التحميل</button>' +
+              '<p style="margin:20px 0 0;color:' + mute + ';font-size:12px;direction:ltr">Ctrl+Shift+R / Cmd+Shift+R</p>' +
+            '</div>';
+          var btn = document.getElementById('__sabq_recover_btn');
+          if (btn) {
+            btn.addEventListener('click', function() {
+              btn.disabled = true;
+              btn.textContent = 'جارٍ المسح...';
+              try { sessionStorage.clear(); } catch (_) {}
+              try { localStorage.clear(); } catch (_) {}
+              try {
+                if ('caches' in window) {
+                  caches.keys().then(function(keys) {
+                    keys.forEach(function(k) { caches.delete(k).catch(function(){}); });
+                  }).catch(function(){});
+                }
+              } catch (_) {}
+              try {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    regs.forEach(function(r) { r.unregister().catch(function(){}); });
+                  }).catch(function(){});
+                }
+              } catch (_) {}
+              setTimeout(function() {
+                try {
+                  var url = new URL(location.href);
+                  url.searchParams.set('_dr', String(Date.now()));
+                  location.replace(url.toString());
+                } catch (_) { location.reload(); }
+              }, 350);
+            });
+          }
+        }
+
+        // تنظيف دفاعي: ألغِ تسجيل أي service worker قديم قبل أن تحاول الحزمة
+        // التحميل. لم نعد نشحن SW؛ أي واحد موجود هو بقايا من بناء قديم وقد
+        // يعترض ويخدم HTML بائتاً يشير إلى chunks محذوفة.
+        if ('serviceWorker' in navigator) {
+          try {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              if (regs && regs.length) {
+                regs.forEach(function(r) { r.unregister().catch(function(){}); });
+              }
+            }).catch(function(){});
+          } catch (_) {}
+        }
+
+        // خاص بـ Safari: تجاوز استرجاع BFCache. يحتفظ WebKit بالصفحة السابقة في
+        // الذاكرة حتى مع no-store؛ وعند الرجوع أو فتح تاب من بطاقة التطبيقات
+        // الحديثة يسحب HTML القديم الذي يشير إلى chunks بناءٍ سابق لم تعد موجودة
+        // بعد النشر، فتتعلّق الصفحة. الإشارة الوحيدة الموثوقة أن الصفحة جاءت من
+        // BFCache هي event.persisted === true، فنعيد التحميل مع كاسر كاش.
+        window.addEventListener('pageshow', function(event) {
+          if (event && event.persisted) {
+            try { console.warn('[Sabq BFCache] Page restored from BFCache — reloading'); } catch (_) {}
+            if (!reloadWithBust()) {
+              try { location.reload(); } catch (_) {}
+            }
+          }
+        });
+
+        // التقاط فشل تحميل <script src="/assets/*.js"> و<link>. هذه هي الإشارة
+        // المهيمنة على أن HTML يشير إلى chunks محذوفة. الطور capture (المعامل
+        // الثالث true) لأن أحداث error لتحميل الموارد لا تتصاعد (don't bubble).
+        document.addEventListener('error', function(e) {
+          var t = e.target;
+          if (!t) return;
+          if (t.tagName === 'SCRIPT' && t.src && t.src.indexOf(location.origin + '/assets/') === 0) {
+            try { console.warn('[Sabq SafetyNet] Asset script failed to load: ' + t.src); } catch (_) {}
+            if (!reloadWithBust()) renderRecoveryUI();
+          }
+          if (t.tagName === 'LINK' && t.href && t.href.indexOf(location.origin + '/assets/') === 0 && (t.rel === 'modulepreload' || t.rel === 'stylesheet')) {
+            try { console.warn('[Sabq SafetyNet] Asset link failed to load: ' + t.href); } catch (_) {}
+            if (!reloadWithBust()) renderRecoveryUI();
+          }
+        }, true);
+
+        // watchdog الإقلاع: افحص عند 8s ثم 14s بعد load. إن بقي #root فارغاً أو
+        // عالقاً على هيكل instant-loader، حاول إعادة تحميل مع كاسر كاش؛ وإن نفد
+        // رصيد إعادة التحميل اعرض واجهة استرداد ظاهرة — لا نترك المستخدم أمام
+        // صفحة بيضاء صامتة أبداً.
+        window.addEventListener('load', function() {
+          setTimeout(function() {
+            if (!bootStalled()) return;
+            try { console.warn('[Sabq SafetyNet] Boot stalled 8s after load — attempting reload'); } catch (_) {}
+            if (!reloadWithBust()) {
+              setTimeout(function() {
+                if (bootStalled()) renderRecoveryUI();
+              }, 1500);
+            }
+          }, 8000);
+          // نقطة فحص ثانية: إن انهار التطبيق أثناء الرسم بعد نجاح الفحص الأول،
+          // فلن يُطلَق الفحص الأول ثانية. هذه تلتقط تلك الحالة.
+          setTimeout(function() {
+            if (bootStalled() && !recoveryShown) {
+              try { console.warn('[Sabq SafetyNet] Boot stalled 14s after load — recovery UI'); } catch (_) {}
+              if (!reloadWithBust()) renderRecoveryUI();
+            }
+          }, 14000);
+        });
+      })();
+    </script>
+
     
     <!-- Google Analytics GA4 -->
     <!--

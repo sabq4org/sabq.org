@@ -74,22 +74,32 @@ const HTML_NO_STORE_HEADERS = {
 // re-render the SPA shell from origin on every crawl (~1.5s TTFB, huge
 // crawl-budget drain), the injected shell is served from Cloudflare's edge in
 // <150ms for repeat hits, refreshed in the background.
-//   - max-age=120     : short browser cache so users still get fresh content.
-//   - s-maxage=300     : edge serves the cached, SEO-injected shell for 5 min.
+//
+// BROWSER vs EDGE split (white-page-after-deploy fix, 2026-06-15):
+//   - Cache-Control governs the VISITOR's browser. We set it to no-store so the
+//     browser NEVER keeps a copy of the shell. This closes the ~120s window in
+//     which a visitor's browser would replay a stale index.html that points at a
+//     rotated /assets/index-<hash>.js (= the classic post-deploy white page).
+//   - CDN-Cache-Control governs Cloudflare's OWN edge tier independently of the
+//     browser, so the edge still serves the SEO-injected shell for 5 min (TTFB
+//     win + crawl-budget savings preserved). The edge keyspace is namespaced by
+//     deploy commit (CF_PAGES_COMMIT_SHA, see htmlCacheKey), so a new deploy =
+//     fresh keyspace — the edge can never serve the previous build's dead chunks.
 //   - stale-while-revalidate=60 : edge can serve a slightly-stale copy while it
 //     refreshes in the background → no cold-start tax for the next crawler.
-// CDN-Cache-Control governs Cloudflare's own tier independently of the browser.
 //
 // SAFETY: this is ONLY applied to indexable content on the canonical host
 // (sabq.org). noindex screens (dashboard/admin/auth/account), non-canonical
 // hosts (*.pages.dev, sabq.news), and any route whose resolved robots meta is
-// `noindex` always fall back to HTML_NO_STORE_HEADERS. A cached shell could
-// reference a rotated /assets/index-<hash>.js after a deploy; the client-side
-// deploy-recovery guard (client/src/lib/deployRecovery.ts) hard-reloads once on
-// a chunk-load error, so the short staleness window self-heals.
+// `noindex` always fall back to HTML_NO_STORE_HEADERS. As a belt-and-suspenders
+// second layer, the inline safety net in client/index.html (and the in-bundle
+// deployRecovery.ts) hard-reloads once with a `_dr` cache-buster on a chunk-load
+// error, so any residual staleness self-heals.
 const HTML_EDGE_CACHE_HEADERS = {
+  // Browser: do not store the shell (cuts the post-deploy stale-HTML window).
   "Cache-Control":
-    "public, max-age=120, s-maxage=300, stale-while-revalidate=60",
+    "private, no-cache, must-revalidate, max-age=0",
+  // Edge: keep caching the SEO-injected shell for the TTFB/crawl-budget win.
   "CDN-Cache-Control":
     "public, max-age=300, stale-while-revalidate=60",
 };
