@@ -9,6 +9,7 @@ import { verifyImageMagicBytes } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
+import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -487,6 +488,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   }
 
   behaviorFlushTimer = setInterval(flushBehaviorBuffer, 30_000);
+
+  // Per-IP article view aggregate — buffered batch UPSERT (see service).
+  initArticleViewStats();
 
   process.on('SIGTERM', async () => {
     console.log('[Buffers] SIGTERM received, flushing...');
@@ -13326,6 +13330,15 @@ Respond in valid JSON format only:
       if (userId) {
         behaviorLogBuffer.push({ userId, eventType: "article_view", metadata: { articleId } });
       }
+
+      // Record the per-IP aggregate (hashed IP, buffered) so a counted view can
+      // later be broken down by distinct IP. Same precedence as rateLimitKey().
+      const clientIp = ((req.headers['x-sabq-client-ip'] || req.headers['true-client-ip']) as string | undefined)?.split(',')[0]?.trim()
+        || (req.headers['cf-connecting-ip'] as string)
+        || (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+        || req.ip
+        || 'unknown';
+      recordArticleView(articleId, clientIp, userId);
 
       res.json({ success: true, counted: true });
     } catch (error) {

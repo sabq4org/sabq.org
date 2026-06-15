@@ -2285,6 +2285,25 @@ export const articleImpressions = pgTable("article_impressions", {
   index("idx_impressions_type").on(table.impressionType),
 ]);
 
+// Per-IP article view aggregate — answers "is this article's traffic from one IP?"
+// One row per (article, hashed IP): views_count = number of COUNTED views from that
+// IP (post 5-min dedup). The IP is stored ONLY as a salted SHA-256 hash (privacy),
+// which still allows distinct-IP counting and per-IP distribution. The table grows
+// with the number of DISTINCT IPs, not pageviews, so it stays small. Written via a
+// buffered batch UPSERT in server/services/articleViewStatsService.ts.
+export const articleIpViews = pgTable("article_ip_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  ipHash: varchar("ip_hash", { length: 64 }).notNull(),
+  userId: varchar("user_id"), // last known logged-in viewer for this IP (nullable)
+  viewsCount: integer("views_count").default(0).notNull(),
+  firstSeen: timestamp("first_seen").defaultNow().notNull(),
+  lastSeen: timestamp("last_seen").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_article_ip_views_article_ip").on(table.articleId, table.ipHash),
+  index("idx_article_ip_views_article").on(table.articleId),
+]);
+
 // Feed Recommendations - التوصيات المخصصة للعرض في الفيد
 export const feedRecommendations = pgTable("feed_recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
