@@ -1,5 +1,6 @@
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
+import { log } from "./utils/logger";
 import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
@@ -4588,55 +4589,60 @@ export class DatabaseStorage implements IStorage {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Total news (exclude opinion articles)
-    const totalNews = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion")
-        )
-      );
+    // Run the independent aggregates in parallel. The first two counts and the
+    // average all read the same published-non-opinion slice; firing them
+    // concurrently instead of awaiting in series cuts the endpoint latency.
+    const [totalNews, todayNews, avgViews, topArticle] = await Promise.all([
+      // Total news (exclude opinion articles)
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(articles)
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion")
+          )
+        ),
 
-    // Today's news
-    const todayNews = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion"),
-          gte(articles.publishedAt, todayStart)
-        )
-      );
+      // Today's news
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(articles)
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion"),
+            gte(articles.publishedAt, todayStart)
+          )
+        ),
 
-    // Average views
-    const avgViews = await db
-      .select({ avg: sql<number>`COALESCE(AVG(views), 0)::int` })
-      .from(articles)
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion")
-        )
-      );
+      // Average views
+      db
+        .select({ avg: sql<number>`COALESCE(AVG(views), 0)::int` })
+        .from(articles)
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion")
+          )
+        ),
 
-    // Top viewed this week
-    const topArticle = await db
-      .select()
-      .from(articles)
-      .leftJoin(users, eq(articles.authorId, users.id))
-      .leftJoin(categories, eq(articles.categoryId, categories.id))
-      .where(
-        and(
-          eq(articles.status, "published"),
-          ne(articles.articleType, "opinion"),
-          gte(articles.publishedAt, weekStart)
+      // Top viewed this week
+      db
+        .select()
+        .from(articles)
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .leftJoin(categories, eq(articles.categoryId, categories.id))
+        .where(
+          and(
+            eq(articles.status, "published"),
+            ne(articles.articleType, "opinion"),
+            gte(articles.publishedAt, weekStart)
+          )
         )
-      )
-      .orderBy(desc(articles.views))
-      .limit(1);
+        .orderBy(desc(articles.views))
+        .limit(1),
+    ]);
 
     const topArticleDetails = topArticle[0]
       ? {
@@ -15217,7 +15223,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async triggerLoyaltyPassUpdate(userId: string, reason: string) {
-    console.log('🔄 [Loyalty Pass] Triggering update for user:', userId, 'Reason:', reason);
+    log.debug('🔄 [Loyalty Pass] Triggering update for user:', userId, 'Reason:', reason);
     
     // Log the update event (Phase 2: will send APNs)
     const { passUpdateLogger } = await import('./lib/passkit/PassUpdateLogger');

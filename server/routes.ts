@@ -12201,7 +12201,12 @@ Respond in valid JSON format only:
   // News Statistics Endpoint - Statistics cards data
   app.get("/api/news/stats", async (req, res) => {
     try {
+      const cacheKey = 'news:stats';
+      const cached = memoryCache.get(cacheKey);
+      if (cached) return res.json(cached);
+
       const stats = await storage.getNewsStatistics();
+      memoryCache.set(cacheKey, stats, CACHE_TTL.SHORT);
       res.json(stats);
     } catch (error) {
       console.error("Error fetching news stats:", error);
@@ -13179,81 +13184,7 @@ Respond in valid JSON format only:
 
   // News Analytics Endpoint - Smart statistics and insights
 
-  // Get articles by keyword
-  app.get("/api/keyword/:keyword", async (req, res) => {
-    try {
-      const keyword = decodeURIComponent(req.params.keyword);
-
-      const cacheKey = `keyword-tag-v2:${keyword}`;
-      const cached = memoryCache.get(cacheKey);
-      if (cached) return res.json(cached);
-
-      const result = await db.execute(sql`
-        SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
-               a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
-               a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
-               a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-               a.article_type AS "articleType"
-        FROM articles a
-        INNER JOIN article_tags at ON at.article_id = a.id
-        INNER JOIN tags t ON t.id = at.tag_id
-        WHERE a.status = 'published'
-          AND t.status = 'active'
-          AND (t.slug = ${keyword} OR t.name_ar = ${keyword})
-        ORDER BY a.published_at DESC
-        LIMIT 20
-      `);
-
-      let filteredArticles = (result as any).rows || result;
-
-      // Fallback: many articles carry only free-text SEO keywords
-      // (articles.seo->'keywords') with no matching row in the `tags` table.
-      // The article page still renders those as clickable badges, so without
-      // this lookup the keyword page comes back empty. Only runs when the
-      // indexed tag join found nothing, keeping the common path fast.
-      if (!filteredArticles || filteredArticles.length === 0) {
-        const seoResult = await db.execute(sql`
-          SELECT a.id, a.title, a.slug, a.english_slug AS "englishSlug",
-                 a.excerpt, a.image_url AS "imageUrl", a.thumbnail_url AS "thumbnailUrl",
-                 a.image_focal_point AS "imageFocalPoint", a.category_id AS "categoryId",
-                 a.published_at AS "publishedAt", a.views, a.news_type AS "newsType",
-                 a.article_type AS "articleType"
-          FROM articles a
-          WHERE a.status = 'published'
-            AND EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(a.seo -> 'keywords') AS kw
-              WHERE lower(kw) = lower(${keyword})
-            )
-          ORDER BY a.published_at DESC
-          LIMIT 20
-        `);
-        filteredArticles = (seoResult as any).rows || seoResult;
-      }
-
-      const topicsResult = await db.execute(sql`
-        SELECT t.id, t.title, t.slug, t.excerpt, t.hero_image_url AS "heroImageUrl",
-               t.published_at AS "publishedAt", t.view_count AS "viewCount",
-               a.slug AS "angleSlug", a.name_ar AS "angleNameAr", a.color_hex AS "angleColorHex"
-        FROM topics t
-        INNER JOIN angles a ON a.id = t.angle_id
-        WHERE t.status = 'published'
-          AND EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(t.seo_meta -> 'keywords') AS kw
-            WHERE lower(kw) = lower(${keyword})
-          )
-        ORDER BY t.published_at DESC
-        LIMIT 20
-      `);
-      const muqtarabTopics = (topicsResult as any).rows || topicsResult;
-
-      const payload = { articles: filteredArticles || [], muqtarabTopics: muqtarabTopics || [] };
-      memoryCache.set(cacheKey, payload, CACHE_TTL.MEDIUM);
-      res.json(payload);
-    } catch (error) {
-      console.error("Error fetching articles by keyword:", error);
-      res.status(500).json({ message: "Failed to fetch articles" });
-    }
-  });
+  // GET /api/keyword/:keyword moved to server/routes/keywordRoutes.ts (ADR-001).
 
   // Get article events history - requires authentication
   app.get("/api/articles/:id/events", isAuthenticated, async (req: any, res) => {
@@ -13292,8 +13223,14 @@ Respond in valid JSON format only:
       // no longer inflates the stored view count.
       const articleHourlyCount = memoryCache.get<number>(articleHourlyKey) || 0;
       if (articleHourlyCount >= 500) {
-        // Log suspicious activity but still allow view (soft limit)
-        console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
+        // Log suspicious activity but still allow view (soft limit). Throttle the
+        // line to once per minute per article — otherwise every view above the
+        // threshold prints, flooding the logs with thousands of identical alerts.
+        const alertThrottleKey = `view:alertlog:${articleId}`;
+        if (!memoryCache.get(alertThrottleKey)) {
+          console.log(`[ViewProtection] High traffic alert for article ${articleId}: ${articleHourlyCount} views/hour`);
+          memoryCache.set(alertThrottleKey, true, 60 * 1000); // 1 minute
+        }
       }
       memoryCache.set(articleHourlyKey, articleHourlyCount + 1, 60 * 60 * 1000); // 1 hour
 
@@ -35924,6 +35861,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const tsQueryAnd = words.join(' & ');
       const tsQueryOr  = words.length > 1 ? words.join(' | ') : tsQueryAnd;
 
+      // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
+      // searches in prod logs: `to_tsquery('arabic', ...)` on bare digit strings
+      // matches almost nothing yet the recent→older→title ladder still runs all
+      // three timeouts back-to-back. Short-circuit them straight to the trigram
+      // title lookup (idx_articles_title_trgm), skipping both FTS passes.
+      const isNumericQuery = /^\d+$/.test(normalizedQuery.replace(/\s+/g, ''));
+
       let results: any[] = [];
 
       const recentCut = new Date();
@@ -35933,7 +35877,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
       // Primary FTS query (recent articles, AND-mode for precision)
-      try {
+      if (!isNumericQuery) try {
         const recentResults: any = await searchTimeout(db.execute(sql`
           SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
             a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -35946,7 +35890,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
             AND a.search_vector @@ to_tsquery('arabic', ${tsQueryAnd})
           ORDER BY a.published_at DESC
           LIMIT ${limit} OFFSET ${offset}
-        `), 5000);
+        `), 3000);
 
         const rows = recentResults?.rows || recentResults;
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
@@ -35960,8 +35904,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       }
 
       // Supplemental: search older articles only if recent yielded few results.
-      // Errors here MUST NOT wipe the primary results.
-      if (results.length < Math.min(limit, 5)) {
+      // Errors here MUST NOT wipe the primary results. Skipped for numeric
+      // queries (handled by the trigram title fallback below).
+      if (!isNumericQuery && results.length < Math.min(limit, 5)) {
         try {
           const existingIds = results.map(r => r.id);
           const remaining = Math.min(limit - results.length, 10);
@@ -35979,7 +35924,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
               ${existingIds.length > 0 ? sql`AND a.id != ALL(${existingIds})` : sql``}
             ORDER BY a.published_at DESC
             LIMIT ${remaining}
-          `), 3000);
+          `), 2000);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
         } catch (suppErr: any) {
@@ -35990,8 +35935,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
         }
       }
 
-      // Fallback: direct title ILIKE search (powered by pg_trgm GIN index)
-      // Runs only when full-text search returns nothing — keeps cost low.
+      // Fallback: direct title ILIKE search (powered by the pg_trgm GIN index
+      // idx_articles_title_trgm). Runs when FTS returns nothing, and is the ONLY
+      // pass for numeric queries — keeps cost low and avoids stacked timeouts.
       if (results.length === 0 && page === 0) {
         try {
           const likePattern = `%${normalizedQuery.toLowerCase().replace(/[%_\\]/g, c => '\\' + c)}%`;
@@ -36004,9 +35950,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
             LEFT JOIN categories c ON c.id = a.category_id
             WHERE a.status = 'published'
               AND lower(a.title) LIKE ${likePattern}
-            ORDER BY a.published_at DESC NULLS LAST
-            LIMIT ${limit}
-          `), 3000);
+          ORDER BY a.published_at DESC NULLS LAST
+              LIMIT ${limit}
+          `), 2500);
           const tRows = (titleResults as any).rows || titleResults;
           results = (Array.isArray(tRows) ? tRows : []).map((r: any) => ({ ...r, matchType: 'title' }));
         } catch (likeErr: any) {

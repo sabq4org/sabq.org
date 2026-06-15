@@ -12,6 +12,7 @@
 
 import { Router, Request, Response } from "express";
 import { db, pool } from "../db";
+import { log } from "../utils/logger";
 import {
   categories,
   articles,
@@ -420,8 +421,9 @@ router.post("/articles/:id/view", async (req: Request, res: Response) => {
       .set({ views: sql`${articles.views} + ${randomBoost}` })
       .where(eq(articles.id, articleId));
 
-    // Log for analytics (console only for anonymous users)
-    console.log(`[Mobile API] View tracked: article=${articleId}, platform=${platform}, device=${deviceId || 'unknown'}, version=${appVersion || 'unknown'}`);
+    // Per-view analytics line — very high frequency. Gate behind debug so it
+    // no longer floods production logs (set LOG_VERBOSE=1 to re-enable).
+    log.debug(`[Mobile API] View tracked: article=${articleId}, platform=${platform}, device=${deviceId || 'unknown'}, version=${appVersion || 'unknown'}`);
 
     res.json({ 
       success: true,
@@ -1666,8 +1668,9 @@ router.get("/members/profile", async (req: Request, res: Response) => {
 
     // Diagnostic: log the resolved role payload so we can confirm a
     // particular user (e.g. malakalhazmi7@gmail.com) actually has the
-    // expected RBAC mapping arriving from the backend.
-    console.log(
+    // expected RBAC mapping arriving from the backend. Fires on every profile
+    // fetch — gate behind debug (set LOG_VERBOSE=1) to keep it for triage.
+    log.debug(
       `[Mobile API] /members/profile role data — userId=${session.userId} email=${user.email} legacyRole=${user.role ?? "null"} resolvedRole=${rolePayload.role} rbacRoles=${JSON.stringify(rolePayload.roles)}`
     );
 
