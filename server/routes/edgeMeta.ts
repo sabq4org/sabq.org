@@ -161,6 +161,41 @@ async function computeSlugRedirect(path: string): Promise<string | null> {
   return null;
 }
 
+// "Gone" detection for the edge. An article URL whose row EXISTS but is no
+// longer published (archived = soft-deleted by editors, or draft/scheduled)
+// should return HTTP 410 to crawlers — NOT a 200 + `noindex` shell that Google
+// re-crawls forever and parks in the "Excluded by noindex tag" report. A
+// MISSING row stays a 404 (web-next renders notFound()); only an
+// existing-but-unpublished row is "gone". Mirrors the slug match in
+// fetchArArticle / fetchEnArticle / fetchUrArticle.
+async function computeArticleGone(path: string): Promise<boolean> {
+  const m = path.match(/^\/(?:(en|ur)\/)?article\/([^/?#]+)/);
+  if (!m) return false;
+  const lang = m[1]; // undefined → ar
+  const slug = safeDecode(m[2]);
+  let row: { status: string | null } | undefined;
+  if (lang === "en") {
+    [row] = await db
+      .select({ status: enArticles.status })
+      .from(enArticles)
+      .where(or(eq(enArticles.englishSlug, slug), eq(enArticles.slug, slug))!)
+      .limit(1);
+  } else if (lang === "ur") {
+    [row] = await db
+      .select({ status: urArticles.status })
+      .from(urArticles)
+      .where(or(eq(urArticles.englishSlug, slug), eq(urArticles.slug, slug))!)
+      .limit(1);
+  } else {
+    [row] = await db
+      .select({ status: articles.status })
+      .from(articles)
+      .where(or(eq(articles.englishSlug, slug), eq(articles.slug, slug))!)
+      .limit(1);
+  }
+  return !!row && row.status !== "published";
+}
+
 router.get("/api/edge/slug-redirect", async (req, res) => {
   // Redirect decisions for a path are semantically stable (a published
   // article's canonical slug doesn't change), so let the edge absorb repeats:
@@ -186,10 +221,15 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // across the 5-min edge window; 301 targets are stable so this is safe for
     // crawlers/indexing.
     const cacheKey = `edge:slug-redirect:${path}`;
-    const cached = memoryCache.get<{ redirect: string | null }>(cacheKey);
+    const cached = memoryCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
-    const payload = { redirect: await computeSlugRedirect(path) };
+    const redirect = await computeSlugRedirect(path);
+    // Only probe "gone" when there's NO redirect: a redirect 301s first at the
+    // edge so the gone flag would never be consulted, and this saves the extra
+    // DB lookup on the (Arabic-slug) redirect path.
+    const gone = redirect ? false : await computeArticleGone(path);
+    const payload = { redirect, gone };
     memoryCache.set(cacheKey, payload, CACHE_TTL.LONG);
     return res.json(payload);
   } catch (err) {

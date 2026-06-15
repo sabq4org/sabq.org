@@ -100,22 +100,47 @@ const STATIC_EXTENSIONS = [
   ".json", ".xml", ".txt", ".pdf",
 ];
 
-// Mirrors a subset of server/utils/noindexPaths.ts — never inject SEO meta into
-// dashboard/admin/auth/account screens (both Arabic and en/ur localized prefixes).
+// Mirrors server/utils/noindexPaths.ts — every private/authenticated SPA route
+// (auth, account, dashboards, admin, onboarding, payment, search). Two uses:
+//   1. never inject content SEO meta into these screens, and
+//   2. serve `X-Robots-Tag: noindex, follow` on them (see finalizeHtml).
+// They are NO LONGER blocked in robots.txt — that blocking caused the GSC
+// "Indexed, though blocked by robots.txt" warning because Google couldn't crawl
+// them to discover the noindex. Now Google crawls, sees the header, and drops
+// them. KEEP IN SYNC with server/utils/noindexPaths.ts.
 const NOINDEX_PREFIXES = [
+  // dashboards / admin / internal tooling
   "/dashboard", "/en/dashboard", "/ur/dashboard",
-  "/admin",
-  "/login", "/register",
-  "/profile", "/en/profile",
-  "/settings",
+  "/admin", "/ifox",
+  // auth flows
+  "/login", "/register", "/logout",
   "/forgot-password", "/reset-password", "/set-password",
   "/2fa-verify", "/verify-email",
-  "/notifications", "/bookmarks", "/my-keywords", "/my-follows",
-  "/preferences-center", "/select-interests", "/edit-interests",
-  "/complete-profile",
-  "/payment-callback", "/advertiser-payment-callback",
+  // account / personalization
+  "/profile", "/en/profile", "/ur/profile",
+  "/bookmarks", "/reading-history",
+  "/my-follows", "/my-keywords", "/my-votes",
+  "/notification-settings", "/en/notification-settings", "/recommendation-settings",
+  "/select-interests", "/edit-interests", "/preferences-center", "/complete-profile",
+  // search (thin / duplicate result pages)
+  "/search", "/en/search", "/ur/search",
+  // onboarding / payment
+  "/onboarding", "/payment", "/payment-callback", "/advertiser-payment-callback",
+  // misc legacy private prefixes
+  "/settings", "/notifications",
   "/advertiser/", "/publisher/", "/staff/",
 ];
+
+// Boundary-aware prefix match (mirrors isNoindexPath in
+// server/utils/noindexPaths.ts): `/profile` matches `/profile` and
+// `/profile/123` but NOT `/profiles`. Trailing-slash prefixes are normalized.
+function isNoindexPrefix(p) {
+  for (let prefix of NOINDEX_PREFIXES) {
+    if (prefix.endsWith("/")) prefix = prefix.slice(0, -1);
+    if (p === prefix || p.startsWith(prefix + "/")) return true;
+  }
+  return false;
+}
 
 // Paths proxied verbatim to the backend. Mirrors vercel.json `rewrites`.
 function isProxyPath(p) {
@@ -168,11 +193,35 @@ function isCrawler(ua) {
 }
 
 function isInjectablePath(p) {
-  for (const prefix of NOINDEX_PREFIXES) {
-    if (p === prefix || p.startsWith(prefix + "/") || p.startsWith(prefix)) return false;
-  }
+  if (isNoindexPrefix(p)) return false;
   if (isStaticAsset(p)) return false;
   return true;
+}
+
+// Minimal 410 Gone HTML for archived/unpublished articles. Serving 410 (not a
+// 200 + noindex shell) tells Google the URL is permanently gone so it drops it
+// and stops re-crawling — clearing the "Excluded by noindex tag" report and
+// reclaiming crawl budget. Consistent with the human experience: the public
+// article API already returns 404 for archived articles, so this is not
+// cloaking. noindex header is belt-and-suspenders.
+function goneHtmlResponse() {
+  const body =
+    '<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">' +
+    '<meta name="robots" content="noindex, follow">' +
+    '<title>المحتوى لم يَعُد متاحًا — سبق</title></head><body>' +
+    "<h1>هذا المحتوى لم يَعُد متاحًا</h1>" +
+    "<p>المقال المطلوب تمت أرشفته أو إزالته.</p></body></html>";
+  return new Response(body, {
+    status: 410,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Robots-Tag": "noindex, follow",
+      // Short cache so a republished (un-archived) article recovers quickly,
+      // bounded anyway by the slug-redirect/gone TTL upstream.
+      "Cache-Control": "public, max-age=60, s-maxage=120",
+      "CDN-Cache-Control": "public, max-age=120",
+    },
+  });
 }
 
 function isHtml(res) {
@@ -443,6 +492,12 @@ export async function onRequest(context) {
   // sabq.org for identical content and dilutes/splits Google's signals.
   const noindexHost = url.hostname !== "sabq.org";
 
+  // Private/authenticated SPA routes (auth, account, dashboard, admin, search…).
+  // No longer robots.txt-blocked, so we serve X-Robots-Tag: noindex here instead
+  // — the documented fix for the "Indexed, though blocked by robots.txt" warning
+  // (Google must be able to crawl the page to see the noindex and drop it).
+  const pathIsNoindex = isNoindexPrefix(path);
+
   // On a non-canonical host, override robots.txt with a blanket disallow so
   // crawlers skip the duplicate entirely (the proxied backend robots.txt says
   // "Allow: /"). Page responses below also carry X-Robots-Tag: noindex.
@@ -482,12 +537,17 @@ export async function onRequest(context) {
   // additionally get X-Robots-Tag: noindex and are FORCED to no-store so a
   // duplicate host can never poison the edge with a cacheable copy.
   const finalizeHtml = (res, { cacheable = false } = {}) => {
-    const useCache = cacheable && !noindexHost;
+    // A noindex page (private route) must never be edge-cached as indexable.
+    const useCache = cacheable && !noindexHost && !pathIsNoindex;
     const out = applyHtmlHeaders(
       res,
       useCache ? HTML_EDGE_CACHE_HEADERS : HTML_NO_STORE_HEADERS,
     );
-    if (!noindexHost || !isHtml(out)) return out;
+    // Stamp X-Robots-Tag: noindex on duplicate hosts AND on the canonical host's
+    // private routes (login/register/profile/dashboard/search/…). This is the
+    // signal that lets Googlebot drop the now-crawlable (un-robots-blocked)
+    // auth/account URLs from the index.
+    if ((!noindexHost && !pathIsNoindex) || !isHtml(out)) return out;
     const headers = new Headers(out.headers);
     headers.set("X-Robots-Tag", "noindex, follow");
     return new Response(out.body, { status: out.status, statusText: out.statusText, headers });
@@ -646,6 +706,9 @@ export async function onRequest(context) {
       if (redirectTo && redirectTo !== path) {
         return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
       }
+      // Archived/unpublished article → 410 Gone (not a 200 + noindex SSR page
+      // Google re-crawls forever). The row exists but isn't published.
+      if (slug && slug.gone) return goneHtmlResponse();
       const ssrRes = await proxyToApi(request, nextOrigin);
       // Only edge-cache a successful HTML render; Next 404/5xx pass through
       // no-store so a transient error is never cached as a 200.
@@ -681,6 +744,11 @@ export async function onRequest(context) {
     if (redirectTo && redirectTo !== path) {
       return Response.redirect(`${url.origin}${redirectTo}${url.search}`, 301);
     }
+    // Archived/unpublished article → 410 Gone for CRAWLERS only (mirrors the
+    // SSR-crawler path). Humans keep the SPA shell, whose client-side render
+    // shows the styled not-found (the public article API already 404s archived),
+    // so this stays consistent — not cloaking.
+    if (slug && slug.gone && isCrawler(userAgent)) return goneHtmlResponse();
 
     // No meta (DB hiccup) → don't long-cache an un-injected generic shell on a
     // content URL; serve it no-store so the next crawl re-tries injection.
