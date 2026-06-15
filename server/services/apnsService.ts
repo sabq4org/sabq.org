@@ -20,12 +20,19 @@ const APNS_PORT = 443;
 // Get APNs host based on environment
 // IMPORTANT: TestFlight and App Store builds ALWAYS use Production APNs
 // Only use Sandbox for Xcode debug builds (which we don't use)
+//
+// Cached at module level: the host is derived purely from env (which doesn't
+// change at runtime), so we resolve + log it once instead of on every single
+// push send. Logging it per-token flooded Railway logs and tripped its
+// per-deployment log rate limit (dropping messages) during large broadcasts.
+let cachedApnsHost: string | null = null;
 function getApnsHost(): string {
+  if (cachedApnsHost) return cachedApnsHost;
   // Use APNS_ENVIRONMENT to explicitly control, default to production
   const useSandbox = process.env.APNS_ENVIRONMENT === "sandbox";
-  const host = useSandbox ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
-  console.log(`[APNs] Using ${useSandbox ? 'SANDBOX' : 'PRODUCTION'} environment: ${host}`);
-  return host;
+  cachedApnsHost = useSandbox ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
+  console.log(`[APNs] Using ${useSandbox ? 'SANDBOX' : 'PRODUCTION'} environment: ${cachedApnsHost}`);
+  return cachedApnsHost;
 }
 
 // APNs credentials from environment
@@ -36,7 +43,20 @@ interface ApnsCredentials {
   bundleId: string;
 }
 
+// Cached credentials. Resolved + logged exactly once, then reused for every
+// subsequent send. Credentials come from env vars that don't change at
+// runtime, so re-reading/re-formatting/re-logging them on every single push
+// (sendPushNotification is called once per device token) was pure waste — it
+// flooded Railway logs ("Using credentials", "Reformatted key to proper PEM
+// format") and contributed to the per-deployment log rate limit during large
+// broadcasts. `undefined` = not yet computed; `null` = computed-but-missing.
+let cachedCredentials: ApnsCredentials | null | undefined = undefined;
+
 function getApnsCredentials(): ApnsCredentials | null {
+  if (cachedCredentials !== undefined) {
+    return cachedCredentials;
+  }
+
   // Support both APNS_PRIVATE_KEY and APNS_KEY_P8 (Apple's .p8 file content).
   // keyId/teamId are env-only — hardcoded fallbacks were removed in the
   // 2026-06-10 audit so a leaked .p8 alone is not immediately usable.
@@ -47,10 +67,11 @@ function getApnsCredentials(): ApnsCredentials | null {
 
   if (!privateKey || !keyId || !teamId) {
     console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
+    cachedCredentials = null;
     return null;
   }
 
-  // Log credentials being used (without revealing private key)
+  // Log credentials being used (without revealing private key) — logged once.
   console.log(`[APNs] Using credentials: keyId=${keyId}, teamId=${teamId}, bundleId=${bundleId}, keyLength=${privateKey.length}`);
 
   // Format private key properly for APNs
@@ -73,7 +94,8 @@ function getApnsCredentials(): ApnsCredentials | null {
     }
   }
 
-  return { keyId, teamId, privateKey: formattedKey, bundleId };
+  cachedCredentials = { keyId, teamId, privateKey: formattedKey, bundleId };
+  return cachedCredentials;
 }
 
 // Cache for JWT token (valid for 1 hour)
@@ -275,7 +297,12 @@ export async function sendBatchPushNotifications(
   for (const batch of batches) {
     const promises = batch.map(async (token) => {
       const response = await sendPushNotification(token, payload);
-      console.log(`[APNs] Token ${token.substring(0, 16)}... result: ${response.success ? 'OK' : response.reason}`);
+      // Only log failures: per-token success lines were emitted for every
+      // device in a broadcast (thousands), flooding Railway logs and hitting
+      // its log rate limit. Failures stay logged so error tracking is intact.
+      if (!response.success) {
+        console.log(`[APNs] Token ${token.substring(0, 16)}... failed: ${response.reason}`);
+      }
       
       // Record event if campaignId provided
       if (campaignId) {
