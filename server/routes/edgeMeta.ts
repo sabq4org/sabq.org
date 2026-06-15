@@ -45,10 +45,23 @@ import {
   SABQ_ORG_EN,
 } from "../utils/creatorSchema";
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
-import { memoryCache, CACHE_TTL } from "../memoryCache";
+import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
 
 const router = Router();
+
+// Dedicated cache for the slug-redirect decisions, isolated from the shared
+// `memoryCache`. The CF worker hits /api/edge/slug-redirect on (nearly) every
+// HTML pageview, keyed by the FULL path — an inherently high-cardinality key:
+// every article/category/legacy URL plus every crawler/bot 404 probe mints a
+// distinct entry (positive AND negative {redirect:null} are cached for 15 min).
+// On the shared 5000-entry cache that flood evicted genuinely hot entries
+// (rbac:*, article:*, homepage SWR) under crawler traffic — the recurring
+// "[Cache] memoryCache hit the 5000-entry cap" warning in Railway logs.
+// Keeping it in its own bounded bucket lets the per-path churn self-evict here
+// without starving the shared cache. These keys are never pattern-invalidated
+// (they only expire by TTL), so isolation changes no invalidation behavior.
+const edgeRedirectCache = new MemoryCache(5000, "edgeSlugRedirectCache");
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
 const reporterStaff = aliasedTable(staff, "reporter_staff");
@@ -221,7 +234,7 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // across the 5-min edge window; 301 targets are stable so this is safe for
     // crawlers/indexing.
     const cacheKey = `edge:slug-redirect:${path}`;
-    const cached = memoryCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
+    const cached = edgeRedirectCache.get<{ redirect: string | null; gone?: boolean }>(cacheKey);
     if (cached !== null) return res.json(cached);
 
     const redirect = await computeSlugRedirect(path);
@@ -230,7 +243,7 @@ router.get("/api/edge/slug-redirect", async (req, res) => {
     // DB lookup on the (Arabic-slug) redirect path.
     const gone = redirect ? false : await computeArticleGone(path);
     const payload = { redirect, gone };
-    memoryCache.set(cacheKey, payload, CACHE_TTL.LONG);
+    edgeRedirectCache.set(cacheKey, payload, CACHE_TTL.LONG);
     return res.json(payload);
   } catch (err) {
     console.error("[edge/slug-redirect] error:", err);
