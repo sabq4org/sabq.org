@@ -13691,28 +13691,26 @@ Respond in valid JSON format only:
       
       // Import retry helper for rate limit handling
       const { withRetry } = await import("./openai");
-      
-      // Run AI calls SEQUENTIALLY to avoid rate limiting (429 errors)
-      // Each call has retry logic for transient failures
-      
-      console.log("[Edit+Generate API] Step 1/3: Generating smart content...");
-      const generatedContent = await withRetry(
-        () => generateSmartContent(content, language as "ar" | "en"),
-        3,
-        "SmartContent"
-      );
-      
-      console.log("[Edit+Generate API] Step 2/3: Editing content in Sabq style...");
-      const editResult = await withRetry(
-        () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
-        3,
-        "EditContent"
-      );
-      
-      console.log("[Edit+Generate API] Step 3/3: Generating newsletter subtitle (optional)...");
-      let newsletterResult: { subtitle: string | undefined; excerpt: string | undefined } = { subtitle: undefined, excerpt: undefined };
-      try {
-        newsletterResult = await withRetry(
+
+      // Run the three AI calls IN PARALLEL — they all consume the same original
+      // `content` with no inter-dependency, so total latency drops from the sum of
+      // three calls to just the slowest one (the Claude rewrite). Each call keeps
+      // its own retry/backoff, which absorbs the occasional 429 under concurrency.
+      // The newsletter subtitle is optional: its failure must not fail the request,
+      // so it resolves to empty values instead of rejecting the Promise.all.
+      console.log("[Edit+Generate API] Running smart content + Sabq edit + newsletter in parallel...");
+      const [generatedContent, editResult, newsletterResult] = await Promise.all([
+        withRetry(
+          () => generateSmartContent(content, language as "ar" | "en"),
+          3,
+          "SmartContent"
+        ),
+        withRetry(
+          () => analyzeAndEditWithSabqStyle(content, language as "ar" | "en" | "ur", categoryList),
+          3,
+          "EditContent"
+        ),
+        withRetry(
           () => generateNewsletterSubtitle({
             title: content.substring(0, 200),
             content: content,
@@ -13720,12 +13718,12 @@ Respond in valid JSON format only:
           }),
           3,
           "Newsletter"
-        );
-      } catch (err) {
-        console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
-        // Continue without newsletter - it's optional
-      }
-      
+        ).catch((err): { subtitle: string | undefined; excerpt: string | undefined } => {
+          console.warn("[Edit+Generate API] Newsletter generation failed (optional):", err);
+          return { subtitle: undefined, excerpt: undefined };
+        }),
+      ]);
+
       console.log("[Edit+Generate API] ✅ All operations completed");
       console.log("[Edit+Generate API] Quality score:", editResult.qualityScore);
       console.log("[Edit+Generate API] Title (Claude→GPT fallback):", editResult.optimized.title || generatedContent.mainTitle);
