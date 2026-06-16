@@ -138,13 +138,15 @@ async function resolveSportmonksFixtureId(
   const cached = fixtureIdMap.get(apiFootballFixtureId);
   if (cached) return cached;
 
-  // withSWR يدمج الطلبات المتزامنة لمباراة غير محلولة في استدعاء SportMonks واحد
-  const found = await withSWR<number | null>(
+  // نستخدم 0 كقيمة «غير موجود» (لا null): withSWR يعامل null كـ«لا كاش»
+  // فيُعيد جلب fixtures/date كل طلب لأي مباراة لا يحملها SportMonks أو يفشل
+  // مطابقة اسمها — ما يستنزف حد SportMonks تحت الضغط. 0 يُخزَّن RESOLVE_TTL.
+  const found = await withSWR<number>(
     `wc:smfix:${apiFootballFixtureId}`,
     RESOLVE_TTL,
     RESOLVE_TTL * 2,
     async () => {
-      if (!identity.kickoffIso || !identity.homeNameEn || !identity.awayNameEn) return null;
+      if (!identity.kickoffIso || !identity.homeNameEn || !identity.awayNameEn) return 0;
       const day = new Date(identity.kickoffIso).toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
       const resp = await smGet(`fixtures/date/${day}`, {
         filters: `fixtureLeagues:${WC_LEAGUE_ID}`,
@@ -155,14 +157,17 @@ async function resolveSportmonksFixtureId(
       const awayKey = teamKey(identity.awayNameEn);
       for (const fx of candidates) {
         const parts = (fx.participants ?? []).map((p: any) => teamKey(p?.name ?? ""));
-        if (parts.includes(homeKey) && parts.includes(awayKey)) return fx.id ?? null;
+        if (parts.includes(homeKey) && parts.includes(awayKey)) return fx.id ?? 0;
       }
-      return null;
+      return 0;
     }
   );
 
-  if (found) fixtureIdMap.set(apiFootballFixtureId, found);
-  return found;
+  if (found > 0) {
+    fixtureIdMap.set(apiFootballFixtureId, found);
+    return found;
+  }
+  return null;
 }
 
 // ---------- ترجمة أسطر التعليق دفعةً ----------
@@ -183,12 +188,20 @@ async function translateLines(rawEn: string[]): Promise<void> {
   for (let i = 0; i < missing.length; i += TR_BATCH) {
     const batch = missing.slice(i, i + TR_BATCH);
     try {
-      const out = await aiTranslateBatch(batch);
-      for (const en of batch) {
-        const ar = out[en];
-        if (ar && ar.trim()) commentaryMemory.set(en, ar.trim());
-        else failedLines.add(en);
+      const translated = await aiTranslateBatch(batch);
+      // طابِق بمفتاح صدى النص أولًا، وإلا بالموضع — نموذج الـAI قد يُعيد
+      // صياغة الـ"en" المُرجَع، فلا نعتمد على تطابقه الحرفي وحده (وإلا وُسِم
+      // سطرٌ مُترجَم فعلًا كـ«فاشل» وبقي إنجليزيًا للأبد).
+      const byKey = new Map<string, string>();
+      for (const it of translated) {
+        if (it.en && it.ar) byKey.set(normLine(it.en), it.ar.trim());
       }
+      const positional = translated.length === batch.length;
+      batch.forEach((en, j) => {
+        const ar = byKey.get(en) ?? (positional ? (translated[j]?.ar ?? "").trim() : "");
+        if (ar) commentaryMemory.set(en, ar);
+        else failedLines.add(en);
+      });
     } catch (error) {
       console.warn("[SportMonks] commentary translate failed:", (error as Error)?.message);
       for (const en of batch) failedLines.add(en);
@@ -196,7 +209,7 @@ async function translateLines(rawEn: string[]): Promise<void> {
   }
 }
 
-async function aiTranslateBatch(lines: string[]): Promise<Record<string, string>> {
+async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: string }[]> {
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
@@ -219,13 +232,9 @@ async function aiTranslateBatch(lines: string[]): Promise<Record<string, string>
   });
 
   const content = response.choices[0]?.message?.content;
-  if (!content) return {};
+  if (!content) return [];
   const parsed = JSON.parse(content) as { lines?: { en?: string; ar?: string }[] };
-  const out: Record<string, string> = {};
-  for (const item of parsed.lines ?? []) {
-    if (item.en && item.ar) out[normLine(item.en)] = item.ar;
-  }
-  return out;
+  return parsed.lines ?? [];
 }
 
 // ---------- بناء التعليق المُعرَّب ----------
@@ -349,11 +358,16 @@ async function buildMomentum(smFixtureId: number): Promise<WcMomentum> {
   const data = resp?.data ?? {};
   const live = LIVE_STATES.has(data.state?.developer_name ?? "");
   const participants: any[] = Array.isArray(data.participants) ? data.participants : [];
-  const homeId = participants.find((p) => p.meta?.location === "home")?.id;
-  const awayId = participants.find((p) => p.meta?.location === "away")?.id;
+  let homeId = participants.find((p) => p.meta?.location === "home")?.id;
+  let awayId = participants.find((p) => p.meta?.location === "away")?.id;
+  // fallback لو غاب meta.location: SportMonks يُرتّب المضيف أولًا
+  if ((homeId == null || awayId == null) && participants.length === 2) {
+    homeId = homeId ?? participants[0]?.id;
+    awayId = awayId ?? participants[1]?.id;
+  }
   const trends: any[] = Array.isArray(data.trends) ? data.trends : [];
 
-  if (!homeId || !awayId || trends.length === 0) {
+  if (homeId == null || awayId == null || trends.length === 0) {
     return { ...EMPTY_MOMENTUM, live };
   }
 

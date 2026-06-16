@@ -538,7 +538,9 @@ function MomentumTab({
   }
 
   const points = Array.isArray(data?.points) ? data!.points : [];
-  if (points.length === 0) {
+  const possession = data?.possession ?? null;
+  // الاستحواذ قد يتوفّر قبل أن يُصدر المزوّد مقياس الزخم — لا نُخفيه معه
+  if (points.length === 0 && !possession) {
     return (
       <p className="text-center text-sm text-muted-foreground py-8">
         رسم الزخم يظهر هنا أثناء المباراة
@@ -548,43 +550,49 @@ function MomentumTab({
 
   return (
     <div className="space-y-4 py-3">
-      {data?.possession && (
+      {possession && (
         <PossessionBar
-          home={data.possession.home}
-          away={data.possession.away}
+          home={possession.home}
+          away={possession.away}
           homeName={homeName}
           awayName={awayName}
         />
       )}
-      <div>
-        <p className="text-[11px] text-muted-foreground mb-2 text-center">
-          الزخم الهجومي (الهجمات الخطيرة) — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
-        </p>
-        <div dir="ltr">
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={1}>
-              <XAxis
-                dataKey="minute"
-                tick={{ fontSize: 10 }}
-                tickFormatter={(m) => `${m}'`}
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis hide />
-              <ReferenceLine y={0} stroke="hsl(var(--border))" />
-              <RechartsTooltip
-                cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
-                content={<MomentumTooltip homeName={homeName} awayName={awayName} />}
-              />
-              <Bar dataKey="net" radius={[2, 2, 0, 0]}>
-                {points.map((p, i) => (
-                  <Cell key={i} fill={p.net >= 0 ? "#059669" : "#e11d48"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      {points.length > 0 ? (
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-2 text-center">
+            الزخم الهجومي (الهجمات الخطيرة) — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
+          </p>
+          <div dir="ltr">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={1}>
+                <XAxis
+                  dataKey="minute"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(m) => `${m}'`}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                />
+                <YAxis hide />
+                <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                <RechartsTooltip
+                  cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
+                  content={<MomentumTooltip homeName={homeName} awayName={awayName} />}
+                />
+                <Bar dataKey="net" radius={[2, 2, 0, 0]}>
+                  {points.map((p) => (
+                    <Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#e11d48"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground py-2">
+          رسم الزخم الهجومي يظهر فور توفّره أثناء المباراة
+        </p>
+      )}
     </div>
   );
 }
