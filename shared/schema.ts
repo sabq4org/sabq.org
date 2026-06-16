@@ -12642,14 +12642,3 @@ export const wcPlayerNames = pgTable("wc_player_names", {
 });
 
 export type WcPlayerName = typeof wcPlayerNames.$inferSelect;
-
-// كاش دائم لترجمة أسطر تعليق المونديال (SportMonks) — يُترجَم السطر مرة واحدة
-// للأبد عبر كل النُسخ وإعادات التشغيل (نظير wcPlayerNames لكن للجُمل لا الأسماء).
-export const wcCommentaryLines = pgTable("wc_commentary_lines", {
-  id: serial("id").primaryKey(),
-  source: text("source").notNull().unique(),
-  arabic: text("arabic").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export type WcCommentaryLineRow = typeof wcCommentaryLines.$inferSelect;

@@ -5,9 +5,7 @@ import {
   ArrowLeftRight,
   Crown,
   Goal,
-  Loader2,
   MapPin,
-  MessageSquareText,
   MonitorPlay,
   Radio,
   ShieldAlert,
@@ -32,7 +30,6 @@ import {
   elapsedLabel,
   formatKickoffDay,
   formatKickoffTime,
-  type WcCommentary,
   type WcMomentum,
   type WcMomentumPoint,
   type WcFixture,
@@ -399,76 +396,6 @@ function RatingsTab({
   );
 }
 
-// ---------- التغطية الحية (تعليق نصي مباشر من SportMonks، مُعرَّب) ----------
-
-function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }) {
-  // جلب كسول: التبويب لا يُركَّب إلا عند فتحه (Radix يلغي محتوى التبويب الخامل)
-  const { data, isLoading } = useQuery<WcCommentary>({
-    queryKey: [`/api/world-cup/commentary/${fixtureId}`],
-    refetchInterval: (query) => {
-      const d = query.state.data as WcCommentary | undefined;
-      if (d?.translating) return 5_000; // حدّث بسرعة حتى يكتمل التعريب الخلفي
-      return d?.live || live ? 20_000 : false;
-    },
-  });
-
-  if (isLoading) {
-    return (
-      <div className="space-y-2 py-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
-  }
-
-  const lines = Array.isArray(data?.lines) ? data!.lines : [];
-  if (lines.length === 0) {
-    return (
-      <p className="text-center text-sm text-muted-foreground py-8">
-        التعليق المباشر يظهر هنا لحظة بلحظة أثناء المباراة
-      </p>
-    );
-  }
-
-  return (
-    <div>
-      {data?.translating && (
-        <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground pb-2 sticky top-0 bg-background/90 backdrop-blur-sm">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          جارٍ تعريب التعليق…
-        </div>
-      )}
-      <ol className="py-1">
-      {lines.map((ln) => (
-        <li
-          key={ln.id}
-          className={`flex gap-3 py-2.5 border-b border-border/60 last:border-0 ${
-            ln.isGoal ? "bg-emerald-50 dark:bg-emerald-950/20 -mx-2 px-2 rounded-lg border-0" : ""
-          }`}
-        >
-          <Badge
-            variant={ln.isGoal ? "default" : "secondary"}
-            className={`tabular-nums shrink-0 h-fit min-w-[2.75rem] justify-center ${
-              ln.isGoal ? "bg-emerald-600 text-white" : ""
-            }`}
-            dir="ltr"
-          >
-            {ln.minute != null
-              ? `${ln.minute}${ln.extraMinute ? `+${ln.extraMinute}` : ""}'`
-              : "—"}
-          </Badge>
-          <div className="flex items-start gap-1.5 text-sm leading-relaxed">
-            {ln.isGoal && <Goal className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />}
-            <span className={ln.isImportant ? "font-bold" : ""}>{ln.text}</span>
-          </div>
-        </li>
-      ))}
-      </ol>
-    </div>
-  );
-}
-
 // ---------- الزخم الهجومي (من trends — إضافة Match Facts بـSportMonks) ----------
 
 function MomentumTooltip({
@@ -687,12 +614,6 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
             <TabsList className="self-center flex-wrap h-auto">
               <TabsTrigger value="events">الأحداث</TabsTrigger>
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
-                <TabsTrigger value="commentary" className="gap-1">
-                  <MessageSquareText className="h-3 w-3" />
-                  التغطية الحية
-                </TabsTrigger>
-              )}
-              {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsTrigger value="momentum" className="gap-1">
                   <Activity className="h-3 w-3" />
                   الزخم
@@ -716,11 +637,6 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               <TabsContent value="events" className="mt-0">
                 <EventsTimeline events={detail.events} fixture={detail.fixture} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
-              {(detail.fixture.status.live || detail.fixture.status.finished) && (
-                <TabsContent value="commentary" className="mt-0">
-                  <CommentaryTab fixtureId={detail.fixture.id} live={detail.fixture.status.live} />
-                </TabsContent>
-              )}
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsContent value="momentum" className="mt-0">
                   <MomentumTab
