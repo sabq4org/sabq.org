@@ -20,7 +20,7 @@ import {
   isWorldCupConfigured,
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
-import { getCommentary, isSportmonksConfigured } from "../services/sportmonksService";
+import { getCommentary, getMomentum, isSportmonksConfigured } from "../services/sportmonksService";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -217,6 +217,33 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] commentary ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب التعليق المباشر حاليًا", lines: [] });
+    }
+  });
+
+  // الزخم الهجومي عبر الزمن (من trends — إضافة Match Facts بـSportMonks).
+  app.get("/api/world-cup/momentum/:id", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res
+        .status(503)
+        .json({ configured: false, message: "رسم الزخم غير مفعّل حاليًا", points: [] });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getMomentum(fixtureId, { directSmId });
+      res.set(
+        "Cache-Control",
+        data.live
+          ? "public, max-age=15, s-maxage=20, stale-while-revalidate=40"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600"
+      );
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] momentum ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب رسم الزخم حاليًا", points: [] });
     }
   });
 

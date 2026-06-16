@@ -263,6 +263,26 @@ async function buildCommentary(smFixtureId: number): Promise<WcCommentary> {
 }
 
 /**
+ * يحلّ معرّف API-Football إلى معرّف SportMonks ويختار إيقاع الكاش حسب الحالة.
+ * مشترك بين التعليق والزخم لتفادي تكرار منطق الربط.
+ */
+async function resolveFixture(
+  apiFootballFixtureId: number,
+  directSmId?: number
+): Promise<{ smId: number; ttl: number } | null> {
+  if (directSmId) return { smId: directSmId, ttl: CACHE_TTL.MEDIUM };
+  const identity = await getFixtureIdentity(apiFootballFixtureId).catch(() => null);
+  if (!identity) return null;
+  const ttl = identity.live
+    ? COMMENTARY_LIVE_TTL
+    : identity.finished
+      ? COMMENTARY_DONE_TTL
+      : CACHE_TTL.MEDIUM;
+  const smId = await resolveSportmonksFixtureId(apiFootballFixtureId, identity);
+  return smId ? { smId, ttl } : null;
+}
+
+/**
  * التعليق النصي المباشر لمباراة، مُعرَّبًا وخلف كاش SWR.
  * @param apiFootballFixtureId معرّف المباراة كما تعرفه الواجهة (API-Football)
  * @param opts.directSmId معرّف SportMonks مباشر — للتشخيص/الأرشيف فقط
@@ -271,21 +291,124 @@ export async function getCommentary(
   apiFootballFixtureId: number,
   opts: { directSmId?: number } = {}
 ): Promise<WcCommentary> {
-  let smId: number | null = opts.directSmId ?? null;
-  let ttl: number = CACHE_TTL.MEDIUM;
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_COMMENTARY;
+  return withSWR(`wc:commentary:${r.smId}`, r.ttl, r.ttl * 3, () => buildCommentary(r.smId));
+}
 
-  if (!smId) {
-    const identity = await getFixtureIdentity(apiFootballFixtureId).catch(() => null);
-    if (!identity) return EMPTY_COMMENTARY;
-    ttl = identity.live
-      ? COMMENTARY_LIVE_TTL
-      : identity.finished
-        ? COMMENTARY_DONE_TTL
-        : CACHE_TTL.MEDIUM;
-    smId = await resolveSportmonksFixtureId(apiFootballFixtureId, identity);
+// ---------- الزخم الهجومي (من trends — إضافة Match Facts) ----------
+
+export interface WcMomentumPoint {
+  label: string; // وسم نهاية النافذة، مثل "15'"
+  minute: number;
+  home: number; // قيمة المقياس للمضيف داخل النافذة (موجبة)
+  away: number; // للضيف (تُخزَّن سالبة لرسمها أسفل الصفر)
+  net: number; // home - away (موجب = ضغط المضيف)
+}
+
+export interface WcMomentum {
+  available: boolean;
+  live: boolean;
+  /** الاستحواذ في أحدث لحظة مسجّلة (مضيف/ضيف) */
+  possession: { home: number; away: number } | null;
+  points: WcMomentumPoint[];
+}
+
+const EMPTY_MOMENTUM: WcMomentum = {
+  available: false,
+  live: false,
+  possession: null,
+  points: [],
+};
+
+const BUCKET_MINUTES = 5;
+// مقاييس الزخم بالأفضلية — الهجمات الخطيرة هي المؤشّر الكلاسيكي
+const MOMENTUM_METRICS = ["Dangerous Attacks", "Attacks"];
+
+function latestPossession(
+  trends: any[],
+  homeId: number,
+  awayId: number
+): { home: number; away: number } | null {
+  const poss = trends.filter((t) => t.type?.name === "Ball Possession %");
+  if (poss.length === 0) return null;
+  const latestMin = Math.max(...poss.map((t) => t.minute ?? 0));
+  const h = poss.find((t) => t.participant_id === homeId && t.minute === latestMin)?.value;
+  const a = poss.find((t) => t.participant_id === awayId && t.minute === latestMin)?.value;
+  if (h == null && a == null) return null;
+  return {
+    home: h ?? (a != null ? 100 - a : 0),
+    away: a ?? (h != null ? 100 - h : 0),
+  };
+}
+
+async function buildMomentum(smFixtureId: number): Promise<WcMomentum> {
+  const resp = await smGet(`fixtures/${smFixtureId}`, {
+    include: "trends.type;participants;state",
+  });
+  const data = resp?.data ?? {};
+  const live = LIVE_STATES.has(data.state?.developer_name ?? "");
+  const participants: any[] = Array.isArray(data.participants) ? data.participants : [];
+  const homeId = participants.find((p) => p.meta?.location === "home")?.id;
+  const awayId = participants.find((p) => p.meta?.location === "away")?.id;
+  const trends: any[] = Array.isArray(data.trends) ? data.trends : [];
+
+  if (!homeId || !awayId || trends.length === 0) {
+    return { ...EMPTY_MOMENTUM, live };
   }
 
-  if (!smId) return EMPTY_COMMENTARY;
+  const possession = latestPossession(trends, homeId, awayId);
+  const metricName = MOMENTUM_METRICS.find((m) => trends.some((t) => t.type?.name === m));
+  if (!metricName) {
+    return { available: possession != null, live, possession, points: [] };
+  }
 
-  return withSWR(`wc:commentary:${smId}`, ttl, ttl * 3, () => buildCommentary(smId!));
+  // سلسلة تراكمية لكل فريق: minute → value
+  const cumOf = (pid: number): Map<number, number> => {
+    const map = new Map<number, number>();
+    for (const t of trends) {
+      if (t.type?.name === metricName && t.participant_id === pid && typeof t.minute === "number") {
+        map.set(t.minute, t.value ?? 0);
+      }
+    }
+    return map;
+  };
+  const homeCum = cumOf(homeId);
+  const awayCum = cumOf(awayId);
+
+  // القيمة التراكمية عند دقيقة t = آخر قيمة مسجّلة عند دقيقة ≤ t (السلسلة غير متناقصة)
+  const valueAt = (map: Map<number, number>, t: number): number => {
+    let v = 0;
+    for (const [m, val] of map) if (m <= t && val > v) v = val;
+    return v;
+  };
+
+  const metricMinutes = trends
+    .filter((t) => t.type?.name === metricName)
+    .map((t) => t.minute ?? 0);
+  const maxMinute = metricMinutes.length ? Math.max(...metricMinutes) : 0;
+
+  const points: WcMomentumPoint[] = [];
+  for (let a = 0; a < maxMinute; a += BUCKET_MINUTES) {
+    const b = a + BUCKET_MINUTES;
+    // clamp ≥0 تحسّبًا لأي إعادة تصفير بين الأشواط
+    const home = Math.max(0, valueAt(homeCum, b) - valueAt(homeCum, a));
+    const away = Math.max(0, valueAt(awayCum, b) - valueAt(awayCum, a));
+    points.push({ label: `${b}'`, minute: b, home, away: -away, net: home - away });
+  }
+
+  return { available: true, live, possession, points };
+}
+
+/**
+ * الزخم الهجومي عبر الزمن (من trends — إضافة Match Facts).
+ * home/away في النقاط مُحاذية لمضيف/ضيف المباراة (عبر meta.location).
+ */
+export async function getMomentum(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcMomentum> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_MOMENTUM;
+  return withSWR(`wc:momentum:${r.smId}`, r.ttl, r.ttl * 3, () => buildMomentum(r.smId));
 }

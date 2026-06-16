@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   ArrowLeftRight,
   Crown,
   Goal,
@@ -12,6 +13,16 @@ import {
   Square,
   Star,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +32,8 @@ import {
   formatKickoffDay,
   formatKickoffTime,
   type WcCommentary,
+  type WcMomentum,
+  type WcMomentumPoint,
   type WcFixture,
   type WcLineup,
   type WcMatchDetail,
@@ -443,6 +456,139 @@ function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }
   );
 }
 
+// ---------- الزخم الهجومي (من trends — إضافة Match Facts بـSportMonks) ----------
+
+function MomentumTooltip({
+  active,
+  payload,
+  homeName,
+  awayName,
+}: {
+  active?: boolean;
+  payload?: { payload: WcMomentumPoint }[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-md" dir="rtl">
+      <p className="font-bold mb-0.5 tabular-nums" dir="ltr">
+        ~{p.minute}'
+      </p>
+      <p className="text-emerald-600">
+        {homeName}: <span className="font-bold tabular-nums">{p.home}</span>
+      </p>
+      <p className="text-rose-600">
+        {awayName}: <span className="font-bold tabular-nums">{Math.abs(p.away)}</span>
+      </p>
+    </div>
+  );
+}
+
+function PossessionBar({
+  home,
+  away,
+  homeName,
+  awayName,
+}: {
+  home: number;
+  away: number;
+  homeName: string;
+  awayName: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs font-bold mb-1">
+        <span className="text-emerald-600 tabular-nums">{home}%</span>
+        <span className="text-muted-foreground">الاستحواذ</span>
+        <span className="text-rose-600 tabular-nums">{away}%</span>
+      </div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full" dir="ltr">
+        <div className="bg-emerald-500" style={{ width: `${home}%` }} title={homeName} />
+        <div className="bg-rose-500" style={{ width: `${away}%` }} title={awayName} />
+      </div>
+    </div>
+  );
+}
+
+function MomentumTab({
+  fixtureId,
+  live,
+  homeName,
+  awayName,
+}: {
+  fixtureId: number;
+  live: boolean;
+  homeName: string;
+  awayName: string;
+}) {
+  const { data, isLoading } = useQuery<WcMomentum>({
+    queryKey: [`/api/world-cup/momentum/${fixtureId}`],
+    refetchInterval: live ? 30_000 : false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
+
+  const points = Array.isArray(data?.points) ? data!.points : [];
+  if (points.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        رسم الزخم يظهر هنا أثناء المباراة
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-3">
+      {data?.possession && (
+        <PossessionBar
+          home={data.possession.home}
+          away={data.possession.away}
+          homeName={homeName}
+          awayName={awayName}
+        />
+      )}
+      <div>
+        <p className="text-[11px] text-muted-foreground mb-2 text-center">
+          الزخم الهجومي (الهجمات الخطيرة) — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
+        </p>
+        <div dir="ltr">
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={1}>
+              <XAxis
+                dataKey="minute"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(m) => `${m}'`}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis hide />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" />
+              <RechartsTooltip
+                cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
+                content={<MomentumTooltip homeName={homeName} awayName={awayName} />}
+              />
+              <Bar dataKey="net" radius={[2, 2, 0, 0]}>
+                {points.map((p, i) => (
+                  <Cell key={i} fill={p.net >= 0 ? "#059669" : "#e11d48"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -525,6 +671,12 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                   التغطية الحية
                 </TabsTrigger>
               )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsTrigger value="momentum" className="gap-1">
+                  <Activity className="h-3 w-3" />
+                  الزخم
+                </TabsTrigger>
+              )}
               <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
               <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
               {detail.ratings.length > 0 && (
@@ -546,6 +698,16 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsContent value="commentary" className="mt-0">
                   <CommentaryTab fixtureId={detail.fixture.id} live={detail.fixture.status.live} />
+                </TabsContent>
+              )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsContent value="momentum" className="mt-0">
+                  <MomentumTab
+                    fixtureId={detail.fixture.id}
+                    live={detail.fixture.status.live}
+                    homeName={detail.fixture.home.name}
+                    awayName={detail.fixture.away.name}
+                  />
                 </TabsContent>
               )}
               <TabsContent value="lineups" className="mt-0">

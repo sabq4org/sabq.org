@@ -29,6 +29,22 @@ export interface WcCommentary {
   lines: WcCommentaryLine[];
 }
 
+/** الزخم الهجومي عبر الزمن (من trends) — /api/world-cup/momentum/:id */
+export interface WcMomentumPoint {
+  label: string;
+  minute: number;
+  home: number;
+  away: number; // سالبة (تُرسم أسفل الصفر)
+  net: number;
+}
+
+export interface WcMomentum {
+  available: boolean;
+  live: boolean;
+  possession: { home: number; away: number } | null;
+  points: WcMomentumPoint[];
+}
+
 export interface WcFixture {
   id: number;
   date: string;
