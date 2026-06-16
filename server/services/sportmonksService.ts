@@ -174,7 +174,8 @@ async function resolveSportmonksFixtureId(
 
 // ---------- ترجمة أسطر التعليق دفعةً ----------
 
-const TR_BATCH = 50;
+// دفعة 30 سطرًا (~14s بالقياس) أصغر من 50 (~26s) — أسرع للتوازي وتحت المهلة
+const TR_BATCH = 30;
 
 async function translateLines(rawEn: string[]): Promise<void> {
   const missing = Array.from(
@@ -237,7 +238,7 @@ async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: st
     response_format: { type: "json_object" },
     temperature: 0.2,
     max_tokens: Math.min(8000, 200 + lines.length * 60),
-  }, { timeout: 15000, maxRetries: 1 });
+  }, { timeout: 40000, maxRetries: 1 });
 
   const content = response.choices[0]?.message?.content;
   if (!content) return [];
