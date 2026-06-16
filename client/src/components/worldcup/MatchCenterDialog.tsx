@@ -1,16 +1,28 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   ArrowLeftRight,
   Crown,
   Goal,
   MapPin,
+  MessageSquareText,
   MonitorPlay,
   Radio,
   ShieldAlert,
   Square,
   Star,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +31,9 @@ import {
   elapsedLabel,
   formatKickoffDay,
   formatKickoffTime,
+  type WcCommentary,
+  type WcMomentum,
+  type WcMomentumPoint,
   type WcFixture,
   type WcLineup,
   type WcMatchDetail,
@@ -383,6 +398,205 @@ function RatingsTab({
   );
 }
 
+// ---------- التغطية الحية (تعليق نصي مباشر من SportMonks، مُعرَّب) ----------
+
+function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }) {
+  // جلب كسول: التبويب لا يُركَّب إلا عند فتحه (Radix يلغي محتوى التبويب الخامل)
+  const { data, isLoading } = useQuery<WcCommentary>({
+    queryKey: [`/api/world-cup/commentary/${fixtureId}`],
+    refetchInterval: live ? 20_000 : false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 py-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const lines = Array.isArray(data?.lines) ? data!.lines : [];
+  if (lines.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        التعليق المباشر يظهر هنا لحظة بلحظة أثناء المباراة
+      </p>
+    );
+  }
+
+  return (
+    <ol className="py-1">
+      {lines.map((ln) => (
+        <li
+          key={ln.id}
+          className={`flex gap-3 py-2.5 border-b border-border/60 last:border-0 ${
+            ln.isGoal ? "bg-emerald-50 dark:bg-emerald-950/20 -mx-2 px-2 rounded-lg border-0" : ""
+          }`}
+        >
+          <Badge
+            variant={ln.isGoal ? "default" : "secondary"}
+            className={`tabular-nums shrink-0 h-fit min-w-[2.75rem] justify-center ${
+              ln.isGoal ? "bg-emerald-600 text-white" : ""
+            }`}
+            dir="ltr"
+          >
+            {ln.minute != null
+              ? `${ln.minute}${ln.extraMinute ? `+${ln.extraMinute}` : ""}'`
+              : "—"}
+          </Badge>
+          <div className="flex items-start gap-1.5 text-sm leading-relaxed">
+            {ln.isGoal && <Goal className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />}
+            <span className={ln.isImportant ? "font-bold" : ""}>{ln.text}</span>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// ---------- الزخم الهجومي (من trends — إضافة Match Facts بـSportMonks) ----------
+
+function MomentumTooltip({
+  active,
+  payload,
+  homeName,
+  awayName,
+}: {
+  active?: boolean;
+  payload?: { payload: WcMomentumPoint }[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-md" dir="rtl">
+      <p className="font-bold mb-0.5 tabular-nums" dir="ltr">
+        ~{p.minute}'
+      </p>
+      <p className="text-emerald-600">
+        {homeName}: <span className="font-bold tabular-nums">{p.home}</span>
+      </p>
+      <p className="text-rose-600">
+        {awayName}: <span className="font-bold tabular-nums">{Math.abs(p.away)}</span>
+      </p>
+    </div>
+  );
+}
+
+function PossessionBar({
+  home,
+  away,
+  homeName,
+  awayName,
+}: {
+  home: number;
+  away: number;
+  homeName: string;
+  awayName: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs font-bold mb-1">
+        <span className="text-emerald-600 tabular-nums">{home}%</span>
+        <span className="text-muted-foreground">الاستحواذ</span>
+        <span className="text-rose-600 tabular-nums">{away}%</span>
+      </div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full" dir="ltr">
+        <div className="bg-emerald-500" style={{ width: `${home}%` }} title={homeName} />
+        <div className="bg-rose-500" style={{ width: `${away}%` }} title={awayName} />
+      </div>
+    </div>
+  );
+}
+
+function MomentumTab({
+  fixtureId,
+  live,
+  homeName,
+  awayName,
+}: {
+  fixtureId: number;
+  live: boolean;
+  homeName: string;
+  awayName: string;
+}) {
+  const { data, isLoading } = useQuery<WcMomentum>({
+    queryKey: [`/api/world-cup/momentum/${fixtureId}`],
+    refetchInterval: live ? 30_000 : false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
+
+  const points = Array.isArray(data?.points) ? data!.points : [];
+  const possession = data?.possession ?? null;
+  // الاستحواذ قد يتوفّر قبل أن يُصدر المزوّد مقياس الزخم — لا نُخفيه معه
+  if (points.length === 0 && !possession) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        رسم الزخم يظهر هنا أثناء المباراة
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-3">
+      {possession && (
+        <PossessionBar
+          home={possession.home}
+          away={possession.away}
+          homeName={homeName}
+          awayName={awayName}
+        />
+      )}
+      {points.length > 0 ? (
+        <div>
+          <p className="text-[11px] text-muted-foreground mb-2 text-center">
+            الزخم الهجومي (الهجمات الخطيرة) — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
+          </p>
+          <div dir="ltr">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={1}>
+                <XAxis
+                  dataKey="minute"
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(m) => `${m}'`}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                />
+                <YAxis hide />
+                <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                <RechartsTooltip
+                  cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
+                  content={<MomentumTooltip homeName={homeName} awayName={awayName} />}
+                />
+                <Bar dataKey="net" radius={[2, 2, 0, 0]}>
+                  {points.map((p) => (
+                    <Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#e11d48"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground py-2">
+          رسم الزخم الهجومي يظهر فور توفّره أثناء المباراة
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -459,6 +673,18 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
           <Tabs defaultValue="events" dir="rtl" className="flex-1 min-h-0 flex flex-col">
             <TabsList className="self-center flex-wrap h-auto">
               <TabsTrigger value="events">الأحداث</TabsTrigger>
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsTrigger value="commentary" className="gap-1">
+                  <MessageSquareText className="h-3 w-3" />
+                  التغطية الحية
+                </TabsTrigger>
+              )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsTrigger value="momentum" className="gap-1">
+                  <Activity className="h-3 w-3" />
+                  الزخم
+                </TabsTrigger>
+              )}
               <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
               <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
               {detail.ratings.length > 0 && (
@@ -477,6 +703,21 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               <TabsContent value="events" className="mt-0">
                 <EventsTimeline events={detail.events} fixture={detail.fixture} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsContent value="commentary" className="mt-0">
+                  <CommentaryTab fixtureId={detail.fixture.id} live={detail.fixture.status.live} />
+                </TabsContent>
+              )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsContent value="momentum" className="mt-0">
+                  <MomentumTab
+                    fixtureId={detail.fixture.id}
+                    live={detail.fixture.status.live}
+                    homeName={detail.fixture.home.name}
+                    awayName={detail.fixture.away.name}
+                  />
+                </TabsContent>
+              )}
               <TabsContent value="lineups" className="mt-0">
                 <LineupsTab lineups={detail.lineups} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
