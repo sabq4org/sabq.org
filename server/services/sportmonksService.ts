@@ -22,6 +22,8 @@ const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
 const COMMENTARY_LIVE_TTL = 20 * 1000;
 const COMMENTARY_DONE_TTL = 60 * 60 * 1000;
 const RESOLVE_TTL = 2 * 60 * 1000;
+// سقف أسطر التعليق المُترجَمة (الأحدث أولًا) — يحدّ كلفة/زمن الترجمة الباردة
+const COMMENTARY_MAX_LINES = 150;
 
 // حالات SportMonks (developer_name) التي تعني «المباراة جارية الآن»
 const LIVE_STATES = new Set([
@@ -185,28 +187,34 @@ async function translateLines(rawEn: string[]): Promise<void> {
   if (missing.length === 0) return;
   if (!(process.env.OPENAI_API_KEY || "").trim()) return; // بلا AI — يُعرض الإنجليزي
 
-  for (let i = 0; i < missing.length; i += TR_BATCH) {
-    const batch = missing.slice(i, i + TR_BATCH);
-    try {
-      const translated = await aiTranslateBatch(batch);
-      // طابِق بمفتاح صدى النص أولًا، وإلا بالموضع — نموذج الـAI قد يُعيد
-      // صياغة الـ"en" المُرجَع، فلا نعتمد على تطابقه الحرفي وحده (وإلا وُسِم
-      // سطرٌ مُترجَم فعلًا كـ«فاشل» وبقي إنجليزيًا للأبد).
-      const byKey = new Map<string, string>();
-      for (const it of translated) {
-        if (it.en && it.ar) byKey.set(normLine(it.en), it.ar.trim());
+  const batches: string[][] = [];
+  for (let i = 0; i < missing.length; i += TR_BATCH) batches.push(missing.slice(i, i + TR_BATCH));
+
+  // دفعات متوازية — التسلسل كان يجعل ترجمة ~120 سطرًا تتجاوز مهلة الطلب
+  // (timeout) فلا يُكتب الكاش أبدًا ويبقى التبويب «هيكلًا عظميًا» للجميع.
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        const translated = await aiTranslateBatch(batch);
+        // طابِق بمفتاح صدى النص أولًا، وإلا بالموضع — نموذج الـAI قد يُعيد
+        // صياغة الـ"en" المُرجَع، فلا نعتمد على تطابقه الحرفي وحده (وإلا وُسِم
+        // سطرٌ مُترجَم فعلًا كـ«فاشل» وبقي إنجليزيًا للأبد).
+        const byKey = new Map<string, string>();
+        for (const it of translated) {
+          if (it.en && it.ar) byKey.set(normLine(it.en), it.ar.trim());
+        }
+        const positional = translated.length === batch.length;
+        batch.forEach((en, j) => {
+          const ar = byKey.get(en) ?? (positional ? (translated[j]?.ar ?? "").trim() : "");
+          if (ar) commentaryMemory.set(en, ar);
+          else failedLines.add(en);
+        });
+      } catch (error) {
+        console.warn("[SportMonks] commentary translate failed:", (error as Error)?.message);
+        for (const en of batch) failedLines.add(en);
       }
-      const positional = translated.length === batch.length;
-      batch.forEach((en, j) => {
-        const ar = byKey.get(en) ?? (positional ? (translated[j]?.ar ?? "").trim() : "");
-        if (ar) commentaryMemory.set(en, ar);
-        else failedLines.add(en);
-      });
-    } catch (error) {
-      console.warn("[SportMonks] commentary translate failed:", (error as Error)?.message);
-      for (const en of batch) failedLines.add(en);
-    }
-  }
+    })
+  );
 }
 
 async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: string }[]> {
@@ -229,7 +237,7 @@ async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: st
     response_format: { type: "json_object" },
     temperature: 0.2,
     max_tokens: Math.min(8000, 200 + lines.length * 60),
-  });
+  }, { timeout: 15000, maxRetries: 1 });
 
   const content = response.choices[0]?.message?.content;
   if (!content) return [];
@@ -249,24 +257,28 @@ async function buildCommentary(smFixtureId: number): Promise<WcCommentary> {
     return { available: false, live, source: "sportmonks", lines: [] };
   }
 
-  await translateLines(rawComments.map((c) => String(c.comment ?? "")));
+  // الأحدث أولًا (feed مباشر) ثم نقتصر على آخر COMMENTARY_MAX_LINES — نترجم
+  // المعروض فقط لئلا يتجاوز التحميل البارد مهلة الطلب.
+  const recent = [...rawComments]
+    .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
+    .slice(0, COMMENTARY_MAX_LINES);
 
-  const lines: WcCommentaryLine[] = rawComments
-    .map((c): WcCommentaryLine => {
-      const en = String(c.comment ?? "");
-      const key = normLine(en);
-      return {
-        id: c.id ?? 0,
-        order: c.order ?? 0,
-        minute: c.minute ?? null,
-        extraMinute: c.extra_minute ?? null,
-        text: commentaryMemory.get(key) ?? en,
-        textEn: en,
-        isGoal: Boolean(c.is_goal),
-        isImportant: Boolean(c.is_important),
-      };
-    })
-    .sort((a, b) => b.order - a.order); // الأحدث أولًا — تجربة feed مباشر
+  await translateLines(recent.map((c) => String(c.comment ?? "")));
+
+  const lines: WcCommentaryLine[] = recent.map((c): WcCommentaryLine => {
+    const en = String(c.comment ?? "");
+    const key = normLine(en);
+    return {
+      id: c.id ?? 0,
+      order: c.order ?? 0,
+      minute: c.minute ?? null,
+      extraMinute: c.extra_minute ?? null,
+      text: commentaryMemory.get(key) ?? en,
+      textEn: en,
+      isGoal: Boolean(c.is_goal),
+      isImportant: Boolean(c.is_important),
+    };
+  });
 
   return { available: true, live, source: "sportmonks", lines };
 }
