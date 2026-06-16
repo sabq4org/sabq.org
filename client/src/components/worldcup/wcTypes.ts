@@ -25,6 +25,8 @@ export interface WcCommentaryLine {
 export interface WcCommentary {
   available: boolean;
   live: boolean;
+  /** ما زالت بعض الأسطر تُترجَم خلفيًا — تحدّث الواجهة حتى تكتمل */
+  translating: boolean;
   source: string;
   lines: WcCommentaryLine[];
 }

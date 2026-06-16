@@ -5,6 +5,7 @@ import {
   ArrowLeftRight,
   Crown,
   Goal,
+  Loader2,
   MapPin,
   MessageSquareText,
   MonitorPlay,
@@ -404,7 +405,11 @@ function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }
   // جلب كسول: التبويب لا يُركَّب إلا عند فتحه (Radix يلغي محتوى التبويب الخامل)
   const { data, isLoading } = useQuery<WcCommentary>({
     queryKey: [`/api/world-cup/commentary/${fixtureId}`],
-    refetchInterval: live ? 20_000 : false,
+    refetchInterval: (query) => {
+      const d = query.state.data as WcCommentary | undefined;
+      if (d?.translating) return 5_000; // حدّث بسرعة حتى يكتمل التعريب الخلفي
+      return d?.live || live ? 20_000 : false;
+    },
   });
 
   if (isLoading) {
@@ -427,7 +432,14 @@ function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }
   }
 
   return (
-    <ol className="py-1">
+    <div>
+      {data?.translating && (
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground pb-2 sticky top-0 bg-background/90 backdrop-blur-sm">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          جارٍ تعريب التعليق…
+        </div>
+      )}
+      <ol className="py-1">
       {lines.map((ln) => (
         <li
           key={ln.id}
@@ -452,7 +464,8 @@ function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }
           </div>
         </li>
       ))}
-    </ol>
+      </ol>
+    </div>
   );
 }
 

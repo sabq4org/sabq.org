@@ -12,7 +12,10 @@
  * نرجّع { available:false } دون أي عطل — الواجهة تعرض حالة فارغة لبقة.
  */
 import OpenAI from "openai";
+import { inArray } from "drizzle-orm";
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import { db } from "../db";
+import { wcCommentaryLines } from "@shared/schema";
 import { getFixtureIdentity, type WcFixtureIdentity } from "./worldCupService";
 
 const SM_BASE = "https://api.sportmonks.com/v3/football";
@@ -46,6 +49,8 @@ const commentaryMemory = new Map<string, string>();
 const failedLines = new Set<string>();
 // ربط إيجابي فقط: معرّف API-Football → معرّف SportMonks (دائم بعد أول حلّ)
 const fixtureIdMap = new Map<number, number>();
+// مباريات تُترجَم خلفيًا الآن — يمنع إطلاق ترجمة مكرّرة لنفس المباراة
+const translatingFixtures = new Set<number>();
 
 export function isSportmonksConfigured(): boolean {
   return Boolean((process.env.SPORTMONKS_API_TOKEN || "").trim());
@@ -82,6 +87,8 @@ export interface WcCommentaryLine {
 export interface WcCommentary {
   available: boolean;
   live: boolean;
+  /** ما زالت بعض الأسطر تُترجَم خلفيًا — تطلب الواجهة التحديث حتى تكتمل */
+  translating: boolean;
   source: "sportmonks";
   lines: WcCommentaryLine[];
 }
@@ -89,6 +96,7 @@ export interface WcCommentary {
 const EMPTY_COMMENTARY: WcCommentary = {
   available: false,
   live: false,
+  translating: false,
   source: "sportmonks",
   lines: [],
 };
@@ -177,13 +185,34 @@ async function resolveSportmonksFixtureId(
 // دفعة 30 سطرًا (~14s بالقياس) أصغر من 50 (~26s) — أسرع للتوازي وتحت المهلة
 const TR_BATCH = 30;
 
+/**
+ * يملأ كاش الذاكرة من جدول الترجمة الدائم للمفاتيح الناقصة — «أفضل جهد»:
+ * لو لم يُنشأ الجدول بعد نتجاوز دون عطل. يجعل أول زائر بعد إنشاء الجدول
+ * يرى العربية فورًا (بلا انتظار AI) لأي سطر تُرجم سابقًا في أي نسخة.
+ */
+async function primeFromDb(keys: string[]): Promise<void> {
+  const want = Array.from(
+    new Set(keys.filter((k) => k && !commentaryMemory.has(k) && !failedLines.has(k)))
+  );
+  if (want.length === 0) return;
+  try {
+    const rows = await db
+      .select({ source: wcCommentaryLines.source, arabic: wcCommentaryLines.arabic })
+      .from(wcCommentaryLines)
+      .where(inArray(wcCommentaryLines.source, want));
+    for (const row of rows) commentaryMemory.set(row.source, row.arabic);
+  } catch (error) {
+    console.warn("[SportMonks] commentary DB cache read skipped:", (error as Error)?.message);
+  }
+}
+
 async function translateLines(rawEn: string[]): Promise<void> {
+  const normalized = rawEn.map(normLine).filter((s) => s.length > 0);
+  // الجدول الدائم أولًا — يقلّص ما يُرسَل للـAI إلى الجديد فعلًا
+  await primeFromDb(normalized);
+
   const missing = Array.from(
-    new Set(
-      rawEn
-        .map(normLine)
-        .filter((s) => s.length > 0 && !commentaryMemory.has(s) && !failedLines.has(s))
-    )
+    new Set(normalized.filter((s) => !commentaryMemory.has(s) && !failedLines.has(s)))
   );
   if (missing.length === 0) return;
   if (!(process.env.OPENAI_API_KEY || "").trim()) return; // بلا AI — يُعرض الإنجليزي
@@ -191,8 +220,9 @@ async function translateLines(rawEn: string[]): Promise<void> {
   const batches: string[][] = [];
   for (let i = 0; i < missing.length; i += TR_BATCH) batches.push(missing.slice(i, i + TR_BATCH));
 
-  // دفعات متوازية — التسلسل كان يجعل ترجمة ~120 سطرًا تتجاوز مهلة الطلب
-  // (timeout) فلا يُكتب الكاش أبدًا ويبقى التبويب «هيكلًا عظميًا» للجميع.
+  const toPersist: { source: string; arabic: string }[] = [];
+
+  // دفعات متوازية — التسلسل كان يجعل ترجمة ~120 سطرًا تتجاوز مهلة الطلب.
   await Promise.all(
     batches.map(async (batch) => {
       try {
@@ -207,8 +237,12 @@ async function translateLines(rawEn: string[]): Promise<void> {
         const positional = translated.length === batch.length;
         batch.forEach((en, j) => {
           const ar = byKey.get(en) ?? (positional ? (translated[j]?.ar ?? "").trim() : "");
-          if (ar) commentaryMemory.set(en, ar);
-          else failedLines.add(en);
+          if (ar) {
+            commentaryMemory.set(en, ar);
+            toPersist.push({ source: en, arabic: ar });
+          } else {
+            failedLines.add(en);
+          }
         });
       } catch (error) {
         console.warn("[SportMonks] commentary translate failed:", (error as Error)?.message);
@@ -216,6 +250,15 @@ async function translateLines(rawEn: string[]): Promise<void> {
       }
     })
   );
+
+  // حفظ دائم «أفضل جهد» — يجعل الترجمة لا تُعاد بعد إعادة التشغيل/عبر النُسخ
+  if (toPersist.length > 0) {
+    try {
+      await db.insert(wcCommentaryLines).values(toPersist).onConflictDoNothing();
+    } catch (error) {
+      console.warn("[SportMonks] commentary DB cache write skipped:", (error as Error)?.message);
+    }
+  }
 }
 
 async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: string }[]> {
@@ -246,42 +289,73 @@ async function aiTranslateBatch(lines: string[]): Promise<{ en?: string; ar?: st
   return parsed.lines ?? [];
 }
 
-// ---------- بناء التعليق المُعرَّب ----------
+// ---------- بناء التعليق المُعرَّب (تقدّمي: لا ينتظر الـAI أبدًا) ----------
 
-async function buildCommentary(smFixtureId: number): Promise<WcCommentary> {
+interface RawCommentary {
+  available: boolean;
+  live: boolean;
+  raw: any[]; // أحدث أولًا، مقصوص، بلا تكرار متتالٍ
+}
+
+/**
+ * جلب التعليق الخام من SportMonks فقط (رخيص ~1s) — يُخزَّن في SWR. الترجمة
+ * تُطبَّق لاحقًا من الذاكرة/DB فلا نحبس الرد على الـAI إطلاقًا.
+ */
+async function fetchRawCommentary(smFixtureId: number): Promise<RawCommentary> {
   const resp = await smGet(`fixtures/${smFixtureId}`, { include: "comments;state" });
   const data = resp?.data ?? {};
-  const rawComments: any[] = Array.isArray(data.comments) ? data.comments : [];
+  const comments: any[] = Array.isArray(data.comments) ? data.comments : [];
   const live = LIVE_STATES.has(data.state?.developer_name ?? "");
+  if (comments.length === 0) return { available: false, live, raw: [] };
 
-  if (rawComments.length === 0) {
-    return { available: false, live, source: "sportmonks", lines: [] };
-  }
-
-  // الأحدث أولًا (feed مباشر) ثم نقتصر على آخر COMMENTARY_MAX_LINES — نترجم
-  // المعروض فقط لئلا يتجاوز التحميل البارد مهلة الطلب.
-  const recent = [...rawComments]
+  // أحدث أولًا، قصّ لآخر COMMENTARY_MAX_LINES، وإسقاط التكرار المتتالي
+  // (SportMonks يكرّر بعض الأسطر حرفيًا).
+  const sorted = [...comments]
     .sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
     .slice(0, COMMENTARY_MAX_LINES);
+  const raw: any[] = [];
+  let prevKey = "";
+  for (const c of sorted) {
+    const key = normLine(String(c.comment ?? ""));
+    if (key && key === prevKey) continue;
+    raw.push(c);
+    prevKey = key;
+  }
+  return { available: true, live, raw };
+}
 
-  await translateLines(recent.map((c) => String(c.comment ?? "")));
+function toLine(c: any): WcCommentaryLine {
+  const en = String(c.comment ?? "");
+  return {
+    id: c.id ?? 0,
+    order: c.order ?? 0,
+    minute: c.minute ?? null,
+    extraMinute: c.extra_minute ?? null,
+    text: commentaryMemory.get(normLine(en)) ?? en,
+    textEn: en,
+    isGoal: Boolean(c.is_goal),
+    isImportant: Boolean(c.is_important),
+  };
+}
 
-  const lines: WcCommentaryLine[] = recent.map((c): WcCommentaryLine => {
-    const en = String(c.comment ?? "");
-    const key = normLine(en);
-    return {
-      id: c.id ?? 0,
-      order: c.order ?? 0,
-      minute: c.minute ?? null,
-      extraMinute: c.extra_minute ?? null,
-      text: commentaryMemory.get(key) ?? en,
-      textEn: en,
-      isGoal: Boolean(c.is_goal),
-      isImportant: Boolean(c.is_important),
-    };
-  });
+/**
+ * يطلق ترجمة خلفية للأسطر الناقصة (دون انتظار) ويرجع هل بقي ناقص.
+ * تُدمج طلبات نفس المباراة عبر translatingFixtures فلا تُكرَّر الترجمة.
+ */
+function scheduleBackgroundTranslation(smFixtureId: number, raw: any[]): boolean {
+  if (!(process.env.OPENAI_API_KEY || "").trim()) return false;
+  const pending = raw
+    .map((c) => normLine(String(c.comment ?? "")))
+    .filter((k) => k && !commentaryMemory.has(k) && !failedLines.has(k));
+  if (pending.length === 0) return false;
 
-  return { available: true, live, source: "sportmonks", lines };
+  if (!translatingFixtures.has(smFixtureId)) {
+    translatingFixtures.add(smFixtureId);
+    translateLines(raw.map((c) => String(c.comment ?? "")))
+      .catch(() => {})
+      .finally(() => translatingFixtures.delete(smFixtureId));
+  }
+  return true;
 }
 
 /**
@@ -315,7 +389,27 @@ export async function getCommentary(
 ): Promise<WcCommentary> {
   const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
   if (!r) return EMPTY_COMMENTARY;
-  return withSWR(`wc:commentary:${r.smId}`, r.ttl, r.ttl * 3, () => buildCommentary(r.smId));
+
+  // كاش رخيص للجلب الخام فقط — لا ننتظر الترجمة هنا أبدًا
+  const rawC = await withSWR(`wc:commentary:${r.smId}`, r.ttl, r.ttl * 3, () =>
+    fetchRawCommentary(r.smId)
+  );
+  if (!rawC.available) {
+    return { available: false, live: rawC.live, translating: false, source: "sportmonks", lines: [] };
+  }
+
+  // املأ من الجدول الدائم (سريع) ليُعرض المُترجَم سابقًا فورًا، ثم أطلق
+  // ترجمة خلفية للباقي — الواجهة تحدّث حتى يكتمل translating
+  await primeFromDb(rawC.raw.map((c) => normLine(String(c.comment ?? ""))));
+  const translating = scheduleBackgroundTranslation(r.smId, rawC.raw);
+
+  return {
+    available: true,
+    live: rawC.live,
+    translating,
+    source: "sportmonks",
+    lines: rawC.raw.map(toLine),
+  };
 }
 
 // ---------- الزخم الهجومي (من trends — إضافة Match Facts) ----------
