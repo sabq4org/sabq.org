@@ -153,6 +153,35 @@ export async function getLiveFixtures(): Promise<WcFixture[]> {
   });
 }
 
+/**
+ * هوية المباراة الخام (أسماء إنجليزية + توقيت UTC + الحالة) — يحتاجها
+ * sportmonksService لمطابقة المباراة عند مزوّد آخر بمعرّفات مختلفة.
+ * منفصلة عن DTOs المُعرَّبة لأن المطابقة تحتاج الاسم الإنجليزي لا العربي.
+ */
+export interface WcFixtureIdentity {
+  kickoffIso: string; // ISO مع الإزاحة (نشتق منه يوم UTC)
+  homeNameEn: string;
+  awayNameEn: string;
+  live: boolean;
+  finished: boolean;
+}
+
+export async function getFixtureIdentity(fixtureId: number): Promise<WcFixtureIdentity | null> {
+  return withSWR(`wc:identity:${fixtureId}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return null;
+    const code: string = item.fixture?.status?.short ?? "TBD";
+    return {
+      kickoffIso: item.fixture?.date ?? "",
+      homeNameEn: item.teams?.home?.name ?? "",
+      awayNameEn: item.teams?.away?.name ?? "",
+      live: WC_LIVE_STATUSES.has(code),
+      finished: WC_FINISHED_STATUSES.has(code),
+    };
+  });
+}
+
 export interface WcStandingRow {
   rank: number;
   team: WcTeam;

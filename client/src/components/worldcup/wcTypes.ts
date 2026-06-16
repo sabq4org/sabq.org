@@ -10,6 +10,25 @@ export interface WcTeam {
   winner: boolean | null;
 }
 
+/** التعليق النصي المباشر (من SportMonks، مُعرَّب) — /api/world-cup/commentary/:id */
+export interface WcCommentaryLine {
+  id: number;
+  order: number;
+  minute: number | null;
+  extraMinute: number | null;
+  text: string;
+  textEn: string;
+  isGoal: boolean;
+  isImportant: boolean;
+}
+
+export interface WcCommentary {
+  available: boolean;
+  live: boolean;
+  source: string;
+  lines: WcCommentaryLine[];
+}
+
 export interface WcFixture {
   id: number;
   date: string;
