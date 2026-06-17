@@ -3,14 +3,23 @@ import App from "./App";
 import "./index.css";
 import "./mobile.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
+import { startBuildVersionPolling } from "./lib/buildVersion";
 
 // Recover from "white page after deploy": if a lazily-loaded chunk 404s
 // because the edge-cached shell points at a rotated build, hard-reload once
 // (cache-busted) to fetch the current deploy. This is what makes edge-caching
 // the SPA shell in functions/_middleware.js safe. Production only — Vite's HMR
 // handles chunk rotation in dev.
+//
+// REACTIVE layer: deployRecovery listens for `vite:preloadError` / lazy-import
+// failures and reloads once with a cache buster.
+// PROACTIVE layer: buildVersion polls /build-info.json so an open tab reloads
+// to the current deploy BEFORE it tries to load a deleted chunk — turning the
+// post-deploy "white page" into a transparent refresh. Combined with the clean
+// 404 for missing /assets/* in functions/_middleware.js, this closes the loop.
 if (import.meta.env.PROD) {
   installDeployRecovery();
+  startBuildVersionPolling();
 }
 
 // Suppress noisy errors from third-party ad scripts. They reach
@@ -66,7 +75,7 @@ if (import.meta.env.PROD && Capacitor.isNativePlatform()) {
     StatusBar.setBackgroundColor({ color: "#1a73e8" }).catch(() => {});
     Keyboard.setAccessoryBarVisible({ isVisible: true }).catch(() => {});
     CapacitorApp.addListener("appStateChange", ({ isActive }) => {
-      console.log("App state changed. Is active?", isActive);
+      console.warn("App state changed. Is active?", isActive);
     }).catch(() => {});
   }).catch(() => {});
 }

@@ -486,6 +486,15 @@ function apiCacheKey(requestUrl) {
   return new Request(u.toString(), { method: "GET" });
 }
 
+// NOTE: a "/assets/* → 404" guard used to live here to intercept deleted chunks
+// before the SPA fallback served them as HTML. It was removed because
+// _routes.json excludes /assets/* from this middleware (so the guard never ran
+// for the very paths it protected), and removing the exclude triggered a
+// Cloudflare "Failed to publish assets" deployment error. Post-deploy recovery
+// now relies on the proactive buildVersion poll (client/src/lib/buildVersion.ts)
+// + the reactive retryImport/deployRecovery layer, which already classifies the
+// MIME/CORS refusal of an HTML response to a .js request as a chunk failure.
+
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
