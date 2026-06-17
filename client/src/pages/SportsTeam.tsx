@@ -14,6 +14,10 @@ import {
   MapPin,
   Shield,
   Users,
+  Activity,
+  Crown,
+  ClipboardList,
+  Goal,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -48,10 +52,192 @@ interface SpTeamProfile {
   competitionName: string | null;
   fixtures: SpFixture[];
   squad: SpSquadPlayer[];
+  // الموجة 1: إثراء اختياري يُضمَّن عبر ?with=stats.
+  stats: SpTeamStats | null;
+  coach: SpCoach | null;
+  topScorers: SpTeamScorer[];
+}
+// الموجة 1: إحصاءات النادي الشاملة + المدرب + هدّافو النادي.
+interface SpStatTriple { total: number; home: number; away: number; }
+interface SpTeamStats {
+  leagueId: number; season: number;
+  fixtures: {
+    played: SpStatTriple; wins: SpStatTriple; draws: SpStatTriple; loses: SpStatTriple;
+  };
+  goals: {
+    for: { total: number; average: string; home: string; away: string };
+    against: { total: number; average: string; home: string; away: string };
+  };
+  biggest: {
+    winsHome: string | null; winsAway: string | null;
+    losesHome: string | null; losesAway: string | null;
+    streakWin: number | null; streakLose: number | null; streakDraw: number | null;
+  };
+  summary: {
+    cleanSheets: SpStatTriple; failedToScore: SpStatTriple;
+    cards: { yellowTotal: number; redTotal: number };
+    mostUsedFormation: string | null;
+  };
+}
+interface SpCoach {
+  id: number; name: string; photo: string; nationality: string;
+  age: number | null; startDate: string | null;
+  career: { team: string; start: string | null; end: string | null }[];
+}
+interface SpTeamScorer {
+  rank: number; id: number; name: string; photo: string;
+  goals: number; assists: number; penalties: number; matches: number;
 }
 
 const dayFmt = new Intl.DateTimeFormat("ar-SA", { weekday: "short", day: "numeric", month: "short" });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
+
+const monthFmt = new Intl.DateTimeFormat("ar-SA", { year: "numeric", month: "short" });
+function fmtMonth(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : monthFmt.format(d);
+}
+
+// الموجة 1: بطاقة «نبض الأرقام» — إحصاءات النادي الشاملة.
+function StatMini({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="text-center p-2.5 rounded-lg bg-muted/40">
+      <div className={`text-base sm:text-lg font-black tabular-nums ${accent ? "text-primary" : "text-foreground"}`}>{value}</div>
+      <div className="text-[10px] text-muted-foreground mt-0.5">{label}</div>
+    </div>
+  );
+}
+
+function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
+  const { fixtures, goals, biggest, summary } = stats;
+  const wdlTotal = `${fixtures.wins.total}-${fixtures.draws.total}-${fixtures.loses.total}`;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Activity className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">نبض الأرقام</h2>
+        <Badge variant="secondary" className="text-[10px]">موسم {stats.season}</Badge>
+      </div>
+
+      {/* لعب/فوز/تعادل/خسارة + الأهداف */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5 mb-5">
+        <StatMini label="مباريات" value={fixtures.played.total} accent />
+        <StatMini label="ف-ت-خ" value={<span dir="ltr">{wdlTotal}</span>} />
+        <StatMini label="نظافة شباك" value={summary.cleanSheets.total} />
+        <StatMini label="أهداف له" value={goals.for.total} accent />
+        <StatMini label="أهداف عليه" value={goals.against.total} />
+        <StatMini label="معدّل له/م" value={goals.for.average} />
+      </div>
+
+      {/* داخل وخارج الأرض */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="rounded-lg bg-muted/30 p-3">
+          <div className="text-[11px] font-bold text-muted-foreground mb-2">داخل الأرض</div>
+          <div className="grid grid-cols-3 gap-1.5 text-center">
+            <div><div className="font-black text-emerald-600 tabular-nums">{fixtures.wins.home}</div><div className="text-[10px] text-muted-foreground">فوز</div></div>
+            <div><div className="font-black text-amber-600 tabular-nums">{fixtures.draws.home}</div><div className="text-[10px] text-muted-foreground">تعادل</div></div>
+            <div><div className="font-black text-red-600 tabular-nums">{fixtures.loses.home}</div><div className="text-[10px] text-muted-foreground">خسارة</div></div>
+          </div>
+        </div>
+        <div className="rounded-lg bg-muted/30 p-3">
+          <div className="text-[11px] font-bold text-muted-foreground mb-2">خارج الأرض</div>
+          <div className="grid grid-cols-3 gap-1.5 text-center">
+            <div><div className="font-black text-emerald-600 tabular-nums">{fixtures.wins.away}</div><div className="text-[10px] text-muted-foreground">فوز</div></div>
+            <div><div className="font-black text-amber-600 tabular-nums">{fixtures.draws.away}</div><div className="text-[10px] text-muted-foreground">تعادل</div></div>
+            <div><div className="font-black text-red-600 tabular-nums">{fixtures.loses.away}</div><div className="text-[10px] text-muted-foreground">خسارة</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* أكبر النتائج والسلاسل */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
+        {biggest.winsHome && <StatMini label="أكبر فوز بالأرض" value={<span dir="ltr">{biggest.winsHome}</span>} />}
+        {biggest.winsAway && <StatMini label="أكبر فوز خارجًا" value={<span dir="ltr">{biggest.winsAway}</span>} />}
+        {biggest.losesHome && <StatMini label="أكبر خسارة بالأرض" value={<span dir="ltr">{biggest.losesHome}</span>} />}
+        {biggest.losesAway && <StatMini label="أكبر خسارة خارجًا" value={<span dir="ltr">{biggest.losesAway}</span>} />}
+      </div>
+
+      {/* السلاسل + البطاقات + التشكيلة */}
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
+        {biggest.streakWin != null && (
+          <Badge variant="secondary" className="gap-1"><Crown className="w-3 h-3 text-emerald-500" /> أطول سلسلة فوز: {biggest.streakWin}</Badge>
+        )}
+        {biggest.streakLose != null && (
+          <Badge variant="secondary" className="gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> أطول سلسلة خسارة: {biggest.streakLose}</Badge>
+        )}
+        <Badge variant="secondary" className="gap-1"><span className="w-2.5 h-3 rounded-sm bg-amber-400" /> {summary.cards.yellowTotal} صفراء</Badge>
+        <Badge variant="secondary" className="gap-1"><span className="w-2.5 h-3 rounded-sm bg-red-500" /> {summary.cards.redTotal} حمراء</Badge>
+        {summary.mostUsedFormation && (
+          <Badge variant="secondary" className="gap-1"><ClipboardList className="w-3 h-3" /> التشكيلة: <span dir="ltr">{summary.mostUsedFormation}</span></Badge>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// الموجة 1: بطاقة المدرب.
+function CoachCard({ coach }: { coach: SpCoach }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <ClipboardList className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">الجهاز الفني</h2>
+      </div>
+      <div className="flex items-center gap-4">
+        {coach.photo ? (
+          <img src={coach.photo} alt={coach.name} className="w-16 h-16 rounded-full object-cover bg-muted ring-2 ring-primary/20" loading="lazy" />
+        ) : (
+          <span className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <Users className="w-7 h-7 text-muted-foreground/50" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <div className="font-bold text-foreground">{coach.name}</div>
+          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap mt-1">
+            <span>مدرب</span>
+            {coach.nationality && <Badge variant="outline" className="text-[10px]">{coach.nationality}</Badge>}
+            {coach.startDate && <span className="tabular-nums">منذ {fmtMonth(coach.startDate)}</span>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// الموجة 1: هدّافو النادي.
+function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
+  if (scorers.length === 0) return null;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Goal className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">هدّافو النادي</h2>
+        <Badge variant="secondary" className="text-[10px]">هذا الموسم</Badge>
+      </div>
+      <div className="divide-y divide-border">
+        {scorers.map((s) => (
+          <Link key={s.id} href={`/sports2/player/${s.id}`} className="flex items-center gap-3 py-2.5 hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+            <span className="w-5 text-center font-bold text-muted-foreground text-sm tabular-nums">{s.rank}</span>
+            {s.photo ? <img src={s.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted" />}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-foreground truncate">{s.name}</div>
+              <div className="text-[11px] text-muted-foreground tabular-nums">{s.matches} مباراة</div>
+            </div>
+            <div className="text-center">
+              <span className="font-black text-primary tabular-nums">{s.goals}</span>
+              <div className="text-[10px] text-muted-foreground">هدف</div>
+            </div>
+            <div className="text-center pr-2 border-r border-border">
+              <span className="font-bold text-amber-600 tabular-nums">{s.assists}</span>
+              <div className="text-[10px] text-muted-foreground">صناعة</div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 const POSITION_SECTIONS: { en: string; label: string }[] = [
   { en: "Goalkeeper", label: "حراسة المرمى" },
@@ -99,7 +285,7 @@ export default function SportsTeam() {
   const id = Number(params.id);
 
   const { data, isLoading, isError } = useQuery<SpTeamProfile>({
-    queryKey: [`/api/sports/team/${id}`],
+    queryKey: [`/api/sports/team/${id}`, { with: "stats" }],
     enabled: Number.isFinite(id) && id > 0,
     staleTime: 5 * 60_000,
   });
@@ -183,6 +369,19 @@ export default function SportsTeam() {
                 </div>
               )}
             </Card>
+
+            {/* نبض الأرقام + الجهاز الفني + هدّافو النادي (الموجة 1) */}
+            {(data.stats || data.coach || data.topScorers.length > 0) && (
+              <div className="grid lg:grid-cols-2 gap-5 items-start">
+                {data.stats && <TeamStatsCard stats={data.stats} />}
+                {data.coach && <CoachCard coach={data.coach} />}
+                {data.topScorers.length > 0 && (
+                  <div className="lg:col-span-2">
+                    <TeamScorersCard scorers={data.topScorers} />
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* المباريات */}
             {(results.length > 0 || upcoming.length > 0) && (

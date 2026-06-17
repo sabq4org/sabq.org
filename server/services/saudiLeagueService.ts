@@ -505,14 +505,21 @@ export interface SplTeamProfile {
   competitionName: string | null;
   fixtures: SplFixture[];
   squad: SplSquadPlayer[];
+  /** الموجة 1: إثراء اختياري — يُملأ فقط إن طُلب عبر ?with=stats */
+  stats: SplTeamStats | null;
+  coach: SplCoach | null;
+  topScorers: SplTeamScorer[];
 }
 
 /**
  * صفحة النادي المتكاملة: هويته + صفّه في ترتيب دوريه + مبارياته + تشكيلته.
  * يحدّد دوري النادي بالبحث في جداول البطولات السعودية ذات الترتيب (روشن أولًا).
  * كل النداءات خلف كاش SWR مشترك، فالتجميع لا يكلّف المزود نداءات تُذكر.
+ *
+ * بموجب الموجة 1: تُضاف إحصاءات النادي + المدرب + هدّافوه عند تمرير
+ * withExtras=true (تُجلب فقط في صفحة النادي، لا في الاستهلاك الداخلي).
  */
-export async function getTeamProfile(teamId: number): Promise<SplTeamProfile | null> {
+export async function getTeamProfile(teamId: number, opts?: { withExtras?: boolean }): Promise<SplTeamProfile | null> {
   const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
 
   let comp: SaudiCompetition | null = null;
@@ -527,10 +534,23 @@ export async function getTeamProfile(teamId: number): Promise<SplTeamProfile | n
     }
   }
 
-  const [info, squad] = await Promise.all([
+  const fetchBase = [
     getTeamInfo(teamId).catch(() => null),
     getSquad(teamId).catch(() => null),
-  ]);
+  ] as const;
+
+  // الإثراء يُجلب تزامنيًا (Promise.all) فقط حين يطلبه المستهلك، حتى لا
+  // تُكلّف نقطة /api/sports/team/:id نداءات إضافية عند من لا يستخدمها.
+  const withExtras = opts?.withExtras === true;
+  const extrasPromise = withExtras
+    ? Promise.all([
+        getTeamStats(teamId, comp).catch(() => null),
+        getTeamCoach(teamId).catch(() => null),
+        getTeamTopScorers(teamId, comp).catch(() => [] as SplTeamScorer[]),
+      ])
+    : Promise.resolve([null, null, [] as SplTeamScorer[]] as const);
+
+  const [[info, squad], [stats, coach, topScorers]] = await Promise.all([Promise.all(fetchBase), extrasPromise]);
 
   let fixtures: SplFixture[] = [];
   if (comp) {
@@ -552,6 +572,9 @@ export async function getTeamProfile(teamId: number): Promise<SplTeamProfile | n
     competitionName: comp?.name ?? null,
     fixtures,
     squad: squad?.players ?? [],
+    stats,
+    coach,
+    topScorers,
   };
 }
 
@@ -697,5 +720,263 @@ export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | n
       career,
       trophies,
     };
+  });
+}
+
+// ---------- الموجة 1: إثراء النادي والبطولة ----------
+
+const ASSISTS_TTL = CACHE_TTL.LONG; // صنّاع الأهداف يتحرك ببطء كالهدّافين
+const TEAM_STATS_TTL = 30 * 60 * 1000; // إحصاءات النادي شبه ثابتة بين الجولات
+const COACH_TTL = 6 * 60 * 60 * 1000; // المدرب لا يتغيّر إلا بين المواسم غالبًا
+const TEAM_SCORERS_TTL = CACHE_TTL.LONG; // هدّافو النادي يحتاج تجديدًا بطيئًا
+
+/** هل تدعم البطولة إحصاءات تفصيلية للفرق؟ نفس علم hasStats في SAUDI_COMPETITIONS. */
+function competitionForStats(comp: SaudiCompetition | null): SaudiCompetition | null {
+  return comp && comp.hasStats ? comp : null;
+}
+
+// ---- صنّاع الأهداف ----
+
+export interface SplAssister {
+  rank: number;
+  id: number;
+  name: string;
+  photo: string;
+  team: SplTeam;
+  goals: number;
+  assists: number;
+  matches: number;
+}
+
+/**
+ * أعلى صنّاع الأهداف في بطولة. نفس بنية topScorers لكنها تستدعي
+ * players/topassists. ترجع [] للبطولات التي لا تدعمها أو إن غاب المزوّد.
+ */
+export async function getTopAssists(comp: SaudiCompetition): Promise<SplAssister[]> {
+  if (!comp.hasScorers) return [];
+  const season = await seasonFor(comp);
+  return withSWR(`spl:assists:${comp.id}`, ASSISTS_TTL, ASSISTS_TTL * 2, async () => {
+    const rows = await apiGet("players/topassists", { league: comp.id, season });
+    return rows.slice(0, 15).map((row: any, index: number): SplAssister => {
+      const stats = row.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row.player?.id ?? 0,
+        name: localizePlayerName(row.player?.name) || row.player?.name || "",
+        photo: row.player?.photo ?? "",
+        team: localizeTeam(stats.team),
+        goals: stats.goals?.total ?? 0,
+        assists: stats.goals?.assists ?? 0,
+        matches: stats.games?.appearences ?? 0,
+      };
+    });
+  });
+}
+
+// ---- إحصاءات النادي الشاملة (teams/statistics) ----
+
+export interface SplTeamStatFixtures {
+  played: { total: number; home: number; away: number };
+  wins: { total: number; home: number; away: number };
+  draws: { total: number; home: number; away: number };
+  loses: { total: number; home: number; away: number };
+}
+
+export interface SplTeamStatGoals {
+  for: { total: number; average: string; home: string; away: string };
+  against: { total: number; average: string; home: string; away: string };
+}
+
+export interface SplTeamStatBiggest {
+  winsHome: string | null;
+  winsAway: string | null;
+  losesHome: string | null;
+  losesAway: string | null;
+  streakWin: number | null;
+  streakLose: number | null;
+  streakDraw: number | null;
+}
+
+export interface SplTeamStatSummary {
+  cleanSheets: { total: number; home: number; away: number };
+  failedToScore: { total: number; home: number; away: number };
+  cards: { yellowTotal: number; redTotal: number };
+  mostUsedFormation: string | null;
+}
+
+export interface SplTeamStats {
+  leagueId: number;
+  season: number;
+  fixtures: SplTeamStatFixtures;
+  goals: SplTeamStatGoals;
+  biggest: SplTeamStatBiggest;
+  summary: SplTeamStatSummary;
+}
+
+const numOr0 = (v: any): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const strOrNull = (v: any): string | null => (typeof v === "string" && v.trim() ? v : null);
+const numOrNull = (v: any): number | null =>
+  typeof v === "number" && Number.isFinite(v) ? v : null;
+
+/**
+ * إحصاءات النادي الكاملة في بطولته: لعب/فوز/تعادل/خسارة (داخل وخارج الأرض)،
+ * الأهداف له/عليه ومتوسطاتها، أكبر النتائج، أطول السلاسل، نظافة الشباك،
+ * البطاقات، والتشكيلة الأكثر استخداماً. مصدرها teams/statistics.
+ *
+ * تتطلّب بطولة تدعم الإحصاءات (hasStats). إن لم يُعرف دوري النادي (نادٍ من
+ * كأس مثلًا) نحاول افتراضيًا دوري روشن قبل أن نُرجع null.
+ */
+export async function getTeamStats(
+  teamId: number,
+  compOverride?: SaudiCompetition | null,
+): Promise<SplTeamStats | null> {
+  const comp = competitionForStats(compOverride ?? null);
+  if (!comp) return null;
+  const season = await seasonFor(comp);
+
+  return withSWR(`spl:teamstats:${teamId}:${comp.id}`, TEAM_STATS_TTL, TEAM_STATS_TTL * 2, async () => {
+    const rows = await apiGet("teams/statistics", {
+      league: comp.id,
+      season,
+      team: teamId,
+      timezone: TIMEZONE,
+    });
+    const data = rows[0];
+    if (!data) return null;
+
+    const fx = data.fixtures ?? {};
+    const gl = data.goals ?? {};
+    const bg = data.biggest ?? {};
+    const cs = data.clean_sheet ?? {};
+    const fts = data.failed_to_score ?? {};
+    const cards = data.cards ?? {};
+
+    return {
+      leagueId: comp.id,
+      season,
+      fixtures: {
+        played: { total: numOr0(fx.played?.total), home: numOr0(fx.played?.home), away: numOr0(fx.played?.away) },
+        wins: { total: numOr0(fx.wins?.total), home: numOr0(fx.wins?.home), away: numOr0(fx.wins?.away) },
+        draws: { total: numOr0(fx.draws?.total), home: numOr0(fx.draws?.home), away: numOr0(fx.draws?.away) },
+        loses: { total: numOr0(fx.loses?.total), home: numOr0(fx.loses?.home), away: numOr0(fx.loses?.away) },
+      },
+      goals: {
+        for: {
+          total: numOr0(gl.for?.total?.total),
+          average: strOrNull(gl.for?.average?.total) ?? "0",
+          home: strOrNull(gl.for?.average?.home) ?? "0",
+          away: strOrNull(gl.for?.average?.away) ?? "0",
+        },
+        against: {
+          total: numOr0(gl.against?.total?.total),
+          average: strOrNull(gl.against?.average?.total) ?? "0",
+          home: strOrNull(gl.against?.average?.home) ?? "0",
+          away: strOrNull(gl.against?.average?.away) ?? "0",
+        },
+      },
+      biggest: {
+        winsHome: strOrNull(bg.wins?.home),
+        winsAway: strOrNull(bg.wins?.away),
+        losesHome: strOrNull(bg.loses?.home),
+        losesAway: strOrNull(bg.loses?.away),
+        streakWin: numOrNull(bg.streak?.wins),
+        streakLose: numOrNull(bg.streak?.loses),
+        streakDraw: numOrNull(bg.streak?.draws),
+      },
+      summary: {
+        cleanSheets: { total: numOr0(cs.total), home: numOr0(cs.home), away: numOr0(cs.away) },
+        failedToScore: { total: numOr0(fts.total), home: numOr0(fts.home), away: numOr0(fts.away) },
+        cards: {
+          yellowTotal: numOr0(cards.yellow?.total),
+          redTotal: numOr0(cards.red?.total),
+        },
+        mostUsedFormation: strOrNull(data.lineups?.[0]?.formation),
+      },
+    };
+  });
+}
+
+// ---- المدرب ----
+
+export interface SplCoach {
+  id: number;
+  name: string;
+  photo: string;
+  nationality: string;
+  age: number | null;
+  startDate: string | null;
+  career: { team: string; start: string | null; end: string | null }[];
+}
+
+/**
+ * المدرب الحالي للنادي + أبرز محطّاته. المصدر coaches?team. الاسم يعود لخريطة
+ * التعريب إن أمكن (اسم النادي)، وجنسية المدرب تُترجم عبر localizeSplCountry.
+ */
+export async function getTeamCoach(teamId: number): Promise<SplCoach | null> {
+  return withSWR(`spl:coach:${teamId}`, COACH_TTL, COACH_TTL * 2, async () => {
+    const rows = await apiGet("coachs", { id: teamId });
+    const entry = rows[0];
+    if (!entry?.id) return null;
+    return {
+      id: entry.id,
+      name: localizePlayerName(entry.name) || entry.name || "",
+      photo: entry.photo ?? "",
+      nationality: localizeSplCountry(entry.nationality ?? "") || "",
+      age: Number.isFinite(entry.age) ? entry.age : null,
+      startDate: entry.career?.[0]?.start ? String(entry.career[0].start) : null,
+      career: (Array.isArray(entry.career) ? entry.career : [])
+        .map((c: any) => ({
+          team: localizeSplTeamName(c.team?.id, c.team?.name ?? "") || c.team?.name || "",
+          start: c.start ? String(c.start) : null,
+          end: c.end ? String(c.end) : null,
+        }))
+        .filter((c: { team: string }) => c.team)
+        .slice(0, 8),
+    };
+  });
+}
+
+// ---- هدّافو النادي ----
+
+export interface SplTeamScorer {
+  rank: number;
+  id: number;
+  name: string;
+  photo: string;
+  goals: number;
+  assists: number;
+  penalties: number;
+  matches: number;
+}
+
+/**
+ * أعلى 5 هدّافين في النادي خلال موسمه الحالي. تُجلب من players/topscorers
+ * مفلترة على teamId ثم تُقتطع لأعلى 5. ترجع [] إن غابت البيانات.
+ */
+export async function getTeamTopScorers(
+  teamId: number,
+  compOverride?: SaudiCompetition | null,
+): Promise<SplTeamScorer[]> {
+  const comp = competitionForStats(compOverride ?? null) ?? SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const season = await seasonFor(comp);
+
+  return withSWR(`spl:teamscorers:${teamId}:${comp.id}`, TEAM_SCORERS_TTL, TEAM_SCORERS_TTL * 2, async () => {
+    const rows = await apiGet("players/topscorers", { league: comp.id, season });
+    return rows
+      .filter((row: any) => row.statistics?.[0]?.team?.id === teamId)
+      .slice(0, 5)
+      .map((row: any, index: number): SplTeamScorer => {
+        const stats = row.statistics?.[0] ?? {};
+        return {
+          rank: index + 1,
+          id: row.player?.id ?? 0,
+          name: localizePlayerName(row.player?.name) || row.player?.name || "",
+          photo: row.player?.photo ?? "",
+          goals: stats.goals?.total ?? 0,
+          assists: stats.goals?.assists ?? 0,
+          penalties: stats.penalty?.scored ?? 0,
+          matches: stats.games?.appearences ?? 0,
+        };
+      });
   });
 }
