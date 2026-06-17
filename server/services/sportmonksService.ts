@@ -12,6 +12,7 @@
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
 import { getFixtureIdentity, type WcFixtureIdentity } from "./worldCupService";
+import { translateCommentaries, type SmCommentary } from "./worldCupCommentaryTranslator";
 
 const SM_BASE = "https://api.sportmonks.com/v3/football";
 const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
@@ -266,4 +267,74 @@ export async function getMomentum(
   const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
   if (!r) return EMPTY_MOMENTUM;
   return withSWR(`wc:momentum:${r.smId}`, r.ttl, r.ttl * 3, () => buildMomentum(r.smId));
+}
+
+// ---------- التعليق المباشر المترجم (من commentaries — إضافة Match Facts) ----------
+
+export interface WcCommentaryItem {
+  minute: number;
+  extraMinute: number | null;
+  goal: boolean;
+  important: boolean;
+  textAr: string;
+  textEn: string;
+  order: number;
+}
+
+export interface WcCommentary {
+  available: boolean;
+  live: boolean;
+  items: WcCommentaryItem[];
+}
+
+const EMPTY_COMMENTARY: WcCommentary = { available: false, live: false, items: [] };
+
+/**
+ * يبني حمولة التعليق المباشر من بيانات SportMonks الخام: يكتفي باللحظات
+ * المهمة (is_goal أو is_important) كما اتُّفق مع المستخدم، ويعرّبها للعربية.
+ */
+async function buildCommentary(smFixtureId: number): Promise<WcCommentary> {
+  // نطلب تعريف حالة المباراة عبر state، والتعليقات الخام من commentaries
+  const [fixtureResp, commentsResp] = await Promise.all([
+    smGet(`fixtures/${smFixtureId}`, { include: "state" }).catch(() => null),
+    smGet(`commentaries/fixtures/${smFixtureId}`).catch(() => null),
+  ]);
+  const live = LIVE_STATES.has(fixtureResp?.data?.state?.developer_name ?? "");
+  const rawComments: any[] = Array.isArray(commentsResp?.data) ? commentsResp.data : [];
+  if (rawComments.length === 0) {
+    return { ...EMPTY_COMMENTARY, live };
+  }
+
+  // فلترة اللحظات المهمة فقط — الأهداف والأحداث البارزة (ركلات جزاء، تبديلات
+  // مهمة، بدايات الأشواط...). المزود يعلّمها بـ is_goal/is_important.
+  const notable = rawComments.filter((c) => c?.is_goal || c?.is_important);
+  // إن لم يُعلّم المزود أي لحظة (نادر، أو مباراة بلا أهداف/أحداث)، نُفرّغ الكل
+  // حتى لا تظهر المباراة المنتهية كأنها بلا تعليق إطلاقًا.
+  const source = notable.length > 0 ? notable : rawComments;
+
+  const items = await translateCommentaries(
+    source.map((c) => ({
+      comment: c?.comment ?? "",
+      minute: c?.minute ?? null,
+      extra_minute: c?.extra_minute ?? null,
+      is_goal: Boolean(c?.is_goal),
+      is_important: Boolean(c?.is_important),
+      order: c?.order ?? 0,
+    }))
+  );
+
+  return { available: items.length > 0, live, items };
+}
+
+/**
+ * التعليق المباشر المترجم (من commentaries — إضافة Match Facts).
+ * يُرجّع اللحظات المهمة فقط (أهداف + أحداث بارزة)، مُعرّبة، مرتّبة (الأحدث أولًا).
+ */
+export async function getCommentary(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcCommentary> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_COMMENTARY;
+  return withSWR(`wc:commentary:${r.smId}`, r.ttl, r.ttl * 3, () => buildCommentary(r.smId));
 }
