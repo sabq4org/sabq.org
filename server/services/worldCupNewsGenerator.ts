@@ -589,8 +589,14 @@ export interface WcNewsRunSummary {
 
 export async function runWorldCupNewsCycle(): Promise<WcNewsRunSummary> {
   const summary: WcNewsRunSummary = { previews: 0, reports: 0, arabRoundups: 0, skipped: 0, errors: 0 };
-  const fixtures = await getFixtures();
+  // إن قاربت مباراةٌ النهاية (وربما انتهت لتوّها والكاش لم يُحدَّث بعد)، أعد
+  // جلب الجداول طازجةً (تجاوز كاش 30ث) لالتقاط لحظة FT فورًا بدل انتظار انتهاء
+  // الكاش — يقلّص تأخّر تقرير ما بعد المباراة دون المساس ببوّابة نهائية النتيجة.
+  let fixtures = await getFixtures();
   const now = Date.now();
+  if (fixtures.some((f) => f.status.live && (f.status.elapsed ?? 0) >= 85)) {
+    fixtures = await getFixtures({ forceFresh: true });
+  }
 
   const candidates: { kind: WcArticleKind; fixture: WcFixture }[] = [];
 
