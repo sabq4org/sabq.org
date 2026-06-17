@@ -17,6 +17,7 @@ import {
   getFixtures,
   getFixturePrediction,
   getFixturesByRound,
+  getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
   getMatchPlayerRatings,
@@ -474,6 +475,28 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // المواجهات المباشرة بين فريقين (?home=&away=). تُستدعى من نافذة المباراة.
+  app.get("/api/sports/h2h", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, summary: null, meetings: [] });
+      return;
+    }
+    const home = parseId(req.query.home);
+    const away = parseId(req.query.away);
+    if (home == null || away == null) {
+      res.status(400).json({ message: "معرّفا الفريقين مطلوبان" });
+      return;
+    }
+    try {
+      const h2h = await getHeadToHead(home, away);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ configured: true, ...h2h });
+    } catch (error) {
+      console.error("[Sports] h2h failed:", error);
+      res.status(502).json({ message: "تعذر جلب المواجهات حاليًا" });
     }
   });
 
