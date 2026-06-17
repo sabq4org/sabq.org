@@ -74,7 +74,10 @@ import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
-const AiArticleStats = lazy(() => 
+// إخفاء/إظهار الإعلان البارز أعلى صفحة المقال (تحت الهيدر). مخفي مؤقتاً 2026-06-17 — بدّل إلى true للإرجاع.
+const SHOW_TOP_AD = false;
+
+const AiArticleStats = lazy(() =>
   import("@/components/AiArticleStats").then(module => ({ default: module.AiArticleStats }))
 );
 
@@ -1170,10 +1173,14 @@ export default function ArticleDetail() {
     <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
       <Header user={user} />
 
-      {/* DMS Leaderboard Ad - Desktop only */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
-        <DmsLeaderboardAd />
-      </div>
+      {/* ⛔️ الإعلان البارز أعلى المقال مخفي مؤقتاً بطلب المالك (2026-06-17، احتفاءً بالمونديال).
+          لإرجاعه: بدّل SHOW_TOP_AD إلى true. */}
+      {SHOW_TOP_AD && (
+        /* DMS Leaderboard Ad - Desktop only */
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
+          <DmsLeaderboardAd />
+        </div>
+      )}
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
 
