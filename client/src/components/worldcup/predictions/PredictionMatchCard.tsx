@@ -3,6 +3,7 @@ import { Check, Clock, Lock, LogIn, Radio, Trophy, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatKickoffTime, countdownTo, type WcTeam } from "../wcTypes";
+import { LiveMinute } from "../LiveMinute";
 import { ScoreStepper } from "./ScoreStepper";
 import type { PredictableMatch } from "./predictionsTypes";
 
@@ -71,7 +72,7 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
         {fixture.status.live ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
             <Radio className="h-2.5 w-2.5 animate-pulse" />
-            {fixture.status.elapsed != null ? `${fixture.status.elapsed}'` : "مباشر"}
+            {fixture.status.elapsed != null ? <LiveMinute status={fixture.status} /> : "مباشر"}
           </span>
         ) : settled ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">

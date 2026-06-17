@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import {
-  elapsedLabel,
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
@@ -17,6 +16,7 @@ import {
   type WcOverview,
   type WcPrediction,
 } from "./wcTypes";
+import { LiveMinute } from "./LiveMinute";
 
 interface HeroSectionProps {
   overview: WcOverview | undefined;
@@ -224,9 +224,13 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
                         }
                       >
                         {fixture.status.live && <Radio className="h-3 w-3 animate-pulse" />}
-                        {fixture.status.live && fixture.status.elapsed != null
-                          ? `${fixture.status.label} — ${elapsedLabel(fixture.status)}`
-                          : fixture.status.label}
+                        {fixture.status.live && fixture.status.elapsed != null ? (
+                          <>
+                            {fixture.status.label} — <LiveMinute status={fixture.status} />
+                          </>
+                        ) : (
+                          fixture.status.label
+                        )}
                       </Badge>
                     </>
                   ) : (

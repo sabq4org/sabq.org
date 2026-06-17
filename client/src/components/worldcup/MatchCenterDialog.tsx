@@ -28,7 +28,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  elapsedLabel,
   formatKickoffDay,
   formatKickoffTime,
   type WcCommentary,
@@ -41,6 +40,7 @@ import {
   type WcMatchEvent,
   type WcStatistic,
 } from "./wcTypes";
+import { LiveMinute } from "./LiveMinute";
 
 interface MatchCenterDialogProps {
   fixtureId: number | null;
@@ -649,7 +649,8 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
   const { data: detail, isLoading } = useQuery<WcMatchDetail>({
     queryKey: [`/api/world-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
-    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 30_000 : false),
+    // مباراة حية → 15ث لتطازج النتيجة والأحداث (الدقيقة تعدّ محليًا أصلًا)
+    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 15_000 : false),
   });
 
   const fixture = detail?.fixture;
@@ -695,9 +696,11 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                     }
                   >
                     {fixture.status.live && <Radio className="h-3 w-3 animate-pulse" />}
-                    {fixture.status.live && fixture.status.elapsed != null
-                      ? elapsedLabel(fixture.status)
-                      : fixture.status.label}
+                    {fixture.status.live && fixture.status.elapsed != null ? (
+                      <LiveMinute status={fixture.status} />
+                    ) : (
+                      fixture.status.label
+                    )}
                   </Badge>
                 </div>
                 <div className="flex flex-col items-center gap-1.5">

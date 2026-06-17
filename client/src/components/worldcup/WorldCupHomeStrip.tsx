@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import {
-  elapsedLabel,
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
   type WcFixture,
   type WcOverview,
 } from "./wcTypes";
+import { LiveMinute } from "./LiveMinute";
 
 /**
  * «شريط المونديال» — بلوك الصفحة الرئيسية أسفل كروسيل الأخبار.
@@ -161,9 +161,11 @@ export default function WorldCupHomeStrip() {
                   }
                 >
                   {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
-                  {fixture.status.live && fixture.status.elapsed != null
-                    ? elapsedLabel(fixture.status)
-                    : fixture.status.label}
+                  {fixture.status.live && fixture.status.elapsed != null ? (
+                    <LiveMinute status={fixture.status} />
+                  ) : (
+                    fixture.status.label
+                  )}
                 </Badge>
               </>
             ) : (
