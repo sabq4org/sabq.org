@@ -847,11 +847,13 @@ export async function getTeamStats(
   const season = await seasonFor(comp);
 
   return withSWR(`spl:teamstats:${teamId}:${comp.id}`, TEAM_STATS_TTL, TEAM_STATS_TTL * 2, async () => {
+    // ملاحظة: teams/statistics لا يدعم معامل timezone (عكس fixtures) — إرساله
+    // يردّ خطأ "The Timezone field do not exist." ويفشل الطلب كله. تُترك الأهداف
+    // كما يرجعها المزوّد (UTC)؛ الأرقام الإجمالية لا تتأثر بالمنطقة الزمنية.
     const rows = await apiGet("teams/statistics", {
       league: comp.id,
       season,
       team: teamId,
-      timezone: TIMEZONE,
     });
     const data = rows[0];
     if (!data) return null;
