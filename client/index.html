@@ -53,6 +53,52 @@
     -->
     <script data-cfasync="false">
       (function() {
+        // ─── Proactive stale-HTML detection (Safari disk-cache fix) ───────────
+        // iOS Safari keeps a stale index.html in its disk cache even with
+        // Cache-Control: no-cache. That stale HTML references /assets chunks
+        // deleted by the latest deploy, so the bundle never boots and the
+        // bundle-side recovery (polling / retryImport / deployRecovery) can't
+        // run. This check runs from inside the HTML itself, BEFORE the entry
+        // chunk is requested: compare the build id baked into THIS page (the
+        // <meta> tag, injected by vite.config.ts) against the live
+        // /build-info.json. If they differ, this HTML is stale → wipe the disk
+        // cache + cache-busted reload, recovering before any chunk 404s.
+        // Wrapped so any failure (network, parse, blocked fetch) is silent:
+        // the reactive watchdogs below still cover the case.
+        (function proactiveBuildCheck() {
+          try {
+            var meta = document.querySelector('meta[name="sabq-build-id"]');
+            if (!meta) return; // build id not injected (dev or older deploy)
+            var bakedBuildId = meta.content;
+            if (!bakedBuildId) return;
+            fetch('/build-info.json', { cache: 'no-store' })
+              .then(function (res) { return res.ok ? res.json() : null; })
+              .then(function (info) {
+                if (!info || !info.buildId) return;
+                if (info.buildId === bakedBuildId) return; // up to date
+                // Stale HTML detected — self-heal before the chunks fail.
+                try {
+                  if ('caches' in window) {
+                    caches.keys().then(function (keys) {
+                      keys.forEach(function (k) { caches.delete(k).catch(function(){}); });
+                    }).catch(function(){});
+                  }
+                } catch (_) {}
+                try {
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                      regs.forEach(function (r) { r.unregister().catch(function(){}); });
+                    }).catch(function(){});
+                  }
+                } catch (_) {}
+                var url = new URL(location.href);
+                url.searchParams.set('_dr', String(Date.now()));
+                location.replace(url.toString());
+              })
+              .catch(function () { /* network blocked — reactive layer handles it */ });
+          } catch (_) { /* defensive: never block boot */ }
+        })();
+
         var RELOAD_TS_KEY = '__sabq_safety_reload_ts';
         var RELOAD_COUNT_KEY = '__sabq_safety_reload_count';
         var RELOAD_WINDOW_KEY = '__sabq_safety_reload_window';

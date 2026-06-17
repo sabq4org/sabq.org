@@ -26,6 +26,17 @@ export default defineConfig({
           }),
         });
       },
+      // Inject the build id as a <meta> tag so the inline safety-net script in
+      // index.html can read it (it can't see the `define`d __SABQ_BUILD_ID__
+      // constant — that's only available inside the bundled JS). The script
+      // compares this meta against /build-info.json on every HTML load: if they
+      // differ, the browser is holding a STALE index.html (e.g. iOS Safari disk
+      // cache) that points at deleted chunks, and it self-heals with a
+      // cache-busted reload BEFORE the entry chunk is even requested.
+      transformIndexHtml(html) {
+        const meta = `<meta name="sabq-build-id" content="${SABQ_BUILD_ID}">`;
+        return html.replace("<head>", `<head>\n    ${meta}`);
+      },
     },
     // Replit-specific plugins — only on Replit AND in dev. Vercel builds
     // and local non-Replit envs skip them. Set DISABLE_REPLIT_PLUGINS=true
