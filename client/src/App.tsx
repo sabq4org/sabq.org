@@ -355,6 +355,8 @@ const GulfLiveCoverage = lazy(() => retryImport(() => import("@/pages/GulfLiveCo
 const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
 const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")));
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
+// البوابة الرياضية الجديدة — تجربة أون لاين على /sports2
+const SportsHub = lazy(() => retryImport(() => import("@/pages/SportsHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -856,6 +858,8 @@ function Router() {
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
+        {/* البوابة الرياضية الجديدة — تجربة أون لاين على /sports2 (لا تتعارض مع /category/sports) */}
+        <Route path="/sports2">{() => <LazyRoute component={SportsHub} />}</Route>
         
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>

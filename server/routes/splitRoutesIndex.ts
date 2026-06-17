@@ -31,6 +31,7 @@ import { registerCalendarRoutes } from "./calendar";
 import { registerTaskRoutes } from "./tasks";
 import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
+import { registerSportsRoutes } from "./sports";
 import { registerRadarRoutes } from "./radar";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
@@ -78,6 +79,7 @@ export function registerSplitRoutes(app: Express) {
   registerTaskRoutes(app);
   registerWalletRoutes(app);
   registerWorldCupRoutes(app);
+  registerSportsRoutes(app);
   registerRadarRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);

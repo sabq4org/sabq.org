@@ -18,6 +18,8 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/notification-settings', '/recommendation-settings',
   '/en/profile', '/en/notification-settings',
   '/ur/profile',
+  // البوابة الرياضية الجديدة — مسار تجريبي مؤقت، يُزال عند الترقية إلى /sports
+  '/sports2',
 ]);
 
 export const NOINDEX_PREFIXES: readonly string[] = [
