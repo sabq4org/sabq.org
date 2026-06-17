@@ -15,6 +15,7 @@ import {
   getCompetition,
   getFixtures,
   getFixturePrediction,
+  getGlobalLiveFixtures,
   getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
@@ -120,6 +121,23 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] cards failed:", error);
       res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
+    }
+  });
+
+  // لوحة مباشرة شاملة: كل مباريات الأندية السعودية المباشرة عبر كل البطولات.
+  app.get("/api/sports/live", async (_req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.set("Cache-Control", "public, max-age=15, s-maxage=30");
+      res.json({ configured: false, live: [] });
+      return;
+    }
+    try {
+      const live = await getGlobalLiveFixtures();
+      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      res.json({ configured: true, live });
+    } catch (error) {
+      console.error("[Sports] global live failed:", error);
+      res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
     }
   });
 
