@@ -259,6 +259,32 @@ export async function getFixturesByRound(comp: SaudiCompetition, round: string):
   });
 }
 
+// ---------- لوحة مباشرة شاملة (كل البطولات السعودية) ----------
+
+export interface SplLiveBoardItem extends SplFixture {
+  competition: string;
+  competitionSlug: string | null;
+}
+
+/**
+ * كل مباريات الأندية السعودية المباشرة الآن عبر جميع بطولاتنا — في نداء واحد
+ * (fixtures?live=all عالمي ثم نُرشّح على معرّفات بطولاتنا). يُغني عن استطلاع
+ * كل بطولة على حدة، ويتيح شريطًا مباشرًا موحّدًا بصرف النظر عن البطولة المختارة.
+ */
+export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
+  return withSWR(`spl:live:all`, LIVE_TTL, LIVE_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
+    const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
+    return rows
+      .filter((r: any) => byId.has(r.league?.id))
+      .map((r: any): SplLiveBoardItem => {
+        const comp = byId.get(r.league.id)!;
+        return { ...localizeFixture(r), competition: comp.name, competitionSlug: comp.slug };
+      })
+      .sort((a, b) => a.timestamp - b.timestamp);
+  });
+}
+
 // ---------- المواجهات المباشرة (Head-to-Head) ----------
 
 export interface SplH2HMeeting {
