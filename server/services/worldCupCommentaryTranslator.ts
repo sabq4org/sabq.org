@@ -50,33 +50,33 @@ export interface WcCommentaryItem {
 export async function translateCommentaries(comments: SmCommentary[]): Promise<WcCommentaryItem[]> {
   if (comments.length === 0) return [];
 
-  // (1+2) اجمع الأسماء الإنجليزية عبر الدفعة لتعريبها جملة واحدة
+  // (1+2) اجمع كل الأسماء الإنجليزية الظاهرة عبر الدفعة لتعريبها جملة واحدة
   const nameSet = new Set<string>();
   for (const c of comments) collectNames(c.comment, nameSet);
-  const tr = await resolveNames([...nameSet]);
 
-  // طبّق القوالب أولًا — أكثريتها تُحل هنا
-  const results = comments.map((c) => ({
+  // نُطبّق القوالب أولًا (متزامن، فوري) لأن أغلب الأنماط مغطّاة. لكن القوالب
+  // تحتاج الأسماء المُعرّبة، فننتظر resolveNames أولًا.
+  const tr = await resolveNames([...nameSet]);
+  const templated = comments.map((c) => ({
     src: c,
     ar: translateOne(c.comment, tr, c.is_goal),
   }));
 
-  // (3) اجمع التعليقات التي لم تُترجم (بقي فيها حروف لاتينية بعد القوالب)
-  // وترجمها بـAI دفعة واحدة — ضمان عدم ظهور أي إنجليزي للمستخدم.
-  const pending = results.filter((r) => !isArabicOnly(r.ar)).map((r) => r.src.comment);
-  const uniquePending = [...new Set(pending)];
-  const aiMap = uniquePending.length > 0 ? await aiTranslate(uniquePending) : {};
-  // طبّق تعريب الأسماء على نتائج الـAI أيضًا (قد تحتوي أسماء إنجليزية)
+  // (3) فلتر: نُرسل للـAI فقط التعليقات التي بقي فيها حروف لاتينية بعد القوالب
+  // (أي لم يغطّها قالب) — عادةً قليلة. هذا يقلّل حجم الدفعة ويُسرّع الرد.
+  const pending = [...new Set(templated.filter((r) => !isArabicOnly(r.ar)).map((r) => r.src.comment))];
+  const aiMap = pending.length > 0 ? await aiTranslate(pending) : {};
   for (const [en, ar] of Object.entries(aiMap)) {
     aiMap[en] = applyNames(ar, tr);
   }
 
-  const items = results.map<WcCommentaryItem>((r) => ({
+  const items = templated.map<WcCommentaryItem>((r) => ({
     minute: r.src.minute ?? 0,
     extraMinute: r.src.extra_minute,
     goal: r.src.is_goal,
     important: r.src.is_important,
-    textAr: aiMap[r.src.comment] || r.ar,
+    // نُفضّل ترجمة الـAI إن نجحت (دقّة أعلى للأنماط غير المصنّفة)، وإلا القالب.
+    textAr: (aiMap[r.src.comment] || "").trim() || r.ar,
     textEn: r.src.comment,
     order: r.src.order,
   }));
@@ -126,23 +126,35 @@ async function aiTranslate(texts: string[]): Promise<Record<string, string>> {
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "أنت مترجم تعليقات رياضية حيّة لكرة القدم من الإنجليزية إلى العربية الفصحى المبسّطة. " +
-            "ترجم كل جملة ترجمة طبيعية وموجزة كما تُقرأ في تطبيق رياضي عربي (مثل: \"Goal! France takes the lead 2-1\" " +
-            "← \"هدف! تتقدّم فرنسا 2-1\"). حافظ على أسماء اللاعبين والمنتخبات كما هي إن وردت. " +
-            "أعد JSON فقط بالشكل: {\"items\":[{\"src\":\"<النص الإنجليزي كما ورد>\",\"ar\":\"<العربي>\"}]}.",
-        },
-        { role: "user", content: JSON.stringify(todo) },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: Math.min(4000, 200 + todo.length * 80),
-    });
+    // مهلة زمنية صارمة: لو تأخّر الـAI (ازدحام/شبكة) نُلغي الطلب ونعتمد على
+    // القوالب المُعرّبة وحدها بدل تعليق الاستجابة. التعليقات المترجمة تُكاش
+    // فلا تتكرّر التكلفة، والمحاولة القادمة (بعد refetch) قد تنجح وتُكمّل النقص.
+    const response = await Promise.race([
+      openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "أنت مترجم تعليقات رياضية حيّة لكرة القدم من الإنجليزية إلى العربية الفصحى المبسّطة. " +
+              "ترجم كل جملة ترجمة طبيعية وموجزة كما تُقرأ في تطبيق رياضي عربي (مثل: \"Goal! France takes the lead 2-1\" " +
+              "← \"هدف! تتقدّم فرنسا 2-1\"). حافظ على أسماء اللاعبين والمنتخبات كما هي إن وردت. " +
+              "أعد JSON فقط بالشكل: {\"items\":[{\"src\":\"<النص الإنجليزي كما ورد>\",\"ar\":\"<العربي>\"}]}.",
+          },
+          { role: "user", content: JSON.stringify(todo) },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_tokens: Math.min(4000, 200 + todo.length * 80),
+      }),
+      // 6 ثوانٍ حدّ أعلى — يكفي لـ1-4 تعليقات غير مصنّفة (الحالة الواقعية بعد فلترة
+      // المهم: ~4-5 تعليقات للمباراة، أغلبها يغطّيها القالب، يتبقى 1-2 للـAI).
+      // لو فُلتر أكبر (مثلاً بث كامل) تأخّر، نُلغي ونعتمد على القوالب، والمحاولة
+      // القادمة بعد refetch تُكمّل النقص (الكاش يمنع التكرار).
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("AI translation timeout")), 6000)
+      ),
+    ]);
     const content = response.choices[0]?.message?.content;
     if (content) {
       const parsed = JSON.parse(content) as { items?: { src?: string; ar?: string }[] };
