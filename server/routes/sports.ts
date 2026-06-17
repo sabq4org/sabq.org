@@ -14,20 +14,28 @@ import type { Express, Request, Response } from "express";
 import {
   getCompetition,
   getFixtures,
+  getFixturePrediction,
   getLiveFixtures,
   getMatchDetail,
   getMatchPlayerRatings,
   getPlayerCard,
+  getPlayerInjuries,
+  getPlayerSeasonHistory,
+  getPlayerTransfers,
   getSquad,
   getStandings,
   getTeamProfile,
   getTeamStats,
   getTeamCoach,
   getTeamTopScorers,
+  getTeamTransfers,
   getTopAssists,
+  getTopRedCards,
   getTopScorers,
+  getTopYellowCards,
   isSaudiLeagueConfigured,
   listCompetitions,
+  listCompetitionsWithMeta,
   type SaudiCompetition,
   type SplFixture,
 } from "../services/saudiLeagueService";
@@ -77,9 +85,41 @@ export function registerSportsRoutes(app: Express) {
   };
 
   // قائمة البطولات المتاحة (لمبدّل البطولات في الواجهة).
-  app.get("/api/sports/competitions", (_req, res) => {
+  // الموجة 2: تُثرى بالشعار والموسم الحالي لكل بطولة (ترويسة ديناميكية).
+  app.get("/api/sports/competitions", async (_req, res) => {
     res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400");
-    res.json({ configured: isSaudiLeagueConfigured(), competitions: listCompetitions() });
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, competitions: listCompetitions() });
+      return;
+    }
+    try {
+      res.json({ configured: true, competitions: await listCompetitionsWithMeta() });
+    } catch (error) {
+      console.error("[Sports] competitions meta failed:", error);
+      // تدهور بسلاسة إلى القائمة الأساسية دون شعار/موسم.
+      res.json({ configured: true, competitions: listCompetitions() });
+    }
+  });
+
+  // إضافة: متصدّرو البطاقات (إنذارات + طرد) في طلب واحد لتبويب الواجهة.
+  app.get("/api/sports/:comp/cards", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, yellow: [], red: [] });
+      return;
+    }
+    try {
+      const [yellow, red] = await Promise.all([
+        getTopYellowCards(comp).catch(() => []),
+        getTopRedCards(comp).catch(() => []),
+      ]);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ configured: true, yellow, red });
+    } catch (error) {
+      console.error("[Sports] cards failed:", error);
+      res.status(502).json({ message: "تعذر جلب متصدّري البطاقات حاليًا" });
+    }
   });
 
   // مركز المباريات لبطولة: مباشر/اليوم/قادمة/نتائج في طلب واحد.
@@ -312,6 +352,27 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // انتقالات النادي (الموجة 2) — آخر من وصل وغادر (نافذة الانتقالات).
+  app.get("/api/sports/team/:id/transfers", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ arrivals: [], departures: [] });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const transfers = await getTeamTransfers(id);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(transfers);
+    } catch (error) {
+      console.error("[Sports] team transfers failed:", error);
+      res.status(502).json({ message: "تعذر جلب انتقالات النادي حاليًا" });
+    }
+  });
+
   // تشكيلة النادي وحدها (للاستهلاك المنفصل عند الحاجة).
   app.get("/api/sports/squad/:id", async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
@@ -355,10 +416,46 @@ export function registerSportsRoutes(app: Express) {
         return;
       }
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      // الموجة 2: عند ?with=extras تُضمَّن سلسلة المواسم + الانتقالات + الإصابات
+      // في نفس الاستجابة (تقلّل طلبات صفحة اللاعب). كلها تتدهور بسلاسة إلى [].
+      if (req.query.with === "extras") {
+        const [history, transfers, injuries] = await Promise.all([
+          getPlayerSeasonHistory(id).catch(() => []),
+          getPlayerTransfers(id).catch(() => []),
+          getPlayerInjuries(id).catch(() => []),
+        ]);
+        res.json({ ...player, history, transfers, injuries });
+        return;
+      }
       res.json(player);
     } catch (error) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // البند 12: توقّعات المباراة (lazy) — تُعرض للمباريات غير المبدوءة فقط في الواجهة.
+  app.get("/api/sports/match/:id/prediction", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const prediction = await getFixturePrediction(id);
+      if (!prediction) {
+        res.status(404).json({ message: "لا تتوفّر توقّعات لهذه المباراة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json(prediction);
+    } catch (error) {
+      console.error("[Sports] prediction failed:", error);
+      res.status(502).json({ message: "تعذر جلب التوقّعات حاليًا" });
     }
   });
 }

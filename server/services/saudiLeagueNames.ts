@@ -268,3 +268,39 @@ export const SPL_FORM_LETTER_AR: Record<string, string> = {
   D: "تعادل",
   L: "خسارة",
 };
+
+// ---------- الموجة 2/3: انتقالات وإصابات ----------
+
+/**
+ * نوع الانتقال (transfers[].type) → عربي. القيمة قد تكون كلمة (Free/Loan/N/A)
+ * أو مبلغ صفقة (مثل "€ 20M") أو null. نعرّب الكلمات فقط، والمبلغ يُعرض كما هو.
+ */
+export const SPL_TRANSFER_TYPE_AR: Record<string, string> = {
+  free: "انتقال حر",
+  loan: "إعارة",
+  "n/a": "غير معلوم",
+  "loan end": "انتهاء إعارة",
+  swap: "تبادل",
+};
+
+export function localizeSplTransferType(type: string | null | undefined): string {
+  const raw = (type ?? "").trim();
+  if (!raw) return "غير معلوم";
+  const key = raw.toLowerCase();
+  if (SPL_TRANSFER_TYPE_AR[key]) return SPL_TRANSFER_TYPE_AR[key];
+  // مبلغ صفقة أو نص غير معروف → يُعرض كما ورد (الأرقام/العملات عالمية).
+  return raw;
+}
+
+/** نوع الإصابة/الغياب (injuries[].type) → عربي. السبب (reason) نص حُرّ يُترك كما هو. */
+export const SPL_INJURY_TYPE_AR: Record<string, string> = {
+  "missing fixture": "غياب عن المباراة",
+  injured: "مصاب",
+  questionable: "مشكوك في جاهزيته",
+};
+
+export function localizeSplInjuryType(type: string | null | undefined): string {
+  const raw = (type ?? "").trim();
+  if (!raw) return "";
+  return SPL_INJURY_TYPE_AR[raw.toLowerCase()] ?? raw;
+}

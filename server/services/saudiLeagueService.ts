@@ -24,8 +24,10 @@ import {
   SPL_TROPHY_PLACE_AR,
   localizeSplCompetition,
   localizeSplCountry,
+  localizeSplInjuryType,
   localizeSplRound,
   localizeSplTeamName,
+  localizeSplTransferType,
 } from "./saudiLeagueNames";
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -303,9 +305,12 @@ export interface SplStatRow {
 }
 
 export interface SplLineupPlayer {
+  id: number;
   number: number | null;
   name: string;
   pos: string;
+  /** إحداثيات اللاعب على أرض الملعب بصيغة "صف:عمود" (للـ Pitch View)؛ قد تغيب للمباريات القديمة. */
+  grid: string | null;
 }
 
 export interface SplLineup {
@@ -332,9 +337,11 @@ const POS_AR: Record<string, string> = { G: "حراسة", D: "دفاع", M: "و�
 function localizeLineupPlayer(p: any): SplLineupPlayer {
   const pl = p?.player ?? {};
   return {
+    id: pl.id ?? 0,
     number: pl.number ?? null,
     name: localizePlayerName(pl.name) || pl.name || "",
     pos: POS_AR[pl.pos] ?? pl.pos ?? "",
+    grid: pl.grid ?? null,
   };
 }
 
@@ -1062,4 +1069,304 @@ export async function getMatchPlayerRatings(fixtureId: number): Promise<SplMatch
 
     return { motm, players };
   });
+}
+
+// ============================================================
+// الموجة 2/3 — إثراء إضافي
+// ============================================================
+
+const HISTORY_TTL = CACHE_TTL.LONG;
+const TRANSFERS_TTL = 60 * 60 * 1000; // الانتقالات تتحرّك في النوافذ فقط
+const INJURIES_TTL = 60 * 60 * 1000;
+const PREDICTION_TTL = 15 * 60 * 1000; // التوقعات تُحدَّث قبل المباراة
+const CARDS_TTL = CACHE_TTL.LONG;
+const COMP_META_TTL = SEASON_TTL;
+
+// ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
+
+export interface SplCompetitionMeta {
+  logo: string | null;
+  season: number;
+  round: string | null;
+}
+
+export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
+  return withSWR(`spl:compmeta:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
+    try {
+      const rows = await apiGet("leagues", { id: comp.id });
+      const lg = rows[0]?.league ?? {};
+      const seasons: any[] = rows[0]?.seasons ?? [];
+      const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
+      return {
+        logo: lg.logo ?? null,
+        season: typeof current?.year === "number" ? current.year : comp.fallbackSeason,
+        round: null,
+      };
+    } catch {
+      return { logo: null, season: comp.fallbackSeason, round: null };
+    }
+  });
+}
+
+/** قائمة البطولات مُثراة بالشعار والموسم — لترويسة البطولة الديناميكية في الواجهة. */
+export async function listCompetitionsWithMeta() {
+  const base = listCompetitions();
+  const metas = await Promise.all(
+    SAUDI_COMPETITIONS.map((c) => getCompetitionMeta(c).catch(() => null))
+  );
+  return base.map((c, i) => ({
+    ...c,
+    logo: metas[i]?.logo ?? null,
+    season: metas[i]?.season ?? null,
+  }));
+}
+
+// ---------- البند 5: تطوّر أداء اللاعب عبر المواسم ----------
+
+export interface SplPlayerSeasonPoint {
+  season: number;
+  competition: string;
+  matches: number;
+  goals: number;
+  assists: number;
+}
+
+export async function getPlayerSeasonHistory(playerId: number): Promise<SplPlayerSeasonPoint[]> {
+  const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const current = await seasonFor(proLeague);
+  const years = [current - 3, current - 2, current - 1, current];
+
+  const perYear = await Promise.all(
+    years.map((year) =>
+      withSWR(`spl:playerseason:${playerId}:${year}`, HISTORY_TTL, HISTORY_TTL * 2, async () => {
+        const rows = await apiGet("players", { id: playerId, season: year }).catch(() => [] as any[]);
+        const stats: any[] = rows[0]?.statistics ?? [];
+        if (stats.length === 0) return null;
+        // يجمع كل البطولات في الموسم؛ يُسمّي الموسم بأكثر بطولة مشاركةً.
+        let matches = 0, goals = 0, assists = 0;
+        let topComp = "", topApps = -1;
+        for (const st of stats) {
+          const apps = st.games?.appearences ?? 0;
+          matches += apps;
+          goals += st.goals?.total ?? 0;
+          assists += st.goals?.assists ?? 0;
+          if (apps > topApps) { topApps = apps; topComp = st.league?.name ?? ""; }
+        }
+        if (matches === 0) return null;
+        return {
+          season: year,
+          competition: localizeSplCompetition(topComp),
+          matches, goals, assists,
+        } as SplPlayerSeasonPoint;
+      }).catch(() => null)
+    )
+  );
+
+  return perYear.filter((p): p is SplPlayerSeasonPoint => p != null);
+}
+
+// ---------- البند 6: انتقالات اللاعب ----------
+
+export interface SplPlayerTransfer {
+  date: string;
+  type: string;
+  fromId: number;
+  from: string;
+  fromLogo: string;
+  toId: number;
+  to: string;
+  toLogo: string;
+}
+
+export async function getPlayerTransfers(playerId: number): Promise<SplPlayerTransfer[]> {
+  return withSWR(`spl:transfers:player:${playerId}`, TRANSFERS_TTL, TRANSFERS_TTL * 2, async () => {
+    const rows = await apiGet("transfers", { player: playerId });
+    const list: any[] = rows[0]?.transfers ?? [];
+    return list
+      .map((t: any): SplPlayerTransfer => ({
+        date: t.date ?? "",
+        type: localizeSplTransferType(t.type),
+        fromId: t.teams?.out?.id ?? 0,
+        from: localizeSplTeamName(t.teams?.out?.id, t.teams?.out?.name ?? ""),
+        fromLogo: t.teams?.out?.logo ?? "",
+        toId: t.teams?.in?.id ?? 0,
+        to: localizeSplTeamName(t.teams?.in?.id, t.teams?.in?.name ?? ""),
+        toLogo: t.teams?.in?.logo ?? "",
+      }))
+      .filter((t: SplPlayerTransfer) => t.from || t.to)
+      .sort((a: SplPlayerTransfer, b: SplPlayerTransfer) => b.date.localeCompare(a.date));
+  });
+}
+
+// ---------- البند 7: إصابات/غيابات اللاعب ----------
+
+export interface SplPlayerInjury {
+  date: string;
+  type: string;
+  reason: string;
+  team: string;
+  competition: string;
+}
+
+export async function getPlayerInjuries(playerId: number, limit = 8): Promise<SplPlayerInjury[]> {
+  const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const current = await seasonFor(proLeague);
+  const years = [current, current - 1];
+
+  return withSWR(`spl:injuries:player:${playerId}`, INJURIES_TTL, INJURIES_TTL * 2, async () => {
+    const batches = await Promise.all(
+      years.map((season) => apiGet("injuries", { player: playerId, season }).catch(() => [] as any[]))
+    );
+    const seen = new Set<string>();
+    const all: SplPlayerInjury[] = [];
+    for (const rows of batches) {
+      for (const row of rows) {
+        const date = row.fixture?.date ?? row.player?.date ?? "";
+        const reason = row.player?.reason ?? "";
+        const key = `${date}|${reason}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        all.push({
+          date,
+          type: localizeSplInjuryType(row.player?.type),
+          reason,
+          team: localizeSplTeamName(row.team?.id, row.team?.name ?? ""),
+          competition: localizeSplCompetition(row.league?.name ?? ""),
+        });
+      }
+    }
+    return all
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, limit);
+  });
+}
+
+// ---------- البند 8: انتقالات النادي (وصل/غادر) ----------
+
+export interface SplTeamTransfer {
+  date: string;
+  type: string;
+  playerId: number;
+  player: string;
+  teamId: number;
+  team: string;
+  teamLogo: string;
+}
+
+export interface SplTeamTransfers {
+  arrivals: SplTeamTransfer[];
+  departures: SplTeamTransfer[];
+}
+
+export async function getTeamTransfers(teamId: number, limit = 15): Promise<SplTeamTransfers> {
+  return withSWR(`spl:transfers:team:${teamId}`, TRANSFERS_TTL, TRANSFERS_TTL * 2, async () => {
+    const rows = await apiGet("transfers", { team: teamId });
+    const arrivals: SplTeamTransfer[] = [];
+    const departures: SplTeamTransfer[] = [];
+
+    for (const row of rows) {
+      const playerId = row.player?.id ?? 0;
+      const playerName = localizePlayerName(row.player?.name) || row.player?.name || "";
+      for (const t of row.transfers ?? []) {
+        const inId = t.teams?.in?.id ?? 0;
+        const outId = t.teams?.out?.id ?? 0;
+        const base = {
+          date: t.date ?? "",
+          type: localizeSplTransferType(t.type),
+          playerId,
+          player: playerName,
+        };
+        if (inId === teamId) {
+          arrivals.push({ ...base, teamId: outId, team: localizeSplTeamName(outId, t.teams?.out?.name ?? ""), teamLogo: t.teams?.out?.logo ?? "" });
+        } else if (outId === teamId) {
+          departures.push({ ...base, teamId: inId, team: localizeSplTeamName(inId, t.teams?.in?.name ?? ""), teamLogo: t.teams?.in?.logo ?? "" });
+        }
+      }
+    }
+
+    const byDateDesc = (a: SplTeamTransfer, b: SplTeamTransfer) => b.date.localeCompare(a.date);
+    return {
+      arrivals: arrivals.sort(byDateDesc).slice(0, limit),
+      departures: departures.sort(byDateDesc).slice(0, limit),
+    };
+  });
+}
+
+// ---------- البند 12: توقّعات المباراة ----------
+
+export interface SplFixturePrediction {
+  homePct: number;
+  drawPct: number;
+  awayPct: number;
+  winnerId: number | null;
+  winnerName: string | null;
+  advice: string | null;
+}
+
+const pctToNum = (v: unknown): number => {
+  const n = parseInt(String(v ?? "").replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export async function getFixturePrediction(fixtureId: number): Promise<SplFixturePrediction | null> {
+  return withSWR(`spl:prediction:${fixtureId}`, PREDICTION_TTL, PREDICTION_TTL * 2, async () => {
+    const rows = await apiGet("predictions", { fixture: fixtureId });
+    const p = rows[0]?.predictions;
+    if (!p?.percent) return null;
+    const homePct = pctToNum(p.percent.home);
+    const drawPct = pctToNum(p.percent.draw);
+    const awayPct = pctToNum(p.percent.away);
+    if (homePct + drawPct + awayPct === 0) return null;
+    const winnerId = p.winner?.id ?? null;
+    return {
+      homePct, drawPct, awayPct,
+      winnerId,
+      winnerName: winnerId ? localizeSplTeamName(winnerId, p.winner?.name ?? "") : null,
+      advice: p.advice ?? null,
+    };
+  });
+}
+
+// ---------- إضافة: متصدّرو البطاقات (إنذارات/طرد) ----------
+
+export interface SplCardLeader {
+  rank: number;
+  id: number;
+  name: string;
+  photo: string;
+  team: string;
+  teamLogo: string;
+  yellow: number;
+  red: number;
+  matches: number;
+}
+
+async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red"): Promise<SplCardLeader[]> {
+  const season = await seasonFor(comp);
+  const path = kind === "yellow" ? "players/topyellowcards" : "players/topredcards";
+  return withSWR(`spl:${path}:${comp.id}`, CARDS_TTL, CARDS_TTL * 2, async () => {
+    const rows = await apiGet(path, { league: comp.id, season });
+    return rows.slice(0, 10).map((row: any, index: number): SplCardLeader => {
+      const st = row.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row.player?.id ?? 0,
+        name: localizePlayerName(row.player?.name) || row.player?.name || "",
+        photo: row.player?.photo ?? "",
+        team: localizeSplTeamName(st.team?.id, st.team?.name ?? ""),
+        teamLogo: st.team?.logo ?? "",
+        yellow: (st.cards?.yellow ?? 0) + (st.cards?.yellowred ?? 0),
+        red: st.cards?.red ?? 0,
+        matches: st.games?.appearences ?? 0,
+      };
+    });
+  });
+}
+
+export function getTopYellowCards(comp: SaudiCompetition): Promise<SplCardLeader[]> {
+  return getCardLeaders(comp, "yellow");
+}
+
+export function getTopRedCards(comp: SaudiCompetition): Promise<SplCardLeader[]> {
+  return getCardLeaders(comp, "red");
 }

@@ -9,6 +9,7 @@ import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
+  ArrowLeftRight,
   CalendarDays,
   ListOrdered,
   MapPin,
@@ -88,6 +89,12 @@ interface SpTeamScorer {
   rank: number; id: number; name: string; photo: string;
   goals: number; assists: number; penalties: number; matches: number;
 }
+// الموجة 2: انتقالات النادي (وصل/غادر).
+interface SpTeamTransfer {
+  date: string; type: string; playerId: number; player: string;
+  teamId: number; team: string; teamLogo: string;
+}
+interface SpTeamTransfers { arrivals: SpTeamTransfer[]; departures: SpTeamTransfer[]; }
 
 const dayFmt = new Intl.DateTimeFormat("ar-SA", { weekday: "short", day: "numeric", month: "short" });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
@@ -239,6 +246,61 @@ function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
   );
 }
 
+// الموجة 2: عمود انتقالات (وصل أو غادر) داخل بطاقة النادي.
+function TransferColumn({ title, dir, items }: { title: string; dir: "in" | "out"; items: SpTeamTransfer[] }) {
+  const arrow = dir === "in" ? "←" : "→";
+  const tone = dir === "in" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+  return (
+    <div>
+      <div className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${tone}`}>
+        <span className="text-base">{arrow}</span> {title}
+        <span className="text-[11px] font-normal text-muted-foreground">({items.length})</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-3">لا توجد حركات حديثة</p>
+      ) : (
+        <div className="space-y-1.5">
+          {items.map((t, i) => (
+            <div key={`${t.playerId}-${i}`} className="flex items-center gap-2.5 rounded-xl bg-muted/40 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                {t.playerId ? (
+                  <Link href={`/sports2/player/${t.playerId}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{t.player}</Link>
+                ) : (
+                  <span className="text-sm font-semibold text-foreground truncate block">{t.player}</span>
+                )}
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  {dir === "in" ? "من" : "إلى"}
+                  {t.teamLogo && <img src={t.teamLogo} alt="" className="w-4 h-4 object-contain" loading="lazy" />}
+                  {t.teamId ? (
+                    <Link href={`/sports2/team/${t.teamId}`} className="hover:text-primary transition-colors truncate">{t.team}</Link>
+                  ) : <span className="truncate">{t.team}</span>}
+                </span>
+              </div>
+              {t.type && <Badge variant="secondary" className="text-[9px] shrink-0">{t.type}</Badge>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
+  if (transfers.arrivals.length === 0 && transfers.departures.length === 0) return null;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <ArrowLeftRight className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">حركة الانتقالات</h2>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-5">
+        <TransferColumn title="وصل" dir="in" items={transfers.arrivals} />
+        <TransferColumn title="غادر" dir="out" items={transfers.departures} />
+      </div>
+    </Card>
+  );
+}
+
 const POSITION_SECTIONS: { en: string; label: string }[] = [
   { en: "Goalkeeper", label: "حراسة المرمى" },
   { en: "Defender", label: "الدفاع" },
@@ -288,6 +350,12 @@ export default function SportsTeam() {
     queryKey: [`/api/sports/team/${id}`, { with: "stats" }],
     enabled: Number.isFinite(id) && id > 0,
     staleTime: 5 * 60_000,
+  });
+
+  const { data: transfers } = useQuery<SpTeamTransfers>({
+    queryKey: [`/api/sports/team/${id}/transfers`],
+    enabled: Number.isFinite(id) && id > 0,
+    staleTime: 10 * 60_000,
   });
 
   useEffect(() => {
@@ -382,6 +450,9 @@ export default function SportsTeam() {
                 )}
               </div>
             )}
+
+            {/* حركة الانتقالات (الموجة 2) */}
+            {transfers && <TeamTransfersCard transfers={transfers} />}
 
             {/* المباريات */}
             {(results.length > 0 || upcoming.length > 0) && (
