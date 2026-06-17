@@ -57,6 +57,25 @@ export const WC_TEAM_AR: Record<number, string> = {
 
 export const SAUDI_TEAM_ID = 23;
 
+/**
+ * المنتخبات العربية المتأهلة لكأس العالم 2026 (بمعرّف API-Football، لا الاسم).
+ * تُستخدم لتوليد «تقرير المنتخبات العربية بعد كل جولة» — تجميع نتائج كل منتخب
+ * عربي في الجولة الواحدة في مادة تحليلية واحدة. حدّث القائمة إن تأهّل/خرج منتخب.
+ */
+export const ARAB_TEAM_IDS = new Set<number>([
+  23, // السعودية
+  28, // تونس
+  31, // المغرب
+  32, // مصر
+  1532, // الجزائر
+  1548, // الأردن
+  1567, // العراق
+  1569, // قطر
+]);
+
+export const isArabTeam = (id: number | null | undefined): boolean =>
+  id != null && ARAB_TEAM_IDS.has(id);
+
 /** الملاعب الـ16 المضيفة (المفتاح = الاسم الإنجليزي كما يرسله المزود) */
 export const WC_VENUE_AR: Record<string, { name: string; city: string }> = {
   "AT&T Stadium": { name: "ملعب إيه تي آند تي", city: "دالاس" },

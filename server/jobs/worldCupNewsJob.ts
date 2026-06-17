@@ -31,9 +31,9 @@ async function tick(trigger: string): Promise<void> {
   isRunning = true;
   try {
     const summary = await runWorldCupNewsCycle();
-    if (summary.previews || summary.reports || summary.errors) {
+    if (summary.previews || summary.reports || summary.arabRoundups || summary.errors) {
       console.log(
-        `[WC News Job] (${trigger}) previews=${summary.previews} reports=${summary.reports} skipped=${summary.skipped} errors=${summary.errors}`
+        `[WC News Job] (${trigger}) previews=${summary.previews} reports=${summary.reports} arabRoundups=${summary.arabRoundups} skipped=${summary.skipped} errors=${summary.errors}`
       );
     }
   } catch (error) {
