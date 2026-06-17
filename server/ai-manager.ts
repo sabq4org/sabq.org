@@ -97,16 +97,27 @@ class AIManager {
     return pRetry(
       async () => {
         try {
-          switch (config.provider) {
-            case 'openai':
-              return await this.generateOpenAI(prompt, config);
-            case 'anthropic':
-              return await this.generateAnthropic(prompt, config);
-            case 'gemini':
-              return await this.generateGemini(prompt, config);
-            default:
-              throw new Error(`Unknown provider: ${config.provider}`);
-          }
+          // لفّ نداء المزود بمهلة زمنية: بدونها يبقى نداءٌ معلّق (لا يعود من
+          // المزود أبدًا) عالقًا للأبد، فيُجمّد أي مستدعٍ متسلسل — كدورة أخبار
+          // المونديال (كل دقيقة) التي تترك isRunning=true فتتوقّف تقاريرها حتى
+          // إعادة التشغيل. نفس الحارس المطبَّق أصلًا في generateMultiple.
+          const call = (async (): Promise<AIResponse> => {
+            switch (config.provider) {
+              case 'openai':
+                return await this.generateOpenAI(prompt, config);
+              case 'anthropic':
+                return await this.generateAnthropic(prompt, config);
+              case 'gemini':
+                return await this.generateGemini(prompt, config);
+              default:
+                throw new Error(`Unknown provider: ${config.provider}`);
+            }
+          })();
+          return await withTimeout(
+            call,
+            AI_CALL_TIMEOUT_MS,
+            `AI model ${config.provider}/${config.model} timed out after ${AI_CALL_TIMEOUT_MS / 1000}s`
+          );
         } catch (error: any) {
           throw new Error(`${config.provider}/${config.model}: ${error.message}`);
         }
