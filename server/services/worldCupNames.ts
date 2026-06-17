@@ -216,6 +216,8 @@ export const WC_PLAYER_AR: Record<string, string> = {
   "Mohammed Al Owais": "محمد العويس",
   "Saud Abdulhamid": "سعود عبدالحميد",
   "Mohammed Abu Al Shamat": "محمد أبو الشامات",
+  "Waheb Saleh": "صالح أبو الشامات",
+  "Saleh Abu Al Shamat": "صالح أبو الشامات",
   "Nawaf Boushal": "نواف بوشل",
   "Abdulelah Al Amri": "عبدالإله العمري",
   "Moteb Al Harbi": "متعب الحربي",

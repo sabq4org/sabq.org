@@ -387,12 +387,26 @@ export const SPL_COACH_AR: Record<number, string> = {
   2204: "سيرجيو كونسيساو",    // الاتحاد
 };
 
-export function localizeSplPlayerName(id: number | null | undefined, fallback: string): string {
+// محوّل اختياري بالذكاء الاصطناعي (resolveNames) للأسماء غير المغطّاة بالمعرّف؛
+// لو لم يُمرَّر نسقط للقاموس الثابت فقط (سلوك متوافق مع النداءات القديمة).
+type NameTranslator = (name: string | null | undefined) => string;
+
+export function localizeSplPlayerName(
+  id: number | null | undefined,
+  fallback: string,
+  tr?: NameTranslator,
+): string {
   if (id != null && SPL_PLAYER_AR[id]) return SPL_PLAYER_AR[id];
+  if (tr) return tr(fallback) || fallback || "";
   return localizePlayerName(fallback) || fallback || "";
 }
 
-export function localizeSplCoachName(id: number | null | undefined, fallback: string): string {
+export function localizeSplCoachName(
+  id: number | null | undefined,
+  fallback: string,
+  tr?: NameTranslator,
+): string {
   if (id != null && SPL_COACH_AR[id]) return SPL_COACH_AR[id];
+  if (tr) return tr(fallback) || fallback || "";
   return localizePlayerName(fallback) || fallback || "";
 }
