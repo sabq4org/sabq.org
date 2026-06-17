@@ -90,3 +90,154 @@ export function localizeSplRound(round: string): string {
   if (ro) return `دور الـ${ro[1]}`;
   return r;
 }
+
+// ---------- صفحة النادي وبطاقة اللاعب ----------
+
+/** مراكز اللاعبين كما يعيدها المزود (إنجليزية) → عربي */
+export const SPL_POSITION_AR: Record<string, string> = {
+  Goalkeeper: "حراسة المرمى",
+  Defender: "الدفاع",
+  Midfielder: "الوسط",
+  Attacker: "الهجوم",
+};
+
+/** ترتيب عرض المراكز في التشكيلة (حراسة → دفاع → وسط → هجوم) */
+export const SPL_POSITION_ORDER: Record<string, number> = {
+  Goalkeeper: 0,
+  Defender: 1,
+  Midfielder: 2,
+  Attacker: 3,
+};
+
+/** مراكز الألقاب في الكؤوس → عربي */
+export const SPL_TROPHY_PLACE_AR: Record<string, string> = {
+  Winner: "بطل",
+  "2nd Place": "وصيف",
+  "3rd Place": "المركز الثالث",
+};
+
+/**
+ * أسماء البطولات (مسيرة اللاعب وألقابه) → عربي. مأخوذة من تغطية API-Football،
+ * مع تركيز على البطولات السعودية والخليجية والعربية والقارية وأبرز الدوريات.
+ * غير المعروف يبقى كما هو بدل تشويهه.
+ */
+export const SPL_COMPETITION_AR: Record<string, string> = {
+  "Pro League": "دوري المحترفين",
+  "Saudi League": "الدوري السعودي",
+  "First Division": "دوري الدرجة الأولى",
+  "Division 1": "دوري الدرجة الأولى",
+  "Second Division": "دوري الدرجة الثانية",
+  "King Cup": "كأس الملك",
+  "King's Cup": "كأس الملك",
+  "Super Cup": "كأس السوبر",
+  "Crown Prince Cup": "كأس ولي العهد",
+  "AFC Champions League": "دوري أبطال آسيا",
+  "AFC Champions League Elite": "دوري أبطال آسيا للنخبة",
+  "AFC Champions League Two": "دوري أبطال آسيا الثاني",
+  "AFC Cup": "كأس الاتحاد الآسيوي",
+  "Asian Cup": "كأس آسيا",
+  "Gulf Cup": "كأس الخليج",
+  "Arab Cup": "كأس العرب",
+  "Arab Club Champions Cup": "كأس العرب للأندية الأبطال",
+  "World Cup": "كأس العالم",
+  "Club World Cup": "كأس العالم للأندية",
+  "FIFA Club World Cup": "كأس العالم للأندية",
+  "Confederations Cup": "كأس القارات",
+  "UEFA Champions League": "دوري أبطال أوروبا",
+  "Champions League": "دوري الأبطال",
+  "UEFA Europa League": "الدوري الأوروبي",
+  "Europa League": "الدوري الأوروبي",
+  "Premier League": "الدوري الإنجليزي الممتاز",
+  "La Liga": "الدوري الإسباني",
+  "Serie A": "الدوري الإيطالي",
+  Bundesliga: "الدوري الألماني",
+  "Ligue 1": "الدوري الفرنسي",
+  Eredivisie: "الدوري الهولندي",
+  "Primeira Liga": "الدوري البرتغالي",
+  "Major League Soccer": "الدوري الأمريكي",
+  "FA Cup": "كأس الاتحاد الإنجليزي",
+  "Copa del Rey": "كأس ملك إسبانيا",
+  "Coppa Italia": "كأس إيطاليا",
+  "CAF Champions League": "دوري أبطال أفريقيا",
+  "Africa Cup of Nations": "كأس الأمم الأفريقية",
+  "Copa America": "كوبا أمريكا",
+  "Euro Championship": "كأس أمم أوروبا",
+  Friendlies: "مباريات ودية",
+  "U20 World Cup": "كأس العالم للشباب",
+  "U23 Asian Cup": "كأس آسيا تحت 23 عامًا",
+  "AFC U23 Asian Cup": "كأس آسيا تحت 23 عامًا",
+};
+
+/** دول الميلاد والألقاب → عربي (أبرز دول كرة القدم). */
+export const SPL_COUNTRY_AR: Record<string, string> = {
+  "Saudi Arabia": "السعودية",
+  World: "العالم",
+  Asia: "آسيا",
+  Africa: "أفريقيا",
+  Europe: "أوروبا",
+  Brazil: "البرازيل",
+  Argentina: "الأرجنتين",
+  Portugal: "البرتغال",
+  Spain: "إسبانيا",
+  France: "فرنسا",
+  England: "إنجلترا",
+  Italy: "إيطاليا",
+  Germany: "ألمانيا",
+  Netherlands: "هولندا",
+  Belgium: "بلجيكا",
+  Croatia: "كرواتيا",
+  Serbia: "صربيا",
+  Morocco: "المغرب",
+  Tunisia: "تونس",
+  Algeria: "الجزائر",
+  Egypt: "مصر",
+  Qatar: "قطر",
+  "United Arab Emirates": "الإمارات",
+  Kuwait: "الكويت",
+  Bahrain: "البحرين",
+  Oman: "عُمان",
+  Jordan: "الأردن",
+  Iraq: "العراق",
+  Lebanon: "لبنان",
+  Syria: "سوريا",
+  Yemen: "اليمن",
+  Sudan: "السودان",
+  Mali: "مالي",
+  Senegal: "السنغال",
+  Ghana: "غانا",
+  Nigeria: "نيجيريا",
+  Cameroon: "الكاميرون",
+  "Ivory Coast": "ساحل العاج",
+  "South Africa": "جنوب أفريقيا",
+  Colombia: "كولومبيا",
+  Uruguay: "أوروغواي",
+  Ecuador: "الإكوادور",
+  Paraguay: "باراغواي",
+  Chile: "تشيلي",
+  Mexico: "المكسيك",
+  USA: "الولايات المتحدة",
+  "South Korea": "كوريا الجنوبية",
+  "Korea Republic": "كوريا الجنوبية",
+  Japan: "اليابان",
+  Australia: "أستراليا",
+  Iran: "إيران",
+  Uzbekistan: "أوزبكستان",
+  Turkey: "تركيا",
+  Türkiye: "تركيا",
+  Greece: "اليونان",
+  Poland: "بولندا",
+  Sweden: "السويد",
+  Denmark: "الدنمارك",
+  Norway: "النرويج",
+  Switzerland: "سويسرا",
+  Austria: "النمسا",
+};
+
+export function localizeSplCompetition(name: string): string {
+  return SPL_COMPETITION_AR[name] ?? name;
+}
+
+export function localizeSplCountry(name: string): string {
+  if (!name) return "";
+  return SPL_COUNTRY_AR[name] ?? name;
+}

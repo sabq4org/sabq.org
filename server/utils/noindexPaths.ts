@@ -18,8 +18,6 @@ export const NOINDEX_EXACT: ReadonlySet<string> = new Set<string>([
   '/notification-settings', '/recommendation-settings',
   '/en/profile', '/en/notification-settings',
   '/ur/profile',
-  // البوابة الرياضية الجديدة — مسار تجريبي مؤقت، يُزال عند الترقية إلى /sports
-  '/sports2',
 ]);
 
 export const NOINDEX_PREFIXES: readonly string[] = [
@@ -30,6 +28,8 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/payment',
   '/en/dashboard',
   '/ur/dashboard',
+  // البوابة الرياضية الجديدة — مسار تجريبي مؤقت (يشمل /sports2/team و /sports2/player)
+  '/sports2',
 ];
 
 export function isNoindexPath(pathname: string): boolean {

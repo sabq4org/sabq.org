@@ -544,10 +544,10 @@ function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
                   <tr key={r.team.id} className={`border-b border-border last:border-b-0 hover:bg-muted/40 ${band}`}>
                     <td className="py-2.5 px-2 text-center font-bold text-muted-foreground tabular-nums">{r.rank}</td>
                     <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
+                      <Link href={`/sports2/team/${r.team.id}`} className="flex items-center gap-2 hover:text-primary transition-colors">
                         {r.team.logo && <img src={r.team.logo} alt="" className="w-6 h-6 object-contain" loading="lazy" />}
-                        <span className="font-semibold text-foreground">{r.team.name}</span>
-                      </div>
+                        <span className="font-semibold text-foreground hover:text-primary">{r.team.name}</span>
+                      </Link>
                     </td>
                     <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.played}</td>
                     <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.win}</td>
@@ -593,10 +593,10 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
       <Card className="p-5">
         <div className="flex items-end justify-center gap-3 sm:gap-5 pt-4">
           {order.map((s) => (
-            <div key={s.id} className="flex flex-col items-center flex-1 max-w-[120px]">
+            <Link key={s.id} href={`/sports2/player/${s.id}`} className="flex flex-col items-center flex-1 max-w-[120px] group">
               <div className="relative mb-2">
                 {s.photo ? (
-                  <img src={s.photo} alt="" className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-primary/40" loading="lazy" />
+                  <img src={s.photo} alt="" className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-primary/40 group-hover:ring-primary transition-all" loading="lazy" />
                 ) : (
                   <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-muted" />
                 )}
@@ -604,11 +604,11 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
                   {s.rank}
                 </span>
               </div>
-              <span className="text-xs font-bold text-foreground text-center line-clamp-1">{s.name}</span>
+              <span className="text-xs font-bold text-foreground text-center line-clamp-1 group-hover:text-primary transition-colors">{s.name}</span>
               <div className={`mt-2 w-full ${heightByRank(s.rank)} rounded-t-xl bg-gradient-to-t ${medalByRank(s.rank)} flex items-start justify-center pt-2`}>
                 <span className="text-white font-black text-lg tabular-nums">{s.goals}</span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
         <p className="text-center text-xs text-muted-foreground mt-3">عدد الأهداف</p>
@@ -616,7 +616,7 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
       {/* البقية */}
       <Card className="divide-y divide-border overflow-hidden">
         {rest.map((s) => (
-          <div key={`${s.id}-${s.rank}`} className="flex items-center gap-3 p-3">
+          <Link key={`${s.id}-${s.rank}`} href={`/sports2/player/${s.id}`} className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
             <span className="w-6 text-center font-bold text-muted-foreground tabular-nums">{s.rank}</span>
             {s.photo ? <img src={s.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted" />}
             <div className="flex-1 min-w-0">
@@ -627,7 +627,7 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
             </div>
             <div className="text-center px-1"><span className={`font-black tabular-nums ${ACCENT}`}>{s.goals}</span></div>
             <div className="text-center px-1 border-r border-border"><span className="text-amber-600 font-bold text-sm tabular-nums">{s.assists}</span></div>
-          </div>
+          </Link>
         ))}
       </Card>
     </div>
