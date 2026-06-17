@@ -132,7 +132,12 @@ async function apiGet(path: string, params: Record<string, string | number>): Pr
   if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
     throw new Error(`[SaudiLeague] API-Football error for ${path}: ${JSON.stringify(errors)}`);
   }
-  return Array.isArray(data?.response) ? data.response : [];
+  // معظم النقاط تعيد response كمصفوفة، لكن بعضها (teams/statistics) يعيد كائنًا
+  // واحدًا — نلفّه في مصفوفة حتى يستهلكه المستدعي عبر rows[0] بنفس النمط.
+  const resp = data?.response;
+  if (Array.isArray(resp)) return resp;
+  if (resp && typeof resp === "object") return [resp];
+  return [];
 }
 
 // ---------- DTOs المُعرَّبة ----------
@@ -269,6 +274,16 @@ export async function getHeadToHead(homeId: number, awayId: number, last = 8): P
 
 // ---------- الترتيب (جدول واحد للدوري) ----------
 
+export interface SplStandingSplit {
+  played: number;
+  win: number;
+  draw: number;
+  lose: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  points: number; // محسوب: فوز×3 + تعادل (المزوّد لا يعيد نقاط السبليت)
+}
+
 export interface SplStandingRow {
   rank: number;
   team: SplTeam;
@@ -281,6 +296,8 @@ export interface SplStandingRow {
   goalsDiff: number;
   points: number;
   form: string | null;
+  home: SplStandingSplit | null;
+  away: SplStandingSplit | null;
 }
 
 export async function getStandings(comp: SaudiCompetition): Promise<SplStandingRow[]> {
@@ -289,6 +306,19 @@ export async function getStandings(comp: SaudiCompetition): Promise<SplStandingR
   return withSWR(`spl:standings:${comp.id}`, CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
     const rows = await apiGet("standings", { league: comp.id, season });
     const table: any[] = rows[0]?.league?.standings?.[0] ?? [];
+    const toSplit = (s: any): SplStandingSplit | null => {
+      if (!s) return null;
+      const win = s.win ?? 0, draw = s.draw ?? 0;
+      return {
+        played: s.played ?? 0,
+        win,
+        draw,
+        lose: s.lose ?? 0,
+        goalsFor: s.goals?.for ?? 0,
+        goalsAgainst: s.goals?.against ?? 0,
+        points: win * 3 + draw,
+      };
+    };
     return table
       .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
       .map((row: any): SplStandingRow => ({
@@ -303,6 +333,8 @@ export async function getStandings(comp: SaudiCompetition): Promise<SplStandingR
         goalsDiff: row.goalsDiff ?? 0,
         points: row.points ?? 0,
         form: row.form ?? null,
+        home: toSplit(row.home),
+        away: toSplit(row.away),
       }));
   });
 }
@@ -870,6 +902,12 @@ export interface SplTeamStatSummary {
   mostUsedFormation: string | null;
 }
 
+export interface SplGoalTiming {
+  bucket: string; // فترة الدقائق: "0-15" ... "76-90"
+  for: number; // أهداف سجّلها الفريق في هذه الفترة
+  against: number; // أهداف استقبلها
+}
+
 export interface SplTeamStats {
   leagueId: number;
   season: number;
@@ -877,6 +915,7 @@ export interface SplTeamStats {
   goals: SplTeamStatGoals;
   biggest: SplTeamStatBiggest;
   summary: SplTeamStatSummary;
+  timing: SplGoalTiming[];
 }
 
 const numOr0 = (v: any): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -931,6 +970,13 @@ export async function getTeamStats(
     const fts = data.failed_to_score ?? {};
     const cards = data.cards ?? {};
 
+    // توزيع الأهداف حسب فترات الدقائق (له/عليه) — نُسقط الفترات الفارغة.
+    const gfMin = gl.for?.minute ?? {};
+    const gaMin = gl.against?.minute ?? {};
+    const timing: SplGoalTiming[] = ["0-15", "16-30", "31-45", "46-60", "61-75", "76-90", "91-105", "106-120"]
+      .map((b) => ({ bucket: b, for: numOr0(gfMin[b]?.total), against: numOr0(gaMin[b]?.total) }))
+      .filter((t) => t.for > 0 || t.against > 0);
+
     return {
       leagueId: comp.id,
       season,
@@ -972,6 +1018,7 @@ export async function getTeamStats(
         },
         mostUsedFormation: strOrNull(data.lineups?.[0]?.formation),
       },
+      timing,
     };
   });
 }
