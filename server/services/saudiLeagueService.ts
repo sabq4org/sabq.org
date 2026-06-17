@@ -823,14 +823,26 @@ const numOrNull = (v: any): number | null =>
  * الأهداف له/عليه ومتوسطاتها، أكبر النتائج، أطول السلاسل، نظافة الشباك،
  * البطاقات، والتشكيلة الأكثر استخداماً. مصدرها teams/statistics.
  *
- * تتطلّب بطولة تدعم الإحصاءات (hasStats). إن لم يُعرف دوري النادي (نادٍ من
- * كأس مثلًا) نحاول افتراضيًا دوري روشن قبل أن نُرجع null.
+ * تتطلّب بطولة تدعم الإحصاءات (hasStats). إن لم تُمرَّر بطولة صراحةً نكتشف
+ * دوري النادي بالبحث في جداول الترتيب (كما يفعل getTeamProfile)، حتى تعمل
+ * النقطة المنفصلة /api/sports/team/:id/stats بلا حاجة لتحديد البطولة.
  */
 export async function getTeamStats(
   teamId: number,
   compOverride?: SaudiCompetition | null,
 ): Promise<SplTeamStats | null> {
-  const comp = competitionForStats(compOverride ?? null);
+  // البطولة الممرّرة أولًا؛ وإلا نكتشفها من الترتيب.
+  let comp = competitionForStats(compOverride ?? null);
+  if (!comp) {
+    const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStats);
+    for (const c of leagueComps) {
+      const table = await getStandings(c).catch(() => [] as SplStandingRow[]);
+      if (table.some((r) => r.team.id === teamId)) {
+        comp = c;
+        break;
+      }
+    }
+  }
   if (!comp) return null;
   const season = await seasonFor(comp);
 
