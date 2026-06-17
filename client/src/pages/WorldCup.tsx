@@ -28,10 +28,14 @@ export default function WorldCup() {
 
   const { data: overview, isLoading: overviewLoading } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    // حول لحظة الانطلاق (الموعد مرّ والمزود لم يرفع «حية» بعد) نستعجل كل 10 ثوانٍ
-    // حتى تنقلب الواجهة للوضع المباشر بأقل تأخير ممكن
+    // مباراة حية → 15ث (نتيجة/دقيقة طازجة)؛ حول لحظة الانطلاق (الموعد مرّ
+    // والمزود لم يرفع «حية» بعد) → 10ث لتنقلب الواجهة للوضع المباشر بأسرع ما يمكن؛
+    // غير ذلك → 30ث
     refetchInterval: (query) => {
-      const fixture = query.state.data?.matchOfTheDay?.fixture;
+      const data = query.state.data;
+      const fixture = data?.matchOfTheDay?.fixture;
+      const hasLive = (data?.live?.length ?? 0) > 0 || Boolean(fixture?.status.live);
+      if (hasLive) return 15_000;
       const kickoffPassed =
         fixture &&
         !fixture.status.live &&
@@ -44,7 +48,9 @@ export default function WorldCup() {
 
   const { data: fixturesData, isLoading: fixturesLoading } = useQuery<{ fixtures: WcFixture[] }>({
     queryKey: ["/api/world-cup/fixtures"],
-    refetchInterval: 60_000,
+    // مباراة حية في الجدول → 20ث لتطازج نتائج بطاقات المباريات؛ غير ذلك → 60ث
+    refetchInterval: (query) =>
+      (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 20_000 : 60_000,
     refetchIntervalInBackground: false,
   });
 

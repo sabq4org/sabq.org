@@ -3,6 +3,7 @@ import { MapPin, Radio } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatKickoffTime, type WcFixture, type WcTeam } from "./wcTypes";
+import { LiveMinute } from "./LiveMinute";
 
 function TeamRow({ team, goals, winner }: { team: WcTeam; goals: number | null; winner: boolean }) {
   return (
@@ -32,7 +33,7 @@ export function StatusBadge({ fixture }: { fixture: WcFixture }) {
     return (
       <Badge className="bg-red-500 text-white border-0 gap-1 text-[10px] px-2 py-0.5">
         <Radio className="h-2.5 w-2.5 animate-pulse" />
-        {fixture.status.elapsed != null ? `${fixture.status.elapsed}'` : fixture.status.label}
+        {fixture.status.elapsed != null ? <LiveMinute status={fixture.status} /> : fixture.status.label}
       </Badge>
     );
   }

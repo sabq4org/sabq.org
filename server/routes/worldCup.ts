@@ -39,7 +39,9 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+      // max-age=0: المتصفح يعيد الطلب فورًا عند كل تحديث (لا يخدم نتيجة/دقيقة قديمة
+      // من قرصه)؛ s-maxage + SWR يحميان الأصل على الـCDN وحده
+      res.set("Cache-Control", "public, max-age=0, s-maxage=15, stale-while-revalidate=30");
       res.json(await getOverview());
     } catch (error) {
       console.error("[WorldCup] overview failed:", error);
@@ -75,7 +77,7 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/live", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+      res.set("Cache-Control", "public, max-age=0, s-maxage=15, stale-while-revalidate=30");
       res.json({ fixtures: await getLiveFixtures() });
     } catch (error) {
       console.error("[WorldCup] live failed:", error);
@@ -255,7 +257,14 @@ export function registerWorldCupRoutes(app: Express) {
     try {
       const detail = await getMatchDetail(fixtureId);
       if (!detail) return res.status(404).json({ message: "المباراة غير موجودة" });
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // مباراة حيّة: المتصفح يعيد الطلب فورًا (لا نتيجة/دقيقة قديمة من قرصه)؛
+      // المنتهية/القادمة تبقى قابلة للكاش لدقائق إذ لا تتغير
+      res.set(
+        "Cache-Control",
+        detail.fixture.status.live
+          ? "public, max-age=0, s-maxage=20, stale-while-revalidate=40"
+          : "public, max-age=60, s-maxage=120, stale-while-revalidate=300"
+      );
       res.json(detail);
     } catch (error) {
       console.error(`[WorldCup] match ${fixtureId} failed:`, error);
