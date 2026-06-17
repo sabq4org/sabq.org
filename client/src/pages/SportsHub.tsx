@@ -57,6 +57,7 @@ interface SpFixture {
   round: string; venue: { name: string; city: string };
   home: SpTeam; away: SpTeam; goals: { home: number | null; away: number | null };
 }
+interface SpLiveItem extends SpFixture { competition: string; competitionSlug: string | null; }
 interface SpStandingRow {
   rank: number; team: SpTeam; played: number; win: number; draw: number; lose: number;
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
@@ -191,6 +192,40 @@ function LiveScoreStrip({ fixtures, onOpen }: { fixtures: SpFixture[]; onOpen: (
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// لوحة مباشرة شاملة — كل مباريات الأندية السعودية المباشرة عبر كل البطولات،
+// مستقلّة عن البطولة المختارة. تظهر فقط عند وجود مباراة مباشرة الآن.
+function GlobalLiveBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="border-b border-border bg-gradient-to-l from-red-500/10 to-transparent">
+      <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-red-600 dark:text-red-400">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          مباشر الآن · كل البطولات
+          <span className="text-muted-foreground font-medium">({items.length})</span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
+          {items.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => onOpen(f.id)}
+              className="shrink-0 rounded-xl bg-background border border-red-500/30 px-3 py-2 hover:border-red-500/60 transition-colors text-right min-w-[10rem]"
+            >
+              <div className="text-[10px] text-muted-foreground font-medium mb-1 truncate">{f.competition}</div>
+              <div className="flex items-center gap-2">
+                <span className="flex-1 truncate text-xs font-semibold text-foreground">{f.home.name}</span>
+                <span className="shrink-0 text-sm font-black text-foreground tabular-nums px-1">{f.goals.home ?? 0}-{f.goals.away ?? 0}</span>
+                <span className="flex-1 truncate text-xs font-semibold text-foreground text-left">{f.away.name}</span>
+              </div>
+              <div className="text-[10px] font-bold text-red-500 mt-1 text-center">{f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label}</div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -1168,7 +1203,13 @@ export default function SportsHub() {
     results: Array.isArray(matchesData?.results) ? matchesData!.results : [],
   };
   const tickerFixtures = [...matches.live, ...matches.today].slice(0, 16);
-  const liveCount = matches.live.length;
+
+  // لوحة مباشرة شاملة عبر كل البطولات (مستقلّة عن البطولة المختارة).
+  const { data: globalLiveData } = useQuery<{ live: SpLiveItem[] }>({
+    queryKey: ["/api/sports/live"], refetchInterval: 20_000, refetchIntervalInBackground: false,
+  });
+  const globalLive = Array.isArray(globalLiveData?.live) ? globalLiveData!.live : [];
+  const liveCount = globalLive.length;
 
   const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({ queryKey: [`/api/sports/${compSlug}/standings`], staleTime: 5 * 60_000, enabled: hasStandings });
   const standings = Array.isArray(standingsData?.standings) ? standingsData.standings : [];
@@ -1246,6 +1287,9 @@ export default function SportsHub() {
             </div>
           </div>
         </nav>
+
+        {/* ===== لوحة مباشرة شاملة لكل البطولات ===== */}
+        <GlobalLiveBoard items={globalLive} onOpen={setOpenMatch} />
 
         {/* ===== شريط نتائج اليوم ===== */}
         {matchesConfigured && tickerFixtures.length > 0 && <LiveScoreStrip fixtures={tickerFixtures} onOpen={setOpenMatch} />}
