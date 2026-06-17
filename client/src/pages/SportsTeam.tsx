@@ -79,6 +79,7 @@ interface SpTeamStats {
     cards: { yellowTotal: number; redTotal: number };
     mostUsedFormation: string | null;
   };
+  timing: { bucket: string; for: number; against: number }[];
 }
 interface SpCoach {
   id: number; name: string; photo: string; nationality: string;
@@ -116,8 +117,36 @@ function StatMini({ label, value, accent }: { label: string; value: React.ReactN
   );
 }
 
+// توزيع الأهداف حسب فترات الدقائق — شريطان (له/عليه) لكل فترة، مُقاسان لأكبر قيمة.
+function GoalTimingChart({ timing }: { timing: { bucket: string; for: number; against: number }[] }) {
+  const max = Math.max(1, ...timing.map((t) => Math.max(t.for, t.against)));
+  return (
+    <div className="pt-3 border-t border-border">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[11px] font-bold text-muted-foreground">توزيع الأهداف حسب الدقائق</div>
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> سجّل</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500" /> استقبل</span>
+        </div>
+      </div>
+      <div className="flex items-end justify-between gap-1.5 h-24" dir="ltr">
+        {timing.map((t) => (
+          <div key={t.bucket} className="flex-1 flex flex-col items-center gap-1">
+            <div className="w-full flex items-end justify-center gap-0.5 h-20">
+              <div className="w-1/2 rounded-t bg-emerald-500/80" style={{ height: `${(t.for / max) * 100}%` }} title={`سجّل ${t.for}`} />
+              <div className="w-1/2 rounded-t bg-red-500/70" style={{ height: `${(t.against / max) * 100}%` }} title={`استقبل ${t.against}`} />
+            </div>
+            <div className="text-[9px] text-muted-foreground tabular-nums">{t.bucket}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
   const { fixtures, goals, biggest, summary } = stats;
+  const timing = Array.isArray(stats.timing) ? stats.timing : [];
   const wdlTotal = `${fixtures.wins.total}-${fixtures.draws.total}-${fixtures.loses.total}`;
   return (
     <Card className="p-5">
@@ -179,6 +208,8 @@ function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
           <Badge variant="secondary" className="gap-1"><ClipboardList className="w-3 h-3" /> التشكيلة: <span dir="ltr">{summary.mostUsedFormation}</span></Badge>
         )}
       </div>
+
+      {timing.length > 0 && <div className="mt-5"><GoalTimingChart timing={timing} /></div>}
     </Card>
   );
 }
