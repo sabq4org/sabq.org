@@ -16,7 +16,10 @@ import {
   getFixtures,
   getLiveFixtures,
   getMatchDetail,
+  getPlayerCard,
+  getSquad,
   getStandings,
+  getTeamProfile,
   getTopScorers,
   isSaudiLeagueConfigured,
   listCompetitions,
@@ -154,6 +157,86 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match detail failed:", error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
+    }
+  });
+
+  const parseId = (raw: unknown): number | null => {
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  };
+
+  // صفحة النادي: هوية + ترتيب + مباريات + تشكيلة — المعرّف عام عند المزود.
+  app.get("/api/sports/team/:id", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "النادي غير موجود" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const profile = await getTeamProfile(id);
+      if (!profile) {
+        res.status(404).json({ message: "النادي غير موجود" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=1800");
+      res.json(profile);
+    } catch (error) {
+      console.error("[Sports] team profile failed:", error);
+      res.status(502).json({ message: "تعذر جلب صفحة النادي حاليًا" });
+    }
+  });
+
+  // تشكيلة النادي وحدها (للاستهلاك المنفصل عند الحاجة).
+  app.get("/api/sports/squad/:id", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "التشكيلة غير متاحة" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const squad = await getSquad(id);
+      if (!squad) {
+        res.status(404).json({ message: "التشكيلة غير متاحة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(squad);
+    } catch (error) {
+      console.error("[Sports] squad failed:", error);
+      res.status(502).json({ message: "تعذر جلب التشكيلة حاليًا" });
+    }
+  });
+
+  // بطاقة اللاعب: ملف شخصي + أرقام الموسم + مسيرة + ألقاب.
+  app.get("/api/sports/player/:id", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "ملف اللاعب غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف لاعب غير صحيح" });
+      return;
+    }
+    try {
+      const player = await getPlayerCard(id);
+      if (!player) {
+        res.status(404).json({ message: "ملف اللاعب غير متاح" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(player);
+    } catch (error) {
+      console.error("[Sports] player card failed:", error);
+      res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
     }
   });
 }

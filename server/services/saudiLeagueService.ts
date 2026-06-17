@@ -17,8 +17,13 @@ import {
   localizePlayerName,
 } from "./worldCupNames";
 import {
+  SPL_POSITION_AR,
+  SPL_POSITION_ORDER,
   SPL_STAT_AR,
   SPL_STAT_ORDER,
+  SPL_TROPHY_PLACE_AR,
+  localizeSplCompetition,
+  localizeSplCountry,
   localizeSplRound,
   localizeSplTeamName,
 } from "./saudiLeagueNames";
@@ -401,6 +406,296 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
       events: eventsRaw.map(localizeEventRow),
       statistics: localizeStats(statsRaw),
       lineups: localizeLineups(lineupsRaw),
+    };
+  });
+}
+
+// ---------- النادي: معلومات + تشكيلة + صفحة متكاملة ----------
+
+const SQUAD_TTL = 24 * 60 * 60 * 1000; // التشكيلة شبه ثابتة خلال الموسم
+const PLAYER_CARD_TTL = 60 * 60 * 1000; // الملف شبه ثابت؛ أرقام الموسم تتجدد كل ساعة
+
+export interface SplTeamInfo {
+  id: number;
+  name: string;
+  logo: string;
+  country: string | null;
+  founded: number | null;
+  venue: { name: string; city: string; capacity: number | null; image: string } | null;
+}
+
+export interface SplSquadPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+}
+
+export interface SplSquad {
+  team: SplTeamInfo;
+  players: SplSquadPlayer[];
+}
+
+/** معلومات النادي (الملعب، سنة التأسيس) — اسم النادي بالخريطة الثابتة */
+async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
+  return withSWR(`spl:teaminfo:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("teams", { id: teamId });
+    const entry = rows[0];
+    if (!entry?.team?.id) return null;
+    return {
+      id: entry.team.id,
+      name: localizeSplTeamName(entry.team.id, entry.team.name ?? ""),
+      logo: entry.team.logo ?? "",
+      country: entry.team.country ?? null,
+      founded: entry.team.founded ?? null,
+      venue: entry.venue
+        ? {
+            name: entry.venue.name ?? "",
+            city: entry.venue.city ?? "",
+            capacity: entry.venue.capacity ?? null,
+            image: entry.venue.image ?? "",
+          }
+        : null,
+    };
+  });
+}
+
+/** تشكيلة النادي مرتّبة حسب المركز ثم الرقم */
+export async function getSquad(teamId: number): Promise<SplSquad | null> {
+  return withSWR(`spl:squad:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("players/squads", { team: teamId });
+    const entry = rows[0];
+    if (!entry) return null;
+    const players: SplSquadPlayer[] = (entry.players ?? [])
+      .map((p: any): SplSquadPlayer => ({
+        id: p.id ?? 0,
+        name: localizePlayerName(p.name) || p.name || "",
+        number: p.number ?? null,
+        position: SPL_POSITION_AR[p.position] ?? p.position ?? "",
+        positionEn: p.position ?? "",
+        age: p.age ?? null,
+        photo: p.photo ?? "",
+      }))
+      .sort(
+        (a: SplSquadPlayer, b: SplSquadPlayer) =>
+          (SPL_POSITION_ORDER[a.positionEn] ?? 9) - (SPL_POSITION_ORDER[b.positionEn] ?? 9) ||
+          (a.number ?? 99) - (b.number ?? 99)
+      );
+    const team: SplTeamInfo = {
+      id: entry.team?.id ?? teamId,
+      name: localizeSplTeamName(entry.team?.id, entry.team?.name ?? ""),
+      logo: entry.team?.logo ?? "",
+      country: null,
+      founded: null,
+      venue: null,
+    };
+    return { team, players };
+  });
+}
+
+export interface SplTeamProfile {
+  team: SplTeamInfo;
+  /** صف النادي في ترتيب دوريه (إن كان في دوري له جدول) */
+  standing: SplStandingRow | null;
+  /** سلَك البطولة التي عُثر على النادي فيها (لجلب مبارياته) */
+  competitionSlug: string | null;
+  competitionName: string | null;
+  fixtures: SplFixture[];
+  squad: SplSquadPlayer[];
+}
+
+/**
+ * صفحة النادي المتكاملة: هويته + صفّه في ترتيب دوريه + مبارياته + تشكيلته.
+ * يحدّد دوري النادي بالبحث في جداول البطولات السعودية ذات الترتيب (روشن أولًا).
+ * كل النداءات خلف كاش SWR مشترك، فالتجميع لا يكلّف المزود نداءات تُذكر.
+ */
+export async function getTeamProfile(teamId: number): Promise<SplTeamProfile | null> {
+  const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
+
+  let comp: SaudiCompetition | null = null;
+  let standing: SplStandingRow | null = null;
+  for (const c of leagueComps) {
+    const table = await getStandings(c).catch(() => [] as SplStandingRow[]);
+    const row = table.find((r) => r.team.id === teamId);
+    if (row) {
+      comp = c;
+      standing = row;
+      break;
+    }
+  }
+
+  const [info, squad] = await Promise.all([
+    getTeamInfo(teamId).catch(() => null),
+    getSquad(teamId).catch(() => null),
+  ]);
+
+  let fixtures: SplFixture[] = [];
+  if (comp) {
+    const all = await getFixtures(comp).catch(() => [] as SplFixture[]);
+    fixtures = all
+      .filter((f) => f.home.id === teamId || f.away.id === teamId)
+      .sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  const team: SplTeamInfo | null = info ?? squad?.team ?? (standing
+    ? { id: standing.team.id, name: standing.team.name, logo: standing.team.logo, country: null, founded: null, venue: null }
+    : null);
+  if (!team || !team.id) return null;
+
+  return {
+    team,
+    standing,
+    competitionSlug: comp?.slug ?? null,
+    competitionName: comp?.name ?? null,
+    fixtures,
+    squad: squad?.players ?? [],
+  };
+}
+
+// ---------- بطاقة اللاعب الشاملة ----------
+
+const parseMetric = (value: unknown): number | null => {
+  const n = parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export interface SplPlayerSeasonStats {
+  competition: string;
+  team: SplTeam;
+  matches: number;
+  lineups: number;
+  minutes: number;
+  rating: number | null;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+  saves: number;
+  conceded: number;
+}
+
+export interface SplPlayerCareerStop {
+  teamId: number;
+  team: string;
+  logo: string;
+  seasons: number[];
+}
+
+export interface SplPlayerTrophy {
+  competition: string;
+  country: string;
+  season: string;
+  place: string;
+  winner: boolean;
+}
+
+export interface SplPlayerCard {
+  id: number;
+  name: string;
+  fullName: string | null;
+  photo: string;
+  position: string;
+  number: number | null;
+  age: number | null;
+  birthDate: string | null;
+  birthPlace: string | null;
+  nationality: string | null;
+  height: number | null;
+  weight: number | null;
+  /** أرقام اللاعب في كل بطولة لعبها هذا الموسم (الأكثر مشاركةً أولًا) */
+  seasonStats: SplPlayerSeasonStats[];
+  career: SplPlayerCareerStop[];
+  trophies: SplPlayerTrophy[];
+}
+
+export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | null> {
+  // موسم دوري روشن الحالي كمرجع لأرقام الموسم الجاري
+  const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const season = await seasonFor(proLeague);
+
+  return withSWR(`spl:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const [profileRows, careerRows, trophyRows, statsRows] = await Promise.all([
+      apiGet("players/profiles", { player: playerId }),
+      apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
+      apiGet("trophies", { player: playerId }).catch(() => [] as any[]),
+      apiGet("players", { id: playerId, season }).catch(() => [] as any[]),
+    ]);
+
+    const p = profileRows[0]?.player;
+    if (!p?.id) return null;
+
+    const seasonStats: SplPlayerSeasonStats[] = (statsRows[0]?.statistics ?? [])
+      .map((st: any): SplPlayerSeasonStats => ({
+        competition: localizeSplCompetition(st.league?.name ?? ""),
+        team: localizeTeam(st.team),
+        matches: st.games?.appearences ?? 0,
+        lineups: st.games?.lineups ?? 0,
+        minutes: st.games?.minutes ?? 0,
+        rating: Number.isFinite(parseFloat(st.games?.rating ?? "")) ? parseFloat(st.games.rating) : null,
+        goals: st.goals?.total ?? 0,
+        assists: st.goals?.assists ?? 0,
+        yellow: st.cards?.yellow ?? 0,
+        red: (st.cards?.red ?? 0) + (st.cards?.yellowred ?? 0),
+        saves: st.goals?.saves ?? 0,
+        conceded: st.goals?.conceded ?? 0,
+      }))
+      .filter((s: SplPlayerSeasonStats) => s.matches > 0)
+      .sort((a: SplPlayerSeasonStats, b: SplPlayerSeasonStats) => b.matches - a.matches);
+
+    const career: SplPlayerCareerStop[] = careerRows
+      .map((row: any): SplPlayerCareerStop => ({
+        teamId: row.team?.id ?? 0,
+        team: localizeSplTeamName(row.team?.id, row.team?.name ?? ""),
+        logo: row.team?.logo ?? "",
+        seasons: ((row.seasons ?? []) as number[]).filter((s) => Number.isFinite(s)).sort((a, b) => a - b),
+      }))
+      .filter((stop: SplPlayerCareerStop) => stop.team)
+      .sort(
+        (a: SplPlayerCareerStop, b: SplPlayerCareerStop) =>
+          (b.seasons[b.seasons.length - 1] ?? 0) - (a.seasons[a.seasons.length - 1] ?? 0)
+      );
+
+    const seen = new Set<string>();
+    const trophies: SplPlayerTrophy[] = trophyRows
+      .filter((row: any) => row?.league && row?.season)
+      .filter((row: any) => {
+        const key = `${row.league}|${row.country}|${row.season}|${row.place}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((row: any): SplPlayerTrophy => ({
+        competition: localizeSplCompetition(row.league),
+        country: localizeSplCountry(row.country ?? ""),
+        season: String(row.season),
+        place: SPL_TROPHY_PLACE_AR[row.place] ?? row.place ?? "",
+        winner: row.place === "Winner",
+      }))
+      .sort((a: SplPlayerTrophy, b: SplPlayerTrophy) => b.season.localeCompare(a.season));
+
+    const officialFull = [p.firstname, p.lastname].filter(Boolean).join(" ").trim();
+    const displayName = localizePlayerName(p.name) || p.name || "";
+    const translatedFull = officialFull ? localizePlayerName(officialFull) || officialFull : "";
+
+    return {
+      id: p.id,
+      name: displayName,
+      fullName: translatedFull && translatedFull !== displayName ? translatedFull : null,
+      photo: p.photo ?? "",
+      position: SPL_POSITION_AR[p.position] ?? p.position ?? "",
+      number: p.number ?? null,
+      age: p.age ?? null,
+      birthDate: p.birth?.date ?? null,
+      birthPlace: p.birth?.place ? localizePlayerName(p.birth.place) || p.birth.place : null,
+      nationality: localizeSplCountry(p.nationality ?? "") || null,
+      height: parseMetric(p.height),
+      weight: parseMetric(p.weight),
+      seasonStats,
+      career,
+      trophies,
     };
   });
 }
