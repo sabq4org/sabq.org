@@ -355,6 +355,10 @@ const GulfLiveCoverage = lazy(() => retryImport(() => import("@/pages/GulfLiveCo
 const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
 const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")));
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
+// قسم رياضي مخفي قيد التطوير — مسار غير مدرج في القائمة، خلف SAUDI_LEAGUE_ENABLED في الـAPI
+const SaudiLeague = lazy(() => retryImport(() => import("@/pages/SaudiLeague")));
+// البوابة الرياضية الجديدة — قسم متكامل عام على /sports
+const SportsHub = lazy(() => retryImport(() => import("@/pages/SportsHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -856,7 +860,11 @@ function Router() {
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
-        
+        {/* قسم رياضي مخفي قيد التطوير — غير مدرج في أي قائمة */}
+        <Route path="/saudi-league">{() => <LazyRoute component={SaudiLeague} />}</Route>
+        {/* البوابة الرياضية الجديدة — قسم متكامل عام */}
+        <Route path="/sports">{() => <LazyRoute component={SportsHub} />}</Route>
+
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>
         <Route path="/dashboard/smart-links">{() => <LazyRoute component={SmartLinksManagement} />}</Route>
