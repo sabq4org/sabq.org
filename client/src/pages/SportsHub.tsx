@@ -98,6 +98,8 @@ interface SpMatchRatings {
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; logo?: string | null; season?: number | null; }
 interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
+interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
+interface SpH2H { summary: { total: number; homeWins: number; draws: number; awayWins: number } | null; meetings: SpH2HMeeting[]; }
 interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
 
 // ============================================================
@@ -848,6 +850,53 @@ function PredictionBar({ prediction, homeName, awayName }: { prediction: SpPredi
   );
 }
 
+// المواجهات المباشرة — ملخّص (فوز/تعادل/خسارة من منظور صاحب الأرض) + آخر اللقاءات.
+function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: number; homeName: string; awayName: string }) {
+  const s = h2h.summary;
+  const fmt = (d: string) => {
+    const t = Date.parse(d);
+    return Number.isFinite(t) ? new Intl.DateTimeFormat("ar-SA", { year: "numeric", month: "short", day: "numeric" }).format(t) : "";
+  };
+  return (
+    <div>
+      {s && s.total > 0 && (
+        <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-primary/10 py-2.5">
+            <div className="text-xl font-black tabular-nums text-primary">{s.homeWins}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5 truncate px-1">فوز {homeName}</div>
+          </div>
+          <div className="rounded-xl bg-muted py-2.5">
+            <div className="text-xl font-black tabular-nums text-foreground">{s.draws}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">تعادل</div>
+          </div>
+          <div className="rounded-xl bg-amber-500/10 py-2.5">
+            <div className="text-xl font-black tabular-nums text-amber-600">{s.awayWins}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5 truncate px-1">فوز {awayName}</div>
+          </div>
+        </div>
+      )}
+      <ul className="space-y-2">
+        {h2h.meetings.map((m) => {
+          const decided = m.goals.home != null && m.goals.away != null;
+          const homeWon = decided && (m.goals.home! > m.goals.away!);
+          const awayWon = decided && (m.goals.away! > m.goals.home!);
+          return (
+            <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm">
+              <span className="w-20 shrink-0 text-[11px] text-muted-foreground">{fmt(m.date)}</span>
+              <span className={`flex-1 truncate text-left ${homeWon ? "font-bold text-foreground" : "text-muted-foreground"}`}>{m.home.name}</span>
+              <span className="shrink-0 font-black tabular-nums text-foreground px-2">{decided ? `${m.goals.home} - ${m.goals.away}` : "—"}</span>
+              <span className={`flex-1 truncate ${awayWon ? "font-bold text-foreground" : "text-muted-foreground"}`}>{m.away.name}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {h2h.meetings.length > 0 && (
+        <div className="mt-2 text-[11px] text-muted-foreground text-center">آخر {h2h.meetings.length} مواجهة بين الفريقين</div>
+      )}
+    </div>
+  );
+}
+
 function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -862,6 +911,14 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
   });
+  const homeId = data?.fixture?.home?.id;
+  const awayId = data?.fixture?.away?.id;
+  const { data: h2hData } = useQuery<SpH2H>({
+    queryKey: [`/api/sports/h2h`, { home: homeId, away: awayId }],
+    enabled: id != null && !!homeId && !!awayId,
+    staleTime: 30 * 60_000,
+  });
+  const h2hMeetings = Array.isArray(h2hData?.meetings) ? h2hData!.meetings : [];
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
   const events = Array.isArray(data?.events) ? data!.events : [];
@@ -872,6 +929,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
+    h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
@@ -965,6 +1023,9 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
           })()}
           {!isLoading && activeKey === "lineups" && lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
+          {!isLoading && activeKey === "h2h" && fx && h2hData && (
+            <H2HView h2h={h2hData} homeId={fx.home.id} homeName={fx.home.name} awayName={fx.away.name} />
+          )}
           {!isLoading && tabs.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">لا توجد تفاصيل متاحة لهذه المباراة بعد</div>}
         </div>
       </motion.div>
