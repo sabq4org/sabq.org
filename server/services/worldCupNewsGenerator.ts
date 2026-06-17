@@ -29,6 +29,7 @@ import {
   type WcGroup,
   type WcMatchDetail,
 } from "./worldCupService";
+import { isArabTeam } from "./worldCupNames";
 
 const SABQ_AI_AUTHOR_ID = "bkIhDx7BM8quPu2W1tB6Z"; // "سبق AI" (sabqai@sabq.org)
 const SLUG_PREFIX = "wc26";
@@ -43,12 +44,26 @@ const PREVIEW_WINDOW_MS = 26 * 60 * 60 * 1000; // معاينة لكل مبارا
 const REPORT_WINDOW_MS = 12 * 60 * 60 * 1000; // تقرير لكل مباراة انتهت خلال آخر 12 ساعة
 const MAX_GENERATIONS_PER_RUN = Number(process.env.WC_NEWS_MAX_PER_RUN || 4);
 
+// أرقام جولات دور المجموعات (المرحلة الأولى من البطولة). تقرير المنتخبات
+// العربية يُنتَج لكل جولة منها على حدة بعد اكتمال مباريات العرب فيها.
+const GROUP_STAGE_ROUNDS = [1, 2, 3] as const;
+const groupStageRoundEn = (n: number) => `Group Stage - ${n}`;
+
+// زمن نضج البيانات بعد آخر انطلاقة في الجولة: مباراة دور المجموعات ٩٠ دقيقة +
+// استراحة + بدل ضائع ≈ ساعتان حتى صافرة النهاية، نضيف هامش أمان ليستقر
+// المزود (نتائج/أحداث) قبل التجميع. أي ~٤٥ دقيقة بعد صافرة آخر مباراة عربية.
+const ARAB_ROUNDUP_MIN_AGE_MS =
+  Number(process.env.WC_ARAB_ROUNDUP_MIN_AGE_MIN || 150) * 60 * 1000;
+
 const autoPublish = () => process.env.WC_NEWS_AUTOPUBLISH !== "false";
 
 export type WcArticleKind = "preview" | "report";
 
 const slugFor = (kind: WcArticleKind, fixtureId: number) =>
   `${SLUG_PREFIX}-${kind}-${fixtureId}`;
+
+// slug حتمي لتقرير الجولة (gs1/gs2/gs3) — وجوده يعني أن التقرير أُنتِج
+const arabRoundupSlug = (roundNum: number) => `${SLUG_PREFIX}-arab-roundup-gs${roundNum}`;
 
 // ---------- استعلامات قاعدة البيانات (طبقة الخدمة وفق ADR-001) ----------
 
@@ -384,18 +399,30 @@ async function generateAndStore(
     }
   }
 
-  // رابط داخلي ثابت نحو هب المونديال — للقارئ وللزاحف معًا (يصل قوقل عبر
-  // semanticHtml للمقال في edgeMeta، ويبني إشارة الكلمة المفتاحية للهب)
-  const hubFooter =
-    '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
+  return persistArticle(slugFor(kind, detail.fixture.id), generated, published);
+}
 
+// رابط داخلي ثابت نحو هب المونديال — للقارئ وللزاحف معًا (يصل قوقل عبر
+// semanticHtml للمقال في edgeMeta، ويبني إشارة الكلمة المفتاحية للهب)
+const HUB_FOOTER =
+  '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
+
+/**
+ * حفظ مادة مولّدة في جدول المقالات بنفس إعدادات أخبار المونديال (تصنيف
+ * الرياضة، الكاتب «سبق AI»، displayOrder للحداثة). الـ slug يُختَم أيضًا في
+ * legacySlug لتثبيت منع التكرار حتى لو غيّر المحرر الـ slug من العنوان.
+ */
+async function persistArticle(
+  slug: string,
+  generated: GeneratedWcArticle,
+  published: boolean
+): Promise<{ id: string; published: boolean }> {
   const now = new Date();
   const created = await storage.createArticle({
     title: generated.title,
-    slug: slugFor(kind, detail.fixture.id),
-    // مفتاح منع التكرار المحصّن — يبقى ثابتًا حتى لو أعاد المحرر توليد الـ slug
-    legacySlug: slugFor(kind, detail.fixture.id),
-    content: `${generated.content}\n${hubFooter}`,
+    slug,
+    legacySlug: slug,
+    content: `${generated.content}\n${HUB_FOOTER}`,
     excerpt: (generated.summary || generated.metaDescription).substring(0, 200),
     aiSummary: generated.summary,
     locale: "ar",
@@ -443,17 +470,125 @@ async function safeStandings(): Promise<WcGroup[]> {
   }
 }
 
+// ---------- تقرير المنتخبات العربية بعد كل جولة ----------
+// يجمع نتائج كل المنتخبات العربية في جولة دور مجموعات واحدة في مادة تحليلية
+// واحدة، تُنشر بعد اكتمال آخر مباراة عربية في الجولة واستقرار البيانات.
+
+interface ArabMatchSummary {
+  fixture: WcFixture;
+  detail: WcMatchDetail | null;
+}
+
+/** الأهداف فقط من وقائع المباراة — موجز مختصر يكفي تقرير الجولة */
+function goalsBrief(detail: WcMatchDetail): string {
+  const goals = detail.events.filter((ev) => ev.type === "goal");
+  if (!goals.length) return "";
+  const lines = goals.map((ev) => {
+    const minute = ev.extraMinute ? `${ev.minute}+${ev.extraMinute}` : `${ev.minute}`;
+    const team =
+      ev.teamId === detail.fixture.home.id ? detail.fixture.home.name : detail.fixture.away.name;
+    return `د${minute} ${ev.player} (${team})`;
+  });
+  return `الأهداف: ${lines.join("، ")}`;
+}
+
+/** موقع المنتخبات العربية في مجموعاتها بعد الجولة (من جدول الترتيب الرسمي) */
+function arabStandingsBrief(arabTeamIds: Set<number>, groups: WcGroup[]): string {
+  const lines: string[] = [];
+  for (const group of groups) {
+    for (const row of group.rows) {
+      if (!arabTeamIds.has(row.team.id)) continue;
+      const diff = `${row.goalsDiff >= 0 ? "+" : ""}${row.goalsDiff}`;
+      lines.push(
+        `- ${row.team.name}: المركز ${row.rank} في ${group.group} برصيد ${row.points} نقطة (لعب ${row.played}، فوز ${row.win}، تعادل ${row.draw}، خسارة ${row.lose}، فارق الأهداف ${diff})`
+      );
+    }
+  }
+  return lines.length
+    ? `ترتيب المنتخبات العربية في مجموعاتها بعد هذه الجولة:\n${lines.join("\n")}`
+    : "";
+}
+
+function buildArabRoundupPrompt(
+  roundLabel: string,
+  matches: ArabMatchSummary[],
+  groups: WcGroup[]
+): string {
+  const arabIds = new Set<number>();
+  for (const { fixture } of matches) {
+    if (isArabTeam(fixture.home.id)) arabIds.add(fixture.home.id);
+    if (isArabTeam(fixture.away.id)) arabIds.add(fixture.away.id);
+  }
+
+  const blocks = matches
+    .map(({ fixture, detail }) => {
+      const outcome = describeOutcome(fixture);
+      const goals = detail ? goalsBrief(detail) : "";
+      const motm = detail?.manOfTheMatch
+        ? `أفضل لاعب: ${detail.manOfTheMatch.name} (تقييم ${detail.manOfTheMatch.rating})`
+        : "";
+      return [
+        `• ${fixture.home.name} ${fixture.goals.home ?? 0} - ${fixture.goals.away ?? 0} ${fixture.away.name}`,
+        `  ${outcome.line}`,
+        goals && `  ${goals}`,
+        motm && `  ${motm}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+
+  return `${EDITORIAL_RULES}
+
+المطلوب: تقرير فني تحليلي شامل لأداء المنتخبات العربية في ${roundLabel} من كأس العالم 2026، يجمع نتائج كل المنتخبات العربية في هذه الجولة في مادة واحدة.
+
+تجاوز قاعدتي العنوان وعدد الكلمات أعلاه لهذه المادة تحديدًا: العنوان يعبّر عن حصاد المنتخبات العربية في الجولة (لا يلزم ذكر اسمي منتخبين)، وطول المتن من 600 إلى 900 كلمة لاتساع التغطية.
+
+موجز البيانات (المصدر الوحيد المسموح):
+نتائج مباريات المنتخبات العربية في ${roundLabel}:
+${blocks}
+
+${arabStandingsBrief(arabIds, groups)}
+
+ابنِ التقرير على هذا الترتيب: مقدمة تلخّص حصاد المنتخبات العربية في الجولة (عدد المنتخبات، كم فاز/تعادل/خسر، وأبرز مفاجأة أو إنجاز)، ثم فقرة مستقلة (<h2>) لكل منتخب عربي تسرد مباراته ونتيجتها وأبرز لحظاتها وموقعه في مجموعته، ثم خاتمة تستشرف حظوظ التأهل اعتمادًا على الأرقام فقط.
+قواعد حاسمة: التزم بالنتائج القطعية أعلاه حرفيًا (لا تعكس فائزًا أو خاسرًا، ولا تصف تعادلًا كفوز ولا فوزًا كتعادل). لا تقارن بأرقام جولات لم تَرِد في الموجز.
+
+${JSON_CONTRACT}`;
+}
+
+async function generateArabRoundup(
+  roundNum: number,
+  roundLabel: string,
+  arabFixtures: WcFixture[]
+): Promise<{ id: string; published: boolean }> {
+  // تفاصيل كل مباراة عربية (خلف كاش SWR) لإثراء الأهداف وأفضل لاعب — تتدهور
+  // بأمان إلى الموجز المبني على النتيجة وحدها إن تعذّر جلب التفاصيل
+  const matches: ArabMatchSummary[] = [];
+  for (const fixture of arabFixtures) {
+    const detail = await getMatchDetail(fixture.id).catch(() => null);
+    matches.push({ fixture, detail });
+  }
+
+  const prompt = buildArabRoundupPrompt(roundLabel, matches, await safeStandings());
+  const response = await aiManager.generate(prompt, { provider: "openai", model: "gpt-5.1" });
+  if (response.error) throw new Error(`[WC News] AI generation failed: ${response.error}`);
+  const generated = parseGenerated(response.content);
+
+  return persistArticle(arabRoundupSlug(roundNum), generated, autoPublish());
+}
+
 // ---------- دورة العمل التي يستدعيها الـ cron ----------
 
 export interface WcNewsRunSummary {
   previews: number;
   reports: number;
+  arabRoundups: number;
   skipped: number;
   errors: number;
 }
 
 export async function runWorldCupNewsCycle(): Promise<WcNewsRunSummary> {
-  const summary: WcNewsRunSummary = { previews: 0, reports: 0, skipped: 0, errors: 0 };
+  const summary: WcNewsRunSummary = { previews: 0, reports: 0, arabRoundups: 0, skipped: 0, errors: 0 };
   const fixtures = await getFixtures();
   const now = Date.now();
 
@@ -507,6 +642,42 @@ export async function runWorldCupNewsCycle(): Promise<WcNewsRunSummary> {
     } catch (error) {
       summary.errors++;
       console.error(`[WC News] ❌ ${kind} failed for fixture ${fixture.id}:`, error);
+    }
+  }
+
+  // تقرير المنتخبات العربية لكل جولة دور مجموعات اكتملت مبارياتها العربية.
+  // البوابة: كل مباريات العرب في الجولة «انتهت» + مضى زمن نضج البيانات على
+  // آخر انطلاقة (≈٤٥ دقيقة بعد صافرة آخر مباراة عربية). منع التكرار بالـ slug.
+  for (const roundNum of GROUP_STAGE_ROUNDS) {
+    if (generated >= MAX_GENERATIONS_PER_RUN) break;
+    const slug = arabRoundupSlug(roundNum);
+    try {
+      if (await articleExists(slug)) {
+        summary.skipped++;
+        continue;
+      }
+      const roundEn = groupStageRoundEn(roundNum);
+      const arabFixtures = fixtures.filter(
+        (f) => f.roundEn === roundEn && (isArabTeam(f.home.id) || isArabTeam(f.away.id))
+      );
+      if (!arabFixtures.length) continue; // لا منتخبات عربية في هذه الجولة أو لم تُجدوَل بعد
+
+      const allFinished = arabFixtures.every((f) => f.status.finished);
+      const latestKickoff = Math.max(...arabFixtures.map((f) => f.timestamp * 1000));
+      if (!allFinished || now - latestKickoff < ARAB_ROUNDUP_MIN_AGE_MS) {
+        summary.skipped++;
+        continue;
+      }
+
+      const { id, published } = await generateArabRoundup(roundNum, arabFixtures[0].round, arabFixtures);
+      generated++;
+      summary.arabRoundups++;
+      console.log(
+        `[WC News] ✅ تقرير المنتخبات العربية (${arabFixtures[0].round}) ${published ? "نُشر" : "مسودة (محجوب للمراجعة)"} → article ${id} (${arabFixtures.length} مباراة)`
+      );
+    } catch (error) {
+      summary.errors++;
+      console.error(`[WC News] ❌ arab-roundup gs${roundNum} failed:`, error);
     }
   }
 
