@@ -26,6 +26,23 @@ export interface WcMomentum {
   points: WcMomentumPoint[];
 }
 
+/** التعليق المباشر المترجم (من commentaries) — /api/world-cup/commentary/:id */
+export interface WcCommentaryItem {
+  minute: number;
+  extraMinute: number | null;
+  goal: boolean;
+  important: boolean;
+  textAr: string;
+  textEn: string;
+  order: number;
+}
+
+export interface WcCommentary {
+  available: boolean;
+  live: boolean;
+  items: WcCommentaryItem[];
+}
+
 export interface WcFixture {
   id: number;
   date: string;

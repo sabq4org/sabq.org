@@ -12,6 +12,7 @@ import {
   Square,
   Star,
 } from "lucide-react";
+import { CornerDownRight, Flag, Hand, Rocket, Timer } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -30,6 +31,8 @@ import {
   elapsedLabel,
   formatKickoffDay,
   formatKickoffTime,
+  type WcCommentary,
+  type WcCommentaryItem,
   type WcMomentum,
   type WcMomentumPoint,
   type WcFixture,
@@ -537,6 +540,109 @@ function MomentumTab({
   );
 }
 
+// ---------- التعليق المباشر المترجم (من commentaries) ----------
+
+// أيقونة بحسب نوع اللحظة المُستنتجة من النص العربي (الخادم لا يُرسل نوعًا صريحًا).
+function commentaryKind(item: WcCommentaryItem): string {
+  if (item.goal) return "goal";
+  const t = item.textAr;
+  if (t.includes("بطاقة حمراء")) return "red";
+  if (t.includes("بطاقة صفراء")) return "yellow";
+  if (t.includes("ضربة جزاء")) return "penalty";
+  if (t.includes("ركلة ركنية")) return "corner";
+  if (t.includes("تبديل")) return "substitution";
+  if (t.startsWith("تصدٍّ")) return "shot-saved";
+  if (t.startsWith("تسديدة محالة")) return "shot-missed";
+  if (t.includes("صافرة النهاية")) return "fulltime";
+  if (t.includes("الوقت بدل الضائع")) return "added-time";
+  if (t.includes("بداية الشوط") || t.includes("نهاية الشوط")) return "period";
+  return "other";
+}
+
+function CommentaryIcon({ kind }: { kind: string }) {
+  switch (kind) {
+    case "goal":
+      return <Goal className="h-4 w-4 text-emerald-500" />;
+    case "yellow":
+      return <Square className="h-4 w-4 fill-yellow-400 text-yellow-400" />;
+    case "red":
+      return <Square className="h-4 w-4 fill-red-500 text-red-500" />;
+    case "penalty":
+      return <Goal className="h-4 w-4 text-sky-500" />;
+    case "corner":
+      return <CornerDownRight className="h-4 w-4 text-sky-500" />;
+    case "substitution":
+      return <ArrowLeftRight className="h-4 w-4 text-sky-500" />;
+    case "shot-saved":
+      return <Hand className="h-4 w-4 text-indigo-500" />;
+    case "shot-missed":
+      return <Rocket className="h-4 w-4 text-muted-foreground" />;
+    case "fulltime":
+      return <Flag className="h-4 w-4 text-red-500" />;
+    case "period":
+    case "added-time":
+      return <Timer className="h-4 w-4 text-muted-foreground" />;
+    default:
+      return <Radio className="h-4 w-4 text-muted-foreground" />;
+  }
+}
+
+function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }) {
+  const { data, isLoading } = useQuery<WcCommentary>({
+    queryKey: [`/api/world-cup/commentary/${fixtureId}`],
+    refetchInterval: live ? 20_000 : false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 py-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  const items = Array.isArray(data?.items) ? data!.items : [];
+  if (items.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        {live
+          ? "التعليق اللحظي يبدأ مع صافرة البداية"
+          : "لا يتوفر تعليق لهذه المباراة"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 py-1">
+      {items.map((item, index) => {
+        const kind = commentaryKind(item);
+        const highlight = item.goal || item.important;
+        return (
+          <div
+            key={index}
+            className={`flex items-start gap-3 rounded-xl px-3 py-2.5 text-right transition-colors ${
+              highlight ? "bg-emerald-500/10 ring-1 ring-emerald-500/20" : "bg-muted/40"
+            }`}
+          >
+            <Badge
+              variant="secondary"
+              className="tabular-nums shrink-0 min-w-[3rem] justify-center"
+              dir="ltr"
+            >
+              {item.minute > 0 ? `${item.minute}'` : "—"}
+              {item.minute > 0 && item.extraMinute ? `+${item.extraMinute}` : ""}
+            </Badge>
+            <CommentaryIcon kind={kind} />
+            <p className="text-sm leading-relaxed flex-1 min-w-0">{item.textAr}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -610,8 +716,18 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
         </DialogHeader>
 
         {detail && (
-          <Tabs defaultValue="events" dir="rtl" className="flex-1 min-h-0 flex flex-col">
+          <Tabs
+            defaultValue={detail.fixture.status.live ? "live" : "events"}
+            dir="rtl"
+            className="flex-1 min-h-0 flex flex-col"
+          >
             <TabsList className="self-center flex-wrap h-auto">
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsTrigger value="live" className="gap-1">
+                  {detail.fixture.status.live && <Radio className="h-3 w-3 animate-pulse text-red-500" />}
+                  {detail.fixture.status.live ? "مباشر" : "التعليق"}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="events">الأحداث</TabsTrigger>
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsTrigger value="momentum" className="gap-1">
@@ -637,6 +753,11 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               <TabsContent value="events" className="mt-0">
                 <EventsTimeline events={detail.events} fixture={detail.fixture} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsContent value="live" className="mt-0">
+                  <CommentaryTab fixtureId={detail.fixture.id} live={detail.fixture.status.live} />
+                </TabsContent>
+              )}
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsContent value="momentum" className="mt-0">
                   <MomentumTab
