@@ -911,7 +911,7 @@ export default function SportsHub() {
   const [openMatch, setOpenMatch] = useState<number | null>(null);
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
-  useCanonical("https://sabq.org/sports");
+  useCanonical("https://sabq.org/sports2");
 
   const { data: newsRaw, isLoading: newsLoading } = useQuery<ArticleWithDetails[]>({ queryKey: ["/api/categories", "sports", "articles"] });
   const news = Array.isArray(newsRaw) ? newsRaw : [];
