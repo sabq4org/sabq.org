@@ -1,22 +1,24 @@
 /**
- * تعريف تعليقات SportMonks المباشرة إلى العربية — طبقة قالبية سريعة.
+ * تعريف تعليقات SportMonks المباشرة إلى العربية.
  *
- * فلسفة التعريب: تعليقات SportMonks أنماط مكرّرة محدودة (هدف، ركنية، تسديدة،
- * إنذار…) فلا نحتاج ترجمة AI لكل رسالة. نكتفي بـ:
- *   1) كشف النمط بـRegEx على النص الإنجليزي وإخراج قالب عربي.
- *   2) تعريب أسماء اللاعبين/المنتخبات الظاهرة في النص عبر resolveNames (التي
- *      تجمع القاموس الثابت + كاش الذاكرة/قاعدة البيانات + AI دفعة واحدة،
- *      ثم تُكاش كل اسم للأبد).
+ * استراتيجية ثلاثية تضمن عدم ظهور أي نص إنجليزي للمستخدم:
  *
- * الأنماط غير المصنّفة: نُعرّب أسماءها ونبقي النص كما هو (سريع، 0 تكلفة AI
- * إضافية) — هكذا لا تختفي أي رسالة.
+ *   1) قوالب RegEx: الأنماط المتكرّرة (هدف، ركنية، بطاقة، تسديدة، ركلة حرة،
+ *      تبديل، أشواط…) تُترجم فوريًا — 0 تكلفة، 0 استدعاء AI.
+ *   2) تعريب الأسماء: أسماء اللاعبين/المنتخبات الظاهرة في النص تُحلّ دفعة واحدة
+ *      عبر resolveNames (قاموس ثابت + كاش DB + AI، ثم يُكاش لكل اسم للأبد).
+ *   3) AI fallback للأنماط المستقبلية غير المعروفة: ترجمة دفعية بـgpt-4o-mini
+ *      مع كاش ذاكرة دائم لكل نص فريد — لا نكرّر الترجمة ولا نختلط أبدًا.
  *
  * مرجع العيّنات: واجهة commentaries/fixtures/:id ترجع بيانات بـ
  * comment / minute / extra_minute / is_goal / is_important / order، والنصوص
- * أنماط موثّقة (Goal! ... takes the lead, Corner awarded to, ... receives
- * a yellow card, Attempt saved/missed, First/Second half begins…).
+ * أنماط موثّقة عبر مئات المباريات (Goal! ... takes the lead, wins a free kick,
+ * Corner awarded to, Attempt saved/missed, First/Second half begins…).
  */
+import OpenAI from "openai";
 import { resolveNames } from "./worldCupNameTranslator";
+
+const openai = new OpenAI();
 
 export interface SmCommentary {
   comment: string;
@@ -39,7 +41,8 @@ export interface WcCommentaryItem {
 
 /**
  * يعرّب دفعة تعليقات SportMonks للعربية دفعة واحدة.
- * يمرّ واحدًا (resolveNames) على كل أسماء الدفعة، ثم يطبّق القوالب متزامنًا.
+ * يمرّ واحدًا (resolveNames) على كل أسماء الدفعة، ثم يطبّق القوالب متزامنًا،
+ * ثم يُترجم بـAI أي تعليقات لم تطابق قالبًا (دفعة واحدة، بكاش دائم).
  *
  * @param comments التعليقات الخام كما وردت من SportMonks
  * @returns عناصر مُعرّبة مرتّبة تنازليًا حسب ترتيب المزود (الأحدث أولًا)
@@ -47,24 +50,118 @@ export interface WcCommentaryItem {
 export async function translateCommentaries(comments: SmCommentary[]): Promise<WcCommentaryItem[]> {
   if (comments.length === 0) return [];
 
-  // اجمع كل الأسماء الإنجليزية الظاهرة عبر الدفعة لتعريبها جملة واحدة
+  // (1+2) اجمع الأسماء الإنجليزية عبر الدفعة لتعريبها جملة واحدة
   const nameSet = new Set<string>();
   for (const c of comments) collectNames(c.comment, nameSet);
   const tr = await resolveNames([...nameSet]);
 
-  const items = comments.map<WcCommentaryItem>((c) => ({
-    minute: c.minute ?? 0,
-    extraMinute: c.extra_minute,
-    goal: c.is_goal,
-    important: c.is_important,
-    textAr: translateOne(c.comment, tr, c.is_goal),
-    textEn: c.comment,
-    order: c.order,
+  // طبّق القوالب أولًا — أكثريتها تُحل هنا
+  const results = comments.map((c) => ({
+    src: c,
+    ar: translateOne(c.comment, tr, c.is_goal),
+  }));
+
+  // (3) اجمع التعليقات التي لم تُترجم (بقي فيها حروف لاتينية بعد القوالب)
+  // وترجمها بـAI دفعة واحدة — ضمان عدم ظهور أي إنجليزي للمستخدم.
+  const pending = results.filter((r) => !isArabicOnly(r.ar)).map((r) => r.src.comment);
+  const uniquePending = [...new Set(pending)];
+  const aiMap = uniquePending.length > 0 ? await aiTranslate(uniquePending) : {};
+  // طبّق تعريب الأسماء على نتائج الـAI أيضًا (قد تحتوي أسماء إنجليزية)
+  for (const [en, ar] of Object.entries(aiMap)) {
+    aiMap[en] = applyNames(ar, tr);
+  }
+
+  const items = results.map<WcCommentaryItem>((r) => ({
+    minute: r.src.minute ?? 0,
+    extraMinute: r.src.extra_minute,
+    goal: r.src.is_goal,
+    important: r.src.is_important,
+    textAr: aiMap[r.src.comment] || r.ar,
+    textEn: r.src.comment,
+    order: r.src.order,
   }));
 
   // تنازليًا: الأحدث أولًا
   items.sort((a, b) => b.order - a.order);
   return items;
+}
+
+// ---------- كشف «عربي خالص» ----------
+
+// نعتبر النص عربيًا خالصًا لو خلا من أي حرف لاتيني (أسماء لاعبين متبقية).
+// هذا هو الفلتر الذي يقرر هل نحتاج ترجمة AI للسطر.
+const HAS_LATIN_RE = /[A-Za-zÀ-ÿ]/;
+function isArabicOnly(text: string): boolean {
+  return !HAS_LATIN_RE.test(text);
+}
+
+// ---------- كاش ذاكرة لترجمات الـAI ----------
+
+// النص الإنجليزي → العربي. تُحسب مرة واحدة لكل نص فريد ثم تُكاش طوال عمر العملية.
+// تعليقات المباراة محدودة (~120 لكل مباراة، كثيرها مكرّر عبر المباريات) فيكفي
+// الكاش دون جدول قاعدة بيانات. أي ترجمة جديدة تُضاف تلقائيًا هنا.
+const aiTranslationCache = new Map<string, string>();
+
+/**
+ * يترجم دفعة نصوص إنجليزية للعربية عبر gpt-4o-mini، مع كاش ذاكرة دائم.
+ * «أفضل جهد»: لو غابت OPENAI_API_KEY أو فشل الطلب، نُعيد النص كما هو (لا عطل).
+ */
+async function aiTranslate(texts: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const todo: string[] = [];
+  for (const t of texts) {
+    const cached = aiTranslationCache.get(t);
+    if (cached != null) {
+      out[t] = cached;
+    } else {
+      todo.push(t);
+    }
+  }
+  if (todo.length === 0) return out;
+
+  if (!(process.env.OPENAI_API_KEY || "").trim()) {
+    // لا AI متاح — نُبقي النص كما هو (تعريب الأسماء طُبّق مسبقًا في translateCommentaries)
+    for (const t of todo) out[t] = t;
+    return out;
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "أنت مترجم تعليقات رياضية حيّة لكرة القدم من الإنجليزية إلى العربية الفصحى المبسّطة. " +
+            "ترجم كل جملة ترجمة طبيعية وموجزة كما تُقرأ في تطبيق رياضي عربي (مثل: \"Goal! France takes the lead 2-1\" " +
+            "← \"هدف! تتقدّم فرنسا 2-1\"). حافظ على أسماء اللاعبين والمنتخبات كما هي إن وردت. " +
+            "أعد JSON فقط بالشكل: {\"items\":[{\"src\":\"<النص الإنجليزي كما ورد>\",\"ar\":\"<العربي>\"}]}.",
+        },
+        { role: "user", content: JSON.stringify(todo) },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+      max_tokens: Math.min(4000, 200 + todo.length * 80),
+    });
+    const content = response.choices[0]?.message?.content;
+    if (content) {
+      const parsed = JSON.parse(content) as { items?: { src?: string; ar?: string }[] };
+      for (const item of parsed.items ?? []) {
+        if (item.src && item.ar) {
+          out[item.src] = item.ar;
+          aiTranslationCache.set(item.src, item.ar);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[Commentary] AI translation failed:", (error as Error)?.message);
+  }
+
+  // ما تبقّى دون ترجمة نُبقيه كما هو (تعريب الأسماء طُبّق)
+  for (const t of todo) {
+    if (out[t] == null) out[t] = t;
+  }
+  return out;
 }
 
 // ---------- جمع الأسماء من النص ----------
@@ -98,10 +195,21 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
   // نسخة بأسماء مُعرّبة مسبقًا — تُستعمل في الخرج المُجمَّع لتفادي مزج عربي/إنجليزي.
   const ar = applyNames(s, tr);
 
-  // الأهداف: "Goal! <Team> takes the lead N-M with <Player> scoring..."
+  // ===== الأهداف (أنماط متعدّدة) =====
+  // "Goal! <Team> takes the lead N-M with <Player> scoring..."
   let m = s.match(/^Goal!\s+(.+?)\s+takes the lead\s+(\d+-\d+)\s+with\s+(.+?)\s+scoring/i);
   if (m) {
     return `هدف! ${team(m[1], tr)} يتقدّم ${m[2]} عبر ${player(m[3], tr)}${goalTail(s)}`;
+  }
+  // "Goal! <Team> equalizes at N-M ..."
+  m = s.match(/^Goal!\s+(.+?)\s+equaliz(?:e|es|ed)\s+(?:at\s+)?(\d+-\d+)/i);
+  if (m) {
+    return `هدف! ${team(m[1], tr)} يدرك التعادل ${m[2]}${goalTail(s)}`;
+  }
+  // "Goal! <Team> lead N-N against <Team>." / "<Team> N, <Team> N."
+  m = s.match(/^Goal!\s+(.+?)\s+lead\s+(\d+-\d+)\s+against\s+(.+?)(?:[.,]|$)/i);
+  if (m) {
+    return `هدف! ${team(m[1], tr)} يتقدّم ${m[2]} على ${team(m[3], tr)}${goalTail(s)}`;
   }
   // "Goal! The match is now N-M as <Player> scores for <Team>..."
   m = s.match(/^Goal!\s+The match is now\s+(\d+-\d+)\s+as\s+(.+?)\s+scores\s+for\s+(.+?)(?:\s+with|\s*,|\.|$)/i);
@@ -115,16 +223,21 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
     const side = m[2] ? ` لـ${team(m[2], tr)}` : "";
     return `هدف! سجّل ${who}${side}${goalTail(s)}`;
   }
+  // "Own goal by <Player> gives <Team> a N-M lead..."
+  m = s.match(/^Own goal\s+by\s+(.+?)\s+gives\s+(.+?)\s+a\s+(\d+-\d+)/i);
+  if (m) {
+    return `هدف عكسي من ${player(m[1], tr)} يمنح ${team(m[2], tr)} التقدّم ${m[3]}`;
+  }
   // أي هدف آخر يحمل is_goal لكن لا يطابق الأنماط أعلاه
   if (isGoal) {
     return `هدف! ${ar}`;
   }
 
-  // البطاقات — "<Player> from/of <Team> receives a yellow/red card"
+  // ===== البطاقات =====
+  // "<Player> from/of <Team> receives a yellow/red card for a foul."
   m = s.match(/^(.+?)\s+(?:from|of)\s+(.+?)\s+(?:receives|gets)\s+a\s+(yellow|red)\s+card/i)
     || s.match(/^(.+?)\s+(?:receives|gets)\s+a\s+(yellow|red)\s+card/i);
   if (m) {
-    // ترتيب المجموعات يختلف بين النمطين — نوحّد الاستخراج
     const whoGroup = m[1];
     const colorWord = (m[3] || m[2] || "").toLowerCase();
     const who = player(whoGroup, tr);
@@ -133,28 +246,50 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
     }
     return `بطاقة صفراء على ${who}`;
   }
+  // "Second yellow card..." / "sent off"
   if (/second yellow|sent off|red card/i.test(low)) {
     return `بطاقة حمراء — ${ar}`;
   }
+  // "VAR decision: the card has been changed." / referee decisions
+  if (/\bvar\b|\bdecision\b/i.test(low)) {
+    return `قرار حكم — ${ar}`;
+  }
 
-  // ركلة جزاء
+  // ===== ركلة جزاء =====
   if (/\bpenalty\b/i.test(low)) {
     return `ضربة جزاء — ${ar}`;
   }
 
-  // ركنية: "Corner awarded to <Team> ...", "Corner for <Team> ..."
+  // ===== ركنية (صيغ متعدّدة) =====
   m = s.match(/Corner\s+awarded\s+to\s+(.+?)(?:[.,]|$)/i)
+    || s.match(/(.+?)\s+wins\s+a\s+corner\s+after\s+(.+?)\s+concedes/i)
     || s.match(/^Corner\s+for\s+(.+?)(?:[,.]|conceded|$)/i);
   if (m) {
-    return `ركلة ركنية لـ${team(m[1], tr)}`;
+    const t = team(m[1], tr);
+    return `ركلة ركنية لـ${t}`;
   }
 
-  // تبديل
+  // ===== ركلات حرة (شائعة جدًا — كانت سبب الاختلاط) =====
+  m = s.match(/^(.+?)\s+(?:from|of)\s+(.+?)\s+(wins|is awarded|earns)\s+a\s+free\s+kick\s+(.+)/i)
+    || s.match(/^(.+?)\s+(wins|is awarded|earns)\s+a\s+free\s+kick\s+(.+)/i);
+  if (m) {
+    // اللاعب قد يسبقه "from <Team>" أو لا
+    const hasTeam = /from|of/.test(m[0]) && m[2];
+    const who = player(hasTeam ? m[1] : m[1], tr);
+    const sidePart = hasTeam ? ` (${team(m[2]!, tr)})` : "";
+    const where = freeKickWhere(m[3] || m[2] || "");
+    return `ركلة حرة لـ${who}${sidePart}${where}`;
+  }
+  if (/free\s+kick/i.test(low)) {
+    return `ركلة حرة — ${ar}`;
+  }
+
+  // ===== تبديل =====
   if (/substitut|comes on|comes off|replaces|is brought on|substitution/i.test(low)) {
     return `تبديل — ${ar}`;
   }
 
-  // تسديدات
+  // ===== تسديدات =====
   // "Attempt saved. <Keeper> from <Team> saves a <foot>-footed shot from <Shooter>."
   m = s.match(
     /^Attempt saved\.\s+(.+?)\s+from\s+(.+?)\s+saves a\s+(?:[\w-]+\s+)?(?:header|shot)\s+from\s+(.+?)(?:[.,]|\s*$)/i
@@ -162,12 +297,15 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
   if (m) {
     return `تصدٍّ — ${player(m[1], tr)} (${team(m[2], tr)}) يُبعد تسديدة ${player(m[3], tr)}`;
   }
-  // "Attempt saved. <Keeper> saves a ... shot from <Shooter>." (بلا ذكر منتخب)
   m = s.match(/^Attempt saved\.\s+(.+?)\s+saves a\s+(?:[\w-]+\s+)?(?:header|shot)\s+from\s+(.+?)(?:[.,]|\s*$)/i);
   if (m) {
     return `تصدٍّ — ${player(m[1], tr)} يُبعد تسديدة ${player(m[2], tr)}`;
   }
-  if (/attempt saved|attempt is saved/i.test(low)) {
+  m = s.match(/^(.+?)'s\s+.+?shot\s+.+?is\s+saved/i);
+  if (m) {
+    return `تصدٍّ لتسديدة ${player(m[1], tr)}`;
+  }
+  if (/attempt saved|attempt is saved|is saved/i.test(low)) {
     return `تصدٍّ — ${ar}`;
   }
   // "Attempt missed. <Shooter> from <Team> misses..." / "<Shooter>'s ... shot ..."
@@ -183,7 +321,7 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
     return `تسديدة محالة — ${ar}`;
   }
 
-  // بدايات/نهايات الأشواط
+  // ===== بدايات/نهايات الأشواط =====
   if (/first half begins|kick-off|kickoff|match begins/i.test(low)) {
     return `بداية الشوط الأول`;
   }
@@ -198,12 +336,19 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
   if (m) {
     return `الوقت بدل الضائع: ${m[1]} دقائق`;
   }
+  // تأخير/استئناف
+  if (/delay is over|ready to continue|play resumes/i.test(low)) {
+    return `استئناف اللعب`;
+  }
+  if (/delay|drinks break|temporary suspension/i.test(low)) {
+    return `توقّف مؤقّت — ${ar}`;
+  }
   if (/match ends|game ended|full[\s-]?time|second half ends/i.test(low)) {
     return `صافرة النهاية`;
   }
 
-  // fallback: نُعرّب الأسماء ونُبقي النص — لا تختفي الرسالة
-  // TODO(لاحقًا): تفعيل ترجمة AI دفعية للأنماط غير المصنّفة لو رغبنا بدقّة أعلى.
+  // ===== fallback: نُعرّب الأسماء ونُبقي النص =====
+  // (التعليقات التي تبقى بحروف لاتينية ستُترجم بـAI في translateCommentaries)
   return ar;
 }
 
@@ -221,6 +366,16 @@ function goalTail(s: string): string {
     "very close range": " (من مسافة قريبة جدًا)",
   };
   return map[m[1].toLowerCase()] ?? "";
+}
+
+// موضع الركلة الحرة: "on the left wing" ← " على الجناح الأيسر"
+function freeKickWhere(rest: string): string {
+  const low = rest.toLowerCase();
+  if (/left wing/.test(low)) return " على الجناح الأيسر";
+  if (/right wing/.test(low)) return " على الجناح الأيمن";
+  if (/attacking half/.test(low)) return " في نصف المهاجم";
+  if (/defensive half/.test(low)) return " في نصف المدافع";
+  return "";
 }
 
 // تعريب اسم لاعب: نُسقط أي ذكر للمنتخب بين قوسين ثم نُعرّب
