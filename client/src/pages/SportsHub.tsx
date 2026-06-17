@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Crown,
+  Hand,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -62,6 +63,11 @@ interface SpStandingRow {
 interface SpScorer {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
   goals: number; assists: number; penalties: number; matches: number;
+}
+// الموجة 1: صنّاع الأهداف — نفس بنية الهدّاف لكن بلا ركلات جزاء.
+interface SpAssister {
+  rank: number; id: number; name: string; photo: string; team: SpTeam;
+  goals: number; assists: number; matches: number;
 }
 interface SpStatRow { type: string; label: string; home: string | number | null; away: string | number | null; }
 interface SpMatchEvent {
@@ -574,12 +580,21 @@ function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
 }
 
 // ============================================================
-// منصّة الهدّافين
+// منصّة الهدّافين / صنّاع الأهداف (مكوّن مشترك)
 // ============================================================
-function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
-  const podium = scorers.slice(0, 3);
-  const rest = scorers.slice(3, 10);
-  if (podium.length === 0) return null;
+interface PodiumEntry {
+  rank: number; id: number; name: string; photo: string;
+  team: { name: string; logo: string };
+  primary: number;  // الرقم البارز (أهداف أو صناعة)
+  secondary: number; // الرقم الثانوي (الضد)
+}
+
+function PodiumCard({ entries, primaryLabel, secondaryLabel }: {
+  entries: PodiumEntry[]; primaryLabel: string; secondaryLabel: string;
+}) {
+  if (entries.length === 0) return null;
+  const podium = entries.slice(0, 3);
+  const rest = entries.slice(3, 10);
   // ترتيب العرض: 2 - 1 - 3
   const order = [podium[1], podium[0], podium[2]].filter(Boolean);
   const heights = ["h-24", "h-32", "h-20"];
@@ -606,12 +621,12 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
               </div>
               <span className="text-xs font-bold text-foreground text-center line-clamp-1 group-hover:text-primary transition-colors">{s.name}</span>
               <div className={`mt-2 w-full ${heightByRank(s.rank)} rounded-t-xl bg-gradient-to-t ${medalByRank(s.rank)} flex items-start justify-center pt-2`}>
-                <span className="text-white font-black text-lg tabular-nums">{s.goals}</span>
+                <span className="text-white font-black text-lg tabular-nums">{s.primary}</span>
               </div>
             </Link>
           ))}
         </div>
-        <p className="text-center text-xs text-muted-foreground mt-3">عدد الأهداف</p>
+        <p className="text-center text-xs text-muted-foreground mt-3">{primaryLabel}</p>
       </Card>
       {/* البقية */}
       <Card className="divide-y divide-border overflow-hidden">
@@ -625,8 +640,8 @@ function ScorerPodium({ scorers }: { scorers: SpScorer[] }) {
                 {s.team.logo && <img src={s.team.logo} alt="" className="w-3.5 h-3.5 object-contain" />}{s.team.name}
               </div>
             </div>
-            <div className="text-center px-1"><span className={`font-black tabular-nums ${ACCENT}`}>{s.goals}</span></div>
-            <div className="text-center px-1 border-r border-border"><span className="text-amber-600 font-bold text-sm tabular-nums">{s.assists}</span></div>
+            <div className="text-center px-1"><span className={`font-black tabular-nums ${ACCENT}`}>{s.primary}</span></div>
+            <div className="text-center px-1 border-r border-border"><span className="text-amber-600 font-bold text-sm tabular-nums">{s.secondary}</span></div>
           </Link>
         ))}
       </Card>
@@ -909,6 +924,8 @@ export default function SportsHub() {
   const { user } = useAuth();
   const [compSlug, setCompSlug] = useState("pro-league");
   const [openMatch, setOpenMatch] = useState<number | null>(null);
+  // الموجة 1: تبديل بين الهدّافين وصنّاع الأهداف ضمن قسم واحد.
+  const [scorersTab, setScorersTab] = useState<"scorers" | "assists">("scorers");
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
   useCanonical("https://sabq.org/sports2");
@@ -943,6 +960,10 @@ export default function SportsHub() {
 
   const { data: scorersData } = useQuery<{ scorers: SpScorer[] }>({ queryKey: [`/api/sports/${compSlug}/scorers`], staleTime: 10 * 60_000, enabled: hasScorers });
   const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers : [];
+
+  // الموجة 1: صنّاع الأهداف — تُجلب لنفس البطولات التي تدعم الهدّافين.
+  const { data: assistsData } = useQuery<{ assists: SpAssister[] }>({ queryKey: [`/api/sports/${compSlug}/assists`], staleTime: 10 * 60_000, enabled: hasScorers });
+  const assisters = Array.isArray(assistsData?.assists) ? assistsData.assists : [];
 
   const { data: shortsByCat } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts", { categoryId: sportsCatId, limit: 12 }], enabled: !!sportsCatId, staleTime: 10 * 60_000 });
   const { data: shortsFeatured } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts/featured", { limit: 12 }], staleTime: 10 * 60_000 });
@@ -1077,12 +1098,41 @@ export default function SportsHub() {
             </section>
           )}
 
-          {/* ===== الهدّافون ===== */}
+          {/* ===== الهدّافون وصنّاع الأهداف (تبديل) ===== */}
           {hasScorers && (
             <section id="scorers" className="scroll-mt-24">
-              <SectionHeader title="منصّة الهدّافين" subtitle="الأكثر تهديفًا في البطولة" icon={<Goal className={`w-5 h-5 ${ACCENT}`} />} />
-              {scorers.length ? <ScorerPodium scorers={scorers} /> : (
-                <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار تسجيل أول الأهداف — يظهر ترتيب الهدّافين هنا مع انطلاق المنافسة.</div>
+              <SectionHeader
+                title={scorersTab === "scorers" ? "منصّة الهدّافين" : "منصّة صنّاع الأهداف"}
+                subtitle={scorersTab === "scorers" ? "الأكثر تهديفًا في البطولة" : "الأكثر صناعةً للأهداف"}
+                icon={scorersTab === "scorers" ? <Goal className={`w-5 h-5 ${ACCENT}`} /> : <Hand className={`w-5 h-5 ${ACCENT}`} />}
+                action={
+                  <PillTabs
+                    layoutId="scorers-tab"
+                    active={scorersTab}
+                    onChange={(k) => setScorersTab(k === "assists" ? "assists" : "scorers")}
+                    tabs={[
+                      { key: "scorers", label: "هدّافون" },
+                      { key: "assists", label: "صنّاع الأهداف" },
+                    ]}
+                  />
+                }
+              />
+              {scorersTab === "scorers" ? (
+                scorers.length ? <PodiumCard
+                  entries={scorers.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.goals, secondary: s.assists }))}
+                  primaryLabel="عدد الأهداف"
+                  secondaryLabel="الصناعة"
+                /> : (
+                  <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار تسجيل أول الأهداف — يظهر ترتيب الهدّافين هنا مع انطلاق المنافسة.</div>
+                )
+              ) : (
+                assisters.length ? <PodiumCard
+                  entries={assisters.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.assists, secondary: s.goals }))}
+                  primaryLabel="عدد الصناعات"
+                  secondaryLabel="الأهداف"
+                /> : (
+                  <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار أولى الصناعات — يظهر ترتيب صنّاع الأهداف هنا مع انطلاق المنافسة.</div>
+                )
               )}
             </section>
           )}

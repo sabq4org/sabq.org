@@ -241,3 +241,30 @@ export function localizeSplCountry(name: string): string {
   if (!name) return "";
   return SPL_COUNTRY_AR[name] ?? name;
 }
+
+/**
+ * مفاتيح إحصاءات النادي الشاملة (teams/statistics) من المزوّد → عربي.
+ * تركيب البيانات: { total, fixtures, goals, biggest, clean_sheet, failed_to_score,
+ *   cards, penalty, lineups }. نعرّب المفاتيح الفرعية الثابتة فقط هنا.
+ */
+export const SPL_TEAMSTAT_LEAGUE_PHASE_AR: Record<string, string> = {
+  "Regular Season": "الدوري",
+  "1st Phase": "الدور الأول",
+  "2nd Phase": "الدور الثاني",
+  "Final Stage": "المرحلة النهائية",
+  "Final Phases": "المراحل النهائية",
+};
+
+/** ترتيب أكثر التشكيلات استخداماً (النتيجة) لا يحتاج تعريبًا — يُعرض كما هو (مثل 4-3-3). */
+/** ألوان/أنواع البطاقات الإجمالية للنادي (yellow/red) → عربي قصير. */
+export const SPL_TEAMSTAT_CARD_AR: Record<string, string> = {
+  yellow: "صفراء",
+  red: "حمراء",
+};
+
+/** تعريب سلسلة الأرقام (أطول فوز/خسارة/تعادل): "WWWDW" → تُحلّ رموزها عند العرض. */
+export const SPL_FORM_LETTER_AR: Record<string, string> = {
+  W: "فوز",
+  D: "تعادل",
+  L: "خسارة",
+};

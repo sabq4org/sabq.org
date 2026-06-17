@@ -20,6 +20,10 @@ import {
   getSquad,
   getStandings,
   getTeamProfile,
+  getTeamStats,
+  getTeamCoach,
+  getTeamTopScorers,
+  getTopAssists,
   getTopScorers,
   isSaudiLeagueConfigured,
   listCompetitions,
@@ -134,6 +138,23 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // صنّاع الأهداف (الموجة 1) — أعلى 15 صانع هدف؛ يرد [] لمن لا يدعمها.
+  app.get("/api/sports/:comp/assists", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, assists: [] });
+      return;
+    }
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ configured: true, assists: await getTopAssists(comp) });
+    } catch (error) {
+      console.error("[Sports] assists failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
+    }
+  });
+
   // تفاصيل مباراة — المعرّف عام عند المزود فلا يحتاج تحديد البطولة.
   app.get("/api/sports/match/:id", async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
@@ -166,6 +187,8 @@ export function registerSportsRoutes(app: Express) {
   };
 
   // صفحة النادي: هوية + ترتيب + مباريات + تشكيلة — المعرّف عام عند المزود.
+  // الموجة 1: عند ?with=stats تُضمَّن إحصاءات النادي + المدرب + هدّافوه في نفس
+  // الاستجابة (واجهة صفحة النادي تستخدمها لتقليل الطلبات).
   app.get("/api/sports/team/:id", async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.status(404).json({ message: "النادي غير موجود" });
@@ -177,7 +200,8 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const profile = await getTeamProfile(id);
+      const withExtras = req.query.with === "stats";
+      const profile = await getTeamProfile(id, { withExtras });
       if (!profile) {
         res.status(404).json({ message: "النادي غير موجود" });
         return;
@@ -187,6 +211,77 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] team profile failed:", error);
       res.status(502).json({ message: "تعذر جلب صفحة النادي حاليًا" });
+    }
+  });
+
+  // إحصاءات النادي الشاملة (الموجة 1) — منفصلة لمن يريد الأرقام وحدها.
+  app.get("/api/sports/team/:id/stats", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "الإحصاءات غير متاحة" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const stats = await getTeamStats(id);
+      if (!stats) {
+        res.status(404).json({ message: "لا تتوفّر إحصاءات تفصيلية لهذا النادي" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(stats);
+    } catch (error) {
+      console.error("[Sports] team stats failed:", error);
+      res.status(502).json({ message: "تعذر جلب إحصاءات النادي حاليًا" });
+    }
+  });
+
+  // المدرب (الموجة 1) — بطاقة المدرب الحالي للنادي.
+  app.get("/api/sports/team/:id/coach", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "بيانات المدرب غير متاحة" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const coach = await getTeamCoach(id);
+      if (!coach) {
+        res.status(404).json({ message: "بيانات المدرب غير متاحة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(coach);
+    } catch (error) {
+      console.error("[Sports] team coach failed:", error);
+      res.status(502).json({ message: "تعذر جلب بيانات المدرب حاليًا" });
+    }
+  });
+
+  // هدّافو النادي (الموجة 1) — أعلى 5 هدّافين في صفوف النادي هذا الموسم.
+  app.get("/api/sports/team/:id/scorers", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ scorers: [] });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    try {
+      const scorers = await getTeamTopScorers(id);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json({ scorers });
+    } catch (error) {
+      console.error("[Sports] team scorers failed:", error);
+      res.status(502).json({ message: "تعذر جلب هدّافي النادي حاليًا" });
     }
   });
 
