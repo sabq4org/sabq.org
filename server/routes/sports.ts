@@ -16,6 +16,7 @@ import {
   getFixtures,
   getLiveFixtures,
   getMatchDetail,
+  getMatchPlayerRatings,
   getPlayerCard,
   getSquad,
   getStandings,
@@ -178,6 +179,32 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match detail failed:", error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
+    }
+  });
+
+  // تقييمات لاعبي المباراة (lazy) — نقطة منفصلة عن /match/:id تُستدعى فقط عند فتح
+  // تبويب «التقييمات»، لأن fixtures/players ثقيلة (22+ لاعبًا) ولا داعي لها على كل فتح.
+  app.get("/api/sports/match/:id/players", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const ratings = await getMatchPlayerRatings(id);
+      if (!ratings) {
+        res.status(404).json({ message: "لا تتوفّر تقييمات لهذه المباراة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=120");
+      res.json(ratings);
+    } catch (error) {
+      console.error("[Sports] match player ratings failed:", error);
+      res.status(502).json({ message: "تعذر جلب تقييمات اللاعبين حاليًا" });
     }
   });
 

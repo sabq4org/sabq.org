@@ -85,6 +85,15 @@ interface SpMatchDetail {
   statistics: { home: { id: number; name: string }; away: { id: number; name: string }; rows: SpStatRow[] } | null;
   lineups: SpLineup[];
 }
+interface SpMatchRatingPlayer {
+  id: number; name: string; photo: string; teamId: number; team: string;
+  number: number | null; pos: string; rating: number | null;
+  minutes: number; goals: number; assists: number; yellow: number; red: number; captain: boolean;
+}
+interface SpMatchRatings {
+  motm: { id: number; name: string; team: string; rating: number } | null;
+  players: SpMatchRatingPlayer[];
+}
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; }
 interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
 
@@ -735,10 +744,12 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   const fx = data?.fixture, stats = data?.statistics;
   const events = Array.isArray(data?.events) ? data!.events : [];
   const lineups = Array.isArray(data?.lineups) ? data!.lineups : [];
+  const started = !!fx && (fx.status.finished || fx.status.live);
   const tabs = [
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    started ? { key: "ratings", label: "التقييمات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
@@ -830,9 +841,90 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
             );
           })()}
           {!isLoading && activeKey === "lineups" && lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
+          {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
           {!isLoading && tabs.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">لا توجد تفاصيل متاحة لهذه المباراة بعد</div>}
         </div>
       </motion.div>
+    </div>
+  );
+}
+
+// لون شارة التقييم حسب القيمة (نمط المزوّدين العالميين).
+function ratingTone(r: number): string {
+  if (r >= 7.5) return "bg-emerald-500 text-white";
+  if (r >= 7) return "bg-green-500/90 text-white";
+  if (r >= 6) return "bg-amber-500 text-white";
+  return "bg-red-500/90 text-white";
+}
+
+// تبويب «التقييمات» — يُحمّل بكسل (lazy) عند فتحه فقط (المكوّن لا يُركّب إلا حينها).
+function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
+  const { data, isLoading, isError } = useQuery<SpMatchRatings>({
+    queryKey: [`/api/sports/match/${id}/players`],
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
+      </div>
+    );
+  }
+  if (isError || !data || data.players.length === 0) {
+    return <div className="py-8 text-center text-muted-foreground text-sm">لا تتوفّر تقييمات لهذه المباراة</div>;
+  }
+
+  const { motm, players } = data;
+
+  return (
+    <div className="space-y-4">
+      {motm && (
+        <div className="flex items-center gap-3 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3 py-2.5">
+          <Crown className="w-5 h-5 text-amber-500 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">رجل المباراة</div>
+            <Link href={`/sports2/player/${motm.id}`}>
+              <span className="text-sm font-black text-foreground hover:text-primary transition-colors">{motm.name}</span>
+            </Link>
+            <span className="text-xs text-muted-foreground"> · {motm.team}</span>
+          </div>
+          <span className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black tabular-nums ${ratingTone(motm.rating)}`} dir="ltr">
+            {motm.rating.toFixed(1)}
+          </span>
+        </div>
+      )}
+
+      <ul className="space-y-1.5">
+        {players.map((p) => {
+          const sideClass = homeId != null ? (p.teamId === homeId ? "border-r-primary" : "border-r-amber-500") : "border-r-transparent";
+          return (
+            <li key={`${p.id}-${p.teamId}`} className={`flex items-center gap-3 rounded-xl border border-border border-r-[3px] ${sideClass} px-3 py-2`}>
+              {p.photo
+                ? <img src={p.photo} alt="" className="w-8 h-8 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
+                : <span className="w-8 h-8 rounded-full bg-muted shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <Link href={`/sports2/player/${p.id}`}>
+                  <span className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate">{p.name}</span>
+                </Link>
+                {p.captain && <span className="ms-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 align-middle">(ق)</span>}
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>{p.team}</span>
+                  {p.pos && <span>· {p.pos}</span>}
+                  {p.minutes > 0 && <span className="tabular-nums">· {p.minutes}′</span>}
+                  {p.goals > 0 && <span>· ⚽ {p.goals}</span>}
+                  {p.assists > 0 && <span>· 🅰 {p.assists}</span>}
+                  {p.yellow > 0 && <span>· 🟨</span>}
+                  {p.red > 0 && <span>· 🟥</span>}
+                </div>
+              </div>
+              {p.rating != null
+                ? <span className={`shrink-0 rounded-lg px-2 py-1 text-sm font-black tabular-nums ${ratingTone(p.rating)}`} dir="ltr">{p.rating.toFixed(1)}</span>
+                : <span className="shrink-0 text-xs text-muted-foreground">—</span>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

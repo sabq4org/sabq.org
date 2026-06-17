@@ -994,3 +994,72 @@ export async function getTeamTopScorers(
       });
   });
 }
+
+// ---------- تقييمات لاعبي المباراة (رجل المباراة الحقيقي) ----------
+// تُجلب بكسل (lazy) عند فتح تبويب التقييمات فقط — ليست ضمن getMatchDetail
+// تفاديًا لنداءة خامسة ثقيلة (بيانات 22+ لاعبًا) على كل فتح مباراة.
+
+export interface SplMatchPlayerRating {
+  id: number;
+  name: string;
+  photo: string;
+  teamId: number;
+  team: string;
+  number: number | null;
+  pos: string;
+  rating: number | null;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+  captain: boolean;
+}
+
+export interface SplMatchRatings {
+  motm: { id: number; name: string; team: string; rating: number } | null;
+  players: SplMatchPlayerRating[];
+}
+
+export async function getMatchPlayerRatings(fixtureId: number): Promise<SplMatchRatings | null> {
+  return withSWR(`spl:matchplayers:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 6, async () => {
+    const rows = await apiGet("fixtures/players", { fixture: fixtureId });
+    if (rows.length === 0) return null;
+
+    const players: SplMatchPlayerRating[] = [];
+    for (const teamRow of rows) {
+      const team = localizeTeam(teamRow.team);
+      for (const entry of teamRow.players ?? []) {
+        const st = entry.statistics?.[0] ?? {};
+        const ratingNum = parseFloat(st.games?.rating ?? "");
+        players.push({
+          id: entry.player?.id ?? 0,
+          name: localizePlayerName(entry.player?.name) || entry.player?.name || "",
+          photo: entry.player?.photo ?? "",
+          teamId: team.id,
+          team: team.name,
+          number: st.games?.number ?? null,
+          pos: POS_AR[st.games?.position] ?? st.games?.position ?? "",
+          rating: Number.isFinite(ratingNum) ? ratingNum : null,
+          minutes: st.games?.minutes ?? 0,
+          goals: st.goals?.total ?? 0,
+          assists: st.goals?.assists ?? 0,
+          yellow: st.cards?.yellow ?? 0,
+          red: st.cards?.red ?? 0,
+          captain: st.games?.captain ?? false,
+        });
+      }
+    }
+    if (players.length === 0) return null;
+
+    // الأعلى تقييمًا أولًا؛ من بلا تقييم في الأسفل.
+    players.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
+    const top = players[0];
+    const motm =
+      top && top.rating != null
+        ? { id: top.id, name: top.name, team: top.team, rating: top.rating }
+        : null;
+
+    return { motm, players };
+  });
+}
