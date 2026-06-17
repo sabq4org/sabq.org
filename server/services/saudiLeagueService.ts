@@ -39,6 +39,7 @@ const LIVE_TTL = 15 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const MATCH_DETAIL_TTL = 20 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
+const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه ثابتة
 
 /**
  * سجل البطولات السعودية التي يغطّيها القسم، مفلتر على ما يدعمه المزود فعلًا
@@ -212,6 +213,57 @@ export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixtur
       timezone: TIMEZONE,
     });
     return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+  });
+}
+
+// ---------- المواجهات المباشرة (Head-to-Head) ----------
+
+export interface SplH2HMeeting {
+  id: number;
+  timestamp: number;
+  date: string;
+  competition: string;
+  home: { id: number; name: string; logo: string };
+  away: { id: number; name: string; logo: string };
+  goals: { home: number | null; away: number | null };
+}
+
+export interface SplH2H {
+  summary: { total: number; homeWins: number; draws: number; awayWins: number };
+  meetings: SplH2HMeeting[];
+}
+
+/**
+ * تاريخ المواجهات بين فريقين (fixtures/headtohead). الملخّص (فوز/تعادل/خسارة)
+ * محسوب من منظور homeId المطلوب، على المباريات المحسومة فقط. أسماء الأندية
+ * تُعرّب عبر الخريطة. يعمل عبر كل البطولات (لا يقتصر على بطولة واحدة).
+ */
+export async function getHeadToHead(homeId: number, awayId: number, last = 8): Promise<SplH2H> {
+  return withSWR(`spl:h2h:${homeId}-${awayId}`, H2H_TTL, H2H_TTL * 2, async () => {
+    const rows = await apiGet("fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last, timezone: TIMEZONE });
+    const meetings: SplH2HMeeting[] = (Array.isArray(rows) ? rows : [])
+      .map((r: any): SplH2HMeeting => ({
+        id: r.fixture?.id ?? 0,
+        timestamp: r.fixture?.timestamp ?? 0,
+        date: r.fixture?.date ?? "",
+        competition: localizeSplCompetition(r.league?.name ?? ""),
+        home: { id: r.teams?.home?.id ?? 0, name: localizeSplTeamName(r.teams?.home?.id, r.teams?.home?.name ?? ""), logo: r.teams?.home?.logo ?? "" },
+        away: { id: r.teams?.away?.id ?? 0, name: localizeSplTeamName(r.teams?.away?.id, r.teams?.away?.name ?? ""), logo: r.teams?.away?.logo ?? "" },
+        goals: { home: r.goals?.home ?? null, away: r.goals?.away ?? null },
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    let total = 0, homeWins = 0, draws = 0, awayWins = 0;
+    for (const m of meetings) {
+      if (m.goals.home == null || m.goals.away == null) continue;
+      total++;
+      const hg = m.home.id === homeId ? m.goals.home : m.goals.away;
+      const ag = m.home.id === homeId ? m.goals.away : m.goals.home;
+      if (hg === ag) draws++;
+      else if (hg > ag) homeWins++;
+      else awayWins++;
+    }
+    return { summary: { total, homeWins, draws, awayWins }, meetings };
   });
 }
 
