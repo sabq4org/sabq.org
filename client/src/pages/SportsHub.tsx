@@ -57,9 +57,11 @@ interface SpFixture {
   round: string; venue: { name: string; city: string };
   home: SpTeam; away: SpTeam; goals: { home: number | null; away: number | null };
 }
+interface SpStandingSplit { played: number; win: number; draw: number; lose: number; goalsFor: number; goalsAgainst: number; points: number; }
 interface SpStandingRow {
   rank: number; team: SpTeam; played: number; win: number; draw: number; lose: number;
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
+  home?: SpStandingSplit | null; away?: SpStandingSplit | null;
 }
 interface SpScorer {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
@@ -499,20 +501,39 @@ function FormChips({ form }: { form: string | null }) {
 }
 
 type SortKey = "rank" | "points" | "goalsDiff" | "goalsFor" | "win";
+type StandScope = "all" | "home" | "away";
+
 function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [scope, setScope] = useState<StandScope>("all");
   const [query, setQuery] = useState("");
+  const hasSplits = useMemo(() => rows.some((r) => r.home || r.away), [rows]);
+
+  // نطبّع الصفوف حسب النطاق (الكل/أرضه/خارجه) فتعمل بقية المنطق على أرقام موحّدة.
+  const normalized = useMemo(() => rows.map((r) => {
+    if (scope === "all") return r;
+    const s = scope === "home" ? r.home : r.away;
+    if (!s) return { ...r, played: 0, win: 0, draw: 0, lose: 0, goalsFor: 0, goalsAgainst: 0, goalsDiff: 0, points: 0 };
+    return { ...r, played: s.played, win: s.win, draw: s.draw, lose: s.lose, goalsFor: s.goalsFor, goalsAgainst: s.goalsAgainst, goalsDiff: s.goalsFor - s.goalsAgainst, points: s.points };
+  }), [rows, scope]);
+
   const sorted = useMemo(() => {
-    const filtered = query.trim() ? rows.filter((r) => r.team.name.includes(query.trim())) : rows;
+    const filtered = query.trim() ? normalized.filter((r) => r.team.name.includes(query.trim())) : normalized;
     const arr = [...filtered];
-    arr.sort((a, b) => (sortKey === "rank" ? a.rank - b.rank : (b[sortKey] as number) - (a[sortKey] as number)));
+    // خارج نطاق "الكل" لا يوجد ترتيب أصلي للسبليت، فنرتّب بالنقاط ثم الفارق.
+    if (scope !== "all") {
+      arr.sort((a, b) => b.points - a.points || b.goalsDiff - a.goalsDiff || b.goalsFor - a.goalsFor);
+    } else {
+      arr.sort((a, b) => (sortKey === "rank" ? a.rank - b.rank : (b[sortKey] as number) - (a[sortKey] as number)));
+    }
     return arr;
-  }, [rows, sortKey, query]);
+  }, [normalized, sortKey, query, scope]);
 
   const sortBtn = (key: SortKey, label: string) => (
     <button
       onClick={() => setSortKey(key)}
-      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+      disabled={scope !== "all"}
+      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
         sortKey === key ? "bg-primary text-white" : "bg-card border border-border text-muted-foreground hover:border-primary/40"
       }`}
     >
@@ -520,8 +541,26 @@ function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
     </button>
   );
 
+  const scopeBtn = (key: StandScope, label: string) => (
+    <button
+      onClick={() => setScope(key)}
+      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
+        scope === key ? "bg-primary text-white" : "bg-card border border-border text-muted-foreground hover:border-primary/40"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div>
+      {hasSplits && (
+        <div className="flex items-center gap-2 mb-3">
+          {scopeBtn("all", "عام")}
+          {scopeBtn("home", "على أرضه")}
+          {scopeBtn("away", "خارج أرضه")}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {sortBtn("rank", "الترتيب")}
         {sortBtn("points", "النقاط")}
@@ -555,12 +594,14 @@ function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((r) => {
-                const band = r.rank <= 3 ? "border-r-2 border-primary"
-                  : r.rank >= rows.length - 2 ? "border-r-2 border-red-400" : "border-r-2 border-transparent";
+              {sorted.map((r, idx) => {
+                const pos = scope === "all" ? r.rank : idx + 1;
+                const band = scope === "all"
+                  ? (r.rank <= 3 ? "border-r-2 border-primary" : r.rank >= rows.length - 2 ? "border-r-2 border-red-400" : "border-r-2 border-transparent")
+                  : "border-r-2 border-transparent";
                 return (
                   <tr key={r.team.id} className={`border-b border-border last:border-b-0 hover:bg-muted/40 ${band}`}>
-                    <td className="py-2.5 px-2 text-center font-bold text-muted-foreground tabular-nums">{r.rank}</td>
+                    <td className="py-2.5 px-2 text-center font-bold text-muted-foreground tabular-nums">{pos}</td>
                     <td className="py-2.5 px-3">
                       <Link href={`/sports2/team/${r.team.id}`} className="flex items-center gap-2 hover:text-primary transition-colors">
                         {r.team.logo && <img src={r.team.logo} alt="" className="w-6 h-6 object-contain" loading="lazy" />}
