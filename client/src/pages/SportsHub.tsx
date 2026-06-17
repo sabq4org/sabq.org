@@ -399,9 +399,55 @@ function MatchCard({ fixture, onOpen }: { fixture: SpFixture; onOpen: (id: numbe
   );
 }
 
-function MatchHub({ data, configured, onOpen }: {
+// متصفّح الجولات — يجلب قائمة الجولات + الجولة الحالية، ويعرض مباريات الجولة
+// المختارة. يبدأ من الجولة الحالية تلقائيًا، ويسقط لآخر جولة عند انتهاء الموسم.
+function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: number) => void }) {
+  const { data: roundsData } = useQuery<{ rounds: { key: string; label: string }[]; current: string | null }>({
+    queryKey: [`/api/sports/${compSlug}/rounds`], staleTime: 30 * 60_000,
+  });
+  const rounds = Array.isArray(roundsData?.rounds) ? roundsData!.rounds : [];
+  const [selected, setSelected] = useState<string | null>(null);
+  const active = selected ?? roundsData?.current ?? rounds[rounds.length - 1]?.key ?? null;
+
+  const { data: fxData, isLoading } = useQuery<{ fixtures: SpFixture[] }>({
+    queryKey: [`/api/sports/${compSlug}/round`, { name: active }],
+    enabled: !!active, staleTime: 60_000,
+  });
+  const fixtures = Array.isArray(fxData?.fixtures) ? fxData!.fixtures : [];
+
+  const emptyBox = (text: string) => (
+    <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">{text}</div>
+  );
+
+  if (rounds.length === 0) return emptyBox("لا تتوفّر جولات لهذه البطولة بعد.");
+
+  return (
+    <div>
+      <div className="flex gap-2 overflow-x-auto pb-3 mb-4 -mx-1 px-1 scrollbar-hide">
+        {rounds.map((r) => (
+          <button
+            key={r.key}
+            onClick={() => setSelected(r.key)}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
+              active === r.key ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"
+            }`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {isLoading
+        ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl bg-card border border-border animate-pulse" />)}</div>
+        : fixtures.length === 0
+          ? emptyBox("لا توجد مباريات في هذه الجولة.")
+          : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}</div>}
+    </div>
+  );
+}
+
+function MatchHub({ data, configured, compSlug, onOpen }: {
   data: { live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] };
-  configured: boolean; onOpen: (id: number) => void;
+  configured: boolean; compSlug: string; onOpen: (id: number) => void;
 }) {
   const tabs = [
     { key: "live", label: "مباشر", list: data.live },
@@ -411,13 +457,15 @@ function MatchHub({ data, configured, onOpen }: {
   ];
   const firstWithData = tabs.find((t) => t.list.length > 0)?.key ?? "today";
   const [active, setActive] = useState(firstWithData);
-  const current = tabs.find((t) => t.key === active) ?? tabs[1];
 
   const emptyBox = (text: string) => (
     <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">{text}</div>
   );
 
   if (!configured) return emptyBox("بانتظار انطلاق الموسم — تغطية المباريات الحيّة تظهر هنا فور بدء الجولة الأولى.");
+
+  const isRounds = active === "rounds";
+  const current = tabs.find((t) => t.key === active) ?? tabs[1];
 
   return (
     <div>
@@ -426,12 +474,15 @@ function MatchHub({ data, configured, onOpen }: {
           layoutId="match-hub-tab"
           active={active}
           onChange={setActive}
-          tabs={tabs.map((t) => ({
-            key: t.key, label: t.label,
-            badge: t.key === "live"
-              ? (t.list.length > 0 ? <span className="mr-1.5 inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse align-middle" /> : null)
-              : <span className="mr-1.5 opacity-60 tabular-nums">{t.list.length}</span>,
-          }))}
+          tabs={[
+            ...tabs.map((t) => ({
+              key: t.key, label: t.label,
+              badge: t.key === "live"
+                ? (t.list.length > 0 ? <span className="mr-1.5 inline-block w-2 h-2 rounded-full bg-red-400 animate-pulse align-middle" /> : null)
+                : <span className="mr-1.5 opacity-60 tabular-nums">{t.list.length}</span>,
+            })),
+            { key: "rounds", label: "الجولات", badge: null },
+          ]}
         />
       </div>
       <AnimatePresence mode="wait">
@@ -440,13 +491,15 @@ function MatchHub({ data, configured, onOpen }: {
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.2 }}
         >
-          {current.list.length === 0
-            ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
-            : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}
-              </div>
-            )}
+          {isRounds
+            ? <RoundsView compSlug={compSlug} onOpen={onOpen} />
+            : current.list.length === 0
+              ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
+              : (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}
+                </div>
+              )}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -1314,7 +1367,7 @@ export default function SportsHub() {
                 </div>
               </div>
             )}
-            <MatchHub key={compSlug} data={matches} configured={matchesConfigured} onOpen={setOpenMatch} />
+            <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />
           </section>
 
           {/* ===== الترتيب ===== */}

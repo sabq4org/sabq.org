@@ -13,8 +13,10 @@
 import type { Express, Request, Response } from "express";
 import {
   getCompetition,
+  getCompetitionRounds,
   getFixtures,
   getFixturePrediction,
+  getFixturesByRound,
   getLiveFixtures,
   getMatchDetail,
   getMatchPlayerRatings,
@@ -142,6 +144,47 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] matches failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات حاليًا" });
+    }
+  });
+
+  // متصفّح الجولات: قائمة الجولات + الجولة الحالية (للدوريات).
+  app.get("/api/sports/:comp/rounds", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, rounds: [], current: null });
+      return;
+    }
+    try {
+      const { rounds, current } = await getCompetitionRounds(comp);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json({ configured: true, rounds, current });
+    } catch (error) {
+      console.error("[Sports] rounds failed:", error);
+      res.status(502).json({ message: "تعذر جلب الجولات حاليًا" });
+    }
+  });
+
+  // مباريات جولة محدّدة (?name=الجولة الخام). تُستخدم مع /rounds للتصفّح.
+  app.get("/api/sports/:comp/round", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    const name = String(req.query.name || "").trim();
+    if (!name) {
+      res.status(400).json({ message: "اسم الجولة مطلوب" });
+      return;
+    }
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, fixtures: [] });
+      return;
+    }
+    try {
+      const fixtures = await getFixturesByRound(comp, name);
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.json({ configured: true, fixtures });
+    } catch (error) {
+      console.error("[Sports] round fixtures failed:", error);
+      res.status(502).json({ message: "تعذر جلب مباريات الجولة حاليًا" });
     }
   });
 
