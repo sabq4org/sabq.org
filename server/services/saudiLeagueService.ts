@@ -22,9 +22,11 @@ import {
   SPL_STAT_AR,
   SPL_STAT_ORDER,
   SPL_TROPHY_PLACE_AR,
+  localizeSplCoachName,
   localizeSplCompetition,
   localizeSplCountry,
   localizeSplInjuryType,
+  localizeSplPlayerName,
   localizeSplRound,
   localizeSplTeamName,
   localizeSplTransferType,
@@ -272,7 +274,7 @@ export async function getTopScorers(comp: SaudiCompetition): Promise<SplScorer[]
       return {
         rank: index + 1,
         id: row.player?.id ?? 0,
-        name: localizePlayerName(row.player?.name) || row.player?.name || "",
+        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? ""),
         photo: row.player?.photo ?? "",
         team: localizeTeam(stats.team),
         goals: stats.goals?.total ?? 0,
@@ -339,7 +341,7 @@ function localizeLineupPlayer(p: any): SplLineupPlayer {
   return {
     id: pl.id ?? 0,
     number: pl.number ?? null,
-    name: localizePlayerName(pl.name) || pl.name || "",
+    name: localizeSplPlayerName(pl.id, pl.name ?? ""),
     pos: POS_AR[pl.pos] ?? pl.pos ?? "",
     grid: pl.grid ?? null,
   };
@@ -479,7 +481,7 @@ export async function getSquad(teamId: number): Promise<SplSquad | null> {
     const players: SplSquadPlayer[] = (entry.players ?? [])
       .map((p: any): SplSquadPlayer => ({
         id: p.id ?? 0,
-        name: localizePlayerName(p.name) || p.name || "",
+        name: localizeSplPlayerName(p.id, p.name ?? ""),
         number: p.number ?? null,
         position: SPL_POSITION_AR[p.position] ?? p.position ?? "",
         positionEn: p.position ?? "",
@@ -707,7 +709,7 @@ export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | n
       .sort((a: SplPlayerTrophy, b: SplPlayerTrophy) => b.season.localeCompare(a.season));
 
     const officialFull = [p.firstname, p.lastname].filter(Boolean).join(" ").trim();
-    const displayName = localizePlayerName(p.name) || p.name || "";
+    const displayName = localizeSplPlayerName(p.id, p.name ?? "");
     const translatedFull = officialFull ? localizePlayerName(officialFull) || officialFull : "";
 
     return {
@@ -769,7 +771,7 @@ export async function getTopAssists(comp: SaudiCompetition): Promise<SplAssister
       return {
         rank: index + 1,
         id: row.player?.id ?? 0,
-        name: localizePlayerName(row.player?.name) || row.player?.name || "",
+        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? ""),
         photo: row.player?.photo ?? "",
         team: localizeTeam(stats.team),
         goals: stats.goals?.total ?? 0,
@@ -935,12 +937,16 @@ export interface SplCoach {
  */
 export async function getTeamCoach(teamId: number): Promise<SplCoach | null> {
   return withSWR(`spl:coach:${teamId}`, COACH_TTL, COACH_TTL * 2, async () => {
-    const rows = await apiGet("coachs", { id: teamId });
-    const entry = rows[0];
+    // coachs?team يعيد طاقم التدريب (مدرب + مساعدون). المدرب الأول هو الرئيسي.
+    // ملاحظة: المعامل team لا id — id هو معرّف المدرب لا النادي.
+    const rows = await apiGet("coachs", { team: teamId });
+    const entry = Array.isArray(rows)
+      ? rows.find((r: any) => Array.isArray(r?.career) && r.career.some((c: any) => c?.team?.id === teamId && !c?.end)) ?? rows[0]
+      : null;
     if (!entry?.id) return null;
     return {
       id: entry.id,
-      name: localizePlayerName(entry.name) || entry.name || "",
+      name: localizeSplCoachName(entry.id, entry.name ?? ""),
       photo: entry.photo ?? "",
       nationality: localizeSplCountry(entry.nationality ?? "") || "",
       age: Number.isFinite(entry.age) ? entry.age : null,
@@ -991,7 +997,7 @@ export async function getTeamTopScorers(
         return {
           rank: index + 1,
           id: row.player?.id ?? 0,
-          name: localizePlayerName(row.player?.name) || row.player?.name || "",
+          name: localizeSplPlayerName(row.player?.id, row.player?.name ?? ""),
           photo: row.player?.photo ?? "",
           goals: stats.goals?.total ?? 0,
           assists: stats.goals?.assists ?? 0,
@@ -1041,7 +1047,7 @@ export async function getMatchPlayerRatings(fixtureId: number): Promise<SplMatch
         const ratingNum = parseFloat(st.games?.rating ?? "");
         players.push({
           id: entry.player?.id ?? 0,
-          name: localizePlayerName(entry.player?.name) || entry.player?.name || "",
+          name: localizeSplPlayerName(entry.player?.id, entry.player?.name ?? ""),
           photo: entry.player?.photo ?? "",
           teamId: team.id,
           team: team.name,
@@ -1351,7 +1357,7 @@ async function getCardLeaders(comp: SaudiCompetition, kind: "yellow" | "red"): P
       return {
         rank: index + 1,
         id: row.player?.id ?? 0,
-        name: localizePlayerName(row.player?.name) || row.player?.name || "",
+        name: localizeSplPlayerName(row.player?.id, row.player?.name ?? ""),
         photo: row.player?.photo ?? "",
         team: localizeSplTeamName(st.team?.id, st.team?.name ?? ""),
         teamLogo: st.team?.logo ?? "",
