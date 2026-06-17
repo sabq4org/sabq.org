@@ -26,7 +26,9 @@ const TIMEZONE = "Asia/Riyadh";
 
 // إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني
 const LIVE_TTL = 15 * 1000;
-const FIXTURES_TTL = 60 * 1000;
+// 30ث (كان 60): يلتقط cron أخبار المونديال لحظة FT أبكر بعد صافرة النهاية،
+// فيقلّص تأخّر نشر تقرير ما بعد المباراة. البيانات الحية تتغيّر بالثواني.
+const FIXTURES_TTL = 30 * 1000;
 const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
 // المزود ينشر التشكيلات قبل الانطلاق بـ 20–40 دقيقة — كاش 5 دقائق يؤخرها حتى الصافرة
 const MATCH_DETAIL_PREKICKOFF_TTL = 60 * 1000;
@@ -130,15 +132,23 @@ function localizeFixture(item: any): WcFixture {
 
 // ---------- نقاط البيانات المكشوفة للراوتر ----------
 
-export async function getFixtures(): Promise<WcFixture[]> {
-  return withSWR("wc:fixtures", FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", {
-      league: LEAGUE_ID,
-      season: SEASON,
-      timezone: TIMEZONE,
-    });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
-  });
+export async function getFixtures(
+  opts: { forceFresh?: boolean } = {}
+): Promise<WcFixture[]> {
+  return withSWR(
+    "wc:fixtures",
+    FIXTURES_TTL,
+    FIXTURES_TTL * 2,
+    async () => {
+      const rows = await apiGet("fixtures", {
+        league: LEAGUE_ID,
+        season: SEASON,
+        timezone: TIMEZONE,
+      });
+      return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+    },
+    opts.forceFresh ?? false
+  );
 }
 
 export async function getLiveFixtures(): Promise<WcFixture[]> {
