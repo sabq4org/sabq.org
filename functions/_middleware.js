@@ -486,11 +486,53 @@ function apiCacheKey(requestUrl) {
   return new Request(u.toString(), { method: "GET" });
 }
 
+// Short, cacheable 404 for a deleted/missing static asset. Returning an empty
+// 404 (instead of letting the SPA fallback `_redirects` rewrite serve
+// index.html with 200 + text/html) is the root-cause fix for the post-deploy
+// "white page": after a deploy, hashed chunks from the previous build no longer
+// exist, so a stale open tab requests `/assets/index-<oldhash>.js`, and the
+// SPA fallback used to answer it with `200 text/html`. The browser then refuses
+// to execute HTML as a JS module (MIME/CORS refusal → `vite:preloadError` →
+// `retryImport` burns its retries → ErrorBoundary shows "تعذّر تحميل الصفحة").
+// A clean 404 here makes Vite/deployRecovery classify it as a genuine chunk
+// failure and recover with a single cache-busted reload. Cached briefly so a
+// stampede of stale tabs doesn't re-hit the static layer.
+function assetNotFoundResponse() {
+  return new Response("", {
+    status: 404,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=60, s-maxage=300",
+    },
+  });
+}
+
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
+
+  // Guard: never let a missing /assets/* (or other static file) fall through to
+  // the SPA's `/* /index.html 200` fallback. A post-deploy open tab holding an
+  // old index.html references rotated chunk hashes (e.g. /assets/index-<old>.js)
+  // that no longer exist; without this guard the static layer 404s and the
+  // _redirects catch-all rewrites the request to index.html with status 200 +
+  // Content-Type text/html — which browsers refuse to execute as a module
+  // (the MIME/CORS error that surfaces as vite:preloadError / lazy-import).
+  // Hand the static layer the request; if it can't find the file, return a
+  // clean 404 so the client's deploy-recovery reloads to the current build.
+  // (GET/HEAD only — other methods aren't valid for static assets.)
+  if (
+    isStaticAsset(path) &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
+    const assetRes = await next();
+    if (assetRes.status === 404) {
+      return assetNotFoundResponse();
+    }
+    return assetRes;
+  }
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
   const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
   const ssrEnabled =

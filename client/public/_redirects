@@ -1,8 +1,9 @@
 # Cloudflare Pages SPA fallback.
-# Real static files (and /assets/*) are served first and take precedence, and
-# functions/_middleware.js runs ahead of this for every included route (proxy,
-# slug-redirect, SEO injection). This rule only applies when the function calls
-# next() and the static layer would otherwise 404 — i.e. a client-side route
-# like /article/<slug> with no matching file — so the SPA shell (index.html) is
-# returned with a 200 instead of a 404. Keeps SPA routing consistent on Pages.
+# functions/_middleware.js runs ahead of this for every route. For static
+# assets (/assets/* and anything with a static extension) the middleware's
+# asset guard intercepts MISSING files and returns a clean 404 — so a stale
+# open tab requesting a deleted /assets/index-<hash>.js after a deploy gets a
+# real 404 (not this fallback). This rule only fires for client-side routes
+# with no matching file (e.g. /article/<slug>), returning the SPA shell
+# (index.html) with a 200 so client-side routing works on Pages.
 /*    /index.html   200
