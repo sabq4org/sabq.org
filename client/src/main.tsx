@@ -75,7 +75,7 @@ if (import.meta.env.PROD && Capacitor.isNativePlatform()) {
     StatusBar.setBackgroundColor({ color: "#1a73e8" }).catch(() => {});
     Keyboard.setAccessoryBarVisible({ isVisible: true }).catch(() => {});
     CapacitorApp.addListener("appStateChange", ({ isActive }) => {
-      console.log("App state changed. Is active?", isActive);
+      console.warn("App state changed. Is active?", isActive);
     }).catch(() => {});
   }).catch(() => {});
 }
