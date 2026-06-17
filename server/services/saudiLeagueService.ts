@@ -39,6 +39,7 @@ const LIVE_TTL = 15 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const MATCH_DETAIL_TTL = 20 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
+const ROUNDS_TTL = 30 * 60 * 1000; // قائمة الجولات تتغيّر نادرًا
 const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه ثابتة
 
 /**
@@ -217,6 +218,43 @@ export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixtur
       live: "all",
       timezone: TIMEZONE,
     });
+    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+  });
+}
+
+// ---------- الجولات (متصفّح الجولات) ----------
+
+export interface SplRound {
+  key: string; // الخام كما يعيده المزود (للاستعلام): "Regular Season - 5"
+  label: string; // المعرّب للعرض: "الجولة 5"
+}
+
+/**
+ * قائمة جولات البطولة + الجولة الحالية (من fixtures/rounds). تُرجع رؤوسًا خامًّا
+ * (للاستعلام) + تسمية معرّبة (للعرض). فارغة لمن لا جولات له (خارج الموسم/كؤوس).
+ */
+export async function getCompetitionRounds(
+  comp: SaudiCompetition,
+): Promise<{ rounds: SplRound[]; current: string | null }> {
+  const season = await seasonFor(comp);
+  return withSWR(`spl:rounds:${comp.id}`, ROUNDS_TTL, ROUNDS_TTL * 2, async () => {
+    const [all, cur] = await Promise.all([
+      apiGet("fixtures/rounds", { league: comp.id, season }),
+      apiGet("fixtures/rounds", { league: comp.id, season, current: "true" }).catch(() => [] as any[]),
+    ]);
+    const rounds: SplRound[] = (Array.isArray(all) ? all : [])
+      .filter((r: any) => typeof r === "string" && r.trim())
+      .map((r: string) => ({ key: r, label: localizeSplRound(r) }));
+    const current = Array.isArray(cur) && typeof cur[0] === "string" ? cur[0] : null;
+    return { rounds, current };
+  });
+}
+
+/** مباريات جولة محدّدة (round الخام كما يعود من getCompetitionRounds). */
+export async function getFixturesByRound(comp: SaudiCompetition, round: string): Promise<SplFixture[]> {
+  const season = await seasonFor(comp);
+  return withSWR(`spl:roundfx:${comp.id}:${round}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { league: comp.id, season, round, timezone: TIMEZONE });
     return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
   });
 }
