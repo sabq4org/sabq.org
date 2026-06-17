@@ -17,10 +17,13 @@
 //     it captures the build the running tab was booted from.
 //   - Poll is lightweight (tiny JSON), skips on hidden tabs, and is silent on
 //     network errors (we'll just try again next tick).
-//   - Reload reuses deployRecovery's cache-buster + cooldown so it composes
-//     with the reactive listeners instead of fighting them (no double reload).
+//   - Reload reuses deployRecovery's cache-buster, but BYPASSES the cooldown
+//     via forceDeployRecoveryReload when a build-id mismatch is confirmed — a
+//     confirmed deploy is never a false positive, so the cooldown (which exists
+//     to prevent reload loops on transient chunk errors) must not block it.
+//     Long-lived tabs across a deploy depend on this to self-heal.
 
-import { attemptChunkRecoveryReload } from "./deployRecovery";
+import { forceDeployRecoveryReload } from "./deployRecovery";
 
 declare const __SABQ_BUILD_ID__: string;
 
@@ -48,9 +51,15 @@ async function checkForNewBuild(): Promise<void> {
     // Only reload on a DIFFERENT, non-empty build id. An equal id means we're
     // still on the current deploy; an empty one means the probe was malformed.
     if (latest && latest !== BOOT_BUILD_ID) {
-      // Reuse deployRecovery so the reload is cache-busted (`?_dr=<ts>`) and
-      // respects the 30s cooldown — composing with the reactive listeners.
-      attemptChunkRecoveryReload("build-version-poll");
+      // This is a CONFIRMED deploy (build id mismatch), not a guessed chunk
+      // failure — so we bypass attemptChunkRecoveryReload's 30s cooldown by
+      // calling forceDeployRecoveryReload directly. Without this, a long-lived
+      // tab that survives across a deploy gets stuck: polling detects the new
+      // build but the cooldown (already tripped by an earlier reactive
+      // vite:preloadError) blocks the reload, and the user is left on a broken
+      // page. A confirmed build-id change is never a false positive, so there's
+      // no loop risk here (polling runs at most once per minute, visible only).
+      forceDeployRecoveryReload();
     }
   } catch {
     // Network/parse failure — stay quiet and retry on the next interval.

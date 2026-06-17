@@ -1,4 +1,25 @@
-import { attemptChunkRecoveryReload } from "./deployRecovery";
+import { attemptChunkRecoveryReload, forceDeployRecoveryReload } from "./deployRecovery";
+
+declare const __SABQ_BUILD_ID__: string;
+
+/**
+ * Has a new deploy shipped since this bundle was built? Checks the live
+ * /build-info.json against the build id baked into the running bundle. Used by
+ * retryImport's last-resort path to distinguish a CONFIRMED deploy (which
+ * should bypass the reload cooldown) from a transient chunk error (which the
+ * cooldown should keep blocking to avoid loops). Resolves to null on any
+ * network/parse failure — callers treat that as "no confirmed deploy".
+ */
+function detectNewDeploy(): Promise<boolean | null> {
+  return fetch("/build-info.json", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((info) => {
+      const live = info && typeof info.buildId === "string" ? info.buildId : "";
+      if (!live) return null;
+      return live !== String(__SABQ_BUILD_ID__ || "");
+    })
+    .catch(() => null);
+}
 
 /**
  * Detect stale-deploy / lazy-chunk failures across browsers.
@@ -67,10 +88,26 @@ export function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 
           return;
         }
         if (isModuleError) {
-          if (attemptChunkRecoveryReload("lazy-import")) {
-            return;
-          }
-          reject(new Error("تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)"));
+          // Before showing the error UI, check whether a new deploy shipped.
+          // If the live build id differs from THIS bundle's, the failure is
+          // caused by a confirmed deploy (not a transient error) — bypass the
+          // 30s reload cooldown and force a cache-busted reload. This catches
+          // the case polling misses (polling skipped on hidden tabs, or a
+          // navigation to a deleted chunk before polling's first/next tick).
+          detectNewDeploy().then((isNewDeploy) => {
+            if (isNewDeploy) {
+              forceDeployRecoveryReload();
+              return;
+            }
+            // No deploy (null = couldn't tell, or false = same build) — fall
+            // back to the cooldown-respecting path. If that's blocked too, the
+            // user gets the manual-refresh message (the genuine 404 case).
+            if (attemptChunkRecoveryReload("lazy-import")) {
+              return;
+            }
+            reject(new Error("تعذر تحميل الصفحة. يرجى مسح ذاكرة المتصفح (Ctrl+Shift+R)"));
+          });
+          return;
         } else {
           reject(error);
         }
