@@ -34,6 +34,7 @@ import {
   ChevronRight,
   Crown,
   Hand,
+  Square,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -74,7 +75,7 @@ interface SpMatchEvent {
   minute: number | null; extra: number | null; teamId: number; team: string;
   player: string; assist: string | null; type: string; label: string;
 }
-interface SpLineupPlayer { number: number | null; name: string; pos: string; }
+interface SpLineupPlayer { id: number; number: number | null; name: string; pos: string; grid: string | null; }
 interface SpLineup {
   team: { id: number; name: string; logo: string };
   formation: string | null; coach: string | null;
@@ -94,7 +95,9 @@ interface SpMatchRatings {
   motm: { id: number; name: string; team: string; rating: number } | null;
   players: SpMatchRatingPlayer[];
 }
-interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; }
+interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; logo?: string | null; season?: number | null; }
+interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
+interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
 
 // ============================================================
@@ -708,7 +711,56 @@ function PossessionBar({ row }: { row: SpStatRow }) {
     </div>
   );
 }
+// اسم لاعب في التشكيلة، يربط لصفحته إن توفّر معرّفه.
+function LineupName({ p, className }: { p: SpLineupPlayer; className?: string }) {
+  if (p.id) return <Link href={`/sports2/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{p.name}</Link>;
+  return <span className={className}>{p.name}</span>;
+}
+
+// البند 10: عرض التشكيلة على أرض ملعب حسب إحداثيات grid ("صف:عمود").
+function PitchView({ lineup }: { lineup: SpLineup }) {
+  // تجميع لاعبي الأساسيّ حسب الصفّ (الصفّ 1 = الحارس، قرب المرمى).
+  const rows = new Map<number, SpLineupPlayer[]>();
+  for (const p of lineup.startXI) {
+    const [r] = (p.grid ?? "").split(":");
+    const row = Number(r) || 1;
+    if (!rows.has(row)) rows.set(row, []);
+    rows.get(row)!.push(p);
+  }
+  const sortedRows = [...rows.keys()].sort((a, b) => a - b).map((r) => {
+    const players = rows.get(r)!.slice().sort((a, b) => {
+      const ca = Number((a.grid ?? "").split(":")[1]) || 0;
+      const cb = Number((b.grid ?? "").split(":")[1]) || 0;
+      return ca - cb;
+    });
+    return players;
+  });
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-emerald-900/30 bg-gradient-to-b from-emerald-700 to-emerald-800 p-3 py-5">
+      {/* خطوط الملعب */}
+      <div className="absolute inset-3 rounded-xl border-2 border-white/15 pointer-events-none" />
+      <div className="absolute left-1/2 right-3 top-1/2 h-px bg-white/15 -translate-y-1/2 pointer-events-none" style={{ left: "0.75rem" }} />
+      <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-16 h-16 rounded-full border-2 border-white/15 pointer-events-none" />
+      <div className="relative flex flex-col-reverse gap-3">
+        {sortedRows.map((players, ri) => (
+          <div key={ri} className="flex items-start justify-around gap-1">
+            {players.map((p) => (
+              <div key={p.id || p.number || p.name} className="flex flex-col items-center gap-1 min-w-0 flex-1">
+                <span className="w-9 h-9 rounded-full bg-white text-emerald-900 flex items-center justify-center text-sm font-black tabular-nums shadow ring-1 ring-black/10">{p.number ?? ""}</span>
+                <LineupName p={p} className="text-[10px] font-semibold text-white text-center leading-tight line-clamp-2 max-w-[72px]" />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function LineupTeam({ lineup }: { lineup: SpLineup }) {
+  // إن توفّرت إحداثيات grid لكل اللاعبين → عرض أرض الملعب؛ وإلا القائمة النصية.
+  const hasGrid = lineup.startXI.length > 0 && lineup.startXI.every((p) => !!p.grid);
   return (
     <div className="mb-5 last:mb-0">
       <div className="flex items-center gap-2 mb-2">
@@ -717,29 +769,99 @@ function LineupTeam({ lineup }: { lineup: SpLineup }) {
         {lineup.formation && <span className={`text-xs bg-accent-blue/40 ${ACCENT} rounded px-1.5 py-0.5 font-bold tabular-nums`} dir="ltr">{lineup.formation}</span>}
       </div>
       {lineup.coach && <div className="text-xs text-muted-foreground mb-2">المدرب: {lineup.coach}</div>}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {lineup.startXI.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-sm">
-            <span className={`w-6 text-center text-xs font-bold ${ACCENT} tabular-nums shrink-0`}>{p.number ?? ""}</span>
-            <span className="text-foreground truncate">{p.name}</span>
-          </div>
-        ))}
-      </div>
+      {hasGrid ? (
+        <PitchView lineup={lineup} />
+      ) : (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          {lineup.startXI.map((p, i) => (
+            <div key={i} className="flex items-center gap-2 text-sm">
+              <span className={`w-6 text-center text-xs font-bold ${ACCENT} tabular-nums shrink-0`}>{p.number ?? ""}</span>
+              <LineupName p={p} className="text-foreground truncate" />
+            </div>
+          ))}
+        </div>
+      )}
       {lineup.substitutes.length > 0 && (
         <div className="mt-3 pt-2 border-t border-border">
           <div className="text-xs font-bold text-muted-foreground mb-1">البدلاء</div>
-          <div className="text-xs text-muted-foreground leading-6">{lineup.substitutes.map((p) => p.name).join("، ")}</div>
+          <div className="text-xs text-muted-foreground leading-6">
+            {lineup.substitutes.map((p, i) => (
+              <span key={p.id || i}>{i > 0 ? "، " : ""}<LineupName p={p} /></span>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
+// الموجة 2: قائمة متصدّري البطاقات (إنذارات + طرد).
+function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
+  return (
+    <div className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border">
+      {leaders.map((p) => (
+        <div key={p.id || p.rank} className="flex items-center gap-3 px-4 py-2.5">
+          <span className="w-5 text-center font-bold text-muted-foreground text-sm tabular-nums shrink-0">{p.rank}</span>
+          {p.photo ? <img src={p.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted shrink-0" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted shrink-0" />}
+          <div className="flex-1 min-w-0">
+            {p.id ? (
+              <Link href={`/sports2/player/${p.id}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{p.name}</Link>
+            ) : <div className="text-sm font-semibold text-foreground truncate">{p.name}</div>}
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              {p.teamLogo && <img src={p.teamLogo} alt="" className="w-3.5 h-3.5 object-contain" loading="lazy" />}
+              <span className="truncate">{p.team}</span>
+              <span className="tabular-nums">· {p.matches} مباراة</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="flex items-center gap-1 text-sm font-black tabular-nums">
+              <span className="w-3 h-4 rounded-sm bg-amber-400" /> {p.yellow}
+            </span>
+            {p.red > 0 && (
+              <span className="flex items-center gap-1 text-sm font-black tabular-nums">
+                <span className="w-3 h-4 rounded-sm bg-red-500" /> {p.red}
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// البند 12: شريط توقّعات ثلاثي (فوز المضيف / تعادل / فوز الضيف).
+function PredictionBar({ prediction, homeName, awayName }: { prediction: SpPrediction; homeName: string; awayName: string }) {
+  const { homePct, drawPct, awayPct, advice } = prediction;
+  return (
+    <div className="shrink-0 px-4 py-3 border-b border-border bg-muted/30">
+      <div className="flex items-center justify-between text-[11px] font-bold mb-1.5">
+        <span className="text-primary truncate max-w-[35%]">{homeName} {homePct}%</span>
+        <span className="text-muted-foreground">تعادل {drawPct}%</span>
+        <span className="text-amber-600 dark:text-amber-400 truncate max-w-[35%]">{awayPct}% {awayName}</span>
+      </div>
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-muted" dir="ltr">
+        <div className="bg-primary" style={{ width: `${homePct}%` }} />
+        <div className="bg-muted-foreground/40" style={{ width: `${drawPct}%` }} />
+        <div className="bg-amber-400" style={{ width: `${awayPct}%` }} />
+      </div>
+      {advice && <div className="text-[11px] text-muted-foreground mt-2 text-center">التوصية: <span className="font-semibold text-foreground">{advice}</span></div>}
+    </div>
+  );
+}
+
 function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
     refetchInterval: (q) => (q.state.data?.fixture?.status?.live ? 15_000 : false),
   });
   const [tab, setTab] = useState("events");
+  // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
+  const fixtureStatus = data?.fixture?.status;
+  const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
+  const { data: prediction } = useQuery<SpPrediction>({
+    queryKey: [`/api/sports/match/${id}/prediction`],
+    enabled: id != null && isUpcoming,
+    staleTime: 5 * 60_000,
+  });
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
   const events = Array.isArray(data?.events) ? data!.events : [];
@@ -783,6 +905,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
             </>
           )}
         </div>
+        {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
         {tabs.length > 0 && (
           <div className="shrink-0 flex border-b border-border bg-card">
             {tabs.map((t) => (
@@ -1016,8 +1139,8 @@ export default function SportsHub() {
   const { user } = useAuth();
   const [compSlug, setCompSlug] = useState("pro-league");
   const [openMatch, setOpenMatch] = useState<number | null>(null);
-  // الموجة 1: تبديل بين الهدّافين وصنّاع الأهداف ضمن قسم واحد.
-  const [scorersTab, setScorersTab] = useState<"scorers" | "assists">("scorers");
+  // الموجة 1+2: تبديل بين الهدّافين وصنّاع الأهداف ومتصدّري البطاقات ضمن قسم واحد.
+  const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
   useCanonical("https://sabq.org/sports2");
@@ -1056,6 +1179,10 @@ export default function SportsHub() {
   // الموجة 1: صنّاع الأهداف — تُجلب لنفس البطولات التي تدعم الهدّافين.
   const { data: assistsData } = useQuery<{ assists: SpAssister[] }>({ queryKey: [`/api/sports/${compSlug}/assists`], staleTime: 10 * 60_000, enabled: hasScorers });
   const assisters = Array.isArray(assistsData?.assists) ? assistsData.assists : [];
+
+  // الموجة 2: متصدّرو البطاقات (إنذارات) — تُجلب عند فتح تبويب البطاقات فقط.
+  const { data: cardsData } = useQuery<{ yellow: SpCardLeader[]; red: SpCardLeader[] }>({ queryKey: [`/api/sports/${compSlug}/cards`], staleTime: 10 * 60_000, enabled: hasScorers && scorersTab === "cards" });
+  const yellowLeaders = Array.isArray(cardsData?.yellow) ? cardsData.yellow : [];
 
   const { data: shortsByCat } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts", { categoryId: sportsCatId, limit: 12 }], enabled: !!sportsCatId, staleTime: 10 * 60_000 });
   const { data: shortsFeatured } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts/featured", { limit: 12 }], staleTime: 10 * 60_000 });
@@ -1177,6 +1304,16 @@ export default function SportsHub() {
                 ))}
               </div>
             )}
+            {/* البند 9: ترويسة البطولة الديناميكية (شعار + موسم). */}
+            {comp && (comp.logo || comp.season) && (
+              <div className="flex items-center gap-3 mb-5 px-1">
+                {comp.logo && <img src={comp.logo} alt="" className="w-11 h-11 object-contain shrink-0" />}
+                <div className="min-w-0">
+                  <div className="font-black text-foreground truncate">{comp.name}</div>
+                  {comp.season && <div className="text-xs text-muted-foreground tabular-nums">موسم {comp.season}</div>}
+                </div>
+              </div>
+            )}
             <MatchHub key={compSlug} data={matches} configured={matchesConfigured} onOpen={setOpenMatch} />
           </section>
 
@@ -1194,17 +1331,18 @@ export default function SportsHub() {
           {hasScorers && (
             <section id="scorers" className="scroll-mt-24">
               <SectionHeader
-                title={scorersTab === "scorers" ? "منصّة الهدّافين" : "منصّة صنّاع الأهداف"}
-                subtitle={scorersTab === "scorers" ? "الأكثر تهديفًا في البطولة" : "الأكثر صناعةً للأهداف"}
-                icon={scorersTab === "scorers" ? <Goal className={`w-5 h-5 ${ACCENT}`} /> : <Hand className={`w-5 h-5 ${ACCENT}`} />}
+                title={scorersTab === "scorers" ? "منصّة الهدّافين" : scorersTab === "assists" ? "منصّة صنّاع الأهداف" : "متصدّرو البطاقات"}
+                subtitle={scorersTab === "scorers" ? "الأكثر تهديفًا في البطولة" : scorersTab === "assists" ? "الأكثر صناعةً للأهداف" : "الأكثر حصولًا على الإنذارات"}
+                icon={scorersTab === "scorers" ? <Goal className={`w-5 h-5 ${ACCENT}`} /> : scorersTab === "assists" ? <Hand className={`w-5 h-5 ${ACCENT}`} /> : <Square className="w-5 h-5 text-amber-500" />}
                 action={
                   <PillTabs
                     layoutId="scorers-tab"
                     active={scorersTab}
-                    onChange={(k) => setScorersTab(k === "assists" ? "assists" : "scorers")}
+                    onChange={(k) => setScorersTab(k as "scorers" | "assists" | "cards")}
                     tabs={[
                       { key: "scorers", label: "هدّافون" },
                       { key: "assists", label: "صنّاع الأهداف" },
+                      { key: "cards", label: "البطاقات" },
                     ]}
                   />
                 }
@@ -1217,13 +1355,17 @@ export default function SportsHub() {
                 /> : (
                   <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار تسجيل أول الأهداف — يظهر ترتيب الهدّافين هنا مع انطلاق المنافسة.</div>
                 )
-              ) : (
+              ) : scorersTab === "assists" ? (
                 assisters.length ? <PodiumCard
                   entries={assisters.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.assists, secondary: s.goals }))}
                   primaryLabel="عدد الصناعات"
                   secondaryLabel="الأهداف"
                 /> : (
                   <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار أولى الصناعات — يظهر ترتيب صنّاع الأهداف هنا مع انطلاق المنافسة.</div>
+                )
+              ) : (
+                yellowLeaders.length ? <CardLeaders leaders={yellowLeaders} /> : (
+                  <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">لا تتوفّر بيانات البطاقات لهذه البطولة بعد.</div>
                 )
               )}
             </section>

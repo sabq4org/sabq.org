@@ -7,7 +7,7 @@
 import { useEffect } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Cake, MapPin, Ruler, Trophy, User, Weight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Cake, MapPin, Ruler, Stethoscope, TrendingUp, Trophy, User, Weight } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,12 +23,21 @@ interface SpPlayerSeasonStats {
 }
 interface SpPlayerCareerStop { teamId: number; team: string; logo: string; seasons: number[]; }
 interface SpPlayerTrophy { competition: string; country: string; season: string; place: string; winner: boolean; }
+// الموجة 2: إثراء اختياري عبر ?with=extras.
+interface SpPlayerSeasonPoint { season: number; competition: string; matches: number; goals: number; assists: number; }
+interface SpPlayerTransfer {
+  date: string; type: string;
+  fromId: number; from: string; fromLogo: string;
+  toId: number; to: string; toLogo: string;
+}
+interface SpPlayerInjury { date: string; type: string; reason: string; team: string; competition: string; }
 interface SpPlayerCard {
   id: number; name: string; fullName: string | null; photo: string;
   position: string; number: number | null; age: number | null;
   birthDate: string | null; birthPlace: string | null; nationality: string | null;
   height: number | null; weight: number | null;
   seasonStats: SpPlayerSeasonStats[]; career: SpPlayerCareerStop[]; trophies: SpPlayerTrophy[];
+  history?: SpPlayerSeasonPoint[]; transfers?: SpPlayerTransfer[]; injuries?: SpPlayerInjury[];
 }
 
 const birthFmt = new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "long", year: "numeric" });
@@ -45,6 +54,13 @@ function seasonsRange(seasons: number[]): string {
   return first === last ? String(first) : `${first}–${last}`;
 }
 
+const shortDateFmt = new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "short", year: "numeric" });
+function fmtShortDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : shortDateFmt.format(d);
+}
+
 function BioItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   if (!value) return null;
   return (
@@ -58,13 +74,117 @@ function BioItem({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
+// الموجة 2 — البند 5: رسم تطوّر الأداء (أعمدة SVG خفيفة، بلا اعتمادية خارجية).
+function PerformanceChart({ points }: { points: SpPlayerSeasonPoint[] }) {
+  const max = Math.max(1, ...points.map((p) => p.goals + p.assists));
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-5">
+        <TrendingUp className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">تطوّر الأداء</h2>
+        <span className="text-[11px] text-muted-foreground">آخر {points.length} مواسم</span>
+      </div>
+      <div className="flex items-end justify-around gap-3 h-44" dir="ltr">
+        {points.map((p) => {
+          const gH = Math.round((p.goals / max) * 100);
+          const aH = Math.round((p.assists / max) * 100);
+          return (
+            <div key={p.season} className="flex-1 flex flex-col items-center gap-2 min-w-0">
+              <div className="flex items-end gap-1 h-32 w-full justify-center">
+                <div className="w-1/3 max-w-[28px] bg-primary rounded-t-md transition-all flex items-start justify-center" style={{ height: `${Math.max(gH, p.goals > 0 ? 6 : 0)}%` }} title={`${p.goals} هدف`}>
+                  {p.goals > 0 && <span className="text-[10px] font-black text-primary-foreground mt-0.5">{p.goals}</span>}
+                </div>
+                <div className="w-1/3 max-w-[28px] bg-amber-400 rounded-t-md transition-all flex items-start justify-center" style={{ height: `${Math.max(aH, p.assists > 0 ? 6 : 0)}%` }} title={`${p.assists} صناعة`}>
+                  {p.assists > 0 && <span className="text-[10px] font-black text-amber-950 mt-0.5">{p.assists}</span>}
+                </div>
+              </div>
+              <div className="text-center" dir="rtl">
+                <div className="text-xs font-bold text-foreground tabular-nums">{p.season}</div>
+                <div className="text-[10px] text-muted-foreground truncate max-w-[90px]">{p.competition}</div>
+                <div className="text-[10px] text-muted-foreground tabular-nums">{p.matches} مباراة</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-center gap-4 mt-4 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary" /> أهداف</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-400" /> صناعة</span>
+      </div>
+    </Card>
+  );
+}
+
+// الموجة 2 — البند 6: مسيرة انتقالات اللاعب.
+function TransfersCard({ transfers }: { transfers: SpPlayerTransfer[] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <ArrowLeftRight className="w-5 h-5 text-primary" />
+        <h2 className="font-bold text-lg">مسيرة الانتقالات</h2>
+      </div>
+      <div className="space-y-2">
+        {transfers.map((t, i) => (
+          <div key={`${t.date}-${i}`} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
+            <span className="text-[11px] text-muted-foreground w-20 shrink-0 tabular-nums">{fmtShortDate(t.date)}</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0" dir="ltr">
+              <TeamChip id={t.fromId} name={t.from} logo={t.fromLogo} />
+              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0 rotate-180" />
+              <TeamChip id={t.toId} name={t.to} logo={t.toLogo} />
+            </div>
+            {t.type && <Badge variant="secondary" className="text-[10px] shrink-0">{t.type}</Badge>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function TeamChip({ id, name, logo }: { id: number; name: string; logo: string }) {
+  const inner = (
+    <span className="flex items-center gap-1.5 min-w-0">
+      {logo && <img src={logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+      <span className="text-xs font-semibold text-foreground truncate">{name}</span>
+    </span>
+  );
+  return id ? (
+    <Link href={`/sports2/team/${id}`} className="hover:text-primary transition-colors min-w-0">{inner}</Link>
+  ) : inner;
+}
+
+// الموجة 2 — البند 7: سجلّ الإصابات/الغيابات.
+function InjuriesCard({ injuries }: { injuries: SpPlayerInjury[] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Stethoscope className="w-5 h-5 text-red-500" />
+        <h2 className="font-bold text-lg">الإصابات والغيابات</h2>
+      </div>
+      <div className="space-y-2">
+        {injuries.map((inj, i) => (
+          <div key={`${inj.date}-${i}`} className="flex items-center gap-3 rounded-xl bg-muted/40 px-3 py-2.5">
+            <span className="w-1.5 h-8 rounded-full bg-red-500/70 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-foreground truncate">{inj.reason || inj.type || "غياب"}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {inj.team}{inj.competition ? ` · ${inj.competition}` : ""}
+              </div>
+            </div>
+            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">{fmtShortDate(inj.date)}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function SportsPlayer() {
   const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
   const { data, isLoading, isError } = useQuery<SpPlayerCard>({
-    queryKey: [`/api/sports/player/${id}`],
+    queryKey: [`/api/sports/player/${id}`, { with: "extras" }],
     enabled: Number.isFinite(id) && id > 0,
     staleTime: 10 * 60_000,
   });
@@ -128,6 +248,9 @@ export default function SportsPlayer() {
               <BioItem icon={<Weight className="w-4 h-4" />} label="الوزن" value={data.weight != null ? `${data.weight} كجم` : ""} />
             </div>
 
+            {/* تطوّر الأداء (الموجة 2) */}
+            {data.history && data.history.length > 1 && <PerformanceChart points={data.history} />}
+
             {/* أرقام الموسم */}
             {data.seasonStats.length > 0 && (
               <Card className="p-5">
@@ -190,6 +313,12 @@ export default function SportsPlayer() {
                 </div>
               </Card>
             )}
+
+            {/* الانتقالات (الموجة 2) */}
+            {data.transfers && data.transfers.length > 0 && <TransfersCard transfers={data.transfers} />}
+
+            {/* الإصابات (الموجة 2) */}
+            {data.injuries && data.injuries.length > 0 && <InjuriesCard injuries={data.injuries} />}
 
             {/* الألقاب */}
             {data.trophies.length > 0 && (
