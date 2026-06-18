@@ -18,8 +18,14 @@ import {
   localizeVenue,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
+import pLimit from "p-limit";
 
 const API_BASE = "https://v3.football.api-sports.io";
+
+// تجميع سباقات الهدّافين يحتاج أحداث كل المباريات الجارية/المنتهية دفعةً واحدة.
+// بلا حدّ تزامن كان Promise.all يطلق طلبًا (أو ثلاثة) لكل مباراة في نفس اللحظة،
+// فيُغرق حصة المزود ويُشعل rate-limit بعد كل إعادة تشغيل (كاش بارد). نحدّه بـ 4.
+const MATCH_FETCH_CONCURRENCY = 4;
 const LEAGUE_ID = 1; // World Cup
 const SEASON = 2026;
 const TIMEZONE = "Asia/Riyadh";
@@ -944,22 +950,27 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     // أحداث المباراة المنتهية لا تتغير — كاش طويل خاص بها كي لا يستنزف التجميع
     // الدوري (كل 30 ثانية) حصة المزود بإعادة جلب تفاصيل كل مباريات البطولة
     const FINISHED_EVENTS_TTL = 60 * 60 * 1000;
+    // حدّ تزامن صارم: لا نطلق أكثر من MATCH_FETCH_CONCURRENCY نداءً للمزود معًا،
+    // ونكتفي بمسار الأحداث الخفيف (نداء واحد لكل مباراة) بدل التفاصيل الكاملة.
+    const limit = pLimit(MATCH_FETCH_CONCURRENCY);
     const eventLists = await Promise.all(
-      started.map(async (f): Promise<{ at: number; events: WcMatchEvent[] }> => {
-        try {
-          const events = f.status.finished
-            ? await withSWR(
-                `wc:raceEvents:${f.id}`,
-                FINISHED_EVENTS_TTL,
-                FINISHED_EVENTS_TTL * 2,
-                async () => (await getMatchDetail(f.id))?.events ?? []
-              )
-            : (await getMatchDetail(f.id))?.events ?? [];
-          return { at: f.timestamp, events };
-        } catch {
-          return { at: f.timestamp, events: [] };
-        }
-      })
+      started.map((f): Promise<{ at: number; events: WcMatchEvent[] }> =>
+        limit(async () => {
+          try {
+            const events = f.status.finished
+              ? await withSWR(
+                  `wc:raceEvents:${f.id}`,
+                  FINISHED_EVENTS_TTL,
+                  FINISHED_EVENTS_TTL * 2,
+                  async () => await getMatchEventsOnly(f.id)
+                )
+              : await getMatchEventsOnly(f.id);
+            return { at: f.timestamp, events };
+          } catch {
+            return { at: f.timestamp, events: [] };
+          }
+        })
+      )
     );
     for (const { at, events } of eventLists) {
       for (const ev of events) {
@@ -1165,6 +1176,53 @@ export interface WcMatchDetail {
   headToHead: WcFixture[];
 }
 
+/** يعرّب أحداث المباراة فقط — مشترك بين التفاصيل الكاملة والمسار الخفيف. */
+function localizeMatchEvents(item: any, tr: (name: string | null | undefined) => string): WcMatchEvent[] {
+  return (item?.events ?? []).map((ev: any): WcMatchEvent => {
+    const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
+    return {
+      minute: ev.time?.elapsed ?? 0,
+      extraMinute: ev.time?.extra ?? null,
+      teamId: ev.team?.id ?? 0,
+      type: localized.type,
+      label: localized.label,
+      detail: ev.detail ?? "",
+      player: tr(ev.player?.name),
+      playerId: ev.player?.id ?? null,
+      assist: ev.assist?.name ? tr(ev.assist.name) : null,
+      assistId: ev.assist?.id ?? null,
+    };
+  });
+}
+
+/**
+ * مسار خفيف يجلب أحداث المباراة فقط (نداء `fixtures` واحد) دون توقعات أو سجل
+ * مواجهات. تجميع سباقات الهدّافين يحتاج الأحداث وحدها، فلا داعي لإشعال نداءين
+ * إضافيين لكل مباراة كما يفعل getMatchDetail — هذا جذر طوفان rate-limit.
+ */
+async function getMatchEventsOnly(fixtureId: number): Promise<WcMatchEvent[]> {
+  const known = (await getFixtures()).find((f) => f.id === fixtureId);
+  let ttl = CACHE_TTL.MEDIUM;
+  if (known?.status.live) {
+    ttl = MATCH_DETAIL_LIVE_TTL;
+  } else if (known && !known.status.finished) {
+    const msToKickoff = new Date(known.date).getTime() - Date.now();
+    if (msToKickoff < PREKICKOFF_WINDOW_MS) ttl = MATCH_DETAIL_PREKICKOFF_TTL;
+  }
+
+  return withSWR(`wc:matchEvents:${fixtureId}`, ttl, ttl * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return [];
+    const rawNames: (string | null | undefined)[] = [];
+    for (const ev of item.events ?? []) {
+      rawNames.push(ev.player?.name, ev.assist?.name);
+    }
+    const tr = await resolveNames(rawNames);
+    return localizeMatchEvents(item, tr);
+  });
+}
+
 export async function getMatchDetail(
   fixtureId: number,
   opts: { forceFresh?: boolean } = {}
@@ -1204,21 +1262,7 @@ export async function getMatchDetail(
     }
     const tr = await resolveNames(rawNames);
 
-    const events: WcMatchEvent[] = (item.events ?? []).map((ev: any) => {
-      const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
-      return {
-        minute: ev.time?.elapsed ?? 0,
-        extraMinute: ev.time?.extra ?? null,
-        teamId: ev.team?.id ?? 0,
-        type: localized.type,
-        label: localized.label,
-        detail: ev.detail ?? "",
-        player: tr(ev.player?.name),
-        playerId: ev.player?.id ?? null,
-        assist: ev.assist?.name ? tr(ev.assist.name) : null,
-        assistId: ev.assist?.id ?? null,
-      };
-    });
+    const events: WcMatchEvent[] = localizeMatchEvents(item, tr);
 
     const lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({

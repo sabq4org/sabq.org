@@ -22,6 +22,11 @@ interface NotificationPayload {
   matchedTopic?: string;
   deeplink?: string;
   imageUrl?: string;
+  // العنوان والنص المنسّقان مسبقًا هنا. notificationWorker كان يعيد تركيبهما من
+  // الصفر حسب type، فأي نوع جديد بلا فرع صريح كان يقع في "Unknown notification
+  // type" ويُسجَّل كخطأ. تمريرهما عبر الـ payload يجعل العامل يثق بهما مباشرة.
+  notificationTitle?: string;
+  notificationBody?: string;
 }
 
 // Notification type definitions
@@ -137,11 +142,17 @@ async function sendToInbox(
 
     // Add to notification queue (with deduplication via unique constraint)
     const dedupeKey = `${userId}:${payload.articleId || 'general'}:${type}`;
+    // احفظ العنوان/النص المنسّقين ضمن الـ payload ليستخدمهما العامل كما هي.
+    const enrichedPayload: NotificationPayload = {
+      ...payload,
+      notificationTitle: payload.notificationTitle ?? title,
+      notificationBody: payload.notificationBody ?? body,
+    };
     try {
       await db.insert(notificationQueue).values({
         userId,
         type,
-        payload,
+        payload: enrichedPayload,
         priority: type === "BreakingNews" ? 100 : 50,
         scheduledAt,
         dedupeKey,
