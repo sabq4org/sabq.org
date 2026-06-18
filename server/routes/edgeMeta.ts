@@ -1444,7 +1444,9 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       if (t.founded) parts.push(`تأسّس عام ${t.founded}.`);
       if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ""}.`);
       parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
-      const image = abs(t.venueImage || t.logo || BRAND_OG_IMAGE);
+      // بطاقة OG مولّدة 1200×630 (معتمة، تظهر في واتساب/تويتر) بدل صور
+      // المزوّد 150×150 الشفّافة التي يرفضها واتساب.
+      const image = `${SITE_URL}/api/sports/og/team/${id}`;
       return {
         title: `${t.name} — المباريات والترتيب والتشكيلة | سبق`,
         description: trunc(parts.join(" "), 220),
