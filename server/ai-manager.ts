@@ -37,6 +37,10 @@ export interface AIResponse {
     outputTokens: number;
   };
   error?: string;
+  // true إذا قطع النموذج إجابته لبلوغ حد التوكنات (finish_reason=length /
+  // stop_reason=max_tokens / MAX_TOKENS). المستهلكون الذين لا يحتملون المخرجات
+  // المبتورة (المحرر التحريري، محوّل الرادار) يعاملونها كفشل ويسقطون للبديل.
+  truncated?: boolean;
 }
 
 // Initialize AI Clients
@@ -200,6 +204,7 @@ class AIManager {
         inputTokens: response.usage?.prompt_tokens || 0,
         outputTokens: response.usage?.completion_tokens || 0,
       },
+      truncated: response.choices[0]?.finish_reason === 'length',
     };
   }
 
@@ -226,6 +231,7 @@ class AIManager {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
       },
+      truncated: response.stop_reason === 'max_tokens',
     };
   }
 
@@ -253,6 +259,7 @@ class AIManager {
         inputTokens: result.response.usageMetadata?.promptTokenCount || 0,
         outputTokens: result.response.usageMetadata?.candidatesTokenCount || 0,
       },
+      truncated: response.candidates?.[0]?.finishReason === 'MAX_TOKENS',
     };
   }
 }
