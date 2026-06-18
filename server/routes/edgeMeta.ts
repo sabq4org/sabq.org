@@ -47,6 +47,7 @@ import {
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
+import { getTeamSeoMeta } from "../services/saudiLeagueService";
 
 const router = Router();
 
@@ -1422,6 +1423,66 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       type: "website",
       locale: "ar_SA",
     }),
+  },
+  // البوابة الرياضية الجديدة — صفحة النادي: /sports2/team/:id
+  // ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
+  // سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق.
+  {
+    pattern: /^\/sports2\/team\/(\d+)/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      if (!Number.isFinite(id) || id <= 0) return null;
+      const t = await getTeamSeoMeta(id).catch(() => null);
+      if (!t) return null;
+      const canonical = `${SITE_URL}/sports2/team/${id}`;
+      const parts: string[] = [];
+      if (t.rank && t.points != null && t.competitionName) {
+        parts.push(`يحتل ${t.name} المركز ${t.rank} برصيد ${t.points} نقطة في ${t.competitionName}.`);
+      } else if (t.competitionName) {
+        parts.push(`${t.name} يشارك في ${t.competitionName}.`);
+      }
+      if (t.founded) parts.push(`تأسّس عام ${t.founded}.`);
+      if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ""}.`);
+      parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
+      const image = abs(t.venueImage || t.logo || BRAND_OG_IMAGE);
+      return {
+        title: `${t.name} — المباريات والترتيب والتشكيلة | سبق`,
+        description: trunc(parts.join(" "), 220),
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical,
+        // القسم تجريبي → مخفيّ عن قوقل، لكن معاينة المشاركة (واتساب/تويتر)
+        // تبقى غنية بصورة الملعب والعنوان والوصف.
+        robots: "noindex, follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "SportsTeam",
+          name: t.name,
+          sport: "Association football",
+          url: canonical,
+          ...(t.logo ? { logo: abs(t.logo) } : {}),
+          ...(t.founded ? { foundingDate: String(t.founded) } : {}),
+          ...(t.venueName
+            ? {
+                location: {
+                  "@type": "StadiumOrArena",
+                  name: t.venueName,
+                  ...(t.venueCity
+                    ? { address: { "@type": "PostalAddress", addressLocality: t.venueCity } }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(t.competitionName
+            ? { memberOf: { "@type": "SportsOrganization", name: t.competitionName } }
+            : {}),
+        },
+      };
+    },
   },
   // World Cup 2026 predictions competition landing — لا بد أن يسبق معالج الهب
   // (نمط الهب مثبّت بـ $ فلا يلتقطها، لكن نُبقيها أولًا للوضوح).

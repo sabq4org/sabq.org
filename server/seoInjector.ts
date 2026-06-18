@@ -28,6 +28,7 @@ import {
   SABQ_ORG_EN,
 } from "./utils/creatorSchema";
 import { resolveMuqtarabOgImage } from "./utils/muqtarabShareImage";
+import { getTeamSeoMeta } from "./services/saudiLeagueService";
 
 const SKIP_PREFIXES = ['/api/', '/src/', '/@fs/', '/assets/', '/@vite/', '/node_modules/'];
 const FILE_EXT_REGEX = /\.\w{2,5}$/;
@@ -795,6 +796,12 @@ function matchRoute(pathname: string): { type: string; slug?: string; angleSlug?
   if (pathname === '/' || pathname === '') return { type: 'homepage', pathname };
   if (pathname === '/en' || pathname === '/ar' || pathname === '/ur') return { type: 'homepage', pathname };
 
+  // البوابة الرياضية الجديدة — صفحة النادي (/sports2/team/:id).
+  // يُفحص قبل isNoindexPath لأن المسار /sports2 ضمن قائمة noindex (تجريبي):
+  // نريد ميتا مشاركة غنية (صورة الملعب + عنوان/وصف) مع إبقاء robots=noindex.
+  let sportsTeamMatch = pathname.match(/^\/sports2\/team\/(\d+)$/);
+  if (sportsTeamMatch) return { type: 'sports-team', slug: sportsTeamMatch[1], pathname };
+
   // Noindex routes — emit self-canonical + noindex,follow
   if (isNoindexPath(pathname)) return { type: 'noindex-page', pathname };
 
@@ -1413,6 +1420,70 @@ async function handleWorldDayPage(slug: string, baseUrl: string): Promise<SeoDat
   };
 }
 
+// البوابة الرياضية الجديدة — صفحة النادي (/sports2/team/:id).
+// ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
+// سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق. صورة الملعب/الشعار
+// روابط https كاملة من المزوّد فتُمرَّر كما هي.
+async function handleSportsTeamPage(id: string, baseUrl: string): Promise<SeoData | null> {
+  const teamId = Number(id);
+  if (!Number.isFinite(teamId) || teamId <= 0) return null;
+  const t = await withCache(`seo:sports-team:${teamId}`, CACHE_TTL.MEDIUM, async () =>
+    getTeamSeoMeta(teamId).catch(() => null)
+  );
+  const canonicalUrl = `${baseUrl}/sports2/team/${teamId}`;
+  if (!t) return null;
+
+  const parts: string[] = [];
+  if (t.rank && t.points != null && t.competitionName) {
+    parts.push(`يحتل ${t.name} المركز ${t.rank} برصيد ${t.points} نقطة في ${t.competitionName}.`);
+  } else if (t.competitionName) {
+    parts.push(`${t.name} يشارك في ${t.competitionName}.`);
+  }
+  if (t.founded) parts.push(`تأسّس عام ${t.founded}.`);
+  if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ''}.`);
+  parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
+
+  const ogImage = t.venueImage || t.logo
+    ? ensureAbsoluteUrl(t.venueImage || t.logo, baseUrl)
+    : `${baseUrl}/branding/sabq-og-image.png`;
+
+  return {
+    title: `${t.name} — المباريات والترتيب والتشكيلة | الرياضة - سبق`,
+    description: truncate(parts.join(' '), 220),
+    canonicalUrl,
+    ogType: 'website',
+    ogImage,
+    ogLocale: 'ar_SA',
+    ogSiteName: 'صحيفة سبق الإلكترونية',
+    twitterSite: '@sabq',
+    // القسم تجريبي → مخفيّ عن قوقل، مع إبقاء معاينة المشاركة غنية.
+    robots: 'noindex, follow',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'SportsTeam',
+      name: t.name,
+      sport: 'Association football',
+      url: canonicalUrl,
+      ...(t.logo ? { logo: ensureAbsoluteUrl(t.logo, baseUrl) } : {}),
+      ...(t.founded ? { foundingDate: String(t.founded) } : {}),
+      ...(t.venueName
+        ? {
+            location: {
+              '@type': 'StadiumOrArena',
+              name: t.venueName,
+              ...(t.venueCity
+                ? { address: { '@type': 'PostalAddress', addressLocality: t.venueCity } }
+                : {}),
+            },
+          }
+        : {}),
+      ...(t.competitionName
+        ? { memberOf: { '@type': 'SportsOrganization', name: t.competitionName } }
+        : {}),
+    },
+  };
+}
+
 async function handleLocalizedCategoryPage(slug: string, baseUrl: string, pathname: string): Promise<SeoData | null> {
   const isEn = pathname.startsWith('/en/');
   const display = slug.replace(/[-_]+/g, ' ');
@@ -1460,6 +1531,8 @@ async function resolveSeoData(route: { type: string; slug?: string; angleSlug?: 
       return handleOmqPage(route.slug!, baseUrl);
     case 'world-day':
       return handleWorldDayPage(route.slug!, baseUrl);
+    case 'sports-team':
+      return handleSportsTeamPage(route.slug!, baseUrl);
     case 'homepage':
       return handleHomepage(baseUrl);
     case 'sponsored':
