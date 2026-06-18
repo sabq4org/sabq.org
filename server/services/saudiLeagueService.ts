@@ -695,10 +695,26 @@ export interface SplTeamProfile {
 export async function getTeamProfile(teamId: number, opts?: { withExtras?: boolean }): Promise<SplTeamProfile | null> {
   const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
 
+  // معلومات النادي + التشكيلة لا تعتمدان على البطولة، فنبدأهما فورًا بالتوازي مع
+  // اكتشاف بطولة النادي — يقلّص زمن البرود بدمج النداءات بدل تسلسلها.
+  const basePromise = Promise.all([
+    getTeamInfo(teamId).catch(() => null),
+    getSquad(teamId).catch(() => null),
+  ]);
+
+  // اكتشاف بطولة النادي وصفّه: نجلب جداول البطولات بالتوازي بدل التسلسل.
+  // قبل الموسم قد تكون الجداول الجديدة فارغة، فالتسلسل كان يمرّ على كل
+  // البطولات الأربع متتاليًا (٨+ نداءات) ويبطّئ الصفحة عدة ثوانٍ.
   let comp: SaudiCompetition | null = null;
   let standing: SplStandingRow | null = null;
-  for (const c of leagueComps) {
-    const table = await getStandings(c).catch(() => [] as SplStandingRow[]);
+  const tables = await Promise.all(
+    leagueComps.map((c) =>
+      getStandings(c)
+        .catch(() => [] as SplStandingRow[])
+        .then((table) => ({ c, table }))
+    )
+  );
+  for (const { c, table } of tables) {
     const row = table.find((r) => r.team.id === teamId);
     if (row) {
       comp = c;
@@ -707,31 +723,25 @@ export async function getTeamProfile(teamId: number, opts?: { withExtras?: boole
     }
   }
 
-  const fetchBase = [
-    getTeamInfo(teamId).catch(() => null),
-    getSquad(teamId).catch(() => null),
-  ] as const;
-
-  // الإثراء يُجلب تزامنيًا (Promise.all) فقط حين يطلبه المستهلك، حتى لا
-  // تُكلّف نقطة /api/sports/team/:id نداءات إضافية عند من لا يستخدمها.
+  // الإثراء يُجلب فقط حين يطلبه المستهلك (?with=stats)، حتى لا تُكلّف النقطة
+  // الأساسية نداءات إضافية. المباريات (تعتمد على البطولة) + الإثراء يُجلبان
+  // بالتوازي مع بعضهما وبعد معرفة البطولة، ومع نتيجة basePromise الجارية.
   const withExtras = opts?.withExtras === true;
-  const extrasPromise = withExtras
-    ? Promise.all([
-        getTeamStats(teamId, comp).catch(() => null),
-        getTeamCoach(teamId).catch(() => null),
-        getTeamTopScorers(teamId, comp).catch(() => [] as SplTeamScorer[]),
-      ])
-    : Promise.resolve([null, null, [] as SplTeamScorer[]] as const);
+  const [[info, squad], fixturesAll, [stats, coach, topScorers]] = await Promise.all([
+    basePromise,
+    comp ? getFixtures(comp).catch(() => [] as SplFixture[]) : Promise.resolve([] as SplFixture[]),
+    withExtras
+      ? Promise.all([
+          getTeamStats(teamId, comp).catch(() => null),
+          getTeamCoach(teamId).catch(() => null),
+          getTeamTopScorers(teamId, comp).catch(() => [] as SplTeamScorer[]),
+        ])
+      : Promise.resolve([null, null, [] as SplTeamScorer[]] as const),
+  ]);
 
-  const [[info, squad], [stats, coach, topScorers]] = await Promise.all([Promise.all(fetchBase), extrasPromise]);
-
-  let fixtures: SplFixture[] = [];
-  if (comp) {
-    const all = await getFixtures(comp).catch(() => [] as SplFixture[]);
-    fixtures = all
-      .filter((f) => f.home.id === teamId || f.away.id === teamId)
-      .sort((a, b) => a.timestamp - b.timestamp);
-  }
+  const fixtures: SplFixture[] = fixturesAll
+    .filter((f) => f.home.id === teamId || f.away.id === teamId)
+    .sort((a, b) => a.timestamp - b.timestamp);
 
   const team: SplTeamInfo | null = info ?? squad?.team ?? (standing
     ? { id: standing.team.id, name: standing.team.name, logo: standing.team.logo, country: null, founded: null, venue: null }
