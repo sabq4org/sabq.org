@@ -4,13 +4,14 @@
  * تستهلك /api/sports/team/:id (هوية النادي + صفّه في الترتيب + مبارياته + تشكيلته).
  * تتدهور بسلاسة: 404 → حالة «غير متاح» مع رجوع للبوابة. كل البيانات معرَّبة من الخدمة.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   ArrowLeftRight,
   CalendarDays,
+  ChevronDown,
   ListOrdered,
   MapPin,
   Shield,
@@ -24,6 +25,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -278,9 +280,11 @@ function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
 }
 
 // الموجة 2: عمود انتقالات (وصل أو غادر) داخل بطاقة النادي.
-function TransferColumn({ title, dir, items }: { title: string; dir: "in" | "out"; items: SpTeamTransfer[] }) {
+// limit يقصّ العدد المعروض (للطيّ على الجوال)؛ Infinity يعرض الكل.
+function TransferColumn({ title, dir, items, limit }: { title: string; dir: "in" | "out"; items: SpTeamTransfer[]; limit: number }) {
   const arrow = dir === "in" ? "←" : "→";
   const tone = dir === "in" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+  const shown = items.slice(0, limit);
   return (
     <div>
       <div className={`text-sm font-bold mb-3 flex items-center gap-1.5 ${tone}`}>
@@ -291,7 +295,7 @@ function TransferColumn({ title, dir, items }: { title: string; dir: "in" | "out
         <p className="text-xs text-muted-foreground py-3">لا توجد حركات حديثة</p>
       ) : (
         <div className="space-y-1.5">
-          {items.map((t, i) => (
+          {shown.map((t, i) => (
             <div key={`${t.playerId}-${i}`} className="flex items-center gap-2.5 rounded-xl bg-muted/40 px-3 py-2">
               <div className="min-w-0 flex-1">
                 {t.playerId ? (
@@ -316,8 +320,14 @@ function TransferColumn({ title, dir, items }: { title: string; dir: "in" | "out
   );
 }
 
+const TRANSFERS_COLLAPSED = 5;
+
 function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
+  const [expanded, setExpanded] = useState(false);
   if (transfers.arrivals.length === 0 && transfers.departures.length === 0) return null;
+  // الطيّ مفيد فقط لو تجاوز أحد العمودين الحدّ — وإلا نخفي الزر.
+  const canExpand = transfers.arrivals.length > TRANSFERS_COLLAPSED || transfers.departures.length > TRANSFERS_COLLAPSED;
+  const limit = expanded ? Infinity : TRANSFERS_COLLAPSED;
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -325,9 +335,20 @@ function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
         <h2 className="font-bold text-lg">حركة الانتقالات</h2>
       </div>
       <div className="grid sm:grid-cols-2 gap-5">
-        <TransferColumn title="وصل" dir="in" items={transfers.arrivals} />
-        <TransferColumn title="غادر" dir="out" items={transfers.departures} />
+        <TransferColumn title="وصل" dir="in" items={transfers.arrivals} limit={limit} />
+        <TransferColumn title="غادر" dir="out" items={transfers.departures} limit={limit} />
       </div>
+      {/* على الجوال خصوصًا تطول القوائم — نعرض 5 ثم زر «المزيد» لكامل البلوك. */}
+      {canExpand && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-4 w-full flex items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-sm font-semibold text-primary hover:bg-muted/50 transition-colors"
+        >
+          {expanded ? "عرض أقل" : "عرض كل الانتقالات"}
+          <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      )}
     </Card>
   );
 }
@@ -481,21 +502,19 @@ export default function SportsTeam() {
               )}
             </Card>
 
-            {/* نبض الأرقام + الجهاز الفني + هدّافو النادي (الموجة 1) — تُجلب منفصلة */}
+            {/* نبض الأرقام (يسار) + الجهاز الفني والهدّافون فوق بعض (يمين) — استغلالًا
+                للمساحة الرأسية تحت بطاقة المدرب القصيرة. تُجلب منفصلة (الموجة 1). */}
             {(stats || coach || topScorers.length > 0) && (
               <div className="grid lg:grid-cols-2 gap-5 items-start">
                 {stats && <TeamStatsCard stats={stats} />}
-                {coach && <CoachCard coach={coach} />}
-                {topScorers.length > 0 && (
-                  <div className="lg:col-span-2">
-                    <TeamScorersCard scorers={topScorers} />
+                {(coach || topScorers.length > 0) && (
+                  <div className="space-y-5">
+                    {coach && <CoachCard coach={coach} />}
+                    {topScorers.length > 0 && <TeamScorersCard scorers={topScorers} />}
                   </div>
                 )}
               </div>
             )}
-
-            {/* حركة الانتقالات (الموجة 2) */}
-            {transfers && <TeamTransfersCard transfers={transfers} />}
 
             {/* المباريات */}
             {(results.length > 0 || upcoming.length > 0) && (
@@ -524,6 +543,9 @@ export default function SportsTeam() {
                 )}
               </div>
             )}
+
+            {/* أخبار النادي — مبنية على الكلمة المفتاحية (اسم النادي) */}
+            <SportsNewsBlock query={data.team.name} title="أخبار النادي" />
 
             {/* التشكيلة */}
             {data.squad.length > 0 && (
@@ -570,6 +592,9 @@ export default function SportsTeam() {
                 </div>
               </Card>
             )}
+
+            {/* حركة الانتقالات (الموجة 2) — أسفل التشكيلة */}
+            {transfers && <TeamTransfersCard transfers={transfers} />}
           </div>
         ) : null}
       </main>
