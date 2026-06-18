@@ -670,7 +670,17 @@ Professional English news story, ready for immediate publication, presenting Sau
     }
 
     // محرر الأسلوب الأساسي: Claude Sonnet — وعند أي فشل نسقط تلقائياً إلى GPT-5.1
-    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:\n\n${text.substring(0, 5000)}`;
+    // ملاحظة: كلا النموذجين لهما نافذة سياق كبيرة جداً (200k+ توكن)، لذا نسمح
+    // بمدخلات طويلة حتى لا تصل المواد مبتورة. الحد الأعلى احترازي فقط لتفادي
+    // النصوص الشاذة الضخمة (مثل سلاسل بريد مُعاد توجيهها بالكامل).
+    const MAX_EDITOR_INPUT_CHARS = 60000;
+    const editorInput = text.length > MAX_EDITOR_INPUT_CHARS
+      ? text.substring(0, MAX_EDITOR_INPUT_CHARS)
+      : text;
+    if (text.length > MAX_EDITOR_INPUT_CHARS) {
+      console.warn(`[Sabq Editor] Input trimmed from ${text.length} to ${MAX_EDITOR_INPUT_CHARS} chars (safety cap)`);
+    }
+    const userPrompt = `قم بتحليل وتحرير المحتوى التالي:\n\n${editorInput}`;
     let result: any;
     try {
       const anthropic = getAnthropicClient();
@@ -717,11 +727,16 @@ Professional English news story, ready for immediate publication, presenting Sau
             },
           ],
           response_format: { type: "json_object" },
-          max_completion_tokens: 3000,
+          max_completion_tokens: 8000,
         }),
         3,
         "SabqEditor"
       );
+
+      // احرس من المخرجات المبتورة حتى لا يُنشر خبر ناقص بصمت
+      if (response.choices[0].finish_reason === "length") {
+        throw new Error("OpenAI fallback response truncated (finish_reason=length)");
+      }
 
       result = JSON.parse(response.choices[0].message.content || "{}");
     }

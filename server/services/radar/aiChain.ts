@@ -16,6 +16,11 @@ export async function generateWithFallback(
         lastError = response.error;
         continue;
       }
+      // لا تقبل مخرجات مبتورة — انتقل للبديل بدل كتابة مسودة ناقصة
+      if (response.truncated) {
+        lastError = `${config.provider}/${config.model}: response truncated (max tokens)`;
+        continue;
+      }
       return response;
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);

@@ -119,6 +119,8 @@ Additional rules:
       try {
         const attempt = await aiManager.generate(prompt, modelConfig);
         if (attempt.error) throw new Error(attempt.error);
+        // ارفض المخرجات المبتورة حتى لا يُنشر مقال ناقص — انتقل للنموذج البديل
+        if (attempt.truncated) throw new Error('response truncated (max tokens)');
         response = attempt;
         break;
       } catch (err: any) {
