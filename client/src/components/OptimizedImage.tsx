@@ -23,6 +23,12 @@ interface OptimizedImageProps {
   webpSrc?: string;
   blurDataUrl?: string;
   threshold?: number;
+  /**
+   * يبدأ تنزيل الصورة فورًا عند أول رسم (loading="eager") بدل انتظار
+   * IntersectionObserver — مخصّص للبطاقات فوق الطية التي ليست عنصر LCP،
+   * فلا يرفع fetchpriority إلى high حتى لا يزاحم صورة الهيرو.
+   */
+  eager?: boolean;
   sizes?: string;
   srcSet?: string;
   style?: CSSProperties;
@@ -139,6 +145,7 @@ export function OptimizedImage({
   webpSrc,
   blurDataUrl,
   threshold = 0.1,
+  eager = false,
   sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
   srcSet,
   style,
@@ -153,7 +160,7 @@ export function OptimizedImage({
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [useFallback, setUseFallback] = useState(false);
-  const [isInView, setIsInView] = useState(priority);
+  const [isInView, setIsInView] = useState(priority || eager);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const normalizedSrc = useMemo(() => normalizeImageSrc(src), [src]);
@@ -188,7 +195,7 @@ export function OptimizedImage({
   const hasBlurDataUrl = !!blurDataUrl;
 
   useEffect(() => {
-    if (priority) {
+    if (priority || eager) {
       setIsInView(true);
       return;
     }
@@ -222,7 +229,7 @@ export function OptimizedImage({
     return () => {
       observer.disconnect();
     };
-  }, [priority, threshold]);
+  }, [priority, eager, threshold]);
 
   // Note: Preload removed - browser handles srcset selection automatically
   // Adding preload with fixed size causes duplicate downloads on different viewports
@@ -304,7 +311,7 @@ export function OptimizedImage({
               alt={alt}
               className={imgClassName}
               style={imageStyles}
-              loading={priority ? "eager" : "lazy"}
+              loading={priority || eager ? "eager" : "lazy"}
               {...{ fetchpriority: priority ? "high" : fetchPriority }}
               onLoad={handleLoad}
               onError={handleError}
@@ -318,7 +325,7 @@ export function OptimizedImage({
             alt={alt}
             className={imgClassName}
             style={imageStyles}
-            loading={priority ? "eager" : "lazy"}
+            loading={priority || eager ? "eager" : "lazy"}
             {...{ fetchpriority: priority ? "high" : fetchPriority }}
             onLoad={handleLoad}
             onError={handleError}
