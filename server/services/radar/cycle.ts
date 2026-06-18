@@ -86,7 +86,10 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
       summary.newItems += result.value;
     } else {
       summary.errors++;
-      console.error("[Radar] source fetch failed:", result.reason);
+      // فشل جلب/تحليل مصدر RSS (مثل "Unable to parse XML") حالة متوقَّعة لمصادر
+      // متقلّبة؛ نكتفي بالرسالة المختصرة بدل إغراق السجلّات بالـ stack كل دقيقة.
+      const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      console.warn("[Radar] source fetch failed:", reason);
     }
   }
 

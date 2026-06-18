@@ -4028,7 +4028,12 @@ export class DatabaseStorage implements IStorage {
     if (row.status === 'archived') {
       const isAuthorized = userRole === 'system_admin' || userRole === 'admin' || userRole === 'editor';
       if (!isAuthorized) {
-        console.warn(`[SECURITY] Archived article access denied - Article: ${row.slug}, UserRole: ${userRole || 'unauthenticated'}, UserId: ${userId || 'none'}`);
+        // الوصول المرفوض من زائر غير مسجّل سلوكٌ طبيعي (روابط قديمة/زواحف)
+        // وكان يملأ السجلّات بضجيج بلا قيمة. نُسجّل فقط محاولات المستخدمين
+        // المسجّلين غير المصرّح لهم لأنها الإشارة الأمنية الفعلية.
+        if (userId) {
+          console.warn(`[SECURITY] Archived article access denied - Article: ${row.slug}, UserRole: ${userRole || 'unknown'}, UserId: ${userId}`);
+        }
         return undefined;
       }
     }

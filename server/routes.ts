@@ -12896,7 +12896,14 @@ Respond in valid JSON format only:
             ]);
             usedProvider = 'elevenlabs';
           } catch (eErr) {
-            console.error('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eErr instanceof Error ? eErr.message : eErr);
+            const eMsg = eErr instanceof Error ? eErr.message : String(eErr);
+            // نفاد رصيد ElevenLabs حالة متوقَّعة (نعتمد على Google كبديل)؛ لا نُسجّلها
+            // كخطأ حتى لا تُغرق السجلّات في كل طلب صوت. الأخطاء الأخرى تبقى تحذيرًا.
+            if (eMsg.includes('quota_exceeded')) {
+              console.log('[summary-audio] ElevenLabs quota exhausted — using Google TTS fallback');
+            } else {
+              console.warn('[summary-audio] ElevenLabs TTS failed, trying Google fallback:', eMsg);
+            }
           }
         }
       }
