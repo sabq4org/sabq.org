@@ -761,6 +761,69 @@ export async function getTeamProfile(teamId: number, opts?: { withExtras?: boole
   };
 }
 
+// ---------- ميتا صفحة النادي (OG/SEO) ----------
+
+export interface SplTeamSeoMeta {
+  id: number;
+  name: string;
+  logo: string;
+  founded: number | null;
+  venueName: string | null;
+  venueCity: string | null;
+  venueImage: string | null;
+  competitionName: string | null;
+  rank: number | null;
+  points: number | null;
+}
+
+/**
+ * بيانات خفيفة لميتا صفحة النادي (`/sports2/team/:id`) — اسمه وشعاره وملعبه
+ * وصفّه في الترتيب فقط، بلا جلب التشكيلة أو المباريات. نداءان كحدّ أقصى
+ * (الترتيب + معلومات النادي) وكلاهما خلف كاش SWR، فالاستهلاك من زواحف الـ
+ * SEO رخيص. يُستهلك من seoInjector و /api/edge/seo-meta.
+ */
+export async function getTeamSeoMeta(teamId: number): Promise<SplTeamSeoMeta | null> {
+  if (!isSaudiLeagueConfigured()) return null;
+
+  const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStandings);
+  let competitionName: string | null = null;
+  let rank: number | null = null;
+  let points: number | null = null;
+  let standingTeam: SplTeam | null = null;
+  for (const c of leagueComps) {
+    const table = await getStandings(c).catch(() => [] as SplStandingRow[]);
+    const row = table.find((r) => r.team.id === teamId);
+    if (row) {
+      competitionName = c.name;
+      rank = row.rank;
+      points = row.points;
+      standingTeam = row.team;
+      break;
+    }
+  }
+
+  const info = await getTeamInfo(teamId).catch(() => null);
+  const team: SplTeamInfo | null =
+    info ??
+    (standingTeam
+      ? { id: standingTeam.id, name: standingTeam.name, logo: standingTeam.logo, country: null, founded: null, venue: null }
+      : null);
+  if (!team || !team.id) return null;
+
+  return {
+    id: team.id,
+    name: team.name,
+    logo: team.logo,
+    founded: team.founded,
+    venueName: team.venue?.name || null,
+    venueCity: team.venue?.city || null,
+    venueImage: team.venue?.image || null,
+    competitionName,
+    rank,
+    points,
+  };
+}
+
 // ---------- بطاقة اللاعب الشاملة ----------
 
 const parseMetric = (value: unknown): number | null => {
