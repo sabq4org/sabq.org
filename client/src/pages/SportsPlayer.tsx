@@ -12,6 +12,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -288,6 +289,9 @@ export default function SportsPlayer() {
                 </div>
               </Card>
             )}
+
+            {/* أخبار اللاعب — مبنية على الكلمة المفتاحية (اسم اللاعب) */}
+            <SportsNewsBlock query={data.name} title="أخبار اللاعب" />
 
             {/* المسيرة */}
             {data.career.length > 0 && (
