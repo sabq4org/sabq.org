@@ -1443,9 +1443,8 @@ async function handleSportsTeamPage(id: string, baseUrl: string): Promise<SeoDat
   if (t.venueName) parts.push(`ملعبه ${t.venueName}${t.venueCity ? ` بـ${t.venueCity}` : ''}.`);
   parts.push(`تابع نتائج ${t.name} ومبارياته القادمة وترتيبه وتشكيلته وهدّافيه على سبق.`);
 
-  const ogImage = t.venueImage || t.logo
-    ? ensureAbsoluteUrl(t.venueImage || t.logo, baseUrl)
-    : `${baseUrl}/branding/sabq-og-image.png`;
+  // بطاقة OG مولّدة 1200×630 (معتمة) بدل صور المزوّد 150×150 الشفّافة.
+  const ogImage = `${baseUrl}/api/sports/og/team/${teamId}`;
 
   return {
     title: `${t.name} — المباريات والترتيب والتشكيلة | الرياضة - سبق`,

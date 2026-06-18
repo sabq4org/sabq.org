@@ -43,6 +43,7 @@ import {
   type SaudiCompetition,
   type SplFixture,
 } from "../services/saudiLeagueService";
+import { getTeamOgImage } from "../services/sportsOgImage";
 
 const RIYADH_TZ = "Asia/Riyadh";
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
@@ -340,6 +341,30 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] team profile failed:", error);
       res.status(502).json({ message: "تعذر جلب صفحة النادي حاليًا" });
+    }
+  });
+
+  // بطاقة المشاركة (OG) المولّدة للنادي — 1200×630 معتمة (خلفية سبق + شعار
+  // النادي + اسمه + مركزه). تُستهلك من og:image في seoInjector/edgeMeta لأن
+  // صور المزوّد 150×150 شفّافة يرفضها واتساب. تتدهور لصورة سبق الافتراضية.
+  app.get("/api/sports/og/team/:id", async (req, res) => {
+    const id = parseId(req.params.id);
+    if (id == null || !isSaudiLeagueConfigured()) {
+      res.redirect(302, "/branding/sabq-og-image.png");
+      return;
+    }
+    try {
+      const png = await getTeamOgImage(id);
+      if (!png) {
+        res.redirect(302, "/branding/sabq-og-image.png");
+        return;
+      }
+      res.set("Content-Type", "image/png");
+      res.set("Cache-Control", "public, max-age=21600, s-maxage=86400, stale-while-revalidate=86400");
+      res.send(png);
+    } catch (error) {
+      console.error("[Sports] team OG image failed:", error);
+      res.redirect(302, "/branding/sabq-og-image.png");
     }
   });
 
