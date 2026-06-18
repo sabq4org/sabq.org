@@ -375,6 +375,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                                 preferSize="small"
                                 aspectRatio="16/9"
                                 sizes="112px"
+                                eager={index < 3}
                               />
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-primary/20 via-accent/20 to-primary/10" />
@@ -485,7 +486,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
       {/* Desktop View: Grid with 4 columns */}
       {!isCompact && (
       <div className="hidden lg:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {articles.map((article) => {
+        {articles.map((article, index) => {
           const match = matches.get(article.id);
           return (
             <Link key={article.id} href={`/article/${article.englishSlug || article.slug}`}>
@@ -508,6 +509,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
                       preferSize="small"
                       aspectRatio="16/9"
                       sizes="(max-width: 1279px) 100vw, 25vw"
+                      eager={index < 4}
                     />
                   </div>
                 )}
