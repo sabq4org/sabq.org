@@ -377,11 +377,23 @@ export default function SportsTeam() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
+  // الطلب الأساسي (سريع): هوية + ترتيب + مباريات + تشكيلة — يُعرض فور وصوله.
   const { data, isLoading, isError } = useQuery<SpTeamProfile>({
-    queryKey: [`/api/sports/team/${id}`, { with: "stats" }],
+    queryKey: [`/api/sports/team/${id}`],
     enabled: Number.isFinite(id) && id > 0,
     staleTime: 5 * 60_000,
   });
+
+  // الإثراء (منفصل، غير حاجب): الإحصاءات + المدرب + الهدّافون — يملأ تدريجيًا
+  // بمجرد جاهزيته دون أن يؤخّر ظهور المحتوى الأساسي.
+  const { data: extras } = useQuery<SpTeamProfile>({
+    queryKey: [`/api/sports/team/${id}`, { with: "stats" }],
+    enabled: Number.isFinite(id) && id > 0 && !!data,
+    staleTime: 5 * 60_000,
+  });
+  const stats = extras?.stats ?? null;
+  const coach = extras?.coach ?? null;
+  const topScorers = Array.isArray(extras?.topScorers) ? extras!.topScorers : [];
 
   const { data: transfers } = useQuery<SpTeamTransfers>({
     queryKey: [`/api/sports/team/${id}/transfers`],
@@ -469,14 +481,14 @@ export default function SportsTeam() {
               )}
             </Card>
 
-            {/* نبض الأرقام + الجهاز الفني + هدّافو النادي (الموجة 1) */}
-            {(data.stats || data.coach || data.topScorers.length > 0) && (
+            {/* نبض الأرقام + الجهاز الفني + هدّافو النادي (الموجة 1) — تُجلب منفصلة */}
+            {(stats || coach || topScorers.length > 0) && (
               <div className="grid lg:grid-cols-2 gap-5 items-start">
-                {data.stats && <TeamStatsCard stats={data.stats} />}
-                {data.coach && <CoachCard coach={data.coach} />}
-                {data.topScorers.length > 0 && (
+                {stats && <TeamStatsCard stats={stats} />}
+                {coach && <CoachCard coach={coach} />}
+                {topScorers.length > 0 && (
                   <div className="lg:col-span-2">
-                    <TeamScorersCard scorers={data.topScorers} />
+                    <TeamScorersCard scorers={topScorers} />
                   </div>
                 )}
               </div>
