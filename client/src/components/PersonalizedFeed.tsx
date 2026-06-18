@@ -14,6 +14,7 @@ import { getReadingHistory, type ReadingEntry } from "@/lib/readingHistory";
 import { computeMatchScore, type MatchResult } from "@/lib/matchScore";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { apiUrl } from "@/lib/queryClient";
 
 interface MatchBadgeProps {
   match: MatchResult;
@@ -211,7 +212,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     impressionQueue.current = [];
 
     try {
-      await fetch('/api/recommendations/impressions', {
+      await fetch(apiUrl('/api/recommendations/impressions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -254,7 +255,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     queueImpression(articleId);
 
     try {
-      await fetch(`/api/recommendations/${recommendationId}/displayed`, {
+      await fetch(apiUrl(`/api/recommendations/${recommendationId}/displayed`), {
         method: 'POST',
         credentials: 'include',
       });
@@ -267,11 +268,11 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     if (!recommendationId) return;
 
     try {
-      await fetch(`/api/recommendations/${recommendationId}/clicked`, {
+      await fetch(apiUrl(`/api/recommendations/${recommendationId}/clicked`), {
         method: 'POST',
         credentials: 'include',
       });
-      await fetch('/api/recommendations/click', {
+      await fetch(apiUrl('/api/recommendations/click'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -289,7 +290,7 @@ export function PersonalizedFeed({ articles: initialArticles, title = "جميع 
     try {
       // استخدام نقطة النهاية المخصصة للترقيم
       const response = await fetch(
-        `/api/news/paginated?limit=8&offset=${offset}`,
+        apiUrl(`/api/news/paginated?limit=8&offset=${offset}`),
         { credentials: 'include' }
       );
       
