@@ -15,7 +15,9 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy,
@@ -36,6 +38,7 @@ import {
   Hand,
   Square,
   Sparkles,
+  Star,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -101,6 +104,7 @@ interface SpMatchRatings {
 }
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
+interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; }
 type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
 const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
@@ -175,6 +179,122 @@ const moreLink = (href: string, label = "عرض الكل") => (
 // مع اسم البطولة لكل مباراة والجارية مُبرَزة — مستقلّة عن البطولة المختارة.
 // تُخفى تمامًا إن لا مباريات اليوم.
 // ============================================================
+// ============================================================
+// المرحلة 3 (الشخصنة): متابعة الفِرق + لوحة «متابعاتي»
+// ============================================================
+// خطّاف موحّد لمتابعات المستخدم — TanStack Query يوحّد النداء بنفس المفتاح عبر
+// كل المستهلكين، فلا تكرار. يُفعَّل فقط للمستخدم المسجَّل (يتجنّب 401 مزعجة).
+function useSportsFollows() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data } = useQuery<{ follows: SpFollow[] }>({
+    queryKey: ["/api/sports/follows"],
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const follows = Array.isArray(data?.follows) ? data!.follows : [];
+  const has = (kind: SpFollow["kind"], refId: string | number) =>
+    follows.some((f) => f.kind === kind && f.refId === String(refId));
+
+  const toggle = async (kind: SpFollow["kind"], refId: string | number, refName: string, refLogo?: string | null) => {
+    const id = String(refId);
+    const wasFollowing = has(kind, id);
+    try {
+      if (wasFollowing) {
+        await apiRequest(`/api/sports/follows?kind=${kind}&refId=${encodeURIComponent(id)}`, { method: "DELETE" });
+      } else {
+        await apiRequest("/api/sports/follows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind, refId: id, refName, refLogo: refLogo ?? null }),
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["/api/sports/follows"] });
+      toast({ description: wasFollowing ? `أُلغيت متابعة ${refName}` : `تتابع الآن ${refName}` });
+    } catch {
+      toast({ variant: "destructive", description: "تعذّر تحديث المتابعة، حاول مجددًا" });
+    }
+  };
+
+  return { isAuthed: !!user, follows, has, toggle };
+}
+
+// زر نجمة المتابعة — يظهر للمستخدم المسجَّل فقط.
+function FollowStar({ kind, refId, refName, refLogo, className }: {
+  kind: SpFollow["kind"]; refId: string | number; refName: string; refLogo?: string | null; className?: string;
+}) {
+  const { isAuthed, has, toggle } = useSportsFollows();
+  if (!isAuthed) return null;
+  const active = has(kind, refId);
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); void toggle(kind, refId, refName, refLogo); }}
+      title={active ? "إلغاء المتابعة" : "متابعة"}
+      aria-pressed={active}
+      className={`inline-flex items-center justify-center rounded-full p-1 transition-colors hover:bg-muted ${className ?? ""}`}
+    >
+      <Star className={`w-4 h-4 ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+    </button>
+  );
+}
+
+// لوحة «متابعاتي» — شريط أفقي لفِرقك المتابَعة، مع إبراز من يلعب اليوم/مباشرة.
+function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; onOpen: (id: number) => void }) {
+  const { isAuthed, follows } = useSportsFollows();
+  const teamFollows = follows.filter((f) => f.kind === "team");
+  if (!isAuthed || teamFollows.length === 0) return null;
+
+  const matchOf = (refId: string) =>
+    todayMatches.find((m) => String(m.home.id) === refId || String(m.away.id) === refId);
+
+  return (
+    <div className="border-b border-border bg-card">
+      <div className="max-w-6xl mx-auto px-4 py-3.5">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
+          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+          متابعاتي
+          <span className="font-medium text-muted-foreground">({teamFollows.length})</span>
+        </div>
+        <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
+          {teamFollows.map((f) => {
+            const m = matchOf(f.refId);
+            const live = m?.status.live ?? false;
+            const inner = (
+              <span className={`snap-start shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors ${live ? "border-red-500/40 bg-red-500/5" : "border-border bg-background hover:border-primary/40"}`}>
+                {f.refLogo ? (
+                  <img src={f.refLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
+                ) : (
+                  <span className="w-5 h-5 rounded-full bg-muted shrink-0" />
+                )}
+                <span className="text-sm font-bold whitespace-nowrap text-foreground">{f.refName}</span>
+                {m ? (
+                  live ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                      {m.status.elapsed != null ? `${m.status.elapsed}'` : "مباشر"}
+                    </span>
+                  ) : m.status.finished ? (
+                    <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
+                  ) : (
+                    <span className="text-[10px] font-bold tabular-nums text-primary">{fmtTime(m.timestamp)}</span>
+                  )
+                ) : null}
+              </span>
+            );
+            return m ? (
+              <button key={f.id} type="button" onClick={() => onOpen(m.id)}>{inner}</button>
+            ) : (
+              <Link key={f.id} href={`/sports2/team/${f.refId}`}>{inner}</Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // بطاقة مصغّرة لشريط «مباريات اليوم» — عرض ثابت تنزلق أفقيًا (snap).
 function TodayMiniCard({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => void }) {
   const decided = f.status.live || f.status.finished;
@@ -1315,6 +1435,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
                 <div className="flex-1 flex flex-col items-center gap-1">
                   {fx.home.logo && <img src={fx.home.logo} alt="" className="w-12 h-12 object-contain" />}
                   <span className="font-semibold text-sm text-center text-foreground">{fx.home.name}</span>
+                  <FollowStar kind="team" refId={fx.home.id} refName={fx.home.name} refLogo={fx.home.logo} />
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-black tabular-nums tracking-wider text-foreground">
@@ -1325,6 +1446,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
                 <div className="flex-1 flex flex-col items-center gap-1">
                   {fx.away.logo && <img src={fx.away.logo} alt="" className="w-12 h-12 object-contain" />}
                   <span className="font-semibold text-sm text-center text-foreground">{fx.away.name}</span>
+                  <FollowStar kind="team" refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
                 </div>
               </div>
             </>
@@ -1721,6 +1843,9 @@ export default function SportsHub() {
             </div>
           </div>
         </nav>
+
+        {/* ===== متابعاتي (شخصنة) — فوق كل شيء للمستخدم المسجَّل المتابِع ===== */}
+        <MyFollowsBoard todayMatches={todayMatches} onOpen={setOpenMatch} />
 
         {/* ===== مباريات اليوم · كل البطولات (نظرة سريعة فوق الأخبار) ===== */}
         <TodayMatchesBoard items={todayMatches} onOpen={setOpenMatch} />

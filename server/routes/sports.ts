@@ -47,6 +47,13 @@ import {
   type SplFixture,
 } from "../services/saudiLeagueService";
 import { getTeamOgImage } from "../services/sportsOgImage";
+import {
+  addFollow,
+  isValidFollowKind,
+  listFollows,
+  removeFollow,
+} from "../services/sportsFollowsService";
+import { requireAuth } from "../rbac";
 
 const RIYADH_TZ = "Asia/Riyadh";
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
@@ -591,6 +598,63 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match preview failed:", error);
       res.status(502).json({ message: "تعذر توليد معاينة المباراة حاليًا" });
+    }
+  });
+
+  // ============================================================
+  // المرحلة 3 (الشخصنة): متابعة الفِرق/البطولات
+  // كلها تتطلّب جلسة ويب (requireAuth). الـ refId نصّ: معرّف فريق أو slug بطولة.
+  // ============================================================
+
+  // متابعاتي
+  app.get("/api/sports/follows", requireAuth, async (req: any, res) => {
+    try {
+      const follows = await listFollows(req.user.id);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ follows });
+    } catch (error) {
+      console.error("[Sports] list follows failed:", error);
+      res.status(502).json({ message: "تعذر جلب متابعاتك حاليًا" });
+    }
+  });
+
+  // إضافة متابعة
+  app.post("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const { kind, refId, refName, refLogo } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || !refName) {
+      res.status(400).json({ message: "بيانات المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      const follow = await addFollow(req.user.id, {
+        kind,
+        refId: String(refId),
+        refName: String(refName),
+        refLogo: refLogo ? String(refLogo) : null,
+      });
+      res.set("Cache-Control", "private, no-store");
+      res.json({ follow });
+    } catch (error) {
+      console.error("[Sports] add follow failed:", error);
+      res.status(502).json({ message: "تعذر حفظ المتابعة حاليًا" });
+    }
+  });
+
+  // إلغاء متابعة (?kind=&refId=)
+  app.delete("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const kind = req.query.kind;
+    const refId = req.query.refId;
+    if (!isValidFollowKind(kind) || !refId) {
+      res.status(400).json({ message: "بيانات إلغاء المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      await removeFollow(req.user.id, kind, String(refId));
+      res.set("Cache-Control", "private, no-store");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Sports] remove follow failed:", error);
+      res.status(502).json({ message: "تعذر إلغاء المتابعة حاليًا" });
     }
   });
 
