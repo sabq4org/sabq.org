@@ -172,16 +172,57 @@ const moreLink = (href: string, label = "عرض الكل") => (
 // مع اسم البطولة لكل مباراة والجارية مُبرَزة — مستقلّة عن البطولة المختارة.
 // تُخفى تمامًا إن لا مباريات اليوم.
 // ============================================================
+// بطاقة مصغّرة لشريط «مباريات اليوم» — عرض ثابت تنزلق أفقيًا (snap).
+function TodayMiniCard({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => void }) {
+  const decided = f.status.live || f.status.finished;
+  const homeWon = decided && f.goals.home != null && f.goals.away != null && f.goals.home > f.goals.away;
+  const awayWon = decided && f.goals.home != null && f.goals.away != null && f.goals.away > f.goals.home;
+
+  const teamLine = (t: SpTeam, score: number | null, won: boolean) => (
+    <div className="flex items-center gap-2 min-w-0">
+      {t.logo ? (
+        <img src={t.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
+      ) : (
+        <span className="w-5 h-5 rounded-full bg-muted shrink-0" />
+      )}
+      <span className={`flex-1 min-w-0 truncate text-sm ${won ? "font-extrabold text-foreground" : decided ? "font-semibold text-muted-foreground" : "font-semibold text-foreground"}`}>
+        {t.name}
+      </span>
+      {decided && <span className={`shrink-0 text-sm font-black tabular-nums ${won ? ACCENT : "text-foreground"}`}>{score ?? 0}</span>}
+    </div>
+  );
+
+  return (
+    <button
+      onClick={() => onOpen(f.id)}
+      className="snap-start shrink-0 w-[15.5rem] rounded-2xl border border-border bg-background text-right p-3 hover-elevate transition-all"
+    >
+      <div className="flex items-center justify-between gap-2 mb-2.5">
+        <span className="text-[10px] font-medium text-muted-foreground truncate">{f.competition}</span>
+        <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+          {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+          {f.status.live
+            ? (f.status.elapsed != null ? `${f.status.elapsed}'` : "مباشر")
+            : f.status.finished
+            ? "انتهت"
+            : fmtTime(f.timestamp)}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {teamLine(f.home, f.goals.home, homeWon)}
+        {teamLine(f.away, f.goals.away, awayWon)}
+      </div>
+    </button>
+  );
+}
+
 function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
-  const [expanded, setExpanded] = useState(false);
   if (items.length === 0) return null;
   const liveCount = items.filter((f) => f.status.live).length;
-  const visible = expanded ? items : items.slice(0, 3);
-  const more = items.length - 3;
   return (
     <div className="border-b border-border bg-card">
-      <div className="max-w-2xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="max-w-6xl mx-auto px-4 py-3.5">
+        <div className="flex items-center gap-2 mb-2.5">
           <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
             <CalendarDays className={`w-3.5 h-3.5 ${ACCENT}`} />
             مباريات اليوم · كل البطولات
@@ -193,60 +234,10 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
             </span>
           )}
         </div>
-        {/* قائمة عمودية: كل مباراة صفّ كامل العرض بارتفاع منخفض (مناسب للجوال) */}
-        <div className="divide-y divide-border">
-          {visible.map((f) => {
-            const decided = f.status.live || f.status.finished;
-            const homeWon = decided && f.goals.home != null && f.goals.away != null && f.goals.home > f.goals.away;
-            const awayWon = decided && f.goals.home != null && f.goals.away != null && f.goals.away > f.goals.home;
-            return (
-              <button
-                key={f.id}
-                onClick={() => onOpen(f.id)}
-                className="w-full text-right py-2 hover:bg-muted/40 transition-colors"
-              >
-                {/* سطر مصغّر: البطولة + الحالة */}
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
-                  <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
-                    {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
-                    {f.status.live
-                      ? (f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label)
-                      : f.status.finished
-                      ? "انتهت"
-                      : fmtTime(f.timestamp)}
-                  </span>
-                </div>
-                {/* مضيف — نتيجة — ضيف بكامل العرض (الاسم يأخذ عمودًا كاملًا) */}
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={`flex-1 min-w-0 truncate text-sm text-right text-foreground ${homeWon ? "font-extrabold" : "font-semibold"}`}>{f.home.name}</span>
-                    {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
-                  </div>
-                  <div className="px-1 text-center">
-                    {decided ? (
-                      <span className="text-sm font-black tabular-nums text-foreground">{f.goals.home ?? 0} - {f.goals.away ?? 0}</span>
-                    ) : (
-                      <span className="text-xs font-bold tabular-nums text-muted-foreground">{fmtTime(f.timestamp)}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 min-w-0">
-                    {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
-                    <span className={`flex-1 min-w-0 truncate text-sm text-left text-foreground ${awayWon ? "font-extrabold" : "font-semibold"}`}>{f.away.name}</span>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+        {/* شريط بطاقات أفقي قابل للسحب — كل مباراة بطاقة مستقلّة (لا صفوف مرصوصة) */}
+        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
+          {items.map((f) => <TodayMiniCard key={f.id} f={f} onOpen={onOpen} />)}
         </div>
-        {more > 0 && (
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-1 w-full text-center text-xs font-bold text-primary hover:underline py-1.5"
-          >
-            {expanded ? "عرض أقل" : `المزيد (${more === 1 ? "مباراة أخرى" : `${more} مباريات أخرى`})`}
-          </button>
-        )}
       </div>
     </div>
   );
@@ -403,52 +394,78 @@ function PillTabs({ tabs, active, onChange, layoutId }: {
 }
 
 // ============================================================
-// بطاقة مباراة
+// بطاقة مباراة — تصميم بطاقة حقيقية (لا صفّ مرصوص):
+// شعارات كبيرة لكلا الفريقين + النتيجة/الموعد في المنتصف، وشريط حالة علوي،
+// وقدم «مركز المباراة». مثالية على الجوال (كل مباراة بطاقة قائمة بذاتها).
 // ============================================================
 function MatchCard({ fixture, onOpen }: { fixture: SpFixture; onOpen: (id: number) => void }) {
-  const { home, away, goals, status } = fixture;
+  const { home, away, goals, status, round } = fixture;
   const decided = status.live || status.finished;
   const homeWon = decided && (goals.home ?? 0) > (goals.away ?? 0);
   const awayWon = decided && (goals.away ?? 0) > (goals.home ?? 0);
+
+  const teamCol = (team: SpTeam, won: boolean) => (
+    <div className="flex flex-col items-center gap-2 min-w-0">
+      <div className={`grid place-items-center w-14 h-14 rounded-full bg-white p-1.5 ring-1 transition-all ${won ? "ring-primary/50 shadow-sm" : "ring-border"}`}>
+        {team.logo ? (
+          <img src={team.logo} alt="" className="w-full h-full object-contain" loading="lazy" />
+        ) : (
+          <span className="text-base font-black text-muted-foreground">{team.name.slice(0, 2)}</span>
+        )}
+      </div>
+      <span className={`w-full text-center text-xs leading-tight line-clamp-2 ${won ? "font-extrabold text-foreground" : decided ? "font-semibold text-muted-foreground" : "font-bold text-foreground"}`}>
+        {team.name}
+      </span>
+    </div>
+  );
+
   return (
     <button
       onClick={() => onOpen(fixture.id)}
-      className="group w-full text-right relative overflow-hidden bg-card border border-border rounded-lg px-3 py-2 hover-elevate transition-all"
+      className="group relative w-full overflow-hidden rounded-2xl bg-card border border-border text-right hover-elevate transition-all"
     >
-      {status.live && <span className="absolute inset-y-0 right-0 w-0.5 bg-red-500" />}
-      {/* سطر واحد: مضيف — نتيجة/وقت — ضيف */}
-      <div className="flex items-center gap-2">
-        <span className={`truncate text-sm font-bold flex-1 min-w-0 text-right ${homeWon ? "text-foreground" : decided ? "text-muted-foreground" : "text-foreground"}`}>
-          {home.name}
-        </span>
-        {home.logo && <img src={home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
-        <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
-          {decided ? (
-            <span className="text-sm font-black text-foreground tabular-nums tracking-wide" dir="ltr">
-              {goals.home ?? 0}<span className="text-muted-foreground mx-0.5">-</span>{goals.away ?? 0}
-            </span>
-          ) : (
-            <span className={`text-xs font-black ${ACCENT} tabular-nums`}>{fmtTime(fixture.timestamp)}</span>
-          )}
-        </div>
-        {away.logo && <img src={away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
-        <span className={`truncate text-sm font-bold flex-1 min-w-0 text-left ${awayWon ? "text-foreground" : decided ? "text-muted-foreground" : "text-foreground"}`}>
-          {away.name}
-        </span>
-      </div>
-      {/* سطر الحالة السفلي — رفيع جداً */}
-      <div className="mt-1 flex items-center justify-between text-[10px]">
-        <span className="truncate text-muted-foreground max-w-[50%]">{fixture.round}</span>
+      {/* شريط حالة علوي ملوّن */}
+      <span className={`absolute inset-x-0 top-0 h-1 ${status.live ? "bg-red-500" : status.finished ? "bg-muted-foreground/25" : "bg-primary/70"}`} />
+
+      {/* الرأس: الجولة + الحالة */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-3.5">
+        <span className="text-[11px] font-semibold text-muted-foreground truncate max-w-[55%]">{round}</span>
         {status.live ? (
-          <span className="inline-flex items-center gap-1 text-red-500 font-bold shrink-0">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-500 shrink-0">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
             {status.elapsed ? `${status.elapsed}'` : "مباشر"}
           </span>
         ) : status.finished ? (
-          <span className="text-muted-foreground shrink-0">انتهت</span>
+          <span className="text-[11px] font-bold text-muted-foreground shrink-0">انتهت</span>
         ) : (
-          <span className="text-muted-foreground shrink-0 tabular-nums">{fmtDay(fixture.timestamp)}</span>
+          <span className="text-[11px] font-bold text-muted-foreground shrink-0 tabular-nums">{fmtDay(fixture.timestamp)}</span>
         )}
+      </div>
+
+      {/* الفرق + النتيجة/الموعد في المنتصف */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 px-3 py-4">
+        {teamCol(home, homeWon)}
+        <div className="flex flex-col items-center justify-center min-w-[3.75rem] pt-2.5">
+          {decided ? (
+            <span className="text-2xl font-black tabular-nums tracking-tight text-foreground" dir="ltr">
+              <span className={homeWon ? ACCENT : ""}>{goals.home ?? 0}</span>
+              <span className="mx-1 text-muted-foreground/50">-</span>
+              <span className={awayWon ? ACCENT : ""}>{goals.away ?? 0}</span>
+            </span>
+          ) : (
+            <>
+              <span className={`text-lg font-black tabular-nums ${ACCENT}`}>{fmtTime(fixture.timestamp)}</span>
+              <span className="mt-0.5 text-[10px] text-muted-foreground">موعد المباراة</span>
+            </>
+          )}
+        </div>
+        {teamCol(away, awayWon)}
+      </div>
+
+      {/* القدم: مركز المباراة */}
+      <div className="flex items-center justify-center gap-1 border-t border-border/60 py-2 text-[11px] font-bold text-muted-foreground group-hover:text-primary transition-colors">
+        مركز المباراة
+        <ChevronLeft className="w-3.5 h-3.5" />
       </div>
     </button>
   );
@@ -492,10 +509,10 @@ function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: numbe
         ))}
       </div>
       {isLoading
-        ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl bg-card border border-border animate-pulse" />)}</div>
+        ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-44 rounded-2xl bg-card border border-border animate-pulse" />)}</div>
         : fixtures.length === 0
           ? emptyBox("لا توجد مباريات في هذه الجولة.")
-          : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}</div>}
+          : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}</div>}
     </div>
   );
 }
@@ -551,7 +568,7 @@ function MatchHub({ data, configured, compSlug, onOpen }: {
             : current.list.length === 0
               ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
               : (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}
                 </div>
               )}
