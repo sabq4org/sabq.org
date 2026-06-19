@@ -2584,16 +2584,30 @@ export class DatabaseStorage implements IStorage {
 
   async updateUser(id: string, userData: UpdateUser): Promise<User> {
     const updateData: any = {};
-    
+
     if (userData.firstName !== undefined) updateData.firstName = userData.firstName;
     if (userData.lastName !== undefined) updateData.lastName = userData.lastName;
+    if (userData.firstNameEn !== undefined) updateData.firstNameEn = userData.firstNameEn;
+    if (userData.lastNameEn !== undefined) updateData.lastNameEn = userData.lastNameEn;
     if (userData.bio !== undefined) updateData.bio = userData.bio;
     if (userData.phoneNumber !== undefined) updateData.phoneNumber = userData.phoneNumber;
     if (userData.profileImageUrl !== undefined) updateData.profileImageUrl = userData.profileImageUrl;
-    
-    // Check if profile is complete
+    if (userData.preferredVariant !== undefined) updateData.preferredVariant = userData.preferredVariant;
+    // Honor an explicit isProfileComplete (e.g. POST /api/auth/complete-profile
+    // sends ONLY this flag). Without mapping it the whole payload was dropped
+    // and Drizzle threw "No values to set" on .set({}).
+    if (userData.isProfileComplete !== undefined) updateData.isProfileComplete = userData.isProfileComplete;
+
+    // Convenience: a full name implies a complete profile.
     if (userData.firstName && userData.lastName) {
       updateData.isProfileComplete = true;
+    }
+
+    // Guard the empty-update case: Drizzle's .set({}) throws "No values to set".
+    // Nothing to change → return the current row unchanged instead of crashing.
+    if (Object.keys(updateData).length === 0) {
+      const [current] = await db.select().from(users).where(eq(users.id, id));
+      return current;
     }
 
     const [user] = await db
@@ -2601,7 +2615,7 @@ export class DatabaseStorage implements IStorage {
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
-      
+
     return user;
   }
 
