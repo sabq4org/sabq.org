@@ -39,6 +39,8 @@ import {
   Square,
   Sparkles,
   Star,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -104,7 +106,7 @@ interface SpMatchRatings {
 }
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
-interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; }
+interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
 type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
 const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
@@ -196,6 +198,22 @@ function useSportsFollows() {
   const follows = Array.isArray(data?.follows) ? data!.follows : [];
   const has = (kind: SpFollow["kind"], refId: string | number) =>
     follows.some((f) => f.kind === kind && f.refId === String(refId));
+  const get = (kind: SpFollow["kind"], refId: string | number) =>
+    follows.find((f) => f.kind === kind && f.refId === String(refId));
+
+  const setNotify = async (kind: SpFollow["kind"], refId: string | number, notify: boolean) => {
+    try {
+      await apiRequest("/api/sports/follows", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, refId: String(refId), notify }),
+      });
+      qc.invalidateQueries({ queryKey: ["/api/sports/follows"] });
+      toast({ description: notify ? "تم تفعيل الإشعارات" : "تم كتم الإشعارات" });
+    } catch {
+      toast({ variant: "destructive", description: "تعذّر تحديث الإشعار، حاول مجددًا" });
+    }
+  };
 
   const toggle = async (kind: SpFollow["kind"], refId: string | number, refName: string, refLogo?: string | null) => {
     const id = String(refId);
@@ -217,26 +235,43 @@ function useSportsFollows() {
     }
   };
 
-  return { isAuthed: !!user, follows, has, toggle };
+  return { isAuthed: !!user, follows, has, get, toggle, setNotify };
 }
 
-// زر نجمة المتابعة — يظهر للمستخدم المسجَّل فقط.
-function FollowStar({ kind, refId, refName, refLogo, className }: {
-  kind: SpFollow["kind"]; refId: string | number; refName: string; refLogo?: string | null; className?: string;
+// أزرار متابعة الفريق: نجمة المتابعة + جرس كتم الإشعارات (يظهر عند المتابعة فقط).
+// تظهر للمستخدم المسجَّل فقط.
+function TeamFollowControls({ refId, refName, refLogo }: {
+  refId: string | number; refName: string; refLogo?: string | null;
 }) {
-  const { isAuthed, has, toggle } = useSportsFollows();
+  const { isAuthed, has, get, toggle, setNotify } = useSportsFollows();
   if (!isAuthed) return null;
-  const active = has(kind, refId);
+  const active = has("team", refId);
+  const follow = get("team", refId);
+  const muted = follow ? !follow.notify : false;
   return (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); void toggle(kind, refId, refName, refLogo); }}
-      title={active ? "إلغاء المتابعة" : "متابعة"}
-      aria-pressed={active}
-      className={`inline-flex items-center justify-center rounded-full p-1 transition-colors hover:bg-muted ${className ?? ""}`}
-    >
-      <Star className={`w-4 h-4 ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
-    </button>
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); void toggle("team", refId, refName, refLogo); }}
+        title={active ? "إلغاء المتابعة" : "متابعة الفريق"}
+        aria-pressed={active}
+        className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-bold transition-colors hover:bg-muted"
+      >
+        <Star className={`w-3.5 h-3.5 ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+        {active ? "متابَع" : "متابعة"}
+      </button>
+      {active && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); void setNotify("team", refId, muted); }}
+          title={muted ? "تفعيل الإشعارات" : "كتم الإشعارات"}
+          aria-pressed={!muted}
+          className="inline-flex items-center justify-center rounded-full border border-border p-1.5 transition-colors hover:bg-muted"
+        >
+          {muted ? <BellOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Bell className="w-3.5 h-3.5 text-primary" />}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1435,7 +1470,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
                 <div className="flex-1 flex flex-col items-center gap-1">
                   {fx.home.logo && <img src={fx.home.logo} alt="" className="w-12 h-12 object-contain" />}
                   <span className="font-semibold text-sm text-center text-foreground">{fx.home.name}</span>
-                  <FollowStar kind="team" refId={fx.home.id} refName={fx.home.name} refLogo={fx.home.logo} />
+                  <TeamFollowControls refId={fx.home.id} refName={fx.home.name} refLogo={fx.home.logo} />
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-black tabular-nums tracking-wider text-foreground">
@@ -1446,7 +1481,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
                 <div className="flex-1 flex flex-col items-center gap-1">
                   {fx.away.logo && <img src={fx.away.logo} alt="" className="w-12 h-12 object-contain" />}
                   <span className="font-semibold text-sm text-center text-foreground">{fx.away.name}</span>
-                  <FollowStar kind="team" refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
+                  <TeamFollowControls refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
                 </div>
               </div>
             </>

@@ -5,7 +5,7 @@
  * الراوتر التزامًا بـ ADR-001 (الراوتر لا يستورد db). متابعة فريدة لكل
  * (مستخدم، نوع، مرجع) — الإضافة المكرّرة لا تُنشئ صفًّا جديدًا.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { sportsFollows, type SportsFollow } from "@shared/schema";
 
@@ -79,4 +79,42 @@ export async function removeFollow(
         eq(sportsFollows.refId, refId),
       ),
     );
+}
+
+/** تفعيل/كتم إشعارات متابعة قائمة. */
+export async function setFollowNotify(
+  userId: string,
+  kind: SportsFollowKind,
+  refId: string,
+  notify: boolean,
+): Promise<void> {
+  await db
+    .update(sportsFollows)
+    .set({ notify })
+    .where(
+      and(
+        eq(sportsFollows.userId, userId),
+        eq(sportsFollows.kind, kind),
+        eq(sportsFollows.refId, refId),
+      ),
+    );
+}
+
+/**
+ * معرّفات المستخدمين الذين يتابعون أيًّا من الفِرق المعطاة وإشعاراتهم مفعّلة.
+ * تُستخدم في جوب التنبيهات الرياضية لتوجيه إشعار الهدف/النتيجة للمتابعين فقط.
+ */
+export async function getTeamFollowerUserIds(teamRefIds: string[]): Promise<string[]> {
+  if (teamRefIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ userId: sportsFollows.userId })
+    .from(sportsFollows)
+    .where(
+      and(
+        eq(sportsFollows.kind, "team"),
+        eq(sportsFollows.notify, true),
+        inArray(sportsFollows.refId, teamRefIds),
+      ),
+    );
+  return rows.map((r) => r.userId);
 }

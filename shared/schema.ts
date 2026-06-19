@@ -2453,10 +2453,12 @@ export const sportsFollows = pgTable("sports_follows", {
   refId: text("ref_id").notNull(),
   refName: text("ref_name").notNull(),
   refLogo: text("ref_logo"),
+  notify: boolean("notify").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("idx_sports_follows_unique").on(table.userId, table.kind, table.refId),
   index("idx_sports_follows_user").on(table.userId, table.createdAt.desc()),
+  index("idx_sports_follows_ref").on(table.kind, table.refId),
 ]);
 
 export type SportsFollow = typeof sportsFollows.$inferSelect;

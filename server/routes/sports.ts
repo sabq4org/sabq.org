@@ -52,6 +52,7 @@ import {
   isValidFollowKind,
   listFollows,
   removeFollow,
+  setFollowNotify,
 } from "../services/sportsFollowsService";
 import { requireAuth } from "../rbac";
 
@@ -637,6 +638,23 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] add follow failed:", error);
       res.status(502).json({ message: "تعذر حفظ المتابعة حاليًا" });
+    }
+  });
+
+  // تفعيل/كتم إشعارات متابعة قائمة
+  app.patch("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const { kind, refId, notify } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || typeof notify !== "boolean") {
+      res.status(400).json({ message: "بيانات تحديث المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      await setFollowNotify(req.user.id, kind, String(refId), notify);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Sports] update follow notify failed:", error);
+      res.status(502).json({ message: "تعذر تحديث إعداد الإشعار حاليًا" });
     }
   });
 

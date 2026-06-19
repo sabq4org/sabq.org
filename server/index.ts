@@ -1850,6 +1850,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // التنبيهات الرياضية الذكية: نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsAlertsJob } = await import("./jobs/sportsAlertsJob");
+            startSportsAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
     // Handle server errors
     server.on("error", (error: any) => {
       console.error("[Server] ❌ Server error:", error);
