@@ -499,6 +499,44 @@ export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
   const path = url.pathname;
+
+  // ── Missing hashed-asset guard (post-deploy white-page fix) ──────────────
+  // /assets/* holds Vite's content-hashed bundle. When a chunk is MISSING — an
+  // open tab requesting a rotated-out /assets/<oldhash>.js after a deploy, or a
+  // chunk requested mid-deploy — Pages' static layer has no file, so it falls
+  // through the SPA `_redirects` catch-all (`/* /index.html 200`) and serves the
+  // HTML shell as `200 text/html`. Two things then go wrong:
+  //   1. the browser tries to execute HTML as a JS module → MIME error, and
+  //   2. because `_headers` stamps `/assets/*` with `immutable, max-age=1y`, the
+  //      browser CACHES that HTML under the chunk URL for a YEAR — so every later
+  //      load replays the poisoned response and NEITHER the deployRecovery reload
+  //      NOR the buildVersion poll can heal it. Only a manual Ctrl+Shift+R does
+  //      (the recurring "تعذر تحميل الصفحة … امسح الذاكرة" report after deploys).
+  // Fix: intercept /assets/* here (this needs `/assets/*` removed from the
+  // _routes.json `exclude`). If the resolved response is HTML, the file is gone —
+  // return a real, NON-CACHEABLE 404. A Function-generated Response is NOT subject
+  // to the `_headers` immutable rule (that only stamps static-asset responses), so
+  // the 404 is never cached and the chunk URL self-heals once it exists again.
+  // Real assets (js/css/img/font/…) are never text/html, so they pass through
+  // untouched WITH their immutable caching intact.
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    path.startsWith("/assets/")
+  ) {
+    const assetRes = await next();
+    if (isHtml(assetRes)) {
+      return new Response("/* sabq: asset not found (rotated by a deploy) */\n", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store, must-revalidate",
+          "X-Sabq-Asset-Miss": "1",
+        },
+      });
+    }
+    return assetRes;
+  }
+
   const apiOrigin = env.API_ORIGIN || DEFAULT_API_ORIGIN;
   const seoEnabled = String(env.EDGE_SEO || "").toLowerCase() === "on";
   const nextOrigin = (env.NEXT_ORIGIN || "").replace(/\/+$/, "");
