@@ -17,6 +17,15 @@ type WcStatus = WcFixture["status"];
 // الحالات التي يجري فيها عدّاد المباراة فعليًا
 const RUNNING_STATUSES = new Set(["1H", "2H", "ET", "LIVE"]);
 
+/**
+ * هل عدّاد المباراة يجري فعلًا؟ (شوط لعب لا استراحة/توقف/ترجيح)
+ * تستخدمه الواجهات التي تختار بين عرض الدقيقة الحية أو نص الحالة (مثل
+ * «استراحة الشوطين») بدل الدقيقة المجمّدة.
+ */
+export function isClockRunning(status: WcStatus): boolean {
+  return RUNNING_STATUSES.has(status.code) && status.elapsed != null;
+}
+
 // سقف كل شوط — لا نختلق وقتًا بدل ضائع لا يرسله المزود؛ نتوقف عند الحد حتى
 // يؤكد المزود الدقيقة الإضافية أو الانتقال للاستراحة (ثوانٍ قليلة قبل التصحيح)
 const HALF_CEILING: Record<string, number> = { "1H": 45, "2H": 90, ET: 120 };
