@@ -342,6 +342,31 @@ export async function getGlobalTodayFixtures(): Promise<SplLiveBoardItem[]> {
   });
 }
 
+const TEAM_RECENT_TTL = 10 * 60 * 1000; // نتائج الفريق الأخيرة تتغيّر بعد كل مباراة فقط
+
+/**
+ * آخر نتائج فريق محدّد (fixtures?team=&last=). تُرجّع المباريات المنتهية فقط،
+ * مرتّبة من الأحدث، مع تسمية البطولة (مُعرّبة إن كانت ضمن بطولاتنا، وإلا الاسم
+ * الخام). تُستخدم في ملخّص «ما فاتك» — عبر كل البطولات لا بطولة واحدة.
+ */
+export async function getTeamRecentResults(teamId: number, last = 5): Promise<SplLiveBoardItem[]> {
+  return withSWR(`spl:team:${teamId}:recent:${last}`, TEAM_RECENT_TTL, TEAM_RECENT_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { team: String(teamId), last: String(last), timezone: TIMEZONE });
+    const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
+    return rows
+      .map((r: any): SplLiveBoardItem => {
+        const comp = byId.get(r.league?.id);
+        return {
+          ...localizeFixture(r),
+          competition: comp?.name ?? (r.league?.name ?? ""),
+          competitionSlug: comp?.slug ?? null,
+        };
+      })
+      .filter((fx) => fx.status.finished)
+      .sort((a, b) => b.timestamp - a.timestamp);
+  });
+}
+
 // ---------- المواجهات المباشرة (Head-to-Head) ----------
 
 export interface SplH2HMeeting {

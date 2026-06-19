@@ -41,6 +41,7 @@ import {
   Star,
   Bell,
   BellOff,
+  History,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -324,6 +325,65 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
               <Link key={f.id} href={`/sports2/team/${f.refId}`}>{inner}</Link>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// يوم نسبي مختصر بالعربية: اليوم / أمس / قبل n أيام / تاريخ قصير.
+function relDay(ts: number): string {
+  const now = new Date();
+  const d = new Date(ts * 1000);
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diffDays = Math.round((startToday - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
+  if (diffDays <= 0) return "اليوم";
+  if (diffDays === 1) return "أمس";
+  if (diffDays < 7) return `قبل ${diffDays} أيام`;
+  return new Intl.DateTimeFormat("ar-SA-u-nu-latn", { day: "numeric", month: "short" }).format(d);
+}
+
+// لوحة «ما فاتك» — آخر نتائج الفِرق المتابَعة (شخصنة)؛ للمستخدم المسجَّل المتابِع فقط.
+function MissedResultsBoard({ onOpen }: { onOpen: (id: number) => void }) {
+  const { user } = useAuth();
+  const { data } = useQuery<{ results: SpLiveItem[] }>({
+    queryKey: ["/api/sports/digest"],
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const results = Array.isArray(data?.results) ? data!.results : [];
+  if (!user || results.length === 0) return null;
+
+  const teamMini = (t: SpTeam) => (
+    <span className="flex-1 flex items-center gap-1.5 min-w-0">
+      {t.logo ? <img src={t.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" /> : <span className="w-5 h-5 rounded-full bg-muted shrink-0" />}
+      <span className="text-xs font-semibold truncate text-foreground">{t.name}</span>
+    </span>
+  );
+
+  return (
+    <div className="border-b border-border bg-card">
+      <div className="max-w-6xl mx-auto px-4 py-3.5">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
+          <History className="w-3.5 h-3.5 text-primary" />
+          ما فاتك · نتائج فِرقك
+        </div>
+        <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
+          {results.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => onOpen(m.id)}
+              className="snap-start shrink-0 w-60 rounded-xl border border-border bg-background p-3 text-right hover:border-primary/40 transition-colors"
+            >
+              <div className="text-[10px] text-muted-foreground mb-2 truncate">{m.competition} · {relDay(m.timestamp)}</div>
+              <div className="flex items-center gap-2">
+                {teamMini(m.home)}
+                <span className="text-sm font-black tabular-nums text-foreground shrink-0" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
+                {teamMini(m.away)}
+              </div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -1881,6 +1941,9 @@ export default function SportsHub() {
 
         {/* ===== متابعاتي (شخصنة) — فوق كل شيء للمستخدم المسجَّل المتابِع ===== */}
         <MyFollowsBoard todayMatches={todayMatches} onOpen={setOpenMatch} />
+
+        {/* ===== ما فاتك · نتائج فِرقك (شخصنة) ===== */}
+        <MissedResultsBoard onOpen={setOpenMatch} />
 
         {/* ===== مباريات اليوم · كل البطولات (نظرة سريعة فوق الأخبار) ===== */}
         <TodayMatchesBoard items={todayMatches} onOpen={setOpenMatch} />

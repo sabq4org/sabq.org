@@ -54,6 +54,7 @@ import {
   removeFollow,
   setFollowNotify,
 } from "../services/sportsFollowsService";
+import { getMissedResults } from "../services/sportsDigestService";
 import { requireAuth } from "../rbac";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -673,6 +674,18 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] remove follow failed:", error);
       res.status(502).json({ message: "تعذر إلغاء المتابعة حاليًا" });
+    }
+  });
+
+  // «ما فاتك» — آخر نتائج فِرقك المتابَعة (شخصنة)
+  app.get("/api/sports/digest", requireAuth, async (req: any, res) => {
+    try {
+      const results = await getMissedResults(req.user.id);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ results });
+    } catch (error) {
+      console.error("[Sports] digest failed:", error);
+      res.status(502).json({ message: "تعذر جلب ملخّص فِرقك حاليًا" });
     }
   });
 
