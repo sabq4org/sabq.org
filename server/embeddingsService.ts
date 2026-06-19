@@ -84,7 +84,7 @@ export async function generateArticleEmbedding(articleId: string): Promise<{
 }
 
 /**
- * Extract named entities from Arabic text using GPT-4
+ * Extract named entities from Arabic text using gpt-4o-mini
  * Returns people, places, organizations mentioned in the text
  */
 export async function extractEntities(title: string, content: string): Promise<string[]> {
@@ -99,7 +99,7 @@ export async function extractEntities(title: string, content: string): Promise<s
 الكيانات:`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-5.1', // Faster and cheaper for entity extraction
+      model: 'gpt-4o-mini', // مهمة استخراج بسيطة (200 توكن إخراج) تعمل عند كل نشر مقال — gpt-4o-mini يكفي بكلفة أقل ~10× من gpt-5.1
       messages: [
         {
           role: 'system',

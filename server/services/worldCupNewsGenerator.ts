@@ -20,7 +20,8 @@ import { eq, like, ilike, notIlike, and, or, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, categories, tags, articleTags } from "@shared/schema";
 import { storage } from "../storage";
-import { aiManager } from "../ai-manager";
+import { aiManager, type AIModelConfig, type AIResponse } from "../ai-manager";
+import { SABQ_PRIMARY_EDITOR_MODEL, SABQ_FALLBACK_EDITOR_MODEL } from "../ai/sabqEditorialPrompt";
 import {
   getFixtures,
   getMatchDetail,
@@ -371,6 +372,32 @@ function parseGenerated(raw: string): GeneratedWcArticle {
   };
 }
 
+// سلسلة محرّر سبق: Anthropic Sonnet أولاً ثم gpt-5.1 عند أي فشل/بتر — نفس
+// نمط aiArticleGenerator (iFox). كان كل توليد هنا يضرب gpt-5.1 مباشرةً، ومع
+// مادتين لكل مباراة طوال البطولة كان ذلك أثقل بنود استهلاك OpenAI؛ تفضيل
+// Anthropic يخفضه بشدة مع إبقاء البديل جاهزًا عند تعثّره.
+const WC_MODEL_CHAIN: AIModelConfig[] = [
+  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
+  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL },
+];
+
+async function generateWcArticleText(prompt: string): Promise<AIResponse> {
+  let lastError = "";
+  for (const config of WC_MODEL_CHAIN) {
+    try {
+      const attempt = await aiManager.generate(prompt, config);
+      if (attempt.error) throw new Error(attempt.error);
+      // ارفض المخرجات المبتورة — مادة ناقصة لا تُنشر، انتقل للبديل
+      if (attempt.truncated) throw new Error("response truncated (max tokens)");
+      return attempt;
+    } catch (err: any) {
+      lastError = err?.message || String(err);
+      console.warn(`[WC News] ${config.provider}/${config.model} failed: ${lastError}`);
+    }
+  }
+  throw new Error(`[WC News] AI generation failed: ${lastError}`);
+}
+
 async function generateAndStore(
   kind: WcArticleKind,
   detail: WcMatchDetail
@@ -381,8 +408,7 @@ async function generateAndStore(
       ? buildPreviewPrompt(detail, await safeStandings())
       : buildReportPrompt(detail, outcome!);
 
-  const response = await aiManager.generate(prompt, { provider: "openai", model: "gpt-5.1" });
-  if (response.error) throw new Error(`[WC News] AI generation failed: ${response.error}`);
+  const response = await generateWcArticleText(prompt);
   const generated = parseGenerated(response.content);
 
   // شبكة الأمان الأخيرة: لو ناقض العنوان النتيجة الحتمية (تعادلٌ صُوِّر فوزًا
@@ -399,7 +425,7 @@ async function generateAndStore(
     }
   }
 
-  return persistArticle(slugFor(kind, detail.fixture.id), generated, published);
+  return persistArticle(slugFor(kind, detail.fixture.id), generated, published, response);
 }
 
 // رابط داخلي ثابت نحو هب المونديال — للقارئ وللزاحف معًا (يصل قوقل عبر
@@ -415,7 +441,8 @@ const HUB_FOOTER =
 async function persistArticle(
   slug: string,
   generated: GeneratedWcArticle,
-  published: boolean
+  published: boolean,
+  ai: Pick<AIResponse, "provider" | "model">
 ): Promise<{ id: string; published: boolean }> {
   const now = new Date();
   const created = await storage.createArticle({
@@ -453,8 +480,8 @@ async function persistArticle(
       status: "generated",
       generatedAt: now.toISOString(),
       generatedBy: "system",
-      provider: "openai",
-      model: "gpt-5.1",
+      provider: ai.provider,
+      model: ai.model,
     },
     sourceMetadata: { type: "manual" },
   } as any); // authorId/aiGenerated خارج insertArticleSchema — نفس نمط iFox
@@ -570,11 +597,10 @@ async function generateArabRoundup(
   }
 
   const prompt = buildArabRoundupPrompt(roundLabel, matches, await safeStandings());
-  const response = await aiManager.generate(prompt, { provider: "openai", model: "gpt-5.1" });
-  if (response.error) throw new Error(`[WC News] AI generation failed: ${response.error}`);
+  const response = await generateWcArticleText(prompt);
   const generated = parseGenerated(response.content);
 
-  return persistArticle(arabRoundupSlug(roundNum), generated, autoPublish());
+  return persistArticle(arabRoundupSlug(roundNum), generated, autoPublish(), response);
 }
 
 // ---------- دورة العمل التي يستدعيها الـ cron ----------
