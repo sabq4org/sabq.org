@@ -1135,6 +1135,64 @@ function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: numb
   );
 }
 
+// ============================================================
+// خط زمن المباراة — تمثيل بصري أفقي للأحداث الفاصلة (أهداف/بطاقات/ركلة ضائعة)
+// على محور 0→النهاية. المضيف فوق المحور، الضيف تحته. RTL: البداية على اليمين.
+// يُبنى بالكامل من بيانات الأحداث المجلوبة أصلًا (بلا أي نداء إضافي للمزوّد).
+// ============================================================
+function MatchTimeline({ events, homeId }: { events: SpMatchEvent[]; homeId: number | null }) {
+  const KEY_TYPES = new Set(["goal", "yellow-card", "red-card", "missed-penalty"]);
+  const marks = events.filter((e) => e.minute != null && KEY_TYPES.has(e.type));
+  if (marks.length === 0) return null;
+
+  const minuteOf = (e: SpMatchEvent) => (e.minute ?? 0) + (e.extra ?? 0);
+  const maxMin = Math.max(90, ...marks.map(minuteOf));
+  // RTL: 0' على اليمين (left=100%)، النهاية على اليسار.
+  const leftPct = (m: number) => 100 - Math.min(100, (m / maxMin) * 100);
+  const iconOf = (t: string) => (t === "goal" ? "⚽" : t === "missed-penalty" ? "❌" : t === "red-card" ? "🟥" : "🟨");
+
+  return (
+    <div className="mb-5 rounded-xl border border-border bg-muted/20 p-3">
+      <div className="text-[11px] font-bold text-muted-foreground mb-3">خط زمن المباراة</div>
+      <div className="relative h-20">
+        {/* المحور الأفقي */}
+        <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 bg-border" />
+        {/* علامات الدقائق المرجعية */}
+        {[0, 45, 90].filter((m) => m <= maxMin).map((m) => (
+          <div key={m} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center" style={{ left: `${leftPct(m)}%` }}>
+            <span className="w-px h-3 bg-border" />
+            <span className="mt-3 text-[9px] text-muted-foreground tabular-nums">{m}&apos;</span>
+          </div>
+        ))}
+        {/* أحداث المباراة — المضيف أعلى، الضيف أسفل */}
+        {marks.map((e, i) => {
+          const isHome = homeId != null && e.teamId === homeId;
+          const goal = e.type === "goal";
+          return (
+            <div
+              key={i}
+              className={`absolute -translate-x-1/2 flex flex-col items-center ${isHome ? "top-0" : "bottom-0"}`}
+              style={{ left: `${leftPct(minuteOf(e))}%` }}
+              title={`${e.minute}'${e.extra ? `+${e.extra}` : ""} — ${e.player}${goal ? " (هدف)" : ` (${e.label})`}`}
+            >
+              <span className={`grid place-items-center rounded-full leading-none ${goal ? "w-6 h-6 bg-card ring-2 ring-primary/50 text-sm shadow-sm" : "w-5 h-5 text-[11px]"}`}>
+                {iconOf(e.type)}
+              </span>
+              <span className={`text-[8px] tabular-nums ${isHome ? "order-first mb-0.5" : "mt-0.5"} ${goal ? "font-bold text-foreground" : "text-muted-foreground"}`}>
+                {e.minute}&apos;
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" /> المضيف (أعلى)</span>
+        <span className="flex items-center gap-1">الضيف (أسفل) <span className="w-2 h-2 rounded-full bg-amber-400" /></span>
+      </div>
+    </div>
+  );
+}
+
 function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -1157,6 +1215,29 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     staleTime: 30 * 60_000,
   });
   const h2hMeetings = Array.isArray(h2hData?.meetings) ? h2hData!.meetings : [];
+
+  // ربط تحريري: أخبار سبق الرياضية المرتبطة بالمباراة — نفلتر قائمة مقالات
+  // الرياضة (المُحمّلة والمُكاشة أصلًا في الصفحة) حسب ورود اسمَي الفريقين في
+  // العنوان/المقتطف. بلا أي نداء إضافي للمزوّد — ميزة سبق الحصرية (غرفة الأخبار).
+  const { data: sportsNewsRaw } = useQuery<ArticleWithDetails[]>({
+    queryKey: ["/api/categories", "sports", "articles"],
+    enabled: id != null,
+    staleTime: 5 * 60_000,
+  });
+  const relatedNews = useMemo(() => {
+    const list = Array.isArray(sportsNewsRaw) ? sportsNewsRaw : [];
+    const fixture = data?.fixture;
+    if (!fixture) return [] as ArticleWithDetails[];
+    const names = [fixture.home.name, fixture.away.name].filter((n) => n && n.trim().length > 2);
+    if (names.length === 0) return [] as ArticleWithDetails[];
+    return list
+      .filter((a) => {
+        const hay = `${a.title ?? ""} ${a.excerpt ?? ""}`;
+        return names.some((n) => hay.includes(n));
+      })
+      .slice(0, 6);
+  }, [sportsNewsRaw, data?.fixture]);
+
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
   const events = Array.isArray(data?.events) ? data!.events : [];
@@ -1168,6 +1249,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
+    relatedNews.length > 0 ? { key: "news", label: "أخبار سبق" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
@@ -1215,6 +1297,8 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
         <div className="overflow-y-auto p-4">
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (
+            <>
+            <MatchTimeline events={events} homeId={fx?.home.id ?? null} />
             <ul className="relative space-y-3 pr-4 border-r-2 border-border">
               {events.map((e, i) => {
                 const homeSide = e.teamId === fx?.home.id;
@@ -1232,6 +1316,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
                 );
               })}
             </ul>
+            </>
           )}
           {!isLoading && activeKey === "stats" && stats && (() => {
             // استخراج الاستحواذ لعرضه كشريط بارز بالأعلى، وبقية الإحصاءات تحته.
@@ -1263,6 +1348,34 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
           {!isLoading && activeKey === "h2h" && fx && h2hData && (
             <H2HView h2h={h2hData} homeId={fx.home.id} homeName={fx.home.name} awayName={fx.away.name} />
+          )}
+          {!isLoading && activeKey === "news" && (
+            <ul className="space-y-2">
+              {relatedNews.map((a) => {
+                const img = imgOf(a);
+                return (
+                  <li key={a.id}>
+                    <Link
+                      href={`/article/${a.englishSlug || a.slug}`}
+                      onClick={onClose}
+                      className="flex items-center gap-3 rounded-xl border border-border bg-card p-2 hover:bg-muted/50 transition-colors"
+                    >
+                      {img ? (
+                        <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover bg-muted shrink-0" loading="lazy" />
+                      ) : (
+                        <span className="grid place-items-center w-16 h-16 rounded-lg bg-muted shrink-0"><Newspaper className="w-5 h-5 text-muted-foreground/50" /></span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold leading-snug line-clamp-2 text-foreground">{a.title}</h4>
+                        <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <Clock className="w-3 h-3" />{timeAgo(a.publishedAt)}
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           )}
           {!isLoading && tabs.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">لا توجد تفاصيل متاحة لهذه المباراة بعد</div>}
         </div>
