@@ -12,7 +12,7 @@ import {
   type WcFixture,
   type WcOverview,
 } from "./wcTypes";
-import { LiveMinute } from "./LiveMinute";
+import { LiveMinute, isClockRunning } from "./LiveMinute";
 
 /**
  * «شريط المونديال» — بلوك الصفحة الرئيسية أسفل كروسيل الأخبار.
@@ -161,7 +161,7 @@ export default function WorldCupHomeStrip() {
                   }
                 >
                   {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
-                  {fixture.status.live && fixture.status.elapsed != null ? (
+                  {fixture.status.live && isClockRunning(fixture.status) ? (
                     <LiveMinute status={fixture.status} />
                   ) : (
                     fixture.status.label
