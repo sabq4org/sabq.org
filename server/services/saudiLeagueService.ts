@@ -49,6 +49,8 @@ const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه 
  * متوقف منذ 2017. الموسم يُحلّ ديناميكيًا (current) فلا حاجة لتعديل الكود
  * عند انتقال المواسم؛ fallbackSeason احتياط لو فشل الطلب.
  */
+export type CompetitionCategory = "saudi" | "european" | "world";
+
 export interface SaudiCompetition {
   id: number;
   slug: string;
@@ -58,20 +60,32 @@ export interface SaudiCompetition {
   hasScorers: boolean;
   hasStats: boolean;
   fallbackSeason: number;
+  category: CompetitionCategory;
 }
 
 export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
-  { id: 307, slug: "pro-league", name: "دوري روشن للمحترفين", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025 },
-  { id: 308, slug: "division-1", name: "دوري يلو (الدرجة الأولى)", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025 },
-  { id: 309, slug: "division-2", name: "الدرجة الثانية", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025 },
-  { id: 504, slug: "kings-cup", name: "كأس الملك", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026 },
-  { id: 826, slug: "super-cup", name: "كأس السوبر السعودي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026 },
+  { id: 307, slug: "pro-league", name: "دوري روشن للمحترفين", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "saudi" },
+  { id: 308, slug: "division-1", name: "دوري يلو (الدرجة الأولى)", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "saudi" },
+  { id: 309, slug: "division-2", name: "الدرجة الثانية", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "saudi" },
+  { id: 504, slug: "kings-cup", name: "كأس الملك", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
+  { id: 826, slug: "super-cup", name: "كأس السوبر السعودي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
+  { id: 1227, slug: "womens-league", name: "دوري السيدات الممتاز", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   // بطولات قارية/عالمية تشارك فيها الأندية السعودية. الترتيب متعدّد المجموعات
   // (AFC: مجموعتان، كأس العالم للأندية: 8 مجموعات) فيُترك hasStandings=false حتى
   // ندعم عرض الترتيب متعدّد المجموعات لاحقًا — المباريات والهدّافون يعملان الآن.
-  { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025 },
-  { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025 },
-  { id: 1227, slug: "womens-league", name: "دوري السيدات الممتاز", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2026 },
+  { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
+  { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
+  // الدوريات الأوروبية الكبرى الخمسة — تغطية كاملة (ترتيب/هدّافون/تشكيلات/أحداث).
+  { id: 39, slug: "premier-league", name: "الدوري الإنجليزي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  { id: 140, slug: "la-liga", name: "الدوري الإسباني", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  { id: 135, slug: "serie-a", name: "الدوري الإيطالي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  { id: 78, slug: "bundesliga", name: "الدوري الألماني", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  { id: 61, slug: "ligue-1", name: "الدوري الفرنسي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  // كؤوس أوروبا للأندية — مرحلة الدوري الحديثة جدول واحد (36 فريقًا) فيعمل
+  // hasStandings مباشرة عبر standings[0]؛ الأدوار الإقصائية تظهر في المباريات.
+  { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
+  { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
+  { id: 848, slug: "conference-league", name: "دوري المؤتمر الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
 ];
 
 export function getCompetition(slug: string): SaudiCompetition | undefined {
@@ -79,13 +93,14 @@ export function getCompetition(slug: string): SaudiCompetition | undefined {
 }
 
 export function listCompetitions() {
-  return SAUDI_COMPETITIONS.map(({ slug, name, type, hasStandings, hasScorers, hasStats }) => ({
+  return SAUDI_COMPETITIONS.map(({ slug, name, type, hasStandings, hasScorers, hasStats, category }) => ({
     slug,
     name,
     type,
     hasStandings,
     hasScorers,
     hasStats,
+    category,
   }));
 }
 

@@ -98,7 +98,10 @@ interface SpMatchRatings {
   motm: { id: number; name: string; team: string; rating: number } | null;
   players: SpMatchRatingPlayer[];
 }
-interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; logo?: string | null; season?: number | null; }
+type SpCompetitionCategory = "saudi" | "european" | "world";
+interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
+const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", european: "أوروبي", world: "عالمي" };
+const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "european", "world"];
 interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
@@ -1338,6 +1341,12 @@ export default function SportsHub() {
   const hasStandings = comp?.hasStandings ?? compSlug === "pro-league";
   const hasScorers = comp?.hasScorers ?? compSlug === "pro-league";
 
+  // مبدّل بمستويين: الفئة (سعودي/أوروبي/عالمي) ← ثم بطولات الفئة المختارة.
+  const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
+  const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
+  const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
+  const compsInActiveCat = competitions.filter((c) => catOf(c) === activeCat);
+
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`], refetchInterval: 30_000, refetchIntervalInBackground: false,
   });
@@ -1480,13 +1489,33 @@ export default function SportsHub() {
           <section id="matches" className="scroll-mt-24">
             <SectionHeader title="مركز المباريات" subtitle="مباشر · اليوم · قادمة · النتائج" icon={<CalendarDays className={`w-5 h-5 ${ACCENT}`} />} />
             {competitions.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-2 mb-5">
-                {competitions.map((c) => (
-                  <button key={c.slug} onClick={() => setCompSlug(c.slug)}
-                    className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"}`}>
-                    {c.name}
-                  </button>
-                ))}
+              <div className="space-y-2 mb-5">
+                {/* المستوى 1: الفئة */}
+                {presentCats.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {presentCats.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => {
+                          const first = competitions.find((c) => catOf(c) === cat);
+                          if (first) setCompSlug(first.slug);
+                        }}
+                        className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${activeCat === cat ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {COMP_CATEGORY_LABELS[cat]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* المستوى 2: بطولات الفئة */}
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {compsInActiveCat.map((c) => (
+                    <button key={c.slug} onClick={() => setCompSlug(c.slug)}
+                      className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"}`}>
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {/* البند 9: ترويسة البطولة الديناميكية (شعار + موسم). */}
