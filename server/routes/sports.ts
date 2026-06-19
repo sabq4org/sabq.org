@@ -55,6 +55,13 @@ import {
   setFollowNotify,
 } from "../services/sportsFollowsService";
 import { getMissedResults } from "../services/sportsDigestService";
+import {
+  getLeaderboard,
+  getMyPrediction,
+  getUserStats,
+  listMyPredictions,
+  submitPrediction,
+} from "../services/sportsPredictionsService";
 import { requireAuth } from "../rbac";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -733,6 +740,105 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] prediction failed:", error);
       res.status(502).json({ message: "تعذر جلب التوقّعات حاليًا" });
+    }
+  });
+
+  // ============================================================
+  // المرحلة 4 (المجتمع): توقّع النتيجة + لوحة المتصدّرين
+  // الإرسال/توقّعاتي تتطلّب جلسة ويب (requireAuth)؛ اللوحة عامة.
+  // النقاط: نتيجة مطابقة = 3، اتجاه صحيح = 1، خطأ = 0 (تُسوّى بعد انتهاء المباراة).
+  // ============================================================
+
+  const clampGoals = (raw: unknown): number | null => {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 30) return null;
+    return n;
+  };
+
+  // توقّعي لمباراة محدّدة
+  app.get("/api/sports/match/:id/predict", requireAuth, async (req: any, res) => {
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const prediction = await getMyPrediction(req.user.id, id);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ prediction });
+    } catch (error) {
+      console.error("[Sports] get my prediction failed:", error);
+      res.status(502).json({ message: "تعذر جلب توقّعك حاليًا" });
+    }
+  });
+
+  // إرسال/تعديل توقّع (يُقفل عند انطلاق المباراة)
+  app.post("/api/sports/match/:id/predict", requireAuth, async (req: any, res) => {
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    const { predHome, predAway, kickoffTs, competitionSlug, homeId, awayId, homeName, awayName, homeLogo, awayLogo } = req.body ?? {};
+    const ph = clampGoals(predHome);
+    const pa = clampGoals(predAway);
+    const ko = Number(kickoffTs);
+    if (ph == null || pa == null || !Number.isFinite(ko) || ko <= 0 || !homeName || !awayName) {
+      res.status(400).json({ message: "بيانات التوقّع غير مكتملة" });
+      return;
+    }
+    try {
+      const result = await submitPrediction(req.user.id, {
+        fixtureId: id,
+        kickoffTs: ko,
+        competitionSlug: competitionSlug ? String(competitionSlug) : null,
+        homeId: Number.isFinite(Number(homeId)) ? Number(homeId) : null,
+        awayId: Number.isFinite(Number(awayId)) ? Number(awayId) : null,
+        homeName: String(homeName),
+        awayName: String(awayName),
+        homeLogo: homeLogo ? String(homeLogo) : null,
+        awayLogo: awayLogo ? String(awayLogo) : null,
+        predHome: ph,
+        predAway: pa,
+      });
+      res.set("Cache-Control", "private, no-store");
+      if (result.locked) {
+        res.status(409).json({ message: "أُقفل التوقّع — انطلقت المباراة" });
+        return;
+      }
+      res.json({ prediction: result.prediction });
+    } catch (error) {
+      console.error("[Sports] submit prediction failed:", error);
+      res.status(502).json({ message: "تعذر حفظ توقّعك حاليًا" });
+    }
+  });
+
+  // توقّعاتي (قائمة)
+  app.get("/api/sports/predictions/me", requireAuth, async (req: any, res) => {
+    try {
+      const [predictions, stats] = await Promise.all([
+        listMyPredictions(req.user.id),
+        getUserStats(req.user.id),
+      ]);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ predictions, stats });
+    } catch (error) {
+      console.error("[Sports] my predictions failed:", error);
+      res.status(502).json({ message: "تعذر جلب توقّعاتك حاليًا" });
+    }
+  });
+
+  // لوحة المتصدّرين (عامة) — ?period=all|month|week
+  app.get("/api/sports/leaderboard", async (req, res) => {
+    const periodRaw = String(req.query.period || "all");
+    const period = periodRaw === "week" || periodRaw === "month" ? periodRaw : "all";
+    try {
+      const leaderboard = await getLeaderboard(period, 50);
+      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.json({ period, leaderboard });
+    } catch (error) {
+      console.error("[Sports] leaderboard failed:", error);
+      res.status(502).json({ message: "تعذر جلب لوحة المتصدّرين حاليًا" });
     }
   });
 }

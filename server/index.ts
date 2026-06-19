@@ -1862,6 +1862,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسوية توقّعات المباريات (المرحلة 4): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsPredictionsJob } = await import("./jobs/sportsPredictionsJob");
+            startSportsPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
     // Handle server errors
     server.on("error", (error: any) => {
       console.error("[Server] ❌ Server error:", error);
