@@ -227,6 +227,7 @@ const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/Qu
 const BreakingTickerManager = lazy(() => retryImport(() => import("@/pages/dashboard/BreakingTickerManager")));
 const WorldDaysManagement = lazy(() => retryImport(() => import("@/pages/dashboard/WorldDaysManagement")));
 const SmartRadar = lazy(() => retryImport(() => import("@/pages/dashboard/SmartRadar")));
+const RssFeedsManager = lazy(() => retryImport(() => import("@/pages/dashboard/RssFeedsManager")));
 const MediaLibrary = lazy(() => retryImport(() => import("@/pages/dashboard/MediaLibrary")));
 const AITools = lazy(() => retryImport(() => import("@/pages/dashboard/AITools")));
 const DataStoryGenerator = lazy(() => retryImport(() => import("@/pages/DataStoryGenerator")));
@@ -889,7 +890,7 @@ function Router() {
         <Route path="/dashboard/sentiment-analytics">{() => <LazyRoute component={SentimentAnalytics} />}</Route>
         <Route path="/dashboard/personalization-analytics">{() => <LazyRoute component={PersonalizationAnalytics} />}</Route>
         <Route path="/dashboard/newsletter-analytics">{() => <LazyRoute component={NewsletterAnalytics} />}</Route>
-        <Route path="/dashboard/rss-feeds">{() => <LazyRoute component={ComingSoon} />}</Route>
+        <Route path="/dashboard/rss-feeds">{() => <LazyRoute component={RssFeedsManager} />}</Route>
         <Route path="/dashboard/integrations">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/storage">{() => <LazyRoute component={ComingSoon} />}</Route>
         <Route path="/dashboard/audit-logs">{() => <LazyRoute component={ActivityLogsPage} />}</Route>
