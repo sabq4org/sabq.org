@@ -197,29 +197,44 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
               <button
                 key={f.id}
                 onClick={() => onOpen(f.id)}
-                className={`shrink-0 rounded-xl bg-background border px-3 py-2 transition-colors text-right min-w-[11rem] ${
+                className={`shrink-0 rounded-xl bg-background border px-3 py-2.5 transition-colors text-right w-64 max-w-[82vw] ${
                   f.status.live ? "border-red-500/40 hover:border-red-500/70" : "border-border hover:border-primary/50"
                 }`}
               >
-                <div className="flex items-center gap-1 mb-1">
-                  {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
-                  <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
-                  <span className="flex-1 truncate text-xs font-semibold text-foreground">{f.home.name}</span>
-                  <span className="shrink-0 text-sm font-black text-foreground tabular-nums px-1">
-                    {decided ? `${f.goals.home ?? 0}-${f.goals.away ?? 0}` : fmtTime(f.timestamp)}
+                {/* البطولة (يمين) + حالة المباراة (يسار) في سطر واحد */}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="flex items-center gap-1 min-w-0">
+                    {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
+                    <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
                   </span>
-                  <span className="flex-1 truncate text-xs font-semibold text-foreground text-left">{f.away.name}</span>
-                  {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+                  <span className={`shrink-0 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+                    {f.status.live
+                      ? (f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label)
+                      : f.status.finished
+                      ? "انتهت"
+                      : fmtTime(f.timestamp)}
+                  </span>
                 </div>
-                <div className={`text-[10px] mt-1 text-center font-bold ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
-                  {f.status.live
-                    ? `${f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label}`
-                    : f.status.finished
-                    ? "انتهت"
-                    : `تنطلق ${fmtTime(f.timestamp)}`}
+                {/* كل فريق في سطر كامل + نتيجته — يمنح الاسم العرض الكامل فلا يُقصّ */}
+                <div className="space-y-1.5">
+                  {[f.home, f.away].map((team, idx) => {
+                    const my = idx === 0 ? f.goals.home : f.goals.away;
+                    const opp = idx === 0 ? f.goals.away : f.goals.home;
+                    const won = decided && my != null && opp != null && my > opp;
+                    return (
+                      <div key={team.id} className="flex items-center gap-2">
+                        {team.logo ? (
+                          <img src={team.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
+                        ) : (
+                          <span className="w-5 h-5 shrink-0" />
+                        )}
+                        <span className={`flex-1 min-w-0 truncate text-sm text-foreground ${won ? "font-extrabold" : "font-semibold"}`}>{team.name}</span>
+                        {decided && (
+                          <span className={`shrink-0 text-sm tabular-nums ${won ? "font-black text-foreground" : "font-bold text-muted-foreground"}`}>{my ?? 0}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </button>
             );
