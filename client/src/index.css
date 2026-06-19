@@ -2133,3 +2133,82 @@ input, select, textarea {
 .animate-ambient-glow {
   animation: ambient-glow 40s infinite linear;
 }
+
+/* ===== شجرة الأدوار الإقصائية (كأس العالم) =====
+   تخطيط أفقي RTL: دور الـ32 يمينًا يتدفّق يسارًا حتى النهائي.
+   الموصّلات مرسومة بعناصر زائفة لا تعتمد على ارتفاع الخلية الفعلي
+   (نسب مئوية داخل خانة flex:1) فتبقى صحيحة مهما تغيّر المحتوى. */
+.wc-bracket {
+  display: flex;
+  direction: rtl;
+  min-width: max-content;
+  align-items: stretch;
+  --wc-line: hsl(var(--border));
+}
+.wc-round {
+  display: flex;
+  flex-direction: column;
+  width: 12.5rem;
+}
+.wc-round:not(.is-last) {
+  margin-left: 1.75rem;
+}
+.wc-round-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.wc-slot {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 0.45rem 0;
+  min-height: 3.75rem;
+}
+.wc-match {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+/* وصلة أفقية خارجة نحو الدور التالي (يسارًا) */
+.wc-round:not(.is-last) .wc-match::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -0.875rem;
+  width: 0.875rem;
+  height: 2px;
+  background: var(--wc-line);
+}
+/* وصلة أفقية داخلة من الدور السابق (يمينًا) */
+.wc-round:not(.is-first) .wc-match::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -0.875rem;
+  width: 0.875rem;
+  height: 2px;
+  background: var(--wc-line);
+}
+/* العمود الرأسي الذي يجمع كل زوج عند منتصف المسافة */
+.wc-round:not(.is-last) .wc-slot::before {
+  content: "";
+  position: absolute;
+  left: -0.875rem;
+  width: 2px;
+  background: var(--wc-line);
+}
+.wc-round:not(.is-last) .wc-slot:nth-child(odd)::before {
+  top: 50%;
+  bottom: 0;
+}
+.wc-round:not(.is-last) .wc-slot:nth-child(even)::before {
+  top: 0;
+  height: 50%;
+}
+@media (max-width: 640px) {
+  .wc-round {
+    width: 11rem;
+  }
+}
