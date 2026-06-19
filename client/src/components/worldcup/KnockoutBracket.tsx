@@ -3,9 +3,10 @@
  * تُبنى من نفس مصفوفة المباريات التي تجلبها الصفحة (roundEn الخام) دون أي
  * استدعاء API إضافي. الخانات غير المحسومة تظهر «يُحدَّد لاحقًا» (لا بيانات وهمية).
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatKickoffTime, type WcFixture, type WcTeam } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
 
@@ -17,16 +18,28 @@ interface KnockoutBracketProps {
 
 // ترتيب الأدوار الإقصائية ومسمياتها العربية — ثابتة حتى تظهر العناوين
 // قبل توفّر مباريات الدور. المركز الثالث يُعرض منفصلًا خارج الشجرة.
+// تسمية الأدوار بعدد المنتخبات المتبقية: 32 ← 16 ← 8 ← 4 ← النهائي ثم البطل
+// (المفاتيح تطابق round الخام من API-Football، والمسمّيات فقط هي ما يتغيّر)
 const KNOCKOUT_ROUNDS: { key: string; label: string }[] = [
   { key: "round of 32", label: "دور الـ32" },
   { key: "round of 16", label: "دور الـ16" },
-  { key: "quarter-finals", label: "ربع النهائي" },
-  { key: "semi-finals", label: "نصف النهائي" },
+  { key: "quarter-finals", label: "دور الـ8" },
+  { key: "semi-finals", label: "دور الـ4" },
   { key: "final", label: "النهائي" },
 ];
 const THIRD_PLACE_KEYS = new Set(["3rd place final", "third place", "3rd place"]);
 
 const norm = (round: string): string => (round || "").trim().toLowerCase();
+
+/** الدور الافتراضي لتبويبات الجوال: حيث «الحدث» الآن — مباراة جارية، وإلا
+ *  أبكر دور لم يكتمل، وإلا آخر دور (انتهت البطولة) */
+function defaultRoundKey(cols: BracketColumn[]): string | undefined {
+  const live = cols.find((c) => c.matches.some((m) => m.status.live));
+  if (live) return live.key;
+  const upcoming = cols.find((c) => c.matches.some((m) => !m.status.finished));
+  if (upcoming) return upcoming.key;
+  return cols[cols.length - 1]?.key ?? cols[0]?.key;
+}
 
 /** منتخب محسوم فعلًا (له معرّف وشعار) مقابل خانة بانتظار التأهل */
 const isResolved = (team: WcTeam): boolean => Boolean(team?.id && team?.logo);
@@ -121,6 +134,10 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
   const firstKey = liveCols[0]?.key;
   const lastKey = liveCols[liveCols.length - 1]?.key;
 
+  // تبويبات الجوال — الدور النشط (مع تعويض إن اختفى دوره بعد تحديث البيانات)
+  const [tab, setTab] = useState<string | null>(null);
+  const activeKey = tab && liveCols.some((c) => c.key === tab) ? tab : defaultRoundKey(liveCols);
+
   return (
     <section dir="rtl" className="py-10" id="knockout">
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -158,38 +175,66 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
 
         {!isLoading && hasAny && (
           <>
-            <p className="text-[11px] text-muted-foreground mb-2">← اسحب أفقيًا لتتبّع المسار</p>
-            <div className="overflow-x-auto pb-3">
-              <div className="wc-bracket">
-                {liveCols.map((col) => {
-                  const cls = [
-                    "wc-round",
-                    col.key === firstKey ? "is-first" : "",
-                    col.key === lastKey ? "is-last" : "",
-                    col.key === "final" ? "is-final" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ");
-                  return (
-                    <div key={col.key} className={cls}>
-                      <div className="mb-1.5 rounded-md bg-emerald-500/[0.07] py-1.5 text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
-                        {col.label}
-                      </div>
-                      <div className="wc-round-body">
-                        {col.matches.map((fx) => (
-                          <div key={fx.id} className="wc-slot">
-                            <BracketMatch fixture={fx} onOpen={onOpenMatch} />
-                          </div>
-                        ))}
-                      </div>
-                      {col.key === "final" && (
-                        <p className="pt-2 text-center text-[11px] font-extrabold text-amber-600 dark:text-amber-400">
-                          🏆 بطل العالم
-                        </p>
+            {/* الجوال/التابلت: تبويبات حسب الدور تلتف لسطرين (لا سحب أفقي) —
+                نفس نمط tabs قسم «المباريات» */}
+            <div className="lg:hidden">
+              <Tabs value={activeKey} onValueChange={setTab} dir="rtl">
+                <TabsList className="mb-4 flex-wrap h-auto w-full justify-start">
+                  {liveCols.map((col) => (
+                    <TabsTrigger key={col.key} value={col.key} className="gap-1.5" data-testid={`wc-bracket-tab-${col.key}`}>
+                      {col.matches.some((m) => m.status.live) && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
                       )}
-                    </div>
-                  );
-                })}
+                      {col.label}
+                      {col.key === "final" && " 🏆"}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+                {liveCols.map((col) => (
+                  <TabsContent key={col.key} value={col.key} className="space-y-2 mt-0">
+                    {col.matches.map((fx) => (
+                      <BracketMatch key={fx.id} fixture={fx} onOpen={onOpenMatch} />
+                    ))}
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </div>
+
+            {/* الشاشة الكبيرة: الشجرة الأفقية الكلاسيكية */}
+            <div className="hidden lg:block">
+              <p className="text-[11px] text-muted-foreground mb-2">← اسحب أفقيًا لتتبّع المسار</p>
+              <div className="overflow-x-auto pb-3">
+                <div className="wc-bracket">
+                  {liveCols.map((col) => {
+                    const cls = [
+                      "wc-round",
+                      col.key === firstKey ? "is-first" : "",
+                      col.key === lastKey ? "is-last" : "",
+                      col.key === "final" ? "is-final" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ");
+                    return (
+                      <div key={col.key} className={cls}>
+                        <div className="mb-1.5 rounded-md bg-emerald-500/[0.07] py-1.5 text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
+                          {col.label}
+                        </div>
+                        <div className="wc-round-body">
+                          {col.matches.map((fx) => (
+                            <div key={fx.id} className="wc-slot">
+                              <BracketMatch fixture={fx} onOpen={onOpenMatch} />
+                            </div>
+                          ))}
+                        </div>
+                        {col.key === "final" && (
+                          <p className="pt-2 text-center text-[11px] font-extrabold text-amber-600 dark:text-amber-400">
+                            🏆 بطل العالم
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
