@@ -175,9 +175,9 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
 
         {!isLoading && hasAny && (
           <>
-            {/* الجوال/التابلت: تبويبات حسب الدور تلتف لسطرين (لا سحب أفقي) —
+            {/* الجوال فقط: تبويبات حسب الدور تلتف لسطرين —
                 نفس نمط tabs قسم «المباريات» */}
-            <div className="lg:hidden">
+            <div className="md:hidden">
               <Tabs value={activeKey} onValueChange={setTab} dir="rtl">
                 <TabsList className="mb-4 flex-wrap h-auto w-full justify-start">
                   {liveCols.map((col) => (
@@ -200,10 +200,9 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
               </Tabs>
             </div>
 
-            {/* الشاشة الكبيرة: الشجرة الأفقية الكلاسيكية */}
-            <div className="hidden lg:block">
-              <p className="text-[11px] text-muted-foreground mb-2">← اسحب أفقيًا لتتبّع المسار</p>
-              <div className="overflow-x-auto pb-3">
+            {/* سطح المكتب/التابلت: الشجرة الأفقية تملأ العرض دون سحب أفقي */}
+            <div className="hidden md:block">
+              <div className="pb-3">
                 <div className="wc-bracket">
                   {liveCols.map((col) => {
                     const cls = [

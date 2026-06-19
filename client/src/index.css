@@ -2141,14 +2141,16 @@ input, select, textarea {
 .wc-bracket {
   display: flex;
   direction: rtl;
-  min-width: max-content;
+  width: 100%;
   align-items: stretch;
   --wc-line: hsl(var(--border));
 }
+/* تتمدّد الأعمدة لتقتسم العرض المتاح — لا سحب أفقي، والأسماء تُقصّ عند الضيق */
 .wc-round {
   display: flex;
   flex-direction: column;
-  width: 12.5rem;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .wc-round:not(.is-last) {
   margin-left: 1.75rem;
@@ -2206,9 +2208,4 @@ input, select, textarea {
 .wc-round:not(.is-last) .wc-slot:nth-child(even)::before {
   top: 0;
   height: 50%;
-}
-@media (max-width: 640px) {
-  .wc-round {
-    width: 11rem;
-  }
 }
