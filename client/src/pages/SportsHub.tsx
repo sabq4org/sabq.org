@@ -98,10 +98,10 @@ interface SpMatchRatings {
   motm: { id: number; name: string; team: string; rating: number } | null;
   players: SpMatchRatingPlayer[];
 }
-type SpCompetitionCategory = "saudi" | "european" | "world";
+type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
-const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", european: "أوروبي", world: "عالمي" };
-const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "european", "world"];
+const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
+const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
 interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }

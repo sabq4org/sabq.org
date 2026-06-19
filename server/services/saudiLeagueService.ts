@@ -49,7 +49,7 @@ const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه 
  * متوقف منذ 2017. الموسم يُحلّ ديناميكيًا (current) فلا حاجة لتعديل الكود
  * عند انتقال المواسم؛ fallbackSeason احتياط لو فشل الطلب.
  */
-export type CompetitionCategory = "saudi" | "european" | "world";
+export type CompetitionCategory = "saudi" | "gulf" | "european" | "world";
 
 export interface SaudiCompetition {
   id: number;
@@ -86,6 +86,14 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
   { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
   { id: 848, slug: "conference-league", name: "دوري المؤتمر الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
+  // دوريات الخليج — أندية معرّبة (قاموس GULF_TEAM_AR). كأس الخليج للمنتخبات
+  // (id 25) مؤجّل مع بطولات المنتخبات بمجموعات (المرحلة 3).
+  { id: 301, slug: "uae-pro-league", name: "دوري أدنوك للمحترفين", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  { id: 305, slug: "qatar-stars-league", name: "دوري نجوم قطر", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  { id: 330, slug: "kuwait-premier-league", name: "الدوري الكويتي الممتاز", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  { id: 417, slug: "bahrain-premier-league", name: "الدوري البحريني الممتاز", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  { id: 406, slug: "oman-pro-league", name: "دوري عُمانتل للمحترفين", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  { id: 1162, slug: "gulf-club-champions", name: "كأس الخليج للأندية الأبطال", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
 ];
 
 export function getCompetition(slug: string): SaudiCompetition | undefined {
