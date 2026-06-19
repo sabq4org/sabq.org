@@ -2444,6 +2444,26 @@ export const storyFollows = pgTable("story_follows", {
   index("idx_story_follows_story").on(table.storyId),
 ]);
 
+// Sports follows — متابعة المستخدم لفِرق/بطولات رياضية (شخصنة /sports2).
+// kind: 'team' | 'competition'؛ refId = معرّف الفريق (رقم كنص) أو slug البطولة.
+export const sportsFollows = pgTable("sports_follows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(),
+  refId: text("ref_id").notNull(),
+  refName: text("ref_name").notNull(),
+  refLogo: text("ref_logo"),
+  notify: boolean("notify").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_follows_unique").on(table.userId, table.kind, table.refId),
+  index("idx_sports_follows_user").on(table.userId, table.createdAt.desc()),
+  index("idx_sports_follows_ref").on(table.kind, table.refId),
+]);
+
+export type SportsFollow = typeof sportsFollows.$inferSelect;
+export type InsertSportsFollow = typeof sportsFollows.$inferInsert;
+
 // Story notifications (notification log)
 export const storyNotifications = pgTable("story_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

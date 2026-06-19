@@ -12,6 +12,8 @@
  */
 import type { Express, Request, Response } from "express";
 import {
+  generateMatchPreview,
+  generateMatchStory,
   getCompetition,
   getCompetitionRounds,
   getFixtures,
@@ -45,6 +47,15 @@ import {
   type SplFixture,
 } from "../services/saudiLeagueService";
 import { getTeamOgImage } from "../services/sportsOgImage";
+import {
+  addFollow,
+  isValidFollowKind,
+  listFollows,
+  removeFollow,
+  setFollowNotify,
+} from "../services/sportsFollowsService";
+import { getMissedResults } from "../services/sportsDigestService";
+import { requireAuth } from "../rbac";
 
 const RIYADH_TZ = "Asia/Riyadh";
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
@@ -537,6 +548,144 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية). lazy — تُستدعى
+  // عند فتح تبويب «الملخّص الذكي». التوليد خلف كاش SWR فلا يتكرّر لكل زائر.
+  app.get("/api/sports/match/:id/story", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const story = await generateMatchStory(id);
+      if (!story) {
+        res.status(404).json({ message: "لا يتوفّر ملخّص لهذه المباراة" });
+        return;
+      }
+      const ttl = story.live ? "max-age=30, s-maxage=60" : "max-age=600, s-maxage=3600";
+      res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
+      res.json(story);
+    } catch (error) {
+      console.error("[Sports] match story failed:", error);
+      res.status(502).json({ message: "تعذر توليد ملخّص المباراة حاليًا" });
+    }
+  });
+
+  // المرحلة 2 (ذكاء): معاينة ما قبل المباراة (للمباريات غير المبدوءة فقط).
+  app.get("/api/sports/match/:id/preview", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const preview = await generateMatchPreview(id);
+      if (!preview) {
+        res.status(404).json({ message: "لا تتوفّر معاينة لهذه المباراة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=1800, stale-while-revalidate=1800");
+      res.json(preview);
+    } catch (error) {
+      console.error("[Sports] match preview failed:", error);
+      res.status(502).json({ message: "تعذر توليد معاينة المباراة حاليًا" });
+    }
+  });
+
+  // ============================================================
+  // المرحلة 3 (الشخصنة): متابعة الفِرق/البطولات
+  // كلها تتطلّب جلسة ويب (requireAuth). الـ refId نصّ: معرّف فريق أو slug بطولة.
+  // ============================================================
+
+  // متابعاتي
+  app.get("/api/sports/follows", requireAuth, async (req: any, res) => {
+    try {
+      const follows = await listFollows(req.user.id);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ follows });
+    } catch (error) {
+      console.error("[Sports] list follows failed:", error);
+      res.status(502).json({ message: "تعذر جلب متابعاتك حاليًا" });
+    }
+  });
+
+  // إضافة متابعة
+  app.post("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const { kind, refId, refName, refLogo } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || !refName) {
+      res.status(400).json({ message: "بيانات المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      const follow = await addFollow(req.user.id, {
+        kind,
+        refId: String(refId),
+        refName: String(refName),
+        refLogo: refLogo ? String(refLogo) : null,
+      });
+      res.set("Cache-Control", "private, no-store");
+      res.json({ follow });
+    } catch (error) {
+      console.error("[Sports] add follow failed:", error);
+      res.status(502).json({ message: "تعذر حفظ المتابعة حاليًا" });
+    }
+  });
+
+  // تفعيل/كتم إشعارات متابعة قائمة
+  app.patch("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const { kind, refId, notify } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || typeof notify !== "boolean") {
+      res.status(400).json({ message: "بيانات تحديث المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      await setFollowNotify(req.user.id, kind, String(refId), notify);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Sports] update follow notify failed:", error);
+      res.status(502).json({ message: "تعذر تحديث إعداد الإشعار حاليًا" });
+    }
+  });
+
+  // إلغاء متابعة (?kind=&refId=)
+  app.delete("/api/sports/follows", requireAuth, async (req: any, res) => {
+    const kind = req.query.kind;
+    const refId = req.query.refId;
+    if (!isValidFollowKind(kind) || !refId) {
+      res.status(400).json({ message: "بيانات إلغاء المتابعة غير مكتملة" });
+      return;
+    }
+    try {
+      await removeFollow(req.user.id, kind, String(refId));
+      res.set("Cache-Control", "private, no-store");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Sports] remove follow failed:", error);
+      res.status(502).json({ message: "تعذر إلغاء المتابعة حاليًا" });
+    }
+  });
+
+  // «ما فاتك» — آخر نتائج فِرقك المتابَعة (شخصنة)
+  app.get("/api/sports/digest", requireAuth, async (req: any, res) => {
+    try {
+      const results = await getMissedResults(req.user.id);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ results });
+    } catch (error) {
+      console.error("[Sports] digest failed:", error);
+      res.status(502).json({ message: "تعذر جلب ملخّص فِرقك حاليًا" });
     }
   });
 
