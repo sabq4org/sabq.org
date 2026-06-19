@@ -324,9 +324,7 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
                       </span>
                     ) : m.status.finished ? (
                       <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
-                    ) : (
-                      <span className="text-[10px] font-bold tabular-nums text-primary">{fmtTime(m.timestamp)}</span>
-                    )}
+                    ) : null}
                   </button>
                 ) : (
                   <Link href={`/sports2/team/${f.refId}`} className="inline-flex items-center gap-2 min-w-0">
@@ -1528,7 +1526,6 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
-  const startedNow = !!fixtureStatus && (fixtureStatus.live || fixtureStatus.finished);
   const { data: prediction } = useQuery<SpPrediction>({
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
@@ -1541,12 +1538,6 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     enabled: id != null && isUpcoming && tab === "preview" && previewRequested,
     staleTime: 30 * 60_000,
   });
-  const { data: story, isLoading: storyLoading } = useQuery<SpMatchStory>({
-    queryKey: [`/api/sports/match/${id}/story`],
-    enabled: id != null && startedNow && tab === "story",
-    refetchInterval: (q) => (q.state.data?.live ? 60_000 : false),
-    staleTime: 60_000,
-  });
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
   const { data: h2hData } = useQuery<SpH2H>({
@@ -1556,27 +1547,25 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   });
   const h2hMeetings = Array.isArray(h2hData?.meetings) ? h2hData!.meetings : [];
 
-  // ربط تحريري: أخبار سبق الرياضية المرتبطة بالمباراة — نفلتر قائمة مقالات
-  // الرياضة (المُحمّلة والمُكاشة أصلًا في الصفحة) حسب ورود اسمَي الفريقين في
-  // العنوان/المقتطف. بلا أي نداء إضافي للمزوّد — ميزة سبق الحصرية (غرفة الأخبار).
-  const { data: sportsNewsRaw } = useQuery<ArticleWithDetails[]>({
-    queryKey: ["/api/categories", "sports", "articles"],
-    enabled: id != null,
-    staleTime: 5 * 60_000,
-  });
-  const relatedNews = useMemo(() => {
-    const list = Array.isArray(sportsNewsRaw) ? sportsNewsRaw : [];
-    const fixture = data?.fixture;
-    if (!fixture) return [] as ArticleWithDetails[];
-    const names = [fixture.home.name, fixture.away.name].filter((n) => n && n.trim().length > 2);
-    if (names.length === 0) return [] as ArticleWithDetails[];
-    return list
-      .filter((a) => {
-        const hay = `${a.title ?? ""} ${a.excerpt ?? ""}`;
-        return names.some((n) => hay.includes(n));
-      })
-      .slice(0, 6);
-  }, [sportsNewsRaw, data?.fixture]);
+  // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
+  // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
+  useEffect(() => {
+    if (id == null) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [id]);
 
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
@@ -1586,12 +1575,10 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   const tabs = [
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
-    started ? { key: "story", label: "ملخّص ذكي" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
-    relatedNews.length > 0 ? { key: "news", label: "أخبار سبق" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
@@ -1599,10 +1586,10 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
       <motion.div
         initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
         dir="rtl" onClick={(e) => e.stopPropagation()}
-        className="bg-card w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[88vh] flex flex-col overflow-hidden border border-border"
+        className="bg-card w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-border"
       >
-        <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4">
-          <button onClick={onClose} className="absolute left-3 top-3 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4 pt-5">
+          <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-10 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
           {isLoading || !fx ? <Skeleton className="h-16 rounded-lg" /> : (
             <>
               <div className="text-center text-xs text-muted-foreground mb-2">{fx.round} {fx.venue.name ? `· ${fx.venue.name}` : ""}</div>
@@ -1677,9 +1664,6 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
               </div>
             )
           )}
-          {!isLoading && activeKey === "story" && (
-            <AiNarrative loading={storyLoading} text={story?.text} kind="story" live={story?.live} />
-          )}
           {!isLoading && activeKey === "stats" && stats && (() => {
             // استخراج الاستحواذ لعرضه كشريط بارز بالأعلى، وبقية الإحصاءات تحته.
             const possession = stats.rows.find((r) => r.type === "Ball Possession");
@@ -1710,34 +1694,6 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
           {!isLoading && activeKey === "h2h" && fx && h2hData && (
             <H2HView h2h={h2hData} homeId={fx.home.id} homeName={fx.home.name} awayName={fx.away.name} />
-          )}
-          {!isLoading && activeKey === "news" && (
-            <ul className="space-y-2">
-              {relatedNews.map((a) => {
-                const img = imgOf(a);
-                return (
-                  <li key={a.id}>
-                    <Link
-                      href={`/article/${a.englishSlug || a.slug}`}
-                      onClick={onClose}
-                      className="flex items-center gap-3 rounded-xl border border-border bg-card p-2 hover:bg-muted/50 transition-colors"
-                    >
-                      {img ? (
-                        <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover bg-muted shrink-0" loading="lazy" />
-                      ) : (
-                        <span className="grid place-items-center w-16 h-16 rounded-lg bg-muted shrink-0"><Newspaper className="w-5 h-5 text-muted-foreground/50" /></span>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-bold leading-snug line-clamp-2 text-foreground">{a.title}</h4>
-                        <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Clock className="w-3 h-3" />{timeAgo(a.publishedAt)}
-                        </div>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
           )}
           {!isLoading && tabs.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">لا توجد تفاصيل متاحة لهذه المباراة بعد</div>}
         </div>
