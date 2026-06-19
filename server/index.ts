@@ -527,6 +527,30 @@ const writeLimiter = rateLimit({
   },
 });
 
+// Anti-scraping read limiter for the public /api/world-cup/* surface. These are
+// the ONLY heavily-trafficked GET endpoints that re-expose a paid third-party
+// feed (API-Football) verbatim, so an open JSON endpoint is an invitation for
+// someone to freeload on our subscription (and indirectly burn our provider
+// quota on cache-cold paths). The general/write limiters above both skip GET,
+// so reads were previously unthrottled at origin. This is safe to keep
+// per-minute and generous because: (a) genuine visitors are served from the
+// Cloudflare CDN (the `public, s-maxage=…` headers on every route) and never
+// reach origin, so the limiter only sees cache MISSES — exactly the bulk-scrape
+// pattern; (b) the real per-visitor IP survives the Pages proxy via
+// X-Sabq-Client-IP (see rateLimitKey + functions/_middleware.js), so this does
+// NOT collapse every visitor into one bucket. Tune with WC_READ_RATE_LIMIT.
+const worldCupReadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: Number(process.env.WC_READ_RATE_LIMIT) || 300, // per identity/IP per minute
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: rateLimitKey,
+  // Only throttle reads here; there are no write routes under /api/world-cup.
+  skip: (req) => req.method !== 'GET' && req.method !== 'HEAD',
+});
+
 // ---------------------------------------------------------------------------
 // CACHE-CONTROL INVARIANT FOR NOINDEX SPA ROUTES (do not break)
 // ---------------------------------------------------------------------------
@@ -701,6 +725,8 @@ if (process.env.NODE_ENV !== "production") {
 // Apply general rate limiter to all API routes
 app.use("/api", generalApiLimiter);
 app.use("/api", writeLimiter);
+// Anti-scraping read throttle scoped to the public World Cup feed (see above).
+app.use("/api/world-cup", worldCupReadLimiter);
 
 // ============================================
 // APM (Application Performance Monitoring) Middleware
