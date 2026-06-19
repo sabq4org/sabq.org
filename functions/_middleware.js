@@ -529,14 +529,35 @@ export async function onRequest(context) {
     });
   }
 
+  // A recovery reload (deployRecovery.ts + the index.html inline safety-net both
+  // append `?_dr=<ts>`) MUST reach the origin for the CURRENT shell — never a
+  // stale edge HIT. htmlCacheKey() intentionally strips `_dr`, so WITHOUT this
+  // bypass a recovery reload kept resolving to the SAME stale cache entry: the
+  // proactive build-id check (or vite:preloadError) fired, reloaded with `_dr`,
+  // got the identical stale shell back, and the user looped on a white page
+  // until the 300s TTL expired — the "white page after every deploy" report.
+  const isRecoveryReload = url.searchParams.has("_dr");
+  const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+
   // In-function edge cache (Workers Cache API). Default ON; set
   // EDGE_HTML_CACHE=off to disable (e.g. once a zone-level "Cache Everything"
   // Cache Rule is doing the job). Only active when SEO is injected HERE
   // (EDGE_SEO=on) so we never cache a half-rendered shell that the standalone
   // worker would otherwise enrich.
   const edgeHtmlCacheEnabled =
-    String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" && seoEnabled;
-  const commit = env.CF_PAGES_COMMIT_SHA || env.CF_PAGES_BUILD_ID || "";
+    String(env.EDGE_HTML_CACHE || "on").toLowerCase() !== "off" &&
+    seoEnabled &&
+    // Never cache a shell we can't namespace per-deploy. Without a commit/build
+    // id the cache key collapses to the constant "dev" (see htmlCacheKey), so a
+    // new deploy reuses the SAME key and the edge keeps serving the PREVIOUS
+    // build's shell — which references chunk hashes the deploy just deleted →
+    // 404 → white page for up to 300s after EVERY deploy. If CF_PAGES_COMMIT_SHA
+    // (auto-set on git-connected Pages) is missing, skip the edge cache entirely
+    // rather than risk a cross-deploy stale serve.
+    !!commit &&
+    // A recovery reload must self-heal immediately: bypass both the HIT lookup
+    // and the store so it always pulls the fresh origin shell.
+    !isRecoveryReload;
 
   // Dynamic rendering: only search/social crawlers get the SSR rendering on SSR
   // paths; humans always get the original SPA. The cache is namespaced by
