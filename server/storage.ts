@@ -16809,13 +16809,19 @@ export class DatabaseStorage implements IStorage {
     read?: boolean;
     limit?: number;
     offset?: number;
+    excludeTypes?: string[];
   }): Promise<{ notifications: NotificationInbox[]; total: number }> {
     const conditions = [eq(notificationsInbox.userId, userId)];
-    
+
     if (filters?.read !== undefined) {
       conditions.push(eq(notificationsInbox.read, filters.read));
     }
-    
+
+    // استبعاد أنواع محددة (مثل إشعارات نشر المقالات التحريرية من مركز إشعارات الويب).
+    if (filters?.excludeTypes && filters.excludeTypes.length > 0) {
+      conditions.push(not(inArray(notificationsInbox.type, filters.excludeTypes)));
+    }
+
     const whereClause = and(...conditions);
     
     const [totalResult] = await db
