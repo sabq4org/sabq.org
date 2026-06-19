@@ -10102,7 +10102,7 @@ export class DatabaseStorage implements IStorage {
     return angle;
   }
 
-  async getAngleWriter(managerUserId: string | null): Promise<{ name: string; avatar: string | null; slug: string | null } | null> {
+  async getAngleWriter(managerUserId: string | null): Promise<{ id: string; name: string; avatar: string | null; slug: string | null; bio: string | null } | null> {
     if (!managerUserId) return null;
 
     const [row] = await db
@@ -10110,9 +10110,11 @@ export class DatabaseStorage implements IStorage {
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
+        bio: users.bio,
         staffSlug: staff.slug,
         staffNameAr: staff.nameAr,
         staffProfileImage: staff.profileImage,
+        staffBioAr: staff.bioAr,
       })
       .from(users)
       .leftJoin(staff, eq(staff.userId, users.id))
@@ -10123,9 +10125,11 @@ export class DatabaseStorage implements IStorage {
 
     const name = (row.staffNameAr || [row.firstName, row.lastName].filter(Boolean).join(" ").trim()) || "كاتب الزاوية";
     return {
+      id: managerUserId,
       name,
       avatar: row.staffProfileImage || row.profileImageUrl || null,
       slug: row.staffSlug || null,
+      bio: row.staffBioAr || row.bio || null,
     };
   }
 
