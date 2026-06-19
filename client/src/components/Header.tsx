@@ -238,8 +238,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               <LanguageSwitcher />
               <ThemeToggle />
 
-              {/* Notification Bell - Mobile - TEMPORARILY HIDDEN */}
-              {/* {user && <NotificationBell />} */}
+              {/* Notification Bell - Mobile */}
+              {user && <NotificationBell />}
 
               {user ? (
                 <DropdownMenu>
@@ -340,8 +340,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               <VariantSwitcher />
               <ThemeToggle />
               
-              {/* Notification Bell - Desktop - TEMPORARILY HIDDEN */}
-              {/* {user && <NotificationBell />} */}
+              {/* Notification Bell - Desktop */}
+              {user && <NotificationBell />}
 
               {user ? (
                 <DropdownMenu>

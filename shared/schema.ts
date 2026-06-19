@@ -2464,6 +2464,41 @@ export const sportsFollows = pgTable("sports_follows", {
 export type SportsFollow = typeof sportsFollows.$inferSelect;
 export type InsertSportsFollow = typeof sportsFollows.$inferInsert;
 
+// Sports predictions — توقّع المستخدم لنتيجة مباراة (المرحلة 4 — المجتمع).
+// توقّع واحد لكل (مستخدم، مباراة)؛ يُقفل التعديل عند انطلاق المباراة. النقاط:
+// نتيجة مطابقة تمامًا = 3، اتجاه صحيح (فوز/تعادل/خسارة) = 1، خطأ = 0.
+// points = null يعني لم تُسوَّ بعد (المباراة لم تنتهِ). أسماء/شعارات الفريقين
+// لقطة مخزّنة لعرض لوحة المتصدّرين و«توقّعاتي» دون نداء إضافي للمزوّد.
+export const sportsPredictions = pgTable("sports_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(), // طابع يونكس بالثواني لبداية المباراة
+  homeId: integer("home_id"),
+  awayId: integer("away_id"),
+  homeName: text("home_name").notNull(),
+  awayName: text("away_name").notNull(),
+  homeLogo: text("home_logo"),
+  awayLogo: text("away_logo"),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  actualHome: integer("actual_home"),
+  actualAway: integer("actual_away"),
+  points: integer("points"), // null = لم تُسوَّ بعد
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_predictions_unique").on(table.userId, table.fixtureId),
+  index("idx_sports_predictions_fixture").on(table.fixtureId),
+  index("idx_sports_predictions_user").on(table.userId, table.createdAt.desc()),
+  index("idx_sports_predictions_unsettled").on(table.fixtureId, table.settledAt),
+]);
+
+export type SportsPrediction = typeof sportsPredictions.$inferSelect;
+export type InsertSportsPrediction = typeof sportsPredictions.$inferInsert;
+
 // Story notifications (notification log)
 export const storyNotifications = pgTable("story_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

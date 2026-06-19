@@ -42,6 +42,11 @@ import {
   Bell,
   BellOff,
   History,
+  Target,
+  Medal,
+  Check,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -117,6 +122,15 @@ interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winn
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
 interface SpH2H { summary: { total: number; homeWins: number; draws: number; awayWins: number } | null; meetings: SpH2HMeeting[]; }
 interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
+// المرحلة 4 (المجتمع): توقّع النتيجة + لوحة المتصدّرين
+interface SpPredictionRow {
+  id: string; fixtureId: number; homeName: string; awayName: string;
+  homeLogo: string | null; awayLogo: string | null;
+  predHome: number; predAway: number;
+  actualHome: number | null; actualAway: number | null;
+  points: number | null; kickoffTs: number; createdAt: string;
+}
+interface SpLeaderboardEntry { userId: string; name: string; avatar: string | null; totalPoints: number; predictions: number; exact: number; correct: number; rank: number; }
 
 // ============================================================
 // أدوات
@@ -1439,6 +1453,121 @@ function AiNarrative({ loading, text, kind, live }: {
   );
 }
 
+// المرحلة 4 (المجتمع): توقّع نتيجة المباراة. يظهر للمباريات المرتقبة (قبل
+// الانطلاق) للمستخدم المسجَّل. بعد التسوية يعرض النتيجة المتوقّعة والنقاط.
+function MatchPredict({ fixture }: { fixture: SpFixture }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const fixtureId = fixture.id;
+  const started = fixture.status.live || fixture.status.finished;
+
+  const { data } = useQuery<{ prediction: SpPredictionRow | null }>({
+    queryKey: [`/api/sports/match/${fixtureId}/predict`],
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+  const existing = data?.prediction ?? null;
+
+  const [h, setH] = useState(0);
+  const [a, setA] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (existing && !dirty) { setH(existing.predHome); setA(existing.predAway); }
+  }, [existing, dirty]);
+
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await apiRequest(`/api/sports/match/${fixtureId}/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          predHome: h, predAway: a, kickoffTs: fixture.timestamp,
+          homeId: fixture.home.id, awayId: fixture.away.id,
+          homeName: fixture.home.name, awayName: fixture.away.name,
+          homeLogo: fixture.home.logo, awayLogo: fixture.away.logo,
+        }),
+      });
+      qc.invalidateQueries({ queryKey: [`/api/sports/match/${fixtureId}/predict`] });
+      qc.invalidateQueries({ queryKey: ["/api/sports/predictions/me"] });
+      setDirty(false);
+      toast({ description: existing ? "تم تحديث توقّعك" : "تم حفظ توقّعك — بالتوفيق!" });
+    } catch (err: any) {
+      const locked = String(err?.message || "").includes("409") || String(err?.message || "").includes("أُقفل");
+      toast({ variant: "destructive", description: locked ? "أُقفل التوقّع — انطلقت المباراة" : "تعذّر حفظ التوقّع، حاول مجددًا" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="px-4 py-3 border-b border-border bg-muted/30 text-center text-xs text-muted-foreground">
+        <Link href="/login" className={`font-bold ${ACCENT} hover:underline`}>سجّل دخولك</Link> لتوقّع النتيجة وتنافس على لوحة المتصدّرين
+      </div>
+    );
+  }
+
+  // المباراة انطلقت/انتهت: نعرض التوقّع والنقاط فقط (لا تعديل).
+  if (started) {
+    if (!existing) return null;
+    const settled = existing.points != null;
+    return (
+      <div className="px-4 py-3 border-b border-border bg-muted/30">
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <Target className={`w-4 h-4 ${ACCENT}`} />
+          <span className="text-muted-foreground">توقّعك:</span>
+          <span className="font-black tabular-nums text-foreground">{existing.predHome} : {existing.predAway}</span>
+          {settled && (
+            <span className={`mr-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${existing.points === 3 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : existing.points === 1 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}>
+              {existing.points === 3 ? "إصابة تامة" : existing.points === 1 ? "اتجاه صحيح" : "بلا نقاط"} · +{existing.points}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const Stepper = ({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) => (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-[11px] text-muted-foreground font-bold truncate max-w-[88px]">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => { onChange(Math.max(0, value - 1)); setDirty(true); }}
+          className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-border hover:bg-muted transition-colors" aria-label="إنقاص">
+          <Minus className="w-3.5 h-3.5" />
+        </button>
+        <span className="w-8 text-center text-2xl font-black tabular-nums text-foreground">{value}</span>
+        <button type="button" onClick={() => { onChange(Math.min(30, value + 1)); setDirty(true); }}
+          className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-border hover:bg-muted transition-colors" aria-label="زيادة">
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  const changed = !existing || existing.predHome !== h || existing.predAway !== a;
+  return (
+    <div className="px-4 py-3 border-b border-border bg-accent-blue/10">
+      <div className="flex items-center justify-center gap-1.5 mb-2 text-xs font-bold text-muted-foreground">
+        <Target className={`w-3.5 h-3.5 ${ACCENT}`} /> توقّع النتيجة
+        {existing && <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400"><Check className="w-3 h-3" /> محفوظ</span>}
+      </div>
+      <div className="flex items-center justify-center gap-4">
+        <Stepper value={h} onChange={setH} label={fixture.home.name} />
+        <span className="text-xl font-black text-muted-foreground pt-4">:</span>
+        <Stepper value={a} onChange={setA} label={fixture.away.name} />
+      </div>
+      <button type="button" onClick={() => void submit()} disabled={saving || !changed}
+        className="mt-3 w-full py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+        {saving ? "جارٍ الحفظ…" : existing ? "تحديث التوقّع" : "احفظ توقّعي"}
+      </button>
+      <p className="mt-1.5 text-center text-[10px] text-muted-foreground">إصابة تامة 3 نقاط · اتجاه صحيح نقطة · يُقفل عند انطلاق المباراة</p>
+    </div>
+  );
+}
+
 function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -1548,6 +1677,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
           )}
         </div>
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
+        {fx && <MatchPredict fixture={fx} />}
         {tabs.length > 0 && (
           <div className="shrink-0 flex border-b border-border bg-card">
             {tabs.map((t) => (
@@ -1808,11 +1938,84 @@ function VideoReel({ short, index }: { short: SpShort; index: number }) {
 // ============================================================
 // الصفحة
 // ============================================================
+// المرحلة 4 (المجتمع): لوحة متصدّري التوقّعات — عامة. تبديل بين كل الأوقات/الشهر/الأسبوع.
+function LeaderboardBoard() {
+  const { user } = useAuth();
+  const [period, setPeriod] = useState<"all" | "month" | "week">("all");
+  const { data, isLoading } = useQuery<{ leaderboard: SpLeaderboardEntry[] }>({
+    queryKey: ["/api/sports/leaderboard", { period }],
+    staleTime: 60_000,
+  });
+  const entries = Array.isArray(data?.leaderboard) ? data!.leaderboard : [];
+  const myEntry = user ? entries.find((e) => e.userId === (user as any).id) : undefined;
+
+  const rankBadge = (rank: number) => {
+    if (rank === 1) return "bg-amber-400/20 text-amber-600 dark:text-amber-400 border-amber-400/30";
+    if (rank === 2) return "bg-slate-300/30 text-slate-600 dark:text-slate-300 border-slate-400/30";
+    if (rank === 3) return "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/30";
+    return "bg-muted text-muted-foreground border-border";
+  };
+
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <PillTabs
+          layoutId="leaderboard-period"
+          active={period}
+          onChange={(k) => setPeriod(k as "all" | "month" | "week")}
+          tabs={[
+            { key: "all", label: "كل الأوقات" },
+            { key: "month", label: "هذا الشهر" },
+            { key: "week", label: "هذا الأسبوع" },
+          ]}
+        />
+      </div>
+      {isLoading ? (
+        <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
+      ) : entries.length === 0 ? (
+        <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">
+          لا توجد توقّعات مُسوّاة بعد — كن أول المتنافسين! توقّع نتيجة أي مباراة قادمة من مركز المباريات.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((e) => {
+            const isMe = myEntry && e.userId === myEntry.userId;
+            return (
+              <div key={e.userId}
+                className={`flex items-center gap-3 rounded-xl border p-2.5 sm:p-3 ${isMe ? "border-primary/50 bg-primary/5" : "border-border bg-card"}`}>
+                <div className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full border text-sm font-black tabular-nums ${rankBadge(e.rank)}`}>
+                  {e.rank <= 3 ? <Medal className="w-4 h-4" /> : e.rank}
+                </div>
+                {e.avatar ? (
+                  <img src={e.avatar} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-muted shrink-0 inline-flex items-center justify-center text-xs font-bold text-muted-foreground">
+                    {e.name.charAt(0)}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-foreground truncate">{e.name}{isMe && <span className={`mr-1 text-xs ${ACCENT}`}>(أنت)</span>}</div>
+                  <div className="text-[11px] text-muted-foreground tabular-nums">{e.predictions} توقّع · {e.exact} إصابة تامة</div>
+                </div>
+                <div className="shrink-0 text-center">
+                  <div className={`text-lg font-black tabular-nums ${ACCENT}`}>{e.totalPoints}</div>
+                  <div className="text-[10px] text-muted-foreground">نقطة</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SECTIONS = [
   { id: "news", label: "الأخبار", icon: Newspaper },
   { id: "matches", label: "المباريات", icon: CalendarDays },
   { id: "standings", label: "الترتيب", icon: ListOrdered },
   { id: "scorers", label: "الهدّافون", icon: Goal },
+  { id: "leaderboard", label: "المتصدّرون", icon: Target },
   { id: "gallery", label: "صور", icon: Images },
   { id: "videos", label: "فيديو", icon: PlayCircle },
 ];
@@ -2088,6 +2291,12 @@ export default function SportsHub() {
               )}
             </section>
           )}
+
+          {/* ===== لوحة المتصدّرين (المجتمع) ===== */}
+          <section id="leaderboard" className="scroll-mt-24">
+            <SectionHeader title="لوحة المتصدّرين" subtitle="توقّع النتائج ونافِس الجمهور" icon={<Target className={`w-5 h-5 ${ACCENT}`} />} />
+            <LeaderboardBoard />
+          </section>
 
           {/* ===== معرض الصور ===== */}
           {news.length > 0 && (
