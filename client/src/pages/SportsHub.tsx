@@ -216,6 +216,49 @@ function TodayMiniCard({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => v
   );
 }
 
+// صفّ نتائج مدمج لمباراة اليوم (بنفس نمط بطاقة النتائج المدمجة) — للجوال.
+function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => void }) {
+  const decided = f.status.live || f.status.finished;
+  const homeWon = decided && f.goals.home != null && f.goals.away != null && f.goals.home > f.goals.away;
+  const awayWon = decided && f.goals.home != null && f.goals.away != null && f.goals.away > f.goals.home;
+  return (
+    <button
+      onClick={() => onOpen(f.id)}
+      className="group relative w-full overflow-hidden rounded-lg bg-background border border-border text-right px-3 py-2 hover-elevate transition-all"
+    >
+      {f.status.live && <span className="absolute inset-y-0 right-0 w-0.5 bg-red-500" />}
+      <div className="flex items-center gap-2">
+        <span className={`flex-1 min-w-0 truncate text-right text-sm font-bold ${homeWon ? "text-foreground" : decided ? "text-muted-foreground" : "text-foreground"}`}>{f.home.name}</span>
+        {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+        <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
+          {decided ? (
+            <span className="text-sm font-black tabular-nums tracking-wide" dir="ltr">
+              <span className={homeWon ? ACCENT : "text-foreground"}>{f.goals.home ?? 0}</span>
+              <span className="mx-0.5 text-muted-foreground">-</span>
+              <span className={awayWon ? ACCENT : "text-foreground"}>{f.goals.away ?? 0}</span>
+            </span>
+          ) : (
+            <span className={`text-xs font-black ${ACCENT} tabular-nums`}>{fmtTime(f.timestamp)}</span>
+          )}
+        </div>
+        {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+        <span className={`flex-1 min-w-0 truncate text-left text-sm font-bold ${awayWon ? "text-foreground" : decided ? "text-muted-foreground" : "text-foreground"}`}>{f.away.name}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[10px]">
+        <span className="truncate text-muted-foreground max-w-[55%]">{f.competition}</span>
+        <span className={`shrink-0 inline-flex items-center gap-1 font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+          {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+          {f.status.live
+            ? (f.status.elapsed != null ? `${f.status.elapsed}'` : "مباشر")
+            : f.status.finished
+            ? "انتهت"
+            : fmtTime(f.timestamp)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
   if (items.length === 0) return null;
   const liveCount = items.filter((f) => f.status.live).length;
@@ -234,8 +277,12 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
             </span>
           )}
         </div>
-        {/* شريط بطاقات أفقي قابل للسحب — كل مباراة بطاقة مستقلّة (لا صفوف مرصوصة) */}
-        <div className="flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
+        {/* الجوال: صفوف نتائج مدمجة (مثل بطاقات النتائج) */}
+        <div className="sm:hidden grid gap-2">
+          {items.map((f) => <TodayCompactRow key={f.id} f={f} onOpen={onOpen} />)}
+        </div>
+        {/* الديسكتوب: شريط بطاقات أفقي قابل للسحب */}
+        <div className="hidden sm:flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
           {items.map((f) => <TodayMiniCard key={f.id} f={f} onOpen={onOpen} />)}
         </div>
       </div>
@@ -397,8 +444,9 @@ function PillTabs({ tabs, active, onChange, layoutId }: {
 // بطاقة مباراة — متجاوبة:
 //  • الجوال (< sm): صفّ نتائج مدمج منخفض الارتفاع (مضيف — النتيجة — ضيف) — مريح وغير مزعج.
 //  • الديسكتوب (sm+): بطاقة كبيرة بشعارين كبيرين + نتيجة في المنتصف + شريط حالة وقدم.
+//  • compact=true: تُفرض الصفوف المدمجة على كل المقاسات (تبويب «النتائج» يفضّلها).
 // ============================================================
-function MatchCard({ fixture, onOpen }: { fixture: SpFixture; onOpen: (id: number) => void }) {
+function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; onOpen: (id: number) => void; compact?: boolean }) {
   const { home, away, goals, status, round } = fixture;
   const decided = status.live || status.finished;
   const homeWon = decided && (goals.home ?? 0) > (goals.away ?? 0);
@@ -434,13 +482,13 @@ function MatchCard({ fixture, onOpen }: { fixture: SpFixture; onOpen: (id: numbe
   return (
     <button
       onClick={() => onOpen(fixture.id)}
-      className="group relative w-full overflow-hidden rounded-lg sm:rounded-2xl bg-card border border-border text-right hover-elevate transition-all"
+      className={`group relative w-full overflow-hidden bg-card border border-border text-right hover-elevate transition-all ${compact ? "rounded-lg" : "rounded-lg sm:rounded-2xl"}`}
     >
-      {/* شريط حالة علوي ملوّن — ديسكتوب فقط */}
-      <span className={`hidden sm:block absolute inset-x-0 top-0 h-1 ${status.live ? "bg-red-500" : status.finished ? "bg-muted-foreground/25" : "bg-primary/70"}`} />
+      {/* شريط حالة علوي ملوّن — ديسكتوب فقط (يُخفى في الوضع المدمج) */}
+      <span className={`${compact ? "hidden" : "hidden sm:block"} absolute inset-x-0 top-0 h-1 ${status.live ? "bg-red-500" : status.finished ? "bg-muted-foreground/25" : "bg-primary/70"}`} />
 
-      {/* ===== الجوال: صفّ نتائج مدمج ===== */}
-      <div className="sm:hidden px-3 py-2">
+      {/* ===== الصفّ المدمج (جوال دائمًا، وكل المقاسات عند compact) ===== */}
+      <div className={`${compact ? "block" : "sm:hidden"} px-3 py-2`}>
         {status.live && <span className="absolute inset-y-0 right-0 w-0.5 bg-red-500" />}
         <div className="flex items-center gap-2">
           <span className={`flex-1 min-w-0 truncate text-right text-sm font-bold ${homeWon ? "text-foreground" : decided ? "text-muted-foreground" : "text-foreground"}`}>{home.name}</span>
@@ -465,8 +513,8 @@ function MatchCard({ fixture, onOpen }: { fixture: SpFixture; onOpen: (id: numbe
         </div>
       </div>
 
-      {/* ===== الديسكتوب: بطاقة كبيرة ===== */}
-      <div className="hidden sm:block">
+      {/* ===== الديسكتوب: بطاقة كبيرة (تُخفى في الوضع المدمج) ===== */}
+      <div className={compact ? "hidden" : "hidden sm:block"}>
         <div className="flex items-center justify-between gap-2 px-4 pt-3.5 text-[11px]">
           <span className="font-semibold text-muted-foreground truncate max-w-[55%]">{round}</span>
           {statusNode}
@@ -596,7 +644,8 @@ function MatchHub({ data, configured, compSlug, onOpen }: {
               ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
               : (
                 <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}
+                  {/* تبويب «النتائج» يبقى صفوفًا مدمجة على كل المقاسات (ديسكتوب كما كان) */}
+                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact={active === "results"} />)}
                 </div>
               )}
         </motion.div>
