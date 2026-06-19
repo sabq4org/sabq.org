@@ -135,6 +135,7 @@ const Personalize = lazy(() => retryImport(() => import("@/pages/onboarding/Pers
 // === LAZY IMPORTS (Muqtarab) ===
 const Muqtarab = lazy(() => retryImport(() => import("@/pages/Muqtarab")));
 const MuqtarabDetail = lazy(() => retryImport(() => import("@/pages/MuqtarabDetail")));
+const MuqtarabWriter = lazy(() => retryImport(() => import("@/pages/MuqtarabWriter")));
 const MuqtarabSubmit = lazy(() => retryImport(() => import("@/pages/MuqtarabSubmit")));
 const TopicDetail = lazy(() => retryImport(() => import("@/pages/TopicDetail")));
 const DashboardMuqtarab = lazy(() => retryImport(() => import("@/pages/dashboard/DashboardMuqtarab")));
@@ -595,6 +596,7 @@ function Router() {
         <Route path="/keyword/:keyword">{() => <LazyRoute component={KeywordPage} />}</Route>
         <Route path="/muqtarab/submit">{() => <LazyRoute component={MuqtarabSubmit} />}</Route>
         <Route path="/muqtarab/:angleSlug/topic/:topicSlug">{() => <LazyRoute component={TopicDetail} />}</Route>
+        <Route path="/muqtarab/writer/:id">{() => <LazyRoute component={MuqtarabWriter} />}</Route>
         <Route path="/muqtarab/:slug">{() => <LazyRoute component={MuqtarabDetail} />}</Route>
         <Route path="/muqtarab">{() => <LazyRoute component={Muqtarab} />}</Route>
         

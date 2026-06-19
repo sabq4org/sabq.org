@@ -9,9 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAngleDetail } from "@/lib/muqtarab";
+import { apiUrl } from "@/lib/queryClient";
 import { ArrowRight, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
+import { formatDate } from "@/lib/format";
 import type { Topic } from "@shared/schema";
 
 function getIconComponent(iconKey: string) {
@@ -41,7 +43,7 @@ export default function MuqtarabDetail() {
   } = useQuery<{ topics: Topic[] }>({
     queryKey: ["/api/muqtarab/angles", slug, "topics"],
     queryFn: async () => {
-      const res = await fetch(`/api/muqtarab/angles/${slug}/topics?limit=10`);
+      const res = await fetch(apiUrl(`/api/muqtarab/angles/${slug}/topics?limit=10`));
       if (!res.ok) throw new Error("Failed to fetch topics");
       return res.json();
     },
@@ -95,8 +97,8 @@ export default function MuqtarabDetail() {
           text: angle.shortDesc || '',
           url: window.location.href,
         });
-      } catch (err) {
-        console.log("Share failed:", err);
+      } catch {
+        // المستخدم ألغى المشاركة أو المتصفح لا يدعمها — تجاهل بصمت
       }
     }
   };
@@ -272,8 +274,8 @@ export default function MuqtarabDetail() {
                 className="flex items-center justify-center gap-3 mb-5"
                 data-testid="writer-byline"
               >
-                {writer.slug ? (
-                  <Link href={`/reporter/${writer.slug}`}>
+                {writer.id ? (
+                  <Link href={`/muqtarab/writer/${writer.id}`}>
                     <Avatar className="h-12 w-12 ring-2 ring-white/30 cursor-pointer hover:ring-white/50 transition-all">
                       {writer.avatar && (
                         <AvatarImage src={writer.avatar} alt={writer.name} className="object-cover" />
@@ -294,8 +296,8 @@ export default function MuqtarabDetail() {
                   </Avatar>
                 )}
                 <div className="text-right">
-                  {writer.slug ? (
-                    <Link href={`/reporter/${writer.slug}`}>
+                  {writer.id ? (
+                    <Link href={`/muqtarab/writer/${writer.id}`}>
                       <a
                         className="font-bold text-lg text-white hover:text-white/90 transition-colors"
                         data-testid="text-writer-name"
@@ -459,13 +461,7 @@ export default function MuqtarabDetail() {
                         data-testid={`text-topic-date-${topic.id}`}
                       >
                         <Calendar className="h-3 w-3" />
-                        <span>
-                          {new Date(topic.publishedAt).toLocaleDateString('ar-SA-u-ca-gregory', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </span>
+                        <span>{formatDate(topic.publishedAt)}</span>
                       </div>
                     )}
                   </CardContent>

@@ -36,9 +36,11 @@ import {
 } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
+import { formatNumber, formatDate } from "@/lib/format";
 import type { Topic, Angle, DisplayComment } from "@shared/schema";
 
 type AngleWriter = {
+  id?: string | null;
   name: string;
   avatar: string | null;
   slug: string | null;
@@ -50,15 +52,6 @@ type TopicDetailResponse = {
   writer: AngleWriter | null;
 };
 
-function formatDate(date: Date | string | null | undefined): string {
-  if (!date) return "";
-  const d = new Date(date);
-  return d.toLocaleDateString("ar-SA-u-ca-gregory", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -146,8 +139,10 @@ function WriterByline({
     </Avatar>
   );
 
-  const nameEl = writer.slug ? (
-    <Link href={`/reporter/${writer.slug}`}>
+  const writerHref = writer.id ? `/muqtarab/writer/${writer.id}` : null;
+
+  const nameEl = writerHref ? (
+    <Link href={writerHref}>
       <a
         className="font-bold text-base text-foreground hover:text-[color:var(--angle)] transition-colors"
         data-testid="text-writer-name"
@@ -163,7 +158,7 @@ function WriterByline({
 
   return (
     <div className="flex items-center gap-3" data-testid="writer-byline">
-      {writer.slug ? <Link href={`/reporter/${writer.slug}`}>{avatar}</Link> : avatar}
+      {writerHref ? <Link href={writerHref}>{avatar}</Link> : avatar}
       <div className="min-w-0">
         {nameEl}
         <p className="text-sm text-muted-foreground" data-testid="text-writer-role">
@@ -798,7 +793,7 @@ export default function TopicDetail() {
                   {viewCount > 0 && (
                     <span className="flex items-center gap-1.5" data-testid="text-view-count">
                       <Eye className="h-4 w-4" />
-                      {viewCount.toLocaleString("ar-EG")} مشاهدة
+                      {formatNumber(viewCount)} مشاهدة
                     </span>
                   )}
                 </div>
@@ -1049,7 +1044,7 @@ export default function TopicDetail() {
                             style={{ backgroundColor: theme.soft, color: theme.color }}
                             aria-hidden="true"
                           >
-                            {(idx + 1).toLocaleString("ar-EG")}
+                            {formatNumber(idx + 1)}
                           </span>
                           <div className="min-w-0">
                             <h3 className="font-semibold text-foreground group-hover:text-[color:var(--angle)] transition-colors line-clamp-2">

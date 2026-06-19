@@ -41,6 +41,7 @@ import {
   buildProfilePageJsonLd,
   reporterProfileUrl,
   muqtarabAngleUrl,
+  muqtarabWriterUrl,
   SABQ_ORG_AR,
   SABQ_ORG_EN,
 } from "../utils/creatorSchema";
@@ -1072,6 +1073,72 @@ const ROUTE_HANDLERS: RouteHandler[] = [
         robots: row.status === "published" ? "index,follow" : "noindex, follow",
         type: "article",
         locale: "ar_SA",
+      };
+    },
+  },
+  // Muqtarab writer profile: /muqtarab/writer/:id
+  // لا بد أن يسبق معالج الزاوية أدناه — نمط الزاوية /muqtarab/([^/]+) يلتقط
+  // "writer" كـ slug، والإرسال يتوقف عند أول نمط مطابق.
+  {
+    pattern: /^\/muqtarab\/writer\/([^/?#]+)/,
+    handle: async (m) => {
+      const id = safeDecode(m[1]);
+      const [w] = await db
+        .select({
+          firstName: users.firstName,
+          lastName: users.lastName,
+          bio: users.bio,
+          image: users.profileImageUrl,
+          staffNameAr: staff.nameAr,
+          staffBioAr: staff.bioAr,
+          staffImage: staff.profileImage,
+        })
+        .from(users)
+        .leftJoin(staff, eq(staff.userId, users.id))
+        .where(eq(users.id, id))
+        .limit(1);
+      if (!w) return null;
+      // كاتب عام فقط إن كان يدير زاوية فعّالة
+      const [activeAngle] = await db
+        .select({ nameAr: angles.nameAr })
+        .from(angles)
+        .where(and(eq(angles.managerUserId, id), eq(angles.isActive, true)))
+        .limit(1);
+      if (!activeAngle) return null;
+      const name =
+        w.staffNameAr ||
+        [w.firstName, w.lastName].filter(Boolean).join(" ") ||
+        "كاتب مُقترب";
+      const description = (
+        w.staffBioAr ||
+        w.bio ||
+        `${name} — كاتب في منصة مُقترب من صحيفة سبق الإلكترونية.`
+      ).slice(0, 220);
+      const canonical = muqtarabWriterUrl(SITE_URL, id);
+      const { absolute: image } = await resolveMuqtarabOgImage(SITE_URL, w.staffImage, w.image);
+      const person = buildPersonJsonLd({
+        name,
+        url: canonical,
+        image,
+        description,
+        jobTitle: "كاتب في مُقترب",
+        worksFor: SABQ_ORG_AR,
+      });
+      return {
+        title: `${name} — كاتب في مُقترب — سبق`,
+        description,
+        image,
+        canonical,
+        robots: "index, follow, max-image-preview:large",
+        type: "profile",
+        locale: "ar_SA",
+        jsonLd: buildProfilePageJsonLd({
+          name,
+          url: canonical,
+          description,
+          image,
+          person,
+        }),
       };
     },
   },

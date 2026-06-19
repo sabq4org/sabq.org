@@ -24,6 +24,7 @@ import deployWebhooksRouter from "./deployWebhooks";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
 import muqtarabAIRouter from "./muqtarabAI";
+import muqtarabWriterRouter from "./muqtarabWriter";
 import { registerAnnouncementRoutes } from "./announcements";
 import { registerAudioBriefRoutes } from "./audioBriefs";
 import { registerShortsRoutes } from "./shorts";
@@ -72,6 +73,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
   app.use(muqtarabAIRouter);
+  app.use(muqtarabWriterRouter);
   registerAnnouncementRoutes(app);
   registerAudioBriefRoutes(app);
   registerShortsRoutes(app);
