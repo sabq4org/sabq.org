@@ -41,7 +41,6 @@ import {
   Star,
   Bell,
   BellOff,
-  History,
   Target,
   Medal,
   Check,
@@ -135,8 +134,9 @@ interface SpLeaderboardEntry { userId: string; name: string; avatar: string | nu
 // ============================================================
 // أدوات
 // ============================================================
-const dayFmt = new Intl.DateTimeFormat("ar-SA", { weekday: "short", day: "numeric", month: "long" });
-const timeFmt = new Intl.DateTimeFormat("ar-SA", { hour: "2-digit", minute: "2-digit", hour12: true });
+// نستخدم أرقامًا لاتينية (7675) في كل التواريخ والأوقات عبر -u-nu-latn.
+const dayFmt = new Intl.DateTimeFormat("ar-SA-u-nu-latn", { weekday: "short", day: "numeric", month: "long" });
+const timeFmt = new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "2-digit", minute: "2-digit", hour12: true });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
 const fmtTime = (ts: number) => timeFmt.format(new Date(ts * 1000));
 
@@ -292,7 +292,7 @@ function TeamFollowControls({ refId, refName, refLogo }: {
 
 // لوحة «متابعاتي» — شريط أفقي لفِرقك المتابَعة، مع إبراز من يلعب اليوم/مباشرة.
 function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; onOpen: (id: number) => void }) {
-  const { isAuthed, follows } = useSportsFollows();
+  const { isAuthed, follows, toggle } = useSportsFollows();
   const teamFollows = follows.filter((f) => f.kind === "team");
   if (!isAuthed || teamFollows.length === 0) return null;
 
@@ -311,93 +311,41 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
           {teamFollows.map((f) => {
             const m = matchOf(f.refId);
             const live = m?.status.live ?? false;
-            const inner = (
-              <span className={`snap-start shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors ${live ? "border-red-500/40 bg-red-500/5" : "border-border bg-background hover:border-primary/40"}`}>
-                {f.refLogo ? (
-                  <img src={f.refLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-muted shrink-0" />
-                )}
-                <span className="text-sm font-bold whitespace-nowrap text-foreground">{f.refName}</span>
+            return (
+              <span key={f.id} className={`snap-start shrink-0 inline-flex items-center gap-2 rounded-full border ps-3 pe-1.5 py-1.5 transition-colors ${live ? "border-red-500/40 bg-red-500/5" : "border-border bg-background hover:border-primary/40"}`}>
                 {m ? (
-                  live ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      {m.status.elapsed != null ? `${m.status.elapsed}'` : "مباشر"}
-                    </span>
-                  ) : m.status.finished ? (
-                    <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
-                  ) : (
-                    <span className="text-[10px] font-bold tabular-nums text-primary">{fmtTime(m.timestamp)}</span>
-                  )
-                ) : null}
+                  <button type="button" onClick={() => onOpen(m.id)} className="inline-flex items-center gap-2 min-w-0">
+                    {f.refLogo ? <img src={f.refLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" /> : <span className="w-5 h-5 rounded-full bg-muted shrink-0" />}
+                    <span className="text-sm font-bold whitespace-nowrap text-foreground">{f.refName}</span>
+                    {live ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        {m.status.elapsed != null ? `${m.status.elapsed}'` : "مباشر"}
+                      </span>
+                    ) : m.status.finished ? (
+                      <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
+                    ) : (
+                      <span className="text-[10px] font-bold tabular-nums text-primary">{fmtTime(m.timestamp)}</span>
+                    )}
+                  </button>
+                ) : (
+                  <Link href={`/sports2/team/${f.refId}`} className="inline-flex items-center gap-2 min-w-0">
+                    {f.refLogo ? <img src={f.refLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" /> : <span className="w-5 h-5 rounded-full bg-muted shrink-0" />}
+                    <span className="text-sm font-bold whitespace-nowrap text-foreground">{f.refName}</span>
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); void toggle("team", f.refId, f.refName, f.refLogo); }}
+                  title={`إلغاء متابعة ${f.refName}`}
+                  aria-label={`إلغاء متابعة ${f.refName}`}
+                  className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </span>
             );
-            return m ? (
-              <button key={f.id} type="button" onClick={() => onOpen(m.id)}>{inner}</button>
-            ) : (
-              <Link key={f.id} href={`/sports2/team/${f.refId}`}>{inner}</Link>
-            );
           })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// يوم نسبي مختصر بالعربية: اليوم / أمس / قبل n أيام / تاريخ قصير.
-function relDay(ts: number): string {
-  const now = new Date();
-  const d = new Date(ts * 1000);
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const diffDays = Math.round((startToday - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
-  if (diffDays <= 0) return "اليوم";
-  if (diffDays === 1) return "أمس";
-  if (diffDays < 7) return `قبل ${diffDays} أيام`;
-  return new Intl.DateTimeFormat("ar-SA-u-nu-latn", { day: "numeric", month: "short" }).format(d);
-}
-
-// لوحة «ما فاتك» — آخر نتائج الفِرق المتابَعة (شخصنة)؛ للمستخدم المسجَّل المتابِع فقط.
-function MissedResultsBoard({ onOpen }: { onOpen: (id: number) => void }) {
-  const { user } = useAuth();
-  const { data } = useQuery<{ results: SpLiveItem[] }>({
-    queryKey: ["/api/sports/digest"],
-    enabled: !!user,
-    staleTime: 5 * 60_000,
-  });
-  const results = Array.isArray(data?.results) ? data!.results : [];
-  if (!user || results.length === 0) return null;
-
-  const teamMini = (t: SpTeam) => (
-    <span className="flex-1 flex items-center gap-1.5 min-w-0">
-      {t.logo ? <img src={t.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" /> : <span className="w-5 h-5 rounded-full bg-muted shrink-0" />}
-      <span className="text-xs font-semibold truncate text-foreground">{t.name}</span>
-    </span>
-  );
-
-  return (
-    <div className="border-b border-border bg-card">
-      <div className="max-w-6xl mx-auto px-4 py-3.5">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
-          <History className="w-3.5 h-3.5 text-primary" />
-          ما فاتك · نتائج فِرقك
-        </div>
-        <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 snap-x scrollbar-hide">
-          {results.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onOpen(m.id)}
-              className="snap-start shrink-0 w-60 rounded-xl border border-border bg-background p-3 text-right hover:border-primary/40 transition-colors"
-            >
-              <div className="text-[10px] text-muted-foreground mb-2 truncate">{m.competition} · {relDay(m.timestamp)}</div>
-              <div className="flex items-center gap-2">
-                {teamMini(m.home)}
-                <span className="text-sm font-black tabular-nums text-foreground shrink-0" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
-                {teamMini(m.away)}
-              </div>
-            </button>
-          ))}
         </div>
       </div>
     </div>
@@ -1325,7 +1273,7 @@ function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: numb
   const s = h2h.summary;
   const fmt = (d: string) => {
     const t = Date.parse(d);
-    return Number.isFinite(t) ? new Intl.DateTimeFormat("ar-SA", { year: "numeric", month: "short", day: "numeric" }).format(t) : "";
+    return Number.isFinite(t) ? new Intl.DateTimeFormat("ar-SA-u-nu-latn", { year: "numeric", month: "short", day: "numeric" }).format(t) : "";
   };
   return (
     <div>
@@ -1574,6 +1522,9 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     refetchInterval: (q) => (q.state.data?.fixture?.status?.live ? 15_000 : false),
   });
   const [tab, setTab] = useState("events");
+  // المعاينة بالذكاء الاصطناعي عند الطلب فقط (لا تتولّد تلقائيًا عند فتح المباراة).
+  const [previewRequested, setPreviewRequested] = useState(false);
+  useEffect(() => { setPreviewRequested(false); setTab("events"); }, [id]);
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
@@ -1583,11 +1534,11 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
   });
-  // المرحلة 2 (ذكاء): المعاينة تُجلب تلقائيًا للمباريات المرتقبة (محتواها الأساسي)،
-  // والسرد يُجلب بكسل عند فتح تبويبه فقط (يضبط تكلفة التوليد).
+  // المرحلة 2 (ذكاء): المعاينة والسرد يُولّدان عند طلب المستخدم فقط (تبويبهما +
+  // ضغط زر التوليد) — لتفادي توليد آلي مكلف عند كل فتح للمباراة.
   const { data: preview, isLoading: previewLoading } = useQuery<SpMatchPreview>({
     queryKey: [`/api/sports/match/${id}/preview`],
-    enabled: id != null && isUpcoming,
+    enabled: id != null && isUpcoming && tab === "preview" && previewRequested,
     staleTime: 30 * 60_000,
   });
   const { data: story, isLoading: storyLoading } = useQuery<SpMatchStory>({
@@ -1688,7 +1639,7 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
             ))}
           </div>
         )}
-        <div className="overflow-y-auto p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (
             <>
@@ -1713,7 +1664,18 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
             </>
           )}
           {!isLoading && activeKey === "preview" && (
-            <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
+            previewRequested ? (
+              <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
+            ) : (
+              <div className="py-8 text-center">
+                <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
+                <p className="text-sm text-muted-foreground mb-4">معاينة ذكية تحلّل الفريقين وتوقّع مجريات المباراة قبل انطلاقها.</p>
+                <button type="button" onClick={() => setPreviewRequested(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
+                  <Sparkles className="w-4 h-4" /> ولّد المعاينة بالذكاء الاصطناعي
+                </button>
+              </div>
+            )
           )}
           {!isLoading && activeKey === "story" && (
             <AiNarrative loading={storyLoading} text={story?.text} kind="story" live={story?.live} />
@@ -2144,9 +2106,6 @@ export default function SportsHub() {
 
         {/* ===== متابعاتي (شخصنة) — فوق كل شيء للمستخدم المسجَّل المتابِع ===== */}
         <MyFollowsBoard todayMatches={todayMatches} onOpen={setOpenMatch} />
-
-        {/* ===== ما فاتك · نتائج فِرقك (شخصنة) ===== */}
-        <MissedResultsBoard onOpen={setOpenMatch} />
 
         {/* ===== مباريات اليوم · كل البطولات (نظرة سريعة فوق الأخبار) ===== */}
         <TodayMatchesBoard items={todayMatches} onOpen={setOpenMatch} />

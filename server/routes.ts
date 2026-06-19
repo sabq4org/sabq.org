@@ -18841,13 +18841,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
       if (req.query.read === 'true') read = true;
       else if (req.query.read === 'false') read = false;
       
+      // مركز إشعارات الويب لا يعرض إشعارات نشر المقالات التحريرية (التي يُدخلها
+      // المحررون في لوحة التحكم) — يبقى مركزًا للإشعارات الشخصية/التفاعلية فقط
+      // (الرياضة، التوصيات، الردود…). الموبايل غير متأثّر (مساره منفصل).
+      const EDITORIAL_NOTIFICATION_TYPES = [
+        "ArticlePublished",
+        "ReporterArticlePublished",
+        "BreakingNews",
+        "FeaturedArticle",
+      ];
+
       // Get notifications from storage
       const result = await storage.getNotifications(userId, {
         read,
         limit,
         offset,
+        excludeTypes: EDITORIAL_NOTIFICATION_TYPES,
       });
-      
+
       res.json(result);
     } catch (error) {
       console.error("Error fetching notifications:", error);
