@@ -62,7 +62,18 @@ const router = Router();
 // Keeping it in its own bounded bucket lets the per-path churn self-evict here
 // without starving the shared cache. These keys are never pattern-invalidated
 // (they only expire by TTL), so isolation changes no invalidation behavior.
-const edgeRedirectCache = new MemoryCache(5000, "edgeSlugRedirectCache");
+//
+// Cap = 50k (was 5k): once isRedirectCandidate() filters out the random crawler
+// 404 probes, the residual cardinality is LEGITIMATE traffic — one negative
+// {redirect:null} entry per distinct published /article/<slug> viewed inside the
+// 5-min negative TTL window. On a high-traffic news site that routinely exceeds
+// 5k distinct article URLs per window, which pinned the old bucket at its cap and
+// produced the recurring "[Cache] edgeSlugRedirectCache hit the cap" warning
+// (and evicted still-hot redirect decisions, forcing needless DB re-probes).
+// Each entry is a tiny {redirect, gone} object (<100 B), so 50k is a few MB —
+// cheap insurance against that churn. Tune via EDGE_REDIRECT_CACHE_MAX if needed.
+const EDGE_REDIRECT_CACHE_MAX = Number(process.env.EDGE_REDIRECT_CACHE_MAX) || 50_000;
+const edgeRedirectCache = new MemoryCache(EDGE_REDIRECT_CACHE_MAX, "edgeSlugRedirectCache");
 // `users` joined twice (staff author + chosen reporter) — mirror seoInjector.ts.
 const reporterUsers = aliasedTable(users, "reporter_user");
 const reporterStaff = aliasedTable(staff, "reporter_staff");

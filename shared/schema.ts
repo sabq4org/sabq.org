@@ -4239,6 +4239,7 @@ export const audioNewsletters = pgTable("audio_newsletters", {
   metadata: jsonb("metadata").$type<{
     retryCount?: number;
     lastRetryAt?: string;
+    abandonedAt?: string; // set when retries are exhausted (status → failed_permanent)
     isRecurring?: boolean;
     recurrencePattern?: string; // cron pattern
     nextRecurrenceDate?: string;

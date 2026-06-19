@@ -379,7 +379,23 @@ async function processFailedJobs() {
         // Add to queue with low priority
         audioNewsletterQueue.addJob(newsletter.id, 'low');
       } else {
-        console.log(`Newsletter ${newsletter.id} exceeded max retries (${maxRetries})`);
+        // Terminal state: move out of 'failed' so the next sweep stops
+        // re-selecting (and re-logging) the same exhausted rows every run. The
+        // old code left them as 'failed' forever, so a backlog of permanently
+        // failed newsletters (116 in production) was re-queried + logged on
+        // every 15-min run — pure waste. 'failed_permanent' is excluded from the
+        // status='failed' query below; surface them in the dashboard if needed.
+        console.log(`Newsletter ${newsletter.id} exceeded max retries (${maxRetries}) — marking failed_permanent`);
+        await db.update(audioNewsletters)
+          .set({
+            status: 'failed_permanent',
+            metadata: {
+              ...newsletter.metadata,
+              abandonedAt: new Date().toISOString(),
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(audioNewsletters.id, newsletter.id));
       }
     }
   } catch (error) {
