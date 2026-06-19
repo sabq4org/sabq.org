@@ -164,72 +164,63 @@ const moreLink = (href: string, label = "عرض الكل") => (
 );
 
 // ============================================================
-// شريط نتائج اليوم (تمرير أفقي هادئ — بلا حركة تلقائية)
+// لوحة «مباريات اليوم · كل البطولات» — نظرة سريعة موحّدة أعلى الصفحة:
+// كل مباريات الأندية السعودية اليوم عبر جميع بطولاتنا (مقرّرة/جارية/منتهية)،
+// مع اسم البطولة لكل مباراة والجارية مُبرَزة — مستقلّة عن البطولة المختارة.
+// تُخفى تمامًا إن لا مباريات اليوم.
 // ============================================================
-function LiveScoreStrip({ fixtures, onOpen }: { fixtures: SpFixture[]; onOpen: (id: number) => void }) {
-  if (fixtures.length === 0) return null;
+function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
+  if (items.length === 0) return null;
+  const liveCount = items.filter((f) => f.status.live).length;
   return (
     <div className="border-b border-border bg-card">
       <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-muted-foreground">
-          <CalendarDays className={`w-3.5 h-3.5 ${ACCENT}`} />
-          مباريات ونتائج اليوم
+        <div className="flex items-center gap-2 mb-2">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+            <CalendarDays className={`w-3.5 h-3.5 ${ACCENT}`} />
+            مباريات اليوم · كل البطولات
+            <span className="text-muted-foreground font-medium">({items.length})</span>
+          </span>
+          {liveCount > 0 && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {liveCount} مباشر الآن
+            </span>
+          )}
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
-          {fixtures.map((f) => {
+          {items.map((f) => {
             const decided = f.status.live || f.status.finished;
             return (
               <button
                 key={f.id}
                 onClick={() => onOpen(f.id)}
-                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-background border border-border px-3 py-2 hover:border-primary/50 transition-colors"
+                className={`shrink-0 rounded-xl bg-background border px-3 py-2 transition-colors text-right min-w-[11rem] ${
+                  f.status.live ? "border-red-500/40 hover:border-red-500/70" : "border-border hover:border-primary/50"
+                }`}
               >
-                {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
-                {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain" loading="lazy" />}
-                <span className="text-sm font-bold text-foreground tabular-nums">
-                  {decided ? `${f.goals.home ?? 0}-${f.goals.away ?? 0}` : fmtTime(f.timestamp)}
-                </span>
-                {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain" loading="lazy" />}
-                <span className="text-[10px] text-muted-foreground font-medium">
-                  {f.status.live ? `${f.status.elapsed ?? ""}'` : f.status.finished ? "انتهت" : ""}
-                </span>
+                <div className="flex items-center gap-1 mb-1">
+                  {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
+                  <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+                  <span className="flex-1 truncate text-xs font-semibold text-foreground">{f.home.name}</span>
+                  <span className="shrink-0 text-sm font-black text-foreground tabular-nums px-1">
+                    {decided ? `${f.goals.home ?? 0}-${f.goals.away ?? 0}` : fmtTime(f.timestamp)}
+                  </span>
+                  <span className="flex-1 truncate text-xs font-semibold text-foreground text-left">{f.away.name}</span>
+                  {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+                </div>
+                <div className={`text-[10px] mt-1 text-center font-bold ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+                  {f.status.live
+                    ? `${f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label}`
+                    : f.status.finished
+                    ? "انتهت"
+                    : `تنطلق ${fmtTime(f.timestamp)}`}
+                </div>
               </button>
             );
           })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// لوحة مباشرة شاملة — كل مباريات الأندية السعودية المباشرة عبر كل البطولات،
-// مستقلّة عن البطولة المختارة. تظهر فقط عند وجود مباراة مباشرة الآن.
-function GlobalLiveBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="border-b border-border bg-gradient-to-l from-red-500/10 to-transparent">
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-red-600 dark:text-red-400">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          مباشر الآن · كل البطولات
-          <span className="text-muted-foreground font-medium">({items.length})</span>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
-          {items.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => onOpen(f.id)}
-              className="shrink-0 rounded-xl bg-background border border-red-500/30 px-3 py-2 hover:border-red-500/60 transition-colors text-right min-w-[10rem]"
-            >
-              <div className="text-[10px] text-muted-foreground font-medium mb-1 truncate">{f.competition}</div>
-              <div className="flex items-center gap-2">
-                <span className="flex-1 truncate text-xs font-semibold text-foreground">{f.home.name}</span>
-                <span className="shrink-0 text-sm font-black text-foreground tabular-nums px-1">{f.goals.home ?? 0}-{f.goals.away ?? 0}</span>
-                <span className="flex-1 truncate text-xs font-semibold text-foreground text-left">{f.away.name}</span>
-              </div>
-              <div className="text-[10px] font-bold text-red-500 mt-1 text-center">{f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label}</div>
-            </button>
-          ))}
         </div>
       </div>
     </div>
@@ -1357,14 +1348,12 @@ export default function SportsHub() {
     upcoming: Array.isArray(matchesData?.upcoming) ? matchesData!.upcoming : [],
     results: Array.isArray(matchesData?.results) ? matchesData!.results : [],
   };
-  const tickerFixtures = [...matches.live, ...matches.today].slice(0, 16);
-
-  // لوحة مباشرة شاملة عبر كل البطولات (مستقلّة عن البطولة المختارة).
-  const { data: globalLiveData } = useQuery<{ live: SpLiveItem[] }>({
-    queryKey: ["/api/sports/live"], refetchInterval: 20_000, refetchIntervalInBackground: false,
+  // مباريات اليوم عبر كل البطولات (مستقلّة عن البطولة المختارة) — نظرة سريعة أعلى الصفحة.
+  const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
+    queryKey: ["/api/sports/today"], refetchInterval: 30_000, refetchIntervalInBackground: false,
   });
-  const globalLive = Array.isArray(globalLiveData?.live) ? globalLiveData!.live : [];
-  const liveCount = globalLive.length;
+  const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
+  const liveCount = todayMatches.filter((f) => f.status.live).length;
 
   const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({ queryKey: [`/api/sports/${compSlug}/standings`], staleTime: 5 * 60_000, enabled: hasStandings });
   const standings = Array.isArray(standingsData?.standings) ? standingsData.standings : [];
@@ -1443,11 +1432,8 @@ export default function SportsHub() {
           </div>
         </nav>
 
-        {/* ===== لوحة مباشرة شاملة لكل البطولات ===== */}
-        <GlobalLiveBoard items={globalLive} onOpen={setOpenMatch} />
-
-        {/* ===== شريط نتائج اليوم ===== */}
-        {matchesConfigured && tickerFixtures.length > 0 && <LiveScoreStrip fixtures={tickerFixtures} onOpen={setOpenMatch} />}
+        {/* ===== مباريات اليوم · كل البطولات (نظرة سريعة فوق الأخبار) ===== */}
+        <TodayMatchesBoard items={todayMatches} onOpen={setOpenMatch} />
 
         <div className="max-w-6xl mx-auto px-4 py-12 space-y-16 sm:space-y-20">
           {/* ===== الأخبار ===== */}

@@ -37,6 +37,7 @@ const TIMEZONE = "Asia/Riyadh";
 
 const LIVE_TTL = 15 * 1000;
 const FIXTURES_TTL = 60 * 1000;
+const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
 const MATCH_DETAIL_TTL = 20 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
 const ROUNDS_TTL = 30 * 60 * 1000; // قائمة الجولات تتغيّر نادرًا
@@ -282,6 +283,38 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
         return { ...localizeFixture(r), competition: comp.name, competitionSlug: comp.slug };
       })
       .sort((a, b) => a.timestamp - b.timestamp);
+  });
+}
+
+/** مفتاح يوم بتوقيت الرياض (YYYY-MM-DD) — لتحديد نطاق "اليوم" محليًا بدقة. */
+const riyadhDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * كل مباريات الأندية السعودية اليوم عبر جميع بطولاتنا — في نداء واحد
+ * (fixtures?date=اليوم عالمي ثم نُرشّح على معرّفات بطولاتنا). تشمل المقرّرة
+ * والجارية والمنتهية اليوم، مرتّبة: الجارية أولًا ثم الأقرب موعدًا — لنظرة
+ * سريعة موحّدة أعلى الصفحة بصرف النظر عن البطولة المختارة.
+ */
+export async function getGlobalTodayFixtures(): Promise<SplLiveBoardItem[]> {
+  const dateKey = riyadhDayFmt.format(new Date());
+  return withSWR(`spl:today:${dateKey}`, TODAY_TTL, TODAY_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { date: dateKey, timezone: TIMEZONE });
+    const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
+    return rows
+      .filter((r: any) => byId.has(r.league?.id))
+      .map((r: any): SplLiveBoardItem => {
+        const comp = byId.get(r.league.id)!;
+        return { ...localizeFixture(r), competition: comp.name, competitionSlug: comp.slug };
+      })
+      .sort((a, b) => {
+        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
+        return a.timestamp - b.timestamp;
+      });
   });
 }
 

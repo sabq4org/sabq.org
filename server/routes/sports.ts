@@ -18,6 +18,7 @@ import {
   getFixturePrediction,
   getFixturesByRound,
   getGlobalLiveFixtures,
+  getGlobalTodayFixtures,
   getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
@@ -141,6 +142,24 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] global live failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
+    }
+  });
+
+  // مباريات اليوم عبر كل البطولات السعودية (مقرّرة/جارية/منتهية) مع اسم البطولة
+  // لكل مباراة — نظرة سريعة موحّدة أعلى الصفحة، مستقلّة عن البطولة المختارة.
+  app.get("/api/sports/today", async (_req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+      res.json({ configured: false, today: [] });
+      return;
+    }
+    try {
+      const today = await getGlobalTodayFixtures();
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+      res.json({ configured: true, today });
+    } catch (error) {
+      console.error("[Sports] global today failed:", error);
+      res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
     }
   });
 
