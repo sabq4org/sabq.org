@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
 import { HeroSection } from "@/components/worldcup/HeroSection";
+import { KnockoutBracket } from "@/components/worldcup/KnockoutBracket";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { MatchesSection } from "@/components/worldcup/MatchesSection";
 import { NewsSection } from "@/components/worldcup/NewsSection";
@@ -84,6 +85,7 @@ export default function WorldCup() {
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <PredictionsCTA />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
+        <KnockoutBracket fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <ScorersSection
           scorers={scorers}
           isLoading={scorersLoading}
