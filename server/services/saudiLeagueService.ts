@@ -9,6 +9,7 @@
  * من طلب واحد للمزود.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import { aiManager, AI_MODELS } from "../ai-manager";
 import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
@@ -1692,4 +1693,124 @@ export function getTopYellowCards(comp: SaudiCompetition): Promise<SplCardLeader
 
 export function getTopRedCards(comp: SaudiCompetition): Promise<SplCardLeader[]> {
   return getCardLeaders(comp, "red");
+}
+
+// ============================================================
+// المرحلة 2 (الذكاء): سرد المباراة + معاينة ما قبل المباراة
+// نولّد نصًّا عربيًا عبر aiManager من البيانات الوقائعية المجلوبة أصلًا، خلف
+// كاش SWR: توليد واحد يخدم كل الزوار خلال نافذة الكاش (يضبط التكلفة والكمون).
+// النموذج يُمنع صراحةً من اختلاق أي معلومة غير معطاة.
+// ============================================================
+
+const STORY_LIVE_TTL = 60 * 1000; // المباراة جارية: تتجدد كل دقيقة مع الأحداث
+const STORY_FT_TTL = 24 * 60 * 60 * 1000; // المباراة انتهت: السرد ثابت
+const PREVIEW_TTL = 30 * 60 * 1000;
+
+export interface SplMatchStory {
+  text: string;
+  generatedAt: number;
+  live: boolean;
+}
+
+export interface SplMatchPreview {
+  text: string;
+  generatedAt: number;
+}
+
+/**
+ * سرد صحفي عربي موجز للمباراة (جارية/منتهية) من أحداثها وإحصائياتها. يرجع null
+ * قبل انطلاق المباراة أو إن تعذّر التوليد. مخزَّن: 1د للجارية، 24س للمنتهية.
+ */
+export async function generateMatchStory(fixtureId: number): Promise<SplMatchStory | null> {
+  const detail = await getMatchDetail(fixtureId);
+  if (!detail) return null;
+  const fx = detail.fixture;
+  if (!fx.status.live && !fx.status.finished) return null; // لا سرد قبل البداية
+  const live = fx.status.live;
+  const ttl = live ? STORY_LIVE_TTL : STORY_FT_TTL;
+
+  return withSWR(`spl:story:${fixtureId}:${live ? "live" : "ft"}`, ttl, ttl * 2, async () => {
+    const lines: string[] = [];
+    lines.push(`المباراة: ${fx.home.name} (المضيف) ضد ${fx.away.name}`);
+    if (fx.round) lines.push(`البطولة/الجولة: ${fx.round}`);
+    if (fx.venue.name) lines.push(`الملعب: ${fx.venue.name}${fx.venue.city ? ` - ${fx.venue.city}` : ""}`);
+    lines.push(live ? `الحالة: جارية — الدقيقة ${fx.status.elapsed ?? ""}` : "الحالة: انتهت");
+    lines.push(`النتيجة: ${fx.home.name} ${fx.goals.home ?? 0} - ${fx.goals.away ?? 0} ${fx.away.name}`);
+    if (detail.events.length > 0) {
+      lines.push("الأحداث بالترتيب:");
+      for (const e of detail.events) {
+        const min = e.minute != null ? `${e.minute}'${e.extra ? `+${e.extra}` : ""}` : "";
+        lines.push(`- ${min} ${e.label} | ${e.player}${e.assist ? ` (صناعة ${e.assist})` : ""} | ${e.team}`);
+      }
+    }
+    if (detail.statistics) {
+      const keys = ["Ball Possession", "Total Shots", "Shots on Goal", "Corner Kicks", "expected_goals"];
+      const picked = detail.statistics.rows.filter((r) => keys.includes(r.type));
+      if (picked.length > 0) {
+        lines.push(`إحصاءات مختارة (${fx.home.name} / ${fx.away.name}):`);
+        for (const r of picked) lines.push(`- ${r.label}: ${r.home ?? "-"} / ${r.away ?? "-"}`);
+      }
+    }
+
+    const prompt = `أنت محرّر رياضي في صحيفة «سبق». اكتب تقريرًا صحفيًا موجزًا بالعربية الفصحى عن هذه المباراة اعتمادًا حصريًا على الوقائع التالية، دون اختلاق أي معلومة غير مذكورة ودون تحيّز. ${live ? "المباراة ما زالت جارية فاكتب بصيغة الحاضر وبما حدث حتى الآن." : "المباراة انتهت فاكتب بصيغة الماضي."} فقرة أو فقرتان (٩٠-١٦٠ كلمة)، نصًّا متّصلًا دون عناوين أو نقاط أو رموز.\n\nالوقائع:\n${lines.join("\n")}`;
+
+    try {
+      const res = await aiManager.generate(prompt, { ...AI_MODELS.GPT_5_1, maxTokens: 700 });
+      const text = (res.content || "").trim();
+      if (!text) return null;
+      return { text, generatedAt: Date.now(), live };
+    } catch (error) {
+      console.error("[SaudiLeague] match story AI failed:", error);
+      return null;
+    }
+  });
+}
+
+/**
+ * معاينة عربية موجزة لمباراة مرتقبة من المواجهات السابقة والترجيحات. يرجع null
+ * إن بدأت المباراة أو انتهت أو تعذّر التوليد. مخزَّنة 30 دقيقة.
+ */
+export async function generateMatchPreview(fixtureId: number): Promise<SplMatchPreview | null> {
+  const detail = await getMatchDetail(fixtureId);
+  if (!detail) return null;
+  const fx = detail.fixture;
+  if (fx.status.live || fx.status.finished) return null; // معاينة قبل البداية فقط
+
+  return withSWR(`spl:preview:${fixtureId}`, PREVIEW_TTL, PREVIEW_TTL * 2, async () => {
+    const [h2h, prediction] = await Promise.all([
+      getHeadToHead(fx.home.id, fx.away.id).catch(() => null),
+      getFixturePrediction(fixtureId).catch(() => null),
+    ]);
+
+    const lines: string[] = [];
+    lines.push(`المباراة المرتقبة: ${fx.home.name} (المضيف) ضد ${fx.away.name}`);
+    if (fx.round) lines.push(`البطولة/الجولة: ${fx.round}`);
+    if (fx.venue.name) lines.push(`الملعب: ${fx.venue.name}${fx.venue.city ? ` - ${fx.venue.city}` : ""}`);
+    if (h2h?.summary && h2h.summary.total > 0) {
+      lines.push(`المواجهات السابقة (${h2h.summary.total}): فوز ${fx.home.name} ${h2h.summary.homeWins}، تعادل ${h2h.summary.draws}، فوز ${fx.away.name} ${h2h.summary.awayWins}`);
+    }
+    if (h2h?.meetings?.length) {
+      lines.push("آخر اللقاءات:");
+      for (const m of h2h.meetings.slice(0, 5)) {
+        if (m.goals.home == null || m.goals.away == null) continue;
+        lines.push(`- ${m.home.name} ${m.goals.home} - ${m.goals.away} ${m.away.name}`);
+      }
+    }
+    if (prediction) {
+      lines.push(`الترجيحات: فوز ${fx.home.name} ${prediction.homePct}%، تعادل ${prediction.drawPct}%، فوز ${fx.away.name} ${prediction.awayPct}%`);
+      if (prediction.advice) lines.push(`توصية المزوّد: ${prediction.advice}`);
+    }
+
+    const prompt = `أنت محرّر رياضي في صحيفة «سبق». اكتب معاينة تشويقية موجزة بالعربية الفصحى لهذه المباراة المرتقبة اعتمادًا حصريًا على المعطيات التالية دون اختلاق أي معلومة غير مذكورة. اذكر سياق اللقاء وأبرز ما يُنتظر فيه. فقرة أو فقرتان (٩٠-١٥٠ كلمة)، نصًّا متّصلًا دون عناوين أو نقاط أو رموز.\n\nالمعطيات:\n${lines.join("\n")}`;
+
+    try {
+      const res = await aiManager.generate(prompt, { ...AI_MODELS.GPT_5_1, maxTokens: 600 });
+      const text = (res.content || "").trim();
+      if (!text) return null;
+      return { text, generatedAt: Date.now() };
+    } catch (error) {
+      console.error("[SaudiLeague] match preview AI failed:", error);
+      return null;
+    }
+  });
 }

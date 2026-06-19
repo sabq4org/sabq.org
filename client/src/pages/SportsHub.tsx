@@ -35,6 +35,7 @@ import {
   Crown,
   Hand,
   Square,
+  Sparkles,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -98,6 +99,8 @@ interface SpMatchRatings {
   motm: { id: number; name: string; team: string; rating: number } | null;
   players: SpMatchRatingPlayer[];
 }
+interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
+interface SpMatchPreview { text: string; generatedAt: number; }
 type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
 interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
 const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
@@ -1193,6 +1196,34 @@ function MatchTimeline({ events, homeId }: { events: SpMatchEvent[]; homeId: num
   );
 }
 
+// عرض النص المولّد بالذكاء الاصطناعي (السرد/المعاينة) مع شارة ووسم إخلاء مسؤولية.
+function AiNarrative({ loading, text, kind, live }: {
+  loading: boolean; text?: string; kind: "story" | "preview"; live?: boolean;
+}) {
+  const noun = kind === "story" ? "الملخّص" : "المعاينة";
+  if (loading) {
+    return (
+      <div className="py-10 flex flex-col items-center gap-2 text-muted-foreground text-sm">
+        <Sparkles className="w-5 h-5 animate-pulse text-primary" />
+        جارٍ توليد {noun} بالذكاء الاصطناعي…
+      </div>
+    );
+  }
+  if (!text) {
+    return <div className="py-8 text-center text-muted-foreground text-sm">تعذّر توليد {noun} حاليًا.</div>;
+  }
+  return (
+    <div>
+      <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary">
+        <Sparkles className="w-3.5 h-3.5" />
+        {kind === "story" ? (live ? "سرد لحظي بالذكاء الاصطناعي" : "ملخّص بالذكاء الاصطناعي") : "معاينة بالذكاء الاصطناعي"}
+      </div>
+      <p className="text-sm leading-7 text-foreground whitespace-pre-line">{text}</p>
+      <p className="mt-3 text-[10px] text-muted-foreground">وُلِّد آليًا اعتمادًا على بيانات المباراة — قد يحتاج لمراجعة.</p>
+    </div>
+  );
+}
+
 function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -1202,10 +1233,24 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
+  const startedNow = !!fixtureStatus && (fixtureStatus.live || fixtureStatus.finished);
   const { data: prediction } = useQuery<SpPrediction>({
     queryKey: [`/api/sports/match/${id}/prediction`],
     enabled: id != null && isUpcoming,
     staleTime: 5 * 60_000,
+  });
+  // المرحلة 2 (ذكاء): المعاينة تُجلب تلقائيًا للمباريات المرتقبة (محتواها الأساسي)،
+  // والسرد يُجلب بكسل عند فتح تبويبه فقط (يضبط تكلفة التوليد).
+  const { data: preview, isLoading: previewLoading } = useQuery<SpMatchPreview>({
+    queryKey: [`/api/sports/match/${id}/preview`],
+    enabled: id != null && isUpcoming,
+    staleTime: 30 * 60_000,
+  });
+  const { data: story, isLoading: storyLoading } = useQuery<SpMatchStory>({
+    queryKey: [`/api/sports/match/${id}/story`],
+    enabled: id != null && startedNow && tab === "story",
+    refetchInterval: (q) => (q.state.data?.live ? 60_000 : false),
+    staleTime: 60_000,
   });
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
@@ -1244,7 +1289,9 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
   const lineups = Array.isArray(data?.lineups) ? data!.lineups : [];
   const started = !!fx && (fx.status.finished || fx.status.live);
   const tabs = [
+    isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
+    started ? { key: "story", label: "ملخّص ذكي" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
@@ -1317,6 +1364,12 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
               })}
             </ul>
             </>
+          )}
+          {!isLoading && activeKey === "preview" && (
+            <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
+          )}
+          {!isLoading && activeKey === "story" && (
+            <AiNarrative loading={storyLoading} text={story?.text} kind="story" live={story?.live} />
           )}
           {!isLoading && activeKey === "stats" && stats && (() => {
             // استخراج الاستحواذ لعرضه كشريط بارز بالأعلى، وبقية الإحصاءات تحته.

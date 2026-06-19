@@ -12,6 +12,8 @@
  */
 import type { Express, Request, Response } from "express";
 import {
+  generateMatchPreview,
+  generateMatchStory,
   getCompetition,
   getCompetitionRounds,
   getFixtures,
@@ -537,6 +539,58 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // المرحلة 2 (ذكاء): سرد المباراة آليًا بالعربية (جارية/منتهية). lazy — تُستدعى
+  // عند فتح تبويب «الملخّص الذكي». التوليد خلف كاش SWR فلا يتكرّر لكل زائر.
+  app.get("/api/sports/match/:id/story", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const story = await generateMatchStory(id);
+      if (!story) {
+        res.status(404).json({ message: "لا يتوفّر ملخّص لهذه المباراة" });
+        return;
+      }
+      const ttl = story.live ? "max-age=30, s-maxage=60" : "max-age=600, s-maxage=3600";
+      res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
+      res.json(story);
+    } catch (error) {
+      console.error("[Sports] match story failed:", error);
+      res.status(502).json({ message: "تعذر توليد ملخّص المباراة حاليًا" });
+    }
+  });
+
+  // المرحلة 2 (ذكاء): معاينة ما قبل المباراة (للمباريات غير المبدوءة فقط).
+  app.get("/api/sports/match/:id/preview", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "غير متاح" });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const preview = await generateMatchPreview(id);
+      if (!preview) {
+        res.status(404).json({ message: "لا تتوفّر معاينة لهذه المباراة" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=1800, stale-while-revalidate=1800");
+      res.json(preview);
+    } catch (error) {
+      console.error("[Sports] match preview failed:", error);
+      res.status(502).json({ message: "تعذر توليد معاينة المباراة حاليًا" });
     }
   });
 
