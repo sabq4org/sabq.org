@@ -324,9 +324,7 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
                       </span>
                     ) : m.status.finished ? (
                       <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
-                    ) : (
-                      <span className="text-[10px] font-bold tabular-nums text-primary">{fmtTime(m.timestamp)}</span>
-                    )}
+                    ) : null}
                   </button>
                 ) : (
                   <Link href={`/sports2/team/${f.refId}`} className="inline-flex items-center gap-2 min-w-0">
@@ -1577,6 +1575,26 @@ function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }
       })
       .slice(0, 6);
   }, [sportsNewsRaw, data?.fixture]);
+
+  // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
+  // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
+  useEffect(() => {
+    if (id == null) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [id]);
 
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
