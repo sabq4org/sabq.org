@@ -1648,16 +1648,22 @@ if (!(globalThis as any).__sabqServer) {
       }
       
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';
+      const enableIfoxGenerator = process.env.ENABLE_IFOX_GENERATOR !== 'false';
       
-      if (shouldRunBackgroundJobs && enableAITasksScheduler) {
-        setTimeout(async () => {
-          try {
-            const { startAITasksScheduler } = await import("./jobs/aiTasksJob");
-            startAITasksScheduler();
-          } catch (error) {
-            console.error("[Server] Error starting AI tasks scheduler:", error);
-          }
-        }, BACKGROUND_JOB_DELAY + 30000);
+      if (shouldRunBackgroundJobs) {
+        // AI Tasks Scheduler — مستهلك للتوكن، خلف flag مستقل عن وظائف الصيانة
+        if (enableAITasksScheduler) {
+          setTimeout(async () => {
+            try {
+              const { startAITasksScheduler } = await import("./jobs/aiTasksJob");
+              startAITasksScheduler();
+            } catch (error) {
+              console.error("[Server] Error starting AI tasks scheduler:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 30000);
+        } else {
+          console.log("[Server] AI Tasks Scheduler disabled (set ENABLE_AI_TASKS_SCHEDULER=true to enable)");
+        }
         
         setTimeout(async () => {
           try {
@@ -1679,14 +1685,19 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 50000);
         
-        setTimeout(async () => {
-          try {
-            const { startIfoxContentGeneratorJob } = await import("./jobs/ifoxContentGeneratorJob");
-            startIfoxContentGeneratorJob();
-          } catch (error) {
-            console.error("[Server] Error starting iFox generator:", error);
-          }
-        }, BACKGROUND_JOB_DELAY + 60000);
+        // iFox Content Generator — مستهلك للتوكن (مقالات كاملة + صور)، خلف flag مستقل
+        if (enableIfoxGenerator) {
+          setTimeout(async () => {
+            try {
+              const { startIfoxContentGeneratorJob } = await import("./jobs/ifoxContentGeneratorJob");
+              startIfoxContentGeneratorJob();
+            } catch (error) {
+              console.error("[Server] Error starting iFox generator:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 60000);
+        } else {
+          console.log("[Server] iFox Content Generator disabled (set ENABLE_IFOX_GENERATOR=true to enable)");
+        }
         
         setTimeout(async () => {
           try {
@@ -1795,10 +1806,8 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 100000);
         
-      } else if (!shouldRunBackgroundJobs) {
-        console.log("[Server] AI Tasks Scheduler skipped (background workers disabled or not leader)");
       } else {
-        console.log("[Server] AI Tasks Scheduler disabled (set ENABLE_AI_TASKS_SCHEDULER=true to enable)");
+        console.log("[Server] Background maintenance + AI jobs skipped (background workers disabled or not leader)");
       }
 
       // أخبار المونديال: التسجيل خارج بوابة isLeader() عمدًا — أثناء النشر
