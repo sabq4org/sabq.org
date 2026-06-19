@@ -173,12 +173,15 @@ const moreLink = (href: string, label = "عرض الكل") => (
 // تُخفى تمامًا إن لا مباريات اليوم.
 // ============================================================
 function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
+  const [expanded, setExpanded] = useState(false);
   if (items.length === 0) return null;
   const liveCount = items.filter((f) => f.status.live).length;
+  const visible = expanded ? items : items.slice(0, 3);
+  const more = items.length - 3;
   return (
     <div className="border-b border-border bg-card">
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="flex items-center gap-2 mb-1">
           <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
             <CalendarDays className={`w-3.5 h-3.5 ${ACCENT}`} />
             مباريات اليوم · كل البطولات
@@ -190,24 +193,23 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
             </span>
           )}
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
-          {items.map((f) => {
+        {/* قائمة عمودية: كل مباراة صفّ كامل العرض بارتفاع منخفض (مناسب للجوال) */}
+        <div className="divide-y divide-border">
+          {visible.map((f) => {
             const decided = f.status.live || f.status.finished;
+            const homeWon = decided && f.goals.home != null && f.goals.away != null && f.goals.home > f.goals.away;
+            const awayWon = decided && f.goals.home != null && f.goals.away != null && f.goals.away > f.goals.home;
             return (
               <button
                 key={f.id}
                 onClick={() => onOpen(f.id)}
-                className={`shrink-0 rounded-xl bg-background border px-3 py-2.5 transition-colors text-right w-64 max-w-[82vw] ${
-                  f.status.live ? "border-red-500/40 hover:border-red-500/70" : "border-border hover:border-primary/50"
-                }`}
+                className="w-full text-right py-2 hover:bg-muted/40 transition-colors"
               >
-                {/* البطولة (يمين) + حالة المباراة (يسار) في سطر واحد */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="flex items-center gap-1 min-w-0">
-                    {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0" />}
-                    <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
-                  </span>
-                  <span className={`shrink-0 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+                {/* سطر مصغّر: البطولة + الحالة */}
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[10px] text-muted-foreground font-medium truncate">{f.competition}</span>
+                  <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
+                    {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
                     {f.status.live
                       ? (f.status.elapsed != null ? `${f.status.elapsed}'` : f.status.label)
                       : f.status.finished
@@ -215,31 +217,36 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
                       : fmtTime(f.timestamp)}
                   </span>
                 </div>
-                {/* كل فريق في سطر كامل + نتيجته — يمنح الاسم العرض الكامل فلا يُقصّ */}
-                <div className="space-y-1.5">
-                  {[f.home, f.away].map((team, idx) => {
-                    const my = idx === 0 ? f.goals.home : f.goals.away;
-                    const opp = idx === 0 ? f.goals.away : f.goals.home;
-                    const won = decided && my != null && opp != null && my > opp;
-                    return (
-                      <div key={team.id} className="flex items-center gap-2">
-                        {team.logo ? (
-                          <img src={team.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
-                        ) : (
-                          <span className="w-5 h-5 shrink-0" />
-                        )}
-                        <span className={`flex-1 min-w-0 truncate text-sm text-foreground ${won ? "font-extrabold" : "font-semibold"}`}>{team.name}</span>
-                        {decided && (
-                          <span className={`shrink-0 text-sm tabular-nums ${won ? "font-black text-foreground" : "font-bold text-muted-foreground"}`}>{my ?? 0}</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                {/* مضيف — نتيجة — ضيف بكامل العرض (الاسم يأخذ عمودًا كاملًا) */}
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`flex-1 min-w-0 truncate text-sm text-right text-foreground ${homeWon ? "font-extrabold" : "font-semibold"}`}>{f.home.name}</span>
+                    {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+                  </div>
+                  <div className="px-1 text-center">
+                    {decided ? (
+                      <span className="text-sm font-black tabular-nums text-foreground">{f.goals.home ?? 0} - {f.goals.away ?? 0}</span>
+                    ) : (
+                      <span className="text-xs font-bold tabular-nums text-muted-foreground">{fmtTime(f.timestamp)}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+                    <span className={`flex-1 min-w-0 truncate text-sm text-left text-foreground ${awayWon ? "font-extrabold" : "font-semibold"}`}>{f.away.name}</span>
+                  </div>
                 </div>
               </button>
             );
           })}
         </div>
+        {more > 0 && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-1 w-full text-center text-xs font-bold text-primary hover:underline py-1.5"
+          >
+            {expanded ? "عرض أقل" : `المزيد (${more === 1 ? "مباراة أخرى" : `${more} مباريات أخرى`})`}
+          </button>
+        )}
       </div>
     </div>
   );
