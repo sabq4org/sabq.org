@@ -67,16 +67,6 @@ import {
   type SpShort,
 } from "./SportsHub";
 
-const SECTIONS = [
-  { id: "news", label: "الأخبار", icon: Newspaper },
-  { id: "matches", label: "المباريات", icon: CalendarDays },
-  { id: "standings", label: "الترتيب", icon: ListOrdered },
-  { id: "scorers", label: "الهدّافون", icon: Goal },
-  { id: "leaderboard", label: "المتصدّرون", icon: Target },
-  { id: "gallery", label: "صور", icon: Images },
-  { id: "videos", label: "فيديو", icon: PlayCircle },
-];
-
 const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.thumbnailUrl, a.updatedAt);
 // زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
 const articleTime = (a: ArticleWithDetails) => new Date(a.publishedAt || (a as any).createdAt || 0).getTime();
@@ -326,22 +316,6 @@ export default function SportsDashboard() {
             <FollowsStrip todayMatches={todayMatches} onOpen={setOpenMatch} />
           </div>
         </div>
-
-        <nav className="sticky top-0 z-30 bg-background/85 backdrop-blur-md border-b border-border">
-          <div className="max-w-7xl mx-auto px-4">
-            <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-              {SECTIONS.map((s) => {
-                const Icon = s.icon;
-                return (
-                  <button key={s.id} onClick={() => scrollTo(s.id)}
-                    className="shrink-0 inline-flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-bold text-muted-foreground hover:text-foreground border-b-2 border-transparent hover:border-primary transition-colors">
-                    <Icon className="w-4 h-4" />{s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </nav>
 
         {/* ===== Bento Hero: خبر بارز + لوحة نتائج ===== */}
         <section id="news" className="scroll-mt-16 max-w-7xl mx-auto px-4 pt-6 sm:pt-8">
