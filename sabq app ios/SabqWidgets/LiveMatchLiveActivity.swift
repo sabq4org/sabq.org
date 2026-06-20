@@ -58,23 +58,28 @@ struct LiveMatchLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Text(shortName(context.attributes.homeName))
-                    .font(.system(size: 13, weight: .bold))
+                // الجهة المضيفة (تظهر يمين الـ notch في الواجهة العربية)
+                if isUpcoming(context) {
+                    Text(shortName(context.attributes.homeName))
+                        .font(.system(size: 13, weight: .bold))
+                } else {
+                    compactSide(name: context.attributes.homeName, score: context.state.homeScore)
+                }
             } compactTrailing: {
+                // الجهة الضيفة (تظهر يسار الـ notch)
                 if isUpcoming(context) {
                     Text(timerInterval: Date()...context.attributes.kickoff)
                         .font(.system(size: 13, weight: .bold).monospacedDigit())
                         .frame(maxWidth: 52)
                 } else {
-                    scoreText(context.state)
-                        .font(.system(size: 14, weight: .black, design: .rounded))
+                    compactSide(name: context.attributes.awayName, score: context.state.awayScore)
                 }
             } minimal: {
                 if isUpcoming(context) {
                     Image(systemName: "clock.fill")
                 } else {
                     scoreText(context.state)
-                        .font(.system(size: 12, weight: .black, design: .rounded))
+                        .font(.system(size: 12, weight: .black).monospacedDigit())
                 }
             }
             .widgetURL(URL(string: "sabq://match/\(context.attributes.fixtureId)"))
@@ -92,6 +97,19 @@ struct LiveMatchLiveActivity: Widget {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+        }
+    }
+
+    // جهة واحدة في الـ Dynamic Island المضغوط: علم الفريق + نتيجته.
+    // يُحاذى العلم للحافة الخارجية والرقم للداخل تجاه الـ notch.
+    private func compactSide(name: String, score: Int) -> some View {
+        HStack(spacing: 3) {
+            if let flag = muqFlagEmoji(name) {
+                Text(flag).font(.system(size: 15))
+            }
+            Text("\(score)")
+                .font(.system(size: 16, weight: .black).monospacedDigit())
+                .foregroundStyle(.white)
         }
     }
 
