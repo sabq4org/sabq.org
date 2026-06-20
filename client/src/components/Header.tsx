@@ -224,17 +224,6 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             {/* Mobile Actions */}
             <div className="md:hidden flex items-center gap-0.5 max-sm:gap-0">
               <SearchDialog />
-              <Link href="/lite">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="hover-elevate active-elevate-2"
-                  data-testid="button-quick-browse-mobile"
-                  aria-label="تصفح سريع"
-                >
-                  <Zap className="h-5 w-5" aria-hidden="true" />
-                </Button>
-              </Link>
               <LanguageSwitcher />
               <ThemeToggle />
 
