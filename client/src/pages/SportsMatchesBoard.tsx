@@ -255,7 +255,7 @@ function MatchRow({
               className={`inline-block rounded-md px-2 py-0.5 text-base font-black tabular-nums ${st === "live" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
-              {hg} - {ag}
+              {ag} - {hg}
             </span>
           ) : (
             <span className="text-xs font-bold text-muted-foreground">vs</span>
