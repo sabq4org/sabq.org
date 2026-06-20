@@ -301,11 +301,8 @@ export default function Notifications() {
 
                     {/* Content */}
                     <div className="flex-1 min-w-0 space-y-2">
-                      {/* Header: Type badge and time */}
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="secondary" data-testid={`badge-type-${notification.id}`}>
-                          {getTypeLabel(notification.type)}
-                        </Badge>
+                      {/* Header: time + delete (الوقت فقط) */}
+                      <div className="flex items-center justify-end gap-2">
                         <div className="flex items-center gap-1">
                           <span
                             className="text-xs text-muted-foreground whitespace-nowrap"
@@ -349,18 +346,6 @@ export default function Notifications() {
                         {notification.body}
                       </p>
 
-                      {/* Unread indicator (dot) */}
-                      {!notification.read && (
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="h-2 w-2 rounded-full bg-blue-500"
-                            data-testid={`indicator-unread-${notification.id}`}
-                          />
-                          <span className="text-xs text-blue-600 font-medium">
-                            جديد
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </CardContent>
