@@ -359,6 +359,10 @@ const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 // البوابة الرياضية الجديدة — تجربة أون لاين على /sports2
 const SportsHub = lazy(() => retryImport(() => import("@/pages/SportsHub")));
+// تجربة توزيع Dashboard (عمودين) على /sports3 — جنبًا إلى جنب مع /sports2
+const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
+// تجربة لوحة Bento الإبداعية على /sports4
+const SportsBento = lazy(() => retryImport(() => import("@/pages/SportsBento")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -867,6 +871,10 @@ function Router() {
         <Route path="/sports2/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
         <Route path="/sports2/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
         <Route path="/sports2">{() => <LazyRoute component={SportsHub} />}</Route>
+        {/* تجربة Dashboard بعمودين على /sports3 */}
+        <Route path="/sports3">{() => <LazyRoute component={SportsDashboard} />}</Route>
+        {/* تجربة لوحة Bento على /sports4 */}
+        <Route path="/sports4">{() => <LazyRoute component={SportsBento} />}</Route>
         
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>

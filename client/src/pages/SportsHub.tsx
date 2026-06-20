@@ -61,26 +61,26 @@ import type { ArticleWithDetails, Category } from "@shared/schema";
 // ============================================================
 // الأنواع (مطابقة لـ /api/sports/*)
 // ============================================================
-interface SpTeam { id: number; name: string; logo: string; winner: boolean | null; }
-interface SpFixture {
+export interface SpTeam { id: number; name: string; logo: string; winner: boolean | null; }
+export interface SpFixture {
   id: number; date: string; timestamp: number;
   status: { code: string; label: string; elapsed: number | null; live: boolean; finished: boolean };
   round: string; venue: { name: string; city: string };
   home: SpTeam; away: SpTeam; goals: { home: number | null; away: number | null };
 }
-interface SpLiveItem extends SpFixture { competition: string; competitionSlug: string | null; }
+export interface SpLiveItem extends SpFixture { competition: string; competitionSlug: string | null; }
 interface SpStandingSplit { played: number; win: number; draw: number; lose: number; goalsFor: number; goalsAgainst: number; points: number; }
-interface SpStandingRow {
+export interface SpStandingRow {
   rank: number; team: SpTeam; played: number; win: number; draw: number; lose: number;
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
   home?: SpStandingSplit | null; away?: SpStandingSplit | null;
 }
-interface SpScorer {
+export interface SpScorer {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
   goals: number; assists: number; penalties: number; matches: number;
 }
 // الموجة 1: صنّاع الأهداف — نفس بنية الهدّاف لكن بلا ركلات جزاء.
-interface SpAssister {
+export interface SpAssister {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
   goals: number; assists: number; matches: number;
 }
@@ -112,15 +112,15 @@ interface SpMatchRatings {
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
 interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
-type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
-interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
-const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
-const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
-interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
+export type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
+export interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
+export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
+export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
+export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
 interface SpH2H { summary: { total: number; homeWins: number; draws: number; awayWins: number } | null; meetings: SpH2HMeeting[]; }
-interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
+export interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
 // المرحلة 4 (المجتمع): توقّع النتيجة + لوحة المتصدّرين
 interface SpPredictionRow {
   id: string; fixtureId: number; homeName: string; awayName: string;
@@ -149,7 +149,7 @@ function fmtDuration(sec: number | null): string {
   const m = Math.floor(sec / 60);
   return `${m}:${String(sec % 60).padStart(2, "0")}`;
 }
-function timeAgo(date: Date | string | null | undefined): string {
+export function timeAgo(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = (Date.now() - d.getTime()) / 1000;
@@ -162,12 +162,12 @@ const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.
 
 // لمسة الهوية (accent) — أزرق اللوقو الرسمي (--primary = hsl 204 88% 53%)،
 // لا أخضر emerald ولا primary (اللذان استعرناهما سابقًا من WorldCup).
-const ACCENT = "text-primary";
+export const ACCENT = "text-primary";
 
 // ============================================================
 // عنوان قسم (نمط الرئيسية: أيقونة بخلفية خفيفة + عنوان + وصف)
 // ============================================================
-function SectionHeader({ title, subtitle, icon, action }: {
+export function SectionHeader({ title, subtitle, icon, action }: {
   title: string; subtitle?: string; icon: React.ReactNode; action?: React.ReactNode;
 }) {
   return (
@@ -184,7 +184,7 @@ function SectionHeader({ title, subtitle, icon, action }: {
   );
 }
 
-const moreLink = (href: string, label = "عرض الكل") => (
+export const moreLink = (href: string, label = "عرض الكل") => (
   <Link href={href}>
     <span className={`text-sm font-bold ${ACCENT} hover:underline`}>{label} ←</span>
   </Link>
@@ -201,7 +201,7 @@ const moreLink = (href: string, label = "عرض الكل") => (
 // ============================================================
 // خطّاف موحّد لمتابعات المستخدم — TanStack Query يوحّد النداء بنفس المفتاح عبر
 // كل المستهلكين، فلا تكرار. يُفعَّل فقط للمستخدم المسجَّل (يتجنّب 401 مزعجة).
-function useSportsFollows() {
+export function useSportsFollows() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -395,7 +395,7 @@ function TodayMiniCard({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => v
 }
 
 // صفّ نتائج مدمج لمباراة اليوم (بنفس نمط بطاقة النتائج المدمجة) — للجوال.
-function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => void }) {
+export function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => void }) {
   const decided = f.status.live || f.status.finished;
   const homeWon = decided && f.goals.home != null && f.goals.away != null && f.goals.home > f.goals.away;
   const awayWon = decided && f.goals.home != null && f.goals.away != null && f.goals.away > f.goals.home;
@@ -472,7 +472,7 @@ function TodayMatchesBoard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id
 // بطاقة الخبر البارز — مع صورة: تدرّج خفيف على الصورة + نص أبيض.
 // بلا صورة: بطاقة نصّية فاتحة أنيقة (تتجنّب مظهر «الصورة المكسورة»).
 // ============================================================
-function FeaturedCard({ article, large }: { article: ArticleWithDetails; large?: boolean }) {
+export function FeaturedCard({ article, large }: { article: ArticleWithDetails; large?: boolean }) {
   const img = imgOf(article);
   const onImage = !!img;
   const aspect = large ? "aspect-[16/10] sm:aspect-[16/9]" : "aspect-[16/10] lg:aspect-[16/9]";
@@ -540,7 +540,7 @@ function FeaturedCard({ article, large }: { article: ArticleWithDetails; large?:
 // ============================================================
 // بطاقة خبر قياسية (صورة بالأعلى + نص على خلفية بيضاء — نمط الرئيسية)
 // ============================================================
-function NewsCard({ article, index }: { article: ArticleWithDetails; index: number }) {
+export function NewsCard({ article, index }: { article: ArticleWithDetails; index: number }) {
   const img = imgOf(article);
   return (
     <motion.div
@@ -589,7 +589,7 @@ function NewsCard({ article, index }: { article: ArticleWithDetails; index: numb
 // ============================================================
 // تبويبات بمؤشّر متحرّك (أخضر صلب — بلا تدرّج)
 // ============================================================
-function PillTabs({ tabs, active, onChange, layoutId }: {
+export function PillTabs({ tabs, active, onChange, layoutId }: {
   tabs: { key: string; label: string; badge?: React.ReactNode }[];
   active: string; onChange: (k: string) => void; layoutId: string;
 }) {
@@ -770,7 +770,7 @@ function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: numbe
   );
 }
 
-function MatchHub({ data, configured, compSlug, onOpen }: {
+export function MatchHub({ data, configured, compSlug, onOpen }: {
   data: { live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] };
   configured: boolean; compSlug: string; onOpen: (id: number) => void;
 }) {
@@ -835,7 +835,7 @@ function MatchHub({ data, configured, compSlug, onOpen }: {
 // ============================================================
 // سباق اللقب (بطاقة بيضاء + أشرطة خضراء) + جدول الترتيب
 // ============================================================
-function TitleRace({ rows }: { rows: SpStandingRow[] }) {
+export function TitleRace({ rows }: { rows: SpStandingRow[] }) {
   const top = rows.slice(0, 4);
   if (top.length === 0) return null;
   const maxPts = Math.max(...top.map((r) => r.points), 1);
@@ -880,7 +880,7 @@ function FormChips({ form }: { form: string | null }) {
 type SortKey = "rank" | "points" | "goalsDiff" | "goalsFor" | "win";
 type StandScope = "all" | "home" | "away";
 
-function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
+export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [scope, setScope] = useState<StandScope>("all");
   const [query, setQuery] = useState("");
@@ -1019,7 +1019,7 @@ interface PodiumEntry {
   secondary: number; // الرقم الثانوي (الضد)
 }
 
-function PodiumCard({ entries, primaryLabel, secondaryLabel }: {
+export function PodiumCard({ entries, primaryLabel, secondaryLabel }: {
   entries: PodiumEntry[]; primaryLabel: string; secondaryLabel: string;
 }) {
   if (entries.length === 0) return null;
@@ -1213,7 +1213,7 @@ function LineupTeam({ lineup }: { lineup: SpLineup }) {
   );
 }
 // الموجة 2: قائمة متصدّري البطاقات (إنذارات + طرد).
-function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
+export function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
   return (
     <div className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border">
       {leaders.map((p) => (
@@ -1514,7 +1514,7 @@ function MatchPredict({ fixture }: { fixture: SpFixture }) {
   );
 }
 
-function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
     refetchInterval: (q) => (q.state.data?.fixture?.status?.live ? 15_000 : false),
@@ -1785,7 +1785,7 @@ function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
 // ============================================================
 // معرض الصور (lightbox)
 // ============================================================
-function ImageGallery({ articles }: { articles: ArticleWithDetails[] }) {
+export function ImageGallery({ articles }: { articles: ArticleWithDetails[] }) {
   const [active, setActive] = useState<number | null>(null);
   const items = articles.filter((a) => a.imageUrl || a.thumbnailUrl).slice(0, 9);
   if (items.length === 0) return null;
@@ -1832,7 +1832,7 @@ function ImageGallery({ articles }: { articles: ArticleWithDetails[] }) {
 // ============================================================
 // بطاقة فيديو (reel)
 // ============================================================
-function VideoReel({ short, index }: { short: SpShort; index: number }) {
+export function VideoReel({ short, index }: { short: SpShort; index: number }) {
   const dur = fmtDuration(short.duration);
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.35, delay: Math.min(index * 0.05, 0.24) }}>
@@ -1857,7 +1857,7 @@ function VideoReel({ short, index }: { short: SpShort; index: number }) {
 // الصفحة
 // ============================================================
 // المرحلة 4 (المجتمع): لوحة متصدّري التوقّعات — عامة. تبديل بين كل الأوقات/الشهر/الأسبوع.
-function LeaderboardBoard() {
+export function LeaderboardBoard() {
   const { user } = useAuth();
   const [period, setPeriod] = useState<"all" | "month" | "week">("all");
   const { data, isLoading } = useQuery<{ leaderboard: SpLeaderboardEntry[] }>({

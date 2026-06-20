@@ -30,6 +30,10 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/ur/dashboard',
   // البوابة الرياضية الجديدة — مسار تجريبي مؤقت (يشمل /sports2/team و /sports2/player)
   '/sports2',
+  // تجربة توزيع Dashboard للبوابة الرياضية — مسار تجريبي مؤقت
+  '/sports3',
+  // تجربة لوحة Bento الإبداعية للبوابة الرياضية — مسار تجريبي مؤقت
+  '/sports4',
 ];
 
 export function isNoindexPath(pathname: string): boolean {
