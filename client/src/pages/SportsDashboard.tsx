@@ -149,7 +149,7 @@ function ScoreboardCard({ items, standings, onOpen }: {
   const list = items.slice(0, 5);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card">
+    <div className="flex flex-col overflow-hidden rounded-3xl border border-border bg-card">
       <div className="flex items-center justify-between gap-2 px-4 py-3.5 border-b border-border bg-gradient-to-l from-primary/10 to-transparent">
         <span className="flex items-center gap-2 text-sm font-black text-foreground">
           {liveCount > 0 ? <Radio className="w-4 h-4 text-red-500" /> : <CalendarDays className={`w-4 h-4 ${ACCENT}`} />}
@@ -165,16 +165,16 @@ function ScoreboardCard({ items, standings, onOpen }: {
       </div>
 
       {list.length > 0 ? (
-        <div className="flex-1 grid gap-2 p-3 overflow-y-auto scrollbar-hide max-h-[460px]">
+        <div className="grid gap-2 p-3 overflow-y-auto scrollbar-hide max-h-[480px]">
           {list.map((f) => <TodayCompactRow key={f.id} f={f} onOpen={onOpen} />)}
         </div>
       ) : standings.length > 0 ? (
         // لا مباريات اليوم → نعرض سباق اللقب كبديل مفيد بدل فراغ.
-        <div className="flex-1 p-2">
+        <div className="p-2">
           <TitleRace rows={standings} />
         </div>
       ) : (
-        <div className="flex-1 grid place-items-center p-8 text-center text-sm text-muted-foreground">
+        <div className="grid place-items-center p-8 text-center text-sm text-muted-foreground">
           لا مباريات اليوم — تابع الجولة القادمة من مركز المباريات.
         </div>
       )}
@@ -358,7 +358,7 @@ export default function SportsDashboard() {
           ) : news.length === 0 ? (
             <div className="text-center text-muted-foreground py-16 bg-card rounded-3xl border border-dashed border-border">بانتظار أول الأخبار الرياضية — تظهر هنا فور نشرها.</div>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
               <div className="lg:col-span-2">{featured && <HeroFeature article={featured} />}</div>
               <ScoreboardCard items={todayMatches} standings={standings} onOpen={setOpenMatch} />
             </div>
