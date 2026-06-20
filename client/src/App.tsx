@@ -361,6 +361,8 @@ const SportsHub = lazy(() => retryImport(() => import("@/pages/SportsHub")));
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // تجربة لوحة Bento الإبداعية على /sports4
 const SportsBento = lazy(() => retryImport(() => import("@/pages/SportsBento")));
+// تجربة مركز رياضي مباشر على /sports5
+const SportsLiveCenter = lazy(() => retryImport(() => import("@/pages/SportsLiveCenter")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -873,6 +875,8 @@ function Router() {
         <Route path="/sports3">{() => <LazyRoute component={SportsDashboard} />}</Route>
         {/* تجربة لوحة Bento على /sports4 */}
         <Route path="/sports4">{() => <LazyRoute component={SportsBento} />}</Route>
+        {/* تجربة مركز رياضي مباشر على /sports5 */}
+        <Route path="/sports5">{() => <LazyRoute component={SportsLiveCenter} />}</Route>
         
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>
