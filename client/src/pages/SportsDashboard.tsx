@@ -95,15 +95,17 @@ function HeroFeature({ article }: { article: ArticleWithDetails }) {
     >
       {img ? (
         <>
-          <OptimizedImage
-            src={img}
-            alt={article.title}
-            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            wrapperClassName="absolute inset-0"
-            objectPosition={getObjectPosition(article)}
-            priority
-            fetchPriority="high"
-          />
+          <div className="absolute inset-0">
+            <OptimizedImage
+              src={img}
+              alt={article.title}
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              wrapperClassName="w-full h-full"
+              objectPosition={getObjectPosition(article)}
+              priority
+              fetchPriority="high"
+            />
+          </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
         </>
       ) : (
