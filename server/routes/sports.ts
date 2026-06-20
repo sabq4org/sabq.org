@@ -110,17 +110,27 @@ export function registerSportsRoutes(app: Express) {
 
   // قائمة البطولات المتاحة (لمبدّل البطولات في الواجهة).
   // الموجة 2: تُثرى بالشعار والموسم الحالي لكل بطولة (ترويسة ديناميكية).
-  app.get("/api/sports/competitions", async (_req, res) => {
+  // كل بطولة تحمل status: ongoing | upcoming | finished | unknown.
+  // فلتر اختياري ?status=ongoing[,upcoming] يقصر النتائج على الحالات المطلوبة.
+  app.get("/api/sports/competitions", async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400");
+    const wanted = String(req.query.status || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const applyFilter = <T extends { status?: string }>(rows: T[]): T[] =>
+      wanted.length ? rows.filter((c) => c.status && wanted.includes(c.status)) : rows;
     if (!isSaudiLeagueConfigured()) {
+      // بدون مفتاح لا نعرف الحالة؛ نرجع القائمة الأساسية كاملة (status غير متاح).
       res.json({ configured: false, competitions: listCompetitions() });
       return;
     }
     try {
-      res.json({ configured: true, competitions: await listCompetitionsWithMeta() });
+      const competitions = applyFilter(await listCompetitionsWithMeta());
+      res.json({ configured: true, competitions });
     } catch (error) {
       console.error("[Sports] competitions meta failed:", error);
-      // تدهور بسلاسة إلى القائمة الأساسية دون شعار/موسم.
+      // تدهور بسلاسة إلى القائمة الأساسية دون شعار/موسم/حالة.
       res.json({ configured: true, competitions: listCompetitions() });
     }
   });

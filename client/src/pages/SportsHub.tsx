@@ -113,9 +113,13 @@ interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
 interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
 export type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
-export interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; }
+export type SpCompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
+export interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; start?: string | null; end?: string | null; status?: SpCompetitionStatus; }
 export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
 export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
+export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "جارية الآن", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
+// ترتيب الأولوية داخل الفئة: الجارية أولًا ثم القادمة ثم المنتهية.
+const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
 export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
@@ -1982,7 +1986,16 @@ export default function SportsHub() {
   const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
   const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
   const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
-  const compsInActiveCat = competitions.filter((c) => catOf(c) === activeCat);
+  // داخل الفئة: الجارية أولًا، ثم القادمة، ثم المنتهية (مع الحفاظ على الترتيب الأصلي عند التعادل).
+  const compsInActiveCat = competitions
+    .filter((c) => catOf(c) === activeCat)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const ra = COMP_STATUS_RANK[a.c.status ?? "unknown"];
+      const rb = COMP_STATUS_RANK[b.c.status ?? "unknown"];
+      return ra !== rb ? ra - rb : a.i - b.i;
+    })
+    .map(({ c }) => c);
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`], refetchInterval: 30_000, refetchIntervalInBackground: false,
@@ -2153,19 +2166,33 @@ export default function SportsHub() {
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {compsInActiveCat.map((c) => (
                     <button key={c.slug} onClick={() => setCompSlug(c.slug)}
-                      className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"}`}>
+                      title={c.status ? COMP_STATUS_LABELS[c.status] : undefined}
+                      className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
+                      {c.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                       {c.name}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-            {/* البند 9: ترويسة البطولة الديناميكية (شعار + موسم). */}
-            {comp && (comp.logo || comp.season) && (
+            {/* البند 9: ترويسة البطولة الديناميكية (شعار + موسم + حالة الموسم). */}
+            {comp && (comp.logo || comp.season || (comp.status && comp.status !== "unknown")) && (
               <div className="flex items-center gap-3 mb-5 px-1">
                 {comp.logo && <img src={comp.logo} alt="" className="w-11 h-11 object-contain shrink-0" />}
                 <div className="min-w-0">
-                  <div className="font-black text-foreground truncate">{comp.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-foreground truncate">{comp.name}</span>
+                    {comp.status && comp.status !== "unknown" && (
+                      <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        comp.status === "ongoing" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                        : comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-muted text-muted-foreground"
+                      }`}>
+                        {comp.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                        {COMP_STATUS_LABELS[comp.status]}
+                      </span>
+                    )}
+                  </div>
                   {comp.season && <div className="text-xs text-muted-foreground tabular-nums">موسم {comp.season}</div>}
                 </div>
               </div>
