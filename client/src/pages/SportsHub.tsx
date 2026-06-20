@@ -413,7 +413,7 @@ export function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: num
         {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
         <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
           {decided ? (
-            <span className="text-sm font-black tabular-nums tracking-wide" dir="ltr">
+            <span className="text-sm font-black tabular-nums tracking-wide" dir="rtl">
               <span className={homeWon ? ACCENT : "text-foreground"}>{f.goals.home ?? 0}</span>
               <span className="mx-0.5 text-muted-foreground">-</span>
               <span className={awayWon ? ACCENT : "text-foreground"}>{f.goals.away ?? 0}</span>
@@ -676,7 +676,7 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
           {home.logo && <img src={home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
           <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
             {decided ? (
-              <span className="text-sm font-black tabular-nums tracking-wide" dir="ltr">
+              <span className="text-sm font-black tabular-nums tracking-wide" dir="rtl">
                 <span className={homeWon ? ACCENT : "text-foreground"}>{goals.home ?? 0}</span>
                 <span className="mx-0.5 text-muted-foreground">-</span>
                 <span className={awayWon ? ACCENT : "text-foreground"}>{goals.away ?? 0}</span>
@@ -704,7 +704,7 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
           {teamCol(home, homeWon)}
           <div className="flex flex-col items-center justify-center min-w-[3.75rem] pt-2.5">
             {decided ? (
-              <span className="text-2xl font-black tabular-nums tracking-tight text-foreground" dir="ltr">
+              <span className="text-2xl font-black tabular-nums tracking-tight text-foreground" dir="rtl">
                 <span className={homeWon ? ACCENT : ""}>{goals.home ?? 0}</span>
                 <span className="mx-1 text-muted-foreground/50">-</span>
                 <span className={awayWon ? ACCENT : ""}>{goals.away ?? 0}</span>
@@ -1303,7 +1303,15 @@ function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: numb
             <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm">
               <span className="w-20 shrink-0 text-[11px] text-muted-foreground">{fmt(m.date)}</span>
               <span className={`flex-1 truncate text-left ${homeWon ? "font-bold text-foreground" : "text-muted-foreground"}`}>{m.home.name}</span>
-              <span className="shrink-0 font-black tabular-nums text-foreground px-2">{decided ? `${m.goals.home} - ${m.goals.away}` : "—"}</span>
+              <span className="shrink-0 font-black tabular-nums text-foreground px-2" dir="rtl">
+                {decided ? (
+                  <>
+                    <span>{m.goals.home}</span>
+                    <span className="mx-0.5 text-muted-foreground">-</span>
+                    <span>{m.goals.away}</span>
+                  </>
+                ) : "—"}
+              </span>
               <span className={`flex-1 truncate ${awayWon ? "font-bold text-foreground" : "text-muted-foreground"}`}>{m.away.name}</span>
             </li>
           );
@@ -1604,7 +1612,13 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-black tabular-nums tracking-wider text-foreground">
-                    {fx.status.finished || fx.status.live ? `${fx.goals.home ?? 0} : ${fx.goals.away ?? 0}` : fmtTime(fx.timestamp)}
+                    {fx.status.finished || fx.status.live ? (
+                      <span dir="rtl">
+                        <span>{fx.goals.home ?? 0}</span>
+                        <span className="mx-1 text-muted-foreground/60">:</span>
+                        <span>{fx.goals.away ?? 0}</span>
+                      </span>
+                    ) : fmtTime(fx.timestamp)}
                   </div>
                   <div className={`text-xs mt-1 ${fx.status.live ? "text-red-500 font-bold" : "text-muted-foreground"}`}>{fx.status.live ? `${fx.status.elapsed ?? ""}'` : fx.status.label}</div>
                 </div>
