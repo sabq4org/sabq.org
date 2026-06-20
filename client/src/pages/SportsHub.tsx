@@ -112,12 +112,12 @@ interface SpMatchRatings {
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
 interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
-export type SpCompetitionCategory = "saudi" | "gulf" | "european" | "world";
+export type SpCompetitionCategory = "saudi" | "gulf" | "arab" | "european" | "world";
 export type SpCompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
 export interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; start?: string | null; end?: string | null; status?: SpCompetitionStatus; }
-export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", european: "أوروبي", world: "عالمي" };
-export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
-export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "جارية الآن", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
+export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", arab: "عربي", european: "أوروبي", world: "عالمي" };
+export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "arab", "european", "world"];
+export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "الموسم جارٍ", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
 // ترتيب الأولوية داخل الفئة: الجارية أولًا ثم القادمة ثم المنتهية.
 export const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
 export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }

@@ -50,7 +50,7 @@ const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه 
  * متوقف منذ 2017. الموسم يُحلّ ديناميكيًا (current) فلا حاجة لتعديل الكود
  * عند انتقال المواسم؛ fallbackSeason احتياط لو فشل الطلب.
  */
-export type CompetitionCategory = "saudi" | "gulf" | "european" | "world";
+export type CompetitionCategory = "saudi" | "gulf" | "arab" | "european" | "world";
 
 export interface SaudiCompetition {
   id: number;
@@ -98,6 +98,17 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 417, slug: "bahrain-premier-league", name: "الدوري البحريني الممتاز", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
   { id: 406, slug: "oman-pro-league", name: "دوري عُمانتل للمحترفين", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "gulf" },
   { id: 1162, slug: "gulf-club-champions", name: "كأس الخليج للأندية الأبطال", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
+  // الدوريات العربية — تغطية ترتيب/أحداث في API-Football (إحصاءات اللاعبين
+  // متاحة لمصر فقط، فبقيتها hasScorers=false لتجنّب تبويب هدّافين فارغ).
+  // أسماء الأندية تظهر بالإنجليزية حتى نضيف قواميس تعريب لاحقًا (fallback آمن).
+  { id: 233, slug: "egypt-premier-league", name: "الدوري المصري الممتاز", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 200, slug: "morocco-botola", name: "البطولة الاحترافية المغربية", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 202, slug: "tunisia-ligue-1", name: "الرابطة التونسية المحترفة الأولى", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 186, slug: "algeria-ligue-1", name: "الرابطة الجزائرية المحترفة الأولى", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 542, slug: "iraq-stars-league", name: "دوري نجوم العراق", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 387, slug: "jordan-league", name: "دوري المحترفين الأردني", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 390, slug: "lebanon-premier-league", name: "الدوري اللبناني الممتاز", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
+  { id: 425, slug: "syria-premier-league", name: "الدوري السوري الممتاز", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "arab" },
 ];
 
 export function getCompetition(slug: string): SaudiCompetition | undefined {
