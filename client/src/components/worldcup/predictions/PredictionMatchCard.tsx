@@ -3,6 +3,7 @@ import { Check, Clock, Lock, LogIn, Radio, Trophy, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatKickoffTime, countdownTo, type WcTeam } from "../wcTypes";
+import { formatNumber } from "@/lib/format";
 import { LiveMinute } from "../LiveMinute";
 import { ScoreStepper } from "./ScoreStepper";
 import type { PredictableMatch } from "./predictionsTypes";
@@ -149,7 +150,7 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
           {/* عدد المشاركين + العدّاد التنازلي */}
           <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>{predictionsCount > 0 ? `${predictionsCount.toLocaleString("ar-SA")} توقّعوا` : "كن أول المتوقّعين"}</span>
+            <span>{predictionsCount > 0 ? `${formatNumber(predictionsCount)} توقّعوا` : "كن أول المتوقّعين"}</span>
             {!started && !settled && <Countdown timestamp={fixture.timestamp} />}
           </div>
         </div>
@@ -189,7 +190,7 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
       <p className="rounded-lg bg-muted/60 px-3 py-2 text-center text-xs text-muted-foreground">
         لم تشارك بتوقّع لهذه المباراة
         {settlement && settlement.winnersCount > 0 && (
-          <> · فاز {settlement.winnersCount.toLocaleString("ar-SA")} متوقّع</>
+          <> · فاز {formatNumber(settlement.winnersCount)} متوقّع</>
         )}
       </p>
     );
@@ -221,7 +222,7 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
         </span>
         {isWin ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-black text-white">
-            <Trophy className="h-3 w-3" /> +{myPrediction.pointsAwarded.toLocaleString("ar-SA")} نقطة
+            <Trophy className="h-3 w-3" /> +{formatNumber(myPrediction.pointsAwarded)} نقطة
           </span>
         ) : (
           <span className="text-xs font-semibold text-muted-foreground">لم تُصب النتيجة</span>
@@ -229,8 +230,8 @@ function SettledFooter({ match, isWin }: { match: PredictableMatch; isWin: boole
       </div>
       {isWin && settlement && settlement.winnersCount > 1 && (
         <p className="mt-1.5 text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
-          شاركك الفوز {(settlement.winnersCount - 1).toLocaleString("ar-SA")} — قُسِّمت الجائزة:{" "}
-          {settlement.pointsPerWinner.toLocaleString("ar-SA")} نقطة لكل فائز
+          شاركك الفوز {formatNumber(settlement.winnersCount - 1)} — قُسِّمت الجائزة:{" "}
+          {formatNumber(settlement.pointsPerWinner)} نقطة لكل فائز
         </p>
       )}
     </div>

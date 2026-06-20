@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatKickoffDay, riyadhDayKey, todayRiyadhKey } from "@/components/worldcup/wcTypes";
+import { formatNumber } from "@/lib/format";
 import { PredictionMatchCard } from "@/components/worldcup/predictions/PredictionMatchCard";
 import { PredictionsLeaderboard } from "@/components/worldcup/predictions/PredictionsLeaderboard";
 import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictionsList";
@@ -112,19 +113,19 @@ export default function WorldCupPredictions() {
             {isAuthenticated ? (
               <div className="mt-5 inline-flex items-center gap-4 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
                 <div className="text-center">
-                  <p className="text-xl font-black tabular-nums">{(myRank?.totalPoints ?? 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.totalPoints ?? 0)}</p>
                   <p className="text-[11px] text-emerald-100">نقاط التوقّعات</p>
                 </div>
                 <div className="h-8 w-px bg-white/25" />
                 <div className="text-center">
-                  <p className="text-xl font-black tabular-nums">{(myRank?.correctCount ?? 0).toLocaleString("ar-SA")}</p>
+                  <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.correctCount ?? 0)}</p>
                   <p className="text-[11px] text-emerald-100">إصابة دقيقة</p>
                 </div>
                 {myRank && (
                   <>
                     <div className="h-8 w-px bg-white/25" />
                     <div className="text-center">
-                      <p className="text-xl font-black tabular-nums">#{myRank.rank.toLocaleString("ar-SA")}</p>
+                      <p className="text-xl font-black tabular-nums">#{formatNumber(myRank.rank)}</p>
                       <p className="text-[11px] text-emerald-100">ترتيبك</p>
                     </div>
                   </>
@@ -246,7 +247,7 @@ function TodayTab({
           <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
             <span className="h-4 w-1 rounded-full bg-emerald-500" />
             {g.label}
-            <span className="text-xs font-normal text-muted-foreground">({g.items.length.toLocaleString("ar-SA")})</span>
+            <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {g.items.map((m) => (
