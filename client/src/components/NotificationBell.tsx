@@ -7,7 +7,6 @@ import {
   Newspaper,
   Bot,
   Sparkles,
-  Zap,
   Heart,
   CheckCheck,
   ArrowLeft,
@@ -326,15 +325,8 @@ export function NotificationBell() {
                         )}
 
                         <div className="flex-1 min-w-0 space-y-1.5">
-                          {/* الشريط العلوي */}
-                          <div className="flex items-center justify-between gap-2">
-                            <Badge 
-                              variant="secondary" 
-                              className={`${style.badgeColor} text-xs border`}
-                            >
-                              {style.hasAI && <Zap className="h-2.5 w-2.5 mr-1" />}
-                              {style.label}
-                            </Badge>
+                          {/* الشريط العلوي — الوقت فقط */}
+                          <div className="flex items-center justify-end gap-2">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {formatDistanceToNow(new Date(notification.createdAt), {
                                 addSuffix: true,
@@ -353,15 +345,6 @@ export function NotificationBell() {
                             {notification.body}
                           </p>
 
-                          {/* مؤشر غير مقروء */}
-                          {!notification.read && (
-                            <div className="flex items-center gap-1.5 pt-0.5">
-                              <div className={`h-1.5 w-1.5 rounded-full ${style.dotColor} animate-pulse`} />
-                              <span className={`text-xs font-medium ${style.iconColor}`}>
-                                جديد
-                              </span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
