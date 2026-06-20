@@ -101,24 +101,28 @@ struct MuqtarabHomeStrip: View {
         }
     }
 
+    // أبعاد ثابتة لكل البطاقات حتى تتساوى تمامًا في الشريط الأفقي.
+    private let cardWidth: CGFloat = 230
+    private let imageHeight: CGFloat = 124
+    private let textHeight: CGFloat = 98
+
     private func card(_ topic: MuqTopic) -> some View {
         let tint = muqColor(topic.angle?.colorHex)
         return VStack(alignment: .leading, spacing: 0) {
-            if let raw = topic.heroImageUrl, let url = URL(string: URLConstants.absolutize(raw)) {
-                CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 700) {
-                    Rectangle().fill(tint.opacity(0.12))
-                }
-                .frame(width: 230, height: 120)
-                .clipped()
-            } else {
-                ZStack {
-                    Rectangle().fill(tint.opacity(0.12))
-                    Image(systemName: "scope")
+            ZStack {
+                if let raw = topic.heroImageUrl, let url = URL(string: URLConstants.absolutize(raw)) {
+                    CachedAsyncImage(url: url, contentMode: .fill, maxPixelSize: 700) {
+                        tint.opacity(0.14)
+                    }
+                } else {
+                    tint.opacity(0.14)
+                    Image(systemName: muqSymbol(topic.angle?.icon))
                         .font(SabqFonts.app(size: 30, weight: .light))
-                        .foregroundStyle(tint.opacity(0.6))
+                        .foregroundStyle(tint.opacity(0.7))
                 }
-                .frame(width: 230, height: 120)
             }
+            .frame(width: cardWidth, height: imageHeight)
+            .clipped()
 
             VStack(alignment: .leading, spacing: 6) {
                 if let name = topic.angle?.name, !name.isEmpty {
@@ -135,11 +139,12 @@ struct MuqtarabHomeStrip: View {
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
             .padding(12)
-            .frame(width: 230, alignment: .leading)
+            .frame(width: cardWidth, height: textHeight, alignment: .topLeading)
         }
-        .frame(width: 230)
+        .frame(width: cardWidth, height: imageHeight + textHeight)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(SabqTheme.surface)

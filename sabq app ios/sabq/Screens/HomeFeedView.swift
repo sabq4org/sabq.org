@@ -212,14 +212,6 @@ struct HomeFeedView: View {
                             .animatedAppear(index: 6)
                     }
 
-                    opinionsPreviewSection
-                        .animatedAppear(index: 7)
-
-                    // شريط «مُقترب» — زوايا تحليلية بأقلام الكتّاب. يختفي
-                    // كليًا عند غياب المواضيع المميّزة.
-                    MuqtarabHomeStrip()
-                        .animatedAppear(index: 8)
-
                     trendingPreviewSection
                         .animatedAppear(index: 8)
 
@@ -231,6 +223,15 @@ struct HomeFeedView: View {
                     latestArticlesSection
                         .id(Self.latestSectionID)
                         .animatedAppear(index: 10)
+
+                    // مقالات الرأي و«مُقترب» تُعرضان أسفل «آخر الأخبار».
+                    opinionsPreviewSection
+                        .animatedAppear(index: 11)
+
+                    // شريط «مُقترب» — زوايا تحليلية بأقلام الكتّاب. يختفي
+                    // كليًا عند غياب المواضيع المميّزة.
+                    MuqtarabHomeStrip()
+                        .animatedAppear(index: 12)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)

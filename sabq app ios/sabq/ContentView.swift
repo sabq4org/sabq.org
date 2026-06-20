@@ -106,6 +106,9 @@ struct ContentView: View {
                         initialTitle: route.title
                     )
                 }
+                .navigationDestination(for: MuqtarabWriterRoute.self) { route in
+                    MuqtarabWriterView(id: route.id, initialName: route.name)
+                }
                 .navigationDestination(for: MomentByMomentRoute.self) { _ in
                     MomentByMomentView()
                 }

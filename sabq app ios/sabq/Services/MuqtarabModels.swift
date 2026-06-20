@@ -104,6 +104,57 @@ nonisolated struct MuqTopicDetailResponse: Decodable {
     let writer: MuqWriter?
 }
 
+/// `GET /api/muqtarab/angles/:slug` — حقول الزاوية في المستوى الأعلى + الكاتب.
+nonisolated struct MuqAngleDetail: Decodable {
+    let angle: MuqAngle
+    let writer: MuqWriter?
+
+    enum CodingKeys: String, CodingKey { case writer }
+
+    init(from decoder: Decoder) throws {
+        angle = try MuqAngle(from: decoder)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        writer = try c.decodeIfPresent(MuqWriter.self, forKey: .writer)
+    }
+}
+
+// MARK: - صفحة الكاتب (`GET /api/muqtarab/writers/:id`)
+
+nonisolated struct MuqWriterInfo: Decodable, Hashable {
+    let id: String
+    let name: String
+    let avatar: String?
+    let bio: String?
+}
+
+nonisolated struct MuqWriterAngle: Decodable, Hashable, Identifiable {
+    let slug: String
+    let nameAr: String
+    let colorHex: String?
+    let iconKey: String?
+    let coverImageUrl: String?
+    var id: String { slug }
+}
+
+nonisolated struct MuqWriterTopic: Decodable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let slug: String
+    let excerpt: String?
+    let heroImageUrl: String?
+    let publishedAt: String?
+    let viewCount: Int?
+    let angleSlug: String
+    let angleName: String
+    let colorHex: String?
+}
+
+nonisolated struct MuqWriterProfile: Decodable {
+    let writer: MuqWriterInfo
+    let angles: [MuqWriterAngle]
+    let topics: [MuqWriterTopic]
+}
+
 // MARK: - استدعاءات API (المسارات العامة)
 
 extension APIClient {
@@ -126,8 +177,8 @@ extension APIClient {
     }
 
     /// بيانات زاوية واحدة (ترويسة + كاتب).
-    func fetchMuqtarabAngle(slug: String) async throws -> MuqAngle {
-        try await get(MuqAngle.self,
+    func fetchMuqtarabAngleDetail(slug: String) async throws -> MuqAngleDetail {
+        try await get(MuqAngleDetail.self,
                       path: "/muqtarab/angles/\(slug)",
                       apiRoot: URLConstants.publicAPI)
     }
@@ -144,6 +195,13 @@ extension APIClient {
     func fetchMuqtarabTopic(angleSlug: String, topicSlug: String) async throws -> MuqTopicDetailResponse {
         try await get(MuqTopicDetailResponse.self,
                       path: "/muqtarab/angles/\(angleSlug)/topics/\(topicSlug)",
+                      apiRoot: URLConstants.publicAPI)
+    }
+
+    /// صفحة الكاتب: نبذة + زواياه + مواضيعه المنشورة.
+    func fetchMuqtarabWriter(id: String) async throws -> MuqWriterProfile {
+        try await get(MuqWriterProfile.self,
+                      path: "/muqtarab/writers/\(id)",
                       apiRoot: URLConstants.publicAPI)
     }
 
