@@ -12,7 +12,7 @@ import {
   userRoles,
   roles,
 } from "@shared/schema";
-import { eq, and, or, desc, sql, gt, inArray } from "drizzle-orm";
+import { eq, and, or, desc, sql, gt, inArray, isNull } from "drizzle-orm";
 import { notificationBus } from "./notificationBus";
 
 // Arabic notification templates
@@ -353,10 +353,18 @@ export async function sendDraftSubmittedNotification(
       .from(users)
       .innerJoin(userRoles, eq(userRoles.userId, users.id))
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      // نربط تفضيلات الإشعارات حتى نحترم «وضع المباريات فقط» (leftJoin: مَن لا
+      // يملك صفّ تفضيلات يبقى مؤهّلاً لأن القيمة الافتراضية matchesOnly=false).
+      .leftJoin(userNotificationPrefs, eq(userNotificationPrefs.userId, users.id))
       .where(
         and(
           inArray(roles.name, editorRoleNames),
-          eq(users.status, 'active')
+          eq(users.status, 'active'),
+          // «وضع المباريات فقط» يكتم إشعارات المسودات التحريرية أيضًا.
+          or(
+            isNull(userNotificationPrefs.matchesOnly),
+            eq(userNotificationPrefs.matchesOnly, false)
+          )
         )
       );
 
