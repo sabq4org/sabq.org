@@ -364,6 +364,11 @@ export async function sendDraftSubmittedNotification(
           or(
             isNull(userNotificationPrefs.matchesOnly),
             eq(userNotificationPrefs.matchesOnly, false)
+          ),
+          // مفتاح مستقل: «إشعارات غرفة الأخبار / المسودات». إيقافه يكتمها مباشرة.
+          or(
+            isNull(userNotificationPrefs.editorialDrafts),
+            eq(userNotificationPrefs.editorialDrafts, true)
           )
         )
       );

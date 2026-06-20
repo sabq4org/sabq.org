@@ -21,6 +21,7 @@ interface NotificationPrefs {
   webPush: boolean;
   dailyDigest: boolean;
   matchesOnly: boolean;
+  editorialDrafts: boolean;
   quietHoursStart?: string | null;
   quietHoursEnd?: string | null;
   whatsappPhone?: string | null;
@@ -79,6 +80,11 @@ export default function NotificationSettings() {
   // Check if user is a reporter/editor/admin (can have articles assigned)
   const isReporter = user?.role === 'reporter' || user?.role === 'editor' || user?.role === 'admin' || user?.role === 'superadmin' ||
     user?.roles?.some(r => ['reporter', 'editor', 'admin', 'superadmin'].includes(r.name));
+
+  // محررون/أدمن فقط يستقبلون إشعارات مسودات المراسلين (DraftSubmitted)
+  const editorialRoles = ['editor', 'admin', 'superadmin', 'senior_editor', 'editor_in_chief'];
+  const isEditor = (user?.role ? editorialRoles.includes(user.role) : false) ||
+    (user?.roles?.some(r => editorialRoles.includes(r.name)) ?? false);
 
   const matchesOnly = prefs?.matchesOnly ?? false;
 
@@ -520,6 +526,42 @@ export default function NotificationSettings() {
                   onCheckedChange={(checked) => updateReporterPrefsMutation.mutate(checked)}
                   disabled={updateReporterPrefsMutation.isPending}
                   data-testid="switch-notify-on-publish"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* === غرفة الأخبار / المسودات — محررون وأدمن فقط === */}
+        {isEditor && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Newspaper className="h-5 w-5 text-primary" />
+                غرفة الأخبار
+              </CardTitle>
+              <CardDescription>
+                إشعارات سير العمل التحريري الخاصة بالمحررين
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <PenTool className="h-5 w-5 text-primary" />
+                  <div>
+                    <Label htmlFor="editorial-drafts" className="text-base font-medium">
+                      مسودات المراسلين الجديدة
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      إشعار عند إرسال أي مراسل مسودة خبر جديدة للمراجعة
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="editorial-drafts"
+                  checked={prefs?.editorialDrafts ?? true}
+                  onCheckedChange={(checked) => handleToggle("editorialDrafts", checked)}
+                  data-testid="switch-editorial-drafts"
                 />
               </div>
             </CardContent>
