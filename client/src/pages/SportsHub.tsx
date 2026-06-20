@@ -413,10 +413,11 @@ export function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: num
         {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
         <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
           {decided ? (
-            <span className="text-sm font-black tabular-nums tracking-wide" dir="rtl">
-              <span className={homeWon ? ACCENT : "text-foreground"}>{f.goals.home ?? 0}</span>
-              <span className="mx-0.5 text-muted-foreground">-</span>
+            // RTL: المضيف يمينًا، فنعرض (ضيف - مضيف) لأن الأرقام لا تنعكس مع dir.
+            <span className="text-sm font-black tabular-nums tracking-wide" dir="ltr">
               <span className={awayWon ? ACCENT : "text-foreground"}>{f.goals.away ?? 0}</span>
+              <span className="mx-0.5 text-muted-foreground">-</span>
+              <span className={homeWon ? ACCENT : "text-foreground"}>{f.goals.home ?? 0}</span>
             </span>
           ) : (
             <span className={`text-xs font-black ${ACCENT} tabular-nums`}>{fmtTime(f.timestamp)}</span>
@@ -676,10 +677,10 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
           {home.logo && <img src={home.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
           <div className="shrink-0 min-w-[3.5rem] text-center px-1.5 py-0.5 rounded-md bg-muted/60">
             {decided ? (
-              <span className="text-sm font-black tabular-nums tracking-wide" dir="rtl">
-                <span className={homeWon ? ACCENT : "text-foreground"}>{goals.home ?? 0}</span>
-                <span className="mx-0.5 text-muted-foreground">-</span>
+              <span className="text-sm font-black tabular-nums tracking-wide" dir="ltr">
                 <span className={awayWon ? ACCENT : "text-foreground"}>{goals.away ?? 0}</span>
+                <span className="mx-0.5 text-muted-foreground">-</span>
+                <span className={homeWon ? ACCENT : "text-foreground"}>{goals.home ?? 0}</span>
               </span>
             ) : (
               <span className={`text-xs font-black ${ACCENT} tabular-nums`}>{fmtTime(fixture.timestamp)}</span>
@@ -704,10 +705,10 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
           {teamCol(home, homeWon)}
           <div className="flex flex-col items-center justify-center min-w-[3.75rem] pt-2.5">
             {decided ? (
-              <span className="text-2xl font-black tabular-nums tracking-tight text-foreground" dir="rtl">
-                <span className={homeWon ? ACCENT : ""}>{goals.home ?? 0}</span>
-                <span className="mx-1 text-muted-foreground/50">-</span>
+              <span className="text-2xl font-black tabular-nums tracking-tight text-foreground" dir="ltr">
                 <span className={awayWon ? ACCENT : ""}>{goals.away ?? 0}</span>
+                <span className="mx-1 text-muted-foreground/50">-</span>
+                <span className={homeWon ? ACCENT : ""}>{goals.home ?? 0}</span>
               </span>
             ) : (
               <>
@@ -1303,12 +1304,12 @@ function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: numb
             <li key={m.id} className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm">
               <span className="w-20 shrink-0 text-[11px] text-muted-foreground">{fmt(m.date)}</span>
               <span className={`flex-1 truncate text-left ${homeWon ? "font-bold text-foreground" : "text-muted-foreground"}`}>{m.home.name}</span>
-              <span className="shrink-0 font-black tabular-nums text-foreground px-2" dir="rtl">
+              <span className="shrink-0 font-black tabular-nums text-foreground px-2" dir="ltr">
                 {decided ? (
                   <>
-                    <span>{m.goals.home}</span>
-                    <span className="mx-0.5 text-muted-foreground">-</span>
                     <span>{m.goals.away}</span>
+                    <span className="mx-0.5 text-muted-foreground">-</span>
+                    <span>{m.goals.home}</span>
                   </>
                 ) : "—"}
               </span>
@@ -1613,10 +1614,10 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                 <div className="text-center">
                   <div className="text-3xl font-black tabular-nums tracking-wider text-foreground">
                     {fx.status.finished || fx.status.live ? (
-                      <span dir="rtl">
-                        <span>{fx.goals.home ?? 0}</span>
-                        <span className="mx-1 text-muted-foreground/60">:</span>
+                      <span dir="ltr">
                         <span>{fx.goals.away ?? 0}</span>
+                        <span className="mx-1 text-muted-foreground/60">:</span>
+                        <span>{fx.goals.home ?? 0}</span>
                       </span>
                     ) : fmtTime(fx.timestamp)}
                   </div>
