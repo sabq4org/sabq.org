@@ -20524,7 +20524,19 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         prefs = newPrefs;
       }
 
-      res.json({ preferences: prefs });
+      // الواجهة تستخدم أسماء قديمة (enable*) مختلفة عن أعمدة الجدول — نعرض aliases
+      // لتطابق الواجهة وإلا تظهر كل المفاتيح مفعّلة افتراضياً بقيمة undefined ?? true.
+      res.json({
+        preferences: {
+          ...prefs,
+          enableRecommendations:
+            prefs.becauseYouLiked || prefs.similarToSaved || prefs.withinReads || prefs.trendingForYou,
+          enablePersonalized: prefs.becauseYouLiked,
+          enableCrossCategory: prefs.similarToSaved,
+          enableTrending: prefs.trendingForYou,
+          enableDailyDigest: prefs.dailyDigest,
+        },
+      });
     } catch (error) {
       console.error("Error getting recommendation preferences:", error);
       res.status(500).json({ message: "فشل في جلب إعدادات التوصيات" });
@@ -20537,29 +20549,24 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
   app.patch("/api/recommendations/preferences", requireAuth, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const updates = req.body;
+      const updates = req.body || {};
       const { userRecommendationPrefs } = await import('@shared/schema');
 
-      // Filter only allowed fields to update (exclude id, userId, createdAt, updatedAt)
-      const allowedFields = [
-        'enableRecommendations',
-        'enableDailyDigest',
-        'digestTime',
-        'minSimilarityScore',
-        'enableCrossCategory',
-        'enableTrending',
-        'enablePersonalized',
-        'maxNotificationsPerDay',
-        'quietHoursStart',
-        'quietHoursEnd'
-      ];
-
+      // الواجهة ترسل أسماء قديمة (enable*) — نترجمها إلى أعمدة الجدول الفعلية.
+      // المفتاح الرئيسي enableRecommendations يضبط الأنواع الأربعة، ثم تتجاوزه المفاتيح الفردية.
       const filteredUpdates: any = {};
-      for (const field of allowedFields) {
-        if (field in updates) {
-          filteredUpdates[field] = updates[field];
-        }
+      if (typeof updates.enableRecommendations === 'boolean') {
+        filteredUpdates.becauseYouLiked = updates.enableRecommendations;
+        filteredUpdates.similarToSaved = updates.enableRecommendations;
+        filteredUpdates.withinReads = updates.enableRecommendations;
+        filteredUpdates.trendingForYou = updates.enableRecommendations;
       }
+      if (typeof updates.enablePersonalized === 'boolean') filteredUpdates.becauseYouLiked = updates.enablePersonalized;
+      if (typeof updates.enableCrossCategory === 'boolean') filteredUpdates.similarToSaved = updates.enableCrossCategory;
+      if (typeof updates.enableTrending === 'boolean') filteredUpdates.trendingForYou = updates.enableTrending;
+      if (typeof updates.enableDailyDigest === 'boolean') filteredUpdates.dailyDigest = updates.enableDailyDigest;
+      if (typeof updates.digestTime === 'string') filteredUpdates.digestTime = updates.digestTime;
+      filteredUpdates.updatedAt = new Date();
 
       // Check if preferences exist
       const existing = await db.query.userRecommendationPrefs.findFirst({
