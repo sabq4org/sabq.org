@@ -762,10 +762,10 @@ function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: numbe
         ))}
       </div>
       {isLoading
-        ? <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-16 sm:h-44 rounded-lg sm:rounded-2xl bg-card border border-border animate-pulse" />)}</div>
+        ? <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-card border border-border animate-pulse" />)}</div>
         : fixtures.length === 0
           ? emptyBox("لا توجد مباريات في هذه الجولة.")
-          : <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} />)}</div>}
+          : <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact />)}</div>}
     </div>
   );
 }
@@ -822,8 +822,8 @@ function MatchHub({ data, configured, compSlug, onOpen }: {
               ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
               : (
                 <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* تبويب «النتائج» يبقى صفوفًا مدمجة على كل المقاسات (ديسكتوب كما كان) */}
-                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact={active === "results"} />)}
+                  {/* المباشر/القادمة/النتائج صفوف مدمجة على كل المقاسات؛ «اليوم» يبقى بطاقات كبيرة */}
+                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact={active !== "today"} />)}
                 </div>
               )}
         </motion.div>
