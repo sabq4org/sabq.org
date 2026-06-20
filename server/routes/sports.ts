@@ -175,16 +175,19 @@ export function registerSportsRoutes(app: Express) {
 
   // مباريات اليوم عبر كل البطولات السعودية (مقرّرة/جارية/منتهية) مع اسم البطولة
   // لكل مباراة — نظرة سريعة موحّدة أعلى الصفحة، مستقلّة عن البطولة المختارة.
-  app.get("/api/sports/today", async (_req, res) => {
+  app.get("/api/sports/today", async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
       res.set("Cache-Control", "public, max-age=30, s-maxage=60");
       res.json({ configured: false, today: [] });
       return;
     }
+    // ?date=YYYY-MM-DD اختياري للتنقّل بين الأيام (لوحة "مباريات اليوم").
+    const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     try {
-      const today = await getGlobalTodayFixtures();
+      const today = await getGlobalTodayFixtures(date);
       res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-      res.json({ configured: true, today });
+      res.json({ configured: true, date: date ?? null, today });
     } catch (error) {
       console.error("[Sports] global today failed:", error);
       res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });

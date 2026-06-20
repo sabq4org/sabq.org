@@ -363,6 +363,8 @@ const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashb
 const SportsBento = lazy(() => retryImport(() => import("@/pages/SportsBento")));
 // تجربة مركز رياضي مباشر على /sports5
 const SportsLiveCenter = lazy(() => retryImport(() => import("@/pages/SportsLiveCenter")));
+// لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports3/matches
+const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -871,6 +873,8 @@ function Router() {
         <Route path="/sports2/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
         <Route path="/sports2/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
         <Route path="/sports2">{() => <LazyRoute component={SportsHub} />}</Route>
+        {/* لوحة مباريات اليوم — تُسجّل قبل /sports3 */}
+        <Route path="/sports3/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         {/* تجربة Dashboard بعمودين على /sports3 */}
         <Route path="/sports3">{() => <LazyRoute component={SportsDashboard} />}</Route>
         {/* تجربة لوحة Bento على /sports4 */}
