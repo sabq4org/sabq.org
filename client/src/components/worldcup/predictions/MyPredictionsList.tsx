@@ -1,5 +1,6 @@
 import { Clock, Trophy, X } from "lucide-react";
 import { formatKickoffDay } from "../wcTypes";
+import { formatNumber } from "@/lib/format";
 import type { MyPredictionRow } from "./predictionsTypes";
 
 function MiniTeam({ name, logo }: { name: string | null; logo: string | null }) {
@@ -72,7 +73,7 @@ export function MyPredictionsList({ predictions, isLoading }: Props) {
                 {settled ? (
                   isWin ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-1 text-[11px] font-black text-white">
-                      <Trophy className="h-3 w-3" /> +{p.pointsAwarded.toLocaleString("ar-SA")}
+                      <Trophy className="h-3 w-3" /> +{formatNumber(p.pointsAwarded)}
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">

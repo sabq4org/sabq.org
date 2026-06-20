@@ -1,4 +1,5 @@
 import { Crown, Trophy } from "lucide-react";
+import { formatNumber } from "@/lib/format";
 import type { LeaderRow } from "./predictionsTypes";
 
 const RANK_STYLES: Record<number, string> = {
@@ -72,12 +73,12 @@ export function PredictionsLeaderboard({ leaders, currentUserId, isLoading }: Pr
                 {isMe && <span className="mr-1 text-[11px] font-normal text-emerald-600 dark:text-emerald-400"> (أنت)</span>}
               </p>
               <p className="text-[11px] text-muted-foreground">
-                {row.correctCount.toLocaleString("ar-SA")} إصابة دقيقة · {row.playedCount.toLocaleString("ar-SA")} مباراة
+                {formatNumber(row.correctCount)} إصابة دقيقة · {formatNumber(row.playedCount)} مباراة
               </p>
             </div>
             <div className="shrink-0 text-left">
               <span className="text-base font-black tabular-nums text-emerald-700 dark:text-emerald-300">
-                {row.totalPoints.toLocaleString("ar-SA")}
+                {formatNumber(row.totalPoints)}
               </span>
               <span className="mr-1 text-[11px] text-muted-foreground">نقطة</span>
             </div>
