@@ -323,7 +323,7 @@ function CompetitionGroup({
         <span className="font-black text-foreground truncate flex-1">{name}</span>
         {status === "ongoing" && (
           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> جارية
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> الموسم جارٍ
           </span>
         )}
         {liveCount > 0 ? (
