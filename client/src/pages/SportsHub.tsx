@@ -822,8 +822,8 @@ function MatchHub({ data, configured, compSlug, onOpen }: {
               ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
               : (
                 <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* المباشر/القادمة/النتائج صفوف مدمجة على كل المقاسات؛ «اليوم» يبقى بطاقات كبيرة */}
-                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact={active !== "today"} />)}
+                  {/* كل التبويبات (مباشر/اليوم/قادمة/النتائج) صفوف مدمجة موحّدة على كل المقاسات */}
+                  {current.list.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact />)}
                 </div>
               )}
         </motion.div>
