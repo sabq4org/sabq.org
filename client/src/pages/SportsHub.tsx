@@ -119,7 +119,7 @@ export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { sau
 export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "european", "world"];
 export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "جارية الآن", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
 // ترتيب الأولوية داخل الفئة: الجارية أولًا ثم القادمة ثم المنتهية.
-const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
+export const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
 export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }

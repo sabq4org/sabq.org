@@ -41,6 +41,8 @@ import {
   ACCENT,
   COMP_CATEGORY_LABELS,
   COMP_CATEGORY_ORDER,
+  COMP_STATUS_LABELS,
+  COMP_STATUS_RANK,
   SectionHeader,
   moreLink,
   PillTabs,
@@ -164,8 +166,8 @@ function ScoreboardCard({ items, onOpen }: {
         </div>
       )}
 
-      <Link href="/category/sports" className={`flex items-center justify-center gap-1 border-t border-border py-2.5 text-xs font-bold ${ACCENT} hover:bg-muted/50 transition-colors`}>
-        كل التغطية الرياضية <ChevronLeft className="w-3.5 h-3.5" />
+      <Link href="/sports3/matches" className={`flex items-center justify-center gap-1 border-t border-border py-2.5 text-xs font-bold ${ACCENT} hover:bg-muted/50 transition-colors`}>
+        كل مباريات اليوم <ChevronLeft className="w-3.5 h-3.5" />
       </Link>
     </div>
   );
@@ -244,7 +246,16 @@ export default function SportsDashboard() {
   const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
   const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
   const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
-  const compsInActiveCat = competitions.filter((c) => catOf(c) === activeCat);
+  // داخل الفئة: الجارية أولًا، ثم القادمة، ثم المنتهية (مع الحفاظ على الترتيب الأصلي عند التعادل).
+  const compsInActiveCat = competitions
+    .filter((c) => catOf(c) === activeCat)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const ra = COMP_STATUS_RANK[a.c.status ?? "unknown"];
+      const rb = COMP_STATUS_RANK[b.c.status ?? "unknown"];
+      return ra !== rb ? ra - rb : a.i - b.i;
+    })
+    .map(({ c }) => c);
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`], refetchInterval: 30_000, refetchIntervalInBackground: false,
@@ -348,7 +359,7 @@ export default function SportsDashboard() {
         <section className="mt-12 sm:mt-16 bg-muted/40 border-y border-border">
           <div className="max-w-7xl mx-auto px-4 py-12 space-y-14">
             <div id="matches" className="scroll-mt-16">
-              <SectionHeader title="مركز المباريات" subtitle="مباشر · اليوم · قادمة · النتائج" icon={<CalendarDays className={`w-5 h-5 ${ACCENT}`} />} />
+              <SectionHeader title="مركز المباريات" subtitle="مباشر · اليوم · قادمة · النتائج" icon={<CalendarDays className={`w-5 h-5 ${ACCENT}`} />} action={moreLink("/sports3/matches", "مباريات اليوم")} />
               {competitions.length > 0 && (
                 <div className="space-y-2 mb-5">
                   {presentCats.length > 1 && (
@@ -365,18 +376,32 @@ export default function SportsDashboard() {
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     {compsInActiveCat.map((c) => (
                       <button key={c.slug} onClick={() => setCompSlug(c.slug)}
-                        className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"}`}>
+                        title={c.status ? COMP_STATUS_LABELS[c.status] : undefined}
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
+                        {c.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                         {c.name}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              {comp && (comp.logo || comp.season) && (
+              {comp && (comp.logo || comp.season || (comp.status && comp.status !== "unknown")) && (
                 <div className="flex items-center gap-3 mb-5 px-1">
                   {comp.logo && <img src={comp.logo} alt="" className="w-10 h-10 object-contain shrink-0" />}
                   <div className="min-w-0">
-                    <div className="font-black text-foreground truncate">{comp.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-foreground truncate">{comp.name}</span>
+                      {comp.status && comp.status !== "unknown" && (
+                        <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          comp.status === "ongoing" ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                          : comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          : "bg-muted text-muted-foreground"
+                        }`}>
+                          {comp.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+                          {COMP_STATUS_LABELS[comp.status]}
+                        </span>
+                      )}
+                    </div>
                     {comp.season && <div className="text-xs text-muted-foreground tabular-nums">موسم {comp.season}</div>}
                   </div>
                 </div>

@@ -327,8 +327,9 @@ const riyadhDayFmt = new Intl.DateTimeFormat("en-CA", {
  * والجارية والمنتهية اليوم، مرتّبة: الجارية أولًا ثم الأقرب موعدًا — لنظرة
  * سريعة موحّدة أعلى الصفحة بصرف النظر عن البطولة المختارة.
  */
-export async function getGlobalTodayFixtures(): Promise<SplLiveBoardItem[]> {
-  const dateKey = riyadhDayFmt.format(new Date());
+export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoardItem[]> {
+  // ?date اختياري بصيغة YYYY-MM-DD (بتوقيت الرياض ضمنًا)؛ غير ذلك = اليوم.
+  const dateKey = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : riyadhDayFmt.format(new Date());
   return withSWR(`spl:today:${dateKey}`, TODAY_TTL, TODAY_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { date: dateKey, timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
