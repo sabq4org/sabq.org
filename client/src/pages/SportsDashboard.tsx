@@ -46,7 +46,6 @@ import {
   PillTabs,
   NewsCard,
   MatchHub,
-  TitleRace,
   StandingsTable,
   PodiumCard,
   CardLeaders,
@@ -142,8 +141,8 @@ function HeroFeature({ article }: { article: ArticleWithDetails }) {
 // ============================================================
 // لوحة نتائج اليوم — العنصر المميّز في الـ Hero (مباشر/اليوم بارز).
 // ============================================================
-function ScoreboardCard({ items, standings, onOpen }: {
-  items: SpLiveItem[]; standings: SpStandingRow[]; onOpen: (id: number) => void;
+function ScoreboardCard({ items, onOpen }: {
+  items: SpLiveItem[]; onOpen: (id: number) => void;
 }) {
   const liveCount = items.filter((f) => f.status.live).length;
   const list = items.slice(0, 5);
@@ -168,13 +167,9 @@ function ScoreboardCard({ items, standings, onOpen }: {
         <div className="grid gap-2 p-3 overflow-y-auto scrollbar-hide max-h-[480px]">
           {list.map((f) => <TodayCompactRow key={f.id} f={f} onOpen={onOpen} />)}
         </div>
-      ) : standings.length > 0 ? (
-        // لا مباريات اليوم → نعرض سباق اللقب كبديل مفيد بدل فراغ.
-        <div className="p-2">
-          <TitleRace rows={standings} />
-        </div>
       ) : (
-        <div className="grid place-items-center p-8 text-center text-sm text-muted-foreground">
+        <div className="grid place-items-center gap-1 p-8 text-center text-sm text-muted-foreground">
+          <CalendarDays className="w-6 h-6 opacity-40" />
           لا مباريات اليوم — تابع الجولة القادمة من مركز المباريات.
         </div>
       )}
@@ -360,7 +355,7 @@ export default function SportsDashboard() {
           ) : (
             <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
               <div className="lg:col-span-2">{featured && <HeroFeature article={featured} />}</div>
-              <ScoreboardCard items={todayMatches} standings={standings} onOpen={setOpenMatch} />
+              <ScoreboardCard items={todayMatches} onOpen={setOpenMatch} />
             </div>
           )}
 
