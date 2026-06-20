@@ -1434,10 +1434,31 @@ const COMP_META_TTL = SEASON_TTL;
 
 // ---------- البند 9: ترويسة البطولة (شعار + موسم) ----------
 
+/**
+ * حالة موسم البطولة:
+ * - `ongoing`: انطلق الموسم ولم ينتهِ بعد (اليوم بين start و end).
+ * - `upcoming`: موسم محدّد لكنه لم يبدأ بعد (today < start) — مثل الدوريات
+ *    الأوروبية صيفًا التي يصبح موسمها current قبل انطلاقها بأسابيع.
+ * - `finished`: انتهى الموسم (today > end).
+ * - `unknown`: لا تتوفر تواريخ start/end من المزود.
+ */
+export type CompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
+
+function computeStatus(start: string | null, end: string | null): CompetitionStatus {
+  if (!start || !end) return "unknown";
+  const today = new Date().toISOString().slice(0, 10); // بتوقيت UTC؛ تواريخ المزود يومية فلا حاجة لدقّة المنطقة
+  if (today < start) return "upcoming";
+  if (today > end) return "finished";
+  return "ongoing";
+}
+
 export interface SplCompetitionMeta {
   logo: string | null;
   season: number;
   round: string | null;
+  start: string | null;
+  end: string | null;
+  status: CompetitionStatus;
 }
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
@@ -1447,18 +1468,23 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
       const lg = rows[0]?.league ?? {};
       const seasons: any[] = rows[0]?.seasons ?? [];
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
+      const start = typeof current?.start === "string" ? current.start : null;
+      const end = typeof current?.end === "string" ? current.end : null;
       return {
         logo: lg.logo ?? null,
         season: typeof current?.year === "number" ? current.year : comp.fallbackSeason,
         round: null,
+        start,
+        end,
+        status: computeStatus(start, end),
       };
     } catch {
-      return { logo: null, season: comp.fallbackSeason, round: null };
+      return { logo: null, season: comp.fallbackSeason, round: null, start: null, end: null, status: "unknown" };
     }
   });
 }
 
-/** قائمة البطولات مُثراة بالشعار والموسم — لترويسة البطولة الديناميكية في الواجهة. */
+/** قائمة البطولات مُثراة بالشعار والموسم وحالته — لترويسة البطولة الديناميكية في الواجهة. */
 export async function listCompetitionsWithMeta() {
   const base = listCompetitions();
   const metas = await Promise.all(
@@ -1468,6 +1494,9 @@ export async function listCompetitionsWithMeta() {
     ...c,
     logo: metas[i]?.logo ?? null,
     season: metas[i]?.season ?? null,
+    start: metas[i]?.start ?? null,
+    end: metas[i]?.end ?? null,
+    status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
   }));
 }
 
