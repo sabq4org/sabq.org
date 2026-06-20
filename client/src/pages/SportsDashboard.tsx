@@ -79,6 +79,9 @@ const SECTIONS = [
 ];
 
 const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.thumbnailUrl, a.updatedAt);
+// زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
+const articleTime = (a: ArticleWithDetails) => new Date(a.publishedAt || (a as any).createdAt || 0).getTime();
+const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(b) - articleTime(a);
 
 // ============================================================
 // خبر الـ Hero الكبير — يملأ المساحة بأناقة سواء بصورة أو بدونها.
@@ -291,8 +294,10 @@ export default function SportsDashboard() {
   const featShorts = Array.isArray(shortsFeatured?.shorts) ? shortsFeatured.shorts : [];
   const videos = (catShorts.length > 0 ? catShorts : featShorts).slice(0, 8);
 
-  const featured = news[0];
-  const latest = news.slice(1, 9);
+  // نرتّب بالأحدث: «الخبر الأبرز» يجب أن يكون أحدث خبر فعلاً لا أقدم خبر مثبّت.
+  const sortedNews = [...news].sort(byRecency);
+  const featured = sortedNews[0];
+  const latest = sortedNews.slice(1, 9);
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
