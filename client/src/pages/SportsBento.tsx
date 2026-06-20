@@ -231,8 +231,13 @@ export default function SportsBento() {
   const featShorts = Array.isArray(shortsFeatured?.shorts) ? shortsFeatured.shorts : [];
   const videos = (catShorts.length > 0 ? catShorts : featShorts).slice(0, 4);
 
-  const featured = news[0];
-  const grid = news.slice(1, 9);
+  // نرتّب بالأحدث: «الخبر الأبرز» يجب أن يكون أحدث خبر فعلاً لا أقدم خبر مثبّت يدويًا (displayOrder).
+  const sortedNews = [...news].sort((a, b) =>
+    new Date(b.publishedAt || (b as any).createdAt || 0).getTime() -
+    new Date(a.publishedAt || (a as any).createdAt || 0).getTime()
+  );
+  const featured = sortedNews[0];
+  const grid = sortedNews.slice(1, 9);
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 

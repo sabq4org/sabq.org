@@ -159,6 +159,9 @@ export function timeAgo(date: Date | string | null | undefined): string {
   return `قبل ${Math.floor(diff / 86400)} يوم`;
 }
 const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.thumbnailUrl, a.updatedAt);
+// زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
+const articleTime = (a: ArticleWithDetails) => new Date(a.publishedAt || (a as any).createdAt || 0).getTime();
+const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(b) - articleTime(a);
 
 // لمسة الهوية (accent) — أزرق اللوقو الرسمي (--primary = hsl 204 88% 53%)،
 // لا أخضر emerald ولا primary (اللذان استعرناهما سابقًا من WorldCup).
@@ -2003,9 +2006,11 @@ export default function SportsHub() {
   const featShorts = Array.isArray(shortsFeatured?.shorts) ? shortsFeatured.shorts : [];
   const videos = (catShorts.length > 0 ? catShorts : featShorts).slice(0, 8);
 
-  const featured = news[0];
-  const secondary = news.slice(1, 3);
-  const grid = news.slice(3, 11);
+  // نرتّب بالأحدث: «الخبر الأبرز» يجب أن يكون أحدث خبر فعلاً لا أقدم خبر مثبّت.
+  const sortedNews = [...news].sort(byRecency);
+  const featured = sortedNews[0];
+  const secondary = sortedNews.slice(1, 3);
+  const grid = sortedNews.slice(3, 11);
 
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
