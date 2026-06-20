@@ -1734,6 +1734,9 @@ export const userNotificationPrefs = pgTable("user_notification_prefs", {
   // «وضع المباريات فقط» — عند التفعيل يكتم الملخص اليومي وإشعارات المقالات الجديدة
   // (ArticlePublished + متابعة الكلمات) ويُبقي إشعارات المباريات (sports.*) والعاجل.
   matchesOnly: boolean("matches_only").default(false).notNull(),
+  // إشعارات غرفة الأخبار التحريرية (مسودات المراسلين «DraftSubmitted») — للمحررين
+  // والأدمن فقط. افتراضيًا مفعّلة؛ إيقافها يكتم هذه الإشعارات بصرف النظر عن matchesOnly.
+  editorialDrafts: boolean("editorial_drafts").default(true).notNull(),
   quietHoursStart: text("quiet_hours_start").default("23:00"),
   quietHoursEnd: text("quiet_hours_end").default("08:00"),
   whatsappPhone: text("whatsapp_phone"),
@@ -2910,6 +2913,7 @@ export const updateUserNotificationPrefsSchema = z.object({
   webPush: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),
   matchesOnly: z.boolean().optional(),
+  editorialDrafts: z.boolean().optional(),
   quietHoursStart: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "صيغة الوقت غير صحيحة").optional(),
   quietHoursEnd: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "صيغة الوقت غير صحيحة").optional(),
   whatsappPhone: z.union([
