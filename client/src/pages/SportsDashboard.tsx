@@ -90,7 +90,7 @@ function HeroFeature({ article }: { article: ArticleWithDetails }) {
   return (
     <Link
       href={`/article/${article.englishSlug || article.slug}`}
-      className="group relative block overflow-hidden rounded-3xl border border-border bg-card min-h-[300px] lg:min-h-[460px] h-full"
+      className="group relative block overflow-hidden rounded-3xl border border-border bg-card h-[320px] sm:h-[400px] lg:h-[460px]"
     >
       {img ? (
         <>
