@@ -67,7 +67,7 @@ struct CalendarView: View {
                     ForEach(Array(grouped.enumerated()), id: \.offset) { _, group in
                         VStack(alignment: .leading, spacing: 10) {
                             Text(group.date)
-                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 12, weight: .heavy))
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                                 .padding(.horizontal, 4)
 
@@ -92,7 +92,7 @@ struct CalendarView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -107,16 +107,16 @@ struct CalendarView: View {
                     .fill(SabqTheme.gold.opacity(0.14))
                     .frame(width: 56, height: 56)
                 Image(systemName: "calendar")
-                    .font(.system(size: 24, weight: .light))
+                    .font(SabqFonts.app(size: 24, weight: .light))
                     .foregroundStyle(SabqTheme.gold)
                     .symbolRenderingMode(.hierarchical)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("أحداث وأيام عالمية")
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text("ما يحدث في العالم خلال الأسبوع القادم")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -134,7 +134,7 @@ struct CalendarView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(labelFor(type: event.type))
-                        .font(.system(size: 10, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .heavy))
                         .foregroundStyle(tint)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -143,7 +143,7 @@ struct CalendarView: View {
                         HStack(spacing: 2) {
                             ForEach(0..<min(imp, 5), id: \.self) { _ in
                                 Image(systemName: "star.fill")
-                                    .font(.system(size: 8))
+                                    .font(SabqFonts.app(size: 8))
                                     .foregroundStyle(SabqTheme.gold)
                             }
                         }
@@ -151,13 +151,13 @@ struct CalendarView: View {
                     Spacer(minLength: 0)
                 }
                 Text(event.title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 if let desc = event.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.system(size: 12))
+                        .font(SabqFonts.app(size: 12))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)

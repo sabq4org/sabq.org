@@ -42,7 +42,7 @@ struct DailyBriefView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -98,16 +98,16 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
                 Spacer(minLength: 0)
             }
             Text(value)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .monospacedDigit()
             Text(label)
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(1)
         }
@@ -140,10 +140,10 @@ struct DailyBriefView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.coral)
                 Text("اقتراحات لك من اهتماماتك")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
             }
@@ -181,10 +181,10 @@ struct DailyBriefView: View {
                     .frame(width: 220, height: 124)
             }
             Text(article.category.title)
-                .font(.system(size: 10, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .bold))
                 .foregroundStyle(article.category.tint)
             Text(article.title)
-                .font(.system(size: 13.5, weight: .bold))
+                .font(SabqFonts.app(size: 13.5, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
@@ -205,19 +205,19 @@ struct DailyBriefView: View {
             ZStack {
                 Circle().fill(tint.opacity(0.14)).frame(width: 46, height: 46)
                 Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(SabqFonts.app(size: 20, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolRenderingMode(.hierarchical)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("مزاجك القرائي اليوم")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 Text(label)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(SabqFonts.app(size: 12))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -263,21 +263,21 @@ struct DailyBriefView: View {
             avatar(user: user)
             VStack(alignment: .leading, spacing: 6) {
                 Text(user.displayName)
-                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 18, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .bold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(user.localizedRole)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .lineLimit(1)
                 }
                 if let email = user.email, !email.isEmpty {
                     Text(email)
-                        .font(.system(size: 11, weight: .regular))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .lineLimit(1)
                 }
@@ -325,7 +325,7 @@ struct DailyBriefView: View {
             .frame(width: 64, height: 64)
             .overlay {
                 Text(String(user.displayName.prefix(1)))
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 22, weight: .heavy))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -336,17 +336,17 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("اهتماماتك")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
                 Button {
                     showInterestsPicker = true
                 } label: {
                     Text(interests.isEmpty ? "اختر اهتماماتك" : "تعديل")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                 }
                 .buttonStyle(.plain)
@@ -355,7 +355,7 @@ struct DailyBriefView: View {
             if interests.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("لم تختر بعد اهتماماتك. اختر بضع تصنيفات لنقترح عليك أهم الأخبار في كل زيارة.")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(SabqFonts.app(size: 13, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineSpacing(4)
 
@@ -364,9 +364,9 @@ struct DailyBriefView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                             Text("اختر اهتماماتك الآن")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(SabqFonts.app(size: 13, weight: .bold))
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
@@ -381,7 +381,7 @@ struct DailyBriefView: View {
                 FlowLayout(spacing: 8) {
                     ForEach(interests) { interest in
                         Text(interest.name ?? interest.slug ?? "—")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
@@ -392,7 +392,7 @@ struct DailyBriefView: View {
                 }
 
                 Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
         }
@@ -423,14 +423,14 @@ struct DailyBriefView: View {
             ZStack {
                 Circle().fill(tint.opacity(0.13)).frame(width: 34, height: 34)
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
             }
             Text(title)
-                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 14, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             Text(subtitle)
-                .font(.system(size: 11))
+                .font(SabqFonts.app(size: 11))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(2)
         }
@@ -465,17 +465,17 @@ struct DailyBriefView: View {
                     .fill(SabqTheme.primaryEnd.opacity(0.12))
                     .frame(width: 74, height: 74)
                 Image(systemName: "sparkles.rectangle.stack.fill")
-                    .font(.system(size: 32, weight: .light))
+                    .font(SabqFonts.app(size: 32, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd)
                     .symbolRenderingMode(.hierarchical)
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("موجزك في سبق")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 26, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text("صفحة شخصية تبدأ من اهتماماتك: تختار ما يهمك، وسبق ترتّب لك موجزاً يومياً، توصيات، وإحصاءات قراءة واضحة.")
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
@@ -505,17 +505,17 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 Image(systemName: "person.text.rectangle.fill")
-                    .font(.system(size: 13))
+                    .font(SabqFonts.app(size: 13))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("ابدأ باختيار ما يهمك")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
             }
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
                     Text(item)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
@@ -542,7 +542,7 @@ struct DailyBriefView: View {
     private var guestBenefits: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("بعد التسجيل تحصل على")
-                .font(.system(size: 15, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 15, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
 
             benefitRow("موجز صباحي أو مسائي مبني على اهتماماتك", icon: "sun.max.fill")
@@ -560,11 +560,11 @@ struct DailyBriefView: View {
     private func benefitRow(_ text: String, icon: String) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(SabqTheme.primaryEnd)
                 .frame(width: 18)
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -577,9 +577,9 @@ struct DailyBriefView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(SabqFonts.app(size: 13, weight: .heavy))
                     Text("ابدأ التسجيل مع SABQ AI")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 16, weight: .heavy))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -592,7 +592,7 @@ struct DailyBriefView: View {
                 showLogin = true
             } label: {
                 Text("لديك حساب؟ تسجيل الدخول")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -700,15 +700,15 @@ struct InterestsPickerSheet: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("اختر ما يهمّك")
-                        .font(.system(size: 17, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("سبق ترتّب موجزك اليومي على هذه التصنيفات.")
-                        .font(.system(size: 12))
+                        .font(SabqFonts.app(size: 12))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 8)
                 Text("\(selection.count)")
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(minWidth: 40, minHeight: 32)
                     .padding(.horizontal, 8)
@@ -727,7 +727,7 @@ struct InterestsPickerSheet: View {
                     selection = Set(categories.map(\.id))
                 } label: {
                     Text("حدد الكل")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -740,7 +740,7 @@ struct InterestsPickerSheet: View {
                     selection.removeAll()
                 } label: {
                     Text("امسح الكل")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -789,12 +789,12 @@ struct InterestsPickerSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
                         .foregroundStyle(isOn ? Color.white : SabqTheme.tertiaryInk)
                     Spacer(minLength: 0)
                 }
                 Text(category.name.isEmpty ? (category.slug ?? "—") : category.name)
-                    .font(.system(size: 14, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(isOn ? .white : SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -836,10 +836,10 @@ struct InterestsPickerSheet: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.grid.2x2.fill")
-                .font(.system(size: 32))
+                .font(SabqFonts.app(size: 32))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             Text("لم نستطع تحميل التصنيفات")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Button {
                 Task {
@@ -850,7 +850,7 @@ struct InterestsPickerSheet: View {
                 }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 13, weight: .heavy))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)
@@ -876,7 +876,7 @@ struct InterestsPickerSheet: View {
                     Text(selection.isEmpty
                          ? "تخطّي الآن"
                          : "حفظ \(selection.count) تصنيف")
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 16, weight: .heavy))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)

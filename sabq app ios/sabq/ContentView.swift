@@ -89,6 +89,23 @@ struct ContentView: View {
                 .navigationDestination(for: WorldCupRoute.self) { _ in
                     WorldCupView()
                 }
+                .navigationDestination(for: MuqtarabRoute.self) { _ in
+                    MuqtarabLandingView()
+                }
+                .navigationDestination(for: MuqtarabAngleRoute.self) { route in
+                    MuqtarabAngleView(
+                        slug: route.slug,
+                        initialName: route.name,
+                        initialColorHex: route.colorHex
+                    )
+                }
+                .navigationDestination(for: MuqtarabTopicRoute.self) { route in
+                    MuqtarabTopicView(
+                        angleSlug: route.angleSlug,
+                        topicSlug: route.topicSlug,
+                        initialTitle: route.title
+                    )
+                }
                 .navigationDestination(for: MomentByMomentRoute.self) { _ in
                     MomentByMomentView()
                 }

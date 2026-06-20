@@ -78,16 +78,16 @@ struct PressCardView: View {
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("سبق · بطاقة صحفية")
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .tracking(2)
                                 .foregroundStyle(inkMuted)
                             Text(roleAr)
-                                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 18, weight: .heavy))
                                 .foregroundStyle(accent)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 22, weight: .semibold))
+                            .font(SabqFonts.app(size: 22, weight: .semibold))
                             .foregroundStyle(accent)
                     }
 
@@ -104,11 +104,11 @@ struct PressCardView: View {
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text("الاسم")
-                                .font(.system(size: 9, weight: .medium))
+                                .font(SabqFonts.app(size: 9, weight: .medium))
                                 .tracking(1.5)
                                 .foregroundStyle(inkMuted)
                             Text(userName)
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                                 .foregroundStyle(inkPrimary)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.75)
@@ -120,13 +120,13 @@ struct PressCardView: View {
                             // the duplicate here when they match.
                             if let jobTitle, !jobTitle.isEmpty, jobTitle != roleAr {
                                 Text(jobTitle)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 11, weight: .medium))
                                     .foregroundStyle(inkSecondary)
                                     .lineLimit(1)
                             }
                             if let department, !department.isEmpty {
                                 Text(department)
-                                    .font(.system(size: 10, weight: .regular))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(inkMuted)
                                     .lineLimit(1)
                             }
@@ -139,11 +139,11 @@ struct PressCardView: View {
                         if let pressIdNumber, !pressIdNumber.isEmpty {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("رقم البطاقة")
-                                    .font(.system(size: 9, weight: .medium))
+                                    .font(SabqFonts.app(size: 9, weight: .medium))
                                     .tracking(1.5)
                                     .foregroundStyle(inkMuted)
                                 Text(pressIdNumber)
-                                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    .font(SabqFonts.app(size: 12, weight: .semibold))
                                     .tracking(2)
                                     .foregroundStyle(inkPrimary)
                             }
@@ -151,7 +151,7 @@ struct PressCardView: View {
                         Spacer(minLength: 0)
                         if let validUntilLabel {
                             Text(validUntilLabel)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .foregroundStyle(inkSecondary)
                         }
                     }
@@ -191,7 +191,7 @@ struct PressCardView: View {
         ZStack {
             accent.opacity(0.08)
             Image(systemName: "person.fill")
-                .font(.system(size: 24, weight: .semibold))
+                .font(SabqFonts.app(size: 24, weight: .semibold))
                 .foregroundStyle(accent.opacity(0.55))
         }
     }

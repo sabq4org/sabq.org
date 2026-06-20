@@ -84,19 +84,19 @@ struct OnboardingView: View {
                     .stroke(slide.tint.opacity(0.20), lineWidth: 1)
                     .frame(width: 200, height: 200)
                 Image(systemName: slide.icon)
-                    .font(.system(size: 64, weight: .light))
+                    .font(SabqFonts.app(size: 64, weight: .light))
                     .foregroundStyle(slide.tint)
                     .symbolRenderingMode(.hierarchical)
             }
 
             VStack(spacing: 14) {
                 Text(slide.title)
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 26, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.center)
 
                 Text(slide.body)
-                    .font(.system(size: 15))
+                    .font(SabqFonts.app(size: 15))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
@@ -121,7 +121,7 @@ struct OnboardingView: View {
                     completed = true
                 } label: {
                     Text("تخطّي")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             } else {
@@ -160,7 +160,7 @@ struct OnboardingView: View {
             }
         } label: {
             Text(page < slides.count - 1 ? "التالي" : "ابدأ الآن")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)

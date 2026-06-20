@@ -29,7 +29,7 @@ struct LoyaltyRewardsView: View {
                     ProgressView().padding(.top, 40)
                 } else if let loadError {
                     Text(loadError)
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                         .foregroundStyle(SabqTheme.coral)
                         .padding()
                 } else if rewards.isEmpty {
@@ -66,16 +66,16 @@ struct LoyaltyRewardsView: View {
         VStack(spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                 Text("رصيدك من النقاط")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
             }
             .foregroundStyle(.white.opacity(0.85))
             Text("\(balance)")
-                .font(.system(size: 42, weight: .black, design: .rounded))
+                .font(SabqFonts.app(size: 42, weight: .black))
                 .foregroundStyle(.white)
             Text("نقطة")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
@@ -111,16 +111,16 @@ struct LoyaltyRewardsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if let partner = reward.partnerName, !partner.isEmpty {
                         Text(partner.uppercased())
-                            .font(.system(size: 10, weight: .heavy))
+                            .font(SabqFonts.app(size: 10, weight: .heavy))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                     Text(reward.nameAr)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                         .lineLimit(2)
                     if let desc = reward.description, !desc.isEmpty {
                         Text(desc)
-                            .font(.system(size: 12))
+                            .font(SabqFonts.app(size: 12))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .lineLimit(2)
                     }
@@ -130,9 +130,9 @@ struct LoyaltyRewardsView: View {
 
             HStack(spacing: 8) {
                 HStack(spacing: 4) {
-                    Image(systemName: "sparkles").font(.system(size: 11, weight: .heavy))
+                    Image(systemName: "sparkles").font(SabqFonts.app(size: 11, weight: .heavy))
                     Text("\(reward.pointsCost) نقطة")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(SabqFonts.app(size: 13, weight: .heavy))
                 }
                 .foregroundStyle(SabqTheme.primaryEnd)
                 .padding(.horizontal, 10).padding(.vertical, 5)
@@ -140,7 +140,7 @@ struct LoyaltyRewardsView: View {
 
                 if let stock = reward.remainingStock, stock < 20 {
                     Text("متبقي \(stock)")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SabqTheme.coral)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(SabqTheme.coral.opacity(0.10), in: Capsule())
@@ -168,10 +168,10 @@ struct LoyaltyRewardsView: View {
                     ProgressView().tint(.white).controlSize(.mini)
                 } else {
                     Image(systemName: reward.canRedeem ? "gift.fill" : "lock.fill")
-                        .font(.system(size: 11, weight: .heavy))
+                        .font(SabqFonts.app(size: 11, weight: .heavy))
                 }
                 Text(buttonLabel(for: reward))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 14).padding(.vertical, 8)
@@ -200,7 +200,7 @@ struct LoyaltyRewardsView: View {
         )
         .overlay {
             Image(systemName: "gift.fill")
-                .font(.system(size: 26, weight: .light))
+                .font(SabqFonts.app(size: 26, weight: .light))
                 .foregroundStyle(SabqTheme.primaryEnd.opacity(0.5))
         }
     }
@@ -212,24 +212,24 @@ struct LoyaltyRewardsView: View {
                     .fill(SabqTheme.primaryEnd.opacity(0.10))
                     .frame(width: 96, height: 96)
                 Image(systemName: "gift.fill")
-                    .font(.system(size: 38, weight: .light))
+                    .font(SabqFonts.app(size: 38, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
             HStack(spacing: 6) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .heavy))
                 Text("قريباً")
-                    .font(.system(size: 11, weight: .black))
+                    .font(SabqFonts.app(size: 11, weight: .black))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .background(SabqTheme.primaryEnd, in: Capsule())
             Text("سيتم إتاحة المكافآت قريباً")
-                .font(.system(size: 17, weight: .bold))
+                .font(SabqFonts.app(size: 17, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Text("نقاطك محفوظة ✨ نعمل على إطلاق متجر المكافآت قريباً — تابع تفاعلك واستمر في كسب النقاط.")
-                .font(.system(size: 13))
+                .font(SabqFonts.app(size: 13))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -242,9 +242,9 @@ struct LoyaltyRewardsView: View {
     private func successBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(message)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
         }
         .foregroundStyle(SabqTheme.leaf)
         .padding(12)
@@ -255,9 +255,9 @@ struct LoyaltyRewardsView: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(message)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
         }
         .foregroundStyle(SabqTheme.coral)
         .padding(12)

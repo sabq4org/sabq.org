@@ -46,7 +46,7 @@ struct CommentComposer: View {
             axis: .vertical
         )
         .lineLimit(1...6)
-        .font(.system(size: 15, weight: .medium))
+        .font(SabqFonts.app(size: 15, weight: .medium))
         .foregroundStyle(SabqTheme.ink)
         .focused($focused)
         .padding(.horizontal, 14)
@@ -71,7 +71,7 @@ struct CommentComposer: View {
                     .frame(width: 32, height: 32)
             } else {
                 Image(systemName: "paperplane.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(
@@ -89,7 +89,7 @@ struct CommentComposer: View {
         HStack(spacing: 6) {
             Spacer(minLength: 0)
             Text("\(text.count) / \(CommentsStore.maxLength)")
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(counterColor)
                 .monospacedDigit()
         }
@@ -98,10 +98,10 @@ struct CommentComposer: View {
     private func replyChip(parent: APIComment) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "arrowshape.turn.up.left.fill")
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.primaryEnd)
             Text("ترد على \(parent.userName ?? "تعليق")")
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -109,7 +109,7 @@ struct CommentComposer: View {
                 store.replyingTo = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .padding(6)
                     .background(Circle().fill(SabqTheme.paleFill))

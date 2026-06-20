@@ -21,7 +21,7 @@ struct LoyaltyHistoryView: View {
                     ProgressView().padding(.top, 60)
                 } else if items.isEmpty, let err = loadError {
                     Text(err)
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                         .foregroundStyle(SabqTheme.coral)
                         .padding(.top, 60)
                 } else if items.isEmpty {
@@ -65,14 +65,14 @@ struct LoyaltyHistoryView: View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
                 Text("+\(value)")
-                    .font(.system(size: 19, weight: .black, design: .rounded))
+                    .font(SabqFonts.app(size: 19, weight: .black))
                     .foregroundStyle(tint)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .heavy))
                     .foregroundStyle(tint.opacity(0.75))
             }
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
@@ -126,13 +126,13 @@ struct LoyaltyHistoryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(bucket.label)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 13, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
                 HStack(spacing: 3) {
                     Text("+\(bucket.subtotal)")
-                        .font(.system(size: 12, weight: .black, design: .rounded))
-                    Image(systemName: "sparkles").font(.system(size: 9, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .black))
+                    Image(systemName: "sparkles").font(SabqFonts.app(size: 9, weight: .heavy))
                 }
                 .foregroundStyle(SabqTheme.leaf)
                 .padding(.horizontal, 8)
@@ -157,31 +157,31 @@ struct LoyaltyHistoryView: View {
                     .fill(actionColor(for: event.action).opacity(0.12))
                     .frame(width: 40, height: 40)
                 Text(actionIcon(for: event.action))
-                    .font(.system(size: 19))
+                    .font(SabqFonts.app(size: 19))
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(actionLabel(for: event.action))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                 if let title = event.articleTitle, !title.isEmpty {
                     Text(title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(2)
                 }
                 if let date = event.date {
                     Text(relativeTime(date))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
             Spacer(minLength: 0)
             HStack(spacing: 2) {
                 Text("+\(event.points)")
-                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .black))
                     .foregroundStyle(SabqTheme.leaf)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 11, weight: .heavy))
                     .foregroundStyle(SabqTheme.leaf.opacity(0.7))
             }
         }
@@ -196,13 +196,13 @@ struct LoyaltyHistoryView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 44, weight: .ultraLight))
+                .font(SabqFonts.app(size: 44, weight: .ultraLight))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             Text("لا يوجد نشاط بعد")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
             Text("ابدأ بالقراءة والتفاعل لكسب نقاطك الأولى ⭐")
-                .font(.system(size: 12))
+                .font(SabqFonts.app(size: 12))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }

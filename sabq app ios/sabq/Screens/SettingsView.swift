@@ -174,22 +174,22 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 6) {
                                 Text(user.displayName)
-                                    .font(.system(size: 17, weight: .bold))
+                                    .font(SabqFonts.app(size: 17, weight: .bold))
                                     .foregroundStyle(SabqTheme.ink)
 
                                 if user.isVerified {
                                     Image(systemName: "checkmark.seal.fill")
-                                        .font(.system(size: 14))
+                                        .font(SabqFonts.app(size: 14))
                                         .foregroundStyle(SabqTheme.primaryEnd)
                                 }
                             }
 
                             HStack(spacing: 6) {
                                 Image(systemName: roleIcon(for: user.primaryRoleKey))
-                                    .font(.system(size: 11))
+                                    .font(SabqFonts.app(size: 11))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                                 Text(user.localizedRole)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 13, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                             // Long-press the role label to surface the raw
@@ -203,7 +203,7 @@ struct SettingsView: View {
 
                             if let email = user.email, !email.isEmpty {
                                 Text(email)
-                                    .font(.system(size: 12, weight: .regular))
+                                    .font(SabqFonts.app(size: 12, weight: .regular))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                                     .lineLimit(1)
                             }
@@ -214,16 +214,16 @@ struct SettingsView: View {
                     if let jobTitle = user.jobTitle, !jobTitle.isEmpty, jobTitle != user.localizedRole {
                         HStack(spacing: 8) {
                             Image(systemName: "briefcase.fill")
-                                .font(.system(size: 12))
+                                .font(SabqFonts.app(size: 12))
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                             Text(jobTitle)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(SabqFonts.app(size: 13, weight: .medium))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                             if let dept = user.department, !dept.isEmpty {
                                 Text("·")
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                                 Text(dept)
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(SabqFonts.app(size: 13, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                         }
@@ -232,7 +232,7 @@ struct SettingsView: View {
 
                     if let bio = user.bio, !bio.isEmpty {
                         Text(bio)
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .lineSpacing(4)
                             .lineLimit(3)
@@ -242,9 +242,9 @@ struct SettingsView: View {
                     if user.emailVerified == false {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 13))
+                                .font(SabqFonts.app(size: 13))
                             Text("لم يتم تأكيد البريد الإلكتروني بعد")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(SabqFonts.app(size: 13, weight: .medium))
                         }
                         .foregroundStyle(.orange)
                         .padding(.horizontal, 12)
@@ -269,7 +269,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 12) {
                                 Image(systemName: "sparkles")
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(SabqFonts.app(size: 18, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                                     .frame(width: 32, height: 32)
                                     .background(
@@ -279,10 +279,10 @@ struct SettingsView: View {
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("أكمل بياناتك")
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(SabqFonts.app(size: 14, weight: .bold))
                                         .foregroundStyle(SabqTheme.ink)
                                     Text(completionBannerHint(needsBasics: needsBasics, needsInterests: needsInterests))
-                                        .font(.system(size: 12, weight: .regular))
+                                        .font(SabqFonts.app(size: 12, weight: .regular))
                                         .foregroundStyle(SabqTheme.secondaryInk)
                                         .lineLimit(2)
                                 }
@@ -294,9 +294,9 @@ struct SettingsView: View {
                                     Button { showEditProfile = true } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "person.text.rectangle")
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(SabqFonts.app(size: 12, weight: .semibold))
                                             Text("البيانات الشخصية")
-                                                .font(.system(size: 13, weight: .semibold))
+                                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                         }
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
@@ -321,9 +321,9 @@ struct SettingsView: View {
                                     } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "slider.horizontal.3")
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(SabqFonts.app(size: 12, weight: .semibold))
                                             Text("اهتماماتك")
-                                                .font(.system(size: 13, weight: .semibold))
+                                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                         }
                                         .foregroundStyle(needsBasics ? SabqTheme.primaryEnd : .white)
                                         .frame(maxWidth: .infinity)
@@ -356,9 +356,9 @@ struct SettingsView: View {
                         Button { showEditProfile = true } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "pencil")
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 13, weight: .semibold))
                                 Text("تعديل الملف الشخصي")
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 16)
@@ -387,16 +387,16 @@ struct SettingsView: View {
                         .frame(width: 56, height: 56)
                         .overlay {
                             Image(systemName: "person.fill")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(SabqFonts.app(size: 22, weight: .semibold))
                                 .foregroundStyle(SabqTheme.primaryEnd)
                         }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("تسجيل الدخول")
-                            .font(.system(size: 17, weight: .bold))
+                            .font(SabqFonts.app(size: 17, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                         Text("سجّل دخولك لتجربة شخصية أفضل")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -406,9 +406,9 @@ struct SettingsView: View {
                 Button { showLogin = true } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.right.circle.fill")
-                            .font(.system(size: 16))
+                            .font(SabqFonts.app(size: 16))
                         Text("تسجيل الدخول")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(SabqFonts.app(size: 15, weight: .bold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -439,7 +439,7 @@ struct SettingsView: View {
             .frame(width: size, height: size)
             .overlay {
                 Text(String(user.displayName.prefix(1)))
-                    .font(.system(size: size * 0.38, weight: .bold))
+                    .font(SabqFonts.app(size: size * 0.38, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -536,18 +536,18 @@ struct SettingsView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
             }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                     if let badgeCount, badgeCount > 0 {
                         Text("\(badgeCount)")
-                            .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            .font(SabqFonts.app(size: 11, weight: .heavy))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7)
@@ -556,7 +556,7 @@ struct SettingsView: View {
                     }
                 }
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -565,7 +565,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.left")
-                .font(.system(size: 13, weight: .heavy))
+                .font(SabqFonts.app(size: 13, weight: .heavy))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(14)
@@ -602,15 +602,15 @@ struct SettingsView: View {
             Button { showChangePassword = true } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "lock.rotation")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .frame(width: 20)
                     Text("تغيير كلمة المرور")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                     Spacer()
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 .padding(.vertical, 8)
@@ -663,11 +663,11 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.coral)
 
                 Text(subtitle)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(2)
                     .multilineTextAlignment(.leading)
@@ -675,7 +675,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.left")
-                .font(.system(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(.vertical, 3)
@@ -727,20 +727,20 @@ struct SettingsView: View {
                         .fill(SabqTheme.sky.opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(SabqFonts.app(size: 19, weight: .semibold))
                         .foregroundStyle(SabqTheme.sky)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("لوحة التحكم")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("إدارة الأخبار والمؤشّرات")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -766,20 +766,20 @@ struct SettingsView: View {
                         .fill(Color(red: 0.30, green: 0.69, blue: 0.31).opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: "chart.bar.xaxis.ascending")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(SabqFonts.app(size: 19, weight: .semibold))
                         .foregroundStyle(Color(red: 0.30, green: 0.69, blue: 0.31))
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("مركز الأداء")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("إحصائيات مقالاتك وتفاعل جمهورك")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -807,20 +807,20 @@ struct SettingsView: View {
                         .fill(Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: "trophy.fill")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(SabqFonts.app(size: 19, weight: .semibold))
                         .foregroundStyle(Color(red: 0.96, green: 0.62, blue: 0.04))
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("نقاطي والمكافآت")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("تابع مستواك واستبدل نقاطك")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -850,20 +850,20 @@ struct SettingsView: View {
                         .fill(Color(red: 0.11, green: 0.64, blue: 0.94).opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(SabqFonts.app(size: 19, weight: .semibold))
                         .foregroundStyle(Color(red: 0.11, green: 0.64, blue: 0.94))
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("بطاقتي الصحفية")
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("أضف بطاقتك إلى Apple Wallet")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -897,10 +897,10 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("وضع التصفح")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                         Text(lite.browsingMode.arabicSubtitle)
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Spacer(minLength: 0)
@@ -930,10 +930,10 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("المظهر")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                         Text("اختر مظهر التطبيق أو اتبع إعداد الجهاز")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Spacer(minLength: 0)
@@ -953,10 +953,10 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("نمط بطاقات الأخبار")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                         Text("اختر شكل عرض الأخبار في الواجهة")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Spacer(minLength: 0)
@@ -972,7 +972,7 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("لون التطبيق")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 HStack(spacing: 0) {
@@ -999,7 +999,7 @@ struct SettingsView: View {
                                     .shadow(color: accent.color.opacity(isSelected ? 0.4 : 0.15), radius: isSelected ? 6 : 3, y: 2)
 
                                 Text(accent.title)
-                                    .font(.system(size: 11, weight: isSelected ? .bold : .medium))
+                                    .font(SabqFonts.app(size: 11, weight: isSelected ? .bold : .medium))
                                     .foregroundStyle(isSelected ? accent.color : SabqTheme.tertiaryInk)
                             }
                         }
@@ -1013,11 +1013,11 @@ struct SettingsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("حجم الخط")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
 
                         Text("حجم النص: \(Int(textSize))")
-                            .font(.system(size: 13, weight: .regular))
+                            .font(SabqFonts.app(size: 13, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
 
@@ -1028,19 +1028,19 @@ struct SettingsView: View {
 
                 HStack(spacing: 12) {
                     Text("أ")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Slider(value: $textSize, in: 14...24, step: 1)
                         .tint(SabqTheme.primaryEnd)
 
                     Text("أ")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(SabqFonts.app(size: 22, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
 
                 Text("معاينة حجم الخط في المقالات")
-                    .font(.system(size: CGFloat(textSize), weight: .regular))
+                    .font(SabqFonts.app(size: CGFloat(textSize), weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(5)
                     .padding(.top, 4)
@@ -1084,10 +1084,10 @@ struct SettingsView: View {
 
             (Text("سبق.. حيث يلتقي الخبر الموثوق بذكاء المستقبل ")
              + Text(Image(systemName: "sparkles"))
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.primaryEnd)
              + Text(". تغطية لحظية لا تتوقف، بتقنيات الذكاء الاصطناعي وأقلام محررين من قلب الحدث."))
-                .font(.system(size: 15, weight: .regular))
+                .font(SabqFonts.app(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(5)
@@ -1158,11 +1158,11 @@ struct SettingsView: View {
             // bundle's Info.plist so the displayed version always matches
             // what's actually shipping — no more hard-coded "1.0.0".
             Text(Self.versionLabel)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
 
             Text("صنع بكل حب في السعودية 🇸🇦")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
@@ -1176,11 +1176,11 @@ struct SettingsView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1197,17 +1197,17 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.left")
-                .font(.system(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(.vertical, 3)
@@ -1254,7 +1254,7 @@ struct LoginSheet: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -1289,15 +1289,15 @@ struct LoginSheet: View {
             Spacer().frame(height: 40)
 
             Image(systemName: "envelope.badge.shield.half.filled")
-                .font(.system(size: 60, weight: .light))
+                .font(SabqFonts.app(size: 60, weight: .light))
                 .foregroundStyle(SabqTheme.leaf)
 
             Text("تم إنشاء الحساب")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 24, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             Text(authStore.successMessage ?? "يرجى التحقق من بريدك الإلكتروني لتفعيل الحساب")
-                .font(.system(size: 15, weight: .regular))
+                .font(SabqFonts.app(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
@@ -1308,9 +1308,9 @@ struct LoginSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 16))
+                        .font(SabqFonts.app(size: 16))
                     Text("تسجيل الدخول")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -1333,11 +1333,11 @@ struct LoginSheet: View {
                     .frame(height: 48)
 
                 Text("تسجيل الدخول")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 24, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text("سجّل دخولك للاستفادة من جميع الميزات")
-                    .font(.system(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 15, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
             }
@@ -1360,9 +1360,9 @@ struct LoginSheet: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 14))
+                            .font(SabqFonts.app(size: 14))
                         Text(error)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(SabqFonts.app(size: 13, weight: .medium))
                     }
                     .foregroundStyle(SabqTheme.coral)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1382,10 +1382,10 @@ struct LoginSheet: View {
                                         .tint(SabqTheme.coral)
                                 } else {
                                     Image(systemName: "envelope.arrow.triangle.branch")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .font(SabqFonts.app(size: 12, weight: .bold))
                                 }
                                 Text("إعادة إرسال رمز التفعيل")
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(SabqTheme.coral)
                             .padding(.horizontal, 12)
@@ -1411,9 +1411,9 @@ struct LoginSheet: View {
                authStore.pendingActivationEmail != nil || authStore.pendingActivationUserId != nil {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                     Text(success)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(SabqFonts.app(size: 13, weight: .medium))
                 }
                 .foregroundStyle(SabqTheme.leaf)
                 .padding(.horizontal, 12)
@@ -1436,7 +1436,7 @@ struct LoginSheet: View {
                         ProgressView().tint(.white)
                     }
                     Text("تسجيل الدخول")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(SabqFonts.app(size: 17, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
@@ -1452,9 +1452,9 @@ struct LoginSheet: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .heavy))
                     Text("ليس لديك حساب؟ ابدأ التسجيل مع SABQ AI")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                 }
                 .foregroundStyle(SabqTheme.primaryEnd)
                 .frame(maxWidth: .infinity)
@@ -1463,7 +1463,7 @@ struct LoginSheet: View {
 
             Button { showForgotPassword = true } label: {
                 Text("نسيت كلمة المرور؟")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .frame(maxWidth: .infinity)
             }
@@ -1474,17 +1474,17 @@ struct LoginSheet: View {
     private func inputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool = false) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
+                .font(SabqFonts.app(size: 16, weight: .medium))
                 .foregroundStyle(SabqTheme.primaryEnd.opacity(0.6))
                 .frame(width: 20)
 
             if isSecure {
                 SecureField(placeholder, text: text)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(SabqFonts.app(size: 16, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
             } else {
                 TextField(placeholder, text: text)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(SabqFonts.app(size: 16, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -1689,14 +1689,14 @@ struct ContactSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("تم") { focusedField = nil }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                 }
             }
@@ -1737,16 +1737,16 @@ struct ContactSheet: View {
                 .frame(width: 44, height: 44)
                 .overlay {
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                 }
 
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             Text(value)
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(tint)
                 .environment(\.layoutDirection, .leftToRight)
                 .lineLimit(1)
@@ -1777,11 +1777,11 @@ struct ContactSheet: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             TextField(placeholder, text: text)
-                .font(.system(size: 15, weight: .medium))
+                .font(SabqFonts.app(size: 15, weight: .medium))
                 .foregroundStyle(SabqTheme.ink)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(disableAutocap ? .never : .sentences)
@@ -1807,7 +1807,7 @@ struct ContactSheet: View {
     private var subjectPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("موضوع الرسالة")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             Menu {
@@ -1817,11 +1817,11 @@ struct ContactSheet: View {
             } label: {
                 HStack(spacing: 10) {
                     Text(subject.isEmpty ? "اختر موضوع الرسالة" : subject)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(SabqFonts.app(size: 15, weight: .medium))
                         .foregroundStyle(subject.isEmpty ? SabqTheme.tertiaryInk : SabqTheme.ink)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 .padding(.horizontal, 16)
@@ -1842,11 +1842,11 @@ struct ContactSheet: View {
     private var messageEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("الرسالة")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             TextEditor(text: $message)
-                .font(.system(size: 15, weight: .regular))
+                .font(SabqFonts.app(size: 15, weight: .regular))
                 .foregroundStyle(SabqTheme.ink)
                 .focused($focusedField, equals: .message)
                 .frame(minHeight: 140)
@@ -1866,7 +1866,7 @@ struct ContactSheet: View {
                 .overlay(alignment: .topLeading) {
                     if message.isEmpty {
                         Text("اكتب رسالتك هنا...")
-                            .font(.system(size: 15, weight: .regular))
+                            .font(SabqFonts.app(size: 15, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 20)
@@ -1883,7 +1883,7 @@ struct ContactSheet: View {
             HStack(spacing: 8) {
                 if isSending { ProgressView().tint(.white) }
                 Text("إرسال الرسالة")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -1937,9 +1937,9 @@ struct ContactSheet: View {
     private func errorBanner(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
         }
         .foregroundStyle(SabqTheme.coral)
         .padding(.horizontal, 12)
@@ -2029,7 +2029,7 @@ struct NewsletterSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -2048,19 +2048,19 @@ struct NewsletterSheet: View {
                     .fill(SabqTheme.primaryEnd.opacity(0.08))
                     .frame(width: 110, height: 110)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                     .offset(x: 38, y: -34)
                 Image(systemName: "envelope.open.fill")
-                    .font(.system(size: 52, weight: .regular))
+                    .font(SabqFonts.app(size: 52, weight: .regular))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
 
             HStack(spacing: 5) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .heavy))
                 Text("SABQ AI")
-                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 11, weight: .heavy))
                     .tracking(0.8)
             }
             .foregroundStyle(SabqTheme.primaryEnd)
@@ -2074,7 +2074,7 @@ struct NewsletterSheet: View {
                 .foregroundStyle(SabqTheme.ink)
 
             Text("أخبار مختارة بعناية، يصيغها الذكاء الاصطناعي لذوقك تحديداً.")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -2091,18 +2091,18 @@ struct NewsletterSheet: View {
                     .fill(SabqTheme.leaf.opacity(0.10))
                     .frame(width: 110, height: 110)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 56, weight: .regular))
+                    .font(SabqFonts.app(size: 56, weight: .regular))
                     .foregroundStyle(SabqTheme.leaf)
                     .scaleEffect(celebrationScale)
             }
 
             Text(title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.center)
 
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -2126,16 +2126,16 @@ struct NewsletterSheet: View {
                     .fill(tint.opacity(0.10))
                     .frame(width: 110, height: 110)
                 Image(systemName: icon)
-                    .font(.system(size: 50, weight: .regular))
+                    .font(SabqFonts.app(size: 50, weight: .regular))
                     .foregroundStyle(tint)
             }
 
             Text(title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -2180,15 +2180,15 @@ struct NewsletterSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Spacer(minLength: 0)
             }
             Text(desc)
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineSpacing(3)
                 .multilineTextAlignment(.leading)
@@ -2213,11 +2213,11 @@ struct NewsletterSheet: View {
         SurfaceCard(accent: SabqTheme.primaryEnd) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("ابدأ الاشتراك")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text("اشتراك مجاني · بدون رسائل ترويجية · إلغاء فوري")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 if let errorMessage {
@@ -2225,7 +2225,7 @@ struct NewsletterSheet: View {
                 }
 
                 TextField("البريد الإلكتروني", text: $email)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(SabqFonts.app(size: 15, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
@@ -2249,10 +2249,10 @@ struct NewsletterSheet: View {
                             ProgressView().tint(.white)
                         } else {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 14, weight: .heavy))
+                                .font(SabqFonts.app(size: 14, weight: .heavy))
                         }
                         Text(screenState == .subscribing ? "جاري الاشتراك..." : "اشترك في النشرة")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(SabqFonts.app(size: 16, weight: .bold))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -2264,7 +2264,7 @@ struct NewsletterSheet: View {
                 .disabled(!isEmailValid || screenState == .subscribing)
 
                 Text("نحترم خصوصيتك. مزيد من التفاصيل في سياسة الخصوصية.")
-                    .font(.system(size: 11, weight: .regular))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -2279,19 +2279,19 @@ struct NewsletterSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
                     Image(systemName: "envelope.badge.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("إدارة الاشتراك")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("البريد المشترك")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                     Text(trimmedEmail)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .environment(\.layoutDirection, .leftToRight)
                 }
@@ -2314,10 +2314,10 @@ struct NewsletterSheet: View {
                             ProgressView().tint(SabqTheme.coral)
                         } else {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14, weight: .heavy))
+                                .font(SabqFonts.app(size: 14, weight: .heavy))
                         }
                         Text("إلغاء الاشتراك")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(SabqFonts.app(size: 15, weight: .bold))
                     }
                     .foregroundStyle(SabqTheme.coral)
                     .frame(maxWidth: .infinity)
@@ -2335,7 +2335,7 @@ struct NewsletterSheet: View {
                 .disabled(screenState == .unsubscribing)
 
                 Text("سيتم إيقاف جميع الرسائل فوراً. تقدر تشترك مرة ثانية في أي وقت.")
-                    .font(.system(size: 11, weight: .regular))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -2412,9 +2412,9 @@ struct NewsletterSheet: View {
     private func errorBanner(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
         }
         .foregroundStyle(SabqTheme.coral)
         .padding(.horizontal, 12)
@@ -2458,9 +2458,9 @@ struct EditProfileSheet: View {
                     if saved {
                         HStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 16))
+                                .font(SabqFonts.app(size: 16))
                             Text("تم حفظ التغييرات بنجاح")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                         }
                         .foregroundStyle(SabqTheme.leaf)
                         .padding(.horizontal, 14)
@@ -2486,10 +2486,10 @@ struct EditProfileSheet: View {
                         if firstNameLocked || lastNameLocked {
                             HStack(spacing: 6) {
                                 Image(systemName: "info.circle.fill")
-                                    .font(.system(size: 11))
+                                    .font(SabqFonts.app(size: 11))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                                 Text("لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات")
-                                    .font(.system(size: 11, weight: .regular))
+                                    .font(SabqFonts.app(size: 11, weight: .regular))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2506,11 +2506,11 @@ struct EditProfileSheet: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text("نبذة عنك")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
 
                             TextEditor(text: $bio)
-                                .font(.system(size: 15, weight: .regular))
+                                .font(SabqFonts.app(size: 15, weight: .regular))
                                 .foregroundStyle(SabqTheme.ink)
                                 .frame(minHeight: 80)
                                 .padding(12)
@@ -2525,7 +2525,7 @@ struct EditProfileSheet: View {
                                 .overlay(alignment: .topLeading) {
                                     if bio.isEmpty {
                                         Text("اكتب نبذة مختصرة عنك...")
-                                            .font(.system(size: 15, weight: .regular))
+                                            .font(SabqFonts.app(size: 15, weight: .regular))
                                             .foregroundStyle(SabqTheme.tertiaryInk)
                                             .padding(.horizontal, 16)
                                             .padding(.vertical, 20)
@@ -2538,9 +2538,9 @@ struct EditProfileSheet: View {
                     if let error = authStore.errorMessage {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 14))
+                                .font(SabqFonts.app(size: 14))
                             Text(error)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(SabqFonts.app(size: 13, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.coral)
                         .padding(.horizontal, 12)
@@ -2573,7 +2573,7 @@ struct EditProfileSheet: View {
                                 ProgressView().tint(.white)
                             }
                             Text("حفظ التغييرات")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -2591,7 +2591,7 @@ struct EditProfileSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -2646,7 +2646,7 @@ struct EditProfileSheet: View {
                         .frame(width: 30, height: 30)
                         .overlay {
                             Image(systemName: "camera.fill")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(.white)
                         }
                         .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
@@ -2670,7 +2670,7 @@ struct EditProfileSheet: View {
             }
 
             Text(authStore.currentUser?.displayName ?? "")
-                .font(.system(size: 17, weight: .bold))
+                .font(SabqFonts.app(size: 17, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             if authStore.isLoading {
@@ -2678,7 +2678,7 @@ struct EditProfileSheet: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("جاري رفع الصورة...")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(SabqFonts.app(size: 13, weight: .medium))
                 }
                 .foregroundStyle(SabqTheme.secondaryInk)
             }
@@ -2686,9 +2686,9 @@ struct EditProfileSheet: View {
             if showUploadNotice {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(SabqFonts.app(size: 14))
                     Text("تم تحديث الصورة الشخصية بنجاح")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                 }
                 .foregroundStyle(SabqTheme.leaf)
                 .padding(.horizontal, 14)
@@ -2711,7 +2711,7 @@ struct EditProfileSheet: View {
             .frame(width: 90, height: 90)
             .overlay {
                 Text(String((authStore.currentUser?.displayName ?? "م").prefix(1)))
-                    .font(.system(size: 36, weight: .bold))
+                    .font(SabqFonts.app(size: 36, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -2719,11 +2719,11 @@ struct EditProfileSheet: View {
     private func editField(label: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             TextField(placeholder, text: text)
-                .font(.system(size: 15, weight: .medium))
+                .font(SabqFonts.app(size: 15, weight: .medium))
                 .foregroundStyle(SabqTheme.ink)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -2741,7 +2741,7 @@ struct EditProfileSheet: View {
     private var genderPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("الجنس")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             Picker("الجنس", selection: $gender) {
@@ -2756,21 +2756,21 @@ struct EditProfileSheet: View {
     private func readOnlyField(label: String, value: String, icon: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 Text(value)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(SabqFonts.app(size: 15, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             .padding(.horizontal, 16)
@@ -2807,11 +2807,11 @@ struct ChangePasswordSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(spacing: 12) {
                         Image(systemName: "lock.rotation")
-                            .font(.system(size: 48, weight: .light))
+                            .font(SabqFonts.app(size: 48, weight: .light))
                             .foregroundStyle(SabqTheme.primaryEnd)
 
                         Text("تغيير كلمة المرور")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .font(SabqFonts.app(size: 22, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                     }
                     .frame(maxWidth: .infinity)
@@ -2819,9 +2819,9 @@ struct ChangePasswordSheet: View {
                     if success {
                         HStack(spacing: 8) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 16))
+                                .font(SabqFonts.app(size: 16))
                             Text("تم تغيير كلمة المرور بنجاح")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                         }
                         .foregroundStyle(SabqTheme.leaf)
                         .padding(.horizontal, 14)
@@ -2840,9 +2840,9 @@ struct ChangePasswordSheet: View {
                             if !newPassword.isEmpty && !confirmPassword.isEmpty && newPassword != confirmPassword {
                                 HStack(spacing: 6) {
                                     Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.system(size: 12))
+                                        .font(SabqFonts.app(size: 12))
                                     Text("كلمتا المرور غير متطابقتين")
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(SabqFonts.app(size: 13, weight: .medium))
                                 }
                                 .foregroundStyle(SabqTheme.coral)
                             }
@@ -2851,9 +2851,9 @@ struct ChangePasswordSheet: View {
                         if let error = authStore.errorMessage {
                             HStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 14))
+                                    .font(SabqFonts.app(size: 14))
                                 Text(error)
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(SabqFonts.app(size: 13, weight: .medium))
                             }
                             .foregroundStyle(SabqTheme.coral)
                             .padding(.horizontal, 12)
@@ -2880,7 +2880,7 @@ struct ChangePasswordSheet: View {
                                     ProgressView().tint(.white)
                                 }
                                 Text("تغيير كلمة المرور")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(SabqFonts.app(size: 16, weight: .bold))
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -2900,7 +2900,7 @@ struct ChangePasswordSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -2912,11 +2912,11 @@ struct ChangePasswordSheet: View {
     private func secureField(label: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
             SecureField(placeholder, text: text)
-                .font(.system(size: 15, weight: .medium))
+                .font(SabqFonts.app(size: 15, weight: .medium))
                 .foregroundStyle(SabqTheme.ink)
                 .textContentType(.password)
                 .padding(.horizontal, 16)
@@ -2952,22 +2952,22 @@ struct DeleteAccountSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 48, weight: .light))
+                            .font(SabqFonts.app(size: 48, weight: .light))
                             .foregroundStyle(SabqTheme.coral)
 
                         Text("حذف الحساب")
-                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .font(SabqFonts.app(size: 22, weight: .bold))
                             .foregroundStyle(SabqTheme.coral)
                     }
                     .frame(maxWidth: .infinity)
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text("تحذير: هذا الإجراء لا يمكن التراجع عنه")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(SabqFonts.app(size: 15, weight: .bold))
                             .foregroundStyle(SabqTheme.coral)
 
                         Text("سيتم حذف حسابك وجميع بياناتك بشكل نهائي. لن تتمكن من استعادة الحساب بعد الحذف.")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(SabqFonts.app(size: 14, weight: .regular))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .lineSpacing(5)
                     }
@@ -2981,11 +2981,11 @@ struct DeleteAccountSheet: View {
                     if !showConfirmation {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("كلمة المرور")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
 
                             SecureField("أدخل كلمة المرور للتأكيد", text: $password)
-                                .font(.system(size: 15, weight: .medium))
+                                .font(SabqFonts.app(size: 15, weight: .medium))
                                 .foregroundStyle(SabqTheme.ink)
                                 .textContentType(.password)
                                 .padding(.horizontal, 16)
@@ -3004,7 +3004,7 @@ struct DeleteAccountSheet: View {
                             withAnimation { showConfirmation = true }
                         } label: {
                             Text("متابعة")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 15)
@@ -3016,11 +3016,11 @@ struct DeleteAccountSheet: View {
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("اكتب \"\(confirmWord)\" للتأكيد")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
 
                             TextField(confirmWord, text: $confirmText)
-                                .font(.system(size: 15, weight: .medium))
+                                .font(SabqFonts.app(size: 15, weight: .medium))
                                 .foregroundStyle(SabqTheme.ink)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 14)
@@ -3037,9 +3037,9 @@ struct DeleteAccountSheet: View {
                         if let error = authStore.errorMessage {
                             HStack(spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 14))
+                                    .font(SabqFonts.app(size: 14))
                                 Text(error)
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(SabqFonts.app(size: 13, weight: .medium))
                             }
                             .foregroundStyle(SabqTheme.coral)
                             .padding(.horizontal, 12)
@@ -3075,7 +3075,7 @@ struct DeleteAccountSheet: View {
                                     ProgressView().tint(.white)
                                 }
                                 Text("حذف الحساب نهائياً")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(SabqFonts.app(size: 16, weight: .bold))
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -3095,7 +3095,7 @@ struct DeleteAccountSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -3136,11 +3136,11 @@ struct ForgotPasswordSheet: View {
                     Spacer().frame(height: 20)
 
                     Image(systemName: step == .done ? "checkmark.circle.fill" : "envelope.badge.shield.half.filled")
-                        .font(.system(size: 48, weight: .light))
+                        .font(SabqFonts.app(size: 48, weight: .light))
                         .foregroundStyle(step == .done ? SabqTheme.leaf : SabqTheme.primaryEnd)
 
                     Text(step == .done ? "تم تغيير كلمة المرور" : "نسيت كلمة المرور؟")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(SabqFonts.app(size: 22, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
 
                     switch step {
@@ -3157,7 +3157,7 @@ struct ForgotPasswordSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -3171,7 +3171,7 @@ struct ForgotPasswordSheet: View {
     @ViewBuilder
     private var emailStep: some View {
         Text("أدخل بريدك الإلكتروني وسنرسل لك رمز التحقق لإعادة تعيين كلمة المرور")
-            .font(.system(size: 15, weight: .regular))
+            .font(SabqFonts.app(size: 15, weight: .regular))
             .foregroundStyle(SabqTheme.secondaryInk)
             .multilineTextAlignment(.center)
             .lineSpacing(5)
@@ -3203,10 +3203,10 @@ struct ForgotPasswordSheet: View {
     private var codeStep: some View {
         VStack(spacing: 4) {
             Text("أدخل الرمز المرسَل إلى:")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Text(email)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
         }
 
@@ -3245,7 +3245,7 @@ struct ForgotPasswordSheet: View {
 
         if !confirmPassword.isEmpty && newPassword != confirmPassword {
             Text("كلمتا المرور غير متطابقتين")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.coral)
         }
 
@@ -3274,7 +3274,7 @@ struct ForgotPasswordSheet: View {
                 await authStore.forgotPassword(email: email)
             }
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(SabqFonts.app(size: 13, weight: .medium))
         .foregroundStyle(SabqTheme.primaryEnd)
         .padding(.top, 4)
     }
@@ -3284,7 +3284,7 @@ struct ForgotPasswordSheet: View {
     @ViewBuilder
     private var doneStep: some View {
         Text(authStore.successMessage ?? "تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.")
-            .font(.system(size: 15, weight: .regular))
+            .font(SabqFonts.app(size: 15, weight: .regular))
             .foregroundStyle(SabqTheme.secondaryInk)
             .multilineTextAlignment(.center)
             .lineSpacing(5)
@@ -3306,9 +3306,9 @@ struct ForgotPasswordSheet: View {
         if let error = authStore.errorMessage {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 14))
+                    .font(SabqFonts.app(size: 14))
                 Text(error)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
             }
             .foregroundStyle(SabqTheme.coral)
             .padding(.horizontal, 36)
@@ -3321,7 +3321,7 @@ struct ForgotPasswordSheet: View {
                 ProgressView().tint(.white)
             }
             Text(text)
-                .font(.system(size: 16, weight: .bold))
+                .font(SabqFonts.app(size: 16, weight: .bold))
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
@@ -3350,7 +3350,7 @@ struct ForgotPasswordSheet: View {
                     .textContentType(contentType)
             }
         }
-        .font(.system(size: 16, weight: .medium))
+        .font(SabqFonts.app(size: 16, weight: .medium))
         .foregroundStyle(SabqTheme.ink)
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

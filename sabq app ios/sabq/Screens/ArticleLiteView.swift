@@ -76,7 +76,7 @@ struct ArticleLiteView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(displayArticle.category.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(displayArticle.category.tint)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -84,11 +84,11 @@ struct ArticleLiteView: View {
                         Capsule().fill(displayArticle.category.tint.opacity(0.12))
                     )
                 Text(SabqFormatters.relativeArabic.localizedString(for: displayArticle.publishDate, relativeTo: Date()))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Text(displayArticle.title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 22, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .lineSpacing(4)
                 .multilineTextAlignment(.leading)
@@ -121,7 +121,7 @@ struct ArticleLiteView: View {
             .padding(.vertical, 30)
         } else {
             Text(displayArticle.body.isEmpty ? displayArticle.excerpt : displayArticle.body)
-                .font(.system(size: 17))
+                .font(SabqFonts.app(size: 17))
                 .foregroundStyle(SabqTheme.ink)
                 .lineSpacing(8)
                 .multilineTextAlignment(.leading)
@@ -136,7 +136,7 @@ struct ArticleLiteView: View {
                 dismiss()
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .padding(8)
                     .background(Circle().fill(.ultraThinMaterial))
@@ -149,7 +149,7 @@ struct ArticleLiteView: View {
                     bookmarksStore.toggle(displayArticle.id, article: displayArticle)
                 } label: {
                     Image(systemName: bookmarksStore.isBookmarked(displayArticle.id) ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(
                             bookmarksStore.isBookmarked(displayArticle.id)
                                 ? SabqTheme.primaryEnd
@@ -163,7 +163,7 @@ struct ArticleLiteView: View {
                     share()
                 } label: {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))

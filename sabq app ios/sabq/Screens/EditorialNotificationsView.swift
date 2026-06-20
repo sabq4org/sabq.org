@@ -40,13 +40,13 @@ struct EditorialNotificationsView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("الإشعارات")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink(destination: NotificationPreferencesView()) {
                         Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                 }
@@ -68,14 +68,14 @@ struct EditorialNotificationsView: View {
             VStack(spacing: 12) {
                 Spacer()
                 Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 40, weight: .light))
+                    .font(SabqFonts.app(size: 40, weight: .light))
                     .foregroundStyle(SabqTheme.coral)
                 Text(message)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                 Button("إعادة المحاولة") { Task { await load() } }
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Spacer()
             }
@@ -138,9 +138,9 @@ struct EditorialNotificationsView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "trash")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                 Text("مسح كل الإشعارات")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
             }
             .foregroundStyle(SabqTheme.coral)
             .frame(maxWidth: .infinity)
@@ -209,24 +209,24 @@ struct EditorialNotificationsView: View {
                     .fill(SabqTheme.primaryEnd.opacity(0.10))
                     .frame(width: 96, height: 96)
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 38, weight: .light))
+                    .font(SabqFonts.app(size: 38, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .heavy))
                 Text("أنت محدّث")
-                    .font(.system(size: 11, weight: .black))
+                    .font(SabqFonts.app(size: 11, weight: .black))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .background(SabqTheme.primaryEnd, in: Capsule())
             Text("لا توجد إشعارات بعد")
-                .font(.system(size: 17, weight: .bold))
+                .font(SabqFonts.app(size: 17, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Text("سيصلك هنا كل ما يخص مقالاتك وأخبارك من جدولة ونشر ومراجعة.")
-                .font(.system(size: 13))
+                .font(SabqFonts.app(size: 13))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -247,7 +247,7 @@ struct EditorialNotificationsView: View {
                 Image(systemName: "checkmark.circle.fill")
                 Text("تحديد الكل كمقروء")
             }
-            .font(.system(size: 13, weight: .semibold))
+            .font(SabqFonts.app(size: 13, weight: .semibold))
             .foregroundStyle(SabqTheme.primaryEnd)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
@@ -271,14 +271,14 @@ struct EditorialNotificationsView: View {
                         .fill(style.tint.opacity(0.14))
                         .frame(width: 40, height: 40)
                     Image(systemName: style.icon)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(SabqFonts.app(size: 17, weight: .semibold))
                         .foregroundStyle(style.tint)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(item.title)
-                            .font(.system(size: 14, weight: .bold))
+                            .font(SabqFonts.app(size: 14, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
@@ -293,7 +293,7 @@ struct EditorialNotificationsView: View {
                     // — otherwise the reason renders twice (body suffix +
                     // dedicated callout below).
                     Text(Self.cleanBody(item))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineSpacing(3)
                         .lineLimit(3)
@@ -302,11 +302,11 @@ struct EditorialNotificationsView: View {
                     if let reviewerNote = item.reviewerNote, !reviewerNote.isEmpty {
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "quote.bubble.fill")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(SabqFonts.app(size: 9, weight: .semibold))
                                 .foregroundStyle(style.tint)
                                 .padding(.top, 2)
                             Text(reviewerNote)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                                 .foregroundStyle(style.tint)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
@@ -315,7 +315,7 @@ struct EditorialNotificationsView: View {
                         .padding(.top, 2)
                     }
                     Text(relativeDate(from: item.createdAt))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 Spacer(minLength: 0)
@@ -477,13 +477,13 @@ struct EditorialNotificationDetailView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
                 ToolbarItem(placement: .principal) {
                     Text("تفاصيل الإشعار")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -527,11 +527,11 @@ struct EditorialNotificationDetailView: View {
                     .fill(style.tint.opacity(0.14))
                     .frame(width: 80, height: 80)
                 Image(systemName: style.icon)
-                    .font(.system(size: 36, weight: .regular))
+                    .font(SabqFonts.app(size: 36, weight: .regular))
                     .foregroundStyle(style.tint)
             }
             Text(style.label)
-                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 11, weight: .heavy))
                 .tracking(0.5)
                 .foregroundStyle(style.tint)
                 .padding(.horizontal, 10)
@@ -539,7 +539,7 @@ struct EditorialNotificationDetailView: View {
                 .background(Capsule().fill(style.tint.opacity(0.10)))
                 .overlay(Capsule().stroke(style.tint.opacity(0.25), lineWidth: 0.5))
             Text(item.title)
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 18, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
@@ -552,11 +552,11 @@ struct EditorialNotificationDetailView: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text("المحتوى المعني")
-                    .font(.system(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 11, weight: .heavy))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 Text(item.articleTitle ?? item.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
@@ -573,7 +573,7 @@ struct EditorialNotificationDetailView: View {
                     let body = bodyWithoutTitlePrefix()
                     if !body.isEmpty {
                         Text(body)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(SabqFonts.app(size: 13, weight: .medium))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .multilineTextAlignment(.leading)
                             .lineSpacing(5)
@@ -591,11 +591,11 @@ struct EditorialNotificationDetailView: View {
                     .fill(SabqTheme.sky.opacity(0.14))
                     .frame(width: 28, height: 28)
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.sky)
             }
             Text(label)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
                 .monospacedDigit() // no-op for Arabic glyphs, aligns Latin digits in time
         }
@@ -646,14 +646,14 @@ struct EditorialNotificationDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "quote.bubble.fill")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(style.tint)
                     Text("ملاحظة المحرر")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text(note)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(6)
@@ -675,9 +675,9 @@ struct EditorialNotificationDetailView: View {
     private var metadataRow: some View {
         HStack(spacing: 6) {
             Image(systemName: "clock")
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
             Text(relativeArabic(item.createdAt))
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
         }
         .foregroundStyle(SabqTheme.tertiaryInk)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -747,9 +747,9 @@ struct EditorialNotificationDetailView: View {
     private var alreadyResubmittedChip: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 16, weight: .heavy))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
             Text("تم إرسال التعديل سابقاً")
-                .font(.system(size: 15, weight: .bold))
+                .font(SabqFonts.app(size: 15, weight: .bold))
         }
         .foregroundStyle(SabqTheme.leaf)
         .padding(.vertical, 14)
@@ -775,9 +775,9 @@ struct EditorialNotificationDetailView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: action.icon)
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                 Text(action.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -852,7 +852,7 @@ struct NotificationPreferencesView: View {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
                         Text("جاري الحفظ...")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -868,7 +868,7 @@ struct NotificationPreferencesView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -876,7 +876,7 @@ struct NotificationPreferencesView: View {
             }
             ToolbarItem(placement: .principal) {
                 Text("إعدادات الإشعارات")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(SabqFonts.app(size: 15, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -897,14 +897,14 @@ struct NotificationPreferencesView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "bell.badge")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("إشعاراتك الشخصية")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text("تحكم في الأنواع التي تصلك على هذا الجهاز. تطفئة نوع لا يلغي إرسالها — يمكن الاطلاع عليها لاحقاً من شاشة الإشعارات.")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(3)
             }
@@ -918,15 +918,15 @@ struct NotificationPreferencesView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 36, height: 36)
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(subtitle)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
             }

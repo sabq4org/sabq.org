@@ -196,7 +196,7 @@ struct AdminDashboardView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button { showNewArticleChoice = true } label: {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(SabqFonts.app(size: 18, weight: .semibold))
                 }
             }
         }
@@ -237,7 +237,7 @@ struct AdminDashboardView: View {
     private var metricsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("نظرة عامة")
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 18, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
 
             let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
@@ -302,10 +302,10 @@ struct AdminDashboardView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                 }
                 Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
             }
             .foregroundStyle(SabqTheme.sky)
             .frame(maxWidth: .infinity)
@@ -325,10 +325,10 @@ struct AdminDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Image(systemName: "tray")
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
             Text("لا توجد أخبار في \(vm.selectedStatus.label)")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity, minHeight: 240)
@@ -337,14 +337,14 @@ struct AdminDashboardView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40, weight: .light))
+                .font(SabqFonts.app(size: 40, weight: .light))
                 .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
             Button { Task { await vm.load() } } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.sky)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)

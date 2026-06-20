@@ -18,12 +18,12 @@ struct AIImageBadge: View {
     var body: some View {
         HStack(spacing: 5 * sizeScale) {
             Text("مولدة بالذكاء الاصطناعي")
-                .font(.system(size: 11 * sizeScale, weight: .semibold))
+                .font(SabqFonts.app(size: 11 * sizeScale, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .allowsTightening(true)
             Image(systemName: "sparkles")
-                .font(.system(size: 11 * sizeScale, weight: .bold))
+                .font(SabqFonts.app(size: 11 * sizeScale, weight: .bold))
         }
         // Icon on the physical right, Arabic text flows inward.
         .environment(\.layoutDirection, .leftToRight)

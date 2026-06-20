@@ -82,7 +82,7 @@ struct ArticleRevisionView: View {
                     successHero
                     Button { dismiss() } label: {
                         Text("رجوع")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(SabqFonts.app(size: 16, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 15)
@@ -93,7 +93,7 @@ struct ArticleRevisionView: View {
                     alreadyResubmittedView
                     Button { dismiss() } label: {
                         Text("رجوع")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(SabqFonts.app(size: 16, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 15)
@@ -113,13 +113,13 @@ struct ArticleRevisionView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text("تعديل المقال")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(SabqFonts.app(size: 15, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("تم") { focusedField = nil }
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(pageTint)
             }
         }
@@ -141,11 +141,11 @@ struct ArticleRevisionView: View {
         VStack(spacing: 14) {
             ProgressView().tint(SabqTheme.primaryEnd).scaleEffect(1.2)
             Text("نجلب المقال…")
-                .font(.system(size: 14, weight: .medium))
+                .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
             if let loadingError {
                 Text(loadingError)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.coral)
                     .multilineTextAlignment(.center)
             }
@@ -161,14 +161,14 @@ struct ArticleRevisionView: View {
                     .fill(pageTint.opacity(0.10))
                     .frame(width: 80, height: 80)
                 Image(systemName: isOpinion ? "square.and.pencil" : "newspaper.fill")
-                    .font(.system(size: 32, weight: .regular))
+                    .font(SabqFonts.app(size: 32, weight: .regular))
                     .foregroundStyle(pageTint)
             }
             Text(isOpinion ? "إعادة إرسال المقال" : "إعادة إرسال الخبر")
                 .font(SabqFonts.headline(size: 20))
                 .foregroundStyle(SabqTheme.ink)
             Text("راجع ملاحظة فريق التحرير ثم أعد الإرسال")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }
@@ -182,16 +182,16 @@ struct ArticleRevisionView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "quote.opening")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(RevisionPalette.accent)
                 Text("ملاحظة هيئة التحرير")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 13, weight: .heavy))
                     .foregroundStyle(RevisionPalette.accent)
                 Spacer(minLength: 0)
                 if noteCollapsed {
                     Button { withAnimation(.easeInOut(duration: 0.22)) { noteCollapsed = false } } label: {
                         Image(systemName: "chevron.down.circle.fill")
-                            .font(.system(size: 18))
+                            .font(SabqFonts.app(size: 18))
                             .foregroundStyle(RevisionPalette.accent.opacity(0.6))
                     }
                     .buttonStyle(.plain)
@@ -199,7 +199,7 @@ struct ArticleRevisionView: View {
             }
             if !noteCollapsed {
                 Text(note)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .lineSpacing(5)
                     .multilineTextAlignment(.leading)
@@ -209,9 +209,9 @@ struct ArticleRevisionView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .heavy))
+                            .font(SabqFonts.app(size: 11, weight: .heavy))
                         Text("فهمت")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(RevisionPalette.accent)
                     .padding(.horizontal, 12)
@@ -247,7 +247,7 @@ struct ArticleRevisionView: View {
                 fieldLabel("العنوان", required: true)
                 TextField("عنوان المقال", text: $title, axis: .vertical)
                     .lineLimit(2...3)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .focused($focusedField, equals: .title)
                     .submitLabel(.next)
@@ -296,11 +296,11 @@ struct ArticleRevisionView: View {
     private func fieldLabel(_ text: String, required: Bool = false) -> some View {
         HStack(spacing: 4) {
             Text(text)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
             if required {
                 Text("*")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(SabqTheme.coral)
             }
         }
@@ -329,9 +329,9 @@ struct ArticleRevisionView: View {
                     ) {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 11, weight: .heavy))
+                                .font(SabqFonts.app(size: 11, weight: .heavy))
                             Text("تغيير")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .semibold))
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
@@ -353,7 +353,7 @@ struct ArticleRevisionView: View {
                         withAnimation { newHeroPreview = nil; newHeroData = nil; replacedHero = false }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(.white, .black.opacity(0.55))
                     }
                     .padding(10)
@@ -366,10 +366,10 @@ struct ArticleRevisionView: View {
                 ) {
                     VStack(spacing: 8) {
                         Image(systemName: "photo.badge.plus")
-                            .font(.system(size: 22, weight: .light))
+                            .font(SabqFonts.app(size: 22, weight: .light))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                         Text("اضغط لاختيار صورة")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(SabqFonts.app(size: 13, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                     .frame(height: 100)
@@ -398,7 +398,7 @@ struct ArticleRevisionView: View {
                     ProgressView().tint(.white)
                 }
                 Text("إرسال التعديل")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -413,9 +413,9 @@ struct ArticleRevisionView: View {
     private func errorBanner(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(SabqTheme.coral)
@@ -441,14 +441,14 @@ struct ArticleRevisionView: View {
                     .fill(RevisionPalette.accent.opacity(0.12))
                     .frame(width: 110, height: 110)
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 56))
+                    .font(SabqFonts.app(size: 56))
                     .foregroundStyle(RevisionPalette.accent)
             }
             Text("تم إرسال التعديل سابقاً")
                 .font(SabqFonts.headline(size: 22))
                 .foregroundStyle(SabqTheme.ink)
             Text("هذا المقال قيد المراجعة لدى هيئة التحرير. سيصلك إشعار جديد إذا طُلب تعديل إضافي أو عند النشر.")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -465,14 +465,14 @@ struct ArticleRevisionView: View {
                     .fill(SabqTheme.leaf.opacity(0.15))
                     .frame(width: 110, height: 110)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 64))
+                    .font(SabqFonts.app(size: 64))
                     .foregroundStyle(SabqTheme.leaf)
             }
             Text("تم إرسال التعديل")
                 .font(SabqFonts.headline(size: 22))
                 .foregroundStyle(SabqTheme.ink)
             Text("سيراجع فريق التحرير التعديل قريباً ويصلك إشعار بالقرار.")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)

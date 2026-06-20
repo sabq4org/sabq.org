@@ -61,7 +61,7 @@ struct AudioNewslettersView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
@@ -77,16 +77,16 @@ struct AudioNewslettersView: View {
                     .fill(SabqTheme.coral.opacity(0.14))
                     .frame(width: 56, height: 56)
                 Image(systemName: "waveform")
-                    .font(.system(size: 24, weight: .light))
+                    .font(SabqFonts.app(size: 24, weight: .light))
                     .foregroundStyle(SabqTheme.coral)
                     .symbolRenderingMode(.hierarchical)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("النشرات الصوتية")
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                 Text("أبرز ما يحدث، باختصار صوتي")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -100,14 +100,14 @@ struct AudioNewslettersView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(n.title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
                 if let desc = n.description, !desc.isEmpty {
                     Text(desc)
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(2)
                 }
@@ -115,18 +115,18 @@ struct AudioNewslettersView: View {
                 HStack(spacing: 8) {
                     if let d = n.duration {
                         HStack(spacing: 3) {
-                            Image(systemName: "clock").font(.system(size: 9))
+                            Image(systemName: "clock").font(SabqFonts.app(size: 9))
                             Text(formatDuration(d))
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .font(SabqFonts.app(size: 10, weight: .semibold))
                                 .monospacedDigit()
                         }
                         .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                     if let listens = n.totalListens, listens > 0 {
                         HStack(spacing: 3) {
-                            Image(systemName: "headphones").font(.system(size: 9))
+                            Image(systemName: "headphones").font(SabqFonts.app(size: 9))
                             Text("\(listens)")
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                .font(SabqFonts.app(size: 10, weight: .semibold))
                                 .monospacedDigit()
                         }
                         .foregroundStyle(SabqTheme.tertiaryInk)
@@ -144,7 +144,7 @@ struct AudioNewslettersView: View {
                         .fill(active ? SabqTheme.coral : SabqTheme.primaryEnd.opacity(0.14))
                         .frame(width: 44, height: 44)
                     Image(systemName: active ? "pause.fill" : "play.fill")
-                        .font(.system(size: 17, weight: .heavy))
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
                         .foregroundStyle(active ? .white : SabqTheme.primaryEnd)
                         .offset(x: active ? 0 : 1)
                 }
@@ -189,7 +189,7 @@ struct AudioNewslettersView: View {
                 endPoint: .bottomTrailing
             )
             Image(systemName: "waveform")
-                .font(.system(size: 22, weight: .light))
+                .font(SabqFonts.app(size: 22, weight: .light))
                 .foregroundStyle(.white.opacity(0.7))
         }
     }
