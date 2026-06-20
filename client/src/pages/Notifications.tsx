@@ -54,8 +54,7 @@ export default function Notifications() {
   const { data, isLoading, error } = useQuery<NotificationsResponse>({
     queryKey: ["/api/notifications", { limit: 100 }],
     queryFn: async () => {
-      const res = await fetch("/api/notifications?limit=100", { credentials: 'include' });
-      if (!res.ok) throw new Error("Failed to fetch notifications");
+      const res = await apiRequest("/api/notifications?limit=100");
       return res.json();
     },
   });
