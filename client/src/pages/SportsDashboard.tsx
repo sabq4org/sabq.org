@@ -391,13 +391,11 @@ export default function SportsDashboard() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-black text-foreground truncate">{comp.name}</span>
-                      {comp.status && comp.status !== "unknown" && (
+                      {comp.status && comp.status !== "unknown" && comp.status !== "ongoing" && (
                         <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          comp.status === "ongoing" ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                          : comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                           : "bg-muted text-muted-foreground"
                         }`}>
-                          {comp.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                           {COMP_STATUS_LABELS[comp.status]}
                         </span>
                       )}

@@ -117,7 +117,7 @@ export type SpCompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown
 export interface SpCompetition { slug: string; name: string; type: "league" | "cup"; hasStandings: boolean; hasScorers: boolean; hasStats: boolean; category?: SpCompetitionCategory; logo?: string | null; season?: number | null; start?: string | null; end?: string | null; status?: SpCompetitionStatus; }
 export const COMP_CATEGORY_LABELS: Record<SpCompetitionCategory, string> = { saudi: "سعودي", gulf: "خليجي", arab: "عربي", european: "أوروبي", world: "عالمي" };
 export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "arab", "european", "world"];
-export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "الموسم جارٍ", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
+export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
 // ترتيب الأولوية داخل الفئة: الجارية أولًا ثم القادمة ثم المنتهية.
 export const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
 export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
@@ -2182,13 +2182,11 @@ export default function SportsHub() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-black text-foreground truncate">{comp.name}</span>
-                    {comp.status && comp.status !== "unknown" && (
+                    {comp.status && comp.status !== "unknown" && comp.status !== "ongoing" && (
                       <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        comp.status === "ongoing" ? "bg-green-500/15 text-green-600 dark:text-green-400"
-                        : comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        comp.status === "upcoming" ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
                         : "bg-muted text-muted-foreground"
                       }`}>
-                        {comp.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                         {COMP_STATUS_LABELS[comp.status]}
                       </span>
                     )}
