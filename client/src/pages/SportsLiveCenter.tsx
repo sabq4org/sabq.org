@@ -72,7 +72,7 @@ const imgOf = (article: ArticleWithDetails) =>
   getCacheBustedImageUrl(article.imageUrl || article.thumbnailUrl, article.updatedAt);
 
 const articleTime = (article: ArticleWithDetails) =>
-  new Date(article.publishedAt || (article as any).createdAt || 0).getTime();
+  new Date(article.publishedAt || article.createdAt || 0).getTime();
 
 const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(b) - articleTime(a);
 
@@ -573,7 +573,7 @@ export default function SportsLiveCenter() {
   const { data: category } = useQuery<Category>({
     queryKey: ["/api/categories/slug", "sports"],
   });
-  const sportsCatId = (category as any)?.id;
+  const sportsCatId = category?.id;
 
   const { data: compsData } = useQuery<{ competitions: SpCompetition[] }>({
     queryKey: ["/api/sports/competitions"],
