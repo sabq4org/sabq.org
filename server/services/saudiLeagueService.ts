@@ -1462,9 +1462,15 @@ export interface SplCompetitionMeta {
 }
 
 export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCompetitionMeta> {
-  return withSWR(`spl:compmeta:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
-    try {
+  try {
+    // المفتاح موسوم بنسخة (v2) لأن شكل القيمة تغيّر (إضافة start/end/status)؛
+    // رفع النسخة يُبطل القيم القديمة فورًا بدل انتظار TTL.
+    // ملاحظة مهمة: لا نلتقط الخطأ داخل الـ fetcher — نتركه يُرمى حتى لا يخزّن
+    // withSWR نتيجة fallback خاطئة (start/end=null) لـ 6 ساعات عند فشل/تحديد
+    // معدّل من API-Football (يحدث وقت النشر مع رشقة الطلبات المتوازية).
+    return await withSWR(`spl:compmeta:v2:${comp.id}`, COMP_META_TTL, COMP_META_TTL * 2, async () => {
       const rows = await apiGet("leagues", { id: comp.id });
+      if (!rows.length) throw new Error(`[SaudiLeague] no league data for ${comp.id}`);
       const lg = rows[0]?.league ?? {};
       const seasons: any[] = rows[0]?.seasons ?? [];
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
@@ -1478,10 +1484,11 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
         end,
         status: computeStatus(start, end),
       };
-    } catch {
-      return { logo: null, season: comp.fallbackSeason, round: null, start: null, end: null, status: "unknown" };
-    }
-  });
+    });
+  } catch {
+    // fallback غير مُخزَّن — الطلب التالي يعيد المحاولة (شفاء ذاتي).
+    return { logo: null, season: comp.fallbackSeason, round: null, start: null, end: null, status: "unknown" };
+  }
 }
 
 /** قائمة البطولات مُثراة بالشعار والموسم وحالته — لترويسة البطولة الديناميكية في الواجهة. */
