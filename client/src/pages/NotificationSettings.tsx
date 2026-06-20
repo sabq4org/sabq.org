@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy } from "lucide-react";
+import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy, Lightbulb, Newspaper, ChevronLeft, Compass } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
 
@@ -25,6 +26,14 @@ interface NotificationPrefs {
   whatsappPhone?: string | null;
   whatsappEnabled?: boolean;
   updatedAt?: string;
+}
+
+interface RecommendationPrefs {
+  enableDailyDigest: boolean;
+  enablePersonalized: boolean;
+  enableTrending: boolean;
+  enableCrossCategory: boolean;
+  digestTime?: string;
 }
 
 interface UserWithRoles {
@@ -51,6 +60,12 @@ export default function NotificationSettings() {
     queryKey: ["/api/me/notification-prefs"],
   });
 
+  const { data: recData } = useQuery<{ preferences: RecommendationPrefs }>({
+    queryKey: ["/api/recommendations/preferences"],
+    retry: false,
+  });
+  const recPrefs = recData?.preferences;
+
   useEffect(() => {
     setWhatsappPhone(prefs?.whatsappPhone ?? "");
     setWhatsappEnabled(prefs?.whatsappEnabled ?? false);
@@ -65,6 +80,8 @@ export default function NotificationSettings() {
   const isReporter = user?.role === 'reporter' || user?.role === 'editor' || user?.role === 'admin' || user?.role === 'superadmin' ||
     user?.roles?.some(r => ['reporter', 'editor', 'admin', 'superadmin'].includes(r.name));
 
+  const matchesOnly = prefs?.matchesOnly ?? false;
+
   const updatePrefsMutation = useMutation({
     mutationFn: async (data: Partial<NotificationPrefs>) => {
       return await apiRequest("/api/me/notification-prefs", {
@@ -78,6 +95,30 @@ export default function NotificationSettings() {
       toast({
         title: "تم الحفظ",
         description: "تم حفظ إعدادات الإشعارات بنجاح",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء حفظ الإعدادات",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateRecMutation = useMutation({
+    mutationFn: async (data: Partial<RecommendationPrefs>) => {
+      return await apiRequest("/api/recommendations/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recommendations/preferences"] });
+      toast({
+        title: "تم الحفظ",
+        description: "تم حفظ إعدادات التوصيات بنجاح",
       });
     },
     onError: () => {
@@ -117,6 +158,10 @@ export default function NotificationSettings() {
     updatePrefsMutation.mutate({ [key]: value });
   };
 
+  const handleRecToggle = (key: keyof RecommendationPrefs, value: boolean) => {
+    updateRecMutation.mutate({ [key]: value });
+  };
+
   const handleQuietHoursChange = (start: string, end: string) => {
     updatePrefsMutation.mutate({
       quietHoursStart: start || null,
@@ -133,7 +178,7 @@ export default function NotificationSettings() {
   const handleWhatsappPhoneSave = () => {
     const normalized = normalizePhone(whatsappPhone);
     const digits = normalized.replace(/[^0-9]/g, "");
-    
+
     if (!digits) {
       const prevPhone = prefs?.whatsappPhone ?? "";
       const prevEnabled = prefs?.whatsappEnabled ?? false;
@@ -147,7 +192,7 @@ export default function NotificationSettings() {
       });
       return;
     }
-    
+
     if (digits.length < 10 || digits.length > 15) {
       toast({
         title: "خطأ",
@@ -156,7 +201,7 @@ export default function NotificationSettings() {
       });
       return;
     }
-    
+
     const prevPhone = prefs?.whatsappPhone ?? "";
     setWhatsappPhone(normalized);
     updatePrefsMutation.mutate({ whatsappPhone: normalized }, {
@@ -188,42 +233,66 @@ export default function NotificationSettings() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">إعدادات الإشعارات</h1>
           <p className="text-muted-foreground">
-            تحكم في الإشعارات التي تتلقاها وأوقات استلامها
+            مكان واحد للتحكم في كل إشعاراتك: العام، المباريات، والتوصيات والملخص اليومي
           </p>
         </div>
 
       <div className="space-y-6">
-        {/* Matches-only mode */}
+        {/* === المباريات === */}
         <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="pt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-primary" />
+              المباريات
+            </CardTitle>
+            <CardDescription>
+              تنبيهات المباريات تصلك تلقائياً عن الفرق التي تتابعها (بدء المباراة، الأهداف، النتيجة النهائية)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Trophy className="h-5 w-5 text-primary shrink-0" />
-                <div>
-                  <Label htmlFor="matches-only" className="text-base font-medium">
-                    وضع المباريات فقط
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    استلم إشعارات المباريات فقط، مع كتم الملخص اليومي وإشعارات المقالات الجديدة
-                  </p>
-                </div>
+              <div>
+                <Label htmlFor="matches-only" className="text-base font-medium">
+                  وضع المباريات فقط
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  استلم إشعارات المباريات فقط، مع كتم الملخص اليومي وإشعارات المقالات الجديدة
+                </p>
               </div>
               <Switch
                 id="matches-only"
-                checked={prefs?.matchesOnly ?? false}
+                checked={matchesOnly}
                 onCheckedChange={(checked) => handleToggle("matchesOnly", checked)}
                 data-testid="switch-matches-only"
               />
             </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+              <div className="flex items-center gap-3">
+                <Compass className="h-5 w-5 text-primary shrink-0" />
+                <div>
+                  <p className="text-base font-medium">الفرق التي تتابعها</p>
+                  <p className="text-sm text-muted-foreground">
+                    أضف أو أزل الفرق لتتحكم في تنبيهات مبارياتها
+                  </p>
+                </div>
+              </div>
+              <Link href="/my-follows">
+                <Button variant="outline" size="sm" data-testid="link-manage-follows">
+                  إدارة المتابعات
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                </Button>
+              </Link>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Notification Types */}
+        {/* === عام === */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5" />
-              أنواع الإشعارات
+              عام
             </CardTitle>
             <CardDescription>
               اختر الإشعارات التي تريد استلامها
@@ -260,13 +329,16 @@ export default function NotificationSettings() {
                     المقالات المطابقة لاهتماماتك
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    مقالات جديدة تتعلق بمواضيع تهمك
+                    {matchesOnly
+                      ? "معطّل بسبب «وضع المباريات فقط»"
+                      : "مقالات جديدة تتعلق بمواضيع تهمك"}
                   </p>
                 </div>
               </div>
               <Switch
                 id="interest-match"
-                checked={prefs?.interest ?? true}
+                checked={!matchesOnly && (prefs?.interest ?? true)}
+                disabled={matchesOnly}
                 onCheckedChange={(checked) => handleToggle("interest", checked)}
                 data-testid="switch-interest-match"
               />
@@ -311,6 +383,107 @@ export default function NotificationSettings() {
                 checked={prefs?.mostRead ?? true}
                 onCheckedChange={(checked) => handleToggle("mostRead", checked)}
                 data-testid="switch-most-read"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* === التوصيات والملخص اليومي === */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-primary" />
+              التوصيات والملخص اليومي
+            </CardTitle>
+            <CardDescription>
+              تحكم في التوصيات المخصصة والملخص اليومي للمقالات
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Daily Digest */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Newspaper className="h-5 w-5 text-primary" />
+                <div>
+                  <Label htmlFor="daily-digest" className="text-base font-medium">
+                    الملخص اليومي
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {matchesOnly
+                      ? "معطّل بسبب «وضع المباريات فقط»"
+                      : "ملخص يومي للمقالات المهمة في اهتماماتك"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="daily-digest"
+                checked={!matchesOnly && (recPrefs?.enableDailyDigest ?? false)}
+                disabled={matchesOnly}
+                onCheckedChange={(checked) => handleRecToggle("enableDailyDigest", checked)}
+                data-testid="switch-daily-digest"
+              />
+            </div>
+
+            {/* Personalized */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <div>
+                  <Label htmlFor="rec-personalized" className="text-base font-medium">
+                    محتوى مخصص
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    مقالات مشابهة لما قرأته سابقاً
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-personalized"
+                checked={recPrefs?.enablePersonalized ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enablePersonalized", checked)}
+                data-testid="switch-rec-personalized"
+              />
+            </div>
+
+            {/* Trending */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-5 w-5 text-chart-1" />
+                <div>
+                  <Label htmlFor="rec-trending" className="text-base font-medium">
+                    الأكثر رواجاً
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    المقالات الشائعة في مجالات اهتمامك
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-trending"
+                checked={recPrefs?.enableTrending ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enableTrending", checked)}
+                data-testid="switch-rec-trending"
+              />
+            </div>
+
+            {/* Cross Category */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Compass className="h-5 w-5 text-accent" />
+                <div>
+                  <Label htmlFor="rec-cross" className="text-base font-medium">
+                    اكتشاف محتوى جديد
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    مقالات من أقسام أخرى قد تثير اهتمامك
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="rec-cross"
+                checked={recPrefs?.enableCrossCategory ?? true}
+                onCheckedChange={(checked) => handleRecToggle("enableCrossCategory", checked)}
+                data-testid="switch-rec-cross"
               />
             </div>
           </CardContent>
@@ -426,7 +599,7 @@ export default function NotificationSettings() {
                     }
                     const prevEnabled = prefs?.whatsappEnabled ?? false;
                     setWhatsappEnabled(checked);
-                    updatePrefsMutation.mutate({ 
+                    updatePrefsMutation.mutate({
                       whatsappEnabled: checked,
                       whatsappPhone: normalized || null
                     }, {
@@ -483,20 +656,9 @@ export default function NotificationSettings() {
           </CardContent>
         </Card>
 
-        {/* Save Button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={() => {
-              toast({
-                title: "تم الحفظ",
-                description: "يتم حفظ التغييرات تلقائياً",
-              });
-            }}
-            data-testid="button-save-settings"
-          >
-            تم الحفظ
-          </Button>
-        </div>
+        <p className="text-center text-sm text-muted-foreground">
+          يتم حفظ كل تغيير تلقائياً
+        </p>
       </div>
       </div>
     </div>
