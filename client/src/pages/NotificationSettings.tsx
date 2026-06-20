@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle } from "lucide-react";
+import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
 
@@ -19,6 +19,7 @@ interface NotificationPrefs {
   mostRead: boolean;
   webPush: boolean;
   dailyDigest: boolean;
+  matchesOnly: boolean;
   quietHoursStart?: string | null;
   quietHoursEnd?: string | null;
   whatsappPhone?: string | null;
@@ -192,6 +193,31 @@ export default function NotificationSettings() {
         </div>
 
       <div className="space-y-6">
+        {/* Matches-only mode */}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Trophy className="h-5 w-5 text-primary shrink-0" />
+                <div>
+                  <Label htmlFor="matches-only" className="text-base font-medium">
+                    وضع المباريات فقط
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    استلم إشعارات المباريات فقط، مع كتم الملخص اليومي وإشعارات المقالات الجديدة
+                  </p>
+                </div>
+              </div>
+              <Switch
+                id="matches-only"
+                checked={prefs?.matchesOnly ?? false}
+                onCheckedChange={(checked) => handleToggle("matchesOnly", checked)}
+                data-testid="switch-matches-only"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Notification Types */}
         <Card>
           <CardHeader>

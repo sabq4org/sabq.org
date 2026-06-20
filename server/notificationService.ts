@@ -142,7 +142,9 @@ export async function sendArticleNotification(
           .where(
             and(
               eq(userInterests.categoryId, article.categoryId),
-              eq(userNotificationPrefs.interest, true)
+              eq(userNotificationPrefs.interest, true),
+              // «وضع المباريات فقط» يكتم إشعارات المقالات الجديدة
+              eq(userNotificationPrefs.matchesOnly, false)
             )
           );
       }
@@ -234,9 +236,23 @@ export async function sendArticleNotification(
 
         console.log(`📢 [KEYWORD-NOTIFY] Found ${followingUsers.length} users following these keywords`);
 
+        // «وضع المباريات فقط» — استبعاد من فعّلوه (نتجاهل غير المالكين لصف تفضيلات لأن الافتراضي false)
+        const followerIds = Array.from(new Set(followingUsers.map(u => u.userId)));
+        const mutedRows = followerIds.length
+          ? await db
+              .select({ userId: userNotificationPrefs.userId })
+              .from(userNotificationPrefs)
+              .where(and(
+                inArray(userNotificationPrefs.userId, followerIds),
+                eq(userNotificationPrefs.matchesOnly, true)
+              ))
+          : [];
+        const mutedUserIds = new Set(mutedRows.map(r => r.userId));
+
         // Group by userId to find which keywords they follow
         const userKeywordMap = new Map<string, string[]>();
         for (const { userId, tagId } of followingUsers) {
+          if (mutedUserIds.has(userId)) continue;
           if (!userKeywordMap.has(userId)) {
             userKeywordMap.set(userId, []);
           }
