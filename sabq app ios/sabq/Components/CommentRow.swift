@@ -70,11 +70,11 @@ struct CommentRow: View {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 Text(comment.userName ?? "مستخدم")
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(Self.relativeTime(comment.createdAt))
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(SabqFonts.app(size: 11.5, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -109,14 +109,14 @@ struct CommentRow: View {
             .frame(width: 32, height: 32)
             .overlay {
                 Text(String((comment.userName ?? "م").prefix(1)))
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
 
     private var bodyText: some View {
         Text(comment.body)
-            .font(.system(size: 14.5, weight: .regular))
+            .font(SabqFonts.app(size: 14.5, weight: .regular))
             .foregroundStyle(SabqTheme.secondaryInk)
             .lineSpacing(4)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,9 +135,9 @@ struct CommentRow: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrowshape.turn.up.left")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .semibold))
                         Text("رد")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(SabqTheme.primaryEnd)
                 }
@@ -147,9 +147,9 @@ struct CommentRow: View {
             if let pending = comment.status?.lowercased(), pending == "pending" {
                 HStack(spacing: 4) {
                     Image(systemName: "sparkles")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(SabqFonts.app(size: 9, weight: .bold))
                     Text("SABQ AI يراجع")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(SabqFonts.app(size: 10.5, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8)

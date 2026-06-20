@@ -53,11 +53,15 @@ public struct LiveMatchAttributes: ActivityAttributes {
     public var awayName: String
     /// الدور/البطولة، مثل "دور المجموعات — المجموعة أ" — اختياري
     public var round: String?
+    /// موعد انطلاق المباراة — يُمكّن الويدجت من عرض عدّاد تنازلي ذاتي التحديث
+    /// (Text(timerInterval:)) قبل البدء دون أي سحب من الخادم
+    public var kickoff: Date
 
-    public init(fixtureId: Int, homeName: String, awayName: String, round: String?) {
+    public init(fixtureId: Int, homeName: String, awayName: String, round: String?, kickoff: Date) {
         self.fixtureId = fixtureId
         self.homeName = homeName
         self.awayName = awayName
         self.round = round
+        self.kickoff = kickoff
     }
 }

@@ -215,6 +215,11 @@ struct HomeFeedView: View {
                     opinionsPreviewSection
                         .animatedAppear(index: 7)
 
+                    // شريط «مُقترب» — زوايا تحليلية بأقلام الكتّاب. يختفي
+                    // كليًا عند غياب المواضيع المميّزة.
+                    MuqtarabHomeStrip()
+                        .animatedAppear(index: 8)
+
                     trendingPreviewSection
                         .animatedAppear(index: 8)
 
@@ -360,9 +365,9 @@ struct HomeFeedView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 13, weight: .bold))
                     Text(newArticlesBannerText)
-                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
@@ -498,7 +503,7 @@ struct HomeFeedView: View {
                                     )
                                     .frame(width: 44, height: 44)
                                 Image(systemName: "bell.fill")
-                                    .font(.system(size: 17, weight: .semibold))
+                                    .font(SabqFonts.app(size: 17, weight: .semibold))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                             // Red unread dot — driven by NotificationsStore's
@@ -536,7 +541,7 @@ struct HomeFeedView: View {
                             .frame(width: 44, height: 44)
 
                         Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(SabqFonts.app(size: 18, weight: .semibold))
                             .foregroundStyle(SabqTheme.primaryEnd)
                     }
                 }
@@ -578,7 +583,7 @@ struct HomeFeedView: View {
             .frame(width: 44, height: 44)
             .overlay {
                 Image(systemName: systemName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -593,11 +598,11 @@ struct HomeFeedView: View {
                     PulsingDot(color: SabqTheme.coral)
 
                     Text("عاجل")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(SabqFonts.app(size: 13, weight: .heavy))
                         .foregroundStyle(SabqTheme.coral)
 
                     Text(article.title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -605,7 +610,7 @@ struct HomeFeedView: View {
                     Spacer(minLength: 0)
 
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SabqTheme.coral.opacity(0.6))
                 }
                 .padding(.horizontal, 16)
@@ -736,15 +741,15 @@ struct HomeFeedView: View {
                 HStack(alignment: .top) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "flame.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(.orange)
                             .padding(.top, 2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("الأكثر تداولاً")
-                                .font(.system(size: 17, weight: .bold, design: .rounded))
+                                .font(SabqFonts.app(size: 17, weight: .bold))
                                 .foregroundStyle(SabqTheme.ink)
                             Text("خلال آخر 48 ساعة")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                         }
                     }
@@ -754,9 +759,9 @@ struct HomeFeedView: View {
                     NavigationLink(value: TrendingRoute()) {
                         HStack(spacing: 4) {
                             Text("المزيد")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                         }
                         .foregroundStyle(SabqTheme.primaryEnd)
                     }
@@ -772,12 +777,12 @@ struct HomeFeedView: View {
                         NavigationLink(value: article) {
                             HStack(spacing: 12) {
                                 Text("\(index + 1)")
-                                    .font(.system(size: 18, weight: .heavy, design: .rounded))
+                                    .font(SabqFonts.app(size: 18, weight: .heavy))
                                     .foregroundStyle(index < 3 ? .orange : SabqTheme.tertiaryInk)
                                     .frame(width: 28)
 
                                 Text(article.title)
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(SabqFonts.app(size: 14, weight: .semibold))
                                     .foregroundStyle(SabqTheme.ink)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.leading)
@@ -805,11 +810,11 @@ struct HomeFeedView: View {
                                 .fill(SabqTheme.gold.opacity(0.15))
                                 .frame(width: 28, height: 28)
                             Image(systemName: "quote.opening")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(SabqFonts.app(size: 12, weight: .bold))
                                 .foregroundStyle(SabqTheme.gold)
                         }
                         Text("آراء وأقلام")
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .font(SabqFonts.app(size: 17, weight: .bold))
                             .foregroundStyle(SabqTheme.ink)
                     }
 
@@ -818,9 +823,9 @@ struct HomeFeedView: View {
                     NavigationLink(value: OpinionsRoute()) {
                         HStack(spacing: 4) {
                             Text("جميع المقالات")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                         }
                         .foregroundStyle(SabqTheme.primaryEnd)
                     }
@@ -865,7 +870,7 @@ struct HomeFeedView: View {
                 HStack(spacing: 6) {
                     opinionAuthorAvatar(opinion, size: 24)
                     Text(opinion.authorName)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                 }
@@ -882,7 +887,7 @@ struct HomeFeedView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(opinion.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -891,16 +896,16 @@ struct HomeFeedView: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                         Text(opinion.readingTime)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer()
 
                     Text(opinion.relativeDate)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
@@ -924,7 +929,7 @@ struct HomeFeedView: View {
             .frame(width: 200, height: 120)
             .overlay {
                 Image(systemName: "text.quote")
-                    .font(.system(size: 32, weight: .light))
+                    .font(SabqFonts.app(size: 32, weight: .light))
                     .foregroundStyle(SabqTheme.gold.opacity(0.4))
             }
     }
@@ -955,7 +960,7 @@ struct HomeFeedView: View {
             .frame(width: size, height: size)
             .overlay {
                 Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.45, weight: .bold))
+                    .font(SabqFonts.app(size: size * 0.45, weight: .bold))
                     .foregroundStyle(.white)
             }
     }
@@ -1008,7 +1013,7 @@ struct HomeFeedView: View {
                                     .tint(SabqTheme.primaryEnd)
                             }
                             Text("تحميل المزيد")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(SabqFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SabqTheme.primaryEnd)
                         }
                         .frame(maxWidth: .infinity)
@@ -1086,7 +1091,7 @@ struct HomeFeedView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 52, height: 52)
                 Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(SabqFonts.app(size: 22, weight: .semibold))
                     .foregroundStyle(tint)
                     .symbolRenderingMode(.hierarchical)
             }
@@ -1094,15 +1099,15 @@ struct HomeFeedView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(greeting)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     // Tiny "SABQ AI" pill so the headline below clearly
                     // reads as machine-curated rather than editorial copy.
                     HStack(spacing: 3) {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(SabqFonts.app(size: 8, weight: .bold))
                         Text("SABQ AI")
-                            .font(.system(size: 9, weight: .heavy))
+                            .font(SabqFonts.app(size: 9, weight: .heavy))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
@@ -1119,14 +1124,14 @@ struct HomeFeedView: View {
                 }
 
                 Text(headline)
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 16, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(tip)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -1206,18 +1211,18 @@ struct HomeFeedView: View {
                     )
                     .frame(width: 40, height: 40)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(journeyGreeting)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 Text("رحلتك المعرفية في سبق اليوم باختصار")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -1295,19 +1300,19 @@ struct HomeFeedView: View {
         VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
                     .monospacedDigit()
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                 if let unit {
                     Text(unit)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
             Text(label)
-                .font(.system(size: 10, weight: .medium))
+                .font(SabqFonts.app(size: 10, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -1328,13 +1333,13 @@ struct HomeFeedView: View {
         if let interests = richInsights?.topInterests, !interests.isEmpty {
             HStack(spacing: 6) {
                 Text("اهتماماتك اليوم:")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(interests, id: \.self) { name in
                             Text(name)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 4)
@@ -1394,7 +1399,7 @@ struct HomeFeedView: View {
                 if latestOmq != nil {
                     NavigationLink(value: OmqRoute()) {
                         Text("الكل")
-                            .font(.system(size: 11, weight: .heavy))
+                            .font(SabqFonts.app(size: 11, weight: .heavy))
                             .foregroundStyle(sky)
                     }
                 }
@@ -1407,20 +1412,20 @@ struct HomeFeedView: View {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(sky.opacity(0.14))
                             Image(systemName: "brain.head.profile")
-                                .font(.system(size: 22, weight: .light))
+                                .font(SabqFonts.app(size: 22, weight: .light))
                                 .foregroundStyle(sky)
                                 .symbolRenderingMode(.hierarchical)
                         }
                         .frame(width: 50, height: 50)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(omq.title)
-                                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 14, weight: .heavy))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                             if let topic = omq.topic, !topic.isEmpty, topic != omq.title {
                                 Text(topic)
-                                    .font(.system(size: 11))
+                                    .font(SabqFonts.app(size: 11))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                                     .lineLimit(2)
                             }
@@ -1457,17 +1462,17 @@ struct HomeFeedView: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(sky.opacity(0.14))
                 Image(systemName: "brain.head.profile")
-                    .font(.system(size: 28, weight: .light))
+                    .font(SabqFonts.app(size: 28, weight: .light))
                     .foregroundStyle(sky)
                     .symbolRenderingMode(.hierarchical)
             }
             .frame(width: 64, height: 64)
             VStack(alignment: .leading, spacing: 5) {
                 Text("تحليلات الذكاء الاصطناعي")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text("اعرض كل التحليلات المعمّقة المتاحة بمنهجية سبق التحريرية.")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1503,7 +1508,7 @@ struct HomeFeedView: View {
                 )
                 NavigationLink(value: CalendarRoute()) {
                     Text("الكل")
-                        .font(.system(size: 11, weight: .heavy))
+                        .font(SabqFonts.app(size: 11, weight: .heavy))
                         .foregroundStyle(gold)
                 }
             }
@@ -1513,12 +1518,12 @@ struct HomeFeedView: View {
                         RoundedRectangle(cornerRadius: 3).fill(gold).frame(width: 3, height: 28)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.title)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(SabqFonts.app(size: 13, weight: .bold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             if let imp = event.importance, imp >= 4 {
                                 Text("حدث بارز")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                         }
@@ -1552,7 +1557,7 @@ struct HomeFeedView: View {
                     )
                     NavigationLink(value: AudioNewslettersRoute()) {
                         Text("الكل")
-                            .font(.system(size: 11, weight: .heavy))
+                            .font(SabqFonts.app(size: 11, weight: .heavy))
                             .foregroundStyle(SabqTheme.coral)
                     }
                 }
@@ -1565,26 +1570,26 @@ struct HomeFeedView: View {
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing))
                             Image(systemName: "waveform")
-                                .font(.system(size: 20, weight: .light))
+                                .font(SabqFonts.app(size: 20, weight: .light))
                                 .foregroundStyle(.white.opacity(0.8))
                         }
                         .frame(width: 54, height: 54)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(n.title)
-                                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 14, weight: .heavy))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
                             if let d = n.duration {
                                 Text("\(d / 60) دقيقة استماع")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 11, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                                     .monospacedDigit()
                             }
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "play.circle.fill")
-                            .font(.system(size: 28))
+                            .font(SabqFonts.app(size: 28))
                             .foregroundStyle(SabqTheme.coral)
                     }
                     .padding(14)
@@ -1609,11 +1614,11 @@ struct HomeFeedView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 26, height: 26)
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(tint)
             }
             Text(title)
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             Spacer(minLength: 0)
         }
@@ -1686,7 +1691,7 @@ struct StoryBubble: View {
             }
 
             Text(story.title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(1)
                 .frame(width: 72)
@@ -1705,7 +1710,7 @@ struct StoryBubble: View {
             .frame(width: 60, height: 60)
             .overlay {
                 Image(systemName: "doc.text.fill")
-                    .font(.system(size: 22, weight: .light))
+                    .font(SabqFonts.app(size: 22, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd.opacity(0.5))
             }
     }
@@ -1755,13 +1760,13 @@ struct NotificationsSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
                 ToolbarItem(placement: .principal) {
                     Text("الإشعارات")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(SabqFonts.app(size: 17, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -1787,7 +1792,7 @@ struct NotificationsSheet: View {
                                 .tint(SabqTheme.primaryEnd)
                         } else {
                             Text("قراءة الكل")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.primaryEnd)
                         }
                     }
@@ -1811,18 +1816,18 @@ struct NotificationsSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let title = notif.title {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 if let body = notif.body {
                     Text(body)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(SabqFonts.app(size: 14, weight: .regular))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(2)
                 }
                 if let date = notif.createdAt {
                     Text(date)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }

@@ -110,7 +110,7 @@ struct ExploreView: View {
                 ForEach(trendingKeywords.prefix(14), id: \.self) { keyword in
                     NavigationLink(value: KeywordRoute(keyword: keyword)) {
                         Text("#\(keyword)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -163,7 +163,7 @@ struct ExploreView: View {
                     recentSearches.removeAll()
                     UserDefaults.standard.set([String](), forKey: "sabq_recent_searches")
                 }
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
@@ -175,9 +175,9 @@ struct ExploreView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .semibold))
                             Text(recent)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 11)
@@ -215,7 +215,7 @@ struct ExploreView: View {
         } else {
             VStack(alignment: .leading, spacing: 14) {
                 Text("\(displayResults.count) نتيجة")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
@@ -241,10 +241,10 @@ struct ExploreView: View {
     private func sectionTitle(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .semibold))
                 .foregroundStyle(tint)
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Spacer(minLength: 0)
         }

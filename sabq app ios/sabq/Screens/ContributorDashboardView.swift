@@ -258,14 +258,14 @@ struct ContributorDashboardView: View {
             } else if let error = vm.error {
                 VStack(spacing: 16) {
                     Image(systemName: "chart.bar.xaxis.ascending")
-                        .font(.system(size: 40, weight: .light))
+                        .font(SabqFonts.app(size: 40, weight: .light))
                         .foregroundStyle(SabqTheme.secondaryInk.opacity(0.4))
                     Text(error)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(SabqFonts.app(size: 14, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     Button { Task { await vm.load() } } label: {
                         Text("إعادة المحاولة")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(SabqFonts.app(size: 14, weight: .semibold))
                             .padding(.horizontal, 20)
                             .padding(.vertical, 8)
                             .background(Capsule().fill(accentBlue.opacity(0.12)))
@@ -303,14 +303,14 @@ struct ContributorDashboardView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: data.role == "reporter" ? "newspaper.fill" : "pencil.and.outline")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(accentBlue)
                 Text(data.role == "reporter" ? "لوحة المراسل" : "لوحة كاتب الرأي")
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
             }
             Text("مرحباً بك في لوحة التحكم الخاصة بك")
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
     }
@@ -336,16 +336,16 @@ struct ContributorDashboardView: View {
                         .fill(bgColor.opacity(0.12))
                         .frame(width: 30, height: 30)
                     Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(color)
                 }
                 Spacer()
                 if let t = trend {
                     HStack(spacing: 2) {
                         Image(systemName: t >= 0 ? "arrow.up.right" : "arrow.down.right")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(SabqFonts.app(size: 8, weight: .bold))
                         Text("\(abs(t))%")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .font(SabqFonts.app(size: 10, weight: .bold))
                     }
                     .foregroundStyle(t >= 0 ? accentGreen : accentPink)
                     .padding(.horizontal, 6)
@@ -354,10 +354,10 @@ struct ContributorDashboardView: View {
                 }
             }
             Text("\(value)")
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 24, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .padding(14)
@@ -390,21 +390,21 @@ struct ContributorDashboardView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Image(systemName: "trophy.fill")
-                                .font(.system(size: 12))
+                                .font(SabqFonts.app(size: 12))
                                 .foregroundStyle(.orange)
                             Text("الأفضل هذا الأسبوع")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                         Text(best.title)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                             .lineLimit(3)
                         HStack(spacing: 3) {
                             Image(systemName: "eye.fill")
-                                .font(.system(size: 10))
+                                .font(SabqFonts.app(size: 10))
                             Text("\(best.views)")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.secondaryInk)
                     }
@@ -447,7 +447,7 @@ struct ContributorDashboardView: View {
                             AxisValueLabel {
                                 if let v = value.as(Int.self) {
                                     Text("\(v)")
-                                        .font(.system(size: 9))
+                                        .font(SabqFonts.app(size: 9))
                                 }
                             }
                         }
@@ -475,12 +475,12 @@ struct ContributorDashboardView: View {
                                 .fill(index < 3 ? accentAmber.opacity(0.12) : SabqTheme.outline.opacity(0.15))
                                 .frame(width: 26, height: 26)
                             Text("\(index + 1)")
-                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 12, weight: .heavy))
                                 .foregroundStyle(index < 3 ? accentAmber : SabqTheme.secondaryInk)
                         }
                         VStack(alignment: .leading, spacing: 3) {
                             Text(article.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             HStack(spacing: 10) {
@@ -506,23 +506,23 @@ struct ContributorDashboardView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "quote.opening")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(accentCyan)
                     Text("أبرز تعليق هذا الأسبوع")
-                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 12, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text("«\(comment.content)»")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .italic()
                 HStack(spacing: 4) {
                     Image(systemName: "person.circle.fill")
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     Text("\(comment.userName) · \(comment.articleTitle)")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(1)
                 }
@@ -548,19 +548,19 @@ struct ContributorDashboardView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 4) {
                         Image(systemName: "person.2.fill")
-                            .font(.system(size: 12))
+                            .font(SabqFonts.app(size: 12))
                             .foregroundStyle(.blue)
                         Text("المتابعون")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .semibold))
                             .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Text("\(data.followers.count)")
-                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 24, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     if !data.followers.dailyGrowth.isEmpty {
                         let total = data.followers.dailyGrowth.reduce(0) { $0 + $1.count }
                         Text("+\(total) آخر 30 يوم")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .foregroundStyle(.green)
                     }
                 }
@@ -574,36 +574,36 @@ struct ContributorDashboardView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Image(systemName: "medal.fill")
-                                .font(.system(size: 12))
+                                .font(SabqFonts.app(size: 12))
                                 .foregroundStyle(accentAmber)
                             Text("ترتيبك")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .semibold))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                         if let rank = ranking.rank {
                             HStack(alignment: .firstTextBaseline, spacing: 4) {
                                 Text("#\(rank)")
-                                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                                    .font(SabqFonts.app(size: 24, weight: .heavy))
                                     .foregroundStyle(SabqTheme.ink)
                                 Text("من \(ranking.totalAuthors)")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 11, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                             if ranking.isTopTen {
                                 Text("الأكثر قراءة")
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(SabqFonts.app(size: 10, weight: .bold))
                                     .foregroundStyle(accentAmber)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(accentAmber.opacity(0.12)))
                             } else {
                                 Text("أعلى من \(ranking.percentile)%")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .medium))
                                     .foregroundStyle(SabqTheme.secondaryInk)
                             }
                         } else {
                             Text("لم تنشر هذا الشهر")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                         }
                     }
@@ -626,10 +626,10 @@ struct ContributorDashboardView: View {
             HStack(spacing: 12) {
                 VStack(spacing: 4) {
                     Text("\(pa.thisWeekCount)")
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 20, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("هذا الأسبوع")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .frame(maxWidth: .infinity)
@@ -638,10 +638,10 @@ struct ContributorDashboardView: View {
 
                 VStack(spacing: 4) {
                     Text("\(pa.thisMonthCount)")
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 20, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                     Text("هذا الشهر")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 .frame(maxWidth: .infinity)
@@ -651,9 +651,9 @@ struct ContributorDashboardView: View {
             if let days = pa.daysSinceLastPublished {
                 HStack(spacing: 4) {
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 11))
+                        .font(SabqFonts.app(size: 11))
                     Text(days == 0 ? "آخر نشر: اليوم" : days == 1 ? "آخر نشر: أمس" : "آخر نشر منذ \(days) يوم")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                 }
                 .foregroundStyle(days > 14 ? .orange : SabqTheme.secondaryInk)
             }
@@ -674,7 +674,7 @@ struct ContributorDashboardView: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(article.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             HStack(spacing: 8) {
@@ -699,7 +699,7 @@ struct ContributorDashboardView: View {
     @ViewBuilder
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .font(SabqFonts.app(size: 16, weight: .heavy))
             .foregroundStyle(SabqTheme.ink)
     }
 
@@ -708,11 +708,11 @@ struct ContributorDashboardView: View {
         HStack(spacing: 6) {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.ink)
             Spacer()
             Text("\(count)")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .font(SabqFonts.app(size: 12, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
         }
     }
@@ -721,9 +721,9 @@ struct ContributorDashboardView: View {
     private func miniStat(icon: String, value: Int) -> some View {
         HStack(spacing: 2) {
             Image(systemName: icon)
-                .font(.system(size: 9))
+                .font(SabqFonts.app(size: 9))
             Text("\(value)")
-                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .font(SabqFonts.app(size: 10, weight: .medium))
         }
         .foregroundStyle(SabqTheme.secondaryInk)
     }
@@ -732,7 +732,7 @@ struct ContributorDashboardView: View {
     private func statusPill(_ status: String, reviewStatus: String?) -> some View {
         let (label, color) = statusInfo(status, reviewStatus: reviewStatus)
         Text(label)
-            .font(.system(size: 9, weight: .bold))
+            .font(SabqFonts.app(size: 9, weight: .bold))
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)

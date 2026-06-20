@@ -83,7 +83,7 @@ struct MomentByMomentView: View {
                                         ProgressView().tint(SabqTheme.primaryEnd)
                                     }
                                     Text("تحميل المزيد")
-                                        .font(.system(size: 14, weight: .semibold))
+                                        .font(SabqFonts.app(size: 14, weight: .semibold))
                                         .foregroundStyle(SabqTheme.primaryEnd)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -117,14 +117,14 @@ struct MomentByMomentView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 .buttonStyle(.plain)
             }
             ToolbarItem(placement: .principal) {
                 Text("لحظة بلحظة")
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -148,7 +148,7 @@ struct MomentByMomentView: View {
                     .fill(SabqTheme.coral.opacity(0.18))
                     .frame(width: 36, height: 36)
                 Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SabqTheme.coral)
                 Circle()
                     .stroke(SabqTheme.coral.opacity(0.4), lineWidth: 2)
@@ -160,17 +160,17 @@ struct MomentByMomentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("مباشر")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(SabqFonts.app(size: 11, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(SabqTheme.coral))
                     Text("\(items.count) خبر")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 Text("أحدث الأخبار لحظة بلحظة")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             Spacer(minLength: 0)
@@ -190,7 +190,7 @@ struct MomentByMomentView: View {
                     }
                 } label: {
                     Text(f.label)
-                        .font(.system(size: 13, weight: filter == f ? .bold : .medium))
+                        .font(SabqFonts.app(size: 13, weight: filter == f ? .bold : .medium))
                         .foregroundStyle(filter == f ? .white : SabqTheme.ink)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
@@ -235,10 +235,10 @@ struct MomentByMomentView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "tray")
-                .font(.system(size: 32, weight: .light))
+                .font(SabqFonts.app(size: 32, weight: .light))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             Text("لا توجد أخبار حالياً")
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
@@ -248,17 +248,17 @@ struct MomentByMomentView: View {
     private func errorState(message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 28, weight: .light))
+                .font(SabqFonts.app(size: 28, weight: .light))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             Text(message)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
             Button {
                 Task { await reload() }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 8)

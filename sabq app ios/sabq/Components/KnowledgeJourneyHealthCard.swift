@@ -82,17 +82,17 @@ struct KnowledgeJourneyHealthCard: View {
                         )
                     )
                 Image(systemName: "heart.text.square.fill")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(SabqFonts.app(size: 22, weight: .semibold))
                     .foregroundStyle(sleepAccent)
             }
             .frame(width: 48, height: 48)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("اربط بياناتك الصحية")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 15, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text("اعرض خطواتك وساعات نومك ضمن رحلتك المعرفية")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -104,7 +104,7 @@ struct KnowledgeJourneyHealthCard: View {
                 Task { await hk.requestAccess() }
             } label: {
                 Text("تفعيل")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -124,7 +124,7 @@ struct KnowledgeJourneyHealthCard: View {
                 Circle()
                     .fill(tint.opacity(0.12))
                 Image(systemName: symbol)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(SabqFonts.app(size: 20, weight: .semibold))
                     .foregroundStyle(tint)
             }
             .frame(width: 46, height: 46)
@@ -132,16 +132,16 @@ struct KnowledgeJourneyHealthCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(value)
-                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 22, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                     Text(unit)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Text(hint)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk.opacity(0.85))
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)

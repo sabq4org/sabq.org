@@ -25,6 +25,20 @@ enum SabqFonts {
         .custom(semibold, size: size)
     }
 
+    /// الخط الموحّد للتطبيق كله — يُرجع متغيّر IBM Plex Sans Arabic المناسب
+    /// لوزن SwiftUI المطلوب. بديل مباشر لـ `SabqFonts.app(size: weight:)` كي يطابق
+    /// كامل التطبيق الخط المعتمد في تفاصيل الخبر (3 أوزان متوفّرة، فنُسقط
+    /// الأوزان النادرة على أقرب وزن).
+    static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        if weight == .bold || weight == .heavy || weight == .black {
+            return .custom(bold, size: size)
+        }
+        if weight == .semibold || weight == .medium {
+            return .custom(semibold, size: size)
+        }
+        return .custom(regular, size: size)
+    }
+
     private static var didRegister = false
 
     static func registerAll() {

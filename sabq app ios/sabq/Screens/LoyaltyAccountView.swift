@@ -72,14 +72,14 @@ struct LoyaltyAccountView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 38, height: 38)
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(tint)
             }
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(SabqFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
             Text(subtitle)
-                .font(.system(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
@@ -130,17 +130,17 @@ struct LoyaltyAccountView: View {
     private func statTile(label: String, value: Int, accent: Bool, icon: String, suffix: String? = nil) -> some View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 11))
-                Text(label).font(.system(size: 11, weight: .medium))
+                Image(systemName: icon).font(SabqFonts.app(size: 11))
+                Text(label).font(SabqFonts.app(size: 11, weight: .medium))
             }
             .foregroundStyle(accent ? Color.orange : SabqTheme.secondaryInk)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(value)")
-                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .font(SabqFonts.app(size: 22, weight: .black))
                     .foregroundStyle(accent ? Color.orange : SabqTheme.ink)
                 if let suffix {
                     Text(suffix)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
             }
@@ -170,7 +170,7 @@ struct LoyaltyAccountView: View {
         let currentLevel = loader.summary?.points?.rankLevel ?? 1
         VStack(alignment: .leading, spacing: 14) {
             Text("المستويات الخمسة")
-                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .font(SabqFonts.app(size: 14, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
             VStack(spacing: 0) {
                 ForEach(Array(LoyaltyTiers.all.enumerated()), id: \.element.id) { idx, tier in
@@ -223,11 +223,11 @@ struct LoyaltyAccountView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(tier.nameAr)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(tier.color)
                     if isCurrent {
                         Text("مستواك الآن")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -235,7 +235,7 @@ struct LoyaltyAccountView: View {
                     }
                 }
                 Text("يبدأ من \(tier.minLifetimePoints.formatted(.number.locale(Locale(identifier: "ar_SA")))) نقطة")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(.top, 14)   // align text baseline with the node center
@@ -263,7 +263,7 @@ struct LoyaltyAccountView: View {
                     .frame(width: isCurrent ? 20 : 14, height: isCurrent ? 20 : 14)
                 if !isCurrent {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .heavy))
+                        .font(SabqFonts.app(size: 8, weight: .heavy))
                         .foregroundStyle(.white)
                 }
             } else {

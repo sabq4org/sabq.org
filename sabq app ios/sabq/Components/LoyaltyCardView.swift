@@ -77,14 +77,14 @@ struct LoyaltyCardView: View {
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("سبق · LOYALTY")
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .tracking(2.5)
                                 .foregroundStyle(.white.opacity(0.7))
                             Text(tier.nameAr)
-                                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 22, weight: .heavy))
                                 .foregroundStyle(.white)
                             Text(tier.nameEn)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.7))
                         }
                         Spacer(minLength: 0)
@@ -93,7 +93,7 @@ struct LoyaltyCardView: View {
                                 .fill(Color.white.opacity(0.18))
                                 .frame(width: 48, height: 48)
                             Image(systemName: "trophy.fill")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(SabqFonts.app(size: 22, weight: .semibold))
                                 .foregroundStyle(.white)
                         }
                     }
@@ -103,19 +103,19 @@ struct LoyaltyCardView: View {
                     // Center: lifetime points
                     VStack(spacing: 2) {
                         Text("Lifetime Points")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                             .tracking(2)
                             .foregroundStyle(.white.opacity(0.7))
                         Text(lifetimePoints.formatted(.number.locale(Locale(identifier: "en_US"))))
-                            .font(.system(size: 44, weight: .black, design: .rounded))
+                            .font(SabqFonts.app(size: 44, weight: .black))
                             .foregroundStyle(.white)
                             .minimumScaleFactor(0.6)
                             .lineLimit(1)
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 10))
+                                .font(SabqFonts.app(size: 10))
                             Text("المستوى \(tier.level) من 5")
-                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                         }
                         .foregroundStyle(.white.opacity(0.65))
                     }
@@ -127,27 +127,27 @@ struct LoyaltyCardView: View {
                     HStack(alignment: .bottom, spacing: 12) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("حامل البطاقة")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .tracking(1.5)
                                 .foregroundStyle(.white.opacity(0.6))
                             Text(userName)
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                             if let memberSinceLabel {
                                 Text(memberSinceLabel)
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.6))
                             }
                         }
                         Spacer(minLength: 0)
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("رقم العضوية")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .medium))
                                 .tracking(1.5)
                                 .foregroundStyle(.white.opacity(0.6))
                             Text(memberIdShort)
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(SabqFonts.app(size: 12, weight: .semibold))
                                 .tracking(2)
                                 .foregroundStyle(.white)
                         }

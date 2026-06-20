@@ -32,9 +32,20 @@ struct LiveMatchLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
-                        scoreText(context.state)
-                            .font(.system(size: 22, weight: .black, design: .rounded))
-                        minutePill(context.state)
+                        if isUpcoming(context) {
+                            Text(timerInterval: Date()...context.attributes.kickoff)
+                                .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 90)
+                            Text("على الانطلاق")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(WidgetTheme.dim)
+                        } else {
+                            scoreText(context.state)
+                                .font(.system(size: 22, weight: .black, design: .rounded))
+                            minutePill(context.state)
+                        }
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -50,11 +61,21 @@ struct LiveMatchLiveActivity: Widget {
                 Text(shortName(context.attributes.homeName))
                     .font(.system(size: 13, weight: .bold))
             } compactTrailing: {
-                scoreText(context.state)
-                    .font(.system(size: 14, weight: .black, design: .rounded))
+                if isUpcoming(context) {
+                    Text(timerInterval: Date()...context.attributes.kickoff)
+                        .font(.system(size: 13, weight: .bold).monospacedDigit())
+                        .frame(maxWidth: 52)
+                } else {
+                    scoreText(context.state)
+                        .font(.system(size: 14, weight: .black, design: .rounded))
+                }
             } minimal: {
-                scoreText(context.state)
-                    .font(.system(size: 12, weight: .black, design: .rounded))
+                if isUpcoming(context) {
+                    Image(systemName: "clock.fill")
+                } else {
+                    scoreText(context.state)
+                        .font(.system(size: 12, weight: .black, design: .rounded))
+                }
             }
             .widgetURL(URL(string: "sabq://match/\(context.attributes.fixtureId)"))
             .keylineTint(WidgetTheme.emerald)
@@ -86,6 +107,11 @@ private func scoreText(_ state: LiveMatchAttributes.ContentState) -> some View {
     Text("\(state.homeScore) - \(state.awayScore)")
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
+}
+
+// قبل الانطلاق: لم تبدأ، ولم تنتهِ، وموعدها في المستقبل ← نعرض عدّادًا تنازليًا
+private func isUpcoming(_ ctx: ActivityViewContext<LiveMatchAttributes>) -> Bool {
+    !ctx.state.isLive && !ctx.state.isFinished && ctx.attributes.kickoff > Date()
 }
 
 private func shortName(_ name: String) -> String {
@@ -120,9 +146,19 @@ struct LockScreenMatchView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 VStack(spacing: 3) {
-                    scoreText(context.state)
-                        .font(.system(size: 26, weight: .black, design: .rounded))
-                    statusPill
+                    if isUpcoming(context) {
+                        Text(timerInterval: Date()...context.attributes.kickoff)
+                            .font(.system(size: 24, weight: .black, design: .rounded).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                        Text("على انطلاق المباراة")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(WidgetTheme.emerald)
+                    } else {
+                        scoreText(context.state)
+                            .font(.system(size: 26, weight: .black, design: .rounded))
+                        statusPill
+                    }
                 }
                 .frame(minWidth: 96)
 

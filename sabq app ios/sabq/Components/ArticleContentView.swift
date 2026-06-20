@@ -78,7 +78,7 @@ struct ArticleContentView: View {
         return runs.reduce(Text("")) { acc, run in
             let weight: Font.Weight = run.bold ? .bold : baseWeight
             var t = Text(run.text)
-                .font(.system(size: baseSize, weight: weight, design: design))
+                .font(SabqFonts.app(size: baseSize, weight: weight))
             if run.italic { t = t.italic() }
             if run.underline { t = t.underline() }
             if run.strikethrough { t = t.strikethrough() }
@@ -143,7 +143,7 @@ struct ArticleContentView: View {
             ForEach(Array(items.enumerated()), id: \.offset) { idx, runs in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(ordered ? "\(idx + 1)." : "•")
-                        .font(.system(size: CGFloat(fontSize), weight: .bold, design: .rounded))
+                        .font(SabqFonts.app(size: CGFloat(fontSize), weight: .bold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .frame(minWidth: 18, alignment: .trailing)
                     renderText(runs: runs, baseSize: CGFloat(fontSize))
@@ -165,7 +165,7 @@ struct ArticleContentView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Image(systemName: "quote.opening")
-                    .font(.system(size: 18, weight: .light))
+                    .font(SabqFonts.app(size: 18, weight: .light))
                     .foregroundStyle(SabqTheme.primaryEnd.opacity(0.55))
 
                 renderText(runs: runs, baseSize: CGFloat(fontSize + 1), baseWeight: .medium)
@@ -216,7 +216,7 @@ struct ArticleContentView: View {
 
             if let caption, !caption.isEmpty {
                 Text(caption)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -230,7 +230,7 @@ struct ArticleContentView: View {
             .frame(height: 220)
             .overlay(
                 Image(systemName: "photo")
-                    .font(.system(size: 28, weight: .ultraLight))
+                    .font(SabqFonts.app(size: 28, weight: .ultraLight))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             )
     }
@@ -241,14 +241,14 @@ struct ArticleContentView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "photo.stack")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("ألبوم صور")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Spacer(minLength: 0)
                 Text("\(images.count) صورة")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
@@ -274,7 +274,7 @@ struct ArticleContentView: View {
 
                             if let caption = img.caption, !caption.isEmpty {
                                 Text(caption)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 11, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                                     .lineLimit(2)
                                     .frame(width: 260, alignment: .leading)
@@ -325,12 +325,12 @@ struct ArticleContentView: View {
                     ZStack {
                         Circle().fill(.white).frame(width: 60, height: 60)
                         Image(systemName: "play.fill")
-                            .font(.system(size: 22, weight: .heavy))
+                            .font(SabqFonts.app(size: 22, weight: .heavy))
                             .foregroundStyle(tint)
                             .offset(x: 2)
                     }
                     Text(providerName)
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .heavy))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)

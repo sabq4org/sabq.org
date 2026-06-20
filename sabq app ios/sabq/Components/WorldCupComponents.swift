@@ -48,19 +48,19 @@ struct WCStatusPill: View {
                 Circle().fill(.white).frame(width: 5, height: 5)
                 Text(elapsedText)
             }
-            .font(.system(size: 11, weight: .bold))
+            .font(SabqFonts.app(size: 11, weight: .bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.liveRed))
         } else if fixture.status.finished {
             Text(fixture.status.label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(onDark ? Color.white.opacity(0.85) : WCTheme.onDarkDim)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(onDark ? Color.white.opacity(0.12) : WCTheme.chipFill))
         } else {
             Text(WCFormat.time(fixture))
-                .font(.system(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(WCTheme.emeraldDeep)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.emerald.opacity(0.16)))
@@ -89,7 +89,7 @@ struct WCCountdownChips: View {
                         .fill(WCTheme.emerald)
                         .frame(width: 8, height: 8)
                     Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                 }
             } else {
@@ -110,10 +110,10 @@ struct WCCountdownChips: View {
     private func chip(_ value: Int, _ label: String) -> some View {
         VStack(spacing: 1) {
             Text("\(value)")
-                .font(.system(size: 20, weight: .black, design: .rounded))
+                .font(SabqFonts.app(size: 20, weight: .black))
                 .foregroundStyle(.white)
             Text(label)
-                .font(.system(size: 10))
+                .font(SabqFonts.app(size: 10))
                 .foregroundStyle(WCTheme.emerald.opacity(0.85))
         }
         .frame(minWidth: 52)
@@ -140,7 +140,7 @@ struct WCProbabilityBar: View {
                 Spacer()
                 Text("فوز \(fixture.away.name) \(a)%")
             }
-            .font(.system(size: 11, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .semibold))
             .foregroundStyle(WCTheme.emerald.opacity(0.9))
 
             GeometryReader { geo in
@@ -154,7 +154,7 @@ struct WCProbabilityBar: View {
             .clipShape(Capsule())
 
             Text("توقعات خوارزمية للاستئناس من مزود البيانات")
-                .font(.system(size: 10))
+                .font(SabqFonts.app(size: 10))
                 .foregroundStyle(.white.opacity(0.4))
         }
     }
@@ -170,7 +170,7 @@ struct WCSectionHeader: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20, weight: .semibold))
+                .font(SabqFonts.app(size: 20, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 40, height: 40)
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.12)))
@@ -179,7 +179,7 @@ struct WCSectionHeader: View {
                     .font(SabqFonts.headline(size: 21))
                     .foregroundStyle(WCTheme.onDark)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(SabqFonts.app(size: 12))
                     .foregroundStyle(WCTheme.onDarkDim)
             }
             Spacer(minLength: 0)
@@ -196,13 +196,13 @@ struct WCEmptyState: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 30))
+                .font(SabqFonts.app(size: 30))
                 .foregroundStyle(WCTheme.emeraldDeep)
             Text(title)
                 .font(SabqFonts.subhead(size: 15))
                 .foregroundStyle(WCTheme.onDark)
             Text(subtitle)
-                .font(.system(size: 12))
+                .font(SabqFonts.app(size: 12))
                 .foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }

@@ -83,7 +83,7 @@ struct LegalPageView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -91,7 +91,7 @@ struct LegalPageView: View {
             }
             ToolbarItem(placement: .principal) {
                 Text(content.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -103,9 +103,9 @@ struct LegalPageView: View {
         VStack(alignment: .center, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: content.heroBadgeIcon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                 Text(content.heroBadge)
-                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
             }
             .foregroundStyle(content.heroTint)
             .padding(.horizontal, 12)
@@ -123,7 +123,7 @@ struct LegalPageView: View {
                 .multilineTextAlignment(.center)
 
             Text(content.subtitle)
-                .font(.system(size: 15, weight: .medium))
+                .font(SabqFonts.app(size: 15, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
 
             HStack(spacing: 4) {
@@ -133,7 +133,7 @@ struct LegalPageView: View {
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .fontWeight(.semibold)
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(SabqFonts.app(size: 12, weight: .medium))
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity)
@@ -163,10 +163,10 @@ struct LegalPageView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("مقدمة")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(content.intro)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(SabqFonts.app(size: 14, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(6)
                     .multilineTextAlignment(.leading)
@@ -192,7 +192,7 @@ struct LegalPageView: View {
             HStack(alignment: .top, spacing: 14) {
                 iconBubble(systemName: section.icon, tint: SabqTheme.primaryEnd)
                 Text(section.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .padding(.top, 6)
                     .fixedSize(horizontal: false, vertical: true)
@@ -228,7 +228,7 @@ struct LegalPageView: View {
         switch block {
         case .paragraph(let text):
             Text(text)
-                .font(.system(size: 14, weight: .regular))
+                .font(SabqFonts.app(size: 14, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineSpacing(6)
                 .multilineTextAlignment(.leading)
@@ -237,8 +237,8 @@ struct LegalPageView: View {
 
         case .labeledPoint(let label, let text):
             (
-                Text(label).font(.system(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
-                + Text(" \(text)").font(.system(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
+                Text(label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
+                + Text(" \(text)").font(SabqFonts.app(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
             )
             .lineSpacing(6)
             .multilineTextAlignment(.leading)
@@ -248,12 +248,12 @@ struct LegalPageView: View {
         case .subsection(let title, let content, let points):
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
 
                 if let content {
                     Text(content)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(SabqFonts.app(size: 14, weight: .regular))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .lineSpacing(6)
                         .multilineTextAlignment(.leading)
@@ -262,8 +262,8 @@ struct LegalPageView: View {
 
                 ForEach(points, id: \.self) { point in
                     (
-                        Text("• \(point.label) ").font(.system(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
-                        + Text(point.text).font(.system(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
+                        Text("• \(point.label) ").font(SabqFonts.app(size: 14, weight: .bold)).foregroundColor(SabqTheme.ink)
+                        + Text(point.text).font(SabqFonts.app(size: 14, weight: .regular)).foregroundColor(SabqTheme.secondaryInk)
                     )
                     .lineSpacing(6)
                     .multilineTextAlignment(.leading)
@@ -280,15 +280,15 @@ struct LegalPageView: View {
     private func footerCard(_ footer: LegalFooter) -> some View {
         VStack(spacing: 10) {
             Image(systemName: footer.icon)
-                .font(.system(size: 28, weight: .light))
+                .font(SabqFonts.app(size: 28, weight: .light))
                 .foregroundStyle(content.heroTint)
 
             Text(footer.title)
-                .font(.system(size: 16, weight: .bold))
+                .font(SabqFonts.app(size: 16, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
 
             Text(footer.message)
-                .font(.system(size: 13, weight: .regular))
+                .font(SabqFonts.app(size: 13, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
@@ -315,7 +315,7 @@ struct LegalPageView: View {
             .frame(width: 40, height: 40)
             .overlay {
                 Image(systemName: systemName)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
             }
     }

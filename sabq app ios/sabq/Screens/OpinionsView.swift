@@ -103,7 +103,7 @@ struct OpinionsView: View {
 
                 // Rank badge
                 Text("\(rank)")
-                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .font(SabqFonts.app(size: 22, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(
@@ -121,7 +121,7 @@ struct OpinionsView: View {
             }
 
             Text(opinion.title)
-                .font(.system(size: 14.5, weight: .bold))
+                .font(SabqFonts.app(size: 14.5, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
@@ -130,7 +130,7 @@ struct OpinionsView: View {
             HStack(spacing: 8) {
                 OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 22)
                 Text(opinion.authorName)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
             }
@@ -147,7 +147,7 @@ struct OpinionsView: View {
         )
         .overlay {
             Image(systemName: "text.quote")
-                .font(.system(size: 42, weight: .ultraLight))
+                .font(SabqFonts.app(size: 42, weight: .ultraLight))
                 .foregroundStyle(SabqTheme.primaryEnd.opacity(0.30))
         }
     }
@@ -196,12 +196,12 @@ struct OpinionsView: View {
                 HStack(spacing: 8) {
                     StatusChip(title: "رأي", tint: SabqTheme.primaryEnd)
                     Text(opinion.relativeDate)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
 
                 Text(opinion.title)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -217,7 +217,7 @@ struct OpinionsView: View {
             OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 26)
 
             Text(opinion.authorName)
-                .font(.system(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
     }
@@ -227,7 +227,7 @@ struct OpinionsView: View {
             .fill(SabqTheme.primaryEnd.opacity(0.08))
             .overlay {
                 Image(systemName: "text.quote")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(SabqFonts.app(size: 24, weight: .semibold))
                     .foregroundStyle(SabqTheme.primaryEnd.opacity(0.45))
             }
     }
@@ -353,7 +353,7 @@ struct OpinionAuthorAvatar: View {
             .frame(width: size, height: size)
             .overlay {
                 Text(String(name.prefix(1)))
-                    .font(.system(size: size * 0.42, weight: .bold))
+                    .font(SabqFonts.app(size: size * 0.42, weight: .bold))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }

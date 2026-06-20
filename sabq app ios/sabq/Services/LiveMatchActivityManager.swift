@@ -25,7 +25,10 @@ final class LiveMatchActivityManager {
     private var activity: Activity<LiveMatchAttributes>?
     private var pollTask: Task<Void, Never>?
 
-    private let pollInterval: UInt64 = 12_000_000_000 // 12 ثانية
+    /// آخر طور معروف للمباراة — يضبط وتيرة السحب (أسرع أثناء اللعب)
+    private var livePhase = false
+    /// موعد انطلاق المباراة الجاري متابعتها — لتسريع السحب قرب البدء
+    private var kickoff: Date?
 
     /// هل ميزة النشاطات المباشرة متاحة ومسموح بها على هذا الجهاز.
     /// عند false يكون المستخدم رفض الإذن من إعدادات النظام.
@@ -46,22 +49,26 @@ final class LiveMatchActivityManager {
         if activity != nil { stop() }
 
         let f = detail.fixture
+        let kickoffDate = Date(timeIntervalSince1970: Double(f.timestamp))
         let attributes = LiveMatchAttributes(
             fixtureId: f.id,
             homeName: f.home.name,
             awayName: f.away.name,
-            round: "\(f.round) · \(f.venue.city)"
+            round: "\(f.round) · \(f.venue.city)",
+            kickoff: kickoffDate
         )
         let state = Self.makeState(from: detail)
 
         do {
             let act = try Activity.request(
                 attributes: attributes,
-                content: .init(state: state, staleDate: Self.staleDate(state)),
+                content: .init(state: state, staleDate: Self.staleDate(for: detail)),
                 pushType: nil
             )
             activity = act
             activeFixtureId = f.id
+            livePhase = f.status.live
+            kickoff = kickoffDate
             startPolling(fixtureId: f.id)
             return true
         } catch {
@@ -77,6 +84,8 @@ final class LiveMatchActivityManager {
         let act = activity
         activity = nil
         activeFixtureId = nil
+        livePhase = false
+        kickoff = nil
         Task {
             await act?.end(nil, dismissalPolicy: .immediate)
         }
@@ -88,7 +97,8 @@ final class LiveMatchActivityManager {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: self?.pollInterval ?? 12_000_000_000)
+                let interval = await self?.nextPollInterval() ?? 60_000_000_000
+                try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
                 guard let detail = try? await APIClient.shared.fetchWorldCupMatch(
                     fixtureId: fixtureId, ignoreCache: true
@@ -98,10 +108,19 @@ final class LiveMatchActivityManager {
         }
     }
 
+    /// أثناء اللعب: 12 ثانية. قرب الانطلاق (خلال 3 دقائق): 15 ثانية.
+    /// قبل ذلك بكثير: 60 ثانية — العدّاد التنازلي ذاتي التحديث فلا حاجة لسحب أسرع.
+    private func nextPollInterval() -> UInt64 {
+        if livePhase { return 12_000_000_000 }
+        if let k = kickoff, k.timeIntervalSinceNow < 180 { return 15_000_000_000 }
+        return 60_000_000_000
+    }
+
     private func apply(_ detail: WCMatchDetail) async {
         guard let act = activity else { return }
+        livePhase = detail.fixture.status.live
         let state = Self.makeState(from: detail)
-        await act.update(.init(state: state, staleDate: Self.staleDate(state)))
+        await act.update(.init(state: state, staleDate: Self.staleDate(for: detail)))
 
         // عند انتهاء المباراة: نثبّت النتيجة على شاشة القفل لساعتين ثم
         // نوقف السحب الدوري (النشاط يبقى معروضًا حتى يزيله المستخدم/النظام).
@@ -160,8 +179,14 @@ final class LiveMatchActivityManager {
         return "\(icon) \(minute) \(who)"
     }
 
-    private static func staleDate(_ state: LiveMatchAttributes.ContentState) -> Date {
-        // إن توقف السحب (خلفية) يعتبر النظام الحالة قديمة بعد 3 دقائق
-        Date().addingTimeInterval(180)
+    private static func staleDate(for detail: WCMatchDetail) -> Date {
+        let f = detail.fixture
+        // قبل الانطلاق: نُبقي النشاط طازجًا حتى موعد البدء (+دقيقتين) كي لا
+        // يُعتمّ العدّاد التنازلي. أثناء/بعد اللعب: 3 دقائق بعد آخر سحب.
+        if !f.status.live && !f.status.finished {
+            let kickoff = Date(timeIntervalSince1970: Double(f.timestamp))
+            if kickoff > Date() { return kickoff.addingTimeInterval(120) }
+        }
+        return Date().addingTimeInterval(180)
     }
 }

@@ -102,7 +102,7 @@ struct ArticleSubmissionView: View {
                         Color.clear.frame(height: 8)
                         Button { dismiss() } label: {
                             Text("تمام")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(SabqFonts.app(size: 16, weight: .bold))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 15)
@@ -127,19 +127,19 @@ struct ArticleSubmissionView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
+                            .font(SabqFonts.app(size: 22))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
                 ToolbarItem(placement: .principal) {
                     Text(pageTitle)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(SabqFonts.app(size: 15, weight: .bold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("تم") { focusedField = nil }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(pageTint)
                 }
             }
@@ -155,14 +155,14 @@ struct ArticleSubmissionView: View {
                     .fill(pageTint.opacity(0.10))
                     .frame(width: 88, height: 88)
                 Image(systemName: pageIcon)
-                    .font(.system(size: 36, weight: .regular))
+                    .font(SabqFonts.app(size: 36, weight: .regular))
                     .foregroundStyle(pageTint)
             }
             Text(pageTitle)
                 .font(SabqFonts.headline(size: 22))
                 .foregroundStyle(SabqTheme.ink)
             Text(pageSubtitle)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }
@@ -182,7 +182,7 @@ struct ArticleSubmissionView: View {
                 fieldLabel("العنوان", required: true)
                 TextField(titlePlaceholder, text: $title, axis: .vertical)
                     .lineLimit(2...3)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .focused($focusedField, equals: .title)
                     .submitLabel(.next)
@@ -225,7 +225,7 @@ struct ArticleSubmissionView: View {
 
                     if articleContent.isEmpty {
                         Text(bodyPlaceholder)
-                            .font(.system(size: 15, weight: .regular))
+                            .font(SabqFonts.app(size: 15, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 16)
@@ -251,11 +251,11 @@ struct ArticleSubmissionView: View {
     private func fieldLabel(_ text: String, required: Bool = false) -> some View {
         HStack(spacing: 4) {
             Text(text)
-                .font(.system(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
             if required {
                 Text("*")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(SabqTheme.coral)
             }
         }
@@ -270,7 +270,7 @@ struct ArticleSubmissionView: View {
                 Spacer(minLength: 0)
                 if !previewImages.isEmpty {
                     Text("\(previewImages.count) / \(maxImages)")
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .font(SabqFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
                 }
@@ -309,13 +309,13 @@ struct ArticleSubmissionView: View {
         } label: {
             VStack(spacing: 10) {
                 Image(systemName: "photo.badge.plus")
-                    .font(.system(size: 32, weight: .light))
+                    .font(SabqFonts.app(size: 32, weight: .light))
                     .foregroundStyle(pageTint)
                 Text(kind == .opinion ? "اختر صورة" : "اختر الصور")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text("جودة عالية تُحفظ كما هي بدون ضغط")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             .frame(maxWidth: .infinity)
@@ -349,7 +349,7 @@ struct ArticleSubmissionView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         if index == 0 && kind == .news {
                             Text("الرئيسية")
-                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .font(SabqFonts.app(size: 9, weight: .heavy))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
@@ -360,7 +360,7 @@ struct ArticleSubmissionView: View {
                             removeImage(at: index)
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 18, weight: .bold))
+                                .font(SabqFonts.app(size: 18, weight: .bold))
                                 .foregroundStyle(.white, .black.opacity(0.6))
                         }
                         .buttonStyle(.plain)
@@ -382,7 +382,7 @@ struct ArticleSubmissionView: View {
                             .frame(width: 100, height: 100)
                             .overlay {
                                 Image(systemName: "plus")
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(SabqFonts.app(size: 22, weight: .bold))
                                     .foregroundStyle(pageTint)
                             }
                             .overlay(
@@ -399,7 +399,7 @@ struct ArticleSubmissionView: View {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("جاري تحميل الصور...")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
@@ -489,12 +489,12 @@ struct ArticleSubmissionView: View {
                     ProgressView().tint(.white)
                 } else {
                     Image(systemName: kind == .opinion ? "paperplane.fill" : "paperplane.fill")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(SabqFonts.app(size: 14, weight: .heavy))
                 }
                 Text(screenState == .submitting
                      ? "جاري الإرسال..."
                      : (kind == .opinion ? "إرسال المقالة" : "إرسال الخبر"))
-                    .font(.system(size: 16, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .bold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
@@ -515,7 +515,7 @@ struct ArticleSubmissionView: View {
             // so the eye reads the checkmark first, then the celebration.
             ForEach(0..<5, id: \.self) { index in
                 Image(systemName: "sparkle")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(SabqFonts.app(size: 18, weight: .bold))
                     .foregroundStyle(pageTint)
                     .opacity(sparkleOpacity)
                     .scaleEffect(sparkleScale)
@@ -533,7 +533,7 @@ struct ArticleSubmissionView: View {
                     )
                     .frame(width: 130, height: 130)
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 80, weight: .regular))
+                    .font(SabqFonts.app(size: 80, weight: .regular))
                     .foregroundStyle(pageTint)
                     .scaleEffect(celebrationScale)
                     .symbolRenderingMode(.hierarchical)
@@ -571,7 +571,7 @@ struct ArticleSubmissionView: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text(kind == .opinion ? "شكراً لك على إثرائنا ✨" : "شكراً لك على إثراء غرفة الأخبار 📰")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .font(SabqFonts.app(size: 19, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
@@ -579,7 +579,7 @@ struct ArticleSubmissionView: View {
                 Text(kind == .opinion
                      ? "وصلت مقالتك إلى فريق التحرير. كل كلمة كتبتها تستحق المراجعة بعناية، وسنبذل جهدنا لإبرازها بأفضل صورة."
                      : "وصل خبرك إلى غرفة الأخبار. كل تفصيلة شاركتها تساعدنا على تقديم تغطية أدق وأسرع لقرائنا.")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(SabqFonts.app(size: 14, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
@@ -619,15 +619,15 @@ struct ArticleSubmissionView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 36, height: 36)
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(desc)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -668,9 +668,9 @@ struct ArticleSubmissionView: View {
     private func errorBanner(_ text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14))
+                .font(SabqFonts.app(size: 14))
             Text(text)
-                .font(.system(size: 13, weight: .medium))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(SabqTheme.coral)

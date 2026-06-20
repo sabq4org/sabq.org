@@ -43,12 +43,12 @@ struct LoyaltyCelebrationBanner: View {
                         .fill(tier.color.opacity(0.18))
                         .frame(width: 48, height: 48)
                     Image(systemName: iconName(for: mode))
-                        .font(.system(size: 22, weight: .bold))
+                        .font(SabqFonts.app(size: 22, weight: .bold))
                         .foregroundStyle(tier.color)
                 }
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: "sparkle")
-                        .font(.system(size: 9, weight: .black))
+                        .font(SabqFonts.app(size: 9, weight: .black))
                         .foregroundStyle(tier.color)
                         .opacity(0.7)
                         .offset(x: 4, y: -2 + sparkleOffset)
@@ -56,15 +56,15 @@ struct LoyaltyCelebrationBanner: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(copy.eyebrow)
-                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 10, weight: .heavy))
                         .tracking(1.5)
                         .foregroundStyle(tier.color)
                     Text(copy.title)
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(SabqFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SabqTheme.ink)
                         .multilineTextAlignment(.leading)
                     Text(copy.body)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(2)
@@ -74,7 +74,7 @@ struct LoyaltyCelebrationBanner: View {
 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(SabqFonts.app(size: 11, weight: .bold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .frame(width: 26, height: 26)
                         .background(Circle().fill(SabqTheme.tertiaryInk.opacity(0.10)))
