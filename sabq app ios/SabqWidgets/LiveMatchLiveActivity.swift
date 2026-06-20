@@ -83,11 +83,16 @@ struct LiveMatchLiveActivity: Widget {
     }
 
     private func teamColumn(_ name: String) -> some View {
-        Text(name)
-            .font(.system(size: 13, weight: .heavy))
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+        VStack(spacing: 2) {
+            if let flag = muqFlagEmoji(name) {
+                Text(flag).font(.system(size: 22))
+            }
+            Text(name)
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
     }
 
     private func minutePill(_ state: LiveMatchAttributes.ContentState) -> some View {
@@ -116,6 +121,77 @@ private func isUpcoming(_ ctx: ActivityViewContext<LiveMatchAttributes>) -> Bool
 
 private func shortName(_ name: String) -> String {
     String(name.prefix(3))
+}
+
+// MARK: - أعلام المنتخبات (إيموجي — يُرسم نصيًا بلا شبكة)
+//
+// الودجت لا يُحمّل صور الشعارات من الشبكة، فنشتق علم الدولة من اسمها العربي.
+// نخزّن رمز ISO ونحوّله لإيموجي علم عبر رموز Regional Indicator، مع حالات
+// خاصة لأعلام إنجلترا/اسكتلندا/ويلز (تسلسلات Tag).
+
+private let muqFlagISO: [String: String] = [
+    // عربي / الشرق الأوسط
+    "السعودية": "SA", "قطر": "QA", "الإمارات": "AE", "الامارات": "AE",
+    "مصر": "EG", "المغرب": "MA", "تونس": "TN", "الجزائر": "DZ",
+    "الأردن": "JO", "الاردن": "JO", "العراق": "IQ", "الكويت": "KW",
+    "البحرين": "BH", "عُمان": "OM", "عمان": "OM", "اليمن": "YE",
+    "سوريا": "SY", "لبنان": "LB", "فلسطين": "PS", "السودان": "SD",
+    "ليبيا": "LY", "موريتانيا": "MR", "الصومال": "SO", "جيبوتي": "DJ",
+    "جزر القمر": "KM",
+    // أوروبا
+    "فرنسا": "FR", "ألمانيا": "DE", "المانيا": "DE", "إسبانيا": "ES",
+    "اسبانيا": "ES", "إيطاليا": "IT", "ايطاليا": "IT", "البرتغال": "PT",
+    "هولندا": "NL", "بلجيكا": "BE", "كرواتيا": "HR", "السويد": "SE",
+    "الدنمارك": "DK", "النرويج": "NO", "سويسرا": "CH", "النمسا": "AT",
+    "بولندا": "PL", "أوكرانيا": "UA", "اوكرانيا": "UA", "روسيا": "RU",
+    "تركيا": "TR", "اليونان": "GR", "صربيا": "RS", "التشيك": "CZ",
+    "المجر": "HU", "رومانيا": "RO", "أيرلندا": "IE", "ايرلندا": "IE",
+    "أيسلندا": "IS", "ايسلندا": "IS", "سلوفاكيا": "SK", "سلوفينيا": "SI",
+    "ألبانيا": "AL", "البانيا": "AL", "فنلندا": "FI", "بلغاريا": "BG",
+    // أمريكا الشمالية والوسطى
+    "الولايات المتحدة": "US", "أمريكا": "US", "امريكا": "US",
+    "المكسيك": "MX", "كندا": "CA", "كوستاريكا": "CR", "بنما": "PA",
+    "هندوراس": "HN", "جامايكا": "JM",
+    // أمريكا الجنوبية
+    "البرازيل": "BR", "الأرجنتين": "AR", "الارجنتين": "AR",
+    "الإكوادور": "EC", "الاكوادور": "EC", "كولومبيا": "CO",
+    "أوروغواي": "UY", "اوروغواي": "UY", "أوروجواي": "UY",
+    "تشيلي": "CL", "باراغواي": "PY", "باراجواي": "PY", "بيرو": "PE",
+    "فنزويلا": "VE", "بوليفيا": "BO",
+    // آسيا وأوقيانوسيا
+    "اليابان": "JP", "كوريا الجنوبية": "KR", "كوريا": "KR", "إيران": "IR",
+    "ايران": "IR", "أستراليا": "AU", "استراليا": "AU", "الصين": "CN",
+    "الهند": "IN", "إندونيسيا": "ID", "اندونيسيا": "ID", "تايلاند": "TH",
+    "فيتنام": "VN", "أوزبكستان": "UZ", "اوزبكستان": "UZ",
+    "نيوزيلندا": "NZ", "نيوزلندا": "NZ",
+    // أفريقيا
+    "نيجيريا": "NG", "السنغال": "SN", "غانا": "GH", "الكاميرون": "CM",
+    "ساحل العاج": "CI", "مالي": "ML", "جنوب أفريقيا": "ZA",
+    "جنوب افريقيا": "ZA", "الغابون": "GA", "بوركينا فاسو": "BF",
+    "الرأس الأخضر": "CV", "الرأس الاخضر": "CV", "أنغولا": "AO",
+    "انغولا": "AO", "الكونغو الديمقراطية": "CD", "الكونغو": "CG",
+    "زامبيا": "ZM", "أوغندا": "UG", "اوغندا": "UG", "كينيا": "KE",
+]
+
+// أعلام مناطق المملكة المتحدة (تسلسلات Tag) كإيموجي مباشر.
+private let muqSubdivisionFlags: [String: String] = [
+    "إنجلترا": "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+    "انجلترا": "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+    "اسكتلندا": "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}",
+    "ويلز": "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}",
+]
+
+func muqFlagEmoji(_ rawName: String) -> String? {
+    let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let direct = muqSubdivisionFlags[name] { return direct }
+    guard let iso = muqFlagISO[name] else { return nil }
+    var emoji = ""
+    for scalar in iso.unicodeScalars {
+        guard scalar.value >= 65, scalar.value <= 90,
+              let flag = Unicode.Scalar(0x1F1E6 + scalar.value - 65) else { return nil }
+        emoji.unicodeScalars.append(flag)
+    }
+    return emoji
 }
 
 // MARK: - شاشة القفل / مركز الإشعارات
@@ -182,15 +258,23 @@ struct LockScreenMatchView: View {
 
     private func teamSide(_ name: String, alignment: HorizontalAlignment) -> some View {
         VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .fill(WidgetTheme.emerald.opacity(0.18))
-                Circle()
-                    .stroke(WidgetTheme.emerald.opacity(0.45), lineWidth: 1.5)
-                Text(teamInitials(name))
-                    .font(.system(size: 18, weight: .black))
-                    .foregroundStyle(.white)
-                    .environment(\.layoutDirection, .rightToLeft)
+            Group {
+                if let flag = muqFlagEmoji(name) {
+                    Text(flag)
+                        .font(.system(size: 44))
+                        .minimumScaleFactor(0.6)
+                } else {
+                    ZStack {
+                        Circle()
+                            .fill(WidgetTheme.emerald.opacity(0.18))
+                        Circle()
+                            .stroke(WidgetTheme.emerald.opacity(0.45), lineWidth: 1.5)
+                        Text(teamInitials(name))
+                            .font(.system(size: 18, weight: .black))
+                            .foregroundStyle(.white)
+                            .environment(\.layoutDirection, .rightToLeft)
+                    }
+                }
             }
             .frame(width: 52, height: 52)
 
