@@ -297,7 +297,6 @@ function MatchRow({
 function CompetitionGroup({
   name,
   logo,
-  status,
   matches,
   expandedIds,
   toggle,
@@ -305,7 +304,6 @@ function CompetitionGroup({
 }: {
   name: string;
   logo: string | null;
-  status?: SpCompetition["status"];
   matches: SpLiveItem[];
   expandedIds: Set<number>;
   toggle: (id: number) => void;
@@ -321,11 +319,6 @@ function CompetitionGroup({
           <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
         )}
         <span className="font-black text-foreground truncate flex-1">{name}</span>
-        {status === "ongoing" && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> الموسم جارٍ
-          </span>
-        )}
         {liveCount > 0 ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600 dark:text-red-400">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -424,7 +417,7 @@ export default function SportsMatchesBoard() {
       const slug = sorted[0]?.competitionSlug ?? null;
       const meta = slug ? compMeta.get(slug) : undefined;
       const liveCount = matches.filter((m) => m.status.live).length;
-      return { name, matches: sorted, logo: meta?.logo ?? null, status: meta?.status, liveCount };
+      return { name, matches: sorted, logo: meta?.logo ?? null, liveCount };
     });
   }, [filtered, compMeta]);
 
@@ -630,7 +623,6 @@ export default function SportsMatchesBoard() {
                   key={g.name}
                   name={g.name}
                   logo={g.logo}
-                  status={g.status}
                   matches={g.matches}
                   expandedIds={expandedIds}
                   toggle={toggle}
