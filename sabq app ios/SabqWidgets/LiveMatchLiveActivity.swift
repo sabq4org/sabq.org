@@ -124,49 +124,46 @@ struct LockScreenMatchView: View {
     let context: ActivityViewContext<LiveMatchAttributes>
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 14) {
             HStack {
-                Text("كأس العالم 2026")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(WidgetTheme.emerald)
+                HStack(spacing: 6) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("كأس العالم 2026")
+                        .font(.system(size: 13, weight: .heavy))
+                }
+                .foregroundStyle(WidgetTheme.emerald)
                 Spacer()
                 if let round = context.attributes.round {
                     Text(round)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(WidgetTheme.dim)
                         .lineLimit(1)
                 }
             }
 
-            HStack(alignment: .center, spacing: 10) {
-                Text(context.attributes.homeName)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            HStack(alignment: .top, spacing: 10) {
+                teamSide(context.attributes.homeName, alignment: .trailing)
 
-                VStack(spacing: 3) {
+                VStack(spacing: 4) {
                     if isUpcoming(context) {
                         Text(timerInterval: Date()...context.attributes.kickoff)
-                            .font(.system(size: 24, weight: .black, design: .rounded).monospacedDigit())
+                            .font(.system(size: 34, weight: .black, design: .rounded).monospacedDigit())
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)
                         Text("على انطلاق المباراة")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(WidgetTheme.emerald)
                     } else {
                         scoreText(context.state)
-                            .font(.system(size: 26, weight: .black, design: .rounded))
+                            .font(.system(size: 38, weight: .black, design: .rounded))
                         statusPill
                     }
                 }
-                .frame(minWidth: 96)
+                .frame(minWidth: 104)
+                .padding(.top, 8)
 
-                Text(context.attributes.awayName)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                teamSide(context.attributes.awayName, alignment: .leading)
             }
 
             if let ev = context.state.lastEvent {
@@ -177,9 +174,39 @@ struct LockScreenMatchView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .padding(14)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .activityBackgroundTint(WidgetTheme.stadium)
         .activitySystemActionForegroundColor(.white)
+    }
+
+    private func teamSide(_ name: String, alignment: HorizontalAlignment) -> some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(WidgetTheme.emerald.opacity(0.18))
+                Circle()
+                    .stroke(WidgetTheme.emerald.opacity(0.45), lineWidth: 1.5)
+                Text(teamInitials(name))
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(.white)
+                    .environment(\.layoutDirection, .rightToLeft)
+            }
+            .frame(width: 52, height: 52)
+
+            Text(name)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func teamInitials(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return String(trimmed.prefix(2))
     }
 
     private var statusPill: some View {
