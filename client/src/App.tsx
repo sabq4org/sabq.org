@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -170,8 +170,6 @@ const Notifications = lazy(() => retryImport(() => import("@/pages/Notifications
 const NotificationAdmin = lazy(() => retryImport(() => import("@/pages/NotificationAdmin")));
 const RecommendationSettings = lazy(() => retryImport(() => import("@/pages/recommendation-settings")));
 const UserNotifications = lazy(() => retryImport(() => import("@/pages/UserNotifications")));
-const UserRecommendationSettings = lazy(() => retryImport(() => import("@/pages/UserRecommendationSettings")));
-
 // === LAZY IMPORTS (Admin) ===
 const AIModerationDashboard = lazy(() => retryImport(() => import("@/pages/admin/AIModerationDashboard")));
 const PaymentsDashboard = lazy(() => retryImport(() => import("@/pages/admin/PaymentsDashboard")));
@@ -937,7 +935,7 @@ function Router() {
         <Route path="/dashboard/notification-admin">{() => <LazyRoute component={NotificationAdmin} />}</Route>
         <Route path="/dashboard/email-templates">{() => <LazyRoute component={EmailTemplatesPage} />}</Route>
         <Route path="/notifications">{() => <LazyRoute component={UserNotifications} />}</Route>
-        <Route path="/recommendation-settings">{() => <LazyRoute component={UserRecommendationSettings} />}</Route>
+        <Route path="/recommendation-settings">{() => <Redirect to="/notification-settings" />}</Route>
         <Route path="/my-follows">{() => <LazyRoute component={MyFollows} />}</Route>
         <Route path="/my-keywords">{() => <LazyRoute component={MyKeywords} />}</Route>
         <Route path="/dashboard/story-admin">{() => <LazyRoute component={StoryAdmin} />}</Route>
