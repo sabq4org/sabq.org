@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - مركز المباراة
 //
@@ -12,6 +13,8 @@ struct WorldCupMatchCenter: View {
     @State private var detail: WCMatchDetail?
     @State private var loading = true
     @State private var selectedPlayer: WCPlayerSelection?
+    @State private var showActivityDeniedAlert = false
+    private let liveManager = LiveMatchActivityManager.shared
 
     enum Tab: String, CaseIterable { case events = "الأحداث", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
     @State private var tab: Tab = .events
@@ -31,6 +34,9 @@ struct WorldCupMatchCenter: View {
                         WCLoading().padding(.top, 30)
                     } else if let detail {
                         header(detail.fixture)
+                        if detail.fixture.status.live {
+                            liveFollowButton(detail)
+                        }
                         tabBar
                         content(detail)
                     } else {
@@ -58,8 +64,50 @@ struct WorldCupMatchCenter: View {
                 WCPlayerSheet(playerId: sel.id)
                     .presentationDetents([.large])
             }
+            .alert("النشاطات المباشرة معطّلة", isPresented: $showActivityDeniedAlert) {
+                Button("الإعدادات") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("إلغاء", role: .cancel) {}
+            } message: {
+                Text("لمتابعة المباراة على شاشة القفل، فعّل «النشاطات المباشرة» لتطبيق سبق من الإعدادات.")
+            }
         }
         .sabqRTL()
+    }
+
+    // MARK: زر المتابعة المباشرة (Live Activity)
+
+    @ViewBuilder
+    private func liveFollowButton(_ detail: WCMatchDetail) -> some View {
+        let running = liveManager.isRunning(for: detail.fixture.id)
+        Button {
+            if running {
+                liveManager.stop()
+            } else if !liveManager.start(for: detail) {
+                showActivityDeniedAlert = true
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: running ? "stop.circle.fill" : "bolt.horizontal.circle.fill")
+                Text(running ? "إيقاف المتابعة المباشرة" : "تابع على شاشة القفل")
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundStyle(running ? WCTheme.onDark : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(running ? WCTheme.chipFill : WCTheme.emeraldDeep)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(WCTheme.cardStroke, lineWidth: running ? 1 : 0)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func load(force: Bool = false) async {
