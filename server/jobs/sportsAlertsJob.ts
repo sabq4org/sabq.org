@@ -1,17 +1,23 @@
 /**
  * جوب التنبيهات الرياضية الذكية (المرحلة 3ب).
  *
- * كل دقيقة يقارن حالة مباريات اليوم بآخر لقطة ويُرسل أحداثها (انطلاق/هدف/نهاية)
- * لمتابعي الفِرق. يعمل على القائد فقط (يُفحص داخل كل دورة لا عند التسجيل — أثناء
- * النشر يقلع الـ pod الجديد بينما القديم ممسك بقفل القيادة؛ نفس نمط radarJob).
+ * كل 20 ثانية يقارن حالة المباريات (اليوم + المباشر الطازج) بآخر لقطة ويُرسل
+ * أحداثها (انطلاق/هدف/نهاية) لمتابعي الفِرق. يعمل على القائد فقط (يُفحص داخل
+ * كل دورة لا عند التسجيل — أثناء النشر يقلع الـ pod الجديد بينما القديم ممسك
+ * بقفل القيادة؛ نفس نمط radarJob).
+ *
+ * الوتيرة 20ث (بدل دقيقة سابقًا) لتقليل تأخّر إشعارات الهدف/الانطلاق؛ بيانات
+ * المباراة محميّة بـ SWR (live 15ث) فلا ضغط زائد على API-Football.
  *
  * التفعيل صريح عبر SPORTS_ALERTS_ENABLED=true — لا يعمل قبل تطبيق المخطط
  * (npm run db:push على staging) واختبار التوصيل.
  */
-import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { runSportsAlertsCycle } from "../services/sportsAlertsService";
 
+const INTERVAL_MS = 20_000;
+
+let timer: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 
 async function tick(trigger: string): Promise<void> {
@@ -40,10 +46,11 @@ export function startSportsAlertsJob(): void {
     console.log("[SportsAlerts Job] disabled (SPORTS_ALERTS_ENABLED != true)");
     return;
   }
+  if (timer) return;
 
-  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
-  console.log("[SportsAlerts Job] ⚽ scheduled — every minute (followers' teams only)");
+  timer = setInterval(() => void tick("interval"), INTERVAL_MS);
+  console.log("[SportsAlerts Job] ⚽ scheduled — every 20s (followers' teams only)");
 
-  // دورة أولى بعد 30 ثانية لتأسيس خطّ الأساس مبكرًا.
-  setTimeout(() => void tick("startup"), 30 * 1000);
+  // دورة أولى بعد 15 ثانية لتأسيس خطّ الأساس مبكرًا.
+  setTimeout(() => void tick("startup"), 15 * 1000);
 }

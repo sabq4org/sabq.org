@@ -107,9 +107,11 @@ struct LiveMatchLiveActivity: Widget {
     }
 }
 
-// النتيجة دائمًا LTR: المضيف يسارًا في صيغة الرقم لتطابق ترتيب القراءة العالمي
+// البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR لكن بترتيب
+// "الضيف - المضيف" كي يقع رقم المضيف يمينًا (تحت اسم المضيف) ورقم الضيف
+// يسارًا — مطابقًا لمواضع الفريقين فلا تنقلب النتيجة.
 private func scoreText(_ state: LiveMatchAttributes.ContentState) -> some View {
-    Text("\(state.homeScore) - \(state.awayScore)")
+    Text("\(state.awayScore) - \(state.homeScore)")
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
 }

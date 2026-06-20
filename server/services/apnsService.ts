@@ -270,6 +270,120 @@ export async function sendPushNotification(
   });
 }
 
+// ============================================================================
+// Live Activity push-to-update (ActivityKit)
+// ============================================================================
+
+/** الحالة المتغيّرة للنشاط — يجب أن تطابق LiveMatchAttributes.ContentState في iOS. */
+export interface LiveActivityContentState {
+  homeScore: number;
+  awayScore: number;
+  minute: string;
+  statusLabel: string;
+  isLive: boolean;
+  isFinished: boolean;
+  lastEvent: string | null;
+}
+
+export interface LiveActivityUpdateOptions {
+  event: "update" | "end";
+  contentState: LiveActivityContentState;
+  /** متى تُعتبر بيانات النشاط قديمة (ثوانٍ Unix) — يُعتّمها النظام بعدها. */
+  staleDate?: number;
+  /** للحدث "end": متى يزيل النظام النشاط تلقائيًا (ثوانٍ Unix). */
+  dismissalDate?: number;
+  /** تنبيه اختياري يظهر عند التحديث (هدف مثلاً). */
+  alert?: { title: string; body: string };
+}
+
+/**
+ * يدفع تحديث Live Activity لتوكن نشاط (ActivityKit push token) عبر APNs.
+ *
+ * يختلف عن sendPushNotification في أمرين: الموضوع (apns-topic) يجب أن يكون
+ * `<bundleId>.push-type.liveactivity`، ونوع الدفع `liveactivity`. الحمولة
+ * تتبع صيغة aps الخاصة بـ ActivityKit (timestamp/event/content-state).
+ */
+export async function sendLiveActivityUpdate(
+  activityPushToken: string,
+  options: LiveActivityUpdateOptions,
+): Promise<ApnsResponse> {
+  const credentials = getApnsCredentials();
+  if (!credentials) {
+    return { success: false, reason: "APNs not configured" };
+  }
+
+  const host = getApnsHost();
+  const token = generateApnsToken(credentials);
+  const path = `/3/device/${activityPushToken}`;
+
+  const aps: Record<string, unknown> = {
+    timestamp: Math.floor(Date.now() / 1000),
+    event: options.event,
+    "content-state": options.contentState,
+  };
+  if (options.staleDate) aps["stale-date"] = options.staleDate;
+  if (options.event === "end" && options.dismissalDate) {
+    aps["dismissal-date"] = options.dismissalDate;
+  }
+  if (options.alert) {
+    aps.alert = { title: options.alert.title, body: options.alert.body };
+  }
+  const payload = { aps };
+
+  return new Promise((resolve) => {
+    try {
+      const client = http2.connect(`https://${host}:${APNS_PORT}`);
+      client.on("error", (err) => {
+        resolve({ success: false, reason: err.message });
+      });
+
+      const headers = {
+        ":method": "POST",
+        ":path": path,
+        authorization: `bearer ${token}`,
+        // الموضوع الخاص بأنشطة Live Activity
+        "apns-topic": `${credentials.bundleId}.push-type.liveactivity`,
+        "apns-push-type": "liveactivity",
+        "apns-priority": "10",
+      };
+
+      const req = client.request(headers);
+      let responseData = "";
+      let apnsId: string | undefined;
+      let statusCode: number | undefined;
+
+      req.on("response", (h) => {
+        apnsId = h["apns-id"] as string;
+        statusCode = h[":status"] as number;
+      });
+      req.on("data", (chunk) => {
+        responseData += chunk;
+      });
+      req.on("end", () => {
+        client.close();
+        if (statusCode === 200) {
+          resolve({ success: true, apnsId, statusCode });
+        } else {
+          let reason = "Unknown error";
+          try {
+            reason = JSON.parse(responseData).reason || reason;
+          } catch {}
+          resolve({ success: false, apnsId, statusCode, reason });
+        }
+      });
+      req.on("error", (err) => {
+        client.close();
+        resolve({ success: false, reason: err.message });
+      });
+
+      req.write(JSON.stringify(payload));
+      req.end();
+    } catch (error: any) {
+      resolve({ success: false, reason: error.message });
+    }
+  });
+}
+
 /**
  * Send push notification to multiple devices (batch)
  */

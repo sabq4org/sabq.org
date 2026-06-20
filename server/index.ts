@@ -1874,6 +1874,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // عامل النشاط المباشر (iOS Live Activity): يدفع تحديثات شاشة القفل عبر
+      // APNs كل 10 ثوانٍ. نفس النمط — تسجيل دائم وفحص القيادة داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startLiveActivityWorker } = await import("./jobs/liveActivityWorker");
+            startLiveActivityWorker();
+          } catch (error) {
+            console.error("[Server] Error starting live activity worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
     // Handle server errors
     server.on("error", (error: any) => {
       console.error("[Server] ❌ Server error:", error);

@@ -881,6 +881,23 @@ actor APIClient {
         try ensureSuccess(response)
     }
 
+    // MARK: - Live Activity (push-to-update) tokens
+
+    /// Register the ActivityKit push token for a live match so the backend can
+    /// push lock-screen updates (score/minute) via APNs while the app is
+    /// closed/locked. The token differs from the device push token and rotates
+    /// per activity. Public endpoint — works for guests too.
+    func registerLiveActivityToken(fixtureId: Int, token: String) async throws {
+        struct Body: Encodable { let fixtureId: Int; let token: String }
+        try await postRaw(path: "/live-activity/register", body: Body(fixtureId: fixtureId, token: token))
+    }
+
+    /// Tell the backend the live activity is over so it stops pushing updates.
+    func endLiveActivityToken(token: String) async throws {
+        struct Body: Encodable { let token: String }
+        try await postRaw(path: "/live-activity/end", body: Body(token: token))
+    }
+
     /// Latest 50 editorial notifications (scheduled/published/rejected/
     /// needs_revision) for the signed-in user, newest first. Used by the
     /// in-app NotificationsView. Renamed from the generic `notifications`

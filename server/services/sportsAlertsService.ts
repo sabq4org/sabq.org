@@ -19,7 +19,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { notificationsInbox, pushDevices } from "@shared/schema";
 import { notificationBus } from "../notificationBus";
-import { getGlobalTodayFixtures, type SplLiveBoardItem } from "./saudiLeagueService";
+import {
+  getGlobalTodayFixtures,
+  getGlobalLiveFixtures,
+  type SplLiveBoardItem,
+} from "./saudiLeagueService";
 import { getTeamFollowerUserIds } from "./sportsFollowsService";
 import {
   sendPushNotification,
@@ -211,7 +215,18 @@ export interface SportsAlertsCycleSummary {
 
 /** دورة واحدة: اكتشاف الأحداث + توصيلها للمتابعين. */
 export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> {
-  const matches = await getGlobalTodayFixtures();
+  // ندمج مباريات اليوم (كاش 60ث — تغطي المقرّرة/المنتهية) مع المباريات المباشرة
+  // الآن (كاش 15ث — نتائج طازجة). بيانات المباشر تَجُبّ بيانات اليوم لنفس المباراة
+  // فتُكتشف الأهداف والانطلاق خلال ~15-20ث بدل ~60ث+. (يشمل كأس العالم — id 1
+  // ضمن بطولاتنا — فلا حاجة لمرسِل منفصل يُكرّر الإشعارات.)
+  const [today, live] = await Promise.all([
+    getGlobalTodayFixtures(),
+    getGlobalLiveFixtures().catch(() => [] as SplLiveBoardItem[]),
+  ]);
+  const byId = new Map<number, SplLiveBoardItem>();
+  for (const m of today) byId.set(m.id, m);
+  for (const m of live) byId.set(m.id, m); // الأحدث يَجُبّ
+  const matches = [...byId.values()];
   const alerts = detectAlerts(matches);
 
   let recipients = 0;

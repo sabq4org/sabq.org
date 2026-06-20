@@ -4,6 +4,8 @@
 <dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>لعرض خطواتك وساعات نومك في رحلتك المعرفية</string>
 	<key>NSHealthUpdateUsageDescription</key>

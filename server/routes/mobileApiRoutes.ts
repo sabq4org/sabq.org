@@ -5440,6 +5440,54 @@ router.delete("/members/push-token", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// Live Activity push tokens (iOS lock-screen live match)
+// POST /api/v1/live-activity/register   { fixtureId, token }
+// POST /api/v1/live-activity/end        { token }
+// ==========================================
+// عام (لا يتطلب تسجيل دخول): النشاط المباشر قد يعمل لزائر غير مسجّل. نلتقط
+// userId إن وُجدت جلسة فقط. التوكن هنا توكن ActivityKit (مختلف عن توكن الجهاز).
+router.post("/live-activity/register", async (req: Request, res: Response) => {
+  try {
+    const { registerLiveActivityToken } = await import("../services/liveActivityService");
+    const fixtureId = Number(req.body?.fixtureId);
+    const token = typeof req.body?.token === "string" ? req.body.token : null;
+    if (!Number.isFinite(fixtureId) || !token || token.length < 20) {
+      return res.status(400).json({ success: false, message: "fixtureId/token مطلوبان" });
+    }
+    if (token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[")) {
+      return res.status(400).json({ success: false, message: "توكن غير صالح" });
+    }
+
+    let userId: string | null = null;
+    try {
+      const session = await verifyMemberSession(req);
+      userId = session?.userId ?? null;
+    } catch { /* زائر */ }
+
+    await registerLiveActivityToken(fixtureId, token, userId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] /live-activity/register error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل النشاط المباشر" });
+  }
+});
+
+router.post("/live-activity/end", async (req: Request, res: Response) => {
+  try {
+    const { endLiveActivityToken } = await import("../services/liveActivityService");
+    const token = typeof req.body?.token === "string" ? req.body.token : null;
+    if (!token) {
+      return res.status(400).json({ success: false, message: "token مطلوب" });
+    }
+    await endLiveActivityToken(token);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] /live-activity/end error:", error);
+    res.status(500).json({ success: false, message: "تعذر إنهاء النشاط المباشر" });
+  }
+});
+
+// ==========================================
 // Editorial notifications history + preferences
 // GET    /api/v1/notifications                 — last 50 events for the user
 // POST   /api/v1/notifications/:id/read        — mark a single entry read

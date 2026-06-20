@@ -12189,6 +12189,33 @@ export const pushDevices = pgTable("push_devices", {
 ]);
 
 /**
+ * iOS Live Activity push tokens (ActivityKit push-to-update).
+ *
+ * كل نشاط مباشر (Live Activity) لمباراة يصدر توكن APNs خاص به (مختلف عن
+ * توكن جهاز push_devices). يرسله التطبيق هنا مع معرّف المباراة، فيستطيع
+ * الخادم دفع تحديثات شاشة القفل (النتيجة/الشوط) عبر apns-push-type:
+ * liveactivity دون الحاجة لفتح التطبيق. عامل liveActivityWorker يستطلع
+ * المباريات النشطة ويدفع التغييرات، ويُلغي التفعيل عند انتهاء المباراة أو
+ * رفض APNs للتوكن.
+ */
+export const liveActivityTokens = pgTable("live_activity_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  pushToken: text("push_token").notNull().unique(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  // بصمة آخر حالة دُفعت — لتفادي دفع تحديث مكرّر بلا تغيير.
+  lastContentHash: text("last_content_hash"),
+  lastPushedAt: timestamp("last_pushed_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_la_tokens_fixture").on(table.fixtureId),
+  index("idx_la_tokens_active").on(table.isActive),
+  index("idx_la_tokens_token").on(table.pushToken),
+]);
+
+/**
  * Per-user log of every targeted push notification we've sent for editorial
  * events (article scheduled / published / rejected / needs revision). Powers
  * the "Notifications" tab inside the iOS app — even when push delivery

@@ -9,9 +9,10 @@ import SwiftUI
 // التحديث اللحظي عبر سحب دوري (polling) من /api/world-cup/match/:id،
 // والإنهاء عند انتهاء المباراة أو طلب المستخدم. امتداد الويدجت يرسم فقط.
 //
-// قيد معروف (مقصود في هذه النسخة): التحديث يتوقف حين يُعلّق النظام عملية
-// التطبيق بعد فترة في الخلفية؛ يُستأنف فور عودة التطبيق للمقدمة. للتحديث
-// أثناء القفل التام يلزم دفع APNs لاحقًا.
+// التحديث أثناء القفل التام: يبدأ النشاط بـ pushType .token فيُصدر ActivityKit
+// توكن APNs نرسله للخادم (registerLiveActivityToken)، فيدفع الخادم تحديثات شاشة
+// القفل (النتيجة/الشوط) عبر APNs دون فتح التطبيق. السحب المحلي يبقى كمسار سريع
+// أثناء وجود التطبيق في المقدمة فقط.
 
 @Observable
 @MainActor
@@ -24,6 +25,10 @@ final class LiveMatchActivityManager {
 
     private var activity: Activity<LiveMatchAttributes>?
     private var pollTask: Task<Void, Never>?
+    /// مهمة مراقبة توكن الدفع الصادر عن ActivityKit
+    private var pushTokenTask: Task<Void, Never>?
+    /// آخر توكن دفع (hex) سُجّل لدى الخادم — لإلغائه عند الإنهاء
+    private var lastPushTokenHex: String?
 
     /// آخر طور معروف للمباراة — يضبط وتيرة السحب (أسرع أثناء اللعب)
     private var livePhase = false
@@ -47,6 +52,12 @@ final class LiveMatchActivityManager {
         guard areActivitiesEnabled else { return false }
         // نشاط واحد فقط في كل مرة — نُنهي السابق قبل بدء جديد
         if activity != nil { stop() }
+        // ننهي أي أنشطة يتيمة بقيت من جلسات سابقة (التطبيق أُغلق دون إنهائها)
+        // كي لا تظهر بطاقتان لنفس المباراة. توكناتها تُبطَل لدى الخادم تلقائيًا
+        // (APNs يردّ Unregistered بعد الإنهاء).
+        for orphan in Activity<LiveMatchAttributes>.activities {
+            Task { await orphan.end(nil, dismissalPolicy: .immediate) }
+        }
 
         let f = detail.fixture
         let kickoffDate = Date(timeIntervalSince1970: Double(f.timestamp))
@@ -63,12 +74,13 @@ final class LiveMatchActivityManager {
             let act = try Activity.request(
                 attributes: attributes,
                 content: .init(state: state, staleDate: Self.staleDate(for: detail)),
-                pushType: nil
+                pushType: .token
             )
             activity = act
             activeFixtureId = f.id
             livePhase = f.status.live
             kickoff = kickoffDate
+            observePushToken(act, fixtureId: f.id)
             startPolling(fixtureId: f.id)
             return true
         } catch {
@@ -77,10 +89,34 @@ final class LiveMatchActivityManager {
         }
     }
 
+    /// يراقب توكن الدفع الصادر عن النظام لهذا النشاط ويُسجّله لدى الخادم.
+    /// يتغيّر التوكن أحيانًا فنُعيد التسجيل عند كل تحديث.
+    private func observePushToken(_ act: Activity<LiveMatchAttributes>, fixtureId: Int) {
+        pushTokenTask?.cancel()
+        pushTokenTask = Task { [weak self] in
+            for await tokenData in act.pushTokenUpdates {
+                if Task.isCancelled { return }
+                let hex = tokenData.map { String(format: "%02x", $0) }.joined()
+                self?.lastPushTokenHex = hex
+                try? await APIClient.shared.registerLiveActivityToken(fixtureId: fixtureId, token: hex)
+            }
+        }
+    }
+
+    /// يُبلغ الخادم بإيقاف الدفع لتوكن النشاط المنتهي (أفضل-جهد).
+    private func deregisterPushToken() {
+        guard let token = lastPushTokenHex else { return }
+        lastPushTokenHex = nil
+        Task { try? await APIClient.shared.endLiveActivityToken(token: token) }
+    }
+
     /// ينهي النشاط الجاري ويوقف السحب الدوري.
     func stop() {
         pollTask?.cancel()
         pollTask = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
+        deregisterPushToken()
         let act = activity
         activity = nil
         activeFixtureId = nil
@@ -127,6 +163,9 @@ final class LiveMatchActivityManager {
         if state.isFinished {
             pollTask?.cancel()
             pollTask = nil
+            pushTokenTask?.cancel()
+            pushTokenTask = nil
+            deregisterPushToken()
             let finalContent = ActivityContent(
                 state: state,
                 staleDate: Date().addingTimeInterval(2 * 3600)
