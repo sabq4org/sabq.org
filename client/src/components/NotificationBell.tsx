@@ -10,7 +10,8 @@ import {
   Zap,
   Heart,
   CheckCheck,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,6 +147,27 @@ export function NotificationBell() {
     },
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("/api/notifications/clear", {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "تم المسح",
+        description: "تم مسح جميع الإشعارات",
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        description: "تعذّر مسح الإشعارات، حاول مجددًا",
+      });
+    },
+  });
+
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
       markAsReadMutation.mutate(notification.id);
@@ -205,19 +227,34 @@ export function NotificationBell() {
                 )}
               </div>
             </div>
-            {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => markAllAsReadMutation.mutate()}
-                disabled={markAllAsReadMutation.isPending}
-                className="gap-2"
-                data-testid="button-mark-all-read"
-              >
-                <CheckCheck className="h-4 w-4" />
-                <span className="text-xs">تحديد الكل</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => markAllAsReadMutation.mutate()}
+                  disabled={markAllAsReadMutation.isPending}
+                  className="gap-2"
+                  data-testid="button-mark-all-read"
+                >
+                  <CheckCheck className="h-4 w-4" />
+                  <span className="text-xs">تحديد الكل</span>
+                </Button>
+              )}
+              {notifications.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => clearAllMutation.mutate()}
+                  disabled={clearAllMutation.isPending}
+                  className="gap-2 text-destructive hover:text-destructive"
+                  data-testid="button-clear-all"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="text-xs">مسح الكل</span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

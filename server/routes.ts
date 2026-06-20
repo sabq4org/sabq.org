@@ -18934,6 +18934,21 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // DELETE /api/notifications/clear - Clear all notifications
+  // ⚠️ Must be registered BEFORE "/:id" or Express matches it as id="clear".
+  app.delete("/api/notifications/clear", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+
+      await storage.clearAllNotifications(userId);
+
+      res.json({ success: true, message: "All notifications cleared" });
+    } catch (error) {
+      console.error("Error clearing notifications:", error);
+      res.status(500).json({ message: "Failed to clear notifications" });
+    }
+  });
+
   // DELETE /api/notifications/:id - Delete single notification
   app.delete("/api/notifications/:id", isAuthenticated, async (req: any, res) => {
     try {
@@ -18963,22 +18978,6 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
     } catch (error) {
       console.error("Error deleting notification:", error);
       res.status(500).json({ message: "Failed to delete notification" });
-    }
-  });
-
-  // News Analytics Endpoint - Smart statistics and insights
-
-  // DELETE /api/notifications/clear - Clear all notifications
-  app.delete("/api/notifications/clear", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      
-      await storage.clearAllNotifications(userId);
-      
-      res.json({ success: true, message: "All notifications cleared" });
-    } catch (error) {
-      console.error("Error clearing notifications:", error);
-      res.status(500).json({ message: "Failed to clear notifications" });
     }
   });
 

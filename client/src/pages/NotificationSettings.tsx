@@ -273,13 +273,13 @@ export default function NotificationSettings() {
                 <div>
                   <p className="text-base font-medium">الفرق التي تتابعها</p>
                   <p className="text-sm text-muted-foreground">
-                    أضف أو أزل الفرق لتتحكم في تنبيهات مبارياتها
+                    تابع فرقك من صفحة الرياضة بالضغط على نجمة المتابعة ⭐ بجانب كل فريق للتحكم في تنبيهات مبارياتها
                   </p>
                 </div>
               </div>
-              <Link href="/my-follows">
+              <Link href="/sports2">
                 <Button variant="outline" size="sm" data-testid="link-manage-follows">
-                  إدارة المتابعات
+                  متابعة الفرق
                   <ChevronLeft className="h-4 w-4 mr-1" />
                 </Button>
               </Link>

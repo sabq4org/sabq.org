@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, AlertCircle, Star, Newspaper, CheckCheck, Settings } from "lucide-react";
+import { Bell, AlertCircle, Star, Newspaper, CheckCheck, Settings, Trash2, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -82,6 +82,44 @@ export default function Notifications() {
       toast({
         title: "تم تحديث الإشعارات",
         description: "تم تمييز جميع الإشعارات كمقروءة",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      await apiRequest(`/api/notifications/${notificationId}`, {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        description: "تعذّر حذف الإشعار، حاول مجددًا",
+      });
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("/api/notifications/clear", {
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({
+        title: "تم المسح",
+        description: "تم مسح جميع الإشعارات",
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        description: "تعذّر مسح الإشعارات، حاول مجددًا",
       });
     },
   });
@@ -166,6 +204,19 @@ export default function Notifications() {
               >
                 <CheckCheck className="h-4 w-4 ml-2" />
                 تمييز الكل كمقروء
+              </Button>
+            )}
+
+            {data && data.notifications.length > 0 && !isLoading && (
+              <Button
+                variant="outline"
+                onClick={() => clearAllMutation.mutate()}
+                disabled={clearAllMutation.isPending}
+                className="text-destructive hover:text-destructive"
+                data-testid="button-clear-all"
+              >
+                <Trash2 className="h-4 w-4 ml-2" />
+                مسح الكل
               </Button>
             )}
           </div>
@@ -256,15 +307,31 @@ export default function Notifications() {
                         <Badge variant="secondary" data-testid={`badge-type-${notification.id}`}>
                           {getTypeLabel(notification.type)}
                         </Badge>
-                        <span
-                          className="text-xs text-muted-foreground whitespace-nowrap"
-                          data-testid={`text-time-${notification.id}`}
-                        >
-                          {formatDistanceToNow(new Date(notification.createdAt), {
-                            addSuffix: true,
-                            locale: arSA,
-                          })}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span
+                            className="text-xs text-muted-foreground whitespace-nowrap"
+                            data-testid={`text-time-${notification.id}`}
+                          >
+                            {formatDistanceToNow(new Date(notification.createdAt), {
+                              addSuffix: true,
+                              locale: arSA,
+                            })}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteMutation.mutate(notification.id);
+                            }}
+                            disabled={deleteMutation.isPending}
+                            title="حذف الإشعار"
+                            data-testid={`button-delete-${notification.id}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Title */}
