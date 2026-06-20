@@ -5,7 +5,7 @@
  *
  * المعرّفات مأخوذة من /teams?league=307&season=2025 (18 ناديًا).
  */
-import { localizePlayerName } from "./worldCupNames";
+import { localizePlayerName, WC_TEAM_AR } from "./worldCupNames";
 export const SPL_TEAM_AR: Record<number, string> = {
   2928: "الخليج", // Al Khaleej Saihat
   2929: "الأهلي", // Al-Ahli Jeddah
@@ -115,6 +115,7 @@ export function localizeSplTeamName(id: number | null | undefined, fallback: str
     if (SPL_TEAM_AR[id]) return SPL_TEAM_AR[id];
     if (EURO_TEAM_AR[id]) return EURO_TEAM_AR[id];
     if (GULF_TEAM_AR[id]) return GULF_TEAM_AR[id];
+    if (WC_TEAM_AR[id]) return WC_TEAM_AR[id]; // منتخبات كأس العالم
   }
   return fallback;
 }

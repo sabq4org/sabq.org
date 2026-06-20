@@ -74,6 +74,9 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   // بطولات قارية/عالمية تشارك فيها الأندية السعودية. الترتيب متعدّد المجموعات
   // (AFC: مجموعتان، كأس العالم للأندية: 8 مجموعات) فيُترك hasStandings=false حتى
   // ندعم عرض الترتيب متعدّد المجموعات لاحقًا — المباريات والهدّافون يعملان الآن.
+  // كأس العالم للمنتخبات (id 1) — موسم 2026 (نسخة 48 منتخبًا) بمجموعات متعدّدة،
+  // فيُترك hasStandings=false كبقية بطولات المجموعات. المباريات والهدّافون يعملان.
+  { id: 1, slug: "world-cup", name: "كأس العالم", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "world" },
   { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   // الدوريات الأوروبية الكبرى الخمسة — تغطية كاملة (ترتيب/هدّافون/تشكيلات/أحداث).
