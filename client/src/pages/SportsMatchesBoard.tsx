@@ -291,7 +291,9 @@ function MatchRow({
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
               <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                {f.status.elapsed != null ? `'${f.status.elapsed}` : "مباشر"}
+                {f.status.elapsed != null
+                  ? `'${f.status.elapsed}${f.status.extra ? `+${f.status.extra}` : ""}`
+                  : "مباشر"}
               </span>
               <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white">
                 مباشر

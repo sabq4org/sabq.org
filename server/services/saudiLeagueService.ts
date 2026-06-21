@@ -197,6 +197,8 @@ export interface SplFixture {
     code: string;
     label: string;
     elapsed: number | null;
+    /** دقائق بدل الضائع المحتسبة (مثل 90+3 ⇒ elapsed=90, extra=3)؛ null إن لم تتوفّر. */
+    extra: number | null;
     live: boolean;
     finished: boolean;
   };
@@ -227,6 +229,7 @@ function localizeFixture(item: any): SplFixture {
       code: statusCode,
       label: WC_STATUS_AR[statusCode] ?? statusCode,
       elapsed: fx.status?.elapsed ?? null,
+      extra: fx.status?.extra ?? null,
       live: WC_LIVE_STATUSES.has(statusCode),
       finished: WC_FINISHED_STATUSES.has(statusCode),
     },
