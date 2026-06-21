@@ -99,10 +99,10 @@ interface SpTeamTransfer {
 }
 interface SpTeamTransfers { arrivals: SpTeamTransfer[]; departures: SpTeamTransfer[]; }
 
-const dayFmt = new Intl.DateTimeFormat("ar-SA", { weekday: "short", day: "numeric", month: "short" });
+const dayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "short", day: "numeric", month: "short" });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
 
-const monthFmt = new Intl.DateTimeFormat("ar-SA", { year: "numeric", month: "short" });
+const monthFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { year: "numeric", month: "short" });
 function fmtMonth(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);

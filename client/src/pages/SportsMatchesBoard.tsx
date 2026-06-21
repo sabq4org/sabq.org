@@ -55,7 +55,7 @@ const ymdFmt = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-const timeFmt = new Intl.DateTimeFormat("ar-SA-u-nu-latn", {
+const timeFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
   timeZone: RIYADH_TZ,
   hour: "2-digit",
   minute: "2-digit",
@@ -74,7 +74,7 @@ function shiftDate(ymd: string, days: number): string {
 
 function humanDate(ymd: string): string {
   const dt = new Date(`${ymd}T12:00:00Z`);
-  return new Intl.DateTimeFormat("ar", {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
     timeZone: "UTC",
     weekday: "long",
     day: "numeric",
@@ -130,6 +130,20 @@ function compareMatches(a: SpLiveItem, b: SpLiveItem): number {
   if (ra !== rb) return ra - rb;
   if (ra === 2) return b.timestamp - a.timestamp; // المنتهية: الأحدث أولًا
   return a.timestamp - b.timestamp; // المباشر/القادمة: الأبكر موعدًا أولًا
+}
+
+function liveClockLabel(f: SpLiveItem): string {
+  if (f.status.elapsed == null) return "مباشر";
+  const extra = f.status.extra ? `+${f.status.extra}` : "";
+  return `${f.status.elapsed}${extra}'`;
+}
+
+function livePhaseLabel(f: SpLiveItem): string {
+  if (f.status.label && f.status.label !== f.status.code) return f.status.label;
+  if (f.status.code === "1H") return "الشوط الأول";
+  if (f.status.code === "2H") return "الشوط الثاني";
+  if (f.status.code === "HT") return "استراحة الشوطين";
+  return "مباشر";
 }
 
 const STATE_FILTERS: { key: "all" | MatchState; label: string }[] = [
@@ -310,16 +324,14 @@ export function MatchRow({
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
               <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                {f.status.elapsed != null
-                  ? `'${f.status.elapsed}${f.status.extra ? `+${f.status.extra}` : ""}`
-                  : "مباشر"}
+                {liveClockLabel(f)}
               </span>
-              <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white">
-                مباشر
+              <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white whitespace-nowrap">
+                {livePhaseLabel(f)}
               </span>
             </span>
           ) : st === "finished" ? (
-            <span className="text-[11px] font-bold text-muted-foreground">انتهت</span>
+            <span aria-label={f.status.label || "انتهت"} />
           ) : (
             <span className="text-sm font-black text-foreground tabular-nums" dir="ltr">
               {kickoffTime(f)}
@@ -348,10 +360,15 @@ export function MatchRow({
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-block rounded-lg px-2 py-1 text-base font-black tabular-nums sm:rounded-md sm:py-0.5 ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
+              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-lg px-2 py-1 text-base font-black tabular-nums leading-none sm:rounded-md sm:py-0.5 ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
-              {ag} - {hg}
+              <span>{ag} - {hg}</span>
+              {st === "finished" && (
+                <span className="mt-1 text-[9px] font-black leading-none text-muted-foreground" dir="rtl">
+                  {f.status.label || "انتهت"}
+                </span>
+              )}
             </span>
           ) : (
             <span className="text-xs font-bold text-muted-foreground">vs</span>

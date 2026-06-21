@@ -137,7 +137,21 @@ function ScoreboardCard({ items, onOpen }: {
   items: SpLiveItem[]; onOpen: (id: number) => void;
 }) {
   const liveCount = items.filter((f) => f.status.live).length;
-  const list = items.slice(0, 5);
+  const orderToday = (rows: SpLiveItem[]) =>
+    [...rows].sort((a, b) => {
+      if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
+      if (a.status.finished !== b.status.finished) return a.status.finished ? 1 : -1;
+      if (a.status.finished && b.status.finished) return b.timestamp - a.timestamp;
+      return a.timestamp - b.timestamp;
+    });
+  const worldCup = orderToday(items.filter((f) => f.competitionSlug === "world-cup"));
+  const others = orderToday(items.filter((f) => f.competitionSlug !== "world-cup"));
+  const worldCupShown = worldCup.slice(0, 4);
+  const othersShown = others.slice(0, worldCupShown.length > 0 ? 3 : 5);
+  const groups = [
+    { key: "world-cup", title: "كأس العالم", items: worldCupShown },
+    { key: "others", title: "بطولات أخرى", items: othersShown },
+  ].filter((group) => group.items.length > 0);
 
   return (
     <div className="flex flex-col overflow-hidden rounded-3xl border border-border bg-card">
@@ -155,9 +169,17 @@ function ScoreboardCard({ items, onOpen }: {
         ) : null}
       </div>
 
-      {list.length > 0 ? (
-        <div className="grid gap-2 p-3 overflow-y-auto scrollbar-hide max-h-[480px]">
-          {list.map((f) => <TodayCompactRow key={f.id} f={f} onOpen={onOpen} />)}
+      {groups.length > 0 ? (
+        <div className="space-y-3 p-3 overflow-y-auto scrollbar-hide max-h-[480px]">
+          {groups.map((group) => (
+            <div key={group.key} className="grid gap-2">
+              <div className="flex items-center justify-between px-1 text-[11px] font-black text-foreground">
+                <span>{group.title}</span>
+                <span className="font-bold text-muted-foreground tabular-nums">{group.items.length}</span>
+              </div>
+              {group.items.map((f) => <TodayCompactRow key={f.id} f={f} onOpen={onOpen} />)}
+            </div>
+          ))}
         </div>
       ) : (
         <div className="grid place-items-center gap-1 p-8 text-center text-sm text-muted-foreground">

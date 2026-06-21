@@ -41,7 +41,7 @@ interface SpPlayerCard {
   history?: SpPlayerSeasonPoint[]; transfers?: SpPlayerTransfer[]; injuries?: SpPlayerInjury[];
 }
 
-const birthFmt = new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "long", year: "numeric" });
+const birthFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
 function fmtBirth(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -55,7 +55,7 @@ function seasonsRange(seasons: number[]): string {
   return first === last ? String(first) : `${first}–${last}`;
 }
 
-const shortDateFmt = new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "short", year: "numeric" });
+const shortDateFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "short", year: "numeric" });
 function fmtShortDate(iso: string): string {
   if (!iso) return "";
   const d = new Date(iso);
