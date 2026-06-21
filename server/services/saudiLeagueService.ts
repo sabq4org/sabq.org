@@ -90,6 +90,15 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
   { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
   { id: 848, slug: "conference-league", name: "دوري المؤتمر الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
+  // الدرجات الإسبانية الأدنى من La Liga — تغطية كاملة في API-Football.
+  // الدرجة الثانية (Segunda División) دوري واحد بجدول مفرد.
+  { id: 141, slug: "segunda-division", name: "الدرجة الثانية الإسبانية", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  // الدرجة الثالثة (Primera Federación) — اسمها في API-Football "Primera División
+  // RFEF" ومقسّمة إلى مجموعتين حيّتين، لكل مجموعة معرّف مستقل وجدول ترتيب مفرد
+  // (لا ترتيب متعدّد المجموعات)، فتُضاف كدوريين عاديين. المجموعات 3/4/5
+  // (437/438/692) ميتة (عالقة عند موسم 2020) فتُتجاهَل.
+  { id: 435, slug: "primera-rfef-1", name: "الدرجة الثالثة الإسبانية - المجموعة 1", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  { id: 436, slug: "primera-rfef-2", name: "الدرجة الثالثة الإسبانية - المجموعة 2", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
   // دوريات الخليج — أندية معرّبة (قاموس GULF_TEAM_AR). كأس الخليج للمنتخبات
   // (id 25) مؤجّل مع بطولات المنتخبات بمجموعات (المرحلة 3).
   { id: 301, slug: "uae-pro-league", name: "دوري أدنوك للمحترفين", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
