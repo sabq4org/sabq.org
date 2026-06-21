@@ -369,6 +369,50 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   });
 }
 
+// ---------- البث المباشر العالمي (كل مباريات العالم المباشرة، غير مفلتر) ----------
+
+export interface SplWorldLiveItem extends SplLiveBoardItem {
+  country: string; // الاسم الخام (إنجليزي) كما يعيده المزود
+  countryAr: string; // معرَّب (مع fallback للإنجليزي)
+  flag: string | null;
+  leagueId: number;
+  leagueLogo: string | null;
+}
+
+/**
+ * كل المباريات المباشرة في العالم الآن — على عكس getGlobalLiveFixtures لا
+ * نُرشّح على سجل بطولاتنا، بل نعيد الجميع لقسم «البث المباشر · العالم»
+ * (مجمّع في الواجهة حسب الدولة ثم الدوري). نداء واحد fixtures?live=all خلف
+ * كاش SWR قصير يخدم آلاف الزوار. الأسماء المعروفة تُعرَّب (فِرق/دول/بطولات)
+ * مع fallback إنجليزي آمن لما لا قاموس له (دوريات صغيرة/سيدات/احتياط).
+ */
+export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
+  return withSWR(`spl:world-live`, LIVE_TTL, LIVE_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
+    const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
+    return rows
+      .map((r: any): SplWorldLiveItem => {
+        const lg = r.league ?? {};
+        const known = byId.get(lg.id);
+        return {
+          ...localizeFixture(r),
+          competition: known?.name ?? localizeSplCompetition(lg.name ?? ""),
+          competitionSlug: known?.slug ?? null,
+          country: lg.country ?? "",
+          countryAr: localizeSplCountry(lg.country ?? ""),
+          flag: lg.flag ?? null,
+          leagueId: lg.id ?? 0,
+          leagueLogo: lg.logo ?? null,
+        };
+      })
+      .sort((a, b) => {
+        // الأبكر بدءًا (الأكثر دقائق) أولًا داخل نفس الدوري لاحقًا في الواجهة؛
+        // هنا ترتيب عام بالوقت يكفي قبل التجميع.
+        return a.timestamp - b.timestamp;
+      });
+  });
+}
+
 const TEAM_RECENT_TTL = 10 * 60 * 1000; // نتائج الفريق الأخيرة تتغيّر بعد كل مباراة فقط
 
 /**
