@@ -640,6 +640,12 @@ export default function SportsMatchesBoard() {
                   </span>
                 )}
                 <Link
+                  href="/sports/live"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:border-red-500/50 transition-colors"
+                >
+                  <Radio className="w-3.5 h-3.5" /> البث المباشر · العالم
+                </Link>
+                <Link
                   href="/sports"
                   className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
                 >

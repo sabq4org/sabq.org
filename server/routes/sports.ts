@@ -22,6 +22,7 @@ import {
   getFixturesByRound,
   getGlobalLiveFixtures,
   getGlobalTodayFixtures,
+  getWorldLiveFixtures,
   getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
@@ -170,6 +171,25 @@ export function registerSportsRoutes(app: Express) {
       res.json({ configured: true, live });
     } catch (error) {
       console.error("[Sports] global live failed:", error);
+      res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
+    }
+  });
+
+  // البث المباشر العالمي: كل مباريات العالم المباشرة الآن (غير مفلتر على سجلّنا)
+  // — لقسم «البث المباشر · العالم» المجمّع حسب الدولة ثم الدوري. الأسماء
+  // المعروفة معرّبة مع fallback إنجليزي للدوريات الصغيرة.
+  app.get("/api/sports/world-live", async (_req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.set("Cache-Control", "public, max-age=15, s-maxage=30");
+      res.json({ configured: false, matches: [] });
+      return;
+    }
+    try {
+      const matches = await getWorldLiveFixtures();
+      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      res.json({ configured: true, matches });
+    } catch (error) {
+      console.error("[Sports] world live failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
     }
   });
