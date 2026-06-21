@@ -333,6 +333,7 @@ function MatchRow({
 function CompetitionGroup({
   name,
   logo,
+  slug,
   matches,
   expandedIds,
   toggle,
@@ -340,6 +341,7 @@ function CompetitionGroup({
 }: {
   name: string;
   logo: string | null;
+  slug: string | null;
   matches: SpLiveItem[];
   expandedIds: Set<number>;
   toggle: (id: number) => void;
@@ -349,12 +351,30 @@ function CompetitionGroup({
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
       <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-gradient-to-l from-muted/60 to-transparent sm:px-4 sm:py-3">
-        {logo ? (
-          <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
+        {slug ? (
+          <Link
+            href={`/sports2/competition/${slug}`}
+            className="group flex min-w-0 flex-1 items-center gap-2.5"
+            title={`صفحة بطولة ${name}`}
+          >
+            {logo ? (
+              <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
+            ) : (
+              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
+            )}
+            <span className="font-black text-foreground truncate group-hover:text-primary transition-colors">{name}</span>
+            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+          </Link>
         ) : (
-          <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
+          <>
+            {logo ? (
+              <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
+            ) : (
+              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
+            )}
+            <span className="font-black text-foreground truncate flex-1">{name}</span>
+          </>
         )}
-        <span className="font-black text-foreground truncate flex-1">{name}</span>
         {liveCount > 0 ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600 dark:text-red-400">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -467,7 +487,7 @@ export default function SportsMatchesBoard() {
       const slug = sorted[0]?.competitionSlug ?? null;
       const meta = slug ? compMeta.get(slug) : undefined;
       const liveCount = matches.filter((m) => m.status.live).length;
-      return { name, matches: sorted, logo: meta?.logo ?? null, liveCount };
+      return { name, matches: sorted, logo: meta?.logo ?? null, slug, liveCount };
     });
   }, [filtered, compMeta]);
 
@@ -679,6 +699,7 @@ export default function SportsMatchesBoard() {
                   key={g.name}
                   name={g.name}
                   logo={g.logo}
+                  slug={g.slug}
                   matches={g.matches}
                   expandedIds={expandedIds}
                   toggle={toggle}
@@ -690,9 +711,19 @@ export default function SportsMatchesBoard() {
             <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
               {flat.map((m) => (
                 <div key={m.id} className="border-b border-border last:border-b-0">
-                  <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
-                    {m.competition}
-                  </div>
+                  {m.competitionSlug ? (
+                    <Link
+                      href={`/sports2/competition/${m.competitionSlug}`}
+                      className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {m.competition}
+                      <ChevronLeft className="w-3 h-3" />
+                    </Link>
+                  ) : (
+                    <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
+                      {m.competition}
+                    </div>
+                  )}
                   <MatchRow
                     f={m}
                     expanded={expandedIds.has(m.id)}
