@@ -200,7 +200,7 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
   );
 
   return (
-    <div className="grid grid-cols-2 gap-4 px-4 py-3 bg-muted/30">
+    <div className="grid grid-cols-1 gap-3 px-3 py-3 bg-muted/30 sm:grid-cols-2 sm:gap-4 sm:px-4">
       {list(homeGoals, "end")}
       {list(awayGoals, "start")}
     </div>
@@ -237,7 +237,7 @@ function MatchRow({
       }`}
     >
       <div
-        className={`flex items-center gap-2 px-3 py-2.5 transition-colors sm:gap-3 sm:px-4 ${
+        className={`grid grid-cols-[44px_minmax(0,1fr)_58px_minmax(0,1fr)_34px] items-center gap-1.5 px-2.5 py-3 transition-colors sm:flex sm:gap-3 sm:px-4 sm:py-2.5 ${
           isLive ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
         }`}
       >
@@ -245,7 +245,7 @@ function MatchRow({
         <button
           type="button"
           onClick={() => onOpen(f.id)}
-          className="w-14 shrink-0 text-center sm:w-16"
+          className="min-h-10 shrink-0 text-center sm:w-16"
           title="تفاصيل المباراة"
         >
           {isLive ? (
@@ -270,13 +270,13 @@ function MatchRow({
         {/* الفريق المضيف */}
         <Link
           href={`/sports2/team/${f.home.id}`}
-          className={`flex flex-1 items-center justify-end gap-2 min-w-0 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
+          className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
-          <span className="truncate text-sm">{f.home.name}</span>
+          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.home.name}</span>
           {f.home.logo ? (
-            <img src={f.home.logo} alt="" className="w-6 h-6 object-contain shrink-0" loading="lazy" />
+            <img src={f.home.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="w-6 h-6 rounded-full bg-muted shrink-0" />
+            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
           )}
         </Link>
 
@@ -284,11 +284,11 @@ function MatchRow({
         <button
           type="button"
           onClick={() => onOpen(f.id)}
-          className="shrink-0 min-w-[52px] text-center"
+          className="min-h-10 shrink-0 text-center"
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-block rounded-md px-2 py-0.5 text-base font-black tabular-nums ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
+              className={`inline-block rounded-lg px-2 py-1 text-base font-black tabular-nums sm:rounded-md sm:py-0.5 ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
               {ag} - {hg}
@@ -301,21 +301,21 @@ function MatchRow({
         {/* الفريق الضيف */}
         <Link
           href={`/sports2/team/${f.away.id}`}
-          className={`flex flex-1 items-center gap-2 min-w-0 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
+          className={`flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
           {f.away.logo ? (
-            <img src={f.away.logo} alt="" className="w-6 h-6 object-contain shrink-0" loading="lazy" />
+            <img src={f.away.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="w-6 h-6 rounded-full bg-muted shrink-0" />
+            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
           )}
-          <span className="truncate text-sm">{f.away.name}</span>
+          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.away.name}</span>
         </Link>
 
         {/* توسيع مسجّلي الأهداف */}
         <button
           type="button"
           onClick={onToggle}
-          className={`shrink-0 grid place-items-center w-7 h-7 rounded-full transition-colors ${expanded ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"} ${!decided ? "opacity-0 pointer-events-none" : ""}`}
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors sm:h-7 sm:w-7 ${expanded ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"} ${!decided ? "opacity-0 pointer-events-none" : ""}`}
           title="مسجّلو الأهداف"
           aria-label="مسجّلو الأهداف"
         >
@@ -347,8 +347,8 @@ function CompetitionGroup({
 }) {
   const liveCount = matches.filter((m) => m.status.live).length;
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-gradient-to-l from-muted/60 to-transparent">
+    <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
+      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-gradient-to-l from-muted/60 to-transparent sm:px-4 sm:py-3">
         {logo ? (
           <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
         ) : (
@@ -508,32 +508,32 @@ export default function SportsMatchesBoard() {
       <main className="flex-1">
         {/* ترويسة */}
         <div className="bg-card border-b border-border">
-          <div className="max-w-5xl mx-auto px-4 py-5">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
+            <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-accent-blue/30 shrink-0">
                   <CalendarDays className={`w-5 h-5 ${ACCENT}`} />
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-muted-foreground tracking-wide uppercase">سبق سبورت</span>
-                  <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight leading-none">مباريات اليوم</h1>
+                  <h1 className="text-[1.7rem] sm:text-3xl font-black text-foreground tracking-tight leading-none">مباريات اليوم</h1>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
                 {liveTotal > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold border border-red-500/20">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold border border-red-500/20">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
                   </span>
                 )}
                 {isToday && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
                     {isLiveFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5 text-red-500" />}
                     تحديث تلقائي
                   </span>
                 )}
                 <Link
                   href="/sports3"
-                  className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
                 >
                   البوابة الرياضية <ChevronLeft className="w-4 h-4" />
                 </Link>
@@ -544,26 +544,26 @@ export default function SportsMatchesBoard() {
 
         {/* شريط الفلاتر اللاصق */}
         <div className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-md">
-          <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
+          <div className="max-w-5xl mx-auto px-3 py-2.5 space-y-2.5 sm:px-4 sm:py-3 sm:space-y-3">
             {/* التاريخ */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1">
+              <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_40px_auto] items-center gap-1 sm:flex sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setDate((d) => shiftDate(d, -1))}
-                  className="grid place-items-center w-9 h-9 rounded-lg border border-border bg-card hover:border-primary/40 transition-colors"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card hover:border-primary/40 transition-colors sm:h-9 sm:w-9"
                   aria-label="اليوم السابق"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-                <div className="px-3 text-center min-w-[150px]">
-                  <div className="text-sm font-black text-foreground">{humanDate(date)}</div>
+                <div className="min-w-0 px-2 text-center sm:min-w-[150px] sm:px-3">
+                  <div className="truncate text-sm font-black text-foreground">{humanDate(date)}</div>
                   <div className="text-[10px] text-muted-foreground tabular-nums" dir="ltr">{date}</div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setDate((d) => shiftDate(d, 1))}
-                  className="grid place-items-center w-9 h-9 rounded-lg border border-border bg-card hover:border-primary/40 transition-colors"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card hover:border-primary/40 transition-colors sm:h-9 sm:w-9"
                   aria-label="اليوم التالي"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -572,7 +572,7 @@ export default function SportsMatchesBoard() {
                   <button
                     type="button"
                     onClick={() => setDate(today)}
-                    className="mr-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors"
+                    className="mr-0 h-10 rounded-lg bg-primary px-3 text-xs font-bold text-white transition-colors hover:bg-primary/90 sm:mr-1 sm:h-auto sm:py-1.5"
                   >
                     اليوم
                   </button>
@@ -581,32 +581,32 @@ export default function SportsMatchesBoard() {
                   type="date"
                   value={date}
                   onChange={(e) => e.target.value && setDate(e.target.value)}
-                  className="mr-1 h-9 rounded-lg border border-border bg-card px-2 text-xs text-foreground"
+                  className="col-span-4 mt-1 h-10 rounded-lg border border-border bg-card px-2 text-xs text-foreground sm:col-span-1 sm:mt-0 sm:mr-1 sm:h-9"
                 />
               </div>
 
               {/* البحث */}
-              <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <div className="relative w-full sm:min-w-[180px] sm:max-w-xs sm:flex-1">
                 <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="ابحث عن فريق أو بطولة…"
-                  className="w-full h-9 rounded-lg border border-border bg-card pr-9 pl-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
+                  className="h-10 w-full rounded-lg border border-border bg-card pr-9 pl-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none sm:h-9"
                 />
               </div>
             </div>
 
             {/* الحالة + الفئة + طريقة العرض */}
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
               <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 shrink-0">
                 {STATE_FILTERS.map((s) => (
                   <button
                     key={s.key}
                     type="button"
                     onClick={() => setStateFilter(s.key)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${stateFilter === s.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${stateFilter === s.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     {s.key === "live" && stateFilter !== "live" && liveTotal > 0 && (
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1 align-middle animate-pulse" />
@@ -622,7 +622,7 @@ export default function SportsMatchesBoard() {
                   <button
                     type="button"
                     onClick={() => setCatFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${catFilter === "all" ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
+                    className={`min-h-9 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${catFilter === "all" ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
                   >
                     كل الفئات
                   </button>
@@ -631,7 +631,7 @@ export default function SportsMatchesBoard() {
                       key={cat}
                       type="button"
                       onClick={() => setCatFilter(cat)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${catFilter === cat ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
+                      className={`min-h-9 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${catFilter === cat ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
                     >
                       {COMP_CATEGORY_LABELS[cat]}
                     </button>
@@ -643,14 +643,14 @@ export default function SportsMatchesBoard() {
                 <button
                   type="button"
                   onClick={() => setGroupByComp(true)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   حسب البطولة
                 </button>
                 <button
                   type="button"
                   onClick={() => setGroupByComp(false)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors ${!groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${!groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   حسب الوقت
                 </button>
@@ -660,7 +660,7 @@ export default function SportsMatchesBoard() {
         </div>
 
         {/* المحتوى */}
-        <div className="max-w-5xl mx-auto px-4 py-6">
+        <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-6">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" /> جارٍ تحميل المباريات…
@@ -687,7 +687,7 @@ export default function SportsMatchesBoard() {
               ))}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
               {flat.map((m) => (
                 <div key={m.id} className="border-b border-border last:border-b-0">
                   <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
