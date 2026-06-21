@@ -42,6 +42,8 @@ import {
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
 const RIYADH_TZ = "Asia/Riyadh";
+const LIVE_REFETCH_MS = 15_000;
+const TODAY_REFETCH_MS = 30_000;
 
 const ymdFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: RIYADH_TZ,
@@ -79,6 +81,26 @@ function humanDate(ymd: string): string {
 
 function kickoffTime(f: SpLiveItem): string {
   return timeFmt.format(new Date(f.timestamp * 1000));
+}
+
+function mergeLiveMatches(today: SpLiveItem[], live: SpLiveItem[], includeLive: boolean): SpLiveItem[] {
+  if (!includeLive || live.length === 0) return today;
+
+  const liveById = new Map(live.map((m) => [m.id, m]));
+  const seen = new Set<number>();
+  const merged = today.map((m) => {
+    seen.add(m.id);
+    return liveById.get(m.id) ?? m;
+  });
+
+  for (const m of live) {
+    if (!seen.has(m.id)) merged.push(m);
+  }
+
+  return merged.sort((a, b) => {
+    if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
+    return a.timestamp - b.timestamp;
+  });
 }
 
 // ---------- الحالة ----------
@@ -125,8 +147,8 @@ function eventMinute(e: BoardMatchEvent): string {
 function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
   const { data, isLoading } = useQuery<BoardMatchDetail>({
     queryKey: [`/api/sports/match/${fixture.id}`],
-    staleTime: 30_000,
-    refetchInterval: fixture.status.live ? 30_000 : false,
+    staleTime: LIVE_REFETCH_MS,
+    refetchInterval: fixture.status.live ? LIVE_REFETCH_MS : false,
   });
 
   const goals = useMemo(
@@ -204,10 +226,21 @@ function MatchRow({
   const ag = f.goals.away;
   const homeWon = decided && hg != null && ag != null && hg > ag;
   const awayWon = decided && hg != null && ag != null && ag > hg;
+  const isLive = st === "live";
 
   return (
-    <div className="border-b border-border last:border-b-0">
-      <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors sm:gap-3 sm:px-4">
+    <div
+      className={`border-b border-border last:border-b-0 ${
+        isLive
+          ? "relative overflow-hidden border-r-4 border-r-red-500 bg-red-500/[0.06] shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)] dark:bg-red-500/[0.12]"
+          : ""
+      }`}
+    >
+      <div
+        className={`flex items-center gap-2 px-3 py-2.5 transition-colors sm:gap-3 sm:px-4 ${
+          isLive ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
+        }`}
+      >
         {/* الوقت / الحالة */}
         <button
           type="button"
@@ -215,11 +248,14 @@ function MatchRow({
           className="w-14 shrink-0 text-center sm:w-16"
           title="تفاصيل المباراة"
         >
-          {st === "live" ? (
+          {isLive ? (
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
               <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {f.status.elapsed != null ? `'${f.status.elapsed}` : "مباشر"}
+              </span>
+              <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white">
+                مباشر
               </span>
             </span>
           ) : st === "finished" ? (
@@ -252,7 +288,7 @@ function MatchRow({
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-block rounded-md px-2 py-0.5 text-base font-black tabular-nums ${st === "live" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-foreground"}`}
+              className={`inline-block rounded-md px-2 py-0.5 text-base font-black tabular-nums ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
               {ag} - {hg}
@@ -370,10 +406,24 @@ export default function SportsMatchesBoard() {
 
   const { data: todayData, isLoading } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today", { date }],
-    refetchInterval: isToday ? 30_000 : false,
+    staleTime: isToday ? LIVE_REFETCH_MS : TODAY_REFETCH_MS,
+    refetchInterval: isToday ? TODAY_REFETCH_MS : false,
     refetchIntervalInBackground: false,
   });
-  const allMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
+  const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
+
+  const { data: liveData, isFetching: isLiveFetching } = useQuery<{ live: SpLiveItem[] }>({
+    queryKey: ["/api/sports/live"],
+    enabled: isToday,
+    staleTime: LIVE_REFETCH_MS,
+    refetchInterval: LIVE_REFETCH_MS,
+    refetchIntervalInBackground: false,
+  });
+  const liveMatches = Array.isArray(liveData?.live) ? liveData!.live : [];
+  const allMatches = useMemo(
+    () => mergeLiveMatches(todayMatches, liveMatches, isToday),
+    [todayMatches, liveMatches, isToday]
+  );
 
   // الفئات الموجودة فعلاً ضمن مباريات اليوم.
   const presentCats = useMemo(() => {
@@ -473,6 +523,12 @@ export default function SportsMatchesBoard() {
                 {liveTotal > 0 && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold border border-red-500/20">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
+                  </span>
+                )}
+                {isToday && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+                    {isLiveFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5 text-red-500" />}
+                    تحديث تلقائي
                   </span>
                 )}
                 <Link
