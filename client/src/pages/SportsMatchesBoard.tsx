@@ -251,7 +251,7 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
 
 // ---------- صف المباراة ----------
 
-function MatchRow({
+export function MatchRow({
   f,
   expanded,
   onToggle,
