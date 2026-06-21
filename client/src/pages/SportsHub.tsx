@@ -1986,16 +1986,6 @@ export default function SportsHub() {
   const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
   const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
   const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
-  // داخل الفئة: الجارية أولًا، ثم القادمة، ثم المنتهية (مع الحفاظ على الترتيب الأصلي عند التعادل).
-  const compsInActiveCat = competitions
-    .filter((c) => catOf(c) === activeCat)
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => {
-      const ra = COMP_STATUS_RANK[a.c.status ?? "unknown"];
-      const rb = COMP_STATUS_RANK[b.c.status ?? "unknown"];
-      return ra !== rb ? ra - rb : a.i - b.i;
-    })
-    .map(({ c }) => c);
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`], refetchInterval: 30_000, refetchIntervalInBackground: false,
@@ -2013,6 +2003,42 @@ export default function SportsHub() {
   });
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
   const liveCount = todayMatches.filter((f) => f.status.live).length;
+
+  // البطولات التي تجري مبارياتها الآن، أو لها مباريات اليوم — لتفضيلها عند اختيار الفئة وترتيب رقائقها.
+  const liveCompSlugs = new Set(
+    todayMatches.filter((m) => m.status.live && m.competitionSlug).map((m) => m.competitionSlug as string),
+  );
+  const todayCompSlugs = new Set(
+    todayMatches.filter((m) => !m.status.finished && m.competitionSlug).map((m) => m.competitionSlug as string),
+  );
+
+  // داخل الفئة: البطولات الجارية مبارياتها الآن أولًا، ثم الجارية موسمها، ثم القادمة،
+  // ثم المنتهية (مع الحفاظ على الترتيب الأصلي عند التعادل).
+  const compsInActiveCat = competitions
+    .filter((c) => catOf(c) === activeCat)
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const la = liveCompSlugs.has(a.c.slug) ? 0 : 1;
+      const lb = liveCompSlugs.has(b.c.slug) ? 0 : 1;
+      if (la !== lb) return la - lb;
+      const ra = COMP_STATUS_RANK[a.c.status ?? "unknown"];
+      const rb = COMP_STATUS_RANK[b.c.status ?? "unknown"];
+      return ra !== rb ? ra - rb : a.i - b.i;
+    })
+    .map(({ c }) => c);
+
+  // عند اختيار فئة: نفضّل البطولة التي لها مباراة مباشرة الآن، ثم مباريات اليوم،
+  // ثم الجارية موسمها، وإلا الأولى ترتيبًا.
+  const pickCompForCat = (cat: SpCompetitionCategory): string | null => {
+    const inCat = competitions.filter((c) => catOf(c) === cat);
+    if (inCat.length === 0) return null;
+    return (
+      inCat.find((c) => liveCompSlugs.has(c.slug))?.slug ??
+      inCat.find((c) => todayCompSlugs.has(c.slug))?.slug ??
+      inCat.find((c) => c.status === "ongoing")?.slug ??
+      inCat[0].slug
+    );
+  };
 
   const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({ queryKey: [`/api/sports/${compSlug}/standings`], staleTime: 5 * 60_000, enabled: hasStandings });
   const standings = Array.isArray(standingsData?.standings) ? standingsData.standings : [];
@@ -2152,8 +2178,8 @@ export default function SportsHub() {
                       <button
                         key={cat}
                         onClick={() => {
-                          const first = competitions.find((c) => catOf(c) === cat);
-                          if (first) setCompSlug(first.slug);
+                          const slug = pickCompForCat(cat);
+                          if (slug) setCompSlug(slug);
                         }}
                         className={`shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors ${activeCat === cat ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"}`}
                       >
