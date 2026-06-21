@@ -113,6 +113,22 @@ function stateOf(f: SpLiveItem): MatchState {
   return "upcoming";
 }
 
+// ترتيب العرض: المباشر أولًا، ثم القادمة (الأبكر موعدًا)، ثم المنتهية في الأسفل
+// (الأحدث انتهاءً أولًا ضمن المنتهية). يمنع بقاء المباريات المنتهية أعلى القائمة.
+function orderRank(f: SpLiveItem): number {
+  if (f.status.live) return 0;
+  if (f.status.finished) return 2;
+  return 1;
+}
+
+function compareMatches(a: SpLiveItem, b: SpLiveItem): number {
+  const ra = orderRank(a);
+  const rb = orderRank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return b.timestamp - a.timestamp; // المنتهية: الأحدث أولًا
+  return a.timestamp - b.timestamp; // المباشر/القادمة: الأبكر موعدًا أولًا
+}
+
 const STATE_FILTERS: { key: "all" | MatchState; label: string }[] = [
   { key: "all", label: "الكل" },
   { key: "live", label: "جارية الآن" },
@@ -560,10 +576,7 @@ export default function SportsMatchesBoard() {
       byComp.get(key)!.push(m);
     }
     return Array.from(byComp.entries()).map(([name, matches]) => {
-      const sorted = [...matches].sort((a, b) => {
-        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-        return a.timestamp - b.timestamp;
-      });
+      const sorted = [...matches].sort(compareMatches);
       const slug = sorted[0]?.competitionSlug ?? null;
       const meta = slug ? compMeta.get(slug) : undefined;
       const liveCount = matches.filter((m) => m.status.live).length;
@@ -582,14 +595,7 @@ export default function SportsMatchesBoard() {
   );
 
   // قائمة مسطّحة بالوقت.
-  const flat = useMemo(
-    () =>
-      [...filtered].sort((a, b) => {
-        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-        return a.timestamp - b.timestamp;
-      }),
-    [filtered]
-  );
+  const flat = useMemo(() => [...filtered].sort(compareMatches), [filtered]);
 
   const liveTotal = allMatches.filter((m) => m.status.live).length;
 
