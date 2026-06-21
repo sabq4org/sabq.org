@@ -537,6 +537,97 @@ export async function getTopScorers(comp: SaudiCompetition): Promise<SplScorer[]
   });
 }
 
+// ---------- لمحة النسخة السابقة (حامل اللقب + هدّاف الموسم الماضي) ----------
+
+export interface SplPreviousChampion {
+  id: number;
+  name: string;
+  logo: string;
+}
+
+export interface SplPreviousScorer {
+  id: number;
+  name: string;
+  photo: string;
+  team: SplTeam;
+  goals: number;
+}
+
+export interface SplCompetitionHistory {
+  /** الموسم السابق (الحالي - 1)؛ قد يكون null لو تعذّر تحديد الموسم. */
+  previousSeason: number | null;
+  /** حامل اللقب في النسخة السابقة (متصدّر الترتيب للدوريات، فائز النهائي للكؤوس). */
+  champion: SplPreviousChampion | null;
+  /** هدّاف النسخة السابقة (الأول في قائمة الهدّافين). */
+  topScorer: SplPreviousScorer | null;
+}
+
+const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
+
+/**
+ * لمحة عن النسخة السابقة للبطولة: من حملَ اللقب ومن تصدّر الهدّافين الموسم الماضي.
+ * - الدوريات (hasStandings): البطل = متصدّر ترتيب الموسم السابق.
+ * - الكؤوس: البطل = الفائز في آخر مباراة منتهية (النهائي) من الموسم السابق.
+ * مخزَّن طويلًا (بيانات تاريخية ثابتة) ويتدهور بسلاسة إلى null عند أي فشل جزئي.
+ */
+export async function getCompetitionHistory(comp: SaudiCompetition): Promise<SplCompetitionHistory> {
+  const current = await seasonFor(comp);
+  const prev = current - 1;
+
+  return withSWR(`spl:history:v1:${comp.id}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
+    let champion: SplPreviousChampion | null = null;
+
+    if (comp.hasStandings) {
+      const rows = await apiGet("standings", { league: comp.id, season: prev }).catch(() => []);
+      const table: any[] = rows[0]?.league?.standings?.[0] ?? [];
+      const top = table.find((r: any) => r.rank === 1) ?? table[0];
+      if (top?.team) {
+        champion = {
+          id: top.team.id ?? 0,
+          name: localizeSplTeamName(top.team.id, top.team.name ?? ""),
+          logo: top.team.logo ?? "",
+        };
+      }
+    } else {
+      // كأس: نستنتج البطل من فائز آخر مباراة منتهية (النهائي) في الموسم السابق.
+      const fx = await apiGet("fixtures", { league: comp.id, season: prev }).catch(() => []);
+      const finished = fx
+        .filter((r: any) => FINISHED_STATUSES.has(r.fixture?.status?.short))
+        .sort((a: any, b: any) => (b.fixture?.timestamp ?? 0) - (a.fixture?.timestamp ?? 0));
+      const final = finished[0];
+      const home = final?.teams?.home;
+      const away = final?.teams?.away;
+      const winner = home?.winner ? home : away?.winner ? away : null;
+      if (winner) {
+        champion = {
+          id: winner.id ?? 0,
+          name: localizeSplTeamName(winner.id, winner.name ?? ""),
+          logo: winner.logo ?? "",
+        };
+      }
+    }
+
+    let topScorer: SplPreviousScorer | null = null;
+    if (comp.hasScorers) {
+      const rows = await apiGet("players/topscorers", { league: comp.id, season: prev }).catch(() => []);
+      const r0 = rows[0];
+      if (r0?.player) {
+        const stats = r0.statistics?.[0] ?? {};
+        const tr = await resolveNames([r0.player?.name]);
+        topScorer = {
+          id: r0.player.id ?? 0,
+          name: localizeSplPlayerName(r0.player.id, r0.player.name ?? "", tr),
+          photo: r0.player.photo ?? "",
+          team: localizeTeam(stats.team),
+          goals: stats.goals?.total ?? 0,
+        };
+      }
+    }
+
+    return { previousSeason: prev, champion, topScorer };
+  });
+}
+
 // ---------- تفاصيل مباراة (أحداث + إحصاءات «لغة الأرقام») ----------
 
 export interface SplMatchEvent {
