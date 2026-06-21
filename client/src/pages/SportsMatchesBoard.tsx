@@ -270,11 +270,15 @@ export function MatchRow({
   expanded,
   onToggle,
   onOpen,
+  flat = false,
 }: {
   f: SpLiveItem;
   expanded: boolean;
   onToggle: () => void;
   onOpen: (id: number) => void;
+  // flat: يُلغي خلفية المباشر الحمراء (لصفحة /sports/live حيث كل الصفوف مباشرة،
+  // فالتعبئة الحمراء تطغى) — يبقى المؤشّر الدقيق (نقطة + دقيقة حمراء) فقط.
+  flat?: boolean;
 }) {
   const st = stateOf(f);
   const decided = st === "live" || st === "finished";
@@ -303,14 +307,14 @@ export function MatchRow({
   return (
     <div
       className={`border-b border-border last:border-b-0 ${
-        isLive
+        isLive && !flat
           ? "relative overflow-hidden border-r-4 border-r-red-500 bg-red-500/[0.06] shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)] dark:bg-red-500/[0.12]"
           : ""
       }`}
     >
       <div
         className={`grid grid-cols-[44px_minmax(0,1fr)_58px_minmax(0,1fr)_34px] items-center gap-1.5 px-2.5 py-3 transition-colors sm:flex sm:gap-3 sm:px-4 sm:py-2.5 ${
-          flash ? "bg-emerald-500/20" : isLive ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
+          flash ? "bg-emerald-500/20" : isLive && !flat ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
         }`}
       >
         {/* الوقت / الحالة */}
@@ -326,7 +330,7 @@ export function MatchRow({
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {liveClockLabel(f)}
               </span>
-              <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white whitespace-nowrap">
+              <span className={`rounded-full px-1.5 py-px text-[9px] font-black leading-none whitespace-nowrap ${flat ? "bg-muted text-muted-foreground" : "bg-red-500 text-white"}`}>
                 {livePhaseLabel(f)}
               </span>
             </span>
@@ -360,7 +364,7 @@ export function MatchRow({
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-lg px-2 py-1 text-base font-black tabular-nums leading-none sm:rounded-md sm:py-0.5 ${isLive ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
+              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-lg px-2 py-1 text-base font-black tabular-nums leading-none sm:rounded-md sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
               <span>{ag} - {hg}</span>
@@ -629,8 +633,8 @@ export default function SportsMatchesBoard() {
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
                 {liveTotal > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold border border-red-500/20">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
+                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold border border-red-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
                   </span>
                 )}
                 {isToday && (
@@ -641,15 +645,15 @@ export default function SportsMatchesBoard() {
                 )}
                 <Link
                   href="/sports/live"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:border-red-500/50 transition-colors"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-[11px] font-bold text-red-600 dark:text-red-400 hover:border-red-500/50 transition-colors"
                 >
                   <Radio className="w-3.5 h-3.5" /> البث المباشر · العالم
                 </Link>
                 <Link
                   href="/sports"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-foreground hover:border-primary/40 transition-colors"
                 >
-                  البوابة الرياضية <ChevronLeft className="w-4 h-4" />
+                  البوابة الرياضية <ChevronLeft className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>

@@ -147,8 +147,8 @@ export default function SportsLive() {
           <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-red-500/10 shrink-0">
-                  <Radio className="w-5 h-5 text-red-500" />
+                <div className="p-2 rounded-xl bg-accent-blue/30 shrink-0">
+                  <Radio className={`w-5 h-5 ${ACCENT}`} />
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-muted-foreground tracking-wide uppercase">سبق سبورت</span>
@@ -157,7 +157,7 @@ export default function SportsLive() {
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
                 {total > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold border border-red-500/20">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-foreground text-xs font-bold">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {total} مباشر الآن
                   </span>
                 )}
@@ -199,7 +199,7 @@ export default function SportsLive() {
                       <span className="w-7 h-5 rounded-sm bg-muted shrink-0" />
                     )}
                     <h2 className="text-base font-black text-foreground">{c.countryAr}</h2>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600 dark:text-red-400">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-black text-muted-foreground">
                       <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                       {c.liveCount} مباشر
                     </span>
@@ -230,14 +230,14 @@ export default function SportsLive() {
                               <span className="font-black text-foreground truncate flex-1">{l.name}</span>
                             </>
                           )}
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600 dark:text-red-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-black text-muted-foreground">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                             {l.matches.length}
                           </span>
                         </div>
                         <div>
                           {l.matches.map((m) => (
-                            <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={setOpenMatch} />
+                            <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={setOpenMatch} flat />
                           ))}
                         </div>
                       </div>
