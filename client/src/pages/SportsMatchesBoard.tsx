@@ -11,7 +11,7 @@
  *   GET /api/sports/competitions            (شعار/فئة/حالة لكل بطولة)
  *   GET /api/sports/match/:id               (مسجّلو الأهداف عند التوسيع)
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -142,7 +142,24 @@ function eventMinute(e: BoardMatchEvent): string {
   return e.extra ? `${e.minute}+${e.extra}'` : `${e.minute}'`;
 }
 
-// ---------- مسجّلو الأهداف (يُحمّل عند التوسيع) ----------
+// ---------- أحداث المباراة: أهداف + كروت (تُحمّل عند التوسيع) ----------
+
+// الأحداث المعروضة: أهداف (بما فيها ركلة جزاء/عكسي) + بطاقات + ركلة جزاء ضائعة.
+const SHOWN_EVENT_TYPES = new Set(["goal", "missed-penalty", "yellow-card", "red-card"]);
+
+// علامة الحدث: كرة للهدف، مستطيل أصفر/أحمر للبطاقة.
+function EventMark({ type }: { type: string }) {
+  if (type === "yellow-card") {
+    return <span className="inline-block w-[11px] h-[15px] rounded-[2px] bg-yellow-400 shadow-sm" />;
+  }
+  if (type === "red-card") {
+    return <span className="inline-block w-[11px] h-[15px] rounded-[2px] bg-red-500 shadow-sm" />;
+  }
+  if (type === "missed-penalty") {
+    return <span className="text-sm leading-none">❌</span>;
+  }
+  return <Goal className="w-4 h-4 text-emerald-500" />;
+}
 
 function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
   const { data, isLoading } = useQuery<BoardMatchDetail>({
@@ -151,59 +168,65 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
     refetchInterval: fixture.status.live ? LIVE_REFETCH_MS : false,
   });
 
-  const goals = useMemo(
-    () => (Array.isArray(data?.events) ? data!.events.filter((e) => e.type === "goal") : []),
-    [data]
-  );
+  // أهداف + كروت مرتّبة بالدقيقة في قائمة واحدة محاذاة لليمين.
+  const events = useMemo(() => {
+    const rows = Array.isArray(data?.events) ? data!.events.filter((e) => SHOWN_EVENT_TYPES.has(e.type)) : [];
+    return [...rows].sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0) || (a.extra ?? 0) - (b.extra ?? 0));
+  }, [data]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground bg-muted/30">
         <Loader2 className="w-4 h-4 animate-spin" /> جارٍ تحميل تفاصيل المباراة…
       </div>
     );
   }
 
-  if (goals.length === 0) {
+  if (events.length === 0) {
     return (
-      <div className="py-3 text-center text-xs text-muted-foreground">
-        {fixture.status.finished ? "لا توجد أهداف في هذه المباراة." : "لم تُسجَّل أهداف بعد."}
+      <div className="py-3 text-center text-xs text-muted-foreground bg-muted/30">
+        {fixture.status.finished ? "لا توجد أهداف أو بطاقات في هذه المباراة." : "لم تُسجَّل أهداف أو بطاقات بعد."}
       </div>
     );
   }
 
-  const homeGoals = goals.filter((g) => g.teamId === fixture.home.id);
-  const awayGoals = goals.filter((g) => g.teamId === fixture.away.id);
-
-  const list = (rows: BoardMatchEvent[], align: "end" | "start") => (
-    <ul className={`space-y-1.5 ${align === "end" ? "text-end" : "text-start"}`}>
-      {rows.map((g, i) => (
-        <li key={i} className="flex items-center gap-1.5 text-sm" dir="rtl">
-          {align === "end" ? (
-            <>
-              <span className="font-semibold text-foreground">{g.player}</span>
-              <Goal className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="text-[11px] text-muted-foreground tabular-nums">{eventMinute(g)}</span>
-              {g.label !== "هدف" && <span className="text-[10px] text-muted-foreground">({g.label})</span>}
-            </>
-          ) : (
-            <>
-              <span className="text-[11px] text-muted-foreground tabular-nums">{eventMinute(g)}</span>
-              <Goal className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="font-semibold text-foreground">{g.player}</span>
-              {g.label !== "هدف" && <span className="text-[10px] text-muted-foreground">({g.label})</span>}
-            </>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
+  const teamOf = (teamId: number) =>
+    teamId === fixture.home.id ? fixture.home : teamId === fixture.away.id ? fixture.away : null;
 
   return (
-    <div className="grid grid-cols-1 gap-3 px-3 py-3 bg-muted/30 sm:grid-cols-2 sm:gap-4 sm:px-4">
-      {list(homeGoals, "end")}
-      {list(awayGoals, "start")}
-    </div>
+    <ul className="bg-muted/30 px-3 py-1.5 sm:px-4" dir="rtl">
+      {events.map((e, i) => {
+        const team = teamOf(e.teamId);
+        return (
+          <li key={i} className="flex items-center gap-2 py-1.5 border-b border-border/40 last:border-b-0">
+            {/* علامة الحدث (هدف/بطاقة) */}
+            <span className="shrink-0 w-5 grid place-items-center">
+              <EventMark type={e.type} />
+            </span>
+            {/* اسم اللاعب (+ توصيف خاص: ركلة جزاء/عكسي + صناعة) */}
+            <span className="flex-1 min-w-0 truncate text-sm font-semibold text-foreground">
+              {e.player}
+              {e.type === "goal" && e.label && e.label !== "هدف" && (
+                <span className="mr-1 text-[10px] font-normal text-muted-foreground">({e.label})</span>
+              )}
+              {e.assist && (
+                <span className="mr-1 text-[10px] font-normal text-muted-foreground">صناعة {e.assist}</span>
+              )}
+            </span>
+            {/* الوقت */}
+            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{eventMinute(e)}</span>
+            {/* علم/شعار المنتخب أو اسم الفريق */}
+            <span className="shrink-0 w-16 flex items-center justify-end gap-1">
+              {team?.logo ? (
+                <img src={team.logo} alt={team.name} title={team.name} className="w-5 h-5 object-contain" loading="lazy" />
+              ) : (
+                <span className="truncate text-[10px] text-muted-foreground">{team?.name || e.team}</span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -228,6 +251,22 @@ function MatchRow({
   const awayWon = decided && hg != null && ag != null && ag > hg;
   const isLive = st === "live";
 
+  // وميض أخضر عند تغيّر النتيجة (تحديث لحظي) لمباراة جارية.
+  const prevScore = useRef<string>(`${hg}-${ag}`);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    const sig = `${hg}-${ag}`;
+    if (prevScore.current !== sig) {
+      const wasDecided = prevScore.current !== "null-null";
+      prevScore.current = sig;
+      if (wasDecided && isLive) {
+        setFlash(true);
+        const t = setTimeout(() => setFlash(false), 2200);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [hg, ag, isLive]);
+
   return (
     <div
       className={`border-b border-border last:border-b-0 ${
@@ -238,7 +277,7 @@ function MatchRow({
     >
       <div
         className={`grid grid-cols-[44px_minmax(0,1fr)_58px_minmax(0,1fr)_34px] items-center gap-1.5 px-2.5 py-3 transition-colors sm:flex sm:gap-3 sm:px-4 sm:py-2.5 ${
-          isLive ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
+          flash ? "bg-emerald-500/20" : isLive ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
         }`}
       >
         {/* الوقت / الحالة */}
@@ -404,7 +443,7 @@ export default function SportsMatchesBoard() {
     return map;
   }, [competitions]);
 
-  const { data: todayData, isLoading } = useQuery<{ today: SpLiveItem[] }>({
+  const { data: todayData, isLoading, refetch: refetchToday } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today", { date }],
     staleTime: isToday ? LIVE_REFETCH_MS : TODAY_REFETCH_MS,
     refetchInterval: isToday ? TODAY_REFETCH_MS : false,
@@ -412,7 +451,7 @@ export default function SportsMatchesBoard() {
   });
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
 
-  const { data: liveData, isFetching: isLiveFetching } = useQuery<{ live: SpLiveItem[] }>({
+  const { data: liveData, isFetching: isLiveFetching, refetch: refetchLive } = useQuery<{ live: SpLiveItem[] }>({
     queryKey: ["/api/sports/live"],
     enabled: isToday,
     staleTime: LIVE_REFETCH_MS,
@@ -424,6 +463,22 @@ export default function SportsMatchesBoard() {
     () => mergeLiveMatches(todayMatches, liveMatches, isToday),
     [todayMatches, liveMatches, isToday]
   );
+
+  // تحديث فوري عند عودة المستخدم للتبويب/الشبكة — مهمّ على الجوال حيث يُجمَّد التبويب.
+  useEffect(() => {
+    if (!isToday) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      refetchToday();
+      refetchLive();
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+    };
+  }, [isToday, refetchToday, refetchLive]);
 
   // الفئات الموجودة فعلاً ضمن مباريات اليوم.
   const presentCats = useMemo(() => {
@@ -542,8 +597,8 @@ export default function SportsMatchesBoard() {
           </div>
         </div>
 
-        {/* شريط الفلاتر اللاصق */}
-        <div className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur-md">
+        {/* شريط الفلاتر اللاصق — أسفل الهيدر (h-16) لا خلفه */}
+        <div className="sticky top-16 z-30 border-b border-border bg-background/90 backdrop-blur-md">
           <div className="max-w-5xl mx-auto px-3 py-2.5 space-y-2.5 sm:px-4 sm:py-3 sm:space-y-3">
             {/* التاريخ */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
