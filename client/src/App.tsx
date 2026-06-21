@@ -355,17 +355,11 @@ const GulfLiveCoverage = lazy(() => retryImport(() => import("@/pages/GulfLiveCo
 const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
 const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")));
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
-// البوابة الرياضية الجديدة — تجربة أون لاين على /sports2
-const SportsHub = lazy(() => retryImport(() => import("@/pages/SportsHub")));
-// تجربة توزيع Dashboard (عمودين) على /sports3 — جنبًا إلى جنب مع /sports2
+// البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
-// تجربة لوحة Bento الإبداعية على /sports4
-const SportsBento = lazy(() => retryImport(() => import("@/pages/SportsBento")));
-// تجربة مركز رياضي مباشر على /sports5
-const SportsLiveCenter = lazy(() => retryImport(() => import("@/pages/SportsLiveCenter")));
-// لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports3/matches
+// لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
 const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
-// صفحة البطولة المستقلة — /sports2/competition/:slug
+// صفحة البطولة المستقلة — /sports/competition/:slug
 const SportsCompetition = lazy(() => retryImport(() => import("@/pages/SportsCompetition")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
@@ -871,19 +865,21 @@ function Router() {
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
-        {/* البوابة الرياضية الجديدة — تجربة أون لاين على /sports2 (لا تتعارض مع /category/sports) */}
-        <Route path="/sports2/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
-        <Route path="/sports2/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
-        <Route path="/sports2/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
-        <Route path="/sports2">{() => <LazyRoute component={SportsHub} />}</Route>
-        {/* لوحة مباريات اليوم — تُسجّل قبل /sports3 */}
-        <Route path="/sports3/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
-        {/* تجربة Dashboard بعمودين على /sports3 */}
-        <Route path="/sports3">{() => <LazyRoute component={SportsDashboard} />}</Route>
-        {/* تجربة لوحة Bento على /sports4 */}
-        <Route path="/sports4">{() => <LazyRoute component={SportsBento} />}</Route>
-        {/* تجربة مركز رياضي مباشر على /sports5 */}
-        <Route path="/sports5">{() => <LazyRoute component={SportsLiveCenter} />}</Route>
+        {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
+        <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
+        <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
+        <Route path="/sports/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
+        <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
+        <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
+        {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}
+        <Route path="/sports2/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
+        <Route path="/sports2/team/:id">{(p) => <Redirect to={`/sports/team/${p.id}`} />}</Route>
+        <Route path="/sports2/player/:id">{(p) => <Redirect to={`/sports/player/${p.id}`} />}</Route>
+        <Route path="/sports2">{() => <Redirect to="/sports" />}</Route>
+        <Route path="/sports3/matches">{() => <Redirect to="/sports/matches" />}</Route>
+        <Route path="/sports3">{() => <Redirect to="/sports" />}</Route>
+        <Route path="/sports4">{() => <Redirect to="/sports" />}</Route>
+        <Route path="/sports5">{() => <Redirect to="/sports" />}</Route>
         
         {/* Coming Soon Pages - Routes defined in nav.config.ts but not implemented yet */}
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>

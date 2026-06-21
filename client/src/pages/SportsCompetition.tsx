@@ -1,5 +1,5 @@
 /**
- * صفحة البطولة المستقلة — /sports2/competition/:slug
+ * صفحة البطولة المستقلة — /sports/competition/:slug
  *
  * هوية البطولة كاملة في مكان واحد: الشعار، الاسم، الفئة والحالة، الموسم الحالي،
  * عدّاد بدء الموسم (إن لم يبدأ)، ولمحة عن النسخة السابقة (حامل اللقب + هدّافها).
@@ -316,7 +316,7 @@ export default function SportsCompetition() {
   useEffect(() => {
     document.title = comp ? `${comp.name} | سبق سبورت` : "البطولة | سبق سبورت";
   }, [comp]);
-  useCanonical(`https://sabq.org/sports2/competition/${slug}`);
+  useCanonical(`https://sabq.org/sports/competition/${slug}`);
 
   const startDays = daysUntil(comp?.start);
   const statusLabel = comp?.status ? COMP_STATUS_LABELS[comp.status] : "";
@@ -329,7 +329,7 @@ export default function SportsCompetition() {
         {/* ترويسة البطولة */}
         <div className="border-b border-border bg-card">
           <div className="mx-auto max-w-5xl px-3 py-5 sm:px-4 sm:py-6">
-            <Link href="/sports3/matches" className="mb-3 inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground">
+            <Link href="/sports/matches" className="mb-3 inline-flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground">
               <ChevronLeft className="h-4 w-4" /> كل المباريات
             </Link>
             <div className="flex items-center gap-4">
@@ -412,7 +412,7 @@ export default function SportsCompetition() {
           </div>
 
           <div className="flex items-center justify-center pt-2">
-            <Link href="/sports2" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground hover:border-primary/40">
+            <Link href="/sports" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground hover:border-primary/40">
               <Users className="h-4 w-4" /> البوابة الرياضية
             </Link>
           </div>

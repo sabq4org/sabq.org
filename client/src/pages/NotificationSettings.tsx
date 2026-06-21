@@ -283,7 +283,7 @@ export default function NotificationSettings() {
                   </p>
                 </div>
               </div>
-              <Link href="/sports2">
+              <Link href="/sports">
                 <Button variant="outline" size="sm" data-testid="link-manage-follows">
                   متابعة الفرق
                   <ChevronLeft className="h-4 w-4 mr-1" />

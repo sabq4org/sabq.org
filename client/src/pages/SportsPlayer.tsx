@@ -1,5 +1,5 @@
 /**
- * صفحة اللاعب — /sports2/player/:id
+ * صفحة اللاعب — /sports/player/:id
  *
  * تستهلك /api/sports/player/:id (ملف شخصي + أرقام الموسم في كل بطولة + المسيرة + الألقاب).
  * تتدهور بسلاسة: 404 → حالة «غير متاح». كل البيانات معرَّبة من الخدمة.
@@ -149,7 +149,7 @@ function TeamChip({ id, name, logo }: { id: number; name: string; logo: string }
     </span>
   );
   return id ? (
-    <Link href={`/sports2/team/${id}`} className="hover:text-primary transition-colors min-w-0">{inner}</Link>
+    <Link href={`/sports/team/${id}`} className="hover:text-primary transition-colors min-w-0">{inner}</Link>
   ) : inner;
 }
 
@@ -193,7 +193,7 @@ export default function SportsPlayer() {
   useEffect(() => {
     document.title = data?.name ? `${data.name} | الرياضة - سبق` : "اللاعب | الرياضة - سبق";
   }, [data?.name]);
-  useCanonical(`https://sabq.org/sports2/player/${id}`);
+  useCanonical(`https://sabq.org/sports/player/${id}`);
 
   const notFound = isError || (!isLoading && !data);
   const isGk = data?.position?.includes("حراسة");
@@ -202,7 +202,7 @@ export default function SportsPlayer() {
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
-        <Link href="/sports2" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5">
+        <Link href="/sports" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5">
           <ArrowRight className="w-4 h-4" /> البوابة الرياضية
         </Link>
 
@@ -216,7 +216,7 @@ export default function SportsPlayer() {
             <User className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
             <p className="font-bold text-foreground">ملف اللاعب غير متاح حاليًا</p>
             <p className="text-sm text-muted-foreground mt-1">تعذّر جلب بيانات هذا اللاعب من المزوّد.</p>
-            <Link href="/sports2" className="inline-block mt-4 text-sm text-primary font-semibold">العودة للبوابة الرياضية</Link>
+            <Link href="/sports" className="inline-block mt-4 text-sm text-primary font-semibold">العودة للبوابة الرياضية</Link>
           </Card>
         ) : data ? (
           <div className="space-y-6">
@@ -307,7 +307,7 @@ export default function SportsPlayer() {
                       </>
                     );
                     return c.teamId ? (
-                      <Link key={`${c.teamId}-${c.seasons[0] ?? 0}`} href={`/sports2/team/${c.teamId}`} className="flex items-center gap-3 py-3 hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+                      <Link key={`${c.teamId}-${c.seasons[0] ?? 0}`} href={`/sports/team/${c.teamId}`} className="flex items-center gap-3 py-3 hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
                         {inner}
                       </Link>
                     ) : (

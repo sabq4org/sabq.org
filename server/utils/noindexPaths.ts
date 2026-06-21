@@ -28,12 +28,12 @@ export const NOINDEX_PREFIXES: readonly string[] = [
   '/payment',
   '/en/dashboard',
   '/ur/dashboard',
-  // البوابة الرياضية الجديدة — مسار تجريبي مؤقت (يشمل /sports2/team و /sports2/player)
+  // مسارات البوابة الرياضية التجريبية القديمة — تُحوَّل الآن إلى /sports المعتمد،
+  // وتبقى noindex حتى لا تُفهرس النسخ المكرّرة. (البوابة المعتمدة /sports مفهرسة.)
   '/sports2',
-  // تجربة توزيع Dashboard للبوابة الرياضية — مسار تجريبي مؤقت
   '/sports3',
-  // تجربة لوحة Bento الإبداعية للبوابة الرياضية — مسار تجريبي مؤقت
   '/sports4',
+  '/sports5',
 ];
 
 export function isNoindexPath(pathname: string): boolean {

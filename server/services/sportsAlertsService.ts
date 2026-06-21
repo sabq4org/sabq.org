@@ -171,7 +171,7 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
   const userIds = await getTeamFollowerUserIds(alert.teamRefIds);
   if (userIds.length === 0) return 0;
 
-  const deeplink = "/sports2";
+  const deeplink = "/sports";
   const type = `sports.${alert.kind}`;
   const pushData: Record<string, string> = {
     type,

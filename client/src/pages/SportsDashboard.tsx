@@ -1,7 +1,7 @@
 /**
- * البوابة الرياضية — تجربة توزيع جديدة على /sports3
+ * البوابة الرياضية المعتمدة على /sports (تصميم توزيع بعمودين)
  *
- * هيكل مختلف عن /sports2: «Bento Hero» في الأعلى (خبر بارز كبير + لوحة نتائج اليوم
+ * «Bento Hero» في الأعلى (خبر بارز كبير + لوحة نتائج اليوم
  * بجواره مباشرةً)، يليه شريط أخبار مكثّف، ثم بانده ملوّنة لمركز المباريات + الترتيب،
  * فالهدّافون والمتصدّرون، ثم صور وفيديو. الهدف: شخصية رياضية واضحة وإيقاع بصري
  * بدل التكدّس العمودي الموحّد.
@@ -166,7 +166,7 @@ function ScoreboardCard({ items, onOpen }: {
         </div>
       )}
 
-      <Link href="/sports3/matches" className={`flex items-center justify-center gap-1 border-t border-border py-2.5 text-xs font-bold ${ACCENT} hover:bg-muted/50 transition-colors`}>
+      <Link href="/sports/matches" className={`flex items-center justify-center gap-1 border-t border-border py-2.5 text-xs font-bold ${ACCENT} hover:bg-muted/50 transition-colors`}>
         كل مباريات اليوم <ChevronLeft className="w-3.5 h-3.5" />
       </Link>
     </div>
@@ -209,7 +209,7 @@ function FollowsStrip({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; on
             {inner}
           </button>
         ) : (
-          <Link key={f.id} href={`/sports2/team/${f.refId}`}
+          <Link key={f.id} href={`/sports/team/${f.refId}`}
             className="shrink-0 inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 hover:border-primary/40 transition-colors">
             {inner}
           </Link>
@@ -229,7 +229,7 @@ export default function SportsDashboard() {
   const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
-  useCanonical("https://sabq.org/sports3");
+  useCanonical("https://sabq.org/sports");
 
   const { data: newsRaw, isLoading: newsLoading } = useQuery<ArticleWithDetails[]>({ queryKey: ["/api/categories", "sports", "articles"] });
   const news = Array.isArray(newsRaw) ? newsRaw : [];
@@ -359,7 +359,7 @@ export default function SportsDashboard() {
         <section className="mt-12 sm:mt-16 bg-muted/40 border-y border-border">
           <div className="max-w-7xl mx-auto px-4 py-12 space-y-14">
             <div id="matches" className="scroll-mt-16">
-              <SectionHeader title="مركز المباريات" subtitle="مباشر · اليوم · قادمة · النتائج" icon={<CalendarDays className={`w-5 h-5 ${ACCENT}`} />} action={moreLink("/sports3/matches", "مباريات اليوم")} />
+              <SectionHeader title="مركز المباريات" subtitle="مباشر · اليوم · قادمة · النتائج" icon={<CalendarDays className={`w-5 h-5 ${ACCENT}`} />} action={moreLink("/sports/matches", "مباريات اليوم")} />
               {competitions.length > 0 && (
                 <div className="space-y-2 mb-5">
                   {presentCats.length > 1 && (
@@ -377,7 +377,7 @@ export default function SportsDashboard() {
                     {compsInActiveCat.map((c) => (
                       <button key={c.slug} onClick={() => setCompSlug(c.slug)}
                         title={c.status ? COMP_STATUS_LABELS[c.status] : undefined}
-                        className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
+                        className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-colors ${compSlug === c.slug ? "bg-primary text-white shadow-sm" : "bg-card border border-border text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
                         {c.status === "ongoing" && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
                         {c.name}
                       </button>

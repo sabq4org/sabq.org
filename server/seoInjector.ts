@@ -796,10 +796,10 @@ function matchRoute(pathname: string): { type: string; slug?: string; angleSlug?
   if (pathname === '/' || pathname === '') return { type: 'homepage', pathname };
   if (pathname === '/en' || pathname === '/ar' || pathname === '/ur') return { type: 'homepage', pathname };
 
-  // البوابة الرياضية الجديدة — صفحة النادي (/sports2/team/:id).
-  // يُفحص قبل isNoindexPath لأن المسار /sports2 ضمن قائمة noindex (تجريبي):
-  // نريد ميتا مشاركة غنية (صورة الملعب + عنوان/وصف) مع إبقاء robots=noindex.
-  let sportsTeamMatch = pathname.match(/^\/sports2\/team\/(\d+)$/);
+  // البوابة الرياضية — صفحة النادي (/sports/team/:id؛ ويُقبل المسار القديم /sports2/team
+  // الذي يُحوَّل في العميل). يُفحص قبل isNoindexPath لأن المسار القديم /sports2 ضمن
+  // قائمة noindex: نريد ميتا مشاركة غنية + canonical يشير للمسار المعتمد /sports/team.
+  let sportsTeamMatch = pathname.match(/^\/sports2?\/team\/(\d+)$/);
   if (sportsTeamMatch) return { type: 'sports-team', slug: sportsTeamMatch[1], pathname };
 
   // Noindex routes — emit self-canonical + noindex,follow
@@ -1420,7 +1420,7 @@ async function handleWorldDayPage(slug: string, baseUrl: string): Promise<SeoDat
   };
 }
 
-// البوابة الرياضية الجديدة — صفحة النادي (/sports2/team/:id).
+// البوابة الرياضية — صفحة النادي (/sports/team/:id).
 // ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
 // سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق. صورة الملعب/الشعار
 // روابط https كاملة من المزوّد فتُمرَّر كما هي.
@@ -1430,7 +1430,7 @@ async function handleSportsTeamPage(id: string, baseUrl: string): Promise<SeoDat
   const t = await withCache(`seo:sports-team:${teamId}`, CACHE_TTL.MEDIUM, async () =>
     getTeamSeoMeta(teamId).catch(() => null)
   );
-  const canonicalUrl = `${baseUrl}/sports2/team/${teamId}`;
+  const canonicalUrl = `${baseUrl}/sports/team/${teamId}`;
   if (!t) return null;
 
   const parts: string[] = [];

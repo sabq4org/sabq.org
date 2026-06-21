@@ -334,7 +334,7 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
                     ) : null}
                   </button>
                 ) : (
-                  <Link href={`/sports2/team/${f.refId}`} className="inline-flex items-center gap-2 min-w-0">
+                  <Link href={`/sports/team/${f.refId}`} className="inline-flex items-center gap-2 min-w-0">
                     {f.refLogo ? <img src={f.refLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" /> : <span className="w-5 h-5 rounded-full bg-muted shrink-0" />}
                     <span className="text-sm font-bold whitespace-nowrap text-foreground">{f.refName}</span>
                   </Link>
@@ -607,7 +607,7 @@ export function PillTabs({ tabs, active, onChange, layoutId }: {
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className={`relative shrink-0 px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap transition-colors z-10 ${
+          className={`relative shrink-0 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-colors z-10 ${
             active === t.key ? "text-white" : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -962,20 +962,20 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
       </div>
       <Card className="rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-[13px] sm:text-sm">
             <thead>
-              <tr className="bg-accent-blue/20 text-primary text-xs border-b border-border">
-                <th className="py-3 px-2 text-center w-10">#</th>
-                <th className="py-3 px-3 text-right">النادي</th>
-                <th className="py-3 px-2 text-center">لعب</th>
-                <th className="py-3 px-2 text-center">فاز</th>
-                <th className="py-3 px-2 text-center">تعادل</th>
-                <th className="py-3 px-2 text-center">خسر</th>
-                <th className="py-3 px-2 text-center">له</th>
-                <th className="py-3 px-2 text-center">عليه</th>
-                <th className="py-3 px-2 text-center">+/−</th>
-                <th className="py-3 px-2 text-center font-extrabold">نقاط</th>
-                <th className="py-3 px-3 text-center hidden md:table-cell">آخر 5</th>
+              <tr className="bg-accent-blue/15 text-primary text-[11px] sm:text-xs border-b border-border/50">
+                <th className="py-2 px-1.5 sm:py-2.5 sm:px-2 text-center w-8 sm:w-10">#</th>
+                <th className="py-2 px-2 sm:py-2.5 sm:px-3 text-right">النادي</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">لعب</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">فاز</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">تعادل</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">خسر</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">له</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">عليه</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center">+/−</th>
+                <th className="py-2 px-1 sm:py-2.5 sm:px-2 text-center font-extrabold">نقاط</th>
+                <th className="py-2 px-2 sm:py-2.5 sm:px-3 text-center hidden md:table-cell">آخر 5</th>
               </tr>
             </thead>
             <tbody>
@@ -985,30 +985,30 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
                   ? (r.rank <= 3 ? "border-r-2 border-primary" : r.rank >= rows.length - 2 ? "border-r-2 border-red-400" : "border-r-2 border-transparent")
                   : "border-r-2 border-transparent";
                 return (
-                  <tr key={r.team.id} className={`border-b border-border last:border-b-0 hover:bg-muted/40 ${band}`}>
-                    <td className="py-2.5 px-2 text-center font-bold text-muted-foreground tabular-nums">{pos}</td>
-                    <td className="py-2.5 px-3">
-                      <Link href={`/sports2/team/${r.team.id}`} className="flex items-center gap-2 hover:text-primary transition-colors">
-                        {r.team.logo && <img src={r.team.logo} alt="" className="w-6 h-6 object-contain" loading="lazy" />}
-                        <span className="font-semibold text-foreground hover:text-primary">{r.team.name}</span>
+                  <tr key={r.team.id} className={`border-b border-border/30 last:border-b-0 hover:bg-muted/30 ${band}`}>
+                    <td className="py-1.5 px-1.5 sm:py-2.5 sm:px-2 text-center font-bold text-muted-foreground tabular-nums">{pos}</td>
+                    <td className="py-1.5 px-2 sm:py-2.5 sm:px-3">
+                      <Link href={`/sports/team/${r.team.id}`} className="flex items-center gap-1.5 sm:gap-2 hover:text-primary transition-colors">
+                        {r.team.logo && <img src={r.team.logo} alt="" className="w-5 h-5 sm:w-6 sm:h-6 object-contain shrink-0" loading="lazy" />}
+                        <span className="font-semibold text-foreground hover:text-primary truncate">{r.team.name}</span>
                       </Link>
                     </td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.played}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.win}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.draw}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.lose}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.goalsFor}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.goalsAgainst}</td>
-                    <td className="py-2.5 px-2 text-center text-muted-foreground tabular-nums">{r.goalsDiff > 0 ? `+${r.goalsDiff}` : r.goalsDiff}</td>
-                    <td className={`py-2.5 px-2 text-center font-black tabular-nums ${ACCENT}`}>{r.points}</td>
-                    <td className="py-2.5 px-3 hidden md:table-cell"><FormChips form={r.form} /></td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.played}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.win}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.draw}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.lose}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.goalsFor}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center text-muted-foreground tabular-nums">{r.goalsAgainst}</td>
+                    <td className="py-1.5 px-1 sm:py-2.5 sm:px-2 text-center tabular-nums">{r.goalsDiff > 0 ? `+${r.goalsDiff}` : r.goalsDiff}</td>
+                    <td className={`py-1.5 px-1 sm:py-2.5 sm:px-2 text-center font-black tabular-nums ${ACCENT}`}>{r.points}</td>
+                    <td className="py-1.5 px-2 sm:py-2.5 sm:px-3 hidden md:table-cell"><FormChips form={r.form} /></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap gap-4 px-4 py-3 text-xs text-muted-foreground border-t border-border">
+        <div className="flex flex-wrap gap-4 px-4 py-3 text-xs text-muted-foreground border-t border-border/50">
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary" /> مراكز البطولة الآسيوية</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-400" /> مراكز الهبوط</span>
         </div>
@@ -1046,7 +1046,7 @@ export function PodiumCard({ entries, primaryLabel, secondaryLabel }: {
       <Card className="p-5">
         <div className="flex items-end justify-center gap-3 sm:gap-5 pt-4">
           {order.map((s) => (
-            <Link key={s.id} href={`/sports2/player/${s.id}`} className="flex flex-col items-center flex-1 max-w-[120px] group">
+            <Link key={s.id} href={`/sports/player/${s.id}`} className="flex flex-col items-center flex-1 max-w-[120px] group">
               <div className="relative mb-2">
                 {s.photo ? (
                   <img src={s.photo} alt="" className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-primary/40 group-hover:ring-primary transition-all" loading="lazy" />
@@ -1069,7 +1069,7 @@ export function PodiumCard({ entries, primaryLabel, secondaryLabel }: {
       {/* البقية */}
       <Card className="divide-y divide-border overflow-hidden">
         {rest.map((s) => (
-          <Link key={`${s.id}-${s.rank}`} href={`/sports2/player/${s.id}`} className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
+          <Link key={`${s.id}-${s.rank}`} href={`/sports/player/${s.id}`} className="flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors">
             <span className="w-6 text-center font-bold text-muted-foreground tabular-nums">{s.rank}</span>
             {s.photo ? <img src={s.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted" />}
             <div className="flex-1 min-w-0">
@@ -1139,7 +1139,7 @@ function PossessionBar({ row }: { row: SpStatRow }) {
 }
 // اسم لاعب في التشكيلة، يربط لصفحته إن توفّر معرّفه.
 function LineupName({ p, className }: { p: SpLineupPlayer; className?: string }) {
-  if (p.id) return <Link href={`/sports2/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{p.name}</Link>;
+  if (p.id) return <Link href={`/sports/player/${p.id}`} className={`hover:text-primary transition-colors ${className ?? ""}`}>{p.name}</Link>;
   return <span className={className}>{p.name}</span>;
 }
 
@@ -1230,7 +1230,7 @@ export function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
           {p.photo ? <img src={p.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted shrink-0" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted shrink-0" />}
           <div className="flex-1 min-w-0">
             {p.id ? (
-              <Link href={`/sports2/player/${p.id}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{p.name}</Link>
+              <Link href={`/sports/player/${p.id}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{p.name}</Link>
             ) : <div className="text-sm font-semibold text-foreground truncate">{p.name}</div>}
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
               {p.teamLogo && <img src={p.teamLogo} alt="" className="w-3.5 h-3.5 object-contain" loading="lazy" />}
@@ -1759,7 +1759,7 @@ function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
           <Crown className="w-5 h-5 text-amber-500 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold">رجل المباراة</div>
-            <Link href={`/sports2/player/${motm.id}`}>
+            <Link href={`/sports/player/${motm.id}`}>
               <span className="text-sm font-black text-foreground hover:text-primary transition-colors">{motm.name}</span>
             </Link>
             <span className="text-xs text-muted-foreground"> · {motm.team}</span>
@@ -1779,7 +1779,7 @@ function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
                 ? <img src={p.photo} alt="" className="w-8 h-8 rounded-full object-cover bg-muted shrink-0" loading="lazy" />
                 : <span className="w-8 h-8 rounded-full bg-muted shrink-0" />}
               <div className="min-w-0 flex-1">
-                <Link href={`/sports2/player/${p.id}`}>
+                <Link href={`/sports/player/${p.id}`}>
                   <span className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate">{p.name}</span>
                 </Link>
                 {p.captain && <span className="ms-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 align-middle">(ق)</span>}
@@ -1968,7 +1968,7 @@ export default function SportsHub() {
   const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
-  useCanonical("https://sabq.org/sports2");
+  useCanonical("https://sabq.org/sports");
 
   const { data: newsRaw, isLoading: newsLoading } = useQuery<ArticleWithDetails[]>({ queryKey: ["/api/categories", "sports", "articles"] });
   const news = Array.isArray(newsRaw) ? newsRaw : [];
@@ -2220,7 +2220,7 @@ export default function SportsHub() {
                   {comp.season && <div className="text-xs text-muted-foreground tabular-nums">موسم {comp.season}</div>}
                 </div>
                 <Link
-                  href={`/sports2/competition/${compSlug}`}
+                  href={`/sports/competition/${compSlug}`}
                   className="mr-auto shrink-0 inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/40"
                 >
                   صفحة البطولة <ChevronLeft className="w-3.5 h-3.5" />
