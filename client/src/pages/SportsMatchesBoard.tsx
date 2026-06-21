@@ -45,6 +45,9 @@ const RIYADH_TZ = "Asia/Riyadh";
 const LIVE_REFETCH_MS = 15_000;
 const TODAY_REFETCH_MS = 30_000;
 
+// بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
+const PINNED_COMP_SLUGS = ["world-cup"];
+
 const ymdFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: RIYADH_TZ,
   year: "numeric",
@@ -561,10 +564,14 @@ export default function SportsMatchesBoard() {
     });
   }, [filtered, compMeta]);
 
-  // ترتيب المجموعات: الأكثر مباريات مباشرة أولاً ثم أبكر موعد.
+  // ترتيب المجموعات: البطولات المثبّتة (كأس العالم) أولًا دائمًا، ثم الأكثر
+  // مباريات مباشرة، ثم أبكر موعد.
   const sortedGroups = useMemo(
     () =>
       [...groups].sort((a, b) => {
+        const ap = a.slug && PINNED_COMP_SLUGS.includes(a.slug) ? PINNED_COMP_SLUGS.indexOf(a.slug) : 99;
+        const bp = b.slug && PINNED_COMP_SLUGS.includes(b.slug) ? PINNED_COMP_SLUGS.indexOf(b.slug) : 99;
+        if (ap !== bp) return ap - bp;
         if (a.liveCount !== b.liveCount) return b.liveCount - a.liveCount;
         return (a.matches[0]?.timestamp ?? 0) - (b.matches[0]?.timestamp ?? 0);
       }),
