@@ -1,5 +1,5 @@
 /**
- * صفحة النادي — /sports2/team/:id
+ * صفحة النادي — /sports/team/:id
  *
  * تستهلك /api/sports/team/:id (هوية النادي + صفّه في الترتيب + مبارياته + تشكيلته).
  * تتدهور بسلاسة: 404 → حالة «غير متاح» مع رجوع للبوابة. كل البيانات معرَّبة من الخدمة.
@@ -257,7 +257,7 @@ function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
       </div>
       <div className="divide-y divide-border">
         {scorers.map((s) => (
-          <Link key={s.id} href={`/sports2/player/${s.id}`} className="flex items-center gap-3 py-2.5 hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
+          <Link key={s.id} href={`/sports/player/${s.id}`} className="flex items-center gap-3 py-2.5 hover:bg-muted/40 -mx-2 px-2 rounded-lg transition-colors">
             <span className="w-5 text-center font-bold text-muted-foreground text-sm tabular-nums">{s.rank}</span>
             {s.photo ? <img src={s.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted" />}
             <div className="flex-1 min-w-0">
@@ -299,7 +299,7 @@ function TransferColumn({ title, dir, items, limit }: { title: string; dir: "in"
             <div key={`${t.playerId}-${i}`} className="flex items-center gap-2.5 rounded-xl bg-muted/40 px-3 py-2">
               <div className="min-w-0 flex-1">
                 {t.playerId ? (
-                  <Link href={`/sports2/player/${t.playerId}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{t.player}</Link>
+                  <Link href={`/sports/player/${t.playerId}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate block">{t.player}</Link>
                 ) : (
                   <span className="text-sm font-semibold text-foreground truncate block">{t.player}</span>
                 )}
@@ -307,7 +307,7 @@ function TransferColumn({ title, dir, items, limit }: { title: string; dir: "in"
                   {dir === "in" ? "من" : "إلى"}
                   {t.teamLogo && <img src={t.teamLogo} alt="" className="w-4 h-4 object-contain" loading="lazy" />}
                   {t.teamId ? (
-                    <Link href={`/sports2/team/${t.teamId}`} className="hover:text-primary transition-colors truncate">{t.team}</Link>
+                    <Link href={`/sports/team/${t.teamId}`} className="hover:text-primary transition-colors truncate">{t.team}</Link>
                   ) : <span className="truncate">{t.team}</span>}
                 </span>
               </div>
@@ -425,7 +425,7 @@ export default function SportsTeam() {
   useEffect(() => {
     document.title = data?.team?.name ? `${data.team.name} | الرياضة - سبق` : "النادي | الرياضة - سبق";
   }, [data?.team?.name]);
-  useCanonical(`https://sabq.org/sports2/team/${id}`);
+  useCanonical(`https://sabq.org/sports/team/${id}`);
 
   const notFound = isError || (!isLoading && !data);
 
@@ -437,7 +437,7 @@ export default function SportsTeam() {
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
-        <Link href="/sports2" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5">
+        <Link href="/sports" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-5">
           <ArrowRight className="w-4 h-4" /> البوابة الرياضية
         </Link>
 
@@ -451,7 +451,7 @@ export default function SportsTeam() {
             <Shield className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
             <p className="font-bold text-foreground">صفحة النادي غير متاحة حاليًا</p>
             <p className="text-sm text-muted-foreground mt-1">قد لا يكون النادي ضمن البطولات المتاحة، أو تعذّر جلب بياناته.</p>
-            <Link href="/sports2" className="inline-block mt-4 text-sm text-primary font-semibold">العودة للبوابة الرياضية</Link>
+            <Link href="/sports" className="inline-block mt-4 text-sm text-primary font-semibold">العودة للبوابة الرياضية</Link>
           </Card>
         ) : data ? (
           <div className="space-y-6">
@@ -569,7 +569,7 @@ export default function SportsTeam() {
                           {players.map((pl) => (
                             <Link
                               key={pl.id}
-                              href={`/sports2/player/${pl.id}`}
+                              href={`/sports/player/${pl.id}`}
                               className="flex items-center gap-3 p-2.5 rounded-xl border border-border hover:bg-muted/50 transition-colors"
                             >
                               {pl.photo ? (

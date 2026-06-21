@@ -1,12 +1,12 @@
 /**
- * لوحة "مباريات اليوم" — صفحة مستقلة على /sports3/matches
+ * لوحة "مباريات اليوم" — صفحة مستقلة على /sports/matches
  *
  * كل مباريات اليوم عبر بطولاتنا، مرتّبة بالوقت ومجمّعة حسب البطولة، بجدول
  * أنيق يعرض حالة كل مباراة (لم تبدأ / جارية الآن / انتهت) والنتيجة، مع توسيع
  * كل مباراة لإظهار مسجّلي الأهداف. فلترة قوية أعلى الجدول: التاريخ، الحالة،
  * الفئة، البحث، وطريقة العرض (حسب البطولة / حسب الوقت).
  *
- * تستهلك نفس مصادر /sports2-/sports3 دون أي اعتماد جديد:
+ * تستهلك نفس مصادر البوابة الرياضية /sports دون أي اعتماد جديد:
  *   GET /api/sports/today?date=YYYY-MM-DD   (لوحة اليوم)
  *   GET /api/sports/competitions            (شعار/فئة/حالة لكل بطولة)
  *   GET /api/sports/match/:id               (مسجّلو الأهداف عند التوسيع)
@@ -329,7 +329,7 @@ export function MatchRow({
 
         {/* الفريق المضيف */}
         <Link
-          href={`/sports2/team/${f.home.id}`}
+          href={`/sports/team/${f.home.id}`}
           className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
           <span className="truncate text-[13px] leading-5 sm:text-sm">{f.home.name}</span>
@@ -360,7 +360,7 @@ export function MatchRow({
 
         {/* الفريق الضيف */}
         <Link
-          href={`/sports2/team/${f.away.id}`}
+          href={`/sports/team/${f.away.id}`}
           className={`flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
           {f.away.logo ? (
@@ -413,7 +413,7 @@ function CompetitionGroup({
       <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-gradient-to-l from-muted/60 to-transparent sm:px-4 sm:py-3">
         {slug ? (
           <Link
-            href={`/sports2/competition/${slug}`}
+            href={`/sports/competition/${slug}`}
             className="group flex min-w-0 flex-1 items-center gap-2.5"
             title={`صفحة بطولة ${name}`}
           >
@@ -471,7 +471,7 @@ export default function SportsMatchesBoard() {
   useEffect(() => {
     document.title = "مباريات اليوم | سبق";
   }, []);
-  useCanonical("https://sabq.org/sports3/matches");
+  useCanonical("https://sabq.org/sports/matches");
 
   const { data: compsData } = useQuery<{ competitions: SpCompetition[] }>({
     queryKey: ["/api/sports/competitions"],
@@ -623,7 +623,7 @@ export default function SportsMatchesBoard() {
                   </span>
                 )}
                 <Link
-                  href="/sports3"
+                  href="/sports"
                   className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
                 >
                   البوابة الرياضية <ChevronLeft className="w-4 h-4" />
@@ -789,7 +789,7 @@ export default function SportsMatchesBoard() {
                 <div key={m.id} className="border-b border-border last:border-b-0">
                   {m.competitionSlug ? (
                     <Link
-                      href={`/sports2/competition/${m.competitionSlug}`}
+                      href={`/sports/competition/${m.competitionSlug}`}
                       className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground hover:text-primary transition-colors"
                     >
                       {m.competition}

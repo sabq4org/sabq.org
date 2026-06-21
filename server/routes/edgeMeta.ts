@@ -1575,17 +1575,17 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
-  // البوابة الرياضية الجديدة — صفحة النادي: /sports2/team/:id
+  // البوابة الرياضية — صفحة النادي: /sports/team/:id (ويُقبل المسار القديم /sports2/team)
   // ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
   // سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق.
   {
-    pattern: /^\/sports2\/team\/(\d+)/,
+    pattern: /^\/sports2?\/team\/(\d+)/,
     handle: async (m) => {
       const id = Number(m[1]);
       if (!Number.isFinite(id) || id <= 0) return null;
       const t = await getTeamSeoMeta(id).catch(() => null);
       if (!t) return null;
-      const canonical = `${SITE_URL}/sports2/team/${id}`;
+      const canonical = `${SITE_URL}/sports/team/${id}`;
       const parts: string[] = [];
       if (t.rank && t.points != null && t.competitionName) {
         parts.push(`يحتل ${t.name} المركز ${t.rank} برصيد ${t.points} نقطة في ${t.competitionName}.`);
