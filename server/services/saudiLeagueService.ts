@@ -1582,13 +1582,25 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
       const current = seasons.find((s: any) => s.current) ?? seasons[seasons.length - 1];
       const start = typeof current?.start === "string" ? current.start : null;
       const end = typeof current?.end === "string" ? current.end : null;
+      let status = computeStatus(start, end);
+      // المزود قد يُبقي موسمًا قديمًا بعلم current بينما انطلقت مباريات الموسم
+      // الجديد فعلًا (شائع في الدوريات العربية)، فيظهر «انتهى الموسم» خطأً.
+      // وجود مباراة قادمة وشيكة دلالة كافية أن الموسم جارٍ — نطلب التالية فقط
+      // حين تحتسب الحالة finished (تكلفة محدودة بطلب واحد للحالات النادرة).
+      if (status === "finished") {
+        const next = await apiGet("fixtures", { league: comp.id, next: 1 }).catch(() => []);
+        const ts = next[0]?.fixture?.timestamp;
+        if (typeof ts === "number" && (ts * 1000 - Date.now()) / 86_400_000 <= 21) {
+          status = "ongoing";
+        }
+      }
       return {
         logo: lg.logo ?? null,
         season: typeof current?.year === "number" ? current.year : comp.fallbackSeason,
         round: null,
         start,
         end,
-        status: computeStatus(start, end),
+        status,
       };
     });
   } catch {
