@@ -2193,6 +2193,12 @@ export default function SportsHub() {
                   </div>
                   {comp.season && <div className="text-xs text-muted-foreground tabular-nums">موسم {comp.season}</div>}
                 </div>
+                <Link
+                  href={`/sports2/competition/${compSlug}`}
+                  className="mr-auto shrink-0 inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition-colors hover:border-primary/40"
+                >
+                  صفحة البطولة <ChevronLeft className="w-3.5 h-3.5" />
+                </Link>
               </div>
             )}
             <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />

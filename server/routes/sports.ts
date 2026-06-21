@@ -15,6 +15,7 @@ import {
   generateMatchPreview,
   generateMatchStory,
   getCompetition,
+  getCompetitionHistory,
   getCompetitionRounds,
   getFixtures,
   getFixturePrediction,
@@ -289,6 +290,24 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
+    }
+  });
+
+  // لمحة النسخة السابقة: حامل اللقب + هدّاف الموسم الماضي. بيانات تاريخية ثابتة
+  // فتُخزَّن طويلًا. تتدهور بسلاسة إلى null عند تعذّر جزء منها.
+  app.get("/api/sports/:comp/history", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, history: { previousSeason: null, champion: null, topScorer: null } });
+      return;
+    }
+    try {
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400");
+      res.json({ configured: true, history: await getCompetitionHistory(comp) });
+    } catch (error) {
+      console.error("[Sports] history failed:", error);
+      res.status(502).json({ message: "تعذر جلب لمحة النسخة السابقة حاليًا" });
     }
   });
 

@@ -365,6 +365,8 @@ const SportsBento = lazy(() => retryImport(() => import("@/pages/SportsBento")))
 const SportsLiveCenter = lazy(() => retryImport(() => import("@/pages/SportsLiveCenter")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports3/matches
 const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
+// صفحة البطولة المستقلة — /sports2/competition/:slug
+const SportsCompetition = lazy(() => retryImport(() => import("@/pages/SportsCompetition")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -870,6 +872,7 @@ function Router() {
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         {/* البوابة الرياضية الجديدة — تجربة أون لاين على /sports2 (لا تتعارض مع /category/sports) */}
+        <Route path="/sports2/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports2/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
         <Route path="/sports2/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
         <Route path="/sports2">{() => <LazyRoute component={SportsHub} />}</Route>
