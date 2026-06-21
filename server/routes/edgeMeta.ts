@@ -796,14 +796,87 @@ function buildUrArticlePayload(
   });
 }
 
-function defaultMeta(path: string) {
-  return {
+// Locale of a path by its prefix: /en* → English, /ur* → Urdu, else Arabic.
+// Drives the locale-correct default meta so unhandled English/Urdu surfaces
+// (homepage, news, static pages…) never fall back to an Arabic <title>.
+function localeOfPath(path: string): "ar" | "en" | "ur" {
+  if (path === "/en" || path.startsWith("/en/")) return "en";
+  if (path === "/ur" || path.startsWith("/ur/")) return "ur";
+  return "ar";
+}
+
+// Per-language site-level defaults (title/description/locale/site name) used as
+// the catch-all when no specific route handler matches.
+const DEFAULT_SITE_META = {
+  ar: {
     title: "سبق الذكية",
     description: "منصة إخبارية ذكية مدعومة بالذكاء الاصطناعي",
+    locale: "ar_SA",
+    siteName: ARTICLE_BRAND.ar.name,
+  },
+  en: {
+    title: "Sabq News — Smart AI-Powered News",
+    description: "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.",
+    locale: "en_US",
+    siteName: ARTICLE_BRAND.en.name,
+  },
+  ur: {
+    title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم",
+    description: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو سعودی عرب اور دنیا بھر کی تازہ ترین خبریں فراہم کرتا ہے۔",
+    locale: "ur_PK",
+    siteName: ARTICLE_BRAND.ur.name,
+  },
+} as const;
+
+function defaultMeta(path: string) {
+  const d = DEFAULT_SITE_META[localeOfPath(path)];
+  return {
+    title: d.title,
+    description: d.description,
     image: DEFAULT_OG_IMAGE,
     canonical: `${SITE_URL}${path === "/" ? "" : path}`,
     robots: "index,follow",
     type: "website",
+    locale: d.locale,
+    siteName: d.siteName,
+  };
+}
+
+// Localized landing pages (English + Urdu) that have a dedicated SPA route but
+// no dynamic DB-backed handler. Mirrors the English/Urdu entries in
+// seoInjector.ts STATIC_INDEXABLE_PAGES so the edge injector (production) emits
+// the correct-language <title>/description instead of the Arabic default.
+const LOCALIZED_STATIC_PAGES: Record<
+  string,
+  { title: string; desc: string; locale: string; siteName: string }
+> = {
+  // English
+  "/en": { title: "Sabq News — Smart AI-Powered News", desc: "Sabq News — a smart, AI-powered news platform delivering the latest from Saudi Arabia and the world.", locale: "en_US", siteName: "Sabq News" },
+  "/en/news": { title: "Latest News — Sabq", desc: "Browse the latest breaking news and updates on Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/categories": { title: "Categories — Sabq", desc: "Browse all news categories on Sabq.", locale: "en_US", siteName: "Sabq News" },
+  "/en/about": { title: "About — Sabq", desc: "Learn about Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/privacy": { title: "Privacy Policy — Sabq", desc: "Privacy policy of Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/terms": { title: "Terms of Use — Sabq", desc: "Terms of use for Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/accessibility-statement": { title: "Accessibility Statement — Sabq", desc: "Accessibility statement of Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  "/en/daily-brief": { title: "Daily Brief — Sabq", desc: "A daily roundup of the most important news from Sabq.", locale: "en_US", siteName: "Sabq News" },
+  "/en/moment-by-moment": { title: "Moment by Moment — Sabq", desc: "Live coverage of breaking events from Sabq News.", locale: "en_US", siteName: "Sabq News" },
+  // Urdu
+  "/ur": { title: "سبق نیوز — اے آئی سے چلنے والا اسمارٹ نیوز پلیٹ فارم", desc: "سبق نیوز — ایک اسمارٹ، اے آئی سے چلنے والا نیوز پلیٹ فارم جو تازہ ترین خبریں فراہم کرتا ہے۔", locale: "ur_PK", siteName: "سبق نیوز" },
+  "/ur/news": { title: "تازہ خبریں — سبق نیوز", desc: "سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔", locale: "ur_PK", siteName: "سبق نیوز" },
+};
+
+function staticPageMeta(path: string) {
+  const entry = LOCALIZED_STATIC_PAGES[path];
+  if (!entry) return null;
+  return {
+    title: entry.title,
+    description: entry.desc,
+    image: BRAND_OG_IMAGE,
+    canonical: `${SITE_URL}${path}`,
+    robots: "index,follow",
+    type: "website",
+    locale: entry.locale,
+    siteName: entry.siteName,
   };
 }
 
@@ -2075,6 +2148,12 @@ router.get("/api/edge/seo-meta", async (req, res) => {
   try {
     const path = String(req.query.path || "");
     if (!path.startsWith("/")) return res.json(defaultMeta(path));
+
+    // Localized landing pages (English/Urdu) with no dynamic handler — emit the
+    // correct-language title/description instead of the Arabic default. Keys are
+    // exact paths, so they never shadow the slug-based dynamic handlers below.
+    const staticMeta = staticPageMeta(path);
+    if (staticMeta) return res.json(staticMeta);
 
     for (const handler of ROUTE_HANDLERS) {
       const match = path.match(handler.pattern);
