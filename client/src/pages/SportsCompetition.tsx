@@ -61,7 +61,7 @@ function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return "";
-  return new Intl.DateTimeFormat("ar", { day: "numeric", month: "long", year: "numeric" }).format(dt);
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" }).format(dt);
 }
 
 function daysUntil(iso: string | null | undefined): number | null {

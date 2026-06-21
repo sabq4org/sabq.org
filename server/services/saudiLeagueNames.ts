@@ -25,6 +25,15 @@ export const SPL_TEAM_AR: Record<number, string> = {
   10509: "الخلود", // Al Kholood
   10511: "الرياض", // Al Riyadh
   10513: "نيوم", // NEOM
+  // الدوري السعودي الممتاز للسيدات
+  24884: "النصر", // Al Nassr W
+  27712: "الأهلي", // Al Ahli SC W
+  27713: "الهلال", // Al Hilal W
+  27714: "الاتحاد", // Al Ittihad W
+  27715: "القادسية", // Al Qadisiya W
+  27716: "العلا", // Al-Ula W
+  27717: "شعلة الشرقية", // Eastern Flames W
+  27718: "نيوم", // Neom SC W
 };
 
 /**
@@ -275,14 +284,18 @@ export const SPL_TROPHY_PLACE_AR: Record<string, string> = {
  * غير المعروف يبقى كما هو بدل تشويهه.
  */
 export const SPL_COMPETITION_AR: Record<string, string> = {
-  "Pro League": "دوري المحترفين",
-  "Saudi League": "الدوري السعودي",
-  "First Division": "دوري الدرجة الأولى",
-  "Division 1": "دوري الدرجة الأولى",
-  "Second Division": "دوري الدرجة الثانية",
-  "King Cup": "كأس الملك",
-  "King's Cup": "كأس الملك",
-  "Super Cup": "كأس السوبر",
+  "Pro League": "دوري روشن السعودي",
+  "Saudi League": "دوري روشن السعودي",
+  "First Division": "دوري يلو لأندية الدرجة الأولى",
+  "Division 1": "دوري يلو لأندية الدرجة الأولى",
+  "Second Division": "دوري الدرجة الثانية السعودي",
+  "King Cup": "كأس خادم الحرمين الشريفين",
+  "King's Cup": "كأس خادم الحرمين الشريفين",
+  "Super Cup": "كأس السوبر السعودي",
+  "Women's Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Women Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Womens Premier League": "الدوري السعودي الممتاز للسيدات",
+  "Saudi Women's Premier League": "الدوري السعودي الممتاز للسيدات",
   "Crown Prince Cup": "كأس ولي العهد",
   "AFC Champions League": "دوري أبطال آسيا",
   "AFC Champions League Elite": "دوري أبطال آسيا للنخبة",
