@@ -64,7 +64,7 @@ import type { ArticleWithDetails, Category } from "@shared/schema";
 export interface SpTeam { id: number; name: string; logo: string; winner: boolean | null; }
 export interface SpFixture {
   id: number; date: string; timestamp: number;
-  status: { code: string; label: string; elapsed: number | null; live: boolean; finished: boolean };
+  status: { code: string; label: string; elapsed: number | null; extra: number | null; live: boolean; finished: boolean };
   round: string; venue: { name: string; city: string };
   home: SpTeam; away: SpTeam; goals: { home: number | null; away: number | null };
 }
@@ -327,7 +327,7 @@ function MyFollowsBoard({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; 
                     {live ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-500">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                        {m.status.elapsed != null ? `${m.status.elapsed}'` : "مباشر"}
+                        {m.status.elapsed != null ? `${m.status.elapsed}${m.status.extra ? `+${m.status.extra}` : ""}'` : "مباشر"}
                       </span>
                     ) : m.status.finished ? (
                       <span className="text-[10px] font-black tabular-nums text-muted-foreground" dir="ltr">{m.goals.home ?? 0}-{m.goals.away ?? 0}</span>
@@ -387,7 +387,7 @@ function TodayMiniCard({ f, onOpen }: { f: SpLiveItem; onOpen: (id: number) => v
         <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
           {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
           {f.status.live
-            ? (f.status.elapsed != null ? `${f.status.elapsed}'` : "مباشر")
+            ? (f.status.elapsed != null ? `${f.status.elapsed}${f.status.extra ? `+${f.status.extra}` : ""}'` : "مباشر")
             : f.status.finished
             ? "انتهت"
             : fmtTime(f.timestamp)}
@@ -435,7 +435,7 @@ export function TodayCompactRow({ f, onOpen }: { f: SpLiveItem; onOpen: (id: num
         <span className={`shrink-0 inline-flex items-center gap-1 font-bold tabular-nums ${f.status.live ? "text-red-500" : "text-muted-foreground"}`}>
           {f.status.live && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
           {f.status.live
-            ? (f.status.elapsed != null ? `${f.status.elapsed}'` : "مباشر")
+            ? (f.status.elapsed != null ? `${f.status.elapsed}${f.status.extra ? `+${f.status.extra}` : ""}'` : "مباشر")
             : f.status.finished
             ? "انتهت"
             : fmtTime(f.timestamp)}
@@ -642,7 +642,7 @@ function MatchCard({ fixture, onOpen, compact = false }: { fixture: SpFixture; o
   const statusNode = status.live ? (
     <span className="inline-flex items-center gap-1 font-bold text-red-500 shrink-0">
       <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-      {status.elapsed ? `${status.elapsed}'` : "مباشر"}
+      {status.elapsed ? `${status.elapsed}${status.extra ? `+${status.extra}` : ""}'` : "مباشر"}
     </span>
   ) : status.finished ? (
     <span className="font-bold text-muted-foreground shrink-0">انتهت</span>
@@ -1625,7 +1625,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                       </span>
                     ) : fmtTime(fx.timestamp)}
                   </div>
-                  <div className={`text-xs mt-1 ${fx.status.live ? "text-red-500 font-bold" : "text-muted-foreground"}`}>{fx.status.live ? `${fx.status.elapsed ?? ""}'` : fx.status.label}</div>
+                  <div className={`text-xs mt-1 ${fx.status.live ? "text-red-500 font-bold" : "text-muted-foreground"}`}>{fx.status.live ? `${fx.status.elapsed ?? ""}${fx.status.extra ? `+${fx.status.extra}` : ""}'` : fx.status.label}</div>
                 </div>
                 <div className="flex-1 flex flex-col items-center gap-1">
                   {fx.away.logo && <img src={fx.away.logo} alt="" className="w-12 h-12 object-contain" />}

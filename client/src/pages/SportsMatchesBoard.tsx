@@ -113,6 +113,22 @@ function stateOf(f: SpLiveItem): MatchState {
   return "upcoming";
 }
 
+// ترتيب العرض: المباشر أولًا، ثم القادمة (الأبكر موعدًا)، ثم المنتهية في الأسفل
+// (الأحدث انتهاءً أولًا ضمن المنتهية). يمنع بقاء المباريات المنتهية أعلى القائمة.
+function orderRank(f: SpLiveItem): number {
+  if (f.status.live) return 0;
+  if (f.status.finished) return 2;
+  return 1;
+}
+
+function compareMatches(a: SpLiveItem, b: SpLiveItem): number {
+  const ra = orderRank(a);
+  const rb = orderRank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 2) return b.timestamp - a.timestamp; // المنتهية: الأحدث أولًا
+  return a.timestamp - b.timestamp; // المباشر/القادمة: الأبكر موعدًا أولًا
+}
+
 const STATE_FILTERS: { key: "all" | MatchState; label: string }[] = [
   { key: "all", label: "الكل" },
   { key: "live", label: "جارية الآن" },
@@ -291,7 +307,9 @@ function MatchRow({
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
               <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                {f.status.elapsed != null ? `'${f.status.elapsed}` : "مباشر"}
+                {f.status.elapsed != null
+                  ? `'${f.status.elapsed}${f.status.extra ? `+${f.status.extra}` : ""}`
+                  : "مباشر"}
               </span>
               <span className="rounded-full bg-red-500 px-1.5 py-px text-[9px] font-black leading-none text-white">
                 مباشر
@@ -443,6 +461,9 @@ export default function SportsMatchesBoard() {
   const [groupByComp, setGroupByComp] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [openMatch, setOpenMatch] = useState<number | null>(null);
+  // إخفاء الهيدر (هيدر الموقع + ترويسة الصفحة) عند التمرير لأسفل لتحرير المساحة،
+  // وإبقاء شريط الفلاتر وحده مثبّتًا في الأعلى. يعود الكل عند التمرير لأعلى.
+  const [headerHidden, setHeaderHidden] = useState(false);
 
   const today = riyadhToday();
   const isToday = date === today;
@@ -451,6 +472,26 @@ export default function SportsMatchesBoard() {
     document.title = "مباريات اليوم | سبق";
   }, []);
   useCanonical("https://sabq.org/sports3/matches");
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const delta = y - lastY;
+        if (y < 80) setHeaderHidden(false);
+        else if (delta > 6) setHeaderHidden(true);
+        else if (delta < -6) setHeaderHidden(false);
+        lastY = y;
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const { data: compsData } = useQuery<{ competitions: SpCompetition[] }>({
     queryKey: ["/api/sports/competitions"],
@@ -535,10 +576,7 @@ export default function SportsMatchesBoard() {
       byComp.get(key)!.push(m);
     }
     return Array.from(byComp.entries()).map(([name, matches]) => {
-      const sorted = [...matches].sort((a, b) => {
-        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-        return a.timestamp - b.timestamp;
-      });
+      const sorted = [...matches].sort(compareMatches);
       const slug = sorted[0]?.competitionSlug ?? null;
       const meta = slug ? compMeta.get(slug) : undefined;
       const liveCount = matches.filter((m) => m.status.live).length;
@@ -557,14 +595,7 @@ export default function SportsMatchesBoard() {
   );
 
   // قائمة مسطّحة بالوقت.
-  const flat = useMemo(
-    () =>
-      [...filtered].sort((a, b) => {
-        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-        return a.timestamp - b.timestamp;
-      }),
-    [filtered]
-  );
+  const flat = useMemo(() => [...filtered].sort(compareMatches), [filtered]);
 
   const liveTotal = allMatches.filter((m) => m.status.live).length;
 
@@ -578,11 +609,18 @@ export default function SportsMatchesBoard() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
-      <Header user={user || undefined} />
+      {/* هيدر الموقع — ينزلق للأعلى عند التمرير لأسفل لتحرير المساحة */}
+      <div
+        className={`sticky top-0 z-50 transition-transform duration-300 ${headerHidden ? "-translate-y-full" : "translate-y-0"}`}
+      >
+        <Header user={user || undefined} />
+      </div>
 
       <main className="flex-1">
-        {/* ترويسة */}
-        <div className="bg-card border-b border-border">
+        {/* ترويسة الصفحة — تنطوي عند التمرير لأسفل */}
+        <div
+          className={`bg-card border-b border-border overflow-hidden transition-all duration-300 ${headerHidden ? "max-h-0 opacity-0 border-b-0" : "max-h-40 opacity-100"}`}
+        >
           <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
             <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
               <div className="flex items-center gap-3">
@@ -617,8 +655,10 @@ export default function SportsMatchesBoard() {
           </div>
         </div>
 
-        {/* شريط الفلاتر اللاصق — أسفل الهيدر (h-16) لا خلفه */}
-        <div className="sticky top-16 z-30 border-b border-border bg-background/90 backdrop-blur-md">
+        {/* شريط الفلاتر اللاصق — أسفل الهيدر (h-16)، ويرتفع للأعلى عند إخفائه */}
+        <div
+          className={`sticky z-40 border-b border-border bg-background/90 backdrop-blur-md transition-[top] duration-300 ${headerHidden ? "top-0" : "top-16"}`}
+        >
           <div className="max-w-5xl mx-auto px-3 py-2.5 space-y-2.5 sm:px-4 sm:py-3 sm:space-y-3">
             {/* التاريخ */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
