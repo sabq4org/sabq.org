@@ -633,7 +633,7 @@ export default function SportsMatchesBoard() {
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
                 {liveTotal > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-bold border border-red-500/20">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-foreground text-[11px] font-bold">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
                   </span>
                 )}
@@ -645,9 +645,9 @@ export default function SportsMatchesBoard() {
                 )}
                 <Link
                   href="/sports/live"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-[11px] font-bold text-red-600 dark:text-red-400 hover:border-red-500/50 transition-colors"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-foreground hover:border-primary/40 transition-colors"
                 >
-                  <Radio className="w-3.5 h-3.5" /> البث المباشر · العالم
+                  <Radio className="w-3.5 h-3.5 text-red-500" /> البث المباشر · العالم
                 </Link>
                 <Link
                   href="/sports"
