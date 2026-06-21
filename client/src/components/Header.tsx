@@ -36,9 +36,12 @@ import { hasPermission } from "@/hooks/useAuth";
 interface HeaderProps {
   user?: { name?: string | null; email?: string; role?: string; profileImageUrl?: string | null; permissions?: string[] } | null;
   onMenuClick?: () => void;
+  /** افتراضيًا الهيدر لاصق أعلى الصفحة. صفحات معيّنة (مثل لوحة المباريات) تعطّله
+   *  ليُمرَّر طبيعيًا ويختفي عند النزول مُفسحًا المجال لشريط فلاتر لاصق وحده. */
+  sticky?: boolean;
 }
 
-export function Header({ user, onMenuClick }: HeaderProps) {
+export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [location, navigate] = useLocation();
   const { toast } = useToast();
@@ -90,7 +93,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
   return (
     <>
-    <header role="banner" aria-label="رأس الصفحة الرئيسي" className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60" dir="rtl">
+    <header role="banner" aria-label="رأس الصفحة الرئيسي" className={`${sticky ? "sticky top-0" : "relative"} z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60`} dir="rtl">
       <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo - Left side (Desktop only) */}
