@@ -20,6 +20,7 @@ import {
   getFixtures,
   getFixturePrediction,
   getFixturesByRound,
+  getSportsFixtureIdentity,
   getGlobalLiveFixtures,
   getGlobalTodayFixtures,
   getWorldLiveFixtures,
@@ -49,6 +50,13 @@ import {
   type SplFixture,
 } from "../services/saudiLeagueService";
 import { getTeamOgImage } from "../services/sportsOgImage";
+import {
+  getXg,
+  getPressure,
+  getMatchFacts,
+  resolveSmIdByNames,
+  isSportmonksConfigured,
+} from "../services/sportmonksService";
 import {
   addFollow,
   isValidFollowKind,
@@ -397,6 +405,81 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match player ratings failed:", error);
       res.status(502).json({ message: "تعذر جلب تقييمات اللاعبين حاليًا" });
+    }
+  });
+
+  // ---------- إثراء SportMonks للبوابة (xG/الضغط/معطيات) — سعودي/آسيا وغيرها ----------
+  // نحلّ معرّف SportMonks من هوية مباراة API-Football ثم نعيد استخدام دوال البناء
+  // عبر directSmId (نفس منطق المونديال، بلا تكرار). كلها best-effort بحُرّاس توفّر.
+  const resolveSportsSmId = async (id: number): Promise<number | null> => {
+    const identity = await getSportsFixtureIdentity(id).catch(() => null);
+    if (!identity) return null;
+    return resolveSmIdByNames({
+      key: `spl:${id}`,
+      kickoffIso: identity.kickoffIso,
+      homeNameEn: identity.homeNameEn,
+      awayNameEn: identity.awayNameEn,
+    });
+  };
+
+  const SM_ENRICH_CACHE = "public, max-age=30, s-maxage=120, stale-while-revalidate=300";
+
+  app.get("/api/sports/match/:id/xg", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res
+        .status(503)
+        .json({ configured: false, available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) {
+        return res.json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+      }
+      res.set("Cache-Control", SM_ENRICH_CACHE);
+      res.json(await getXg(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] xg failed:", error);
+      res.status(502).json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+    }
+  });
+
+  app.get("/api/sports/match/:id/pressure", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false, live: false, latest: null, points: [] });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json({ available: false, live: false, latest: null, points: [] });
+      res.set("Cache-Control", SM_ENRICH_CACHE);
+      res.json(await getPressure(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] pressure failed:", error);
+      res.status(502).json({ available: false, live: false, latest: null, points: [] });
+    }
+  });
+
+  app.get("/api/sports/match/:id/facts", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({
+        configured: false, available: false, statistics: [], weather: null, absentees: [], eventDetails: [], halftime: null,
+      });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) {
+        return res.json({ available: false, statistics: [], weather: null, absentees: [], eventDetails: [], halftime: null });
+      }
+      res.set("Cache-Control", SM_ENRICH_CACHE);
+      res.json(await getMatchFacts(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] facts failed:", error);
+      res.status(502).json({ available: false, statistics: [], weather: null, absentees: [], eventDetails: [], halftime: null });
     }
   });
 

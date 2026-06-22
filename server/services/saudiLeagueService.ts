@@ -826,6 +826,37 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   });
 }
 
+// ---------- هوية المباراة لمطابقتها بـSportMonks ----------
+
+export interface SplFixtureIdentity {
+  fixtureId: number;
+  kickoffIso: string | null;
+  homeNameEn: string | null;
+  awayNameEn: string | null;
+}
+
+const IDENTITY_TTL = 6 * 60 * 60 * 1000; // الهوية شبه ثابتة (تاريخ + أسماء)
+
+/**
+ * هوية مباراة /sports (تاريخ الانطلاق + الأسماء الإنجليزية الخام) — يستخدمها
+ * جسر SportMonks لمطابقة المباراة وجلب الإثراءات (xG/الضغط/الطقس...).
+ */
+export async function getSportsFixtureIdentity(
+  fixtureId: number,
+): Promise<SplFixtureIdentity | null> {
+  return withSWR(`spl:identity:${fixtureId}`, IDENTITY_TTL, IDENTITY_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return null;
+    return {
+      fixtureId,
+      kickoffIso: item.fixture?.date ?? null,
+      homeNameEn: item.teams?.home?.name ?? null,
+      awayNameEn: item.teams?.away?.name ?? null,
+    };
+  });
+}
+
 // ---------- النادي: معلومات + تشكيلة + صفحة متكاملة ----------
 
 const SQUAD_TTL = 24 * 60 * 60 * 1000; // التشكيلة شبه ثابتة خلال الموسم
