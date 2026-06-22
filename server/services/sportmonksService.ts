@@ -865,6 +865,66 @@ export async function getXg(
   return withSWR(`wc:xg:${r.smId}`, r.ttl, r.ttl * 3, () => buildXg(r.smId));
 }
 
+// ---------- النتيجة الحيّة اللحظية (livescores/inplay — للمتابعة المباشرة) ----------
+
+export interface WcLiveScore {
+  smId: number;
+  home: number;
+  away: number;
+  minute: number; // الدقيقة الجارية التراكمية من الشوط النشط
+  stateDevName: string;
+  live: boolean;
+  finished: boolean;
+}
+
+const FINISHED_STATES = new Set(["FT", "AET", "FT_PEN", "AET_PEN"]);
+
+async function fetchLiveScores(): Promise<WcLiveScore[]> {
+  const resp = await smGet("livescores/inplay", {
+    include: "participants;scores;periods;state",
+  });
+  const rows: any[] = Array.isArray(resp?.data) ? resp.data : [];
+  const out: WcLiveScore[] = [];
+  for (const fx of rows) {
+    const scores: any[] = Array.isArray(fx.scores) ? fx.scores : [];
+    const cur = scores.filter((s) => s.description === "CURRENT");
+    const home = cur.find((s) => s.score?.participant === "home")?.score?.goals ?? 0;
+    const away = cur.find((s) => s.score?.participant === "away")?.score?.goals ?? 0;
+    const state = fx.state?.developer_name ?? "";
+    const periods: any[] = Array.isArray(fx.periods) ? fx.periods : [];
+    const ticking = periods.find((p) => p.ticking);
+    const minute = typeof ticking?.minutes === "number" ? ticking.minutes : 0;
+    out.push({
+      smId: fx.id,
+      home,
+      away,
+      minute,
+      stateDevName: state,
+      live: LIVE_STATES.has(state),
+      finished: FINISHED_STATES.has(state),
+    });
+  }
+  return out;
+}
+
+/**
+ * النتائج الحيّة اللحظية لكل المباريات الجارية (نداء inplay واحد) خلف كاش
+ * قصير جدًا (~4ث) يُشارَك عبر دورة العامل كلها. مصدر «الوقت الحقيقي» لتحديث
+ * شاشة القفل — تحديث المزوّد <15ث، فيتجاوز كاش API-Football البطيء (20ث).
+ * مصفوفة (لا Map) لتأمين التخزين عبر withSWR.
+ */
+export async function getLiveScores(): Promise<WcLiveScore[]> {
+  return withSWR("wc:livescores", 4000, 8000, fetchLiveScores);
+}
+
+/** النتيجة الحيّة لمباراة بمعرّف API-Football (يحلّ معرّف SportMonks ثم يبحث). */
+export async function getLiveScore(apiFootballFixtureId: number): Promise<WcLiveScore | null> {
+  const r = await resolveFixture(apiFootballFixtureId).catch(() => null);
+  if (!r) return null;
+  const arr = await getLiveScores().catch(() => [] as WcLiveScore[]);
+  return arr.find((s) => s.smId === r.smId) ?? null;
+}
+
 // ---------- التعليق المباشر المترجم (من commentaries — إضافة Match Facts) ----------
 
 export interface WcCommentaryItem {

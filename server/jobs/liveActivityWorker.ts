@@ -1,7 +1,7 @@
 /**
  * عامل النشاط المباشر (iOS Live Activity push-to-update).
  *
- * كل ~10 ثوانٍ يدفع تحديثات شاشة القفل للمباريات التي لها أنشطة مباشرة فعّالة
+ * كل ~5 ثوانٍ يدفع تحديثات شاشة القفل للمباريات التي لها أنشطة مباشرة فعّالة
  * عبر APNs (apns-push-type: liveactivity)، فتتحدّث النتيجة/الشوط دون فتح
  * التطبيق. يعمل على القائد فقط (يُفحص داخل كل دورة — نفس نمط sportsAlertsJob).
  *
@@ -11,7 +11,7 @@
 import { isLeader } from "../leaderElection";
 import { runLiveActivityCycle } from "../services/liveActivityService";
 
-const INTERVAL_MS = 10_000;
+const INTERVAL_MS = 5_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
@@ -41,5 +41,5 @@ export function startLiveActivityWorker(): void {
   }
   if (timer) return;
   timer = setInterval(() => void tick(), INTERVAL_MS);
-  console.log("[LiveActivity Worker] 📲 started — every 10s (leader only)");
+  console.log("[LiveActivity Worker] 📲 started — every 5s (leader only)");
 }
