@@ -15,7 +15,6 @@ import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
 import { TeamsSection } from "@/components/worldcup/TeamsSection";
-import { WorldCupPulse } from "@/components/worldcup/WorldCupPulse";
 import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worldcup/wcTypes";
 
 export default function WorldCup() {
@@ -78,10 +77,6 @@ export default function WorldCup() {
 
       <main className="flex-1">
         <HeroSection overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
-        {/* نبض المباراة اللحظي — أقرب/أحدث مباراة (هوية المونديال الخضراء) */}
-        <div className="mx-auto w-full max-w-2xl px-4 mt-5">
-          <WorldCupPulse />
-        </div>
         <SaudiSpotlight
           saudi={overview?.saudi}
           onOpenMatch={setOpenFixtureId}
