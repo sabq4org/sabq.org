@@ -68,13 +68,26 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   return json;
 }
 
-// مفتاح يوم UTC من طابع زمني (تنسيق diary: YYYYMMDD)
-function utcDateKey(timestampSec: number): string {
-  const d = new Date(timestampSec * 1000);
+// مفتاح يوم diary (YYYYMMDD). مهم: TheSports يفهرس الـdiary بتوقيت بكين (UTC+8)
+// لا UTC — فمباراة 17:00 UTC تقع تحت اليوم التالي. نحسب المفتاح بإزاحة ساعات.
+function dateKeyAt(timestampSec: number, offsetHours: number): string {
+  const d = new Date((timestampSec + offsetHours * 3600) * 1000);
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}${m}${day}`;
+}
+
+// مفاتيح أيام مرشّحة للجسر: يوم بكين (الصحيح) + UTC + جواره ليومٍ احتياطًا ضد أي
+// التباس توقيت. مكرّرات تُزال. الحلّ يحدث مرّةً ثم يُكاش المعرّف، فلا تكرار.
+function candidateDateKeys(timestampSec: number): string[] {
+  const keys = [
+    dateKeyAt(timestampSec, 8), // بكين (UTC+8) — ما يستخدمه diary فعليًا
+    dateKeyAt(timestampSec, 0), // UTC
+    dateKeyAt(timestampSec, 32), // اليوم التالي بتوقيت بكين
+    dateKeyAt(timestampSec, -16), // اليوم السابق بتوقيت بكين
+  ];
+  return [...new Set(keys)];
 }
 
 // جدول يوم كامل لبطولة المونديال (مُعرّفات + أوقات + نتائج) — يُكاش طويلًا.
@@ -95,12 +108,15 @@ async function resolveTsMatchId(fixtureId: number, kickoffTs: number): Promise<s
   if (cached) return cached;
   if (!kickoffTs) return null;
 
-  const wc = await getWcDiary(utcDateKey(kickoffTs));
-  // مطابقة بوقت البداية بسماحية دقيقتين (فروقات تقريب بين المزوّدين)
-  const hit = wc.find((m) => Math.abs((m.match_time ?? 0) - kickoffTs) <= 120);
-  if (hit?.id) {
-    matchIdBridge.set(fixtureId, hit.id);
-    return hit.id;
+  // مطابقة بوقت البداية بسماحية دقيقتين (فروقات تقريب بين المزوّدين) عبر أيام
+  // مرشّحة (التباس توقيت بكين/UTC). أول مطابقة تُربط وتُكاش.
+  for (const dateKey of candidateDateKeys(kickoffTs)) {
+    const wc = await getWcDiary(dateKey);
+    const hit = wc.find((m) => Math.abs((m.match_time ?? 0) - kickoffTs) <= 120);
+    if (hit?.id) {
+      matchIdBridge.set(fixtureId, hit.id);
+      return hit.id;
+    }
   }
   return null;
 }
