@@ -929,6 +929,15 @@ export const navConfig: NavItem[] = [
         permissions: ["settings.view", "rss.manage"],
       },
       {
+        id: "spa_news",
+        labelKey: "nav.spa_news",
+        labelAr: "أخبار واس (SPA)",
+        path: "/dashboard/spa-news",
+        icon: Newspaper,
+        roles: ["admin"],
+        permissions: ["settings.view", "articles.create"],
+      },
+      {
         id: "integrations",
         labelKey: "nav.integrations",
         labelAr: "التكاملات",
