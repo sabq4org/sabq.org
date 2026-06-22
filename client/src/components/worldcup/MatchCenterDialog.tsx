@@ -838,7 +838,9 @@ function PossessionBar({
         <span className="text-muted-foreground">الاستحواذ</span>
         <span className="text-rose-600 tabular-nums">{away}%</span>
       </div>
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full" dir="ltr">
+      {/* بلا dir="ltr": يبقى RTL ليُحاذي الأخضر(المضيف) يمينًا والأحمر(الضيف) يسارًا
+          مطابقةً لصفّ النِّسب أعلاه — وإلا انعكس اللون عكس الجهة والنسبة */}
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full">
         <div className="bg-emerald-500" style={{ width: `${home}%` }} title={homeName} />
         <div className="bg-rose-500" style={{ width: `${away}%` }} title={awayName} />
       </div>
