@@ -303,6 +303,68 @@ export function registerWorldCupRoutes(app: Express) {
     }
   });
 
+  // نبض المباراة: حزمة خفيفة للودجت الحيّ (نتيجة + دقيقة + زخم + آخر VAR) بنداء واحد.
+  app.get("/api/world-cup/pulse/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      const detail = await getMatchDetail(fixtureId);
+      if (!detail) return res.status(404).json({ message: "المباراة غير موجودة" });
+      const fixture = await overlayLiveScore(detail.fixture); // نتيجة/دقيقة لحظية
+
+      // الزخم من مؤشّر الضغط (أفضل جهد — صفر إن لم يتوفّر)
+      const momentum = { home: 0, away: 0, leader: null as null | "home" | "away", value: 0 };
+      if (isSportmonksConfigured()) {
+        const pr = await getPressure(fixtureId).catch(() => null);
+        const last = pr?.points?.[pr.points.length - 1];
+        if (last) {
+          momentum.home = Math.round(last.home);
+          momentum.away = Math.round(Math.abs(last.away));
+        }
+        if (pr?.latest && pr.latest.side !== "even") {
+          momentum.leader = pr.latest.side as "home" | "away";
+          momentum.value = Math.round(pr.latest.value);
+        }
+      }
+
+      const varEv = [...detail.events].reverse().find((e) => e.type === "var");
+      const lastVar = varEv
+        ? { minute: varEv.minute, team: varEv.teamId === fixture.home.id ? "home" : "away" }
+        : null;
+
+      res.set(
+        "Cache-Control",
+        fixture.status.live
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=30, s-maxage=120, stale-while-revalidate=300"
+      );
+      res.json({
+        id: fixtureId,
+        home: { name: fixture.home.name, logo: fixture.home.logo },
+        away: { name: fixture.away.name, logo: fixture.away.logo },
+        score: { home: fixture.goals.home ?? 0, away: fixture.goals.away ?? 0 },
+        status: {
+          live: fixture.status.live,
+          finished: fixture.status.finished,
+          elapsed: fixture.status.elapsed,
+          extra: fixture.status.extra,
+          label: fixture.status.label,
+        },
+        kickoff: fixture.date,
+        timestamp: fixture.timestamp,
+        round: fixture.round,
+        momentum,
+        lastVar,
+      });
+    } catch (error) {
+      console.error(`[WorldCup] pulse ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب نبض المباراة حاليًا" });
+    }
+  });
+
   // التوقعات الاحتمالية للمباراة (Predictions — احتمالات SportMonks).
   // نتيجة المباراة + الفريقان يسجلان + أوفر/أندر + الفرصة المزدوجة + أرجح النتائج.
   app.get("/api/world-cup/forecast/:id", async (req, res) => {
