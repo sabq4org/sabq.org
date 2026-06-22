@@ -826,6 +826,23 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   });
 }
 
+const MATCH_EVENTS_TTL = 12 * 1000; // أحداث المباراة المباشرة — تحديث متكرّر لكشف الكروت/الفار
+
+/**
+ * أحداث المباراة فقط (نداء `fixtures/events` واحد) — يستخدمه جوب التنبيهات الرياضية
+ * للكشف اللحظي عن البطاقات وحالات الفار دون إشعال نداءات الإحصاءات/التشكيلات لكل
+ * مباراة كما يفعل getMatchDetail (جذر طوفان rate-limit). محميّ بـ SWR قصير (12ث).
+ */
+export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEvent[]> {
+  return withSWR(`spl:events:${fixtureId}`, MATCH_EVENTS_TTL, MATCH_EVENTS_TTL * 2, async () => {
+    const eventsRaw = await apiGet("fixtures/events", { fixture: fixtureId }).catch(() => []);
+    const rawNames: (string | null | undefined)[] = [];
+    for (const e of eventsRaw) rawNames.push(e.player?.name, e.assist?.name);
+    const tr = await resolveNames(rawNames);
+    return eventsRaw.map((e: any) => localizeEventRow(e, tr));
+  });
+}
+
 // ---------- هوية المباراة لمطابقتها بـSportMonks ----------
 
 export interface SplFixtureIdentity {

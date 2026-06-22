@@ -336,6 +336,12 @@ struct WCTeamSheet: View {
     @State private var loading = true
     @State private var route: WCTeamRoute?
 
+    @Environment(AuthStore.self) private var authStore
+    @State private var isFollowing = false
+    @State private var followBusy = false
+    @State private var showLogin = false
+    @State private var showAlertPrefs = false
+
     init(team: WCTeam) {
         self.team = team
         _teamId = State(initialValue: team.id)
@@ -355,6 +361,7 @@ struct WCTeamSheet: View {
                 } else {
                     VStack(alignment: .leading, spacing: 22) {
                         headerCard
+                        followBar
                         if let group = profile?.group, !group.rows.isEmpty {
                             groupTable(group)
                         }
@@ -386,6 +393,11 @@ struct WCTeamSheet: View {
                 case .player(let id): WCPlayerSheet(playerId: id).presentationDetents([.large])
                 }
             }
+            .sheet(isPresented: $showLogin) { LoginSheet() }
+            .sheet(isPresented: $showAlertPrefs) {
+                NavigationStack { WCMatchEventNotificationsView() }
+            }
+            .task(id: teamId) { await refreshFollowState() }
         }
         .sabqRTL()
     }
@@ -444,6 +456,90 @@ struct WCTeamSheet: View {
                            startPoint: .topTrailing, endPoint: .bottomLeading)
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    // MARK: متابعة التنبيهات
+
+    /// زر متابعة تنبيهات المنتخب + اختصار لاختيار أنواع الأحداث (هدف/كرت/فار…)
+    /// حين يكون متابِعًا. غير المسجّل يُوجَّه لتسجيل الدخول.
+    private var followBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                if authStore.isLoggedIn {
+                    Task { await toggleFollow() }
+                } else {
+                    showLogin = true
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    if followBusy {
+                        ProgressView().controlSize(.small)
+                            .tint(isFollowing ? .white : WCTheme.emeraldDeep)
+                    } else {
+                        Image(systemName: isFollowing ? "bell.fill" : "bell")
+                            .font(SabqFonts.app(size: 14, weight: .semibold))
+                    }
+                    Text(isFollowing ? "تتابع التنبيهات" : "تابع التنبيهات")
+                        .font(SabqFonts.app(size: 13, weight: .heavy))
+                }
+                .foregroundStyle(isFollowing ? .white : WCTheme.emeraldDeep)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(
+                    Capsule().fill(isFollowing ? WCTheme.emeraldDeep : WCTheme.emerald.opacity(0.14))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(followBusy)
+
+            if isFollowing {
+                Button { showAlertPrefs = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                        Text("نوع التنبيهات")
+                            .font(SabqFonts.app(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(WCTheme.emeraldDeep)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(Capsule().stroke(WCTheme.emeraldDeep.opacity(0.35), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// مزامنة حالة المتابعة من الخادم (للمسجّلين فقط). يُستدعى عند فتح/تبديل المنتخب.
+    private func refreshFollowState() async {
+        guard authStore.isLoggedIn else {
+            await MainActor.run { isFollowing = false }
+            return
+        }
+        if let follows = try? await APIClient.shared.fetchSportsFollows() {
+            let following = follows.contains { $0.kind == "team" && $0.refId == String(teamId) }
+            await MainActor.run { isFollowing = following }
+        }
+    }
+
+    /// تفعيل/إلغاء متابعة المنتخب (يُفترض أنّ المستخدم مسجّل — الزرّ يتحقّق قبلها).
+    private func toggleFollow() async {
+        await MainActor.run { followBusy = true }
+        do {
+            if isFollowing {
+                try await APIClient.shared.removeSportsFollow(kind: "team", refId: String(teamId))
+                await MainActor.run { isFollowing = false; followBusy = false; SabqHaptics.medium() }
+            } else {
+                try await APIClient.shared.addSportsFollow(
+                    kind: "team",
+                    refId: String(teamId),
+                    refName: headerTeam.name,
+                    refLogo: headerTeam.logo
+                )
+                await MainActor.run { isFollowing = true; followBusy = false; SabqHaptics.medium() }
+            }
+        } catch {
+            await MainActor.run { followBusy = false }
+        }
     }
 
     // MARK: ترتيب المجموعة

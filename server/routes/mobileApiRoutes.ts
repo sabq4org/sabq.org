@@ -5440,6 +5440,103 @@ router.delete("/members/push-token", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// Sports follows + match-event alert preferences (native apps)
+// GET/POST/DELETE /api/v1/sports/follows
+// GET/PUT        /api/v1/sports/alert-prefs
+// ==========================================
+// النسخة المعتمِدة على جلسة العضو (Bearer) من مسارات الويب /api/sports/follows
+// (التي تتطلّب جلسة Passport). متابعة الفريق + تفضيلات أنواع أحداث الإشعار العامّة
+// (انطلاق/أهداف/بطاقات/فار/نهاية) تُغذّي جوب التنبيهات الرياضية.
+router.get("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { listFollows } = await import("../services/sportsFollowsService");
+    const follows = await listFollows(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, follows });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب متابعاتك حاليًا" });
+  }
+});
+
+router.post("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { addFollow, isValidFollowKind } = await import("../services/sportsFollowsService");
+    const { kind, refId, refName, refLogo } = req.body ?? {};
+    if (!isValidFollowKind(kind) || !refId || !refName) {
+      return res.status(400).json({ success: false, message: "بيانات المتابعة غير مكتملة" });
+    }
+    const follow = await addFollow(session.userId, {
+      kind,
+      refId: String(refId),
+      refName: String(refName),
+      refLogo: refLogo ? String(refLogo) : null,
+    });
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, follow });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ المتابعة حاليًا" });
+  }
+});
+
+router.delete("/sports/follows", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { removeFollow, isValidFollowKind } = await import("../services/sportsFollowsService");
+    const kind = (req.query.kind ?? req.body?.kind) as unknown;
+    const refId = (req.query.refId ?? req.body?.refId) as unknown;
+    if (!isValidFollowKind(kind) || !refId) {
+      return res.status(400).json({ success: false, message: "بيانات إلغاء المتابعة غير مكتملة" });
+    }
+    await removeFollow(session.userId, kind, String(refId));
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /sports/follows error:", error);
+    res.status(502).json({ success: false, message: "تعذر إلغاء المتابعة حاليًا" });
+  }
+});
+
+router.get("/sports/alert-prefs", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { getPrefs } = await import("../services/sportsAlertPrefsService");
+    const preferences = await getPrefs(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/alert-prefs error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب تفضيلات الإشعارات" });
+  }
+});
+
+router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
+    const body = req.body ?? {};
+    const patch: Record<string, boolean> = {};
+    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime"] as const) {
+      if (typeof body[key] === "boolean") patch[key] = body[key];
+    }
+    const preferences = await upsertPrefs(session.userId, patch);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, preferences });
+  } catch (error) {
+    console.error("[Mobile API] PUT /sports/alert-prefs error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ تفضيلات الإشعارات" });
+  }
+});
+
+// ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
 // POST /api/v1/live-activity/register   { fixtureId, token }
 // POST /api/v1/live-activity/end        { token }

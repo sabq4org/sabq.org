@@ -22,6 +22,7 @@
 // خروج Railway في قائمة TheSports المسموح بها (هذه القائمة هي ما يحجب «URL not
 // authorized»). بدون أيٍّ منهما يبقى المزوّد خاملًا والسلوك الحالي كما هو.
 
+import https from "node:https";
 import { withSWR } from "../memoryCache";
 
 const TS_BASE = "https://api.thesports.com/v1/football";
@@ -42,10 +43,53 @@ const BRIDGE_TTL = 6 * 60 * 60 * 1000; // المعرّف لا يتغيّر؛ ن�
 // ربط إيجابي فقط: معرّف مباراتنا (API-Football) → معرّف مباراة TheSports.
 const matchIdBridge = new Map<number, string>();
 
+// قاطع دائرة: عند أي فشل (IP غير مُدرَج/شبكة/نقطة محجوبة) نُجمّد كل نداءات
+// TheSports لفترة تهدئة، فلا يتكرّر النداء البطيء في كل طلب ويُبطئ نقاطَ المستخدم
+// (overview/fixtures). السبب: withSWR لا يخزّن الأخطاء — فبلا القاطع يُعاد النداء
+// الفاشل كل مرّة قبل التراجع لـ SportMonks. يتعافى ذاتيًّا بعد انتهاء التهدئة.
+const TS_FAIL_COOLDOWN_MS = 60 * 1000;
+let tsCooldownUntil = 0;
+
+// مهلة قصيرة: نتيجة لحظية لا قيمة لها إن تأخّرت، والأهم ألّا تُبطئ صفحة المستخدم.
+const TS_HTTP_TIMEOUT_MS = 4000;
+
+// اتصال IPv4 مُعاد الاستخدام (keep-alive) — يلغي مصافحة TLS جديدة لكل نداء،
+// فيقارب أداء fetch المجمّع. family:4 على الوكيل يضمن IPv4 (قائمة TheSports IPv4).
+const tsAgent = new https.Agent({ keepAlive: true, family: 4, maxSockets: 8 });
+
 export function isTheSportsConfigured(): boolean {
   return Boolean(
     (process.env.THESPORTS_USER || "").trim() && (process.env.THESPORTS_SECRET || "").trim()
   );
+}
+
+// نُجبر IPv4 صراحةً (family: 4). قائمة TheSports المسموح بها مبنيّة على IPv4 فقط،
+// و`fetch` العام في Node (undici) يفضّل IPv6 عند توفّره فيخرج بعنوان غير مُدرَج
+// ويرجع «IP not authorized» — فتُعطَّل الميزة بصمت رغم صحّة المفتاح وإدراج IPv4.
+// node:https يمرّر family إلى مقبس الاتصال فيُحلّ الاسم ويتصل عبر IPv4 حصرًا.
+function httpsGetJson(url: URL, timeoutMs: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { agent: tsAgent, timeout: timeoutMs }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (status >= 400) {
+        res.resume();
+        reject(new Error(`[TheSports] HTTP ${status}`));
+        return;
+      }
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => (body += chunk));
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch {
+          reject(new Error("[TheSports] رد غير صالح (JSON)"));
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("[TheSports] انتهت المهلة")));
+    req.on("error", reject);
+  });
 }
 
 async function tsGet(path: string, params: Record<string, string> = {}): Promise<any> {
@@ -58,9 +102,7 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   url.searchParams.set("user", user);
   url.searchParams.set("secret", secret);
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(12_000) });
-  if (!response.ok) throw new Error(`[TheSports] HTTP ${response.status} for ${path}`);
-  const json = await response.json();
+  const json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
   // الأخطاء تأتي 200 بجسم {err:"..."} (نقطة محجوبة / IP غير مُدرَج)
   if (json && typeof json === "object" && "err" in json) {
     throw new Error(`[TheSports] ${json.err}`);
@@ -138,19 +180,46 @@ async function getLiveMap(): Promise<Map<string, any>> {
 export interface TsFastScore {
   home: number;
   away: number;
+  penHome: number | null;
+  penAway: number | null;
   statusId: number;
   live: boolean;
   finished: boolean;
 }
 
 // score: [matchId, statusId, [home: reg,ht,red,yel,corner,ot,pen], [away...], ts, ""]
-function decodeScore(scoreArr: any): { home: number; away: number; statusId: number } | null {
+// خانات النتيجة (موثّقة من TheSports): 0=وقت أصلي 1=شوط أول 2=حمراء 3=صفراء
+// 4=ركنيات 5=وقت إضافي 6=ركلات ترجيح. خوارزمية المجموع الرسمية: إن كان الوقت
+// الإضافي ≠ 0 فالنتيجة المعروضة هي مجموع الوقت الإضافي (يتضمّن الـ90د)، وإلا
+// فهي الوقت الأصلي؛ والركلات تُعرَض منفصلةً. هذا يصحّح أدوار خروج المغلوب —
+// دور المجموعات بلا إضافي/ركلات فالخانة [0] تكفي تلقائيًا.
+function decodeScore(
+  scoreArr: any
+): { home: number; away: number; penHome: number | null; penAway: number | null; statusId: number } | null {
   if (!Array.isArray(scoreArr) || scoreArr.length < 4) return null;
   const statusId = Number(scoreArr[1]);
   const homeArr = scoreArr[2];
   const awayArr = scoreArr[3];
   if (!Array.isArray(homeArr) || !Array.isArray(awayArr)) return null;
-  return { home: Number(homeArr[0]) || 0, away: Number(awayArr[0]) || 0, statusId };
+
+  const reg = (a: any[]) => Number(a[0]) || 0;
+  const ot = (a: any[]) => Number(a[5]) || 0;
+  const pen = (a: any[]) => Number(a[6]) || 0;
+
+  const otHome = ot(homeArr);
+  const otAway = ot(awayArr);
+  const useOvertime = otHome !== 0 || otAway !== 0;
+  const penHomeVal = pen(homeArr);
+  const penAwayVal = pen(awayArr);
+  const hasPenalties = penHomeVal !== 0 || penAwayVal !== 0;
+
+  return {
+    home: useOvertime ? otHome : reg(homeArr),
+    away: useOvertime ? otAway : reg(awayArr),
+    penHome: hasPenalties ? penHomeVal : null,
+    penAway: hasPenalties ? penAwayVal : null,
+    statusId,
+  };
 }
 
 /**
@@ -164,6 +233,8 @@ export async function getTheSportsFastScore(
   kickoffTs: number
 ): Promise<TsFastScore | null> {
   if (!isTheSportsConfigured()) return null;
+  // قاطع الدائرة: أثناء التهدئة لا نلمس الشبكة إطلاقًا → تراجع فوري لـ SportMonks.
+  if (Date.now() < tsCooldownUntil) return null;
   try {
     const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs);
     if (!tsMatchId) return null;
@@ -178,11 +249,15 @@ export async function getTheSportsFastScore(
     return {
       home: decoded.home,
       away: decoded.away,
+      penHome: decoded.penHome,
+      penAway: decoded.penAway,
       statusId: decoded.statusId,
       live: TS_LIVE_STATUS.has(decoded.statusId),
       finished: decoded.statusId === TS_FINISHED_STATUS,
     };
   } catch {
-    return null; // IP غير مُدرَج / نقطة محجوبة / شبكة → تراجع صامت
+    // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return null; // تراجع صامت لـ SportMonks ثم API-Football
   }
 }

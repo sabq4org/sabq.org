@@ -22,9 +22,16 @@ import { notificationBus } from "../notificationBus";
 import {
   getGlobalTodayFixtures,
   getGlobalLiveFixtures,
+  getMatchEventsOnly,
   type SplLiveBoardItem,
+  type SplMatchEvent,
 } from "./saudiLeagueService";
 import { getTeamFollowerUserIds } from "./sportsFollowsService";
+import { getTheSportsFastScore, isTheSportsConfigured } from "./theSportsService";
+import {
+  filterUsersByEventPref,
+  type SportsAlertEventKey,
+} from "./sportsAlertPrefsService";
 import {
   sendPushNotification,
   createCustomNotificationPayload,
@@ -42,7 +49,16 @@ interface MatchSnapshot {
   finished: boolean;
 }
 
-type SportsAlertKind = "kickoff" | "goal" | "fulltime";
+type SportsAlertKind = "kickoff" | "goal" | "fulltime" | "card" | "var";
+
+// تحويل نوع الحدث إلى مفتاح التفضيل المقابل (لترشيح المستلمين).
+const ALERT_KIND_TO_PREF: Record<SportsAlertKind, SportsAlertEventKey> = {
+  kickoff: "kickoff",
+  goal: "goals",
+  fulltime: "fulltime",
+  card: "cards",
+  var: "varReview",
+};
 
 interface DetectedAlert {
   fixtureId: number;
@@ -57,6 +73,14 @@ interface DetectedAlert {
 const snapshots = new Map<number, MatchSnapshot>();
 let lastCleanup = 0;
 
+// توقيعات أحداث الكروت/الفار المُرسَلة لكل مباراة (id → set of signatures). أول
+// رصدٍ لمباراة يؤسّس خطّ الأساس بلا إرسال (يتفادى إغراق متابعٍ جديد بكروت سابقة).
+const eventSeen = new Map<number, Set<string>>();
+let lastEventCleanup = 0;
+
+const eventSig = (e: SplMatchEvent): string =>
+  `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
+
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
 
 function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
@@ -65,13 +89,16 @@ function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
 
   for (const m of matches) {
     seenIds.add(m.id);
+    const prev = snapshots.get(m.id);
+    // اللقطة غير متناقصة في الأهداف: لو تذبذب المصدر (TheSports يرجع ثم يتراجع
+    // لـAPI-Football الأبطأ) لا تنخفض النتيجة المخزّنة، فلا يتكرّر إشعار الهدف
+    // عند ارتدادها صعودًا، ولا يُطلَق هدف زائف عند الهبوط (هدف فار ملغى = لا إشعار).
     const cur: MatchSnapshot = {
-      homeGoals: m.goals.home ?? 0,
-      awayGoals: m.goals.away ?? 0,
+      homeGoals: Math.max(m.goals.home ?? 0, prev?.homeGoals ?? 0),
+      awayGoals: Math.max(m.goals.away ?? 0, prev?.awayGoals ?? 0),
       live: m.status.live,
       finished: m.status.finished,
     };
-    const prev = snapshots.get(m.id);
     snapshots.set(m.id, cur);
 
     // أول مشاهدة: خطّ أساس فقط، لا إرسال.
@@ -91,8 +118,9 @@ function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
       });
     }
 
-    // هدف (تغيّر النتيجة) — أثناء اللعب فقط
-    if (cur.live && (cur.homeGoals !== prev.homeGoals || cur.awayGoals !== prev.awayGoals)) {
+    // هدف (تغيّر النتيجة) — أثناء اللعب فقط. حارس تصاعدي: لا نُرسل إلا بزيادة
+    // مجموع الأهداف (يمنع إشعارًا زائفًا عند تراجع المصدر أو إلغاء هدف بالفار).
+    if (cur.live && cur.homeGoals + cur.awayGoals > prev.homeGoals + prev.awayGoals) {
       const homeScored = cur.homeGoals > prev.homeGoals;
       const scorer = homeScored ? m.home.name : m.away.name;
       const minute = m.status.elapsed != null ? ` · د.${m.status.elapsed}` : "";
@@ -127,6 +155,69 @@ function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
   }
 
   return alerts;
+}
+
+/**
+ * كشف أحداث البطاقات/الفار للمباريات المباشرة التي لها متابعون. نداء أحداثٍ واحد
+ * لكل مباراة (fixtures/events، كاش 12ث) — ونتجاوز أيّ مباراة لا يتابعها أحد كي لا
+ * نستهلك نداء API بلا داعٍ. أول رصدٍ لمباراة = خطّ أساس بلا إرسال.
+ */
+async function detectEventAlerts(matches: SplLiveBoardItem[]): Promise<DetectedAlert[]> {
+  const out: DetectedAlert[] = [];
+  const allIds = new Set(matches.map((m) => m.id));
+
+  for (const m of matches) {
+    if (!m.status.live) continue;
+    const teamRefIds = [String(m.home.id), String(m.away.id)];
+    const followers = await getTeamFollowerUserIds(teamRefIds);
+    if (followers.length === 0) continue; // لا متابع → لا نداء API
+
+    let events: SplMatchEvent[];
+    try {
+      events = await getMatchEventsOnly(m.id);
+    } catch {
+      continue;
+    }
+
+    const prev = eventSeen.get(m.id);
+    eventSeen.set(m.id, new Set(events.map(eventSig)));
+    if (!prev) continue; // خطّ أساس فقط
+
+    const matchName = `${m.home.name} × ${m.away.name}`;
+    for (const e of events) {
+      if (prev.has(eventSig(e))) continue; // ليس جديدًا
+      const minute = e.minute != null ? ` · د.${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
+      if (e.type === "yellow-card" || e.type === "red-card") {
+        const icon = e.type === "red-card" ? "🟥" : "🟨";
+        out.push({
+          fixtureId: m.id,
+          kind: "card",
+          title: `${icon} ${e.label}`,
+          body: `${e.player ? `${e.player} · ` : ""}${e.team || matchName}${minute}`,
+          teamRefIds,
+        });
+      } else if (e.type === "var") {
+        out.push({
+          fixtureId: m.id,
+          kind: "var",
+          title: "🎦 مراجعة الفار",
+          body: `${e.label} · ${matchName}${minute}`,
+          teamRefIds,
+        });
+      }
+    }
+  }
+
+  // تنظيف دوريّ لتوقيعات مباريات لم تعد ضمن القائمة (مرّة كل ساعة).
+  const now = Date.now();
+  if (now - lastEventCleanup > 3_600_000) {
+    lastEventCleanup = now;
+    for (const id of eventSeen.keys()) {
+      if (!allIds.has(id)) eventSeen.delete(id);
+    }
+  }
+
+  return out;
 }
 
 /** دفع إشعار لأجهزة مستخدم واحد (APNs + FCM) — أفضل جهد، لا يرمي. */
@@ -168,7 +259,10 @@ async function pushToUserDevices(
 
 /** توصيل تنبيه واحد لكل متابعي الفريقين (inbox + بثّ + دفع). */
 async function dispatchAlert(alert: DetectedAlert): Promise<number> {
-  const userIds = await getTeamFollowerUserIds(alert.teamRefIds);
+  const followers = await getTeamFollowerUserIds(alert.teamRefIds);
+  if (followers.length === 0) return 0;
+  // ترشيح المتابعين بحسب تفضيلهم لنوع هذا الحدث (بلا صفّ تفضيلات = الكل مفعّل).
+  const userIds = await filterUsersByEventPref(followers, ALERT_KIND_TO_PREF[alert.kind]);
   if (userIds.length === 0) return 0;
 
   const deeplink = "/sports";
@@ -207,6 +301,42 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
   return userIds.length;
 }
 
+// تركيب نتيجة/حالة TheSports اللحظية على مباريات المونديال قبل كشف الأحداث —
+// فيُطلَق إشعار الهدف/الانطلاق بنفس سرعة ما يراه المستخدم على الشاشة (~5-20ث)
+// بدل تأخّر API-Football (~60ث+). أفضل جهد: أي فشل/عدم تهيئة → نُبقي قيمة المصدر
+// الحالي. مهم: لا نُحوّر كائنات كاش saudiLeagueService — نُرجّع نسخًا جديدة.
+//
+// النطاق: مباريات المونديال الجارية الآن، أو المقرّرة التي اقترب موعدها (نافذة من
+// 3 ساعات قبل البداية حتى 10 دقائق بعدها) — كي يُسرّع الانطلاق دون حلّ جسرٍ
+// لمباريات بعيدة. detail_live حيّ فقط، فالمنتهية تتراجع تلقائيًا للمصدر الحالي.
+async function overlayWcFastScore(matches: SplLiveBoardItem[]): Promise<SplLiveBoardItem[]> {
+  if (!isTheSportsConfigured()) return matches;
+  const now = Math.floor(Date.now() / 1000);
+  return Promise.all(
+    matches.map(async (m) => {
+      if (m.competitionSlug !== "world-cup") return m;
+      const nearKickoff =
+        !m.status.finished && m.timestamp <= now + 600 && m.timestamp >= now - 3 * 3600;
+      if (!m.status.live && !nearKickoff) return m;
+      try {
+        const ts = await getTheSportsFastScore(m.id, m.timestamp);
+        if (!ts || (!ts.live && !ts.finished)) return m;
+        return {
+          ...m,
+          goals: { home: ts.home, away: ts.away },
+          status: {
+            ...m.status,
+            live: ts.live,
+            finished: ts.finished || m.status.finished,
+          },
+        };
+      } catch {
+        return m;
+      }
+    }),
+  );
+}
+
 export interface SportsAlertsCycleSummary {
   matches: number;
   alerts: number;
@@ -226,13 +356,19 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   const byId = new Map<number, SplLiveBoardItem>();
   for (const m of today) byId.set(m.id, m);
   for (const m of live) byId.set(m.id, m); // الأحدث يَجُبّ
-  const matches = [...byId.values()];
+  // نتيجة/حالة لحظية من TheSports لمباريات المونديال (overlay) — يجعل إشعار
+  // الهدف/الانطلاق بنفس سرعة الشاشة. أفضل جهد، يتراجع تلقائيًا عند عدم التهيئة.
+  const matches = await overlayWcFastScore([...byId.values()]);
+  // أحداث النتيجة/الحالة (انطلاق/هدف/نهاية) + أحداث البطاقات/الفار (للمباريات
+  // المباشرة التي لها متابعون فقط).
   const alerts = detectAlerts(matches);
+  const eventAlerts = await detectEventAlerts(matches);
+  const allAlerts = [...alerts, ...eventAlerts];
 
   let recipients = 0;
-  for (const alert of alerts) {
+  for (const alert of allAlerts) {
     recipients += await dispatchAlert(alert);
   }
 
-  return { matches: matches.length, alerts: alerts.length, recipients };
+  return { matches: matches.length, alerts: allAlerts.length, recipients };
 }
