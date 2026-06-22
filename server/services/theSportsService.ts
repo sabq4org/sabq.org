@@ -164,6 +164,8 @@ async function resolveTsMatchId(fixtureId: number, kickoffTs: number): Promise<s
 }
 
 // كل المباريات الجارية الآن (نداء واحد يخدم جميع المباريات) — يُكاش بالثواني.
+// يرجع كل عنصر بحقوله الكاملة: score + stats + incidents + tlive — فنقرأ النتيجة
+// والأحداث والإحصاءات والتعليق من النداء نفسه بلا تكلفة شبكة إضافية.
 async function getLiveMap(): Promise<Map<string, any>> {
   const data = await withSWR(
     "ts:detail_live",
@@ -175,6 +177,14 @@ async function getLiveMap(): Promise<Map<string, any>> {
   const map = new Map<string, any>();
   for (const m of results) if (m?.id) map.set(m.id, m);
   return map;
+}
+
+// عنصر detail_live الخام لمباراتنا (بعد حلّ الجسر) — مصدر مشترك للنتيجة والأحداث.
+async function getLiveEntry(fixtureId: number, kickoffTs: number): Promise<any | null> {
+  const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs);
+  if (!tsMatchId) return null;
+  const liveMap = await getLiveMap();
+  return liveMap.get(tsMatchId) ?? null;
 }
 
 export interface TsFastScore {
@@ -222,6 +232,153 @@ function decodeScore(
   };
 }
 
+// ───────────────────────── أحداث المباراة (incidents) ─────────────────────────
+// خريطة أكواد TheSports (مُستخرَجة تجريبيًا من مباريات المونديال الحيّة + التوثيق):
+//   1 هدف · 8 هدف ركلة جزاء · 3 صفراء · 4 حمراء · 15 صفراوان→حمراء · 9 تبديل ·
+//   11 ركلة جزاء (احتُسبت) · 12 ركلة جزاء مهدرة · 17/28 VAR · 19 وقت بدل ضائع.
+// position: 1=صاحب الأرض، 2=الضيف، 0=محايد.
+export type TsEventType =
+  | "goal"
+  | "penalty_goal"
+  | "yellow"
+  | "red"
+  | "yellow_red"
+  | "sub"
+  | "penalty"
+  | "penalty_missed"
+  | "var"
+  | "injury_time"
+  | "other";
+
+const INCIDENT_TYPE: Record<number, TsEventType> = {
+  1: "goal",
+  8: "penalty_goal",
+  3: "yellow",
+  4: "red",
+  15: "yellow_red",
+  9: "sub",
+  11: "penalty",
+  12: "penalty_missed",
+  17: "var",
+  28: "var",
+  19: "injury_time",
+};
+
+export interface TsEvent {
+  rawType: number;
+  type: TsEventType;
+  team: "home" | "away" | null;
+  minute: number;
+  second: number | null;
+  player: string | null;
+  playerId: string | null;
+  assist: string | null;
+  inPlayer: string | null;
+  outPlayer: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  varReason: number | null;
+  varResult: number | null;
+}
+
+function teamFromPosition(p: any): "home" | "away" | null {
+  const n = Number(p);
+  return n === 1 ? "home" : n === 2 ? "away" : null;
+}
+
+function decodeEvents(incidents: any): TsEvent[] {
+  if (!Array.isArray(incidents)) return [];
+  return incidents
+    .map((inc): TsEvent => ({
+      rawType: Number(inc?.type) || 0,
+      type: INCIDENT_TYPE[Number(inc?.type)] ?? "other",
+      team: teamFromPosition(inc?.position),
+      minute: Number(inc?.time) || 0,
+      second: inc?.second != null ? Number(inc.second) : null,
+      player: inc?.player_name ?? null,
+      playerId: inc?.player_id ?? null,
+      assist: inc?.assist1_name ?? null,
+      inPlayer: inc?.in_player_name ?? null,
+      outPlayer: inc?.out_player_name ?? null,
+      homeScore: inc?.home_score != null ? Number(inc.home_score) : null,
+      awayScore: inc?.away_score != null ? Number(inc.away_score) : null,
+      varReason: inc?.var_reason != null ? Number(inc.var_reason) : null,
+      varResult: inc?.var_result != null ? Number(inc.var_result) : null,
+    }))
+    .sort((a, b) => (a.second ?? a.minute * 60) - (b.second ?? b.minute * 60));
+}
+
+// ───────────────────────── إحصاءات حيّة (stats) ─────────────────────────
+// أكواد TheSports: 25 استحواذ% · 21 تسديد على المرمى · 22 خارج المرمى ·
+//   23 هجمات · 24 هجمات خطرة · 2 ركنيات · 3 بطاقات صفراء · 4 بطاقات حمراء.
+export interface TsLiveStats {
+  possession?: [number, number];
+  shotsOnTarget?: [number, number];
+  shotsOffTarget?: [number, number];
+  attacks?: [number, number];
+  dangerousAttacks?: [number, number];
+  corners?: [number, number];
+  yellow?: [number, number];
+  red?: [number, number];
+}
+
+const STAT_TYPE: Record<number, keyof TsLiveStats> = {
+  25: "possession",
+  21: "shotsOnTarget",
+  22: "shotsOffTarget",
+  23: "attacks",
+  24: "dangerousAttacks",
+  2: "corners",
+  3: "yellow",
+  4: "red",
+};
+
+function decodeStats(stats: any): TsLiveStats | null {
+  if (!Array.isArray(stats) || stats.length === 0) return null;
+  const out: TsLiveStats = {};
+  for (const s of stats) {
+    const key = STAT_TYPE[Number(s?.type)];
+    if (key) out[key] = [Number(s?.home) || 0, Number(s?.away) || 0];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+// ───────────────────────── تعليق نصّي مباشر (tlive) ─────────────────────────
+export interface TsCommentaryItem {
+  minute: string;
+  text: string;
+  position: number;
+}
+
+function decodeCommentary(tlive: any): TsCommentaryItem[] {
+  if (!Array.isArray(tlive)) return [];
+  return tlive
+    .filter((t) => t && t.data)
+    .map((t) => ({
+      minute: String(t.time ?? ""),
+      text: String(t.data),
+      position: Number(t.position) || 0,
+    }));
+}
+
+export interface TsMatchLive extends TsFastScore {
+  events: TsEvent[];
+  stats: TsLiveStats | null;
+  commentary: TsCommentaryItem[];
+}
+
+function buildFastScore(decoded: NonNullable<ReturnType<typeof decodeScore>>): TsFastScore {
+  return {
+    home: decoded.home,
+    away: decoded.away,
+    penHome: decoded.penHome,
+    penAway: decoded.penAway,
+    statusId: decoded.statusId,
+    live: TS_LIVE_STATUS.has(decoded.statusId),
+    finished: decoded.statusId === TS_FINISHED_STATUS,
+  };
+}
+
 /**
  * النتيجة اللحظية الفائقة لمباراة مونديال — أفضل جهد.
  * @param fixtureId معرّف مباراتنا (API-Football)
@@ -236,28 +393,42 @@ export async function getTheSportsFastScore(
   // قاطع الدائرة: أثناء التهدئة لا نلمس الشبكة إطلاقًا → تراجع فوري لـ SportMonks.
   if (Date.now() < tsCooldownUntil) return null;
   try {
-    const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs);
-    if (!tsMatchId) return null;
-
-    const liveMap = await getLiveMap();
-    const live = liveMap.get(tsMatchId);
+    const live = await getLiveEntry(fixtureId, kickoffTs);
     if (!live) return null; // ليست جارية الآن (منتهية/لم تبدأ) → اترك المصدر الحالي
-
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
-
-    return {
-      home: decoded.home,
-      away: decoded.away,
-      penHome: decoded.penHome,
-      penAway: decoded.penAway,
-      statusId: decoded.statusId,
-      live: TS_LIVE_STATUS.has(decoded.statusId),
-      finished: decoded.statusId === TS_FINISHED_STATUS,
-    };
+    return buildFastScore(decoded);
   } catch {
     // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
     tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
     return null; // تراجع صامت لـ SportMonks ثم API-Football
+  }
+}
+
+/**
+ * لقطة حيّة كاملة لمباراة مونديال: النتيجة + الأحداث + الإحصاءات + التعليق —
+ * كلّها من نداء detail_live المكاش نفسه (بلا تكلفة شبكة إضافية فوق fast score).
+ * أفضل جهد: ترجع null عند أي فشل/تهدئة فيتراجع المستدعي لمصدره الحالي.
+ */
+export async function getTheSportsMatchLive(
+  fixtureId: number,
+  kickoffTs: number
+): Promise<TsMatchLive | null> {
+  if (!isTheSportsConfigured()) return null;
+  if (Date.now() < tsCooldownUntil) return null;
+  try {
+    const live = await getLiveEntry(fixtureId, kickoffTs);
+    if (!live) return null;
+    const decoded = decodeScore(live.score);
+    if (!decoded) return null;
+    return {
+      ...buildFastScore(decoded),
+      events: decodeEvents(live.incidents),
+      stats: decodeStats(live.stats),
+      commentary: decodeCommentary(live.tlive),
+    };
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return null;
   }
 }

@@ -27,7 +27,13 @@ import {
   type SplMatchEvent,
 } from "./saudiLeagueService";
 import { getTeamFollowerUserIds } from "./sportsFollowsService";
-import { getTheSportsFastScore, isTheSportsConfigured } from "./theSportsService";
+import {
+  getTheSportsMatchLive,
+  isTheSportsConfigured,
+  type TsEvent,
+  type TsMatchLive,
+} from "./theSportsService";
+import { resolveNames } from "./worldCupNameTranslator";
 import {
   filterUsersByEventPref,
   type SportsAlertEventKey,
@@ -81,9 +87,19 @@ let lastEventCleanup = 0;
 const eventSig = (e: SplMatchEvent): string =>
   `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
 
+// توقيعات أحداث TheSports المُرسَلة لكل مباراة مونديال (منفصلة عن توقيعات
+// API-Football كي لا تتصادم عند تبدّل المصدر). أول رصدٍ = خطّ أساس بلا إرسال.
+const tsEventSeen = new Map<number, Set<string>>();
+let lastTsEventCleanup = 0;
+
+const tsEventSig = (e: TsEvent): string =>
+  `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${e.player ?? e.inPlayer ?? ""}`;
+
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
 
-function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
+// مباريات يتكفّل TheSports بأحداثها (هدف باسم اللاعب/بطاقة/فار) — فنتجاوزها في
+// كاشف الهدف العام وكاشف أحداث API-Football تفاديًا للازدواج.
+function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): DetectedAlert[] {
   const alerts: DetectedAlert[] = [];
   const seenIds = new Set<number>();
 
@@ -120,7 +136,12 @@ function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
 
     // هدف (تغيّر النتيجة) — أثناء اللعب فقط. حارس تصاعدي: لا نُرسل إلا بزيادة
     // مجموع الأهداف (يمنع إشعارًا زائفًا عند تراجع المصدر أو إلغاء هدف بالفار).
-    if (cur.live && cur.homeGoals + cur.awayGoals > prev.homeGoals + prev.awayGoals) {
+    // نتجاوز مباريات TheSports — أحداثها تُرسِل الهدف باسم اللاعب (أدقّ وأغنى).
+    if (
+      !tsHandledIds.has(m.id) &&
+      cur.live &&
+      cur.homeGoals + cur.awayGoals > prev.homeGoals + prev.awayGoals
+    ) {
       const homeScored = cur.homeGoals > prev.homeGoals;
       const scorer = homeScored ? m.home.name : m.away.name;
       const minute = m.status.elapsed != null ? ` · د.${m.status.elapsed}` : "";
@@ -162,12 +183,16 @@ function detectAlerts(matches: SplLiveBoardItem[]): DetectedAlert[] {
  * لكل مباراة (fixtures/events، كاش 12ث) — ونتجاوز أيّ مباراة لا يتابعها أحد كي لا
  * نستهلك نداء API بلا داعٍ. أول رصدٍ لمباراة = خطّ أساس بلا إرسال.
  */
-async function detectEventAlerts(matches: SplLiveBoardItem[]): Promise<DetectedAlert[]> {
+async function detectEventAlerts(
+  matches: SplLiveBoardItem[],
+  tsHandledIds: Set<number>,
+): Promise<DetectedAlert[]> {
   const out: DetectedAlert[] = [];
   const allIds = new Set(matches.map((m) => m.id));
 
   for (const m of matches) {
     if (!m.status.live) continue;
+    if (tsHandledIds.has(m.id)) continue; // بطاقات/فار المونديال من TheSports اللحظي
     const teamRefIds = [String(m.home.id), String(m.away.id)];
     const followers = await getTeamFollowerUserIds(teamRefIds);
     if (followers.length === 0) continue; // لا متابع → لا نداء API
@@ -301,40 +326,158 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
   return userIds.length;
 }
 
-// تركيب نتيجة/حالة TheSports اللحظية على مباريات المونديال قبل كشف الأحداث —
-// فيُطلَق إشعار الهدف/الانطلاق بنفس سرعة ما يراه المستخدم على الشاشة (~5-20ث)
-// بدل تأخّر API-Football (~60ث+). أفضل جهد: أي فشل/عدم تهيئة → نُبقي قيمة المصدر
-// الحالي. مهم: لا نُحوّر كائنات كاش saudiLeagueService — نُرجّع نسخًا جديدة.
+// لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) لمباريات المونديال
+// المرشّحة — نداء detail_live واحد مكاش يخدم الكل. نُجمّعها مرّةً ثم نُعيد استخدامها
+// في تركيب النتيجة وكشف الأحداث معًا (بلا مضاعفة نداءات).
 //
-// النطاق: مباريات المونديال الجارية الآن، أو المقرّرة التي اقترب موعدها (نافذة من
-// 3 ساعات قبل البداية حتى 10 دقائق بعدها) — كي يُسرّع الانطلاق دون حلّ جسرٍ
-// لمباريات بعيدة. detail_live حيّ فقط، فالمنتهية تتراجع تلقائيًا للمصدر الحالي.
-async function overlayWcFastScore(matches: SplLiveBoardItem[]): Promise<SplLiveBoardItem[]> {
-  if (!isTheSportsConfigured()) return matches;
+// النطاق: مباريات المونديال الجارية الآن أو المقرّبة (3 ساعات قبل حتى 10 دقائق بعد)
+// — كي يُسرّع الانطلاق دون حلّ جسرٍ لمباريات بعيدة. detail_live حيّ فقط، فالمنتهية
+// تتراجع تلقائيًا للمصدر الحالي. أفضل جهد: أي فشل → لا إدخال (تراجع صامت).
+async function collectWcTsLive(matches: SplLiveBoardItem[]): Promise<Map<number, TsMatchLive>> {
+  const out = new Map<number, TsMatchLive>();
+  if (!isTheSportsConfigured()) return out;
   const now = Math.floor(Date.now() / 1000);
-  return Promise.all(
+  await Promise.all(
     matches.map(async (m) => {
-      if (m.competitionSlug !== "world-cup") return m;
+      if (m.competitionSlug !== "world-cup") return;
       const nearKickoff =
         !m.status.finished && m.timestamp <= now + 600 && m.timestamp >= now - 3 * 3600;
-      if (!m.status.live && !nearKickoff) return m;
+      if (!m.status.live && !nearKickoff) return;
       try {
-        const ts = await getTheSportsFastScore(m.id, m.timestamp);
-        if (!ts || (!ts.live && !ts.finished)) return m;
-        return {
-          ...m,
-          goals: { home: ts.home, away: ts.away },
-          status: {
-            ...m.status,
-            live: ts.live,
-            finished: ts.finished || m.status.finished,
-          },
-        };
+        const ts = await getTheSportsMatchLive(m.id, m.timestamp);
+        if (ts && (ts.live || ts.finished)) out.set(m.id, ts);
       } catch {
-        return m;
+        /* تراجع صامت */
       }
     }),
   );
+  return out;
+}
+
+// تركيب نتيجة/حالة TheSports اللحظية على مباريات المونديال قبل كشف الأحداث —
+// فيُطلَق الإشعار بنفس سرعة الشاشة. مهم: لا نُحوّر كائنات كاش saudiLeagueService —
+// نُرجّع نسخًا جديدة.
+function applyTsOverlay(
+  matches: SplLiveBoardItem[],
+  tsLive: Map<number, TsMatchLive>,
+): SplLiveBoardItem[] {
+  if (tsLive.size === 0) return matches;
+  return matches.map((m) => {
+    const ts = tsLive.get(m.id);
+    if (!ts) return m;
+    return {
+      ...m,
+      goals: { home: ts.home, away: ts.away },
+      status: {
+        ...m.status,
+        live: ts.live,
+        finished: ts.finished || m.status.finished,
+      },
+    };
+  });
+}
+
+const TEAM_NAME = (
+  m: SplLiveBoardItem,
+  team: "home" | "away" | null,
+): string => (team === "home" ? m.home.name : team === "away" ? m.away.name : "");
+
+// كشف أحداث المونديال اللحظية من TheSports: هدف (باسم الهدّاف + الصانع) وبطاقة وفار —
+// أسرع وأغنى من API-Football. الأسماء تُعرَّب عبر الكاش الدائم (أفضل جهد). أول رصدٍ
+// لمباراة = خطّ أساس بلا إرسال (يتفادى إغراق متابعٍ جديد بأحداثٍ سابقة).
+async function detectTsEventAlerts(
+  matches: SplLiveBoardItem[],
+  tsLive: Map<number, TsMatchLive>,
+): Promise<DetectedAlert[]> {
+  const out: DetectedAlert[] = [];
+  if (tsLive.size === 0) return out;
+
+  // تعريب كل أسماء اللاعبين في الأحداث دفعةً واحدة (كاش دائم؛ AI للجديد فقط).
+  const rawNames: string[] = [];
+  for (const ts of tsLive.values()) {
+    for (const e of ts.events) {
+      if (e.player) rawNames.push(e.player);
+      if (e.assist) rawNames.push(e.assist);
+    }
+  }
+  let tr: (n: string | null | undefined) => string = (n) => (n ? n.trim() : "");
+  try {
+    tr = await resolveNames(rawNames);
+  } catch {
+    /* أفضل جهد: نُبقي الأسماء كما وردت */
+  }
+
+  for (const m of matches) {
+    const ts = tsLive.get(m.id);
+    if (!ts) continue;
+    const teamRefIds = [String(m.home.id), String(m.away.id)];
+    const matchName = `${m.home.name} × ${m.away.name}`;
+
+    const prev = tsEventSeen.get(m.id);
+    tsEventSeen.set(m.id, new Set(ts.events.map(tsEventSig)));
+    if (!prev) continue; // خطّ أساس فقط
+
+    for (const e of ts.events) {
+      if (prev.has(tsEventSig(e))) continue; // ليس جديدًا
+      const minute = e.minute ? ` · د.${e.minute}` : "";
+      const teamName = TEAM_NAME(m, e.team);
+
+      if (e.type === "goal" || e.type === "penalty_goal") {
+        const who = e.player ? tr(e.player) : teamName || matchName;
+        const pen = e.type === "penalty_goal" ? " (ركلة جزاء)" : "";
+        const assist = e.assist ? ` · صناعة ${tr(e.assist)}` : "";
+        const score =
+          e.homeScore != null && e.awayScore != null
+            ? `${m.home.name} ${e.homeScore}-${e.awayScore} ${m.away.name}`
+            : `${m.home.name} ${fmtScore(m)} ${m.away.name}`;
+        out.push({
+          fixtureId: m.id,
+          kind: "goal",
+          title: `⚽ هدف! ${who}${pen}`,
+          body: `${score}${minute}${assist}`,
+          teamRefIds,
+        });
+      } else if (e.type === "red" || e.type === "yellow_red") {
+        const who = e.player ? tr(e.player) : "";
+        out.push({
+          fixtureId: m.id,
+          kind: "card",
+          title: "🟥 بطاقة حمراء",
+          body: `${who ? `${who} · ` : ""}${teamName || matchName}${minute}`,
+          teamRefIds,
+        });
+      } else if (e.type === "yellow") {
+        const who = e.player ? tr(e.player) : "";
+        out.push({
+          fixtureId: m.id,
+          kind: "card",
+          title: "🟨 بطاقة صفراء",
+          body: `${who ? `${who} · ` : ""}${teamName || matchName}${minute}`,
+          teamRefIds,
+        });
+      } else if (e.type === "var") {
+        out.push({
+          fixtureId: m.id,
+          kind: "var",
+          title: "🎦 مراجعة الفار",
+          body: `${matchName}${minute}`,
+          teamRefIds,
+        });
+      }
+    }
+  }
+
+  // تنظيف دوريّ لتوقيعات مباريات لم تعد ضمن القائمة (مرّة كل ساعة).
+  const now = Date.now();
+  if (now - lastTsEventCleanup > 3_600_000) {
+    lastTsEventCleanup = now;
+    const allIds = new Set(matches.map((mm) => mm.id));
+    for (const id of tsEventSeen.keys()) {
+      if (!allIds.has(id)) tsEventSeen.delete(id);
+    }
+  }
+
+  return out;
 }
 
 export interface SportsAlertsCycleSummary {
@@ -356,14 +499,20 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   const byId = new Map<number, SplLiveBoardItem>();
   for (const m of today) byId.set(m.id, m);
   for (const m of live) byId.set(m.id, m); // الأحدث يَجُبّ
-  // نتيجة/حالة لحظية من TheSports لمباريات المونديال (overlay) — يجعل إشعار
-  // الهدف/الانطلاق بنفس سرعة الشاشة. أفضل جهد، يتراجع تلقائيًا عند عدم التهيئة.
-  const matches = await overlayWcFastScore([...byId.values()]);
-  // أحداث النتيجة/الحالة (انطلاق/هدف/نهاية) + أحداث البطاقات/الفار (للمباريات
-  // المباشرة التي لها متابعون فقط).
-  const alerts = detectAlerts(matches);
-  const eventAlerts = await detectEventAlerts(matches);
-  const allAlerts = [...alerts, ...eventAlerts];
+  const baseMatches = [...byId.values()];
+  // لقطة TheSports الحيّة الكاملة لمباريات المونديال (نتيجة + أحداث + إحصاءات) —
+  // نداء واحد مكاش، نُعيد استخدامه في تركيب النتيجة وكشف الأحداث. أفضل جهد.
+  const tsLive = await collectWcTsLive(baseMatches);
+  const tsHandledIds = new Set(tsLive.keys());
+  // تركيب نتيجة/حالة TheSports فيُطلَق الإشعار بنفس سرعة الشاشة.
+  const matches = applyTsOverlay(baseMatches, tsLive);
+  // أحداث النتيجة/الحالة (انطلاق/نهاية للكل، وهدف لغير المونديال) + بطاقات/فار
+  // API-Football (لغير مباريات TheSports) + أحداث TheSports اللحظية للمونديال
+  // (هدف باسم الهدّاف + بطاقة + فار).
+  const alerts = detectAlerts(matches, tsHandledIds);
+  const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
+  const tsEventAlerts = await detectTsEventAlerts(matches, tsLive);
+  const allAlerts = [...alerts, ...eventAlerts, ...tsEventAlerts];
 
   let recipients = 0;
   for (const alert of allAlerts) {

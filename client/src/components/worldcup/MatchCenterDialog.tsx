@@ -485,8 +485,14 @@ function StatsTab({ detail }: { detail: WcMatchDetail }) {
     queryKey: [`/api/world-cup/match-facts/${detail.fixture.id}`],
     refetchInterval: detail.fixture.status.live ? 30_000 : false,
   });
-  // إحصائيات SportMonks أعمق (حتى 16 سطرًا منتقى)؛ نعود لـAPI-Football عند غيابها
-  const stats = (facts?.statistics?.length ?? 0) > 0 ? facts!.statistics : detail.statistics;
+  // أثناء اللعب نُفضّل إحصاءات detail اللحظية (TheSports — أسرع) إن توفّرت؛ وإلا
+  // إحصائيات SportMonks الأعمق (حتى 16 سطرًا منتقى)؛ ثم API-Football عند غيابها.
+  const stats =
+    detail.fixture.status.live && detail.statistics.length > 0
+      ? detail.statistics
+      : (facts?.statistics?.length ?? 0) > 0
+        ? facts!.statistics
+        : detail.statistics;
   const weather = facts?.weather ?? null;
   const hasAbsentees = (facts?.absentees?.length ?? 0) > 0;
   const hasStats = stats.length > 0;
