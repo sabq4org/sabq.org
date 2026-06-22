@@ -34,6 +34,7 @@ import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
 import { registerSportsRoutes } from "./sports";
 import { registerRadarRoutes } from "./radar";
+import { registerSpaNewsRoutes } from "./spaNews";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
@@ -83,6 +84,7 @@ export function registerSplitRoutes(app: Express) {
   registerWorldCupRoutes(app);
   registerSportsRoutes(app);
   registerRadarRoutes(app);
+  registerSpaNewsRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
   app.use(wcPredictionsRouter);
