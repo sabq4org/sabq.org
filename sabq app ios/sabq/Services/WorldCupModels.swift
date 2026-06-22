@@ -577,32 +577,61 @@ extension APIClient {
 
 // MARK: - World Cup shared helpers (theme, formatting, navigation)
 
+// ثيم المونديال — أزرق ملكي + ذهبي، تكيّفي (فاتح افتراضيًا، ليلي تلقائيًا).
+//
+// التصميم: جسم الصفحة والبطاقات القياسية والنصوص «تكيّفية» تتبع نمط النظام؛
+// والبطاقات المميّزة (الهيرو، مشوار الأخضر، نبض المباراة) + الملعب تبقى أزرق
+// داكن ثابت في الوضعين (نصوصها بيضاء). الرموز ديناميكية فتتبعها كل المكوّنات
+// تلقائيًا دون تمرير البيئة لكل موضع (UIColor يُحَل وقت العرض حسب الـ trait).
 nonisolated enum WCTheme {
     static let saudiId = 23
 
-    // ثيم الملعب الليلي — أخضر زمردي ثابت عبر الوضعين (الهيرو دائمًا داكن)
-    static let stadiumTop = Color(red: 0.02, green: 0.15, blue: 0.11)
-    static let stadiumBottom = Color(red: 0.02, green: 0.22, blue: 0.16)
-    static let emerald = Color(red: 0.20, green: 0.83, blue: 0.60)
-    static let emeraldDeep = Color(red: 0.06, green: 0.50, blue: 0.36)
-    static let pitchTop = Color(red: 0.13, green: 0.55, blue: 0.35)
-    static let pitchBottom = Color(red: 0.09, green: 0.42, blue: 0.27)
-    static let liveRed = Color(red: 0.90, green: 0.22, blue: 0.22)
-    static let sky = Color(red: 0.35, green: 0.66, blue: 0.96)
-    static let gold = Color(red: 0.92, green: 0.68, blue: 0.20)
-    static let leaf = Color(red: 0.40, green: 0.73, blue: 0.22)
+    /// لون يتبدّل تلقائيًا مع نمط النظام (فاتح/داكن) — (r,g,b,a) لكل وضع.
+    private static func dyn(
+        _ light: (CGFloat, CGFloat, CGFloat, CGFloat),
+        _ dark: (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> Color {
+        Color(uiColor: UIColor { tc in
+            let c = tc.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
+        })
+    }
 
-    // لوحة الوضع الداكن الموحّدة للقسم كله (ثيم الملعب الليلي بلا أبيض مزعج)
-    static let card = Color.white.opacity(0.06)
-    static let cardStroke = Color.white.opacity(0.10)
-    static let onDark = Color.white
-    static let onDarkDim = Color.white.opacity(0.62)
-    static let chipFill = Color.white.opacity(0.10)
+    // ── علامة المونديال: أزرق ملكي + ذهبي (ثابتة عبر الوضعين) ──
+    static let royal = Color(red: 0.16, green: 0.36, blue: 0.96)   // الأزرق الأساسي
+    static let azure = Color(red: 0.30, green: 0.62, blue: 1.0)    // أزرق ساطع (إبراز/مباشر)
+    static let liveRed = Color(red: 0.93, green: 0.26, blue: 0.30)
+    static let sky = Color(red: 0.35, green: 0.66, blue: 0.96)     // أزرق فاتح (سلسلة ثانية/الضيف)
+    static let gold = Color(red: 0.96, green: 0.72, blue: 0.20)    // ذهبي (تتويج/تمييز)
+    static let leaf = Color(red: 0.13, green: 0.78, blue: 0.64)    // تركوازي «إيجابي» (تقييم جيد)
 
-    /// خلفية القسم — تدرّج ملعب ليلي عمودي ثابت عبر الوضعين.
+    // أسماء سابقة (أخضر) مُعاد توجيهها للأزرق — تبقى لتفادي لمس كل المواضع:
+    static let emerald = azure // تعبئة/إبراز ساطع
+    // نص/أيقونة/تعبئة-علامة تكيّفية: غامق على الفاتح، أزرق متوسّط على الليلي —
+    // يصلح نصًّا على البطاقات وتعبئةً بنصٍّ أبيض على السواء.
+    static let emeraldDeep = dyn((0.11, 0.24, 0.60, 1), (0.27, 0.50, 0.96, 1))
+
+    // ── الهيرو/البطاقات المميّزة/الملعب: أزرق داكن ثابت (نصوصها بيضاء) ──
+    static let stadiumTop = Color(red: 0.05, green: 0.11, blue: 0.27)
+    static let stadiumBottom = Color(red: 0.07, green: 0.17, blue: 0.40)
+    static let pitchTop = Color(red: 0.08, green: 0.20, blue: 0.44)
+    static let pitchBottom = Color(red: 0.05, green: 0.13, blue: 0.30)
+
+    // ── أسطح/نصوص تكيّفية (فاتح افتراضيًا، ليلي تلقائيًا) ──
+    static let onDark = dyn((0.07, 0.11, 0.20, 1), (1, 1, 1, 1))       // نص أساسي
+    static let onDarkDim = dyn((0.38, 0.44, 0.56, 1), (1, 1, 1, 0.62)) // نص ثانوي
+    static let card = dyn((1, 1, 1, 1), (1, 1, 1, 0.06))              // سطح بطاقة
+    static let cardStroke = dyn((0.11, 0.24, 0.60, 0.12), (1, 1, 1, 0.10))
+    static let chipFill = dyn((0.16, 0.36, 0.96, 0.08), (1, 1, 1, 0.10))
+
+    /// خلفية القسم — فاتحة هادئة (مائلة للأزرق) في الفاتح، وأزرق داكن في الليلي.
     static var sectionBackground: LinearGradient {
         LinearGradient(
-            colors: [stadiumTop, Color(red: 0.03, green: 0.18, blue: 0.13), stadiumBottom],
+            colors: [
+                dyn((0.90, 0.93, 0.985, 1), (0.04, 0.09, 0.22, 1)),
+                dyn((0.93, 0.955, 0.99, 1), (0.05, 0.12, 0.28, 1)),
+                dyn((0.91, 0.94, 0.985, 1), (0.04, 0.09, 0.22, 1)),
+            ],
             startPoint: .top, endPoint: .bottom
         )
     }
