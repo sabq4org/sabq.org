@@ -213,6 +213,93 @@ nonisolated struct WCMatchDetail: Decodable, Hashable {
     let headToHead: [WCFixture]
 }
 
+// MARK: - معطيات SportMonks المتقدّمة (ضغط/توقعات/إحصائيات+طقس+غيابات/xG)
+//
+// نقاط مكمّلة لـ /world-cup/match: pressure / forecast / match-facts / xg.
+// كلها «أفضل جهد» — لو رجع الخادم 503/404 (غير مفعّل أو غير منشور بعد) يفشل
+// فكّ الترميز فتبقى القيمة nil وتُخفى الأقسام دون أي عطل.
+
+nonisolated struct WCPressurePoint: Decodable, Identifiable, Hashable {
+    let label: String
+    let minute: Int
+    let home: Double
+    let away: Double   // سالبة (تُرسم أسفل الصفر)
+    let net: Double
+
+    var id: Int { minute }
+}
+
+nonisolated struct WCPressureLatest: Decodable, Hashable {
+    let side: String   // "home" | "away" | "even"
+    let value: Double
+}
+
+nonisolated struct WCPressure: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let latest: WCPressureLatest?
+    let points: [WCPressurePoint]
+}
+
+nonisolated struct WCFulltimeOdds: Decodable, Hashable { let home: Int; let draw: Int; let away: Int }
+nonisolated struct WCBtts: Decodable, Hashable { let yes: Int; let no: Int }
+nonisolated struct WCDoubleChance: Decodable, Hashable {
+    let homeOrDraw: Int; let awayOrDraw: Int; let homeOrAway: Int
+}
+nonisolated struct WCOverUnderLine: Decodable, Identifiable, Hashable {
+    let line: Double; let over: Int; let under: Int
+    var id: Double { line }
+}
+nonisolated struct WCCorrectScore: Decodable, Identifiable, Hashable {
+    let score: String; let prob: Double   // "2-0" (المضيف-الضيف)
+    var id: String { score }
+}
+nonisolated struct WCForecast: Decodable, Hashable {
+    let available: Bool
+    let fulltime: WCFulltimeOdds?
+    let btts: WCBtts?
+    let doubleChance: WCDoubleChance?
+    let goals: [WCOverUnderLine]
+    let correctScores: [WCCorrectScore]
+}
+
+nonisolated struct WCWeather: Decodable, Hashable {
+    let type: String   // "actual" | "forecast"
+    let temp: Int?
+    let description: String
+    let icon: String
+    let humidity: String?
+}
+nonisolated struct WCAbsentee: Decodable, Identifiable, Hashable {
+    let name: String; let location: String; let reason: String
+    var id: String { "\(location)-\(name)" }
+}
+nonisolated struct WCEventDetail: Decodable, Identifiable, Hashable {
+    let minute: Int; let location: String; let klass: String; let detail: String; let player: String
+    var id: String { "\(klass)-\(location)-\(minute)" }
+}
+nonisolated struct WCHalftime: Decodable, Hashable { let home: Int; let away: Int }
+nonisolated struct WCMatchFacts: Decodable, Hashable {
+    let available: Bool
+    let statistics: [WCStatistic]
+    let weather: WCWeather?
+    let absentees: [WCAbsentee]
+    let eventDetails: [WCEventDetail]
+    let halftime: WCHalftime?
+}
+
+nonisolated struct WCXgSide: Decodable, Hashable { let xg: Double; let xgot: Double }
+nonisolated struct WCXgPlayer: Decodable, Identifiable, Hashable {
+    let name: String; let location: String; let xg: Double
+    var id: String { "\(location)-\(name)" }
+}
+nonisolated struct WCXg: Decodable, Hashable {
+    let available: Bool
+    let home: WCXgSide
+    let away: WCXgSide
+    let topPlayers: [WCXgPlayer]
+}
+
 nonisolated struct WCSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -387,6 +474,28 @@ extension APIClient {
     func fetchWorldCupPlayer(playerId: Int) async throws -> WCPlayerCard {
         try await get(WCPlayerCard.self, path: "/world-cup/player/\(playerId)",
                       apiRoot: URLConstants.publicAPI)
+    }
+
+    // معطيات SportMonks المتقدّمة — كلها عامة وأفضل جهد
+
+    func fetchWorldCupPressure(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCPressure {
+        try await get(WCPressure.self, path: "/world-cup/pressure/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupForecast(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCForecast {
+        try await get(WCForecast.self, path: "/world-cup/forecast/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupMatchFacts(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCMatchFacts {
+        try await get(WCMatchFacts.self, path: "/world-cup/match-facts/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupXg(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCXg {
+        try await get(WCXg.self, path: "/world-cup/xg/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 }
 
