@@ -43,6 +43,20 @@ const BRIDGE_TTL = 6 * 60 * 60 * 1000; // المعرّف لا يتغيّر؛ ن�
 // ربط إيجابي فقط: معرّف مباراتنا (API-Football) → معرّف مباراة TheSports.
 const matchIdBridge = new Map<number, string>();
 
+// قاطع دائرة: عند أي فشل (IP غير مُدرَج/شبكة/نقطة محجوبة) نُجمّد كل نداءات
+// TheSports لفترة تهدئة، فلا يتكرّر النداء البطيء في كل طلب ويُبطئ نقاطَ المستخدم
+// (overview/fixtures). السبب: withSWR لا يخزّن الأخطاء — فبلا القاطع يُعاد النداء
+// الفاشل كل مرّة قبل التراجع لـ SportMonks. يتعافى ذاتيًّا بعد انتهاء التهدئة.
+const TS_FAIL_COOLDOWN_MS = 60 * 1000;
+let tsCooldownUntil = 0;
+
+// مهلة قصيرة: نتيجة لحظية لا قيمة لها إن تأخّرت، والأهم ألّا تُبطئ صفحة المستخدم.
+const TS_HTTP_TIMEOUT_MS = 4000;
+
+// اتصال IPv4 مُعاد الاستخدام (keep-alive) — يلغي مصافحة TLS جديدة لكل نداء،
+// فيقارب أداء fetch المجمّع. family:4 على الوكيل يضمن IPv4 (قائمة TheSports IPv4).
+const tsAgent = new https.Agent({ keepAlive: true, family: 4, maxSockets: 8 });
+
 export function isTheSportsConfigured(): boolean {
   return Boolean(
     (process.env.THESPORTS_USER || "").trim() && (process.env.THESPORTS_SECRET || "").trim()
@@ -55,7 +69,7 @@ export function isTheSportsConfigured(): boolean {
 // node:https يمرّر family إلى مقبس الاتصال فيُحلّ الاسم ويتصل عبر IPv4 حصرًا.
 function httpsGetJson(url: URL, timeoutMs: number): Promise<any> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { family: 4, timeout: timeoutMs }, (res) => {
+    const req = https.get(url, { agent: tsAgent, timeout: timeoutMs }, (res) => {
       const status = res.statusCode ?? 0;
       if (status >= 400) {
         res.resume();
@@ -88,7 +102,7 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   url.searchParams.set("user", user);
   url.searchParams.set("secret", secret);
 
-  const json = await httpsGetJson(url, 12_000);
+  const json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
   // الأخطاء تأتي 200 بجسم {err:"..."} (نقطة محجوبة / IP غير مُدرَج)
   if (json && typeof json === "object" && "err" in json) {
     throw new Error(`[TheSports] ${json.err}`);
@@ -219,6 +233,8 @@ export async function getTheSportsFastScore(
   kickoffTs: number
 ): Promise<TsFastScore | null> {
   if (!isTheSportsConfigured()) return null;
+  // قاطع الدائرة: أثناء التهدئة لا نلمس الشبكة إطلاقًا → تراجع فوري لـ SportMonks.
+  if (Date.now() < tsCooldownUntil) return null;
   try {
     const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs);
     if (!tsMatchId) return null;
@@ -240,6 +256,8 @@ export async function getTheSportsFastScore(
       finished: decoded.statusId === TS_FINISHED_STATUS,
     };
   } catch {
-    return null; // IP غير مُدرَج / نقطة محجوبة / شبكة → تراجع صامت
+    // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return null; // تراجع صامت لـ SportMonks ثم API-Football
   }
 }
