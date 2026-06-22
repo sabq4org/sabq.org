@@ -10,6 +10,7 @@ import {
   getMatchDetail,
   getOverview,
   getPlayerCard,
+  getPlayerIdentityEn,
   getSquad,
   getStandings,
   getTeamProfile,
@@ -29,6 +30,7 @@ import {
   getMatchFacts,
   getXg,
   getLiveScore,
+  getPlayerForm,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
 
@@ -224,6 +226,27 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] player ${playerId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // فورمة اللاعب + xG (آخر ٥ مباريات) — SportMonks، جسر بالاسم الإنجليزي + الميلاد.
+  app.get("/api/world-cup/player/:id/form", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false, matches: [] });
+    }
+    const playerId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: "معرّف لاعب غير صالح" });
+    }
+    try {
+      const identity = await getPlayerIdentityEn(playerId);
+      if (!identity) return res.json({ available: false, matches: [] });
+      const data = await getPlayerForm(identity);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] player form ${playerId} failed:`, error);
+      res.status(502).json({ available: false, matches: [] });
     }
   });
 

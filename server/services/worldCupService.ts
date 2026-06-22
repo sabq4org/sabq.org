@@ -685,6 +685,22 @@ export interface WcPlayerCard {
   injury: { reason: string } | null;
 }
 
+export interface WcPlayerIdentityEn {
+  firstname: string | null;
+  lastname: string | null;
+  dob: string | null;
+}
+
+/** هوية اللاعب الإنجليزية (الاسم الأول/الأخير + الميلاد) — لجسر لاعب SportMonks. */
+export async function getPlayerIdentityEn(playerId: number): Promise<WcPlayerIdentityEn | null> {
+  return withSWR(`wc:playeridEn:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const rows = await apiGet("players/profiles", { player: playerId });
+    const p = rows[0]?.player;
+    if (!p?.id) return null;
+    return { firstname: p.firstname ?? null, lastname: p.lastname ?? null, dob: p.birth?.date ?? null };
+  });
+}
+
 export async function getPlayerCard(playerId: number): Promise<WcPlayerCard | null> {
   return withSWR(`wc:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
     const [profileRows, careerRows, trophyRows, statsRows, injuryRows] = await Promise.all([

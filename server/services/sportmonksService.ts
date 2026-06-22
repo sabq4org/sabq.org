@@ -977,6 +977,108 @@ export async function getLiveScore(apiFootballFixtureId: number): Promise<WcLive
   return arr.find((s) => s.smId === r.smId) ?? null;
 }
 
+// ---------- فورمة اللاعب + xG (جسر بالاسم الإنجليزي + الميلاد) ----------
+
+export interface WcPlayerFormMatch {
+  date: string;
+  opponent: string;
+  opponentLogo: string;
+  homeAway: "home" | "away";
+  result: "W" | "D" | "L";
+  scoreFor: number;
+  scoreAgainst: number;
+  xg: number | null;
+  goals: number;
+  rating: number | null;
+  league: string;
+}
+
+export interface WcPlayerForm {
+  available: boolean;
+  matches: WcPlayerFormMatch[];
+}
+
+const EMPTY_PLAYER_FORM: WcPlayerForm = { available: false, matches: [] };
+
+// جسر لاعب: اسم إنجليزي كامل + ميلاد → معرّف SportMonks. الميلاد مفتاح قوي يمنع
+// الخلط؛ نطابقه أولًا، ثم نقبل مرشّحًا وحيدًا. غير ذلك = لا مطابقة (لا بيانات مغلوطة).
+const smPlayerIdMap = new Map<string, number>();
+async function resolveSmPlayerId(
+  firstname: string | null,
+  lastname: string | null,
+  dob: string | null
+): Promise<number | null> {
+  const full = [firstname, lastname].filter(Boolean).join(" ").trim();
+  if (!full) return null;
+  const key = `${full}|${dob || ""}`;
+  const cached = smPlayerIdMap.get(key);
+  if (cached) return cached;
+  const found = await withSWR<number>(`sm:player:${key}`, RESOLVE_TTL * 5, RESOLVE_TTL * 10, async () => {
+    const resp = await smGet(`players/search/${encodeURIComponent(full)}`);
+    const cands: any[] = Array.isArray(resp?.data) ? resp.data : [];
+    if (cands.length === 0) return 0;
+    const byDob = dob ? cands.find((c) => c.date_of_birth === dob) : null;
+    const pick = byDob ?? (cands.length === 1 ? cands[0] : null);
+    return pick?.id ?? 0;
+  });
+  if (found > 0) {
+    smPlayerIdMap.set(key, found);
+    return found;
+  }
+  return null;
+}
+
+async function buildPlayerForm(smPlayerId: number): Promise<WcPlayerForm> {
+  const resp = await smGet(`players/${smPlayerId}`, {
+    include:
+      "latest.xGlineup.type;latest.details.type;latest.fixture.participants;latest.fixture.scores;latest.fixture.league",
+  });
+  const latest: any[] = Array.isArray(resp?.data?.latest) ? resp.data.latest : [];
+  const sorted = [...latest].sort(
+    (a, b) => (b.fixture?.starting_at_timestamp ?? 0) - (a.fixture?.starting_at_timestamp ?? 0)
+  );
+  const matches: WcPlayerFormMatch[] = [];
+  for (const l of sorted) {
+    const fx = l.fixture;
+    if (!fx) continue;
+    const parts: any[] = Array.isArray(fx.participants) ? fx.participants : [];
+    const opp = parts.find((p) => p.id !== l.team_id);
+    const me = parts.find((p) => p.id === l.team_id);
+    const cur: any[] = Array.isArray(fx.scores) ? fx.scores.filter((s: any) => s.description === "CURRENT") : [];
+    const scoreFor = cur.find((s) => s.participant_id === l.team_id)?.score?.goals ?? 0;
+    const scoreAgainst = cur.find((s) => s.participant_id !== l.team_id)?.score?.goals ?? 0;
+    const xgRec = (l.xglineup ?? []).find((x: any) => x.type?.code === "expected-goals");
+    const details: any[] = Array.isArray(l.details) ? l.details : [];
+    const stat = (code: string) => details.find((d) => d.type?.code === code)?.data?.value;
+    matches.push({
+      date: fx.starting_at ?? "",
+      opponent: opp?.name ?? "",
+      opponentLogo: opp?.image_path ?? "",
+      homeAway: me?.meta?.location === "home" ? "home" : "away",
+      result: scoreFor > scoreAgainst ? "W" : scoreFor < scoreAgainst ? "L" : "D",
+      scoreFor,
+      scoreAgainst,
+      xg: xgRec ? Math.round((Number(xgRec.data?.value) || 0) * 100) / 100 : null,
+      goals: Number(stat("goals")) || 0,
+      rating: stat("rating") != null ? Math.round(Number(stat("rating")) * 10) / 10 : null,
+      league: fx.league?.name ?? "",
+    });
+    if (matches.length >= 5) break;
+  }
+  return { available: matches.length > 0, matches };
+}
+
+/** فورمة اللاعب (آخر ٥ مباريات + xG) عبر جسر الاسم الإنجليزي + الميلاد. */
+export async function getPlayerForm(opts: {
+  firstname: string | null;
+  lastname: string | null;
+  dob: string | null;
+}): Promise<WcPlayerForm> {
+  const id = await resolveSmPlayerId(opts.firstname, opts.lastname, opts.dob).catch(() => null);
+  if (!id) return EMPTY_PLAYER_FORM;
+  return withSWR(`wc:playerform:${id}`, CACHE_TTL.LONG, CACHE_TTL.VERY_LONG, () => buildPlayerForm(id));
+}
+
 // ---------- التعليق المباشر المترجم (من commentaries — إضافة Match Facts) ----------
 
 export interface WcCommentaryItem {
