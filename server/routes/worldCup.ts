@@ -55,6 +55,12 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
       return {
         ...fx,
         goals: { home: ts.home, away: ts.away },
+        // الركلات الترجيحية (أدوار خروج المغلوب) — نُبقيها من المصدر الحالي
+        // ما لم يرصدها TheSports، فلا نمحو نتيجة ركلات موجودة بقيمة فارغة.
+        penalties:
+          ts.penHome != null || ts.penAway != null
+            ? { home: ts.penHome, away: ts.penAway }
+            : fx.penalties,
         status: {
           ...fx.status,
           live: ts.live,
