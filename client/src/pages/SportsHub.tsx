@@ -46,7 +46,11 @@ import {
   Check,
   Minus,
   Plus,
+  Gauge,
+  Cloud,
+  Droplets,
 } from "lucide-react";
+import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
@@ -111,6 +115,16 @@ interface SpMatchRatings {
 }
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
+// إثراءات SportMonks (سعودي/آسيا) — /api/sports/match/:id/{xg,pressure,facts}
+interface SpXgSide { xg: number; xgot: number; }
+interface SpXgPlayer { name: string; location: "home" | "away"; xg: number; }
+interface SpXg { available: boolean; home: SpXgSide; away: SpXgSide; topPlayers: SpXgPlayer[]; }
+interface SpPressurePoint { minute: number; net: number; }
+interface SpPressure { available: boolean; live: boolean; latest: { side: string; value: number } | null; points: SpPressurePoint[]; }
+interface SpWeather { type: string; temp: number | null; description: string; icon: string; humidity: string | null; }
+interface SpFactStat { key: string; label: string; home: string; away: string; }
+interface SpEventDetail { minute: number; location: "home" | "away"; klass: string; detail: string; }
+interface SpFacts { available: boolean; statistics: SpFactStat[]; weather: SpWeather | null; eventDetails: SpEventDetail[]; halftime: { home: number; away: number } | null; }
 interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
 export type SpCompetitionCategory = "saudi" | "gulf" | "arab" | "european" | "world";
 export type SpCompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
@@ -1580,6 +1594,98 @@ function MatchPredict({ fixture }: { fixture: SpFixture }) {
   );
 }
 
+// ---------- إثراءات SportMonks في نافذة المباراة (xG/طقس/ضغط) ----------
+
+function SpXgCard({ xg, homeLogo, awayLogo }: { xg: SpXg; homeLogo?: string; awayLogo?: string }) {
+  const h = xg.home.xg, a = xg.away.xg, max = h + a || 1;
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-muted/30 p-3">
+      <div className="flex items-center justify-between text-xs mb-1.5">
+        <span className="font-black tabular-nums text-foreground w-12">{h.toFixed(2)}</span>
+        <span className="text-muted-foreground">الأهداف المتوقّعة (xG)</span>
+        <span className="font-black tabular-nums text-foreground w-12 text-left">{a.toFixed(2)}</span>
+      </div>
+      <div className="relative h-2 rounded-full bg-muted overflow-hidden flex">
+        <div className="bg-primary" style={{ width: `${(h / max) * 100}%` }} />
+        <div className="bg-amber-500" style={{ width: `${(a / max) * 100}%` }} />
+      </div>
+      {(xg.home.xgot > 0 || xg.away.xgot > 0) && (
+        <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span className="tabular-nums w-12">{xg.home.xgot.toFixed(2)}</span>
+          <span>على المرمى (xGoT)</span>
+          <span className="tabular-nums w-12 text-left">{xg.away.xgot.toFixed(2)}</span>
+        </div>
+      )}
+      {xg.topPlayers.length > 0 && (
+        <div className="mt-2.5 pt-2.5 border-t border-border/60 space-y-1">
+          <div className="text-[10px] text-muted-foreground">الأعلى خطورة</div>
+          {xg.topPlayers.slice(0, 3).map((p, i) => (
+            <div key={i} className="flex items-center justify-between text-[11px]">
+              <span className="flex items-center gap-1.5 min-w-0">
+                {(p.location === "home" ? homeLogo : awayLogo) && (
+                  <img src={p.location === "home" ? homeLogo : awayLogo} alt="" className="w-3.5 h-3.5 object-contain shrink-0" />
+                )}
+                <span className="truncate text-foreground">{p.name}</span>
+              </span>
+              <span className="font-bold tabular-nums text-foreground" dir="ltr">{p.xg.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SpWeatherChip({ w }: { w: SpWeather }) {
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+      {w.icon ? <img src={w.icon} alt="" className="w-8 h-8 object-contain" /> : <Cloud className="w-6 h-6 text-sky-500" />}
+      <div className="min-w-0">
+        <div className="text-sm font-bold text-foreground">
+          {w.description}
+          {w.type === "forecast" && <span className="text-[10px] text-muted-foreground font-normal"> · توقّع</span>}
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+          {w.temp != null && <span className="tabular-nums">{w.temp}°م</span>}
+          {w.humidity && <span className="flex items-center gap-0.5"><Droplets className="w-3 h-3" />{w.humidity}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure; homeName: string; awayName: string; live: boolean }) {
+  const points = Array.isArray(data?.points) ? data!.points : [];
+  if (points.length === 0) {
+    return <div className="py-8 text-center text-muted-foreground text-sm">مؤشّر الضغط يظهر هنا أثناء المباراة</div>;
+  }
+  const latest = data?.latest ?? null;
+  return (
+    <div className="space-y-3">
+      {live && latest && latest.side !== "even" && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <Gauge className="w-4 h-4 text-primary" />
+          <span className="text-muted-foreground">الأكثر سيطرة الآن:</span>
+          <span className="font-bold text-foreground">{latest.side === "home" ? homeName : awayName}</span>
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground text-center">مؤشّر الضغط لحظة بلحظة — أعلى: {homeName} · أسفل: {awayName}</p>
+      <div dir="ltr">
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={0}>
+            <XAxis dataKey="minute" tick={{ fontSize: 10 }} tickFormatter={(m) => `${m}'`} interval="preserveStartEnd" minTickGap={24} />
+            <YAxis hide />
+            <ReferenceLine y={0} stroke="hsl(var(--border))" />
+            <Bar dataKey="net" radius={[1, 1, 0, 0]}>
+              {points.map((p) => (<Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#f59e0b"} />))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -1613,6 +1719,28 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
   });
   const h2hMeetings = Array.isArray(h2hData?.meetings) ? h2hData!.meetings : [];
 
+  // إثراءات SportMonks (سعودي/آسيا...) — تُجلب بكسل حسب التبويب، أفضل جهد.
+  const live = !!data?.fixture?.status?.live;
+  const matchStarted = !!data?.fixture && (data.fixture.status.finished || live);
+  const { data: facts } = useQuery<SpFacts>({
+    queryKey: [`/api/sports/match/${id}/facts`],
+    enabled: id != null && matchStarted && (tab === "events" || tab === "stats"),
+    refetchInterval: live ? 12_000 : false,
+    staleTime: 20_000,
+  });
+  const { data: xg } = useQuery<SpXg>({
+    queryKey: [`/api/sports/match/${id}/xg`],
+    enabled: id != null && matchStarted && tab === "stats",
+    refetchInterval: live ? 20_000 : false,
+    staleTime: 30_000,
+  });
+  const { data: pressure } = useQuery<SpPressure>({
+    queryKey: [`/api/sports/match/${id}/pressure`],
+    enabled: id != null && matchStarted && tab === "pressure",
+    refetchInterval: live ? 20_000 : false,
+    staleTime: 20_000,
+  });
+
   // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
   // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
   useEffect(() => {
@@ -1642,6 +1770,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
+    started ? { key: "pressure", label: "الضغط" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
@@ -1702,10 +1831,21 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (
             <>
+            {facts?.halftime && (
+              <div className="mb-3 text-center text-[11px] text-muted-foreground">
+                نتيجة الشوط الأول{" "}
+                <span className="font-black tabular-nums text-foreground" dir="ltr">{facts.halftime.away} - {facts.halftime.home}</span>
+              </div>
+            )}
             <MatchTimeline events={events} homeId={fx?.home.id ?? null} />
             <ul className="relative space-y-3 pr-4 border-r-2 border-border">
               {events.map((e, i) => {
                 const homeSide = e.teamId === fx?.home.id;
+                // تركيب تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR) فوق حدث API-Football
+                const klass = e.type === "goal" ? "goal" : /card/i.test(e.type) ? "card" : /var/i.test(e.type) ? "var" : null;
+                const fd = klass && facts?.eventDetails && e.minute != null
+                  ? facts.eventDetails.find((d) => d.klass === klass && d.location === (homeSide ? "home" : "away") && Math.abs(d.minute - (e.minute as number)) <= 1)?.detail ?? null
+                  : null;
                 return (
                   <li key={i} className="relative flex items-start gap-2.5 text-sm">
                     <span className={`absolute -right-[21px] top-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-card ${homeSide ? "bg-primary" : "bg-amber-500"}`} />
@@ -1715,6 +1855,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                       <span className="font-semibold text-foreground">{e.player}</span>
                       {e.assist && <span className="text-xs text-muted-foreground"> (صناعة {e.assist})</span>}
                       <div className="text-xs text-muted-foreground">{e.type !== "goal" ? `${e.label} · ` : ""}{e.team}</div>
+                      {fd && <div className="text-[11px] text-sky-600 dark:text-sky-400">{fd}</div>}
                     </div>
                   </li>
                 );
@@ -1749,8 +1890,10 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
               : null;
             return (
               <>
+                {xg?.available && <SpXgCard xg={xg} homeLogo={fx?.home.logo} awayLogo={fx?.away.logo} />}
+                {facts?.weather && <SpWeatherChip w={facts.weather} />}
                 {possession && <PossessionBar row={possession} />}
-                {motm && (
+                {motm && !xg?.available && (
                   <div className="mb-4 flex items-center gap-2 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3 py-2">
                     <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                     <span className="text-xs font-bold text-foreground">
@@ -1762,6 +1905,9 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
               </>
             );
           })()}
+          {!isLoading && activeKey === "pressure" && (
+            <SpPressureView data={pressure} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} live={live} />
+          )}
           {!isLoading && activeKey === "lineups" && lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
           {!isLoading && activeKey === "h2h" && fx && h2hData && (

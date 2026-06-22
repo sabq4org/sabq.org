@@ -132,6 +132,57 @@ async function resolveSportmonksFixtureId(
   return null;
 }
 
+// ربط محايد البطولة (لـ/sports: سعودي/آسيا/...) بالأسماء + التاريخ، بلا فلتر دوري.
+// اشتراكنا صغير (23 بطولة) فبحث fixtures/date يرجع مبارياتنا فقط، والمطابقة بالاسم تكفي.
+const namedSmIdMap = new Map<string, number>();
+
+/**
+ * يحلّ معرّف SportMonks من هوية مباراة (تاريخ + اسمَي الفريقين الإنجليزيين)
+ * عبر أي بطولة مشترَك بها — للبوابة الرياضية خارج المونديال.
+ */
+export async function resolveSmIdByNames(opts: {
+  key: string;
+  kickoffIso: string | null;
+  homeNameEn: string | null;
+  awayNameEn: string | null;
+}): Promise<number | null> {
+  const { key, kickoffIso, homeNameEn, awayNameEn } = opts;
+  if (!kickoffIso || !homeNameEn || !awayNameEn) return null;
+  const cached = namedSmIdMap.get(key);
+  if (cached) return cached;
+
+  const found = await withSWR<number>(
+    `sm:resolve:${key}`,
+    RESOLVE_TTL,
+    RESOLVE_TTL * 2,
+    async () => {
+      const day = new Date(kickoffIso).toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+      const resp = await smGet(`fixtures/date/${day}`, { include: "participants" });
+      const candidates: any[] = Array.isArray(resp?.data) ? resp.data : [];
+      const homeKey = teamKey(homeNameEn);
+      const awayKey = teamKey(awayNameEn);
+      // تباين النقحرة (القادسية: qadisiyah/qadsiah) يكسر التطابق الصارم على الفريقين.
+      // لكن الفريق يلعب مرة واحدة في اليوم: فتطابق فريق واحد بدقة + نفس التاريخ
+      // يُعرّف المباراة فريدًا. نُفضّل تطابق الفريقين، ثم نقبل تطابق فريق واحد إن كان وحيدًا.
+      const oneExact: number[] = [];
+      for (const fx of candidates) {
+        const parts = (fx.participants ?? []).map((p: any) => teamKey(p?.name ?? ""));
+        const h = parts.includes(homeKey);
+        const a = parts.includes(awayKey);
+        if (h && a) return fx.id ?? 0;
+        if (h || a) oneExact.push(fx.id ?? 0);
+      }
+      return oneExact.length === 1 ? oneExact[0] : 0;
+    },
+  );
+
+  if (found > 0) {
+    namedSmIdMap.set(key, found);
+    return found;
+  }
+  return null;
+}
+
 /**
  * يحلّ معرّف API-Football إلى معرّف SportMonks ويختار إيقاع الكاش حسب الحالة.
  */
@@ -548,6 +599,7 @@ const STAT_LABELS: { code: string; label: string; percent?: boolean }[] = [
 
 const WEATHER_AR: Record<string, string> = {
   "clear sky": "سماء صافية",
+  "sky is clear": "سماء صافية",
   "few clouds": "غيوم قليلة",
   "scattered clouds": "غيوم متفرقة",
   "broken clouds": "غيوم متقطعة",
