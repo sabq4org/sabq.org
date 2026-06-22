@@ -26,6 +26,89 @@ export interface WcMomentum {
   points: WcMomentumPoint[];
 }
 
+/** مؤشّر الضغط لحظة بلحظة (Pressure Index) — /api/world-cup/pressure/:id */
+export interface WcPressurePoint {
+  label: string;
+  minute: number;
+  home: number;
+  away: number; // سالبة (تُرسم أسفل الصفر)
+  net: number;
+}
+
+export interface WcPressure {
+  available: boolean;
+  live: boolean;
+  latest: { side: "home" | "away" | "even"; value: number } | null;
+  points: WcPressurePoint[];
+}
+
+/** التوقعات الاحتمالية (Predictions) — /api/world-cup/forecast/:id */
+export interface WcOverUnderLine {
+  line: number;
+  over: number;
+  under: number;
+}
+
+export interface WcCorrectScore {
+  score: string; // "2-0" (المضيف-الضيف)
+  prob: number;
+}
+
+export interface WcForecast {
+  available: boolean;
+  fulltime: { home: number; draw: number; away: number } | null;
+  btts: { yes: number; no: number } | null;
+  doubleChance: { homeOrDraw: number; awayOrDraw: number; homeOrAway: number } | null;
+  goals: WcOverUnderLine[];
+  correctScores: WcCorrectScore[];
+}
+
+/** معطيات المباراة (إحصائيات + طقس + غيابات) — /api/world-cup/match-facts/:id */
+export interface WcWeather {
+  type: "actual" | "forecast";
+  temp: number | null;
+  description: string;
+  icon: string;
+  humidity: string;
+}
+
+export interface WcAbsentee {
+  name: string;
+  location: "home" | "away";
+  reason: string;
+}
+
+export interface WcEventDetail {
+  minute: number;
+  location: "home" | "away";
+  klass: "goal" | "card" | "var";
+  detail: string; // مُعرَّب
+  player: string;
+}
+
+export interface WcMatchFacts {
+  available: boolean;
+  statistics: WcStatistic[]; // متوافق مع StatRow
+  weather: WcWeather | null;
+  absentees: WcAbsentee[];
+  eventDetails: WcEventDetail[];
+  halftime: { home: number; away: number } | null;
+}
+
+/** الأهداف المتوقعة (xG) — /api/world-cup/xg/:id */
+export interface WcXgPlayer {
+  name: string;
+  location: "home" | "away";
+  xg: number;
+}
+
+export interface WcXg {
+  available: boolean;
+  home: { xg: number; xgot: number };
+  away: { xg: number; xgot: number };
+  topPlayers: WcXgPlayer[];
+}
+
 /** التعليق المباشر المترجم (من commentaries) — /api/world-cup/commentary/:id */
 export interface WcCommentaryItem {
   minute: number;

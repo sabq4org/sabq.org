@@ -20,7 +20,15 @@ import {
   isWorldCupConfigured,
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
-import { getMomentum, getCommentary, isSportmonksConfigured } from "../services/sportmonksService";
+import {
+  getMomentum,
+  getCommentary,
+  getPressure,
+  getForecast,
+  getMatchFacts,
+  getXg,
+  isSportmonksConfigured,
+} from "../services/sportmonksService";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -217,6 +225,113 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] momentum ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب رسم الزخم حاليًا", points: [] });
+    }
+  });
+
+  // مؤشّر الضغط لحظة بلحظة (Pressure Index — إضافة SportMonks).
+  app.get("/api/world-cup/pressure/:id", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res
+        .status(503)
+        .json({ configured: false, message: "مؤشّر الضغط غير مفعّل حاليًا", points: [] });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getPressure(fixtureId, { directSmId });
+      res.set(
+        "Cache-Control",
+        data.live
+          ? "public, max-age=15, s-maxage=20, stale-while-revalidate=40"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600"
+      );
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] pressure ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب مؤشّر الضغط حاليًا", points: [] });
+    }
+  });
+
+  // التوقعات الاحتمالية للمباراة (Predictions — احتمالات SportMonks).
+  // نتيجة المباراة + الفريقان يسجلان + أوفر/أندر + الفرصة المزدوجة + أرجح النتائج.
+  app.get("/api/world-cup/forecast/:id", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res
+        .status(503)
+        .json({ configured: false, message: "التوقعات غير مفعّلة حاليًا", available: false });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getForecast(fixtureId, { directSmId });
+      // التوقعات مستقرّة — كاش أطول، تُحدَّث مع اقتراب المباراة
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] forecast ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب التوقعات حاليًا", available: false });
+    }
+  });
+
+  // معطيات المباراة من SportMonks: إحصائيات أعمق + طقس + غيابات.
+  app.get("/api/world-cup/match-facts/:id", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({
+        configured: false,
+        message: "معطيات المباراة غير مفعّلة حاليًا",
+        available: false,
+        statistics: [],
+        weather: null,
+        absentees: [],
+      });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getMatchFacts(fixtureId, { directSmId });
+      // الإحصائيات تسخن أثناء اللعب؛ الطقس/الغيابات أبطأ — كاش متوسط يكفي
+      res.set("Cache-Control", "public, max-age=30, s-maxage=120, stale-while-revalidate=300");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] match-facts ${fixtureId} failed:`, error);
+      res.status(502).json({
+        message: "تعذر جلب معطيات المباراة حاليًا",
+        available: false,
+        statistics: [],
+        weather: null,
+        absentees: [],
+      });
+    }
+  });
+
+  // الأهداف المتوقعة (xG) للفريقين + أبرز صانعي الخطورة (من lineups.details).
+  app.get("/api/world-cup/xg/:id", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res
+        .status(503)
+        .json({ configured: false, message: "xG غير مفعّل حاليًا", available: false });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getXg(fixtureId, { directSmId });
+      res.set("Cache-Control", "public, max-age=30, s-maxage=120, stale-while-revalidate=300");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] xg ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب xG حاليًا", available: false });
     }
   });
 

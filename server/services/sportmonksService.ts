@@ -269,6 +269,602 @@ export async function getMomentum(
   return withSWR(`wc:momentum:${r.smId}`, r.ttl, r.ttl * 3, () => buildMomentum(r.smId));
 }
 
+// ---------- مؤشّر الضغط (Pressure Index — إضافة SportMonks) ----------
+
+export interface WcPressurePoint {
+  label: string; // وسم الدقيقة، مثل "57'"
+  minute: number;
+  home: number; // ضغط المضيف عند الدقيقة (موجب)
+  away: number; // ضغط الضيف (يُخزَّن سالبًا لرسمه أسفل الصفر)
+  net: number; // home - away (موجب = سيطرة المضيف)
+}
+
+export interface WcPressure {
+  available: boolean;
+  live: boolean;
+  /** الفريق المسيطر في أحدث لحظة مسجّلة + قيمته (0–100 تقريبًا) */
+  latest: { side: "home" | "away" | "even"; value: number } | null;
+  points: WcPressurePoint[];
+}
+
+const EMPTY_PRESSURE: WcPressure = {
+  available: false,
+  live: false,
+  latest: null,
+  points: [],
+};
+
+/**
+ * يبني سلسلة مؤشّر الضغط لحظة بلحظة. SportMonks يعطي قيمة موجبة لفريق واحد
+ * فقط في كل لحظة (الأعلى = الأكثر سيطرة)؛ نحاذيها على المضيف/الضيف عبر
+ * meta.location ونحوّل الضيف إلى سالب ليُرسم أسفل خط الصفر مثل رسم الزخم.
+ */
+async function buildPressure(smFixtureId: number): Promise<WcPressure> {
+  const resp = await smGet(`fixtures/${smFixtureId}`, {
+    include: "pressure;participants;state",
+  });
+  const data = resp?.data ?? {};
+  const live = LIVE_STATES.has(data.state?.developer_name ?? "");
+  const participants: any[] = Array.isArray(data.participants) ? data.participants : [];
+  let homeId = participants.find((p) => p.meta?.location === "home")?.id;
+  let awayId = participants.find((p) => p.meta?.location === "away")?.id;
+  // fallback لو غاب meta.location: SportMonks يُرتّب المضيف أولًا
+  if ((homeId == null || awayId == null) && participants.length === 2) {
+    homeId = homeId ?? participants[0]?.id;
+    awayId = awayId ?? participants[1]?.id;
+  }
+  const pressure: any[] = Array.isArray(data.pressure) ? data.pressure : [];
+
+  if (homeId == null || awayId == null || pressure.length === 0) {
+    return { ...EMPTY_PRESSURE, live };
+  }
+
+  // دقيقة → {home, away}: قيمة موجبة واحدة في الغالب لكل دقيقة
+  const byMinute = new Map<number, { home: number; away: number }>();
+  for (const p of pressure) {
+    if (typeof p.minute !== "number") continue;
+    const slot = byMinute.get(p.minute) ?? { home: 0, away: 0 };
+    const val = Math.max(0, Number(p.pressure) || 0);
+    if (p.participant_id === homeId) slot.home = val;
+    else if (p.participant_id === awayId) slot.away = val;
+    byMinute.set(p.minute, slot);
+  }
+
+  const points: WcPressurePoint[] = [...byMinute.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([minute, v]) => ({
+      label: `${minute}'`,
+      minute,
+      home: v.home,
+      away: -v.away,
+      net: v.home - v.away,
+    }));
+
+  if (points.length === 0) return { ...EMPTY_PRESSURE, live };
+
+  const last = points[points.length - 1];
+  const latest: WcPressure["latest"] =
+    last.net > 0
+      ? { side: "home", value: last.home }
+      : last.net < 0
+        ? { side: "away", value: Math.abs(last.away) }
+        : { side: "even", value: 0 };
+
+  return { available: true, live, latest, points };
+}
+
+/**
+ * مؤشّر الضغط لحظة بلحظة (Pressure Index — إضافة SportMonks).
+ * home/away في النقاط مُحاذية لمضيف/ضيف المباراة (عبر meta.location).
+ */
+export async function getPressure(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcPressure> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_PRESSURE;
+  return withSWR(`wc:pressure:${r.smId}`, r.ttl, r.ttl * 3, () => buildPressure(r.smId));
+}
+
+// ---------- التوقعات الاحتمالية (Predictions — احتمالات SportMonks) ----------
+
+export interface WcOverUnderLine {
+  line: number; // 1.5 / 2.5 / 3.5 ...
+  over: number; // احتمال «أكثر من» (%)
+  under: number; // احتمال «أقل من» (%)
+}
+
+export interface WcCorrectScore {
+  score: string; // "2-0" (المضيف-الضيف)
+  prob: number; // احتمال (%)
+}
+
+export interface WcForecast {
+  available: boolean;
+  /** نتيجة المباراة 1×2 (نِسب مئوية) */
+  fulltime: { home: number; draw: number; away: number } | null;
+  /** الفريقان يسجلان */
+  btts: { yes: number; no: number } | null;
+  /** الفرصة المزدوجة */
+  doubleChance: { homeOrDraw: number; awayOrDraw: number; homeOrAway: number } | null;
+  /** مجموع الأهداف أكثر/أقل من خطوط متعددة */
+  goals: WcOverUnderLine[];
+  /** أرجح النتائج مرتّبة تنازليًا */
+  correctScores: WcCorrectScore[];
+}
+
+const EMPTY_FORECAST: WcForecast = {
+  available: false,
+  fulltime: null,
+  btts: null,
+  doubleChance: null,
+  goals: [],
+  correctScores: [],
+};
+
+/**
+ * يبني حزمة التوقعات من نقطة probabilities: نتيجة المباراة، الفريقان يسجلان،
+ * الفرصة المزدوجة، مجموع الأهداف (1.5–3.5)، وأرجح النتائج الصحيحة.
+ */
+async function buildForecast(smFixtureId: number): Promise<WcForecast> {
+  const resp = await smGet(`predictions/probabilities/fixtures/${smFixtureId}`, {
+    include: "type",
+  });
+  const rows: any[] = Array.isArray(resp?.data) ? resp.data : [];
+  if (rows.length === 0) return EMPTY_FORECAST;
+
+  const byType = new Map<string, any>();
+  for (const r of rows) {
+    const name = r?.type?.developer_name;
+    if (name) byType.set(name, r.predictions ?? {});
+  }
+  const pct = (v: any): number => (typeof v === "number" ? Math.round(v) : 0);
+
+  const ft = byType.get("FULLTIME_RESULT_PROBABILITY");
+  const fulltime = ft ? { home: pct(ft.home), draw: pct(ft.draw), away: pct(ft.away) } : null;
+
+  const b = byType.get("BTTS_PROBABILITY");
+  const btts = b ? { yes: pct(b.yes), no: pct(b.no) } : null;
+
+  const dc = byType.get("DOUBLE_CHANCE_PROBABILITY");
+  const doubleChance = dc
+    ? {
+        homeOrDraw: pct(dc.draw_home),
+        awayOrDraw: pct(dc.draw_away),
+        homeOrAway: pct(dc.home_away),
+      }
+    : null;
+
+  // مجموع الأهداف — نعرض 1.5/2.5/3.5 فقط (4.5 نادرًا ما يُفيد القارئ)
+  const goals: WcOverUnderLine[] = [];
+  for (const line of [1.5, 2.5, 3.5]) {
+    const ou = byType.get(`OVER_UNDER_${String(line).replace(".", "_")}_PROBABILITY`);
+    if (ou && (ou.yes != null || ou.no != null)) {
+      goals.push({ line, over: pct(ou.yes), under: pct(ou.no) });
+    }
+  }
+
+  // أرجح النتائج — نستبعد دلاء "Other_*" ونأخذ أعلى 5 سطور نتيجة فعلية
+  const cs = byType.get("CORRECT_SCORE_PROBABILITY");
+  const scoresObj = cs?.scores && typeof cs.scores === "object" ? cs.scores : {};
+  const correctScores: WcCorrectScore[] = Object.entries(scoresObj)
+    .filter(([k]) => /^\d+-\d+$/.test(k))
+    .map(([score, prob]) => ({ score, prob: typeof prob === "number" ? prob : 0 }))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, 5)
+    .map((s) => ({ score: s.score, prob: Math.round(s.prob * 10) / 10 }));
+
+  const available = Boolean(
+    fulltime || btts || doubleChance || goals.length || correctScores.length
+  );
+  return { available, fulltime, btts, doubleChance, goals, correctScores };
+}
+
+/**
+ * التوقعات الاحتمالية للمباراة (Predictions — احتمالات SportMonks).
+ * متاحة قبل المباراة (حتى 21 يومًا) وتُحدَّث مع اقترابها.
+ */
+export async function getForecast(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcForecast> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_FORECAST;
+  // التوقعات مستقرّة نسبيًا — كاش متوسط بغضّ النظر عن حالة المباراة
+  return withSWR(`wc:forecast:${r.smId}`, CACHE_TTL.MEDIUM, CACHE_TTL.LONG, () =>
+    buildForecast(r.smId)
+  );
+}
+
+// ---------- معطيات المباراة: إحصائيات + طقس + غيابات (Match Facts) ----------
+
+export interface WcStatItem {
+  key: string;
+  label: string;
+  home: string; // قد يحمل "%" — متوافق مع StatRow بالواجهة
+  away: string;
+}
+
+export interface WcWeather {
+  type: "actual" | "forecast"; // توقّع قبل المباراة / فعلي أثناءها وبعدها
+  temp: number | null; // °م
+  description: string; // مُعرَّب
+  icon: string;
+  humidity: string; // "62%"
+}
+
+export interface WcAbsentee {
+  name: string;
+  location: "home" | "away";
+  reason: string; // مُعرَّب (إصابة/إيقاف...)
+}
+
+// تفصيل حدث يُركَّب فوق أحداث API-Football (لا يحلّ محلها) بمطابقة نوع+جهة+دقيقة
+export interface WcEventDetail {
+  minute: number;
+  location: "home" | "away";
+  klass: "goal" | "card" | "var";
+  detail: string; // مُعرَّب: طريقة الهدف / سبب البطاقة / قرار VAR
+  player: string;
+}
+
+export interface WcMatchFacts {
+  available: boolean;
+  statistics: WcStatItem[];
+  weather: WcWeather | null;
+  absentees: WcAbsentee[];
+  eventDetails: WcEventDetail[];
+  halftime: { home: number; away: number } | null;
+}
+
+const EMPTY_MATCH_FACTS: WcMatchFacts = {
+  available: false,
+  statistics: [],
+  weather: null,
+  absentees: [],
+  eventDetails: [],
+  halftime: null,
+};
+
+// قائمة مرتّبة بالأهمية: رمز SportMonks → تسمية عربية (وما يُعرض كنسبة)
+const STAT_LABELS: { code: string; label: string; percent?: boolean }[] = [
+  { code: "ball-possession", label: "الاستحواذ", percent: true },
+  { code: "shots-total", label: "إجمالي التسديدات" },
+  { code: "shots-on-target", label: "تسديدات على المرمى" },
+  { code: "shots-off-target", label: "تسديدات خارج المرمى" },
+  { code: "shots-insidebox", label: "تسديدات داخل المنطقة" },
+  { code: "shots-outsidebox", label: "تسديدات خارج المنطقة" },
+  { code: "dangerous-attacks", label: "هجمات خطيرة" },
+  { code: "attacks", label: "الهجمات" },
+  { code: "corners", label: "الركنيات" },
+  { code: "offsides", label: "التسلل" },
+  { code: "fouls", label: "الأخطاء" },
+  { code: "saves", label: "التصدّيات" },
+  { code: "passes", label: "التمريرات" },
+  { code: "successful-passes", label: "تمريرات ناجحة" },
+  { code: "yellowcards", label: "بطاقات صفراء" },
+  { code: "redcards", label: "بطاقات حمراء" },
+];
+
+const WEATHER_AR: Record<string, string> = {
+  "clear sky": "سماء صافية",
+  "few clouds": "غيوم قليلة",
+  "scattered clouds": "غيوم متفرقة",
+  "broken clouds": "غيوم متقطعة",
+  "overcast clouds": "غائم",
+  "light rain": "مطر خفيف",
+  "moderate rain": "مطر معتدل",
+  "heavy intensity rain": "مطر غزير",
+  "very heavy rain": "مطر شديد الغزارة",
+  "light intensity shower rain": "زخّات مطر خفيفة",
+  "shower rain": "زخّات مطر",
+  thunderstorm: "عاصفة رعدية",
+  mist: "شبّورة",
+  haze: "غبار خفيف",
+  fog: "ضباب",
+  smoke: "دخان",
+  snow: "ثلوج",
+};
+
+// سبب الغياب من SportMonks (نص حرّ محدّد مثل "Hamstring Injury"/"Suspended")
+// → عربي بمطابقة جزئية تغطّي الأغلب؛ fallback: النص الأصلي (نادر).
+function arabicReason(raw: string): string {
+  const r = (raw || "").toLowerCase();
+  if (!r) return "غياب";
+  if (r.includes("suspend")) return "إيقاف";
+  if (r.includes("ill") || r.includes("sick") || r.includes("virus") || r.includes("flu"))
+    return "مرض";
+  if (r.includes("knock")) return "إصابة طفيفة";
+  if (r.includes("doubt")) return "مشكوك بجاهزيته";
+  if (r.includes("national")) return "ارتباط دولي";
+  if (r.includes("injur")) return "إصابة";
+  // إصابات محددة بالاسم لا تحوي كلمة injury
+  if (
+    /(hamstring|knee|ankle|groin|calf|thigh|muscle|broken|fracture|acl|ligament|back|shoulder|foot|toe|hip|concussion|jaw|rib|wrist|finger)/.test(
+      r
+    )
+  )
+    return "إصابة";
+  return raw;
+}
+
+function teamSides(participants: any[]): { homeId: number | null; awayId: number | null } {
+  let homeId = participants.find((p) => p.meta?.location === "home")?.id ?? null;
+  let awayId = participants.find((p) => p.meta?.location === "away")?.id ?? null;
+  if ((homeId == null || awayId == null) && participants.length === 2) {
+    homeId = homeId ?? participants[0]?.id ?? null;
+    awayId = awayId ?? participants[1]?.id ?? null;
+  }
+  return { homeId, awayId };
+}
+
+function buildStatistics(stats: any[]): WcStatItem[] {
+  const map = new Map<string, { home: number; away: number }>();
+  for (const s of stats) {
+    const code = s.type?.code;
+    if (!code) continue;
+    const slot = map.get(code) ?? { home: 0, away: 0 };
+    const val = Number(s.data?.value) || 0;
+    if (s.location === "home") slot.home = val;
+    else if (s.location === "away") slot.away = val;
+    map.set(code, slot);
+  }
+  const out: WcStatItem[] = [];
+  for (const { code, label, percent } of STAT_LABELS) {
+    const v = map.get(code);
+    if (!v || (v.home === 0 && v.away === 0)) continue;
+    out.push({
+      key: code,
+      label,
+      home: percent ? `${v.home}%` : String(v.home),
+      away: percent ? `${v.away}%` : String(v.away),
+    });
+  }
+  return out;
+}
+
+function buildWeather(w: any): WcWeather | null {
+  if (!w) return null;
+  const descRaw = (w.description || w.current?.description || "").toString();
+  const temp = w.temperature?.day ?? w.current?.temp ?? null;
+  if (temp == null && !descRaw) return null;
+  return {
+    type: w.type === "forecast" ? "forecast" : "actual",
+    temp: typeof temp === "number" ? Math.round(temp) : null,
+    description: WEATHER_AR[descRaw.toLowerCase()] ?? descRaw,
+    icon: w.icon || "",
+    humidity: w.humidity || w.current?.humidity || "",
+  };
+}
+
+function buildAbsentees(
+  sidelined: any[],
+  homeId: number | null,
+  awayId: number | null
+): WcAbsentee[] {
+  const out: WcAbsentee[] = [];
+  for (const s of sidelined) {
+    const name = s.sideline?.player?.name; // يُحلّ غالبًا للمباريات القادمة فقط
+    if (!name) continue;
+    const location =
+      s.participant_id === homeId ? "home" : s.participant_id === awayId ? "away" : null;
+    if (!location) continue;
+    const reason = arabicReason((s.sideline?.type?.name || "").toString());
+    out.push({ name, location, reason });
+  }
+  return out;
+}
+
+// طريقة الهدف من حقل info (SportMonks) → عربي. fallback: "" (لا نعرض المجهول)
+function goalMethodAr(info: string): string {
+  const r = (info || "").toLowerCase();
+  if (r.includes("header")) return "رأسية";
+  if (r.includes("left foot")) return "تسديدة يسارية";
+  if (r.includes("right foot")) return "تسديدة يمينية";
+  if (r.includes("penalty")) return "ركلة جزاء";
+  if (r.includes("free")) return "ركلة حرة";
+  if (r.includes("tap")) return "لمسة قرب المرمى";
+  if (r.includes("solo")) return "انفراد";
+  if (r.includes("shot")) return "تسديدة";
+  return "";
+}
+
+// سبب البطاقة من حقل info → عربي. fallback: "" (لا نعرض المجهول)
+function cardReasonAr(info: string): string {
+  const r = (info || "").toLowerCase();
+  if (r.includes("professional")) return "خطأ تكتيكي";
+  if (r.includes("persistent")) return "أخطاء متكررة";
+  if (r.includes("foul")) return "خطأ";
+  if (r.includes("argument") || r.includes("dissent")) return "احتجاج";
+  if (r.includes("hand")) return "لمسة يد";
+  if (r.includes("time")) return "تضييع وقت";
+  if (r.includes("dangerous")) return "لعب خطير";
+  if (r.includes("rough")) return "خشونة";
+  if (r.includes("unsporting")) return "سلوك غير رياضي";
+  if (r.includes("simulation") || r.includes("diving")) return "تمثيل";
+  return "";
+}
+
+// قرار الـVAR من حقل addition → عربي. fallback: مراجعة عامة
+function varDecisionAr(addition: string): string {
+  const r = (addition || "").toLowerCase();
+  if (r.includes("goal") && r.includes("disallow")) return "إلغاء هدف (VAR)";
+  if (r.includes("goal") && r.includes("award")) return "احتساب هدف (VAR)";
+  if (r.includes("penalty") && r.includes("not")) return "إلغاء ركلة جزاء (VAR)";
+  if (r.includes("penalty")) return "احتساب ركلة جزاء (VAR)";
+  if (r.includes("red") && r.includes("cancel")) return "إلغاء طرد (VAR)";
+  if (r.includes("red")) return "طرد (VAR)";
+  return "مراجعة الحكم (VAR)";
+}
+
+function buildEventDetails(
+  events: any[],
+  homeId: number | null,
+  awayId: number | null
+): WcEventDetail[] {
+  const out: WcEventDetail[] = [];
+  for (const e of events) {
+    const code = (e.type?.code || "").toLowerCase();
+    const minute = typeof e.minute === "number" ? e.minute : null;
+    if (minute == null) continue;
+    const location =
+      e.participant_id === homeId ? "home" : e.participant_id === awayId ? "away" : null;
+    if (!location) continue;
+
+    if (code === "goal" || code === "own-goal" || code === "penalty") {
+      const detail = goalMethodAr(e.info);
+      if (detail) out.push({ minute, location, klass: "goal", detail, player: e.player_name || "" });
+    } else if (code === "yellowcard" || code === "redcard" || code === "yellowredcard") {
+      const detail = cardReasonAr(e.info);
+      if (detail) out.push({ minute, location, klass: "card", detail, player: e.player_name || "" });
+    } else if (code === "var" || code === "var_card") {
+      const detail = varDecisionAr(e.addition);
+      out.push({ minute, location, klass: "var", detail, player: e.player_name || "" });
+    }
+  }
+  return out;
+}
+
+function buildHalftime(scores: any[]): { home: number; away: number } | null {
+  const ht = scores.filter((s) => s.description === "1ST_HALF");
+  if (ht.length === 0) return null;
+  const home = ht.find((s) => s.score?.participant === "home")?.score?.goals;
+  const away = ht.find((s) => s.score?.participant === "away")?.score?.goals;
+  if (home == null && away == null) return null;
+  return { home: home ?? 0, away: away ?? 0 };
+}
+
+async function buildMatchFacts(smFixtureId: number): Promise<WcMatchFacts> {
+  const resp = await smGet(`fixtures/${smFixtureId}`, {
+    include:
+      "statistics.type;participants;weatherReport;sidelined.sideline.player;sidelined.sideline.type;events.type;scores",
+  });
+  const data = resp?.data ?? {};
+  const participants: any[] = Array.isArray(data.participants) ? data.participants : [];
+  const { homeId, awayId } = teamSides(participants);
+
+  const statistics = buildStatistics(Array.isArray(data.statistics) ? data.statistics : []);
+  const weather = buildWeather(data.weatherreport);
+  const absentees = buildAbsentees(
+    Array.isArray(data.sidelined) ? data.sidelined : [],
+    homeId,
+    awayId
+  );
+  const eventDetails = buildEventDetails(
+    Array.isArray(data.events) ? data.events : [],
+    homeId,
+    awayId
+  );
+  const halftime = buildHalftime(Array.isArray(data.scores) ? data.scores : []);
+
+  const available =
+    statistics.length > 0 ||
+    weather != null ||
+    absentees.length > 0 ||
+    eventDetails.length > 0 ||
+    halftime != null;
+  return { available, statistics, weather, absentees, eventDetails, halftime };
+}
+
+/**
+ * معطيات المباراة من SportMonks: إحصائيات أعمق (حتى 41 نوعًا)، الطقس
+ * (توقّع قبل المباراة + فعلي بعدها)، والغيابات (تظهر غالبًا قبل المباراة).
+ */
+export async function getMatchFacts(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcMatchFacts> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_MATCH_FACTS;
+  return withSWR(`wc:facts:${r.smId}`, r.ttl, r.ttl * 3, () => buildMatchFacts(r.smId));
+}
+
+// ---------- الأهداف المتوقعة xG (من lineups.details — متاح للمونديال) ----------
+
+export interface WcXgPlayer {
+  name: string;
+  location: "home" | "away";
+  xg: number;
+}
+
+export interface WcXg {
+  available: boolean;
+  /** xG = مجموع الأهداف المتوقعة للاعبي الفريق؛ xgot = على المرمى */
+  home: { xg: number; xgot: number };
+  away: { xg: number; xgot: number };
+  topPlayers: WcXgPlayer[]; // الأعلى خطورة (xG) — حتى 5
+}
+
+const EMPTY_XG: WcXg = {
+  available: false,
+  home: { xg: 0, xgot: 0 },
+  away: { xg: 0, xgot: 0 },
+  topPlayers: [],
+};
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * xG للفريقين = مجموع expected-goals للاعبي كل فريق (من lineups.details).
+ * متاح لمباريات المونديال خلافًا لـ xGFixture الفارغ على مستوى المباراة.
+ */
+async function buildXg(smFixtureId: number): Promise<WcXg> {
+  const resp = await smGet(`fixtures/${smFixtureId}`, {
+    include: "lineups.details.type;participants",
+  });
+  const data = resp?.data ?? {};
+  const { homeId, awayId } = teamSides(Array.isArray(data.participants) ? data.participants : []);
+  const lineups: any[] = Array.isArray(data.lineups) ? data.lineups : [];
+
+  let homeXg = 0,
+    awayXg = 0,
+    homeXgot = 0,
+    awayXgot = 0;
+  const players: WcXgPlayer[] = [];
+
+  for (const lu of lineups) {
+    const location = lu.team_id === homeId ? "home" : lu.team_id === awayId ? "away" : null;
+    if (!location) continue;
+    const details: any[] = Array.isArray(lu.details) ? lu.details : [];
+    let pXg = 0;
+    for (const d of details) {
+      const code = d.type?.code;
+      const v = Number(d.data?.value) || 0;
+      if (code === "expected-goals") {
+        pXg += v;
+        if (location === "home") homeXg += v;
+        else awayXg += v;
+      } else if (code === "expected-goals-on-target") {
+        if (location === "home") homeXgot += v;
+        else awayXgot += v;
+      }
+    }
+    if (pXg > 0) players.push({ name: lu.player_name || "", location, xg: round2(pXg) });
+  }
+
+  const available = homeXg > 0 || awayXg > 0;
+  const topPlayers = players.sort((a, b) => b.xg - a.xg).slice(0, 5);
+  return {
+    available,
+    home: { xg: round2(homeXg), xgot: round2(homeXgot) },
+    away: { xg: round2(awayXg), xgot: round2(awayXgot) },
+    topPlayers,
+  };
+}
+
+/**
+ * الأهداف المتوقعة (xG) للفريقين + أبرز صانعي الخطورة.
+ * يُحاذى home/away عبر meta.location مثل بقية معطيات SportMonks.
+ */
+export async function getXg(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcXg> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_XG;
+  return withSWR(`wc:xg:${r.smId}`, r.ttl, r.ttl * 3, () => buildXg(r.smId));
+}
+
 // ---------- التعليق المباشر المترجم (من commentaries — إضافة Match Facts) ----------
 
 export interface WcCommentaryItem {
