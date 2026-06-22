@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowLeftRight,
   Crown,
+  Gauge,
   Goal,
   MapPin,
   MonitorPlay,
@@ -12,7 +13,7 @@ import {
   Square,
   Star,
 } from "lucide-react";
-import { CornerDownRight, Flag, Hand, Rocket, Timer } from "lucide-react";
+import { Cloud, CornerDownRight, Droplets, Flag, Hand, Rocket, Timer, UserX } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -34,6 +35,14 @@ import {
   type WcCommentaryItem,
   type WcMomentum,
   type WcMomentumPoint,
+  type WcPressure,
+  type WcPressurePoint,
+  type WcForecast,
+  type WcOverUnderLine,
+  type WcMatchFacts,
+  type WcWeather,
+  type WcEventDetail,
+  type WcXg,
   type WcFixture,
   type WcLineup,
   type WcMatchDetail,
@@ -61,14 +70,27 @@ function EventIcon({ type }: { type: string }) {
   return <Radio className="h-4 w-4 text-muted-foreground" />;
 }
 
+// يصنّف حدث API-Football إلى صنف SportMonks لمطابقة التفصيل المركّب
+function eventKlass(type: string): "goal" | "card" | "var" | null {
+  if (type === "goal") return "goal";
+  if (type === "yellow-card" || type === "red-card") return "card";
+  if (type === "var") return "var";
+  return null;
+}
+
 function EventsTimeline({
   events,
   fixture,
   onOpenPlayer,
+  eventDetails = [],
+  halftime = null,
 }: {
   events: WcMatchEvent[];
   fixture: WcFixture;
   onOpenPlayer: (playerId: number) => void;
+  /** تفصيل SportMonks المركّب فوق أحداث API-Football (طريقة الهدف/سبب البطاقة/VAR) */
+  eventDetails?: WcEventDetail[];
+  halftime?: { home: number; away: number } | null;
 }) {
   if (events.length === 0) {
     return (
@@ -79,15 +101,34 @@ function EventsTimeline({
       </p>
     );
   }
+  // مطابقة بـ صنف+جهة+دقيقة (سماح ±1 لاختلاف توقيت المزوّدين)
+  const detailFor = (event: WcMatchEvent): string | null => {
+    const klass = eventKlass(event.type);
+    if (!klass) return null;
+    const location = event.teamId === fixture.home.id ? "home" : "away";
+    const hit = eventDetails.find(
+      (d) => d.klass === klass && d.location === location && Math.abs(d.minute - event.minute) <= 1
+    );
+    return hit?.detail ?? null;
+  };
   const sorted = [...events].sort(
     (a, b) => b.minute - a.minute || (b.extraMinute ?? 0) - (a.extraMinute ?? 0)
   );
   return (
     <div className="space-y-2">
+      {halftime && (
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pb-1">
+          <span>نتيجة الشوط الأول</span>
+          <span className="font-black tabular-nums text-foreground" dir="ltr">
+            {halftime.away} - {halftime.home}
+          </span>
+        </div>
+      )}
       {sorted.map((event, index) => {
         const isHome = event.teamId === fixture.home.id;
         const team = isHome ? fixture.home : fixture.away;
         const clickable = (event.playerId ?? 0) > 0;
+        const extra = detailFor(event);
         return (
           <button
             key={index}
@@ -105,6 +146,9 @@ function EventsTimeline({
                 {event.label}
                 {event.player ? ` — ${event.player}` : ""}
               </p>
+              {extra && (
+                <p className="text-[11px] text-sky-600 dark:text-sky-300 truncate">{extra}</p>
+              )}
               {event.assist && event.type === "goal" && (
                 <p className="text-[11px] text-muted-foreground truncate">صناعة: {event.assist}</p>
               )}
@@ -117,6 +161,29 @@ function EventsTimeline({
         );
       })}
     </div>
+  );
+}
+
+// يجلب معطيات SportMonks ويركّب تفصيلها على أحداث API-Football + نتيجة الشوط الأول
+function EventsTab({
+  detail,
+  onOpenPlayer,
+}: {
+  detail: WcMatchDetail;
+  onOpenPlayer: (playerId: number) => void;
+}) {
+  const { data: facts } = useQuery<WcMatchFacts>({
+    queryKey: [`/api/world-cup/match-facts/${detail.fixture.id}`],
+    refetchInterval: detail.fixture.status.live ? 30_000 : false,
+  });
+  return (
+    <EventsTimeline
+      events={detail.events}
+      fixture={detail.fixture}
+      onOpenPlayer={onOpenPlayer}
+      eventDetails={facts?.eventDetails ?? []}
+      halftime={facts?.halftime ?? null}
+    />
   );
 }
 
@@ -248,6 +315,171 @@ function StatRow({ stat }: { stat: WcStatistic }) {
   );
 }
 
+// ---------- معطيات المباراة: طقس + غيابات + إحصائيات أعمق (SportMonks) ----------
+
+function WeatherCard({ weather }: { weather: WcWeather }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-muted/40 px-3.5 py-2.5">
+      {weather.icon ? (
+        <img src={weather.icon} alt="" className="h-9 w-9 object-contain shrink-0" loading="lazy" />
+      ) : (
+        <Cloud className="h-7 w-7 text-sky-500 shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold">
+          {weather.description}
+          {weather.type === "forecast" && (
+            <span className="text-[10px] text-muted-foreground font-normal"> · توقّع</span>
+          )}
+        </p>
+        <div className="text-[11px] text-muted-foreground flex items-center gap-3 mt-0.5">
+          {weather.temp != null && <span className="tabular-nums">{weather.temp}°م</span>}
+          {weather.humidity && (
+            <span className="flex items-center gap-0.5">
+              <Droplets className="h-3 w-3" /> {weather.humidity}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AbsenteesSection({
+  absentees,
+  fixture,
+}: {
+  absentees: WcMatchFacts["absentees"];
+  fixture: WcFixture;
+}) {
+  const col = (team: WcFixture["home"], location: "home" | "away") => {
+    const list = absentees.filter((a) => a.location === location);
+    return (
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <img src={team.logo} alt="" className="h-4 w-4 object-contain shrink-0" loading="lazy" />
+          <span className="text-xs font-bold truncate">{team.name}</span>
+        </div>
+        <ul className="space-y-1">
+          {list.length === 0 ? (
+            <li className="text-[11px] text-muted-foreground">—</li>
+          ) : (
+            list.map((a, i) => (
+              <li key={i} className="text-[11px] text-muted-foreground truncate">
+                <span className="text-foreground font-semibold">{a.name}</span>
+                {a.reason ? ` — ${a.reason}` : ""}
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+    );
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
+        <UserX className="h-3.5 w-3.5 text-rose-500" />
+        <h4 className="text-xs font-bold text-rose-600 dark:text-rose-300">الغيابات</h4>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {col(fixture.home, "home")}
+        {col(fixture.away, "away")}
+      </div>
+    </div>
+  );
+}
+
+function XgCard({ fixtureId, fixture }: { fixtureId: number; fixture: WcFixture }) {
+  const { data } = useQuery<WcXg>({
+    queryKey: [`/api/world-cup/xg/${fixtureId}`],
+    refetchInterval: fixture.status.live ? 30_000 : false,
+  });
+  if (!data?.available) return null;
+  const teamLogo = (loc: "home" | "away") => (loc === "home" ? fixture.home.logo : fixture.away.logo);
+  return (
+    <div className="rounded-xl bg-gradient-to-l from-emerald-500/10 to-sky-500/10 ring-1 ring-border/60 px-3.5 py-3 space-y-2.5">
+      <StatRow
+        stat={{
+          key: "xg",
+          label: "الأهداف المتوقعة (xG)",
+          home: data.home.xg.toFixed(2),
+          away: data.away.xg.toFixed(2),
+        }}
+      />
+      {(data.home.xgot > 0 || data.away.xgot > 0) && (
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span className="tabular-nums w-12">{data.home.xgot.toFixed(2)}</span>
+          <span>على المرمى (xGoT)</span>
+          <span className="tabular-nums w-12 text-left">{data.away.xgot.toFixed(2)}</span>
+        </div>
+      )}
+      {data.topPlayers.length > 0 && (
+        <div className="pt-2 border-t border-border/60 space-y-1">
+          <p className="text-[10px] text-muted-foreground">الأعلى خطورة (xG)</p>
+          {data.topPlayers.slice(0, 3).map((p, i) => (
+            <div key={i} className="flex items-center justify-between text-[11px]">
+              <span className="flex items-center gap-1.5 min-w-0">
+                <img
+                  src={teamLogo(p.location)}
+                  alt=""
+                  className="h-3.5 w-3.5 object-contain shrink-0"
+                  loading="lazy"
+                />
+                <span className="truncate">{p.name}</span>
+              </span>
+              <span className="font-bold tabular-nums shrink-0">{p.xg.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatsTab({ detail }: { detail: WcMatchDetail }) {
+  const { data: facts, isLoading } = useQuery<WcMatchFacts>({
+    queryKey: [`/api/world-cup/match-facts/${detail.fixture.id}`],
+    refetchInterval: detail.fixture.status.live ? 30_000 : false,
+  });
+  // إحصائيات SportMonks أعمق (حتى 16 سطرًا منتقى)؛ نعود لـAPI-Football عند غيابها
+  const stats = (facts?.statistics?.length ?? 0) > 0 ? facts!.statistics : detail.statistics;
+  const weather = facts?.weather ?? null;
+  const hasAbsentees = (facts?.absentees?.length ?? 0) > 0;
+  const hasStats = stats.length > 0;
+
+  if (isLoading && detail.statistics.length === 0) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      <XgCard fixtureId={detail.fixture.id} fixture={detail.fixture} />
+      {weather && <WeatherCard weather={weather} />}
+      {hasAbsentees && facts && (
+        <AbsenteesSection absentees={facts.absentees} fixture={detail.fixture} />
+      )}
+      {hasStats && (
+        <div className="space-y-3">
+          {(weather || hasAbsentees) && <div className="border-t border-border/60 pt-1" />}
+          {stats.map((stat) => (
+            <StatRow key={stat.key} stat={stat} />
+          ))}
+        </div>
+      )}
+      {!hasStats && !weather && !hasAbsentees && (
+        <p className="text-center text-sm text-muted-foreground py-8">
+          الإحصائيات تظهر هنا أثناء المباراة
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- التوقعات وسجل المواجهات ----------
 
 function HeadToHeadList({ detail }: { detail: WcMatchDetail }) {
@@ -282,32 +514,191 @@ function HeadToHeadList({ detail }: { detail: WcMatchDetail }) {
   );
 }
 
-function PredictionTab({ detail }: { detail: WcMatchDetail }) {
-  const prediction = detail.prediction;
-  const rows = prediction
-    ? [
-        { label: `فوز ${detail.fixture.home.name}`, value: prediction.home, color: "bg-emerald-500" },
-        { label: "التعادل", value: prediction.draw, color: "bg-zinc-400" },
-        { label: `فوز ${detail.fixture.away.name}`, value: prediction.away, color: "bg-sky-500" },
-      ]
-    : [];
+// شريط مزدوج (احتمالان متقابلان) — للفريقان يسجلان وأوفر/أندر
+function ForecastSplit({
+  title,
+  left,
+  right,
+}: {
+  title: string;
+  left: { label: string; value: number; color: string };
+  right: { label: string; value: number; color: string };
+}) {
   return (
-    <div className="space-y-4 py-2">
-      {!prediction && (
-        <p className="text-center text-sm text-muted-foreground py-2">لا تتوفر توقعات لهذه المباراة</p>
-      )}
-      {rows.map((row) => (
-        <div key={row.label} className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold">{row.label}</span>
-            <span className="font-black tabular-nums">{row.value}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
-            <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.value}%` }} />
+    <div className="space-y-1">
+      <p className="text-xs font-bold text-muted-foreground">{title}</p>
+      <div className="flex h-6 w-full overflow-hidden rounded-lg text-[11px] font-bold text-white" dir="rtl">
+        <div
+          className={`flex items-center justify-center ${left.color}`}
+          style={{ width: `${left.value}%` }}
+        >
+          {left.value >= 16 ? `${left.value}%` : ""}
+        </div>
+        <div
+          className={`flex items-center justify-center ${right.color}`}
+          style={{ width: `${right.value}%` }}
+        >
+          {right.value >= 16 ? `${right.value}%` : ""}
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>
+          {left.label} <span className="font-bold tabular-nums text-foreground">{left.value}%</span>
+        </span>
+        <span>
+          {right.label} <span className="font-bold tabular-nums text-foreground">{right.value}%</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function OverUnderRow({ ou }: { ou: WcOverUnderLine }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="font-bold tabular-nums shrink-0 w-9" dir="ltr">
+        {ou.line}
+      </span>
+      <div className="flex h-5 flex-1 overflow-hidden rounded-md text-[10px] font-bold text-white" dir="rtl">
+        <div className="flex items-center justify-center bg-emerald-500" style={{ width: `${ou.over}%` }}>
+          {ou.over >= 20 ? `${ou.over}%` : ""}
+        </div>
+        <div className="flex items-center justify-center bg-zinc-400" style={{ width: `${ou.under}%` }}>
+          {ou.under >= 20 ? `${ou.under}%` : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForecastBlocks({ detail }: { detail: WcMatchDetail }) {
+  const { data, isLoading } = useQuery<WcForecast>({
+    queryKey: [`/api/world-cup/forecast/${detail.fixture.id}`],
+  });
+  if (isLoading) {
+    return (
+      <div className="space-y-3 pt-1">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    );
+  }
+  if (!data?.available) return null;
+  const { btts, doubleChance, goals, correctScores } = data;
+  const homeName = detail.fixture.home.name;
+  const awayName = detail.fixture.away.name;
+
+  return (
+    <div className="space-y-4 pt-3 border-t border-border/60">
+      <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300">توقعات متقدّمة</h4>
+
+      {doubleChance && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">الفرصة المزدوجة</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: `${homeName} أو تعادل`, value: doubleChance.homeOrDraw },
+              { label: "بلا تعادل", value: doubleChance.homeOrAway },
+              { label: `${awayName} أو تعادل`, value: doubleChance.awayOrDraw },
+            ].map((c) => (
+              <div key={c.label} className="rounded-lg bg-muted/50 px-1.5 py-2">
+                <p className="text-base font-black tabular-nums">{c.value}%</p>
+                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{c.label}</p>
+              </div>
+            ))}
           </div>
         </div>
-      ))}
-      {prediction && (
+      )}
+
+      {btts && (
+        <ForecastSplit
+          title="الفريقان يسجلان"
+          left={{ label: "نعم", value: btts.yes, color: "bg-emerald-500" }}
+          right={{ label: "لا", value: btts.no, color: "bg-zinc-400" }}
+        />
+      )}
+
+      {goals.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">
+            مجموع الأهداف — <span className="text-emerald-600">أكثر</span> /{" "}
+            <span className="text-zinc-500">أقل</span> من
+          </p>
+          <div className="space-y-1.5">
+            {goals.map((ou) => (
+              <OverUnderRow key={ou.line} ou={ou} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {correctScores.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">
+            أرجح النتائج <span className="font-normal">(الرقم الأول للمضيف)</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {correctScores.map((cs) => (
+              <div
+                key={cs.score}
+                className="rounded-lg bg-muted/50 px-2.5 py-1.5 text-center min-w-[3.5rem]"
+              >
+                <p className="text-sm font-black tabular-nums" dir="ltr">
+                  {cs.score}
+                </p>
+                <p className="text-[10px] text-muted-foreground tabular-nums">{cs.prob}%</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PredictionTab({ detail }: { detail: WcMatchDetail }) {
+  // مصدر نتيجة المباراة: API-Football إن توفّر، وإلا احتمالات SportMonks
+  const { data: forecast } = useQuery<WcForecast>({
+    queryKey: [`/api/world-cup/forecast/${detail.fixture.id}`],
+  });
+  const apiPred = detail.prediction;
+  const ft = apiPred
+    ? { home: apiPred.home, draw: apiPred.draw, away: apiPred.away }
+    : forecast?.fulltime ?? null;
+  const rows = ft
+    ? [
+        { label: `فوز ${detail.fixture.home.name}`, value: ft.home, color: "bg-emerald-500" },
+        { label: "التعادل", value: ft.draw, color: "bg-zinc-400" },
+        { label: `فوز ${detail.fixture.away.name}`, value: ft.away, color: "bg-sky-500" },
+      ]
+    : [];
+  const hasAny = ft != null || forecast?.available;
+
+  return (
+    <div className="space-y-4 py-2">
+      {!hasAny && (
+        <p className="text-center text-sm text-muted-foreground py-2">لا تتوفر توقعات لهذه المباراة</p>
+      )}
+      {rows.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-muted-foreground">نتيجة المباراة</p>
+          {rows.map((row) => (
+            <div key={row.label} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold">{row.label}</span>
+                <span className="font-black tabular-nums">{row.value}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.value}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ForecastBlocks detail={detail} />
+
+      {hasAny && (
         <p className="text-[11px] text-muted-foreground text-center">
           توقعات خوارزمية من مزود البيانات الرياضية — للاستئناس وليست ترجيحًا تحريريًا
         </p>
@@ -540,6 +931,121 @@ function MomentumTab({
   );
 }
 
+// ---------- مؤشّر الضغط (Pressure Index — إضافة SportMonks) ----------
+
+function PressureTooltip({
+  active,
+  payload,
+  homeName,
+  awayName,
+}: {
+  active?: boolean;
+  payload?: { payload: WcPressurePoint }[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div className="rounded-lg border bg-background px-2.5 py-1.5 text-xs shadow-md" dir="rtl">
+      <p className="font-bold mb-0.5 tabular-nums" dir="ltr">
+        {p.minute}'
+      </p>
+      <p className="text-emerald-600">
+        {homeName}: <span className="font-bold tabular-nums">{Math.round(p.home)}</span>
+      </p>
+      <p className="text-rose-600">
+        {awayName}: <span className="font-bold tabular-nums">{Math.round(Math.abs(p.away))}</span>
+      </p>
+    </div>
+  );
+}
+
+function PressureTab({
+  fixtureId,
+  live,
+  homeName,
+  awayName,
+}: {
+  fixtureId: number;
+  live: boolean;
+  homeName: string;
+  awayName: string;
+}) {
+  const { data, isLoading } = useQuery<WcPressure>({
+    queryKey: [`/api/world-cup/pressure/${fixtureId}`],
+    refetchInterval: live ? 20_000 : false,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-3">
+        <Skeleton className="h-5 w-40 mx-auto" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    );
+  }
+
+  const points = Array.isArray(data?.points) ? data!.points : [];
+  if (points.length === 0) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        مؤشّر الضغط يظهر هنا أثناء المباراة
+      </p>
+    );
+  }
+
+  const latest = data?.latest ?? null;
+  const dominant =
+    latest && latest.side !== "even"
+      ? { name: latest.side === "home" ? homeName : awayName, value: Math.round(latest.value) }
+      : null;
+
+  return (
+    <div className="space-y-4 py-3">
+      {live && dominant && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <Gauge className="h-4 w-4 text-emerald-600" />
+          <span className="text-muted-foreground">الأكثر سيطرة الآن:</span>
+          <span className="font-extrabold">{dominant.name}</span>
+          <Badge variant="secondary" className="tabular-nums" dir="ltr">
+            {dominant.value}
+          </Badge>
+        </div>
+      )}
+      <div>
+        <p className="text-[11px] text-muted-foreground mb-2 text-center">
+          مؤشّر الضغط لحظة بلحظة — أعلى: سيطرة {homeName} · أسفل: سيطرة {awayName}
+        </p>
+        <div dir="ltr">
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={0}>
+              <XAxis
+                dataKey="minute"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(m) => `${m}'`}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis hide />
+              <ReferenceLine y={0} stroke="hsl(var(--border))" />
+              <RechartsTooltip
+                cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
+                content={<PressureTooltip homeName={homeName} awayName={awayName} />}
+              />
+              <Bar dataKey="net" radius={[1, 1, 0, 0]}>
+                {points.map((p) => (
+                  <Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#e11d48"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- التعليق المباشر المترجم (من commentaries) ----------
 
 // أيقونة بحسب نوع اللحظة المُستنتجة من النص العربي (الخادم لا يُرسل نوعًا صريحًا).
@@ -738,6 +1244,12 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                   الزخم
                 </TabsTrigger>
               )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsTrigger value="pressure" className="gap-1">
+                  <Gauge className="h-3 w-3" />
+                  الضغط
+                </TabsTrigger>
+              )}
               <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
               <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
               {detail.ratings.length > 0 && (
@@ -754,7 +1266,7 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               <TabsContent value="events" className="mt-0">
-                <EventsTimeline events={detail.events} fixture={detail.fixture} onOpenPlayer={onOpenPlayer} />
+                <EventsTab detail={detail} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
               {(detail.fixture.status.live || detail.fixture.status.finished) && (
                 <TabsContent value="live" className="mt-0">
@@ -771,21 +1283,21 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                   />
                 </TabsContent>
               )}
+              {(detail.fixture.status.live || detail.fixture.status.finished) && (
+                <TabsContent value="pressure" className="mt-0">
+                  <PressureTab
+                    fixtureId={detail.fixture.id}
+                    live={detail.fixture.status.live}
+                    homeName={detail.fixture.home.name}
+                    awayName={detail.fixture.away.name}
+                  />
+                </TabsContent>
+              )}
               <TabsContent value="lineups" className="mt-0">
                 <LineupsTab lineups={detail.lineups} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
               <TabsContent value="stats" className="mt-0">
-                {detail.statistics.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">
-                    الإحصائيات تظهر هنا أثناء المباراة
-                  </p>
-                ) : (
-                  <div className="space-y-3 py-2">
-                    {detail.statistics.map((stat) => (
-                      <StatRow key={stat.key} stat={stat} />
-                    ))}
-                  </div>
-                )}
+                <StatsTab detail={detail} />
               </TabsContent>
               {detail.ratings.length > 0 && (
                 <TabsContent value="ratings" className="mt-0">
