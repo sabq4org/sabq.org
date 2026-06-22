@@ -151,9 +151,9 @@ function EventsTimeline({
     );
     return hit?.detail ?? null;
   };
-  // تصاعدي زمنيًا (٠′ أعلى → النهاية أسفل) — قراءة الخط الزمني الطبيعية
+  // تنازلي زمنيًا (الأحدث أعلى → الأقدم أسفل)
   const sorted = [...events].sort(
-    (a, b) => a.minute - b.minute || (a.extraMinute ?? 0) - (b.extraMinute ?? 0)
+    (a, b) => b.minute - a.minute || (b.extraMinute ?? 0) - (a.extraMinute ?? 0)
   );
   return (
     <div>
