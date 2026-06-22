@@ -52,9 +52,8 @@ struct WorldCupView: View {
         .background(WCTheme.sectionBackground.ignoresSafeArea())
         .navigationTitle("مونديال 2026")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(WCTheme.stadiumTop, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        // لا خلفية صلبة لشريط التنقّل — يبقى شفّافًا فتظهر خلفية الصفحة الخفيفة خلف
+        // العنوان. لون العنوان يتبع النظام (داكن على الفاتح، أبيض في الليلي).
         .task { await loadAll() }
         .refreshable { await loadAll(force: true) }
         .sheet(item: $selectedMatch) { sel in
@@ -128,32 +127,23 @@ struct WCHeroSection: View {
     private var liveCount: Int { overview?.live.count ?? 0 }
 
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [WCTheme.stadiumTop, WCTheme.stadiumBottom],
-                           startPoint: .topTrailing, endPoint: .bottomLeading)
-            Circle()
-                .stroke(.white.opacity(0.06), lineWidth: 2)
-                .frame(width: 360, height: 360)
-                .offset(y: 150)
-
-            VStack(spacing: 18) {
-                header
-                card
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
+        VStack(spacing: 18) {
+            header
+            card
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.horizontal, 20)
+        .padding(.top, 52) // يُنزِل المحتوى أسفل شريط التنقّل الشفّاف (لا تداخل مع العنوان/الزر)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+        // لا كتلة خلفية للهيرو — يجلس مباشرة على خلفية الصفحة الزرقاء الخفيفة جدًا
+        // (sectionBackground). النصوص والبطاقة تكيّفية تُقرأ على الفاتح والليلي.
     }
 
     private var header: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 pill(icon: "trophy.fill", text: "تغطية خاصة",
-                     bg: WCTheme.emerald.opacity(0.15), fg: WCTheme.emerald)
+                     bg: WCTheme.emerald.opacity(0.14), fg: WCTheme.emeraldDeep)
                 if liveCount > 0 {
                     pill(icon: "dot.radiowaves.left.and.right",
                          text: liveCount == 1 ? "مباراة مباشرة" : "\(liveCount) مباريات مباشرة",
@@ -162,10 +152,10 @@ struct WCHeroSection: View {
             }
             Text("مونديال 2026")
                 .font(SabqFonts.app(size: 40, weight: .black))
-                .foregroundStyle(.white)
+                .foregroundStyle(WCTheme.emeraldDeep)
             Text("48 منتخبًا · 16 ملعبًا · تغطية حية بتوقيت الرياض")
                 .font(SabqFonts.app(size: 12))
-                .foregroundStyle(WCTheme.emerald.opacity(0.75))
+                .foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }
     }
@@ -173,10 +163,10 @@ struct WCHeroSection: View {
     @ViewBuilder private var card: some View {
         if isLoading {
             VStack(spacing: 14) {
-                ProgressView().tint(.white)
+                ProgressView().tint(WCTheme.emerald)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 30)
-            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(WCTheme.card))
         } else if let motd {
             matchCard(motd)
         } else {
@@ -190,9 +180,9 @@ struct WCHeroSection: View {
         return VStack(spacing: 16) {
             HStack(spacing: 6) {
                 Text(f.status.live ? "تجري الآن" : (WCFormat.dayKey(f.date) == WCFormat.todayKey() ? "مباراة اليوم" : "المباراة القادمة"))
-                    .foregroundStyle(WCTheme.emerald)
-                Text("·").foregroundStyle(.white.opacity(0.4))
-                Text(f.round).foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(WCTheme.emeraldDeep)
+                Text("·").foregroundStyle(WCTheme.onDarkDim)
+                Text(f.round).foregroundStyle(WCTheme.onDarkDim)
             }
             .font(SabqFonts.app(size: 12, weight: .semibold))
 
@@ -212,23 +202,24 @@ struct WCHeroSection: View {
             Button { onOpenMatch(f.id) } label: {
                 Text("مركز المباراة")
                     .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(WCTheme.stadiumTop)
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 24).padding(.vertical, 10)
-                    .background(Capsule().fill(WCTheme.emerald))
+                    .background(Capsule().fill(WCTheme.royal))
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.1), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
+        .shadow(color: WCTheme.royal.opacity(0.10), radius: 16, x: 0, y: 8)
     }
 
     private func teamColumn(_ team: WCTeam) -> some View {
         VStack(spacing: 8) {
-            WCTeamLogo(team: team, size: 64, ring: .white.opacity(0.15))
+            WCTeamLogo(team: team, size: 64, ring: WCTheme.cardStroke)
             Text(team.name)
                 .font(SabqFonts.app(size: 16, weight: .heavy))
-                .foregroundStyle(.white)
+                .foregroundStyle(WCTheme.onDark)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -240,20 +231,20 @@ struct WCHeroSection: View {
                 // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                     .font(SabqFonts.app(size: 40, weight: .black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(WCTheme.onDark)
                     .environment(\.layoutDirection, .leftToRight)
                 if let pen = f.penalties {
                     Text("(\(pen.away ?? 0) - \(pen.home ?? 0)) ركلات الترجيح")
-                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
                 }
-                WCStatusPill(fixture: f, onDark: true)
+                WCStatusPill(fixture: f, onDark: false)
             } else {
                 Text(WCFormat.time(f))
                     .font(SabqFonts.app(size: 26, weight: .black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(WCTheme.onDark)
                 Label(WCFormat.day(f), systemImage: "calendar")
                     .font(SabqFonts.app(size: 11))
-                    .foregroundStyle(WCTheme.emerald.opacity(0.75))
+                    .foregroundStyle(WCTheme.onDarkDim)
                     .labelStyle(.titleAndIcon)
             }
         }
@@ -277,12 +268,12 @@ struct WCEmptyDark: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon).font(SabqFonts.app(size: 30)).foregroundStyle(WCTheme.emerald)
-            Text(title).font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(.white)
-            Text(subtitle).font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.7))
+            Text(title).font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            Text(subtitle).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity).padding(.vertical, 24)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.white.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(WCTheme.card))
     }
 }
 
@@ -759,9 +750,9 @@ struct WCPulseCard: View {
             .background(Capsule().fill(WCTheme.liveRed.opacity(0.25)))
         } else if p.status.finished {
             Text(p.status.label.isEmpty ? "انتهت" : p.status.label)
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.8))
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(WCTheme.chipFill))
+                .background(Capsule().fill(.white.opacity(0.12)))
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 Text("تبدأ بعد \(WCFormat.countdown(to: p.timestamp))")

@@ -90,7 +90,7 @@ struct WCCountdownChips: View {
                         .frame(width: 8, height: 8)
                     Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
                         .font(SabqFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(WCTheme.onDark)
                 }
             } else {
                 let days = Int(total) / 86_400
@@ -111,14 +111,14 @@ struct WCCountdownChips: View {
         VStack(spacing: 1) {
             Text("\(value)")
                 .font(SabqFonts.app(size: 20, weight: .black))
-                .foregroundStyle(.white)
+                .foregroundStyle(WCTheme.onDark)
             Text(label)
                 .font(SabqFonts.app(size: 10))
-                .foregroundStyle(WCTheme.emerald.opacity(0.85))
+                .foregroundStyle(WCTheme.emeraldDeep)
         }
         .frame(minWidth: 52)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.chipFill))
     }
 }
 
@@ -136,17 +136,17 @@ struct WCProbabilityBar: View {
             HStack {
                 Text("فوز \(fixture.home.name) \(h)%")
                 Spacer()
-                Text("تعادل \(d)%").foregroundStyle(.white.opacity(0.6))
+                Text("تعادل \(d)%").foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
                 Text("فوز \(fixture.away.name) \(a)%")
             }
             .font(SabqFonts.app(size: 11, weight: .semibold))
-            .foregroundStyle(WCTheme.emerald.opacity(0.9))
+            .foregroundStyle(WCTheme.emeraldDeep)
 
             GeometryReader { geo in
                 HStack(spacing: 0) {
-                    Rectangle().fill(WCTheme.emerald).frame(width: geo.size.width * CGFloat(h) / 100)
-                    Rectangle().fill(Color.white.opacity(0.55)).frame(width: geo.size.width * CGFloat(d) / 100)
+                    Rectangle().fill(WCTheme.royal).frame(width: geo.size.width * CGFloat(h) / 100)
+                    Rectangle().fill(WCTheme.onDarkDim.opacity(0.5)).frame(width: geo.size.width * CGFloat(d) / 100)
                     Rectangle().fill(WCTheme.sky)
                 }
             }
@@ -155,7 +155,7 @@ struct WCProbabilityBar: View {
 
             Text("توقعات خوارزمية للاستئناس من مزود البيانات")
                 .font(SabqFonts.app(size: 10))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(WCTheme.onDarkDim)
         }
     }
 }

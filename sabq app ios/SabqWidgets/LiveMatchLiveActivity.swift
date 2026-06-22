@@ -9,11 +9,13 @@ import WidgetKit
 // يحدّثه التطبيق عبر ActivityKit. الشعارات شبكية فلا تُعرض هنا (الويدجت
 // لا يحمّل صورًا من الشبكة) — نكتفي بالأسماء والنتيجة والشوط والوقت.
 
+// ثيم الويدجت — أزرق ملكي «أفتح وأكثر انفتاحًا» مطابق لهوية المونديال في
+// التطبيق (هدف منفصل فلا يصل WCTheme). الخلفية أزرق ملكي بدل الأخضر الداكن.
 private enum WidgetTheme {
-    static let stadium = Color(red: 0.02, green: 0.18, blue: 0.13)
-    static let emerald = Color(red: 0.20, green: 0.83, blue: 0.60)
-    static let live = Color(red: 0.90, green: 0.22, blue: 0.22)
-    static let dim = Color.white.opacity(0.62)
+    static let stadium = Color(red: 0.11, green: 0.24, blue: 0.56)   // أزرق ملكي أفتح
+    static let emerald = Color(red: 0.47, green: 0.74, blue: 1.0)    // أزرق سماوي ساطع (إبراز)
+    static let live = Color(red: 0.95, green: 0.30, blue: 0.34)
+    static let dim = Color.white.opacity(0.66)
 }
 
 struct LiveMatchLiveActivity: Widget {
