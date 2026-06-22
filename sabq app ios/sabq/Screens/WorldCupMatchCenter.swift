@@ -212,7 +212,11 @@ struct WorldCupMatchCenter: View {
     }
 }
 
-// MARK: - الأحداث
+// MARK: - الأحداث (خط زمن أفقي للأهداف/الكروت + مجريات عمودية أحدثها بالأعلى)
+//
+// تكافؤ مع MatchCenterDialog على الويب (#436): شريط أفقي يلخّص الأهداف والكروت
+// (المضيف أعلى المحور/الضيف أسفله، RTL فالدقيقة 0 يمينًا)، يليه سرد عمودي لكل
+// المجريات أحدثُها بالأعلى مع نقطة بلون الفريق (المضيف زمردي/الضيف ذهبي).
 
 struct WCEventsTimeline: View {
     let detail: WCMatchDetail
@@ -220,26 +224,22 @@ struct WCEventsTimeline: View {
     // تفاصيل SportMonks المركّبة (طريقة الهدف/سبب البطاقة/VAR) + نتيجة الشوط الأول
     @State private var facts: WCMatchFacts?
 
+    // أبعاد الشريط الأفقي
+    private let barHeight: CGFloat = 96
+    private let axisY: CGFloat = 42
+    private let topRowY: CGFloat = 20
+    private let bottomRowY: CGFloat = 64
+    private let barInset: CGFloat = 16
+
     var body: some View {
-        VStack(spacing: 8) {
-            if let ht = facts?.halftime {
-                HStack(spacing: 8) {
-                    Text("نتيجة الشوط الأول").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    // المضيف يمينًا في RTL — الضيف أولًا داخل LTR
-                    Text("\(ht.away) - \(ht.home)")
-                        .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
-                        .foregroundStyle(WCTheme.onDark)
-                        .environment(\.layoutDirection, .leftToRight)
-                }
-                .padding(.bottom, 2)
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            if let ht = facts?.halftime { halftimeRow(ht) }
+
             if detail.events.isEmpty {
                 emptyText("الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة")
             } else {
-                ForEach(sorted) { ev in
-                    Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
-                        .buttonStyle(.plain)
-                }
+                if !barEvents.isEmpty { horizontalBar }
+                verticalFlow
             }
         }
         .task(id: detail.fixture.id) {
@@ -248,8 +248,139 @@ struct WCEventsTimeline: View {
         }
     }
 
+    // MARK: نتيجة الشوط الأول
+    private func halftimeRow(_ ht: WCHalftime) -> some View {
+        HStack(spacing: 8) {
+            Text("نتيجة الشوط الأول").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            // المضيف يمينًا في RTL — الضيف أولًا داخل LTR
+            Text("\(ht.away) - \(ht.home)")
+                .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                .foregroundStyle(WCTheme.onDark)
+                .environment(\.layoutDirection, .leftToRight)
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: الشريط الأفقي (الأهداف والكروت)
+    private var barEvents: [WCMatchEvent] {
+        detail.events.filter { $0.type == "goal" || $0.type == "yellow-card" || $0.type == "red-card" }
+    }
+    private var maxMinute: Int {
+        max(90, detail.events.map { $0.minute + ($0.extraMinute ?? 0) }.max() ?? 90)
+    }
+    private var refMarks: [Int] {
+        maxMinute > 95 ? [0, 45, 90, maxMinute] : [0, 45, 90]
+    }
+
+    /// إحداثي أفقي يدوي بـRTL: الدقيقة 0 عند اليمين، الأكبر عند اليسار (داخل هوامش barInset).
+    private func barX(_ minute: Int, width w: CGFloat) -> CGFloat {
+        let f = min(max(CGFloat(minute) / CGFloat(maxMinute), 0), 1)
+        let usable = max(w - barInset * 2, 1)
+        return barInset + usable * (1 - f)
+    }
+
+    private var horizontalBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("خط زمن المباراة")
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .topLeading) {
+                    // المحور الأفقي
+                    Rectangle().fill(WCTheme.emerald.opacity(0.22))
+                        .frame(width: w - barInset * 2, height: 2)
+                        .position(x: w / 2, y: axisY)
+                    // علامات مرجعية + خطوط شبكية + بطاقة الدقيقة أسفلها
+                    ForEach(refMarks, id: \.self) { m in
+                        let x = barX(m, width: w)
+                        Rectangle().fill(WCTheme.emerald.opacity(0.12))
+                            .frame(width: 1, height: barHeight - 22)
+                            .position(x: x, y: (barHeight - 22) / 2)
+                        Text("\(m)'")
+                            .font(SabqFonts.app(size: 8).monospacedDigit())
+                            .foregroundStyle(WCTheme.onDarkDim)
+                            .position(x: x, y: barHeight - 6)
+                    }
+                    // العلامات: المضيف فوق المحور، الضيف تحته
+                    ForEach(barEvents) { ev in
+                        let isHome = ev.teamId == detail.fixture.home.id
+                        let x = barX(ev.minute + (ev.extraMinute ?? 0), width: w)
+                        VStack(spacing: 1) {
+                            if isHome { minuteTiny(ev); barMarker(ev) }
+                            else { barMarker(ev); minuteTiny(ev) }
+                        }
+                        .position(x: x, y: isHome ? topRowY : bottomRowY)
+                    }
+                }
+                .frame(width: w, height: barHeight)
+                .environment(\.layoutDirection, .leftToRight) // إحداثيات يدوية: 0 يمينًا
+            }
+            .frame(height: barHeight)
+
+            // مفتاح أعلى/أسفل
+            HStack(spacing: 10) {
+                HStack(spacing: 5) {
+                    Circle().fill(WCTheme.emerald).frame(width: 7, height: 7)
+                    Text("\(detail.fixture.home.name) · أعلى")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 5) {
+                    Text("\(detail.fixture.away.name) · أسفل")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    Circle().fill(WCTheme.gold).frame(width: 7, height: 7)
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.emerald.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.emerald.opacity(0.25), lineWidth: 1))
+    }
+
+    private func minuteTiny(_ ev: WCMatchEvent) -> some View {
+        Text(minuteLabel(ev))
+            .font(SabqFonts.app(size: 8, weight: .semibold).monospacedDigit())
+            .foregroundStyle(WCTheme.onDarkDim)
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    @ViewBuilder private func barMarker(_ ev: WCMatchEvent) -> some View {
+        switch ev.type {
+        case "goal":
+            Image(systemName: "soccerball")
+                .font(.system(size: 12))
+                .foregroundStyle(WCTheme.emeraldDeep)
+                .padding(3)
+                .background(Circle().fill(.white))
+                .overlay(Circle().stroke(WCTheme.emerald.opacity(0.6), lineWidth: 1.5))
+        case "yellow-card":
+            RoundedRectangle(cornerRadius: 2).fill(WCTheme.gold).frame(width: 9, height: 13)
+        case "red-card":
+            RoundedRectangle(cornerRadius: 2).fill(WCTheme.liveRed).frame(width: 9, height: 13)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: السرد العمودي (مجريات المباراة — أحدثها بالأعلى)
+    private var verticalFlow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("مجريات المباراة")
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+            ForEach(sorted) { ev in
+                Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
     private var sorted: [WCMatchEvent] {
         detail.events.sorted { ($0.minute, $0.extraMinute ?? 0) > ($1.minute, $1.extraMinute ?? 0) }
+    }
+
+    private func minuteLabel(_ ev: WCMatchEvent) -> String {
+        "\(ev.minute)'\(ev.extraMinute.map { "+\($0)" } ?? "")"
     }
 
     // يطابق صنف حدث API-Football بصنف SportMonks للتركيب
@@ -272,11 +403,12 @@ struct WCEventsTimeline: View {
         let isHome = ev.teamId == detail.fixture.home.id
         let team = isHome ? detail.fixture.home : detail.fixture.away
         let extra = detailFor(ev)
-        return HStack(spacing: 12) {
-            Text("\(ev.minute)'\(ev.extraMinute.map { "+\($0)" } ?? "")")
+        return HStack(spacing: 10) {
+            Circle().fill(isHome ? WCTheme.emerald : WCTheme.gold).frame(width: 8, height: 8)
+            Text(minuteLabel(ev))
                 .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit())
                 .foregroundStyle(WCTheme.onDarkDim)
-                .frame(minWidth: 44)
+                .frame(minWidth: 40)
                 .environment(\.layoutDirection, .leftToRight)
             icon(ev.type)
             VStack(alignment: .leading, spacing: 1) {

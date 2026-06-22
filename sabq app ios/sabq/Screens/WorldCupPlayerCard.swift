@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 // MARK: - بطاقة اللاعب الشاملة
 //
@@ -38,6 +39,7 @@ struct WCPlayerSheet: View {
                         if let stats = player.stats {
                             WCPlayerStatsGrid(stats: stats, isGoalkeeper: player.positionEn == "Goalkeeper")
                         }
+                        WCPlayerFormSection(playerId: playerId)
                         if !player.career.isEmpty {
                             careerSection(player.career)
                         }
@@ -334,5 +336,185 @@ struct WCFactTile: View {
         .padding(.vertical, 9).padding(.horizontal, 6)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.card))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+    }
+}
+
+// MARK: - الفورمة الأخيرة + xG (/world-cup/player/:id/form)
+//
+// تكافؤ مع قسم #435 على الويب: آخر ٥ مباريات للاعب — شريط نتائج W/D/L ملوّن،
+// رسم أعمدة xG (SwiftUI Charts، يظهر فقط حين يوفّر المزود xG)، ثم صفوف لكل
+// مباراة (الخصم/النتيجة/أهداف/تقييم). نقطة منفصلة فتُجلب ذاتيًا؛ تُخفى بهدوء
+// إن رجعت available=false أو فشل النداء (503 قبل تفعيل SportMonks).
+
+struct WCPlayerFormSection: View {
+    let playerId: Int
+    @State private var form: WCPlayerForm?
+    @State private var loaded = false
+
+    private var matches: [WCFormMatch] { form?.matches ?? [] }
+    private var hasXg: Bool { matches.contains { $0.xg != nil } }
+
+    var body: some View {
+        Group {
+            if let form, form.available, !form.matches.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    header
+                    resultsStrip
+                    if hasXg { xgChart }
+                    VStack(spacing: 6) {
+                        ForEach(matches) { m in matchRow(m) }
+                    }
+                }
+            } else {
+                EmptyView()
+            }
+        }
+        .task(id: playerId) {
+            guard !loaded else { return }
+            loaded = true
+            form = try? await APIClient.shared.fetchWorldCupPlayerForm(playerId: playerId)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "chart.line.uptrend.xyaxis")
+                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.emerald)
+            Text(hasXg ? "الفورمة الأخيرة · xG" : "الفورمة الأخيرة")
+                .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+            Spacer()
+            Text("آخر \(matches.count)")
+                .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                .padding(.horizontal, 7).padding(.vertical, 2)
+                .background(Capsule().fill(WCTheme.chipFill))
+                .environment(\.layoutDirection, .leftToRight)
+        }
+    }
+
+    // شريط نتائج W/D/L — الأحدث يمينًا (RTL يدوي معكوس)
+    private var resultsStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(matches.enumerated().reversed()), id: \.offset) { _, m in
+                Text(resultAr(m.result))
+                    .font(SabqFonts.app(size: 11, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(resultColor(m.result)))
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var xgChart: some View {
+        Chart(matches) { m in
+            BarMark(
+                x: .value("الخصم", m.opponent),
+                y: .value("xG", m.xg ?? 0)
+            )
+            .foregroundStyle(WCTheme.emerald.gradient)
+            .cornerRadius(3)
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine().foregroundStyle(WCTheme.cardStroke)
+                AxisValueLabel() {
+                    if let d = value.as(Double.self) {
+                        Text(String(format: "%.1f", d))
+                            .font(SabqFonts.app(size: 8)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks { value in
+                AxisValueLabel() {
+                    if let s = value.as(String.self) {
+                        Text(s).font(SabqFonts.app(size: 7))
+                            .foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    }
+                }
+            }
+        }
+        .frame(height: 96)
+        .padding(.top, 2)
+    }
+
+    private func matchRow(_ m: WCFormMatch) -> some View {
+        HStack(spacing: 10) {
+            // شارة النتيجة
+            Text(resultAr(m.result))
+                .font(SabqFonts.app(size: 11, weight: .black)).foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(resultColor(m.result)))
+            // شعار الخصم + اسمه
+            if !m.opponentLogo.isEmpty {
+                WCRemoteImage(url: m.opponentLogo)
+                    .padding(2).frame(width: 24, height: 24)
+                    .background(Circle().fill(.white))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(m.opponent.isEmpty ? "—" : m.opponent)
+                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(m.homeAway == "home" ? "أرضه" : "خارج أرضه")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    if !m.league.isEmpty {
+                        Text("· \(m.league)")
+                            .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 4)
+            // أرقام: النتيجة + xG + الأهداف + التقييم
+            HStack(spacing: 8) {
+                if let xg = m.xg {
+                    statPill(label: "xG", value: String(format: "%.1f", xg), fg: WCTheme.emerald)
+                }
+                if m.goals > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "soccerball").font(.system(size: 9)).foregroundStyle(WCTheme.emeraldDeep)
+                        Text("\(m.goals)").font(SabqFonts.app(size: 11, weight: .black).monospacedDigit())
+                            .foregroundStyle(WCTheme.onDark)
+                    }
+                }
+                Text("\(m.scoreFor)-\(m.scoreAgainst)")
+                    .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                    .foregroundStyle(WCTheme.onDark)
+                    .environment(\.layoutDirection, .leftToRight)
+                if let r = m.rating {
+                    Text(String(format: "%.1f", r))
+                        .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 7).fill(ratingColor(r)))
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+    }
+
+    private func statPill(label: String, value: String, fg: Color) -> some View {
+        HStack(spacing: 3) {
+            Text(label).font(SabqFonts.app(size: 8, weight: .bold)).foregroundStyle(fg.opacity(0.8))
+            Text(value).font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(fg)
+                .environment(\.layoutDirection, .leftToRight)
+        }
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Capsule().fill(fg.opacity(0.12)))
+    }
+
+    private func resultAr(_ r: String) -> String {
+        switch r { case "W": return "ف"; case "L": return "خ"; default: return "ت" }
+    }
+    private func resultColor(_ r: String) -> Color {
+        switch r { case "W": return WCTheme.emeraldDeep; case "L": return WCTheme.liveRed; default: return WCTheme.gold }
+    }
+    private func ratingColor(_ r: Double) -> Color {
+        if r >= 8 { return WCTheme.emeraldDeep }
+        if r >= 7 { return WCTheme.leaf }
+        if r >= 6 { return WCTheme.gold }
+        return WCTheme.liveRed
     }
 }

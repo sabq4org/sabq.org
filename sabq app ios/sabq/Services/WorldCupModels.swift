@@ -300,6 +300,72 @@ nonisolated struct WCXg: Decodable, Hashable {
     let topPlayers: [WCXgPlayer]
 }
 
+// MARK: - نبض المباراة (/world-cup/pulse/:id)
+//
+// حزمة خفيفة بنداء واحد للودجت الحيّ: نتيجة/دقيقة لحظية + زخم + آخر VAR.
+// home/away هنا اسم+شعار فقط (بلا id/winner)، وstatus بلا code — فلا تُعاد
+// استخدام WCTeam/WCStatus بل بُنى مخصّصة تطابق حِمل الخادم حرفيًا.
+
+nonisolated struct WCPulseSide: Decodable, Hashable { let name: String; let logo: String }
+nonisolated struct WCPulseScore: Decodable, Hashable { let home: Int; let away: Int }
+nonisolated struct WCPulseStatus: Decodable, Hashable {
+    let live: Bool
+    let finished: Bool
+    let elapsed: Int?
+    let extra: Int?
+    let label: String
+}
+nonisolated struct WCPulseMomentum: Decodable, Hashable {
+    let home: Int
+    let away: Int
+    let leader: String?   // "home" | "away" | null
+    let value: Int
+}
+nonisolated struct WCPulseVar: Decodable, Hashable {
+    let minute: Int
+    let team: String      // "home" | "away"
+}
+nonisolated struct WCPulse: Decodable, Hashable {
+    let id: Int
+    let home: WCPulseSide
+    let away: WCPulseSide
+    let score: WCPulseScore
+    let status: WCPulseStatus
+    let kickoff: String
+    let timestamp: Int
+    let round: String
+    let momentum: WCPulseMomentum
+    let lastVar: WCPulseVar?
+
+    var kickoffDate: Date? { SabqFormatters.parseISO8601(kickoff) }
+}
+
+// MARK: - فورمة اللاعب الأخيرة + xG (/world-cup/player/:id/form)
+//
+// آخر ٥ مباريات (الجسر بالاسم الإنجليزي+الميلاد على الخادم — iOS يستهلك فقط).
+// الخصم نصّ + شعار نصّ (لا WCTeam)؛ xg/rating قد تكون null.
+
+nonisolated struct WCFormMatch: Decodable, Identifiable, Hashable {
+    let date: String
+    let opponent: String
+    let opponentLogo: String
+    let homeAway: String   // "home" | "away"
+    let result: String     // "W" | "D" | "L"
+    let scoreFor: Int
+    let scoreAgainst: Int
+    let xg: Double?
+    let goals: Int
+    let rating: Double?
+    let league: String
+
+    var id: String { "\(date)-\(opponent)" }
+}
+
+nonisolated struct WCPlayerForm: Decodable, Hashable {
+    let available: Bool
+    let matches: [WCFormMatch]
+}
+
 nonisolated struct WCSquadPlayer: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -496,6 +562,16 @@ extension APIClient {
     func fetchWorldCupXg(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCXg {
         try await get(WCXg.self, path: "/world-cup/xg/\(fixtureId)",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupPulse(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCPulse {
+        try await get(WCPulse.self, path: "/world-cup/pulse/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupPlayerForm(playerId: Int) async throws -> WCPlayerForm {
+        try await get(WCPlayerForm.self, path: "/world-cup/player/\(playerId)/form",
+                      apiRoot: URLConstants.publicAPI)
     }
 }
 
