@@ -18,11 +18,28 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import { db } from "../db";
 import { liveActivityTokens } from "@shared/schema";
 import { getMatchDetail, type WcMatchDetail, type WcMatchEvent } from "./worldCupService";
+import { getLiveScore, type WcLiveScore } from "./sportmonksService";
 import {
   sendLiveActivityUpdate,
   isApnsConfigured,
   type LiveActivityContentState,
 } from "./apnsService";
+
+// حالات SportMonks اللحظية → نص عربي للبطاقة (أدق وأسرع من API-Football)
+const LIVE_STATE_AR: Record<string, string> = {
+  INPLAY_1ST_HALF: "الشوط الأول",
+  HT: "بين الشوطين",
+  BREAK: "استراحة",
+  INPLAY_2ND_HALF: "الشوط الثاني",
+  INPLAY_ET: "الوقت الإضافي",
+  INPLAY_ET_2ND_HALF: "الإضافي الثاني",
+  EXTRA_TIME: "الوقت الإضافي",
+  PENALTIES: "ركلات الترجيح",
+  INPLAY_PENALTIES: "ركلات الترجيح",
+  FT: "انتهت",
+  AET: "انتهت بعد الإضافي",
+  FT_PEN: "انتهت بالترجيح",
+};
 
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
@@ -104,9 +121,12 @@ function lastEventText(detail: WcMatchDetail): string | null {
   return `${icon} ${minute} ${who}`;
 }
 
-function buildContentState(detail: WcMatchDetail): LiveActivityContentState {
+function buildContentState(
+  detail: WcMatchDetail,
+  live?: WcLiveScore | null,
+): LiveActivityContentState {
   const f = detail.fixture;
-  return {
+  const base: LiveActivityContentState = {
     homeScore: f.goals.home ?? 0,
     awayScore: f.goals.away ?? 0,
     minute: minuteText(f.status),
@@ -115,6 +135,20 @@ function buildContentState(detail: WcMatchDetail): LiveActivityContentState {
     isFinished: f.status.finished,
     lastEvent: lastEventText(detail),
   };
+  // تجاوز لحظي من SportMonks للنتيجة/الدقيقة/الحالة (يكسر تأخّر كاش API-Football).
+  // lastEvent يبقى من API-Football (عربي مُعرَّب) — ثانوي ومقبول تأخّره قليلًا.
+  if (live && (live.live || live.finished)) {
+    return {
+      ...base,
+      homeScore: live.home,
+      awayScore: live.away,
+      minute: live.minute > 0 ? `${live.minute}'` : base.minute,
+      statusLabel: LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel,
+      isLive: live.live,
+      isFinished: live.finished || base.isFinished,
+    };
+  }
+  return base;
 }
 
 function staleDateFor(detail: WcMatchDetail): number {
@@ -186,7 +220,15 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
     if (!detail) continue;
 
-    const state = buildContentState(detail);
+    // نتيجة لحظية من SportMonks (الوقت الحقيقي) — أفضل جهد، تتجاوز كاش API-Football
+    let live: WcLiveScore | null = null;
+    try {
+      live = await getLiveScore(fixtureId);
+    } catch {
+      live = null;
+    }
+
+    const state = buildContentState(detail, live);
     const hash = JSON.stringify(state);
     const finished = state.isFinished;
     const staleDate = staleDateFor(detail);

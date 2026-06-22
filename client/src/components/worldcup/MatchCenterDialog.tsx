@@ -838,7 +838,9 @@ function PossessionBar({
         <span className="text-muted-foreground">الاستحواذ</span>
         <span className="text-rose-600 tabular-nums">{away}%</span>
       </div>
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full" dir="ltr">
+      {/* بلا dir="ltr": يبقى RTL ليُحاذي الأخضر(المضيف) يمينًا والأحمر(الضيف) يسارًا
+          مطابقةً لصفّ النِّسب أعلاه — وإلا انعكس اللون عكس الجهة والنسبة */}
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full">
         <div className="bg-emerald-500" style={{ width: `${home}%` }} title={homeName} />
         <div className="bg-rose-500" style={{ width: `${away}%` }} title={awayName} />
       </div>
@@ -1155,8 +1157,8 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
   const { data: detail, isLoading } = useQuery<WcMatchDetail>({
     queryKey: [`/api/world-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
-    // مباراة حية → 15ث لتطازج النتيجة والأحداث (الدقيقة تعدّ محليًا أصلًا)
-    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 15_000 : false),
+    // مباراة حية → 8ث لتطازج النتيجة اللحظية (الخادم يركّب نتيجة SportMonks الحيّة)
+    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 8_000 : false),
   });
 
   const fixture = detail?.fixture;
