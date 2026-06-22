@@ -19,6 +19,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { notificationsInbox, pushDevices } from "@shared/schema";
 import { notificationBus } from "../notificationBus";
+import { getRedisClient } from "../redis";
 import {
   getGlobalTodayFixtures,
   getGlobalLiveFixtures,
@@ -96,6 +97,56 @@ const tsEventSig = (e: TsEvent): string =>
   `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${e.player ?? e.inPlayer ?? ""}`;
 
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
+
+// ── صمود خطّ الأساس لإعادة التشغيل/النشر (Redis، أفضل جهد) ──
+// خرائط التتبّع أعلاه في الذاكرة فقط، فكل نشر/إعادة تشغيل يمسحها فتُعيد الدورة
+// التالية «تأسيس» المباراة الجارية بصمت وتكبت أحداثها (انطلاق/بطاقة كانت قبل
+// إعادة التشغيل). نحفظها في Redis بعد كل دورة ونُحمّلها مرّةً عند الإقلاع، فتُستأنف
+// الأحداث الجديدة فقط دون تكرار وبلا إغراق. القائد وحده يكتب (لا تسابق).
+const STATE_KEY = "sports_alerts:baseline:v1";
+const STATE_TTL_SEC = 6 * 3600; // يكفي مباراة + استراحة
+let stateHydrated = false;
+
+async function hydrateStateOnce(): Promise<void> {
+  if (stateHydrated) return;
+  stateHydrated = true; // نحاول مرّة واحدة فقط حتى لو فشل (الذاكرة تكفي بعدها)
+  const redis = getRedisClient();
+  if (!redis) return;
+  try {
+    const raw = await redis.get(STATE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      snapshots?: [number, MatchSnapshot][];
+      eventSeen?: [number, string[]][];
+      tsEventSeen?: [number, string[]][];
+    };
+    for (const [id, snap] of parsed.snapshots ?? []) snapshots.set(id, snap);
+    for (const [id, sigs] of parsed.eventSeen ?? []) eventSeen.set(id, new Set(sigs));
+    for (const [id, sigs] of parsed.tsEventSeen ?? []) tsEventSeen.set(id, new Set(sigs));
+    console.log(
+      `[SportsAlerts] baseline hydrated from Redis (snapshots=${snapshots.size} ts=${tsEventSeen.size})`,
+    );
+  } catch (err) {
+    console.error("[SportsAlerts] baseline hydrate failed:", err);
+  }
+}
+
+async function persistState(): Promise<void> {
+  const redis = getRedisClient();
+  if (!redis) return;
+  try {
+    const payload = JSON.stringify({
+      snapshots: [...snapshots.entries()],
+      eventSeen: [...eventSeen.entries()].map(([id, set]) => [id, [...set]]),
+      tsEventSeen: [...tsEventSeen.entries()].map(([id, set]) => [id, [...set]]),
+    });
+    await redis.set(STATE_KEY, payload, {
+      expiration: { type: "EX", value: STATE_TTL_SEC },
+    });
+  } catch (err) {
+    console.error("[SportsAlerts] baseline persist failed:", err);
+  }
+}
 
 // مباريات يتكفّل TheSports بأحداثها (هدف باسم اللاعب/بطاقة/فار) — فنتجاوزها في
 // كاشف الهدف العام وكاشف أحداث API-Football تفاديًا للازدواج.
@@ -488,6 +539,9 @@ export interface SportsAlertsCycleSummary {
 
 /** دورة واحدة: اكتشاف الأحداث + توصيلها للمتابعين. */
 export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> {
+  // نُحمّل خطّ الأساس المحفوظ مرّةً (بعد إعادة نشر/تشغيل) كي لا تُكبت أحداث
+  // المباراة الجارية بصمت. أفضل جهد: غياب Redis = سلوك الذاكرة السابق.
+  await hydrateStateOnce();
   // ندمج مباريات اليوم (كاش 60ث — تغطي المقرّرة/المنتهية) مع المباريات المباشرة
   // الآن (كاش 15ث — نتائج طازجة). بيانات المباشر تَجُبّ بيانات اليوم لنفس المباراة
   // فتُكتشف الأهداف والانطلاق خلال ~15-20ث بدل ~60ث+. (يشمل كأس العالم — id 1
@@ -518,6 +572,9 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   for (const alert of allAlerts) {
     recipients += await dispatchAlert(alert);
   }
+
+  // نحفظ خطّ الأساس المُحدَّث فيصمد لإعادة النشر التالية (أفضل جهد، لا يُعيق الدورة).
+  await persistState();
 
   return { matches: matches.length, alerts: allAlerts.length, recipients };
 }

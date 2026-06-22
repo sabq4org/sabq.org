@@ -428,7 +428,7 @@ struct WCTeamSheet: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(headerTeam.name)
-                        .font(SabqFonts.headline(size: 24)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                        .font(SabqFonts.headline(size: 24)).foregroundStyle(.white).lineLimit(1)
                     if isSaudi {
                         Text("الأخضر")
                             .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(.white)
@@ -443,7 +443,7 @@ struct WCTeamSheet: View {
                 }
                 if let coach = profile?.coach, !coach.isEmpty {
                     Label("المدرّب: \(coach)", systemImage: "person.crop.square")
-                        .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
                         .labelStyle(.titleAndIcon)
                 }
             }
