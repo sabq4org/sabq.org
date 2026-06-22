@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Cake, History, Ruler, Shirt, Trophy, Weight } from "lucide-react";
+import { Activity, Cake, History, Ruler, Shirt, Trophy, Weight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -167,6 +167,84 @@ function TrophiesList({ player }: { player: WcPlayerCard }) {
   );
 }
 
+// فورمة اللاعب + xG (SportMonks) — /api/world-cup/player/:id/form
+interface WcPlayerFormMatch {
+  date: string;
+  opponent: string;
+  opponentLogo: string;
+  homeAway: "home" | "away";
+  result: "W" | "D" | "L";
+  scoreFor: number;
+  scoreAgainst: number;
+  xg: number | null;
+  goals: number;
+  rating: number | null;
+  league: string;
+}
+interface WcPlayerForm {
+  available: boolean;
+  matches: WcPlayerFormMatch[];
+}
+
+function PlayerForm({ playerId }: { playerId: number }) {
+  const { data } = useQuery<WcPlayerForm>({
+    queryKey: [`/api/world-cup/player/${playerId}/form`],
+    enabled: playerId != null,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+  const matches = Array.isArray(data?.matches) ? data!.matches : [];
+  if (matches.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1">
+        <Activity className="h-3.5 w-3.5" />
+        الفورمة الأخيرة · الأهداف المتوقّعة
+      </h4>
+      <div className="space-y-1.5">
+        {matches.map((m, i) => (
+          <div key={i} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-1.5">
+            <span
+              className={`h-6 w-6 rounded-full grid place-items-center text-[10px] font-black text-white shrink-0 ${
+                m.result === "W" ? "bg-emerald-500" : m.result === "L" ? "bg-red-500" : "bg-zinc-400"
+              }`}
+            >
+              {m.result === "W" ? "ف" : m.result === "L" ? "خ" : "ت"}
+            </span>
+            <span className="h-6 w-6 rounded-full bg-white ring-1 ring-border p-0.5 shrink-0">
+              {m.opponentLogo && (
+                <img src={m.opponentLogo} alt="" className="h-full w-full object-contain" loading="lazy" />
+              )}
+            </span>
+            <span className="text-sm font-bold tabular-nums shrink-0" dir="ltr">
+              {m.scoreFor}-{m.scoreAgainst}
+            </span>
+            <span className="flex-1" />
+            {m.goals > 0 && (
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
+                {m.goals} ⚽
+              </span>
+            )}
+            {m.xg != null && (
+              <span
+                className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-emerald-700 dark:text-emerald-300 shrink-0"
+                dir="ltr"
+              >
+                xG {m.xg.toFixed(2)}
+              </span>
+            )}
+            {m.rating != null && (
+              <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-black tabular-nums shrink-0 ${ratingColor(m.rating)}`}>
+                {m.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
   const { data: player, isLoading } = useQuery<WcPlayerCard>({
     queryKey: [`/api/world-cup/player/${playerId}`],
@@ -271,6 +349,8 @@ export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
               {player.stats && (
                 <TournamentStats stats={player.stats} isGoalkeeper={player.positionEn === "Goalkeeper"} />
               )}
+
+              {playerId != null && <PlayerForm playerId={playerId} />}
 
               {player.career.length > 0 && <CareerList career={player.career} />}
 
