@@ -62,6 +62,14 @@ struct WorldCupMatchCenter: View {
                 }
             }
             .task { await load() }
+            // تحديث لحظي للنتيجة/الدقيقة أثناء اللعب (الخادم يركّب نتيجة SportMonks الحيّة)
+            .task(id: detail?.fixture.id) {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    if Task.isCancelled { return }
+                    if detail?.fixture.status.live == true { await load(force: true) }
+                }
+            }
             .refreshable { await load(force: true) }
             .sheet(item: $selectedPlayer) { sel in
                 WCPlayerSheet(playerId: sel.id)

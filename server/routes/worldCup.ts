@@ -18,6 +18,7 @@ import {
   getTopCards,
   getTopScorers,
   isWorldCupConfigured,
+  type WcFixture,
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
 import {
@@ -27,6 +28,7 @@ import {
   getForecast,
   getMatchFacts,
   getXg,
+  getLiveScore,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
 
@@ -34,6 +36,33 @@ const NOT_CONFIGURED = {
   configured: false,
   message: "تغطية كأس العالم غير مفعّلة حاليًا",
 };
+
+// تركيب النتيجة اللحظية من SportMonks على أي مباراة حيّة (أفضل جهد) — يتجاوز
+// تأخّر كاش API-Football فتظهر النتيجة/الدقيقة في الوقت الحقيقي في كل النقاط
+// (نظرة عامة، مباشر، جدول، مركز المباراة). لا نُحوّر كائنات الكاش: نُرجّع نسخًا.
+async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
+  if (!fx?.status?.live) return fx;
+  try {
+    const live = await getLiveScore(fx.id);
+    if (!live || (!live.live && !live.finished)) return fx;
+    return {
+      ...fx,
+      goals: { home: live.home, away: live.away },
+      status: {
+        ...fx.status,
+        elapsed: live.minute > 0 ? live.minute : fx.status.elapsed,
+        live: live.live,
+        finished: live.finished || fx.status.finished,
+      },
+    };
+  } catch {
+    return fx;
+  }
+}
+
+async function overlayLiveList(list: WcFixture[]): Promise<WcFixture[]> {
+  return Promise.all((list ?? []).map(overlayLiveScore));
+}
 
 export function registerWorldCupRoutes(app: Express) {
   const guard = (res: any): boolean => {
@@ -47,10 +76,29 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      // max-age=0: المتصفح يعيد الطلب فورًا عند كل تحديث (لا يخدم نتيجة/دقيقة قديمة
-      // من قرصه)؛ s-maxage + SWR يحميان الأصل على الـCDN وحده
-      res.set("Cache-Control", "public, max-age=0, s-maxage=15, stale-while-revalidate=30");
-      res.json(await getOverview());
+      const ov = await getOverview();
+      // تركيب النتيجة اللحظية على كل المباريات الحيّة في النظرة العامة
+      const [live, today, saudiFixtures] = await Promise.all([
+        overlayLiveList(ov.live),
+        overlayLiveList(ov.today),
+        overlayLiveList(ov.saudi.fixtures),
+      ]);
+      const overlaid = {
+        ...ov,
+        live,
+        today,
+        matchOfTheDay: ov.matchOfTheDay
+          ? { ...ov.matchOfTheDay, fixture: await overlayLiveScore(ov.matchOfTheDay.fixture) }
+          : ov.matchOfTheDay,
+        saudi: {
+          ...ov.saudi,
+          next: ov.saudi.next ? await overlayLiveScore(ov.saudi.next) : ov.saudi.next,
+          fixtures: saudiFixtures,
+        },
+      };
+      // s-maxage=5: النتيجة الحيّة لحظية، فلا نُبقيها على الـCDN أكثر من ٥ ثوانٍ
+      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      res.json(overlaid);
     } catch (error) {
       console.error("[WorldCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة المونديال حاليًا" });
@@ -74,8 +122,8 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/fixtures", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-      res.json({ fixtures: await getFixtures() });
+      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=120");
+      res.json({ fixtures: await overlayLiveList(await getFixtures()) });
     } catch (error) {
       console.error("[WorldCup] fixtures failed:", error);
       res.status(502).json({ message: "تعذر جلب جدول المباريات حاليًا" });
@@ -85,8 +133,8 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/live", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=0, s-maxage=15, stale-while-revalidate=30");
-      res.json({ fixtures: await getLiveFixtures() });
+      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      res.json({ fixtures: await overlayLiveList(await getLiveFixtures()) });
     } catch (error) {
       console.error("[WorldCup] live failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
@@ -372,15 +420,16 @@ export function registerWorldCupRoutes(app: Express) {
     try {
       const detail = await getMatchDetail(fixtureId);
       if (!detail) return res.status(404).json({ message: "المباراة غير موجودة" });
-      // مباراة حيّة: المتصفح يعيد الطلب فورًا (لا نتيجة/دقيقة قديمة من قرصه)؛
-      // المنتهية/القادمة تبقى قابلة للكاش لدقائق إذ لا تتغير
+      // نتيجة/دقيقة لحظية من SportMonks فوق تفاصيل API-Football
+      const fixture = await overlayLiveScore(detail.fixture);
+      // مباراة حيّة: s-maxage=5 للنتيجة اللحظية؛ المنتهية/القادمة تبقى قابلة للكاش لدقائق
       res.set(
         "Cache-Control",
-        detail.fixture.status.live
-          ? "public, max-age=0, s-maxage=20, stale-while-revalidate=40"
+        fixture.status.live
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=60, s-maxage=120, stale-while-revalidate=300"
       );
-      res.json(detail);
+      res.json({ ...detail, fixture });
     } catch (error) {
       console.error(`[WorldCup] match ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });

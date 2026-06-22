@@ -1155,8 +1155,8 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
   const { data: detail, isLoading } = useQuery<WcMatchDetail>({
     queryKey: [`/api/world-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
-    // مباراة حية → 15ث لتطازج النتيجة والأحداث (الدقيقة تعدّ محليًا أصلًا)
-    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 15_000 : false),
+    // مباراة حية → 8ث لتطازج النتيجة اللحظية (الخادم يركّب نتيجة SportMonks الحيّة)
+    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 8_000 : false),
   });
 
   const fixture = detail?.fixture;
