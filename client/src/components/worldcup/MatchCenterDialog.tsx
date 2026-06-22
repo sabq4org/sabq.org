@@ -78,6 +78,46 @@ function eventKlass(type: string): "goal" | "card" | "var" | null {
   return null;
 }
 
+// بطاقة حدث على جانب فريقه في الخط الزمني (الأيقونة تلاصق العمود المركزي)
+function TimelineChip({
+  ev,
+  extra,
+  side,
+  onOpenPlayer,
+}: {
+  ev: WcMatchEvent;
+  extra: string | null;
+  side: "home" | "away";
+  onOpenPlayer: (playerId: number) => void;
+}) {
+  const clickable = (ev.playerId ?? 0) > 0;
+  const isGoal = ev.type === "goal";
+  return (
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={() => clickable && onOpenPlayer(ev.playerId!)}
+      className={`inline-flex items-start gap-2 max-w-full rounded-lg px-2.5 py-1.5 hover-elevate active-elevate-2 transition-all disabled:cursor-default ${
+        isGoal ? "bg-emerald-500/10 ring-1 ring-emerald-500/25" : "bg-muted/40"
+      } ${side === "home" ? "flex-row" : "flex-row-reverse"}`}
+    >
+      <span className="mt-0.5 shrink-0">
+        <EventIcon type={ev.type} />
+      </span>
+      <div className="min-w-0" dir="rtl">
+        <p className="text-xs font-bold truncate">{ev.player || ev.label}</p>
+        {extra && <p className="text-[10px] text-emerald-700 dark:text-emerald-300 truncate">{extra}</p>}
+        {ev.assist && isGoal && (
+          <p className="text-[10px] text-muted-foreground truncate">صناعة: {ev.assist}</p>
+        )}
+        {ev.assist && ev.type === "substitution" && (
+          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {ev.assist}</p>
+        )}
+      </div>
+    </button>
+  );
+}
+
 function EventsTimeline({
   events,
   fixture,
@@ -111,55 +151,59 @@ function EventsTimeline({
     );
     return hit?.detail ?? null;
   };
+  // تصاعدي زمنيًا (٠′ أعلى → النهاية أسفل) — قراءة الخط الزمني الطبيعية
   const sorted = [...events].sort(
-    (a, b) => b.minute - a.minute || (b.extraMinute ?? 0) - (a.extraMinute ?? 0)
+    (a, b) => a.minute - b.minute || (a.extraMinute ?? 0) - (b.extraMinute ?? 0)
   );
   return (
-    <div className="space-y-2">
+    <div>
       {halftime && (
-        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pb-1">
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pb-2">
           <span>نتيجة الشوط الأول</span>
           <span className="font-black tabular-nums text-foreground" dir="ltr">
             {halftime.away} - {halftime.home}
           </span>
         </div>
       )}
-      {sorted.map((event, index) => {
-        const isHome = event.teamId === fixture.home.id;
-        const team = isHome ? fixture.home : fixture.away;
-        const clickable = (event.playerId ?? 0) > 0;
-        const extra = detailFor(event);
-        return (
-          <button
-            key={index}
-            type="button"
-            onClick={() => clickable && onOpenPlayer(event.playerId!)}
-            disabled={!clickable}
-            className="w-full flex items-center gap-3 rounded-xl bg-muted/40 px-3 py-2.5 text-right hover-elevate active-elevate-2 transition-all disabled:cursor-default"
-          >
-            <Badge variant="secondary" className="tabular-nums shrink-0 min-w-[3rem] justify-center" dir="ltr">
-              {event.minute}'{event.extraMinute ? `+${event.extraMinute}` : ""}
-            </Badge>
-            <EventIcon type={event.type} />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold truncate">
-                {event.label}
-                {event.player ? ` — ${event.player}` : ""}
-              </p>
-              {extra && (
-                <p className="text-[11px] text-sky-600 dark:text-sky-300 truncate">{extra}</p>
-              )}
-              {event.assist && event.type === "goal" && (
-                <p className="text-[11px] text-muted-foreground truncate">صناعة: {event.assist}</p>
-              )}
-              {event.assist && event.type === "substitution" && (
-                <p className="text-[11px] text-muted-foreground truncate">بديلًا عن: {event.assist}</p>
-              )}
-            </div>
-            <img src={team.logo} alt={team.name} className="h-5 w-5 object-contain shrink-0" loading="lazy" />
-          </button>
-        );
-      })}
+      {/* رأس الجانبين: المضيف يمينًا، الضيف يسارًا */}
+      <div dir="ltr" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2 px-1">
+        <div className="flex items-center gap-1.5 justify-end min-w-0">
+          <span className="text-xs font-bold truncate">{fixture.away.name}</span>
+          <img src={fixture.away.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />
+        </div>
+        <span className="min-w-[2.75rem]" />
+        <div className="flex items-center gap-1.5 justify-start min-w-0">
+          <img src={fixture.home.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />
+          <span className="text-xs font-bold truncate">{fixture.home.name}</span>
+        </div>
+      </div>
+      {/* الخط الزمني: عمود مركزي للدقائق */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-emerald-500/20" />
+        <div className="space-y-1.5">
+          {sorted.map((event, index) => {
+            const isHome = event.teamId === fixture.home.id;
+            const extra = detailFor(event);
+            return (
+              <div key={index} dir="ltr" className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div className="flex justify-end min-w-0">
+                  {!isHome && (
+                    <TimelineChip ev={event} extra={extra} side="away" onOpenPlayer={onOpenPlayer} />
+                  )}
+                </div>
+                <span className="z-[1] grid place-items-center min-w-[2.75rem] rounded-full bg-emerald-600 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
+                  {event.minute}'{event.extraMinute ? `+${event.extraMinute}` : ""}
+                </span>
+                <div className="flex justify-start min-w-0">
+                  {isHome && (
+                    <TimelineChip ev={event} extra={extra} side="home" onOpenPlayer={onOpenPlayer} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
