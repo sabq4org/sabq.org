@@ -33,6 +33,7 @@ import {
   getPlayerForm,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
+import { getTheSportsFastScore } from "../services/theSportsService";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -44,6 +45,28 @@ const NOT_CONFIGURED = {
 // (نظرة عامة، مباشر، جدول، مركز المباراة). لا نُحوّر كائنات الكاش: نُرجّع نسخًا.
 async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
   if (!fx?.status?.live) return fx;
+
+  // 1) TheSports أولًا — النتيجة الفائقة (sub-minute). أفضل جهد: يرجع null في
+  //    الإنتاج حتى يُدرَج عنوان Railway ويُضبط THESPORTS_* فنتراجع لـSportMonks.
+  //    نُبقي الدقيقة من المصدر التالي (detail_live لا يعطي دقيقة موثوقة مباشرة).
+  try {
+    const ts = await getTheSportsFastScore(fx.id, fx.timestamp);
+    if (ts && (ts.live || ts.finished)) {
+      return {
+        ...fx,
+        goals: { home: ts.home, away: ts.away },
+        status: {
+          ...fx.status,
+          live: ts.live,
+          finished: ts.finished || fx.status.finished,
+        },
+      };
+    }
+  } catch {
+    /* تراجع لـSportMonks */
+  }
+
+  // 2) SportMonks — النتيجة الحيّة + الدقيقة (المصدر الحالي)
   try {
     const live = await getLiveScore(fx.id);
     if (!live || (!live.live && !live.finished)) return fx;
