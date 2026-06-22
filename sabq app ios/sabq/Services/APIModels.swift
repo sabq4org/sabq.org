@@ -2068,3 +2068,28 @@ nonisolated struct EditorialNotificationPreferences: Codable, Hashable {
         revisionEnabled: true
     )
 }
+
+/// تفضيلات أنواع تنبيهات المباريات (عامّة لكل المستخدم) — تُطبَّق على إشعارات
+/// الفِرق التي يتابعها. تدور عبر `GET` / `PUT /api/v1/sports/alert-prefs`.
+nonisolated struct SportsAlertPreferences: Codable, Hashable {
+    var kickoff: Bool
+    var goals: Bool
+    var cards: Bool
+    var varReview: Bool
+    var fulltime: Bool
+
+    static let allOn = SportsAlertPreferences(
+        kickoff: true, goals: true, cards: true, varReview: true, fulltime: true
+    )
+}
+
+/// متابعة رياضية واحدة (فريق/بطولة). تُستخدم لمعرفة ما إذا كان المستخدم يتابع
+/// منتخبًا في صفحته. الحقول الزائدة (userId/createdAt) يتجاهلها Codable.
+nonisolated struct SportsFollow: Codable, Hashable, Identifiable {
+    let id: String
+    let kind: String
+    let refId: String
+    let refName: String
+    let refLogo: String?
+    var notify: Bool
+}

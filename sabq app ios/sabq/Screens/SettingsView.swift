@@ -64,6 +64,9 @@ struct SettingsView: View {
                 }
                 displaySection
                 browsingExperienceSection
+                if authStore.isLoggedIn {
+                    matchAlertsSection
+                }
                 subscriptionSection
                 aboutSection
                 if authStore.isLoggedIn {
@@ -881,6 +884,31 @@ struct SettingsView: View {
 
     // MARK: - Display
 
+
+    /// اختصار لشاشة اختيار أنواع تنبيهات المباريات (هدف/كرت/فار…) للفِرق المتابَعة.
+    private var matchAlertsSection: some View {
+        SurfaceCard {
+            NavigationLink(destination: WCMatchEventNotificationsView()) {
+                HStack(spacing: 12) {
+                    SmallSquareBadge(systemImage: "soccerball", tint: SabqTheme.leaf)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("تنبيهات المباريات")
+                            .font(SabqFonts.app(size: 15, weight: .semibold))
+                            .foregroundStyle(SabqTheme.ink)
+                        Text("اختر أنواع الأحداث (هدف/كرت/فار) للفِرق التي تتابعها")
+                            .font(SabqFonts.app(size: 13, weight: .regular))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.left")
+                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     private var browsingExperienceSection: some View {
         SurfaceCard {

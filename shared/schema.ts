@@ -2470,6 +2470,23 @@ export const sportsFollows = pgTable("sports_follows", {
 export type SportsFollow = typeof sportsFollows.$inferSelect;
 export type InsertSportsFollow = typeof sportsFollows.$inferInsert;
 
+// تفضيلات تنبيهات المباريات (عامّة لكل مستخدم) — أيّ أنواع الأحداث تصله دفعيًّا
+// عن مباريات الفِرق التي يتابعها (sportsFollows). صفّ واحد لكل مستخدم؛ غياب الصفّ
+// يعني «كل الأنواع مفعّلة» (سلوك متوافق رجعيًّا مع متابعين سابقين بلا صفّ).
+// يقرؤها جوب التنبيهات الرياضية (sportsAlertsService) لترشيح المستلمين لكل حدث.
+export const sportsAlertPrefs = pgTable("sports_alert_prefs", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  kickoff: boolean("kickoff").default(true).notNull(),     // انطلاق المباراة
+  goals: boolean("goals").default(true).notNull(),         // الأهداف (يشمل ركلات الجزاء)
+  cards: boolean("cards").default(true).notNull(),          // البطاقات (صفراء + حمراء)
+  varReview: boolean("var_review").default(true).notNull(), // حالات الفار (VAR)
+  fulltime: boolean("fulltime").default(true).notNull(),    // نهاية المباراة
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type SportsAlertPref = typeof sportsAlertPrefs.$inferSelect;
+export type InsertSportsAlertPref = typeof sportsAlertPrefs.$inferInsert;
+
 // Sports predictions — توقّع المستخدم لنتيجة مباراة (المرحلة 4 — المجتمع).
 // توقّع واحد لكل (مستخدم، مباراة)؛ يُقفل التعديل عند انطلاق المباراة. النقاط:
 // نتيجة مطابقة تمامًا = 3، اتجاه صحيح (فوز/تعادل/خسارة) = 1، خطأ = 0.

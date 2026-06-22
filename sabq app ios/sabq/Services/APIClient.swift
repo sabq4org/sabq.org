@@ -939,6 +939,43 @@ actor APIClient {
         try ensureSuccess(response)
     }
 
+    // MARK: - Sports follows + match-event alerts
+
+    /// متابعات المستخدم الرياضية (فِرق/بطولات). يتطلّب جلسة عضو (Bearer).
+    func fetchSportsFollows() async throws -> [SportsFollow] {
+        struct Response: Decodable { let follows: [SportsFollow] }
+        return try await get(Response.self, path: "/sports/follows").follows
+    }
+
+    /// متابعة فريق/بطولة (idempotent على الخادم).
+    func addSportsFollow(kind: String, refId: String, refName: String, refLogo: String?) async throws {
+        struct Body: Encodable { let kind: String; let refId: String; let refName: String; let refLogo: String? }
+        try await postRaw(path: "/sports/follows",
+                          body: Body(kind: kind, refId: refId, refName: refName, refLogo: refLogo))
+    }
+
+    /// إلغاء متابعة — نمرّر (kind, refId) في الجسم لا في المسار (buildURL يرمّز `?`).
+    func removeSportsFollow(kind: String, refId: String) async throws {
+        struct Body: Encodable { let kind: String; let refId: String }
+        try await deleteRaw(path: "/sports/follows", body: Body(kind: kind, refId: refId))
+    }
+
+    /// تفضيلات أنواع تنبيهات المباريات (الافتراضي «الكل مفعّل»).
+    func fetchSportsAlertPreferences() async throws -> SportsAlertPreferences {
+        struct Response: Decodable { let preferences: SportsAlertPreferences }
+        return try await get(Response.self, path: "/sports/alert-prefs").preferences
+    }
+
+    func updateSportsAlertPreferences(_ prefs: SportsAlertPreferences) async throws {
+        let url = try buildURL(path: "/sports/alert-prefs")
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(prefs)
+        let (_, response) = try await session.data(for: request)
+        try ensureSuccess(response)
+    }
+
     // MARK: - Newsletter
 
     /// Subscribe to the smart newsletter. Hits `POST /api/v1/newsletter/subscribe`
