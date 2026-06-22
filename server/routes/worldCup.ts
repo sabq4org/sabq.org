@@ -20,8 +20,12 @@ import {
   getTopScorers,
   isWorldCupConfigured,
   type WcFixture,
+  type WcMatchDetail,
+  type WcMatchEvent,
+  type WcStatistic,
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
+import { resolveNames } from "../services/worldCupNameTranslator";
 import {
   getMomentum,
   getCommentary,
@@ -33,7 +37,13 @@ import {
   getPlayerForm,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
-import { getTheSportsFastScore } from "../services/theSportsService";
+import {
+  getTheSportsFastScore,
+  getTheSportsMatchLive,
+  type TsEvent,
+  type TsEventType,
+  type TsLiveStats,
+} from "../services/theSportsService";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -93,6 +103,133 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
 
 async function overlayLiveList(list: WcFixture[]): Promise<WcFixture[]> {
   return Promise.all((list ?? []).map(overlayLiveScore));
+}
+
+// ─────────── تركيب أحداث/إحصاءات TheSports اللحظية على تفاصيل المباراة ───────────
+// أثناء اللعب فقط: أحداث TheSports (هدف باسم الهدّاف/الصانع، بطاقة، فار، تبديل)
+// وإحصاءاتها الحيّة أسرع وأغنى من API-Football. المنتهية تبقى من API-Football
+// (أحداث قابلة للنقر تفتح بطاقة اللاعب + تقييمات + إحصاءات كاملة). أفضل جهد.
+
+// نوع/تسمية الحدث بمفردات الواجهة نفسها (نطابق localizeEvent كي لا يتغيّر التصميم).
+const TS_EVENT_LABEL: Record<TsEventType, { type: string; label: string } | null> = {
+  goal: { type: "goal", label: "هدف" },
+  penalty_goal: { type: "goal", label: "هدف من ركلة جزاء" },
+  penalty_missed: { type: "missed-penalty", label: "ركلة جزاء ضائعة" },
+  yellow: { type: "yellow-card", label: "بطاقة صفراء" },
+  red: { type: "red-card", label: "بطاقة حمراء" },
+  yellow_red: { type: "red-card", label: "بطاقة حمراء (إنذاران)" },
+  sub: { type: "substitution", label: "تبديل" },
+  var: { type: "var", label: "مراجعة الفار" },
+  penalty: null, // ركلة جزاء احتُسبت — يكفيها سطر الهدف/الإهدار
+  injury_time: null, // وقت بدل ضائع — لا يُعرَض كسطر حدث
+  other: null,
+};
+
+function mapTsEventsToWc(
+  events: TsEvent[],
+  fx: WcFixture,
+  tr: (n: string | null | undefined) => string,
+): WcMatchEvent[] {
+  const out: WcMatchEvent[] = [];
+  for (const e of events) {
+    const meta = TS_EVENT_LABEL[e.type];
+    if (!meta) continue;
+    const teamId = e.team === "home" ? fx.home.id : e.team === "away" ? fx.away.id : 0;
+    if (e.type === "sub") {
+      out.push({
+        minute: e.minute,
+        extraMinute: null,
+        teamId,
+        type: meta.type,
+        label: meta.label,
+        detail: "Substitution",
+        player: tr(e.inPlayer), // الداخل
+        playerId: null, // معرّف TheSports نصّي لا يطابق بطاقة اللاعب (API-Football)
+        assist: e.outPlayer ? tr(e.outPlayer) : null, // «بديلًا عن»
+        assistId: null,
+      });
+    } else {
+      out.push({
+        minute: e.minute,
+        extraMinute: null,
+        teamId,
+        type: meta.type,
+        label: meta.label,
+        detail:
+          e.type === "penalty_goal"
+            ? "Penalty"
+            : e.type === "yellow_red"
+              ? "Second Yellow card"
+              : "",
+        player: tr(e.player),
+        playerId: null,
+        assist: e.assist ? tr(e.assist) : null,
+        assistId: null,
+      });
+    }
+  }
+  return out;
+}
+
+const TS_STAT_LABEL: Record<keyof TsLiveStats, string> = {
+  possession: "الاستحواذ",
+  shotsOnTarget: "تسديدات على المرمى",
+  shotsOffTarget: "تسديدات خارج المرمى",
+  attacks: "الهجمات",
+  dangerousAttacks: "الهجمات الخطرة",
+  corners: "الركنيات",
+  yellow: "البطاقات الصفراء",
+  red: "البطاقات الحمراء",
+};
+const TS_STAT_ORDER: (keyof TsLiveStats)[] = [
+  "possession",
+  "shotsOnTarget",
+  "shotsOffTarget",
+  "attacks",
+  "dangerousAttacks",
+  "corners",
+  "yellow",
+  "red",
+];
+
+function mapTsStatsToWc(stats: TsLiveStats): WcStatistic[] {
+  const out: WcStatistic[] = [];
+  for (const key of TS_STAT_ORDER) {
+    const v = stats[key];
+    if (!v) continue;
+    const suffix = key === "possession" ? "%" : "";
+    out.push({
+      key: `ts:${key}`,
+      label: TS_STAT_LABEL[key],
+      home: `${v[0]}${suffix}`,
+      away: `${v[1]}${suffix}`,
+    });
+  }
+  return out;
+}
+
+// تفاصيل مباراة مُركَّبة: النتيجة (TheSports→SportMonks) + الأحداث/الإحصاءات
+// اللحظية من TheSports أثناء اللعب فقط. أفضل جهد: أي فشل → تفاصيل API-Football.
+async function overlayLiveDetail(detail: WcMatchDetail): Promise<WcMatchDetail> {
+  const fixture = await overlayLiveScore(detail.fixture);
+  if (!fixture.status.live) return { ...detail, fixture };
+  try {
+    const ts = await getTheSportsMatchLive(detail.fixture.id, detail.fixture.timestamp);
+    if (!ts || !ts.live) return { ...detail, fixture };
+    const raw: (string | null | undefined)[] = [];
+    for (const e of ts.events) raw.push(e.player, e.assist, e.inPlayer, e.outPlayer);
+    const tr = await resolveNames(raw);
+    const events = mapTsEventsToWc(ts.events, fixture, tr);
+    const statistics = ts.stats ? mapTsStatsToWc(ts.stats) : [];
+    return {
+      ...detail,
+      fixture,
+      events: events.length > 0 ? events : detail.events,
+      statistics: statistics.length > 0 ? statistics : detail.statistics,
+    };
+  } catch {
+    return { ...detail, fixture };
+  }
 }
 
 export function registerWorldCupRoutes(app: Express) {
@@ -472,16 +609,16 @@ export function registerWorldCupRoutes(app: Express) {
     try {
       const detail = await getMatchDetail(fixtureId);
       if (!detail) return res.status(404).json({ message: "المباراة غير موجودة" });
-      // نتيجة/دقيقة لحظية من SportMonks فوق تفاصيل API-Football
-      const fixture = await overlayLiveScore(detail.fixture);
+      // نتيجة/دقيقة لحظية + أحداث/إحصاءات TheSports اللحظية فوق تفاصيل API-Football
+      const overlaid = await overlayLiveDetail(detail);
       // مباراة حيّة: s-maxage=5 للنتيجة اللحظية؛ المنتهية/القادمة تبقى قابلة للكاش لدقائق
       res.set(
         "Cache-Control",
-        fixture.status.live
+        overlaid.fixture.status.live
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=60, s-maxage=120, stale-while-revalidate=300"
       );
-      res.json({ ...detail, fixture });
+      res.json(overlaid);
     } catch (error) {
       console.error(`[WorldCup] match ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });

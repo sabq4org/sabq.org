@@ -613,8 +613,10 @@ struct WCStatsView: View {
     @State private var xg: WCXg?
     @State private var loaded = false
 
-    // إحصائيات SportMonks أعمق؛ نعود لإحصائيات API-Football عند غيابها
+    // أثناء اللعب نُفضّل إحصاءات detail اللحظية (TheSports — أسرع) إن توفّرت؛ وإلا
+    // إحصائيات SportMonks الأعمق؛ ثم API-Football عند غيابها.
     private var stats: [WCStatistic] {
+        if detail.fixture.status.live, !detail.statistics.isEmpty { return detail.statistics }
         if let f = facts, !f.statistics.isEmpty { return f.statistics }
         return detail.statistics
     }
