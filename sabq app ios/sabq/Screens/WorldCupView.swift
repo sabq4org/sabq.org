@@ -26,6 +26,11 @@ struct WorldCupView: View {
             VStack(spacing: 22) {
                 WCHeroSection(overview: overview, isLoading: overviewLoading) { open($0) }
 
+                if let pid = pulseFixtureId {
+                    WCPulseCard(fixtureId: pid) { open($0) }
+                        .padding(.horizontal, 16)
+                }
+
                 if let saudi = overview?.saudi, !saudi.fixtures.isEmpty {
                     WCSaudiSpotlight(saudi: saudi) { open($0) }
                 }
@@ -59,6 +64,21 @@ struct WorldCupView: View {
     }
 
     private func open(_ fixtureId: Int) { selectedMatch = WCMatchSelection(id: fixtureId) }
+
+    /// مباراة ودجت النبض: حيّة أولًا → أقرب قادمة → أحدث منتهية (مطابق اختيار الويب #434)
+    private var pulseFixtureId: Int? {
+        if let live = fixtures.first(where: { $0.status.live }) { return live.id }
+        let nowTs = Int(Date().timeIntervalSince1970)
+        if let next = fixtures
+            .filter({ !$0.status.finished && !$0.status.live && $0.timestamp >= nowTs })
+            .min(by: { $0.timestamp < $1.timestamp }) {
+            return next.id
+        }
+        if let last = fixtures.filter({ $0.status.finished }).max(by: { $0.timestamp < $1.timestamp }) {
+            return last.id
+        }
+        return overview?.matchOfTheDay?.fixture.id
+    }
 
     // عند السحب للتحديث (force=true) نمرّر تجاوز الكاش لكل النقاط، وإلا
     // بقيت النتائج/الجدول/الترتيب من URLCache (الخادم يضع max-age=30/120/300)
@@ -648,5 +668,209 @@ struct WCFormDots: View {
     }
     private func color(_ ch: Character) -> Color {
         switch ch { case "W": return WCTheme.emeraldDeep; case "D": return WCTheme.onDarkDim; case "L": return WCTheme.liveRed; default: return WCTheme.cardStroke }
+    }
+}
+
+// MARK: - نبض المباراة (ودجت حيّ — /world-cup/pulse/:id)
+//
+// تكافؤ مع WorldCupPulse على الويب (#434): نتيجة/دقيقة لحظية بنداء خفيف يتجدّد
+// كل ١٢ث أثناء البث، شريط زخم هجومي، توهّج نبض عند زخم>70، رادار VAR، وفلاش
+// هدف ٥ث عند تغيّر النتيجة. يختار الخادم/الواجهة المباراة (حيّة→قادمة→منتهية).
+
+struct WCPulseCard: View {
+    let fixtureId: Int
+    let onOpen: (Int) -> Void
+
+    @State private var pulse: WCPulse?
+    @State private var goalFlash = false
+    @State private var glow = false   // نبضة دائمة للتوهّج والنقطة الحيّة
+
+    private var highPulse: Bool { (pulse?.momentum.value ?? 0) > 70 && (pulse?.status.live ?? false) }
+
+    var body: some View {
+        Group {
+            if let p = pulse {
+                card(p)
+                    .onTapGesture { onOpen(fixtureId) }
+            } else {
+                EmptyView()
+            }
+        }
+        .task(id: fixtureId) {
+            glow = true
+            await loop()
+        }
+    }
+
+    // MARK: البطاقة
+    private func card(_ p: WCPulse) -> some View {
+        VStack(spacing: 14) {
+            topRow(p)
+            HStack(alignment: .top, spacing: 8) {
+                teamCol(p.home)
+                centerScore(p)
+                teamCol(p.away)
+            }
+            if p.status.live, p.momentum.home + p.momentum.away > 0 {
+                momentumBar(p)
+            }
+            if let v = p.lastVar { varChip(p, v) }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(LinearGradient(colors: [WCTheme.pitchTop, WCTheme.pitchBottom],
+                                     startPoint: .topTrailing, endPoint: .bottomLeading))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(WCTheme.emerald.opacity(highPulse && glow ? 0.85 : 0.4), lineWidth: 1)
+        )
+        .overlay(alignment: .top) { if goalFlash { goalBanner } }
+        .shadow(color: WCTheme.emerald.opacity(highPulse ? (glow ? 0.55 : 0.18) : 0),
+                radius: highPulse ? (glow ? 22 : 9) : 0)
+        .animation(.easeInOut(duration: 0.95).repeatForever(autoreverses: true), value: glow)
+        .animation(.spring(response: 0.4), value: goalFlash)
+    }
+
+    private func topRow(_ p: WCPulse) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 11)).foregroundStyle(WCTheme.emerald)
+            Text(p.round.isEmpty ? "نبض المباراة" : p.round)
+                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            statusPill(p)
+        }
+    }
+
+    @ViewBuilder private func statusPill(_ p: WCPulse) -> some View {
+        if p.status.live {
+            HStack(spacing: 5) {
+                Circle().fill(WCTheme.liveRed).frame(width: 7, height: 7)
+                    .opacity(glow ? 0.35 : 1)
+                Text(liveMinute(p))
+                    .font(SabqFonts.app(size: 12, weight: .black))
+                    .foregroundStyle(.white)
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(WCTheme.liveRed.opacity(0.25)))
+        } else if p.status.finished {
+            Text(p.status.label.isEmpty ? "انتهت" : p.status.label)
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(WCTheme.chipFill))
+        } else {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Text("تبدأ بعد \(WCFormat.countdown(to: p.timestamp))")
+                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(WCTheme.emerald.opacity(0.15)))
+        }
+    }
+
+    private func teamCol(_ side: WCPulseSide) -> some View {
+        VStack(spacing: 8) {
+            WCRemoteImage(url: side.logo).frame(width: 46, height: 46)
+            Text(side.name)
+                .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(.white)
+                .lineLimit(1).minimumScaleFactor(0.75).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func centerScore(_ p: WCPulse) -> some View {
+        Text("\(p.score.home) - \(p.score.away)")
+            .font(SabqFonts.app(size: 30, weight: .black).monospacedDigit())
+            .foregroundStyle(.white)
+            .environment(\.layoutDirection, .leftToRight)
+            .padding(.top, 6)
+    }
+
+    private func momentumBar(_ p: WCPulse) -> some View {
+        let m = p.momentum
+        let total = max(m.home + m.away, 1)
+        let homeFrac = CGFloat(m.home) / CGFloat(total)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                Text("الزخم الهجومي")
+                    .font(SabqFonts.app(size: 10, weight: .semibold)).foregroundStyle(WCTheme.emerald)
+                Spacer()
+                if let leader = m.leader, m.value > 0 {
+                    Text("\(leader == "home" ? p.home.name : p.away.name) +\(m.value)")
+                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
+            // RTL: المضيف (زمردي) يمينًا، الضيف (ذهبي) يسارًا
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    Rectangle().fill(WCTheme.emerald).frame(width: geo.size.width * homeFrac)
+                    Rectangle().fill(WCTheme.gold.opacity(0.85))
+                }
+            }
+            .frame(height: 8)
+            .clipShape(Capsule())
+        }
+    }
+
+    private func varChip(_ p: WCPulse, _ v: WCPulseVar) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "tv").font(.system(size: 10))
+            Text("مراجعة الفيديو (VAR) · د.\(v.minute) · \(v.team == "home" ? p.home.name : p.away.name)")
+                .font(SabqFonts.app(size: 10, weight: .semibold)).lineLimit(1)
+        }
+        .foregroundStyle(Color(red: 0.72, green: 0.55, blue: 0.98))
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.purple.opacity(0.18)))
+    }
+
+    private var goalBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "soccerball").font(.system(size: 13))
+            Text("هدف!").font(SabqFonts.app(size: 14, weight: .black))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .background(Capsule().fill(WCTheme.emeraldDeep))
+        .shadow(color: WCTheme.emerald.opacity(0.6), radius: 10)
+        .offset(y: -12)
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    private func liveMinute(_ p: WCPulse) -> String {
+        let e = p.status.elapsed ?? 0
+        let x = p.status.extra.map { "+\($0)" } ?? ""
+        return "د. \(e)\(x)"
+    }
+
+    // MARK: التحديث الحيّ
+    private func loop() async {
+        while !Task.isCancelled {
+            let prevTotal = (pulse?.score.home ?? 0) + (pulse?.score.away ?? 0)
+            if let p = try? await APIClient.shared.fetchWorldCupPulse(
+                fixtureId: fixtureId, ignoreCache: pulse?.status.live ?? false) {
+                let increased = pulse != nil && (p.score.home + p.score.away) > prevTotal
+                await MainActor.run {
+                    pulse = p
+                    if increased { triggerGoalFlash() }
+                }
+            }
+            let live = pulse?.status.live ?? false
+            try? await Task.sleep(nanoseconds: live ? 12_000_000_000 : 60_000_000_000)
+        }
+    }
+
+    private func triggerGoalFlash() {
+        goalFlash = true
+        Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            await MainActor.run { goalFlash = false }
+        }
     }
 }
