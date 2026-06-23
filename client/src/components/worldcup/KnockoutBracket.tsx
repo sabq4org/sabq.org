@@ -168,7 +168,7 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
               ))}
             </div>
             <p className="text-sm text-muted-foreground">
-              تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات — وسيظهر مسار البطولة هنا تلقائيًا.
+              تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات (28 يونيو 2026) — وسيظهر مسار البطولة هنا تلقائيًا لحظة بلحظة.
             </p>
           </div>
         )}

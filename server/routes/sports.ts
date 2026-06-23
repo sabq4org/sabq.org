@@ -64,7 +64,6 @@ import {
   removeFollow,
   setFollowNotify,
 } from "../services/sportsFollowsService";
-import { getMissedResults } from "../services/sportsDigestService";
 import {
   getLeaderboard,
   getMyPrediction,
@@ -819,15 +818,34 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
-  // «ما فاتك» — آخر نتائج فِرقك المتابَعة (شخصنة)
-  app.get("/api/sports/digest", requireAuth, async (req: any, res) => {
+  // تفضيلات أنواع تنبيهات المباريات (عامّة على كل الفِرق المتابَعة): انطلاق/أهداف/
+  // بطاقات/فار/نهاية. نظيرة /api/v1/sports/alert-prefs للموبايل لكن بجلسة Passport.
+  app.get("/api/sports/alert-prefs", requireAuth, async (req: any, res) => {
     try {
-      const results = await getMissedResults(req.user.id);
+      const { getPrefs } = await import("../services/sportsAlertPrefsService");
+      const preferences = await getPrefs(req.user.id);
       res.set("Cache-Control", "private, no-store");
-      res.json({ results });
+      res.json({ preferences });
     } catch (error) {
-      console.error("[Sports] digest failed:", error);
-      res.status(502).json({ message: "تعذر جلب ملخّص فِرقك حاليًا" });
+      console.error("[Sports] get alert-prefs failed:", error);
+      res.status(502).json({ message: "تعذر جلب تفضيلات الإشعارات حاليًا" });
+    }
+  });
+
+  app.put("/api/sports/alert-prefs", requireAuth, async (req: any, res) => {
+    try {
+      const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
+      const body = req.body ?? {};
+      const patch: Record<string, boolean> = {};
+      for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime"] as const) {
+        if (typeof body[key] === "boolean") patch[key] = body[key];
+      }
+      const preferences = await upsertPrefs(req.user.id, patch);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ preferences });
+    } catch (error) {
+      console.error("[Sports] save alert-prefs failed:", error);
+      res.status(502).json({ message: "تعذر حفظ تفضيلات الإشعارات حاليًا" });
     }
   });
 

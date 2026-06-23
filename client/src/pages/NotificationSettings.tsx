@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy, Lightbulb, Newspaper, ChevronLeft, Compass } from "lucide-react";
+import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy, Lightbulb, Newspaper, ChevronLeft, Compass, Play, Goal, Square, Video, Flag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
 
@@ -47,6 +47,30 @@ interface ReporterNotificationPrefs {
   notifyOnPublish: boolean;
 }
 
+interface SportsAlertPrefs {
+  kickoff: boolean;
+  goals: boolean;
+  cards: boolean;
+  varReview: boolean;
+  fulltime: boolean;
+}
+
+const SPORTS_ALERT_DEFAULTS: SportsAlertPrefs = {
+  kickoff: true,
+  goals: true,
+  cards: true,
+  varReview: true,
+  fulltime: true,
+};
+
+const SPORTS_ALERT_ROWS: { key: keyof SportsAlertPrefs; icon: typeof Play; title: string; desc: string }[] = [
+  { key: "kickoff", icon: Play, title: "انطلاق المباراة", desc: "إشعار عند صافرة بداية مباراة فريقك" },
+  { key: "goals", icon: Goal, title: "الأهداف", desc: "كل هدف فور تسجيله (يشمل ركلات الجزاء)" },
+  { key: "cards", icon: Square, title: "البطاقات", desc: "البطاقات الصفراء والحمراء" },
+  { key: "varReview", icon: Video, title: "حالات الفار (VAR)", desc: "إلغاء هدف، احتساب ركلة جزاء، أو تسلل بعد المراجعة" },
+  { key: "fulltime", icon: Flag, title: "نهاية المباراة", desc: "النتيجة النهائية عند صافرة النهاية" },
+];
+
 export default function NotificationSettings() {
   const { toast } = useToast();
   const [whatsappPhone, setWhatsappPhone] = useState("");
@@ -75,6 +99,37 @@ export default function NotificationSettings() {
   const { data: reporterPrefs } = useQuery<ReporterNotificationPrefs>({
     queryKey: ["/api/me/reporter-notification-prefs"],
     enabled: !!user,
+  });
+
+  const { data: sportsAlertData } = useQuery<{ preferences: SportsAlertPrefs }>({
+    queryKey: ["/api/sports/alert-prefs"],
+    retry: false,
+  });
+  const sportsAlerts = sportsAlertData?.preferences ?? SPORTS_ALERT_DEFAULTS;
+
+  const updateSportsAlertsMutation = useMutation({
+    mutationFn: async (data: Partial<SportsAlertPrefs>) => {
+      return await apiRequest("/api/sports/alert-prefs", {
+        method: "PUT",
+        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/sports/alert-prefs"] });
+      const prev = queryClient.getQueryData<{ preferences: SportsAlertPrefs }>(["/api/sports/alert-prefs"]);
+      queryClient.setQueryData<{ preferences: SportsAlertPrefs }>(["/api/sports/alert-prefs"], {
+        preferences: { ...(prev?.preferences ?? SPORTS_ALERT_DEFAULTS), ...data },
+      });
+      return { prev };
+    },
+    onError: (_err, _data, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["/api/sports/alert-prefs"], ctx.prev);
+      toast({ title: "خطأ", description: "تعذر حفظ تفضيلات تنبيهات المباريات", variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sports/alert-prefs"] });
+    },
   });
 
   // Check if user is a reporter/editor/admin (can have articles assigned)
@@ -271,6 +326,30 @@ export default function NotificationSettings() {
                 onCheckedChange={(checked) => handleToggle("matchesOnly", checked)}
                 data-testid="switch-matches-only"
               />
+            </div>
+
+            <div className="rounded-lg border border-border p-3 space-y-1">
+              <p className="text-base font-medium mb-1">أنواع تنبيهات المباريات</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                تُطبَّق على كل الفِرق التي تتابعها — اختر الأحداث التي تهمّك فقط
+              </p>
+              {SPORTS_ALERT_ROWS.map(({ key, icon: Icon, title, desc }) => (
+                <div key={key} className="flex items-center justify-between gap-4 py-2">
+                  <div className="flex items-center gap-3">
+                    <Icon className="h-5 w-5 text-primary shrink-0" />
+                    <div>
+                      <Label htmlFor={`sports-alert-${key}`} className="text-base font-medium">{title}</Label>
+                      <p className="text-sm text-muted-foreground">{desc}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    id={`sports-alert-${key}`}
+                    checked={sportsAlerts[key]}
+                    onCheckedChange={(checked) => updateSportsAlertsMutation.mutate({ [key]: checked })}
+                    data-testid={`switch-sports-alert-${key}`}
+                  />
+                </div>
+              ))}
             </div>
 
             <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
