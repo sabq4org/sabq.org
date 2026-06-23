@@ -127,12 +127,12 @@
 | قنوات البثّ | `match/tv/list?uuid=<matchId>` | ✅ يعمل |
 | المدرب/الحكم/الملعب | `coach/list` · `referee/list` · `venue/list` (BASIC INFO) | ✅ يعمل |
 | انتقالات/قيمة/قدرة اللاعب | `player/transfer/list` · `player/market/list` · `player/ability/list` | ✅ يعمل |
-| ملف اللاعب (اسم/صورة) | `player/list` | ❌ ما زال «URL not authorized» — المسار الصحيح للملف غير مؤكَّد |
+| ملف اللاعب (اسم/صورة/مركز) | **`player/with_stat/list`** (BASIC INFO) | ✅ مؤكَّد من الدعم 2026‑06‑23 (لم يُتحقَّق الشكل بعد — انظر ملاحظة عنوان dev) |
 | القيمة السوقية للفريق/التأسيس | `team/additional/list` | ✅ مُطبَّق |
 | حقائق البطولة | `competition/additional/list` | ✅ مُطبَّق |
 | التعريب | `language/list` (مزامنة مُصفَّحة بلا uuid، الحقل العربي **`name_aa`**) | ✅ يعمل |
 
-- **القيمة السوقية للاعب — لا تزال مؤجَّلة:** `player/market/list`/`transfer/list`/`ability/list` تعمل، لكن **ملف اللاعب (`player/list`) ما زال يردّ «URL not authorized»** فلا اسم/صورة لربط لاعبنا (API-Football) بـuuid لاعب TheSports بثقة. يُفتح فور تأكيد مسار الملف الصحيح من الدعم.
+- **القيمة السوقية للاعب — صار المسار متاحًا (2026‑06‑23):** الدعم أكّد أن ملف اللاعب عبر **`player/with_stat/list`** (حزمة BASIC INFO، [الدوكس](https://www.thesports.com/docs/football#package:BASIC%20INFO,endpoint:Player)). مع `player/market/list`/`transfer/list`/`ability/list` العاملة، يكتمل بناء الميزة فور التحقّق من شكل الاستجابة وطريقة الربط (يُفضَّل المطابقة بالاسم الإنجليزي داخل المنتخب عبر `team_id`).
 - **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). إصلاح منفصل مقترح: مزامنة دورية لقاموس `name_aa`.
 
 **ميزات جاهزة للبناء فورًا (المسارات مؤكَّدة):** تصنيف فيفا على صفحة المنتخب/القسم (`ranking/fifa/men`) · الإصابات قبل المباراة (`team/injury/list`) · قنوات البثّ في مركز المباراة (`match/tv/list`) · إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`).
@@ -147,8 +147,9 @@
 
 - **الفرع:** `feat/sports-arabic-match-center` — آخر commit `b408ad9`. **مطلوب:** دمج الـPR إلى `main` (يُدمج تلقائيًّا — أُعيد بناؤه فوق آخر `main`). بعد الدمج تختفي أي بقايا تشخيص ويستقرّ كل شيء.
 - **بيئة الإنتاج تعمل الآن:** اتصال TheSports `ok` بعد تثبيت Static Outbound IPs (انظر «حسم اتصال الإنتاج» أعلاه). لا تُغيَّر منطقة خدمة Railway.
-- **بيانات الاعتماد للفحص اليدوي:** `THESPORTS_USER`/`THESPORTS_SECRET` على Railway. للفحص من جهازك يلزم إدراج IP جهازك لدى TheSports. مثال نداء:
+- **بيانات الاعتماد للفحص اليدوي:** `THESPORTS_USER`/`THESPORTS_SECRET` على Railway. مثال نداء:
   `curl --ipv4 "https://api.thesports.com/v1/football/<path>?<params>&user=<U>&secret=<S>"`
+- **⚠️ قائمة IP لدى TheSports محدودة السعة:** عند تثبيت عناوين Railway الثلاثة (2026‑06‑23) **أُزيل عنوان dev السابق `188.50.158.76`** — فالفحص المحلي/الـdev **لم يعد يصل TheSports** (يردّ «IP is not authorized»). للفحص اليدوي من جهازك: أعِد إدراج عنوان جهازك مؤقّتًا لدى TheSports (وقد يلزم حذف أحد العناوين بسبب الحدّ)، أو افحص من الإنتاج. **هذا يحجب التحقّق من `player/with_stat/list` حاليًّا.**
 - **أين الكود:** خدمة المزوّد `server/services/theSportsService.ts` (نداء `tsGet`، وكيل IPv4، كاش `withSWR`، `getTsLiveStandings`, `parseStandingTables`, `getTsTeamExtra`, `getTsCompetitionExtra`, `resolveTsNames`). دمج المونديال `server/services/worldCupService.ts` (`getWcTeamBridge` جسر الفِرق، `overlayLiveStandings`, `getWcCompetitionFacts`, `getWcTeamExtra`). المسارات `server/routes/worldCup.ts`. الواجهة `client/src/pages/WorldCup.tsx` + `client/src/components/worldcup/*` + `client/src/pages/WorldCupTeam.tsx`.
 - **ثوابت مفيدة:** `WC_COMPETITION_ID = kp3glrw7hwqdyjv` · موسم المونديال الحالي يُجلب من `competition/additional/list`.`curSeasonId`.
 - **قبل أي push:** `npm run check` (نظيف حاليًّا) + تأكّد من الفرع (`git branch --show-current`).
@@ -162,8 +163,8 @@
 3. ✅ **(مُنفَّذ باك‑إند+ويب 2026‑06‑23 — بانتظار تحقّق حقول حيّ)** **قنوات البثّ (`match/tv/list?uuid=<matchId>`):** «أين تُشاهد المباراة» في مركز مباراة المونديال — بُني معه **جسر معرّف المباراة** (النقطة 7). — التفاصيل أدناه.
 4. ⚠️✅ **(جزئي 2026‑06‑23: إحصاء الفريق مُنفَّذ باك‑إند+ويب؛ إحصاء اللاعب مؤجَّل)** **إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`):** إحصاء **الفريقين** يعمل (احتياط للمنتهية خلف SportMonks عبر جسر المباراة). إحصاء **اللاعب مؤجَّل**: يعتمد على اسم اللاعب وهو العائق المؤكَّد نفسه (نقطة الملف محجوبة، النقطة 5). — التفاصيل أدناه.
 
-**تتطلّب تأكيدًا من الدعم أولًا:**
-5. **القيمة السوقية للاعب + سجلّ الانتقالات:** `player/market/list`/`transfer/list`/`ability/list` تعمل، لكن **مسار ملف اللاعب (الاسم/الصورة) ما زال يردّ «URL not authorized»** — بلا ربط موثوق للاعبنا بـuuid لاعب TheSports. **محجوبة حتى يؤكّد الدعم مسار «Player profile» الصحيح.**
+**جاهزة بعد تأكيد الدعم (المسار وصل، يبقى التحقّق):**
+5. **القيمة السوقية للاعب + سجلّ الانتقالات:** المسار الناقص وصل — **`player/with_stat/list`** (ملف اللاعب: اسم/صورة/مركز) + `player/market/list` + `transfer/list` + `ability/list` (كلها تعمل). **الخطوة المتبقّية:** التحقّق من شكل `player/with_stat/list?team_id=<uuid>` ثم الربط بالاسم الإنجليزي داخل المنتخب، فعرض القيمة/الانتقالات في بطاقة اللاعب. **عائق التحقّق:** عنوان dev مُزال من قائمة TheSports (انظر «حالة التسليم») — يلزم إعادة إدراج عنوان dev أو الفحص من الإنتاج.
 
 **ديون تقنية/تحسينات:**
 6. **إصلاح تعريب أسماء TheSports (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`؛ الصحيح **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الحل المقترح: مزامنة دورية لقاموس `name_aa` بدل النداء المباشر.
