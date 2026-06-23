@@ -77,7 +77,15 @@
 - **آلية الأسماء:** `match/diary` يرجّع معرّفات فقط؛ نقطة `schedule/...` (date query) ترجّع `results_extra` بخريطة id→name للبطولات/الفِرق. نخزّنها مرّة (cache) ونعيد استخدامها.
 - **القيد الزمني:** كل أوقات الـAPI بتوقيت **UTC+8**؛ date query يقبل timestamp من −30 إلى +30 يومًا ويرجّع نتائج 24 ساعة.
 
-**الخطوات التالية للبناء:** (1) توسيع `getWcDiary`/الجسر ليقبل أي `competition_id`. (2) خدمة حلّ أسماء عبر `results_extra` مع كاش. (3) طبقة overlay عامة في `saudiLeagueService`/`routes/sports.ts` (نظير `overlayLiveScore`/`overlayLiveDetail`). (4) ترحيل «نبض المباشر» أعلى `/sports`. **متطلّب تشغيلي:** إدراج IP الإنتاج (Railway egress) في قائمة TheSports للتجربة.
+**المرحلة 1 — الباك‑إند مكتمل (2026‑06‑23):** عُمّم جسر TheSports وطبقة الـoverlay على البوابة بالكامل، خلف أعلام آمنة (أفضل جهد، تتراجع لـAPI-Football):
+
+- **الجسر مُعمّم:** `match/diary` يُكاش خامًّا (كل البطولات) ويُشارَك؛ `resolveTsMatchId(fixtureId, kickoffTs, competitionId)` يفلتر على `competition_id` ثم يطابق وقت البداية بـ**تطابق فريد إلزامي** — أي التباس (مباريات متزامنة في نفس البطولة) → `null` فلا ربط خاطئ. `getTheSportsFastScore`/`getTheSportsMatchLive` صارا يقبلان `competitionId` (افتراضه المونديال للتوافق). مساعد `getTsCompetitionId(slug)`.
+- **الـoverlay العام في `saudiLeagueService`:** `overlayLiveMatchDetail` (نتيجة + أحداث بأسماء معرَّبة + إحصاءات حيّة)، `overlayLiveBoardList` (today/live)، `overlayLiveFixturesForComp` (مركز مباريات البطولة). موصولة في `routes/sports.ts`: `/match/:id` و`/live` و`/today` و`/:comp/matches`.
+- **النطاق:** يعمل فقط للبطولات الثماني المُدرَجة في `TS_COMPETITION_IDS` وأثناء اللعب فقط؛ المنتهية تبقى من API-Football (أحداث قابلة للنقر + تقييمات + معرّفات).
+- **التنبيهات عُمّمت لكل البطولات المُدرَجة** (`collectTsLive` يحلّ `getTsCompetitionId(slug)` بدل فلتر `world-cup`) — هدف باسم الهدّاف/الصانع + بطاقة + فار لحظيًّا لروشن والنخبة الآسيوية والدوريات الأوروبية الخمسة، مع تراجع آمن لأحداث API-Football عند الالتباس/التعذّر.
+- **«نبض المباشر» أُضيف أعلى `/sports`** (`LivePulse` في `SportsDashboard`) — شريط بطاقات أفقي للمباريات الجارية عبر كل بطولاتنا، نداء `/api/sports/live` كل 15ث، يظهر فقط عند وجود مباشر.
+
+**ما تبقّى للمرحلة 1:** فضّ التباس المباريات المتزامنة بالأسماء عبر `results_extra` (date query) لاستعادة التغطية اللحظية في جولات الدوري المتزامنة (يحتاج إدراج IP الإنتاج للتجربة). **متطلّب تشغيلي عام:** إدراج IP الإنتاج (Railway egress) في قائمة TheSports لتفعيل الطبقة اللحظية فعليًّا.
 
 **التجارة:** نبدأ شهرًا واحدًا بـAdvanced Data ($1000) — يشمل Basic+Advanced لكل 1970+ دوري — ثم ربع سنوي. لا نأخذ Live Match Tracker (ويدجت iframe، نبني واجهتنا).
 

@@ -78,6 +78,13 @@ export function isTheSportsConfigured(): boolean {
   );
 }
 
+// معرّف بطولة TheSports المقابل لـslug بطولة لدينا — أو null لو لم تُربط بعد.
+// الطبقة اللحظية العامة لا تعمل إلا للبطولات المُدرَجة في الخريطة المنسّقة.
+export function getTsCompetitionId(slug: string | null | undefined): string | null {
+  if (!slug) return null;
+  return TS_COMPETITION_IDS[slug] ?? null;
+}
+
 // نُجبر IPv4 صراحةً (family: 4). قائمة TheSports المسموح بها مبنيّة على IPv4 فقط،
 // و`fetch` العام في Node (undici) يفضّل IPv6 عند توفّره فيخرج بعنوان غير مُدرَج
 // ويرجع «IP not authorized» — فتُعطَّل الميزة بصمت رغم صحّة المفتاح وإدراج IPv4.
@@ -147,32 +154,47 @@ function candidateDateKeys(timestampSec: number): string[] {
   return [...new Set(keys)];
 }
 
-// جدول يوم كامل لبطولة المونديال (مُعرّفات + أوقات + نتائج) — يُكاش طويلًا.
-async function getWcDiary(dateKey: string): Promise<any[]> {
+// جدول يوم كامل (كل البطولات: مُعرّفات + أوقات + نتائج) — يُكاش طويلًا ويُشارَك
+// بين كل البطولات (نداء diary واحد لليوم يخدم المونديال والدوري السعودي وغيرها).
+async function getDiaryRaw(dateKey: string): Promise<any[]> {
   const data = await withSWR(
     `ts:diary:${dateKey}`,
     BRIDGE_TTL,
     BRIDGE_TTL * 2,
     () => tsGet("match/diary", { date: dateKey })
   );
-  const results: any[] = Array.isArray(data?.results) ? data.results : [];
-  return results.filter((m) => m.competition_id === WC_COMPETITION_ID);
+  return Array.isArray(data?.results) ? data.results : [];
 }
 
 // حلّ معرّف مباراة TheSports لمباراتنا عبر الجسر (بطولة + وقت بداية).
-async function resolveTsMatchId(fixtureId: number, kickoffTs: number): Promise<string | null> {
+//
+// التعميم خارج المونديال: نفلتر diary على competitionId ثم نطابق وقت البداية
+// بسماحية دقيقتين. **شرط الأمان: تطابق فريد** — إن وُجدت أكثر من مباراة في نفس
+// البطولة بنفس التوقيت (جولة دوري بمواعيد متزامنة، أو الجولة الأخيرة لمجموعات
+// المونديال) نمتنع عن الربط ونرجع null، فلا نخاطر بربط خاطئ يعطي نتيجة مباراة
+// أخرى. يتراجع المستدعي بهدوء لـSportMonks/API-Football. (الأسماء محجوبة في
+// diary، فلا يمكن فضّ الالتباس بالأسماء بعد — يأتي لاحقًا عبر results_extra.)
+async function resolveTsMatchId(
+  fixtureId: number,
+  kickoffTs: number,
+  competitionId: string
+): Promise<string | null> {
   const cached = matchIdBridge.get(fixtureId);
   if (cached) return cached;
-  if (!kickoffTs) return null;
+  if (!kickoffTs || !competitionId) return null;
 
-  // مطابقة بوقت البداية بسماحية دقيقتين (فروقات تقريب بين المزوّدين) عبر أيام
-  // مرشّحة (التباس توقيت بكين/UTC). أول مطابقة تُربط وتُكاش.
   for (const dateKey of candidateDateKeys(kickoffTs)) {
-    const wc = await getWcDiary(dateKey);
-    const hit = wc.find((m) => Math.abs((m.match_time ?? 0) - kickoffTs) <= 120);
-    if (hit?.id) {
-      matchIdBridge.set(fixtureId, hit.id);
-      return hit.id;
+    const day = await getDiaryRaw(dateKey);
+    const candidates = day.filter(
+      (m) =>
+        m.competition_id === competitionId &&
+        Math.abs((m.match_time ?? 0) - kickoffTs) <= 120
+    );
+    // التباس (مباريات متزامنة في نفس البطولة) → لا نخمّن.
+    if (candidates.length > 1) return null;
+    if (candidates.length === 1 && candidates[0]?.id) {
+      matchIdBridge.set(fixtureId, candidates[0].id);
+      return candidates[0].id;
     }
   }
   return null;
@@ -195,8 +217,12 @@ async function getLiveMap(): Promise<Map<string, any>> {
 }
 
 // عنصر detail_live الخام لمباراتنا (بعد حلّ الجسر) — مصدر مشترك للنتيجة والأحداث.
-async function getLiveEntry(fixtureId: number, kickoffTs: number): Promise<any | null> {
-  const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs);
+async function getLiveEntry(
+  fixtureId: number,
+  kickoffTs: number,
+  competitionId: string
+): Promise<any | null> {
+  const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs, competitionId);
   if (!tsMatchId) return null;
   const liveMap = await getLiveMap();
   return liveMap.get(tsMatchId) ?? null;
@@ -395,20 +421,22 @@ function buildFastScore(decoded: NonNullable<ReturnType<typeof decodeScore>>): T
 }
 
 /**
- * النتيجة اللحظية الفائقة لمباراة مونديال — أفضل جهد.
+ * النتيجة اللحظية الفائقة لمباراة — أفضل جهد.
  * @param fixtureId معرّف مباراتنا (API-Football)
  * @param kickoffTs وقت البداية (ثوانٍ، UTC) — مفتاح الجسر
+ * @param competitionId معرّف بطولة TheSports (افتراضيًا المونديال للتوافق الخلفي)
  * @returns النتيجة الحيّة من TheSports أو null للتراجع للمصدر الحالي
  */
 export async function getTheSportsFastScore(
   fixtureId: number,
-  kickoffTs: number
+  kickoffTs: number,
+  competitionId: string = WC_COMPETITION_ID
 ): Promise<TsFastScore | null> {
   if (!isTheSportsConfigured()) return null;
   // قاطع الدائرة: أثناء التهدئة لا نلمس الشبكة إطلاقًا → تراجع فوري لـ SportMonks.
   if (Date.now() < tsCooldownUntil) return null;
   try {
-    const live = await getLiveEntry(fixtureId, kickoffTs);
+    const live = await getLiveEntry(fixtureId, kickoffTs, competitionId);
     if (!live) return null; // ليست جارية الآن (منتهية/لم تبدأ) → اترك المصدر الحالي
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
@@ -427,12 +455,13 @@ export async function getTheSportsFastScore(
  */
 export async function getTheSportsMatchLive(
   fixtureId: number,
-  kickoffTs: number
+  kickoffTs: number,
+  competitionId: string = WC_COMPETITION_ID
 ): Promise<TsMatchLive | null> {
   if (!isTheSportsConfigured()) return null;
   if (Date.now() < tsCooldownUntil) return null;
   try {
-    const live = await getLiveEntry(fixtureId, kickoffTs);
+    const live = await getLiveEntry(fixtureId, kickoffTs, competitionId);
     if (!live) return null;
     const decoded = decodeScore(live.score);
     if (!decoded) return null;

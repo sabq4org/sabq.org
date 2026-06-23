@@ -60,6 +60,7 @@ import {
   useSportsFollows,
   type SpFixture,
   type SpLiveItem,
+  type SpTeam,
   type SpStandingRow,
   type SpScorer,
   type SpAssister,
@@ -133,6 +134,69 @@ function HeroFeature({ article }: { article: ArticleWithDetails }) {
 // ============================================================
 // لوحة نتائج اليوم — العنصر المميّز في الـ Hero (مباشر/اليوم بارز).
 // ============================================================
+// ============================================================
+// نبض المباشر — شريط أفقي بارز أعلى البوابة، يظهر فقط حين توجد مباريات جارية
+// عبر كل بطولاتنا. هنا تتجلّى الطبقة اللحظية (TheSports): نتيجة ودقيقة فوريّة.
+// ============================================================
+function liveMinute(f: SpLiveItem): string {
+  if (f.status.code === "HT") return "الراحة";
+  const e = f.status.elapsed;
+  if (e == null) return f.status.label;
+  return f.status.extra ? `${e}+${f.status.extra}'` : `${e}'`;
+}
+
+function PulseTeamRow({ team, goal }: { team: SpTeam; goal: number | null }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-0.5">
+      <span className="flex items-center gap-2 min-w-0">
+        {team.logo ? (
+          <img src={team.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />
+        ) : (
+          <span className="w-5 h-5 shrink-0" />
+        )}
+        <span className="truncate text-[13px] font-bold text-foreground">{team.name}</span>
+      </span>
+      <span className="text-base font-black text-foreground tabular-nums shrink-0">{goal ?? 0}</span>
+    </div>
+  );
+}
+
+function LivePulse({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="border-b border-border bg-red-500/[0.04] dark:bg-red-500/[0.07]">
+      <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex items-center gap-2 mb-2.5">
+          <span className="inline-flex items-center gap-1.5 text-xs font-black text-red-600 dark:text-red-400">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> نبض المباشر
+          </span>
+          <span className="text-[11px] font-bold text-muted-foreground tabular-nums">{items.length} مباراة</span>
+        </div>
+        <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
+          {items.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => onOpen(f.id)}
+              className="shrink-0 w-[210px] text-right rounded-2xl border border-border bg-card p-3 transition-colors hover:border-red-500/40"
+              data-testid={`pulse-match-${f.id}`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="truncate text-[10px] font-bold text-muted-foreground max-w-[120px]">{f.competition}</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-black text-red-600 dark:text-red-400 tabular-nums shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {liveMinute(f)}
+                </span>
+              </div>
+              <PulseTeamRow team={f.home} goal={f.goals.home} />
+              <PulseTeamRow team={f.away} goal={f.goals.away} />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScoreboardCard({ items, onOpen }: {
   items: SpLiveItem[]; onOpen: (id: number) => void;
 }) {
@@ -296,6 +360,13 @@ export default function SportsDashboard() {
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
   const liveCount = todayMatches.filter((f) => f.status.live).length;
 
+  // نبض المباشر: نداء مخصّص أسرع (15ث) لكل المباريات الجارية عبر بطولاتنا —
+  // هنا تظهر النتيجة/الدقيقة اللحظية من TheSports فور توفّرها في الإنتاج.
+  const { data: liveData } = useQuery<{ live: SpLiveItem[] }>({
+    queryKey: ["/api/sports/live"], refetchInterval: 15_000, refetchIntervalInBackground: false,
+  });
+  const liveMatches = (Array.isArray(liveData?.live) ? liveData!.live : []).filter((f) => f.status.live);
+
   const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({ queryKey: [`/api/sports/${compSlug}/standings`], staleTime: 5 * 60_000, enabled: hasStandings });
   const standings = Array.isArray(standingsData?.standings) ? standingsData.standings : [];
 
@@ -350,6 +421,9 @@ export default function SportsDashboard() {
             <FollowsStrip todayMatches={todayMatches} onOpen={setOpenMatch} />
           </div>
         </div>
+
+        {/* ===== نبض المباشر — يظهر فقط حين توجد مباريات جارية ===== */}
+        <LivePulse items={liveMatches} onOpen={setOpenMatch} />
 
         {/* ===== Bento Hero: خبر بارز + لوحة نتائج ===== */}
         <section id="news" className="scroll-mt-16 max-w-7xl mx-auto px-4 pt-6 sm:pt-8">

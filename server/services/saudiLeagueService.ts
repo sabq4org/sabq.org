@@ -18,6 +18,13 @@ import {
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
 import {
+  getTheSportsFastScore,
+  getTheSportsMatchLive,
+  getTsCompetitionId,
+  type TsEvent,
+  type TsLiveStats,
+} from "./theSportsService";
+import {
   SPL_POSITION_AR,
   SPL_POSITION_ORDER,
   SPL_STAT_AR,
@@ -730,6 +737,8 @@ export interface SplMatchDetail {
     rows: SplStatRow[];
   } | null;
   lineups: SplLineup[];
+  /** معرّف الدوري في API-Football — لربط الطبقة اللحظية (TheSports) بالبطولة. */
+  leagueId: number | null;
 }
 
 const POS_AR: Record<string, string> = { G: "حراسة", D: "دفاع", M: "وسط", F: "هجوم" };
@@ -822,6 +831,7 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
       events: eventsRaw.map((e: any) => localizeEventRow(e, tr)),
       statistics: localizeStats(statsRaw),
       lineups: localizeLineups(lineupsRaw, tr),
+      leagueId: item.league?.id ?? null,
     };
   });
 }
@@ -841,6 +851,171 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
     const tr = await resolveNames(rawNames);
     return eventsRaw.map((e: any) => localizeEventRow(e, tr));
   });
+}
+
+// ============================================================
+// الطبقة اللحظية الفائقة (TheSports) — تعميمها على البوابة (المرحلة 1)
+// ------------------------------------------------------------
+// أثناء اللعب فقط، وللبطولات المُدرَجة في خريطة TS_COMPETITION_IDS فقط، نُركّب
+// نتيجة/أحداث/إحصاءات TheSports اللحظية (sub-minute، أسرع وأغنى من API-Football)
+// فوق بيانات المباراة. أفضل جهد: أي فشل/تهدئة/التباس → نُبقي بيانات API-Football
+// كما هي. المنتهية تبقى من API-Football (أحداث قابلة للنقر + تقييمات + معرّفات).
+// ============================================================
+
+function getCompetitionByLeagueId(id: number): SaudiCompetition | undefined {
+  return SAUDI_COMPETITIONS.find((c) => c.id === id);
+}
+
+// نوع/تسمية حدث TheSports بمفردات الواجهة نفسها (تطابق localizeEvent).
+const TS_EVENT_LABEL: Record<TsEvent["type"], { type: string; label: string } | null> = {
+  goal: { type: "goal", label: "هدف" },
+  penalty_goal: { type: "goal", label: "هدف من ركلة جزاء" },
+  penalty_missed: { type: "missed-penalty", label: "ركلة جزاء ضائعة" },
+  yellow: { type: "yellow-card", label: "بطاقة صفراء" },
+  red: { type: "red-card", label: "بطاقة حمراء" },
+  yellow_red: { type: "red-card", label: "بطاقة حمراء (إنذاران)" },
+  sub: { type: "substitution", label: "تبديل" },
+  var: { type: "var", label: "مراجعة الفار" },
+  penalty: null, // ركلة جزاء احتُسبت — يكفيها سطر الهدف/الإهدار
+  injury_time: null, // وقت بدل ضائع — لا يُعرَض كسطر
+  other: null,
+};
+
+async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplMatchEvent[]> {
+  const rawNames: (string | null | undefined)[] = [];
+  for (const e of events) rawNames.push(e.player, e.assist, e.inPlayer, e.outPlayer);
+  const tr = await resolveNames(rawNames);
+  const out: SplMatchEvent[] = [];
+  for (const e of events) {
+    const meta = TS_EVENT_LABEL[e.type];
+    if (!meta) continue;
+    const teamId = e.team === "home" ? fx.home.id : e.team === "away" ? fx.away.id : 0;
+    const team = e.team === "home" ? fx.home.name : e.team === "away" ? fx.away.name : "";
+    if (e.type === "sub") {
+      out.push({
+        minute: e.minute, extra: null, teamId, team,
+        player: tr(e.inPlayer), assist: e.outPlayer ? tr(e.outPlayer) : null,
+        type: meta.type, label: meta.label,
+      });
+    } else {
+      out.push({
+        minute: e.minute, extra: null, teamId, team,
+        player: tr(e.player), assist: e.assist ? tr(e.assist) : null,
+        type: meta.type, label: meta.label,
+      });
+    }
+  }
+  return out;
+}
+
+// خريطة إحصاءات TheSports → مفاتيح SplStatRow (نُعيد استخدام تسميات SPL_STAT_AR).
+const TS_STAT_TO_SPL: { key: keyof TsLiveStats; type: string; label: string; pct?: boolean }[] = [
+  { key: "possession", type: "Ball Possession", label: SPL_STAT_AR["Ball Possession"], pct: true },
+  { key: "shotsOnTarget", type: "Shots on Goal", label: SPL_STAT_AR["Shots on Goal"] },
+  { key: "shotsOffTarget", type: "Shots off Goal", label: SPL_STAT_AR["Shots off Goal"] },
+  { key: "attacks", type: "Attacks", label: "الهجمات" },
+  { key: "dangerousAttacks", type: "Dangerous Attacks", label: "هجمات خطيرة" },
+  { key: "corners", type: "Corner Kicks", label: SPL_STAT_AR["Corner Kicks"] },
+  { key: "yellow", type: "Yellow Cards", label: SPL_STAT_AR["Yellow Cards"] },
+  { key: "red", type: "Red Cards", label: SPL_STAT_AR["Red Cards"] },
+];
+
+function mapTsStatsToSpl(ts: TsLiveStats, detail: SplMatchDetail): SplMatchDetail["statistics"] {
+  const fx = detail.fixture;
+  const base = detail.statistics;
+  const rowsByType = new Map<string, SplStatRow>();
+  if (base) for (const r of base.rows) rowsByType.set(r.type, r);
+  for (const m of TS_STAT_TO_SPL) {
+    const pair = ts[m.key] as [number, number] | undefined;
+    if (!pair) continue;
+    const [h, a] = pair;
+    rowsByType.set(m.type, {
+      type: m.type,
+      label: m.label,
+      home: m.pct ? `${h}%` : h,
+      away: m.pct ? `${a}%` : a,
+    });
+  }
+  if (rowsByType.size === 0) return base;
+  const order = (t: string) => {
+    const i = SPL_STAT_ORDER.indexOf(t);
+    return i === -1 ? 99 : i;
+  };
+  const rows = [...rowsByType.values()].sort((x, y) => order(x.type) - order(y.type));
+  return {
+    home: base?.home ?? { id: fx.home.id, name: fx.home.name },
+    away: base?.away ?? { id: fx.away.id, name: fx.away.name },
+    rows,
+  };
+}
+
+// جوهر مشترك: ركّب نتيجة TheSports الحيّة على أي SplFixture بمعرّف بطولة معروف.
+async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: string): Promise<T> {
+  if (!f.status.live) return f;
+  try {
+    const ts = await getTheSportsFastScore(f.id, f.timestamp, tsCompId);
+    if (!ts || (!ts.live && !ts.finished)) return f;
+    return {
+      ...f,
+      goals: { home: ts.home, away: ts.away },
+      status: { ...f.status, live: ts.live, finished: ts.finished || f.status.finished },
+    };
+  } catch {
+    return f;
+  }
+}
+
+/**
+ * تركيب نتيجة TheSports اللحظية على عنصر لوحة (today/live) — أفضل جهد.
+ * يعمل فقط للمباريات الجارية في بطولة مُدرَجة؛ غير ذلك يُعيد العنصر كما هو.
+ */
+export async function overlayLiveBoardScore<T extends SplLiveBoardItem>(item: T): Promise<T> {
+  const tsCompId = getTsCompetitionId(item.competitionSlug);
+  if (!tsCompId) return item;
+  return overlayFastScoreOnFixture(item, tsCompId);
+}
+
+export async function overlayLiveBoardList<T extends SplLiveBoardItem>(items: T[]): Promise<T[]> {
+  return Promise.all((items ?? []).map((i) => overlayLiveBoardScore(i)));
+}
+
+/**
+ * تركيب نتيجة TheSports اللحظية على قائمة مباريات بطولة معروفة (SplFixture بلا
+ * competitionSlug) — لمركز مباريات البطولة. أفضل جهد.
+ */
+export async function overlayLiveFixturesForComp<T extends SplFixture>(
+  items: T[],
+  compSlug: string
+): Promise<T[]> {
+  const tsCompId = getTsCompetitionId(compSlug);
+  if (!tsCompId) return items ?? [];
+  return Promise.all((items ?? []).map((f) => overlayFastScoreOnFixture(f, tsCompId)));
+}
+
+/**
+ * تركيب لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) على تفاصيل
+ * مباراة البوابة — أثناء اللعب فقط وللبطولات المُدرَجة. أفضل جهد.
+ */
+export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
+  const fx = detail.fixture;
+  if (!fx.status.live) return detail;
+  const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
+  const tsCompId = getTsCompetitionId(comp?.slug);
+  if (!tsCompId) return detail;
+  try {
+    const ts = await getTheSportsMatchLive(fx.id, fx.timestamp, tsCompId);
+    if (!ts || (!ts.live && !ts.finished)) return detail;
+    const fixture: SplFixture = {
+      ...fx,
+      goals: { home: ts.home, away: ts.away },
+      status: { ...fx.status, live: ts.live, finished: ts.finished || fx.status.finished },
+    };
+    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
+    const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
+    return { ...detail, fixture, events, statistics };
+  } catch {
+    return detail;
+  }
 }
 
 // ---------- هوية المباراة لمطابقتها بـSportMonks ----------
