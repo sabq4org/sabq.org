@@ -46,6 +46,9 @@ import {
   isSaudiLeagueConfigured,
   listCompetitions,
   listCompetitionsWithMeta,
+  overlayLiveBoardList,
+  overlayLiveFixturesForComp,
+  overlayLiveMatchDetail,
   type SaudiCompetition,
   type SplFixture,
 } from "../services/saudiLeagueService";
@@ -173,7 +176,7 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const live = await getGlobalLiveFixtures();
+      const live = await overlayLiveBoardList(await getGlobalLiveFixtures());
       res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
       res.json({ configured: true, live });
     } catch (error) {
@@ -213,7 +216,7 @@ export function registerSportsRoutes(app: Express) {
     const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     try {
-      const today = await getGlobalTodayFixtures(date);
+      const today = await overlayLiveBoardList(await getGlobalTodayFixtures(date));
       res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
       res.json({ configured: true, date: date ?? null, today });
     } catch (error) {
@@ -236,7 +239,9 @@ export function registerSportsRoutes(app: Express) {
       const buckets = bucketFixtures(fixtures);
       // دمج المباشر من نقطة live (أدقّ) مع ما التُقط من الجدول.
       const liveIds = new Set(liveNow.map((f) => f.id));
-      const live = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
+      const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
+      // الطبقة اللحظية: نتيجة TheSports الفائقة على المباريات الجارية (إن أُدرجت البطولة).
+      const live = await overlayLiveFixturesForComp(mergedLive, comp.slug);
       res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
       res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
     } catch (error) {
@@ -367,11 +372,14 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const detail = await getMatchDetail(id);
-      if (!detail) {
+      const base = await getMatchDetail(id);
+      if (!base) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;
       }
+      // الطبقة اللحظية: نتيجة/أحداث/إحصاءات TheSports فوق بيانات API-Football
+      // للمباريات الجارية في البطولات المُدرَجة — أفضل جهد (تتراجع بصمت).
+      const detail = await overlayLiveMatchDetail(base);
       const ttl = detail.fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
       res.json(detail);

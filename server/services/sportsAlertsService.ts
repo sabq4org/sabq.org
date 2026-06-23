@@ -30,6 +30,7 @@ import {
 import { getTeamFollowerUserIds } from "./sportsFollowsService";
 import {
   getTheSportsMatchLive,
+  getTsCompetitionId,
   isTheSportsConfigured,
   type TsEvent,
   type TsMatchLive,
@@ -377,25 +378,30 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
   return userIds.length;
 }
 
-// لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) لمباريات المونديال
-// المرشّحة — نداء detail_live واحد مكاش يخدم الكل. نُجمّعها مرّةً ثم نُعيد استخدامها
-// في تركيب النتيجة وكشف الأحداث معًا (بلا مضاعفة نداءات).
+// لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) للمباريات المرشّحة —
+// نداء detail_live واحد مكاش يخدم الكل. نُجمّعها مرّةً ثم نُعيد استخدامها في تركيب
+// النتيجة وكشف الأحداث معًا (بلا مضاعفة نداءات).
 //
-// النطاق: مباريات المونديال الجارية الآن أو المقرّبة (3 ساعات قبل حتى 10 دقائق بعد)
-// — كي يُسرّع الانطلاق دون حلّ جسرٍ لمباريات بعيدة. detail_live حيّ فقط، فالمنتهية
-// تتراجع تلقائيًا للمصدر الحالي. أفضل جهد: أي فشل → لا إدخال (تراجع صامت).
-async function collectWcTsLive(matches: SplLiveBoardItem[]): Promise<Map<number, TsMatchLive>> {
+// النطاق: المباريات في **أي بطولة مُدرَجة في TS_COMPETITION_IDS** (المونديال +
+// روشن + النخبة الآسيوية + الدوريات الأوروبية الخمسة) الجارية الآن أو المقرّبة
+// (3 ساعات قبل حتى 10 دقائق بعد) — كي يُسرّع الانطلاق دون حلّ جسرٍ لمباريات بعيدة.
+// نمرّر معرّف بطولة TheSports المقابل ليفلتر الجسر بدقّة (تطابق فريد آمن: التباس
+// المواعيد المتزامنة في نفس البطولة → null فتتراجع للأحداث من API-Football).
+// detail_live حيّ فقط، فالمنتهية تتراجع تلقائيًا للمصدر الحالي. أفضل جهد: أي فشل →
+// لا إدخال (تراجع صامت).
+async function collectTsLive(matches: SplLiveBoardItem[]): Promise<Map<number, TsMatchLive>> {
   const out = new Map<number, TsMatchLive>();
   if (!isTheSportsConfigured()) return out;
   const now = Math.floor(Date.now() / 1000);
   await Promise.all(
     matches.map(async (m) => {
-      if (m.competitionSlug !== "world-cup") return;
+      const tsCompId = getTsCompetitionId(m.competitionSlug);
+      if (!tsCompId) return; // بطولة غير مربوطة بـTheSports → المصدر الحالي
       const nearKickoff =
         !m.status.finished && m.timestamp <= now + 600 && m.timestamp >= now - 3 * 3600;
       if (!m.status.live && !nearKickoff) return;
       try {
-        const ts = await getTheSportsMatchLive(m.id, m.timestamp);
+        const ts = await getTheSportsMatchLive(m.id, m.timestamp, tsCompId);
         if (ts && (ts.live || ts.finished)) out.set(m.id, ts);
       } catch {
         /* تراجع صامت */
@@ -433,9 +439,9 @@ const TEAM_NAME = (
   team: "home" | "away" | null,
 ): string => (team === "home" ? m.home.name : team === "away" ? m.away.name : "");
 
-// كشف أحداث المونديال اللحظية من TheSports: هدف (باسم الهدّاف + الصانع) وبطاقة وفار —
-// أسرع وأغنى من API-Football. الأسماء تُعرَّب عبر الكاش الدائم (أفضل جهد). أول رصدٍ
-// لمباراة = خطّ أساس بلا إرسال (يتفادى إغراق متابعٍ جديد بأحداثٍ سابقة).
+// كشف الأحداث اللحظية من TheSports للبطولات المُدرَجة: هدف (باسم الهدّاف + الصانع)
+// وبطاقة وفار — أسرع وأغنى من API-Football. الأسماء تُعرَّب عبر الكاش الدائم (أفضل
+// جهد). أول رصدٍ لمباراة = خطّ أساس بلا إرسال (يتفادى إغراق متابعٍ جديد بأحداثٍ سابقة).
 async function detectTsEventAlerts(
   matches: SplLiveBoardItem[],
   tsLive: Map<number, TsMatchLive>,
@@ -554,14 +560,14 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   for (const m of today) byId.set(m.id, m);
   for (const m of live) byId.set(m.id, m); // الأحدث يَجُبّ
   const baseMatches = [...byId.values()];
-  // لقطة TheSports الحيّة الكاملة لمباريات المونديال (نتيجة + أحداث + إحصاءات) —
-  // نداء واحد مكاش، نُعيد استخدامه في تركيب النتيجة وكشف الأحداث. أفضل جهد.
-  const tsLive = await collectWcTsLive(baseMatches);
+  // لقطة TheSports الحيّة الكاملة للمباريات في البطولات المُدرَجة (نتيجة + أحداث +
+  // إحصاءات) — نداء واحد مكاش، نُعيد استخدامه في تركيب النتيجة وكشف الأحداث. أفضل جهد.
+  const tsLive = await collectTsLive(baseMatches);
   const tsHandledIds = new Set(tsLive.keys());
   // تركيب نتيجة/حالة TheSports فيُطلَق الإشعار بنفس سرعة الشاشة.
   const matches = applyTsOverlay(baseMatches, tsLive);
-  // أحداث النتيجة/الحالة (انطلاق/نهاية للكل، وهدف لغير المونديال) + بطاقات/فار
-  // API-Football (لغير مباريات TheSports) + أحداث TheSports اللحظية للمونديال
+  // أحداث النتيجة/الحالة (انطلاق/نهاية للكل، وهدف لغير مباريات TheSports) + بطاقات/فار
+  // API-Football (لغير مباريات TheSports) + أحداث TheSports اللحظية للبطولات المُدرَجة
   // (هدف باسم الهدّاف + بطاقة + فار).
   const alerts = detectAlerts(matches, tsHandledIds);
   const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
