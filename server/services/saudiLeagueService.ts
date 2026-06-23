@@ -955,15 +955,39 @@ function mapTsStatsToSpl(ts: TsLiveStats, detail: SplMatchDetail): SplMatchDetai
 }
 
 // جوهر مشترك: ركّب نتيجة TheSports الحيّة على أي SplFixture بمعرّف بطولة معروف.
+// خريطة حالة TheSports الرقمية (statusId) → كود API-Football القصير الذي نُعرّبه
+// محليًّا عبر WC_STATUS_AR. الحالات من theSportsService.ts:
+//   1=لم تبدأ · 2=ش1 · 3=استراحة · 4=ش2 · 5/6=وقت إضافي · 7=ركلات · 8=انتهت.
+// نُعرّب فقط الحالات الجارية/المنتهية (ما قد تُحدّثه TheSports أثناء المباراة)؛
+// ما خارج الخريطة يبقى على كود المصدر الأصلي (لا نخاطر بترجمة خاطئة).
+const TS_STATUS_TO_CODE: Record<number, string> = {
+  2: "1H",  // الشوط الأول
+  3: "HT",  // استراحة الشوطين
+  4: "2H",  // الشوط الثاني
+  5: "ET",  // الوقت الإضافي
+  6: "BT",  // فاصل بين الأشواط الإضافية
+  7: "P",   // ركلات الترجيح
+  8: "FT",  // انتهت
+};
 async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: string): Promise<T> {
   if (!f.status.live) return f;
   try {
     const ts = await getTheSportsFastScore(f.id, f.timestamp, tsCompId);
     if (!ts || (!ts.live && !ts.finished)) return f;
+    // نُحدّث كود الحالة/تسميتها من TheSports أيضًا — لا النتيجة فقط. قبل هذا
+    // كان «استراحة الشوطين» و«الشوط الثاني» يظلّان من API-Football المتأخّر دقيقةً
+    // كاملة حتى مع نتيجة TheSports الطازجة (المستخدم يرى النتيجة لكن التسمية قديمة).
+    const code = TS_STATUS_TO_CODE[ts.statusId];
     return {
       ...f,
       goals: { home: ts.home, away: ts.away },
-      status: { ...f.status, live: ts.live, finished: ts.finished || f.status.finished },
+      status: {
+        ...f.status,
+        code: code ?? f.status.code,
+        label: code ? WC_STATUS_AR[code] ?? f.status.label : f.status.label,
+        live: ts.live,
+        finished: ts.finished || f.status.finished,
+      },
     };
   } catch {
     return f;
@@ -1010,10 +1034,20 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
   try {
     const ts = await getTheSportsMatchLive(fx.id, fx.timestamp, tsCompId);
     if (!ts || (!ts.live && !ts.finished)) return detail;
+    // نُحدّث كود الحالة/تسميتها من TheSports (لا النتيجة فقط) — مطابق overlay
+    // القائمة، حتى تتطازج «استراحة الشوطين»/«الشوط الثاني» مع النتيجة في تفاصيل
+    // المباراة، لا أن تظل من المصدر المتأخّر دقيقةً.
+    const code = TS_STATUS_TO_CODE[ts.statusId];
     const fixture: SplFixture = {
       ...fx,
       goals: { home: ts.home, away: ts.away },
-      status: { ...fx.status, live: ts.live, finished: ts.finished || fx.status.finished },
+      status: {
+        ...fx.status,
+        code: code ?? fx.status.code,
+        label: code ? WC_STATUS_AR[code] ?? fx.status.label : fx.status.label,
+        live: ts.live,
+        finished: ts.finished || fx.status.finished,
+      },
     };
     const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
