@@ -6,6 +6,7 @@
  * للمزود. التوقيت يُطلب من المزود مباشرة بتوقيت الرياض.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,
@@ -44,8 +45,11 @@ const LEAGUE_ID = 1; // World Cup
 const SEASON = 2026;
 const TIMEZONE = "Asia/Riyadh";
 
-// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني
-const LIVE_TTL = 15 * 1000;
+// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني.
+// 8ث (كان 15): قائمة المباريات الجارية تُلتقط أسرع (بدء/انتهاء) لتطابق إيقاع
+// النتيجة اللحظية المُركّبة فوقها. النتيجة نفسها تأتي من TheSports (5ث)/SportMonks
+// (دفعة 4ث) في الطبقة، فلا يحدّها هذا الكاش.
+const LIVE_TTL = 8 * 1000;
 // 30ث (كان 60): يلتقط cron أخبار المونديال لحظة FT أبكر بعد صافرة النهاية،
 // فيقلّص تأخّر نشر تقرير ما بعد المباراة. البيانات الحية تتغيّر بالثواني.
 const FIXTURES_TTL = 30 * 1000;
@@ -452,30 +456,11 @@ export async function getStandingsWithQualification(): Promise<WcGroup[]> {
   });
 }
 
-/** يطبّق نتيجة منتخب واحد على صفّه (ترتيب مبدئي): مباراة + أهداف + نقاط. */
-function applyProvisionalResult(row: WcStandingRow, scored: number, conceded: number): void {
-  row.played += 1;
-  row.goalsFor += scored;
-  row.goalsAgainst += conceded;
-  row.goalsDiff = row.goalsFor - row.goalsAgainst;
-  if (scored > conceded) {
-    row.win += 1;
-    row.points += 3;
-  } else if (scored === conceded) {
-    row.draw += 1;
-    row.points += 1;
-  } else {
-    row.lose += 1;
-  }
-  row.live = true;
-}
-
 /**
  * ترتيب مبدئي (provisional) — يطبّق نتائج المباريات الجارية فوق الترتيب الأساسي
- * لحظيًا، فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية. لا ازدواج
- * احتساب: المباراة الجارية ليست ضمن «played» الأساسي ولا ضمن جدول TheSports
- * (الذي لا يُضيف النقاط إلا بعد النهاية). حالة التأهّل (qualifyStatus) تبقى على
- * النتائج المؤكّدة لأنها تُحسب قبل هذا التطبيق.
+ * لحظيًا، فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية. حالة التأهّل
+ * (qualifyStatus) تبقى على النتائج المؤكّدة لأنها تُحسب قبل هذا التطبيق. المنطق
+ * مشترك مع البوابة الرياضية عبر liveStandings.applyProvisionalTable.
  */
 export function applyProvisionalLiveStandings(
   groups: WcGroup[],
@@ -484,27 +469,8 @@ export function applyProvisionalLiveStandings(
   const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
   if (live.length === 0) return groups;
   return groups.map((g) => {
-    const draft = new Map<number, WcStandingRow>(g.rows.map((r) => [r.team.id, { ...r }]));
-    let changed = false;
-    for (const f of live) {
-      const home = draft.get(f.home.id);
-      const away = draft.get(f.away.id);
-      if (!home || !away) continue; // المباراة ليست داخل هذه المجموعة
-      const gh = f.goals.home ?? 0;
-      const ga = f.goals.away ?? 0;
-      applyProvisionalResult(home, gh, ga);
-      applyProvisionalResult(away, ga, gh);
-      changed = true;
-    }
-    if (!changed) return g;
-    const rows = [...draft.values()];
-    rows.sort(
-      (a, b) => b.points - a.points || b.goalsDiff - a.goalsDiff || b.goalsFor - a.goalsFor,
-    );
-    rows.forEach((r, i) => {
-      r.rank = i + 1;
-    });
-    return { ...g, rows };
+    const rows = applyProvisionalTable(g.rows, live);
+    return rows === g.rows ? g : { ...g, rows };
   });
 }
 

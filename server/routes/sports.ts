@@ -11,6 +11,7 @@
  * لا يستورد db (ملتزم بـ ADR-001) — كل الوصول للبيانات عبر الخدمة فقط.
  */
 import type { Express, Request, Response } from "express";
+import { applyProvisionalTable } from "../services/liveStandings";
 import {
   generateMatchPreview,
   generateMatchStory,
@@ -179,7 +180,14 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const live = await overlayLiveBoardList(await getGlobalLiveFixtures());
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // نقطة مباشرة بحتة: لا نُبقيها في كاش المتصفح (يبتلع الـpolling) أثناء وجود
+      // مباريات جارية؛ خلاف ذلك كاش قصير يكفي.
+      res.set(
+        "Cache-Control",
+        live.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+      );
       res.json({ configured: true, live });
     } catch (error) {
       console.error("[Sports] global live failed:", error);
@@ -219,7 +227,12 @@ export function registerSportsRoutes(app: Express) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     try {
       const today = await overlayLiveBoardList(await getGlobalTodayFixtures(date));
-      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+      res.set(
+        "Cache-Control",
+        today.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+      );
       res.json({ configured: true, date: date ?? null, today });
     } catch (error) {
       console.error("[Sports] global today failed:", error);
@@ -244,7 +257,12 @@ export function registerSportsRoutes(app: Express) {
       const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
       // الطبقة اللحظية: نتيجة TheSports الفائقة على المباريات الجارية (إن أُدرجت البطولة).
       const live = await overlayLiveFixturesForComp(mergedLive, comp.slug);
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      res.set(
+        "Cache-Control",
+        live.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+      );
       res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
     } catch (error) {
       console.error("[Sports] matches failed:", error);
@@ -302,8 +320,21 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      res.set("Cache-Control", "public, max-age=120, s-maxage=300, stale-while-revalidate=600");
-      res.json({ configured: true, standings: await getStandings(comp) });
+      // ترتيب مبدئي لحظي: نطبّق نتائج مباريات البطولة الجارية فوق الجدول فيتحرّك
+      // مع كل هدف. كاش واعٍ للبثّ: قصير أثناء وجود مباراة جارية وإلا أطول.
+      const [base, liveNow] = await Promise.all([
+        getStandings(comp),
+        getLiveFixtures(comp).catch(() => []),
+      ]);
+      const standings = applyProvisionalTable(base, liveNow);
+      const hasLive = standings.some((r) => r.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ configured: true, standings });
     } catch (error) {
       console.error("[Sports] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب الترتيب حاليًا" });

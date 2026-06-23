@@ -524,6 +524,8 @@ export interface SplStandingRow {
   form: string | null;
   home: SplStandingSplit | null;
   away: SplStandingSplit | null;
+  // true إذا طُبّقت عليه نتيجة مباراة جارية (ترتيب مبدئي لحظي).
+  live?: boolean;
 }
 
 export async function getStandings(comp: SaudiCompetition): Promise<SplStandingRow[]> {
