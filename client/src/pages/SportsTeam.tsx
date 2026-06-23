@@ -29,6 +29,7 @@ import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FollowControls, MatchDialog } from "./SportsHub";
 
 interface SpTeam { id: number; name: string; logo: string; winner: boolean | null; }
 interface SpFixture {
@@ -360,7 +361,7 @@ const POSITION_SECTIONS: { en: string; label: string }[] = [
   { en: "Attacker", label: "الهجوم" },
 ];
 
-function FixtureRow({ fx, teamId }: { fx: SpFixture; teamId: number }) {
+function FixtureRow({ fx, teamId, onOpen }: { fx: SpFixture; teamId: number; onOpen: (id: number) => void }) {
   const isHome = fx.home.id === teamId;
   const me = isHome ? fx.home : fx.away;
   const opp = isHome ? fx.away : fx.home;
@@ -374,7 +375,11 @@ function FixtureRow({ fx, teamId }: { fx: SpFixture; teamId: number }) {
     result === "win" ? "bg-emerald-500" : result === "lose" ? "bg-red-500" : result === "draw" ? "bg-amber-500" : "bg-muted-foreground/40";
 
   return (
-    <div className="flex items-center gap-3 py-2.5 px-3">
+    <button
+      type="button"
+      onClick={() => onOpen(fx.id)}
+      className="flex w-full items-center gap-3 py-2.5 px-3 text-right hover-elevate transition-colors rounded-lg"
+    >
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
       <span className="text-[11px] text-muted-foreground w-16 shrink-0">{fmtDay(fx.timestamp)}</span>
       <span className="text-xs text-muted-foreground shrink-0">{isHome ? "ضد" : "على"}</span>
@@ -389,7 +394,7 @@ function FixtureRow({ fx, teamId }: { fx: SpFixture; teamId: number }) {
       ) : (
         <span className="text-[11px] text-muted-foreground tabular-nums">قادمة</span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -429,6 +434,8 @@ export default function SportsTeam() {
 
   const notFound = isError || (!isLoading && !data);
 
+  const [openMatch, setOpenMatch] = useState<number | null>(null);
+
   const finished = (data?.fixtures ?? []).filter((f) => f.status.finished);
   const results = finished.slice(-6).reverse();
   const upcoming = (data?.fixtures ?? []).filter((f) => !f.status.finished).slice(0, 6);
@@ -462,7 +469,18 @@ export default function SportsTeam() {
                 <div className="min-w-0">
                   <h1 className="text-2xl sm:text-3xl font-black text-foreground">{data.team.name}</h1>
                   <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
-                    {data.competitionName && <span>{data.competitionName}</span>}
+                    {data.competitionName && (
+                      data.competitionSlug ? (
+                        <Link
+                          href={`/sports/competition/${data.competitionSlug}`}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          {data.competitionName}
+                        </Link>
+                      ) : (
+                        <span>{data.competitionName}</span>
+                      )
+                    )}
                     {data.team.founded && <span>تأسّس {data.team.founded}</span>}
                     {data.team.venue?.name && (
                       <span className="flex items-center gap-1">
@@ -471,6 +489,15 @@ export default function SportsTeam() {
                       </span>
                     )}
                   </div>
+                </div>
+                <div className="ms-auto shrink-0 self-start">
+                  <FollowControls
+                    kind="team"
+                    refId={data.team.id}
+                    refName={data.team.name}
+                    refLogo={data.team.logo}
+                    size="md"
+                  />
                 </div>
               </div>
 
@@ -526,7 +553,7 @@ export default function SportsTeam() {
                       <h2 className="font-bold text-sm">أحدث النتائج</h2>
                     </div>
                     <div className="divide-y divide-border">
-                      {results.map((fx) => <FixtureRow key={fx.id} fx={fx} teamId={data.team.id} />)}
+                      {results.map((fx) => <FixtureRow key={fx.id} fx={fx} teamId={data.team.id} onOpen={setOpenMatch} />)}
                     </div>
                   </Card>
                 )}
@@ -537,7 +564,7 @@ export default function SportsTeam() {
                       <h2 className="font-bold text-sm">المباريات القادمة</h2>
                     </div>
                     <div className="divide-y divide-border">
-                      {upcoming.map((fx) => <FixtureRow key={fx.id} fx={fx} teamId={data.team.id} />)}
+                      {upcoming.map((fx) => <FixtureRow key={fx.id} fx={fx} teamId={data.team.id} onOpen={setOpenMatch} />)}
                     </div>
                   </Card>
                 )}
@@ -598,6 +625,7 @@ export default function SportsTeam() {
           </div>
         ) : null}
       </main>
+      <MatchDialog id={openMatch} onClose={() => setOpenMatch(null)} />
       <Footer />
     </div>
   );

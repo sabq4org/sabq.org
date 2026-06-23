@@ -30,6 +30,21 @@ const TS_BASE = "https://api.thesports.com/v1/football";
 // مُعرّف بطولة كأس العالم في TheSports (مُتحقَّق منه بمطابقة الجدول والنتيجة).
 export const WC_COMPETITION_ID = "kp3glrw7hwqdyjv";
 
+// خريطة منسّقة: slug البطولة لدينا (saudiLeagueService) → competition_id في TheSports.
+// المعرّفات زوّدنا بها فريق TheSports رسميًا (2026‑06‑23) وهي ثابتة لا تتغيّر.
+// تُستعمل لتعميم الطبقة اللحظية خارج المونديال (المرحلة 1): نقيّد diary على هذه
+// المعرّفات ثم نطابق مبارياتنا زمنيًا كما في جسر المونديال.
+export const TS_COMPETITION_IDS: Record<string, string> = {
+  "world-cup": WC_COMPETITION_ID,
+  "pro-league": "j1l4rjnh66nm7vx",          // دوري روشن السعودي
+  "afc-champions-league": "9dn1m1ghjpmoepl", // دوري أبطال آسيا للنخبة
+  "premier-league": "jednm9whz0ryox8",       // الدوري الإنجليزي الممتاز
+  "la-liga": "vl7oqdehlyr510j",              // الدوري الإسباني
+  "serie-a": "4zp5rzghp5q82w1",             // الدوري الإيطالي
+  "bundesliga": "gy0or5jhg6qwzv3",          // الدوري الألماني
+  "ligue-1": "yl5ergphnzr8k0o",             // الدوري الفرنسي
+};
+
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،
 // 8=انتهت، 9=تأجيل، ...
 const TS_LIVE_STATUS = new Set([2, 3, 4, 5, 6, 7]);
