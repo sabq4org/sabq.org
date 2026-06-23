@@ -661,6 +661,33 @@ export async function getTsCompetitionMatchPairs(
 // تشخيص مؤقّت: يكشف هل المفاتيح مُهيّأة، وحالة التهدئة، وردّ المزوّد الحرفي على
 // نداء حقيقي (competition/additional/list للمونديال) — لتمييز «IP غير مُدرَج» عن
 // «مفاتيح خاطئة» عن «يعمل». يُحذف بعد حسم سبب فشل الإنتاج.
+/**
+ * عنوان الخروج كما يراه الطرف البعيد **عبر نفس وكيل TheSports** (node:https + family:4
+ * + keep-alive). مهمّ للتشخيص: قد يختلف عن عنوان `fetch` العام (undici) إن كان للخادم
+ * أكثر من مسار خروج — وهو ما يقرّر أيّ IP يجب إدراجه في قائمة TheSports.
+ */
+export function getTsEgressIp(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      "https://api.ipify.org?format=json",
+      { agent: tsAgent, timeout: 8000 },
+      (res) => {
+        let b = "";
+        res.on("data", (c) => (b += c));
+        res.on("end", () => {
+          try {
+            resolve(String(JSON.parse(b).ip));
+          } catch {
+            reject(new Error(`bad ipify response: ${b.slice(0, 80)}`));
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("ipify timeout")));
+  });
+}
+
 export async function tsDiagnostic(): Promise<{
   configured: boolean;
   cooldownActive: boolean;
