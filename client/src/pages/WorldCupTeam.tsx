@@ -121,7 +121,14 @@ function SquadPlayerButton({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold truncate">{player.name}</p>
-        {player.age != null && <p className="text-[10px] text-muted-foreground">{player.age} سنة</p>}
+        <div className="flex items-center gap-1.5">
+          {player.age != null && <span className="text-[10px] text-muted-foreground">{player.age} سنة</span>}
+          {formatMarketValue(player.marketValue ?? null, player.marketValueCurrency) && (
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {formatMarketValue(player.marketValue ?? null, player.marketValueCurrency)}
+            </span>
+          )}
+        </div>
       </div>
       <span className="text-sm font-black text-muted-foreground tabular-nums shrink-0">
         {player.number ?? "—"}

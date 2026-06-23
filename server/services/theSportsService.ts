@@ -588,6 +588,52 @@ export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> 
   }
 }
 
+export interface TsTeamPlayer {
+  id: string; // معرّف اللاعب لدى TheSports (uuid)
+  name: string; // الاسم الإنجليزي (للمطابقة مع لاعبنا) — best-effort
+  logo: string; // صورة اللاعب
+  position: string;
+  marketValue: number | null;
+  marketValueCurrency: string;
+}
+
+/**
+ * لاعبو منتخب من TheSports عبر `player/with_stat/list?team_id=<uuid>` (حزمة BASIC INFO،
+ * مؤكَّد من الدعم 2026‑06‑23). تحليل **متسامح** للحقول (شكل الاستجابة لم يُتحقَّق محليًّا
+ * بعد إزالة عنوان dev — انظر docs/SPORTS_PORTAL_ROADMAP.md): نجرّب أسماء حقول متعدّدة
+ * للقيمة السوقية والاسم والمركز. فارغ = لا إثراء (best-effort).
+ */
+export async function getTsTeamPlayers(teamUuid: string): Promise<TsTeamPlayer[]> {
+  if (!teamUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:team:players:${teamUuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("player/with_stat/list", { team_id: teamUuid }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    const out: TsTeamPlayer[] = [];
+    for (const raw of rows) {
+      // قد يكون اللاعب على المستوى الأعلى أو ضمن حقل player داخل عنصر «with_stat»
+      const p = raw?.player && typeof raw.player === "object" ? raw.player : raw;
+      const id = p?.id ?? raw?.player_id;
+      const name = p?.name ?? p?.short_name ?? p?.en_name;
+      if (!id || typeof name !== "string" || !name) continue;
+      out.push({
+        id: String(id),
+        name,
+        logo: typeof p?.logo === "string" ? p.logo : typeof p?.photo === "string" ? p.photo : "",
+        position: typeof p?.position === "string" ? p.position : "",
+        marketValue: pickNum(p?.market_value, p?.marketvalue, p?.value, raw?.market_value),
+        marketValueCurrency:
+          typeof p?.market_value_currency === "string" ? p.market_value_currency : "€",
+      });
+    }
+    return out;
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return [];
+  }
+}
+
 export interface TsCompetitionExtra {
   id: string;
   name: string;
