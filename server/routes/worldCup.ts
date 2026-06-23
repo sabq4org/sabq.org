@@ -27,6 +27,7 @@ import {
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
 import { resolveNames } from "../services/worldCupNameTranslator";
+import { tsDiagnostic } from "../services/theSportsService";
 import {
   getMomentum,
   getCommentary,
@@ -319,6 +320,20 @@ export function registerWorldCupRoutes(app: Express) {
       console.error("[WorldCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
     }
+  });
+
+  // تشخيص مؤقّت لاتصال TheSports من الإنتاج (يُحذف بعد الحسم). يتطلّب ?key=tsdiag2026
+  app.get("/api/world-cup/_tsdiag", async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    if (req.query.key !== "tsdiag2026") return res.status(404).json({ message: "not found" });
+    const out: Record<string, unknown> = { ts: await tsDiagnostic() };
+    try {
+      const r = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
+      out.egressIp = (await r.json()).ip;
+    } catch (e) {
+      out.egressIpError = String(e);
+    }
+    res.json(out);
   });
 
   // حقائق البطولة (حامل اللقب + الأكثر تتويجًا + الدول المضيفة) — إثراء TheSports.

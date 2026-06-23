@@ -658,6 +658,28 @@ export async function getTsCompetitionMatchPairs(
   }
 }
 
+// تشخيص مؤقّت: يكشف هل المفاتيح مُهيّأة، وحالة التهدئة، وردّ المزوّد الحرفي على
+// نداء حقيقي (competition/additional/list للمونديال) — لتمييز «IP غير مُدرَج» عن
+// «مفاتيح خاطئة» عن «يعمل». يُحذف بعد حسم سبب فشل الإنتاج.
+export async function tsDiagnostic(): Promise<{
+  configured: boolean;
+  cooldownActive: boolean;
+  ok: boolean;
+  detail: string;
+}> {
+  if (!isTheSportsConfigured()) {
+    return { configured: false, cooldownActive: false, ok: false, detail: "THESPORTS_USER/SECRET غير مضبوطين" };
+  }
+  const cooldownActive = Date.now() < tsCooldownUntil;
+  try {
+    const data = await tsGet("competition/additional/list", { uuid: WC_COMPETITION_ID });
+    const n = Array.isArray(data?.results) ? data.results.length : 0;
+    return { configured: true, cooldownActive, ok: n > 0, detail: `ok results=${n}` };
+  } catch (e: any) {
+    return { configured: true, cooldownActive, ok: false, detail: String(e?.message ?? e) };
+  }
+}
+
 // ───────────────────── الترتيب اللحظي (real-time standings) ─────────────────────
 // صفّ ترتيب واحد بمعرّف فريق TheSports (uuid). يُطابَق لاحقًا بصفوفنا عبر الجسر.
 export interface TsStandingRow {
