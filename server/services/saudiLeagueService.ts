@@ -378,7 +378,7 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   });
 }
 
-// ---------- البث المباشر العالمي (كل مباريات العالم المباشرة، غير مفلتر) ----------
+// ---------- البث المباشر العالمي (الدوريات العالمية التي موسمها قائم الآن) ----------
 
 export interface SplWorldLiveItem extends SplLiveBoardItem {
   country: string; // الاسم الخام (إنجليزي) كما يعيده المزود
@@ -388,18 +388,64 @@ export interface SplWorldLiveItem extends SplLiveBoardItem {
   leagueLogo: string | null;
 }
 
+let ongoingLeaguesCache: { at: number; ids: Set<number> } | null = null;
+const ONGOING_LEAGUES_TTL = 12 * 60 * 60 * 1000; // قائمة المواسم تتغيّر يوميًا فقط
+
 /**
- * كل المباريات المباشرة في العالم الآن — على عكس getGlobalLiveFixtures لا
- * نُرشّح على سجل بطولاتنا، بل نعيد الجميع لقسم «البث المباشر · العالم»
- * (مجمّع في الواجهة حسب الدولة ثم الدوري). نداء واحد fixtures?live=all خلف
- * كاش SWR قصير يخدم آلاف الزوار. الأسماء المعروفة تُعرَّب (فِرق/دول/بطولات)
- * مع fallback إنجليزي آمن لما لا قاموس له (دوريات صغيرة/سيدات/احتياط).
+ * معرّفات كل دوريات العالم التي موسمها الحالي «قائم» الآن (تاريخ اليوم ضمن نطاق
+ * start..end للموسم الحالي)، من نداء واحد leagues?current=true خلف كاش نصف يوم.
+ * تُستخدم لترشيح البث المباشر العالمي على البطولات العاملة فعلًا — لا ودّيات ولا
+ * بطولات خامدة موسمها منتهٍ.
+ */
+export async function getOngoingLeagueIds(): Promise<Set<number>> {
+  if (ongoingLeaguesCache && Date.now() - ongoingLeaguesCache.at < ONGOING_LEAGUES_TTL) {
+    return ongoingLeaguesCache.ids;
+  }
+  const today = riyadhDayFmt.format(new Date()); // YYYY-MM-DD
+  const rows = await apiGet("leagues", { current: "true" });
+  const ids = new Set<number>();
+  for (const r of rows) {
+    const id = r?.league?.id;
+    if (!id) continue;
+    const seasons: any[] = Array.isArray(r?.seasons) ? r.seasons : [];
+    const cur = seasons.find((s) => s?.current) ?? seasons[seasons.length - 1];
+    const start = cur?.start;
+    const end = cur?.end;
+    if (typeof start === "string" && typeof end === "string" && start <= today && today <= end) {
+      ids.add(id);
+    }
+  }
+  ongoingLeaguesCache = { at: Date.now(), ids };
+  return ids;
+}
+
+// أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات، فئات سنّية، احتياط.
+const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amateur/i;
+
+/**
+ * المباريات المباشرة في البطولات العالمية التي موسمها قائم الآن — نُبقي بطولاتنا
+ * المنتقاة دائمًا، ونضيف أي دوري عالمي موسمه قائم (عبر كل العالم لا قائمتنا فقط)،
+ * ونستبعد ضجيج الودّيات والفئات السنّية. نداء fixtures?live=all + مجموعة المواسم
+ * القائمة، كلاهما خلف كاش SWR يخدم آلاف الزوار. الأسماء المعروفة تُعرَّب مع
+ * fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
  */
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
   return withSWR(`spl:world-live`, LIVE_TTL, LIVE_TTL * 2, async () => {
-    const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
+    const [rows, ongoing] = await Promise.all([
+      apiGet("fixtures", { live: "all", timezone: TIMEZONE }),
+      getOngoingLeagueIds().catch(() => new Set<number>()),
+    ]);
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
     return rows
+      .filter((r: any) => {
+        const lg = r.league ?? {};
+        const id = lg.id;
+        if (!id) return false;
+        if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
+        if (NOISE_LEAGUE_RE.test(String(lg.name ?? ""))) return false; // ودّيات/فئات سنّية
+        if (ongoing.size === 0) return true; // تعذّر تحديد المواسم → لا نُفرّغ الصفحة
+        return ongoing.has(id); // دوري عالمي موسمه قائم فقط
+      })
       .map((r: any): SplWorldLiveItem => {
         const lg = r.league ?? {};
         const known = byId.get(lg.id);
