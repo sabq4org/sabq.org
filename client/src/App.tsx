@@ -358,8 +358,6 @@ const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
-// نسخة شبابية تجريبية للبوابة الرياضية — /sports8
-const Sports8 = lazy(() => retryImport(() => import("@/pages/Sports8")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
 const SportsMatchesBoard = lazy(() => retryImport(() => import("@/pages/SportsMatchesBoard")));
 // البث المباشر · العالم (كل مباريات العالم المباشرة، مجمّعة حسب الدولة) على /sports/live
@@ -876,7 +874,6 @@ function Router() {
         <Route path="/sports/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
         <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         <Route path="/sports/live">{() => <LazyRoute component={SportsLive} />}</Route>
-        <Route path="/sports8">{() => <LazyRoute component={Sports8} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
         {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}
         <Route path="/sports2/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
