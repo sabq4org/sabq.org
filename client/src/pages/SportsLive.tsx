@@ -1,13 +1,14 @@
 /**
  * البث المباشر · العالم — /sports/live
  *
- * كل المباريات المباشرة في العالم الآن (غير مفلترة على بطولاتنا المنتقاة)،
- * مجمّعة حسب الدولة ثم الدوري — كما في تطبيقات النتائج المتخصّصة. يكمّل
- * البوابة الرياضية المنتقاة (/sports) ولوحة مبارياتنا (/sports/matches) دون
- * أن يمسّهما.
+ * المباريات المباشرة في البطولات العالمية التي موسمها قائم الآن (بطولاتنا
+ * المنتقاة دائمًا + أي دوري عالمي موسمه جارٍ، مع استبعاد الودّيات والفئات
+ * السنّية)، مجمّعة حسب الدولة ثم الدوري — كما في تطبيقات النتائج المتخصّصة.
+ * يكمّل البوابة الرياضية (/sports) ولوحة مبارياتنا (/sports/matches) دون مساسهما.
  *
- * المصدر: GET /api/sports/world-live (نداء fixtures?live=all خلف كاش SWR).
- * الأسماء المعروفة معرّبة؛ الدوريات الصغيرة تظهر بأسمائها الإنجليزية (fallback آمن).
+ * المصدر: GET /api/sports/world-live (fixtures?live=all مُرشّح على الدوريات
+ * القائمة عبر leagues?current=true، خلف كاش SWR). الأسماء المعروفة معرّبة؛
+ * الدوريات الصغيرة تظهر بأسمائها الإنجليزية (fallback آمن).
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -153,6 +154,7 @@ export default function SportsLive() {
                 <div>
                   <span className="text-[10px] font-bold text-muted-foreground tracking-wide uppercase">سبق سبورت</span>
                   <h1 className="text-[1.7rem] sm:text-3xl font-black text-foreground tracking-tight leading-none">البث المباشر · العالم</h1>
+                  <p className="mt-1 text-xs text-muted-foreground">البطولات العالمية التي موسمها قائم الآن</p>
                 </div>
               </div>
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
@@ -185,7 +187,7 @@ export default function SportsLive() {
           ) : total === 0 ? (
             <div className="text-center text-muted-foreground py-20 bg-card rounded-2xl border border-dashed border-border">
               <Radio className="w-10 h-10 mx-auto mb-3 opacity-40" />
-              لا توجد مباريات مباشرة في العالم الآن — عُد لاحقًا عند انطلاق المباريات.
+              لا توجد مباريات مباشرة الآن في البطولات العالمية القائمة — عُد عند انطلاق المباريات.
             </div>
           ) : (
             <div className="space-y-6">
