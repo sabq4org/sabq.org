@@ -27,7 +27,7 @@ import {
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
 import { resolveNames } from "../services/worldCupNameTranslator";
-import { tsDiagnostic } from "../services/theSportsService";
+import { tsDiagnostic, getTsEgressIp } from "../services/theSportsService";
 import {
   getMomentum,
   getCommentary,
@@ -327,11 +327,18 @@ export function registerWorldCupRoutes(app: Express) {
     res.set("Cache-Control", "private, no-store");
     if (req.query.key !== "tsdiag2026") return res.status(404).json({ message: "not found" });
     const out: Record<string, unknown> = { ts: await tsDiagnostic() };
+    // العنوان الموثوق: عبر نفس وكيل TheSports (هذا ما يجب إدراجه في قائمتهم)
     try {
-      const r = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
-      out.egressIp = (await r.json()).ip;
+      out.egressIp = await getTsEgressIp();
     } catch (e) {
       out.egressIpError = String(e);
+    }
+    // عنوان fetch العام (undici) للمقارنة — قد يختلف إن تعدّدت مسارات الخروج
+    try {
+      const r = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
+      out.egressIpUndici = (await r.json()).ip;
+    } catch (e) {
+      out.egressIpUndiciError = String(e);
     }
     res.json(out);
   });
