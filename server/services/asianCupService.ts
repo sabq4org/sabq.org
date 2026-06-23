@@ -19,9 +19,8 @@ import {
   WC_STATUS_AR,
   localizeRound,
   localizeTeamName,
-  localizeVenue,
 } from "./worldCupNames";
-import { resolveNames } from "./worldCupNameTranslator";
+import { localizeAcTeam, localizeAcVenue } from "./asianCupNames";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 7; // AFC Asian Cup
@@ -124,9 +123,12 @@ export interface AcOverview {
 // ---------- محوّلات ----------
 
 function mapTeam(raw: any): AcTeam {
+  const id = raw?.id ?? 0;
+  const en = raw?.name ?? "";
+  // أولوية: قاموس كأس آسيا → قاموس المونديال → الإنجليزي
   return {
-    id: raw?.id ?? 0,
-    name: localizeTeamName(raw?.id, raw?.name ?? ""),
+    id,
+    name: localizeAcTeam(id, localizeTeamName(id, en)),
     logo: raw?.logo ?? "",
   };
 }
@@ -143,7 +145,7 @@ function statusOf(code: string, elapsed: number | null) {
 
 function mapFixture(raw: any): AcFixture {
   const code = raw?.fixture?.status?.short ?? "NS";
-  const venue = localizeVenue(raw?.fixture?.venue?.name, raw?.fixture?.venue?.city);
+  const venue = localizeAcVenue(raw?.fixture?.venue?.name, raw?.fixture?.venue?.city);
   const roundEn = raw?.league?.round ?? "";
   return {
     id: raw?.fixture?.id ?? 0,
@@ -165,12 +167,7 @@ function mapFixture(raw: any): AcFixture {
 export async function getAcTeams(): Promise<AcTeam[]> {
   return withSWR("ac:teams", TEAMS_TTL, TEAMS_TTL * 2, async () => {
     const raw = await apiGet("teams", { league: LEAGUE_ID, season: SEASON });
-    const tr = await resolveNames(raw.map((x: any) => x?.team?.name ?? ""));
-    const teams: AcTeam[] = raw.map((x: any): AcTeam => {
-      const id = x?.team?.id ?? 0;
-      const en = x?.team?.name ?? "";
-      return { id, name: localizeTeamName(id, tr(en) || en), logo: x?.team?.logo ?? "" };
-    });
+    const teams: AcTeam[] = raw.map((x: any): AcTeam => mapTeam(x?.team));
     return teams.sort((a, b) => {
       if (a.id === SAUDI_TEAM_ID) return -1;
       if (b.id === SAUDI_TEAM_ID) return 1;
@@ -187,28 +184,142 @@ export async function getAcFixtures(): Promise<AcFixture[]> {
   });
 }
 
-/** ترتيب المجموعات — قد يكون فارغًا حتى تُسحب القرعة النهائية (أفضل جهد). */
+const GROUP_ORDINALS = [
+  "الأولى",
+  "الثانية",
+  "الثالثة",
+  "الرابعة",
+  "الخامسة",
+  "السادسة",
+  "السابعة",
+  "الثامنة",
+];
+
+/**
+ * مجموعات النهائيات + ترتيبها — **محسوبة من جدول المباريات نفسه**، لا من نقطة
+ * `standings` (التي تُرجع حاليًّا مجموعات التصفيات «Promotion» المضلِّلة).
+ * الفِرق التي تلعب ضد بعضها في دور المجموعات = مجموعة واحدة (Union-Find على
+ * مباريات «Group Stage»). الترتيب يُحسب من النتائج المنتهية فقط (قبل البطولة:
+ * أصفار = تكوين المجموعات فحسب). مجموعة المضيف (السعودية) أولًا.
+ */
+function buildGroupsFromFixtures(fixtures: AcFixture[], teams: AcTeam[]): AcGroup[] {
+  const teamMap = new Map<number, AcTeam>();
+  for (const t of teams) teamMap.set(t.id, t);
+
+  const gs = fixtures.filter(
+    (f) => f.roundEn.startsWith("Group Stage") && f.home.id > 0 && f.away.id > 0,
+  );
+  if (gs.length === 0) return [];
+
+  const parent = new Map<number, number>();
+  const find = (x: number): number => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    let c = x;
+    while (parent.get(c) !== r) {
+      const next = parent.get(c)!;
+      parent.set(c, r);
+      c = next;
+    }
+    return r;
+  };
+  const add = (x: number) => {
+    if (!parent.has(x)) parent.set(x, x);
+  };
+  for (const f of gs) {
+    add(f.home.id);
+    add(f.away.id);
+    const ra = find(f.home.id);
+    const rb = find(f.away.id);
+    if (ra !== rb) parent.set(ra, rb);
+  }
+
+  const members = new Map<number, Set<number>>();
+  const earliest = new Map<number, number>();
+  for (const id of parent.keys()) {
+    const r = find(id);
+    if (!members.has(r)) members.set(r, new Set());
+    members.get(r)!.add(id);
+  }
+  for (const f of gs) {
+    const r = find(f.home.id);
+    const cur = earliest.get(r);
+    if (cur == null || f.timestamp < cur) earliest.set(r, f.timestamp);
+  }
+
+  type Stat = { played: number; win: number; draw: number; lose: number; gf: number; ga: number };
+  const stats = new Map<number, Stat>();
+  const ensure = (id: number): Stat => {
+    if (!stats.has(id)) stats.set(id, { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 });
+    return stats.get(id)!;
+  };
+  for (const f of gs) {
+    if (!f.status.finished) continue;
+    const hg = f.goals.home;
+    const ag = f.goals.away;
+    if (hg == null || ag == null) continue;
+    const h = ensure(f.home.id);
+    const a = ensure(f.away.id);
+    h.played++;
+    a.played++;
+    h.gf += hg;
+    h.ga += ag;
+    a.gf += ag;
+    a.ga += hg;
+    if (hg > ag) {
+      h.win++;
+      a.lose++;
+    } else if (hg < ag) {
+      a.win++;
+      h.lose++;
+    } else {
+      h.draw++;
+      a.draw++;
+    }
+  }
+
+  // مجموعة المضيف أولًا، ثم بحسب أبكر انطلاقة
+  const roots = [...members.keys()].sort((x, y) => {
+    const sx = members.get(x)!.has(SAUDI_TEAM_ID) ? 0 : 1;
+    const sy = members.get(y)!.has(SAUDI_TEAM_ID) ? 0 : 1;
+    if (sx !== sy) return sx - sy;
+    return (earliest.get(x) ?? 0) - (earliest.get(y) ?? 0);
+  });
+
+  return roots.map((r, idx) => {
+    const rows: AcStandingRow[] = [...members.get(r)!].map((id) => {
+      const s = stats.get(id) ?? { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 };
+      const team = teamMap.get(id) ?? { id, name: String(id), logo: "" };
+      return {
+        rank: 0,
+        team,
+        played: s.played,
+        win: s.win,
+        draw: s.draw,
+        lose: s.lose,
+        goalsFor: s.gf,
+        goalsAgainst: s.ga,
+        goalsDiff: s.gf - s.ga,
+        points: s.win * 3 + s.draw,
+      };
+    });
+    rows.sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.goalsDiff - a.goalsDiff ||
+        b.goalsFor - a.goalsFor ||
+        a.team.name.localeCompare(b.team.name, "ar"),
+    );
+    rows.forEach((row, i) => (row.rank = i + 1));
+    return { name: `المجموعة ${GROUP_ORDINALS[idx] ?? String(idx + 1)}`, rows };
+  });
+}
+
+/** مجموعات النهائيات وترتيبها (محسوبة من الجدول) — فارغة قبل اعتماد القرعة. */
 export async function getAcStandings(): Promise<AcGroup[]> {
   return withSWR("ac:standings", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
-    const raw = await apiGet("standings", { league: LEAGUE_ID, season: SEASON });
-    const blocks: any[] = raw?.[0]?.league?.standings ?? [];
-    const groups: AcGroup[] = [];
-    for (const block of blocks) {
-      const rows: AcStandingRow[] = (Array.isArray(block) ? block : []).map((r: any) => ({
-        rank: r?.rank ?? 0,
-        team: mapTeam(r?.team),
-        played: r?.all?.played ?? 0,
-        win: r?.all?.win ?? 0,
-        draw: r?.all?.draw ?? 0,
-        lose: r?.all?.lose ?? 0,
-        goalsFor: r?.all?.goals?.for ?? 0,
-        goalsAgainst: r?.all?.goals?.against ?? 0,
-        goalsDiff: r?.goalsDiff ?? 0,
-        points: r?.points ?? 0,
-      }));
-      if (rows.length) groups.push({ name: rows[0] ? (block[0]?.group ?? "") : "", rows });
-    }
-    return groups;
+    const [fixtures, teams] = await Promise.all([getAcFixtures(), getAcTeams()]);
+    return buildGroupsFromFixtures(fixtures, teams);
   });
 }
 

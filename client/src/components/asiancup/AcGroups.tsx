@@ -3,10 +3,16 @@ import { LayoutGrid } from "lucide-react";
 import { SAUDI_TEAM_ID, type AcGroup } from "./acTypes";
 
 function GroupTable({ group }: { group: AcGroup }) {
+  const started = group.rows.some((r) => r.played > 0);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="bg-gradient-to-l from-emerald-600 to-emerald-700 px-4 py-2.5">
+      <div className="flex items-center justify-between bg-gradient-to-l from-emerald-600 to-emerald-700 px-4 py-2.5">
         <h3 className="text-sm font-black text-white">{group.name || "مجموعة"}</h3>
+        {!started && (
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-emerald-50">
+            لم تبدأ
+          </span>
+        )}
       </div>
       <table className="w-full text-sm">
         <thead>
@@ -20,7 +26,7 @@ function GroupTable({ group }: { group: AcGroup }) {
         <tbody>
           {group.rows.map((row) => {
             const isSaudi = row.team.id === SAUDI_TEAM_ID;
-            const qualifying = row.rank <= 2;
+            const qualifying = started && row.rank <= 2;
             return (
               <tr
                 key={row.team.id}
