@@ -132,6 +132,76 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   return json;
 }
 
+// ───────────────────── أسماء المزوّد متعدّدة اللغات (language/list) ─────────────────────
+// TheSports تُتيح أسماء الكيانات بلغات عدّة عبر نقطة `language/list`: ترجّع لكل id
+// حقولًا مثل `name_ar` (الأسماء الموجودة فقط). نطلب بالـuuid المستهدف فقط (لاعبو
+// المباراة الحاليّون) بدل تحميل القاموس الكامل (مئات الآلاف). أفضل جهد تامّ: أي
+// تعذّر → نُرجع null فيتراجع المستدعي للتعريب المحلي (worldCupNameTranslator).
+//
+// type: 1-category · 2-country · 3-competition · 4-team · 5-player · 6-injury
+export const TS_I18N_TYPE = { category: 1, country: 2, competition: 3, team: 4, player: 5, injury: 6 } as const;
+
+const I18N_TTL = 24 * 60 * 60 * 1000; // الأسماء شبه ثابتة
+const i18nCache = new Map<string, string>(); // `${type}:${id}` → الاسم باللغة المضبوطة
+const i18nMissing = new Set<string>(); // معرّفات بلا ترجمة (لا نكرّر طلبها)
+
+function tsLangCode(): string | null {
+  const v = (process.env.THESPORTS_LANG || "").trim();
+  return v || null;
+}
+
+export function isTsLanguageEnabled(): boolean {
+  return isTheSportsConfigured() && !!tsLangCode();
+}
+
+/**
+ * يحلّ أسماء بلغة `THESPORTS_LANG` (مثلًا `ar`) لمجموعة معرّفات كيان من نوع واحد،
+ * ثم يعيد دالة بحث متزامنة. أفضل جهد: يجلب غير المُكاش بدفعات uuid، ويتجاهل أي فشل.
+ */
+export async function resolveTsNames(
+  type: number,
+  ids: (string | null | undefined)[],
+): Promise<(id: string | null | undefined) => string | null> {
+  const lookup = (id: string | null | undefined): string | null =>
+    id ? i18nCache.get(`${type}:${id}`) ?? null : null;
+  const lang = tsLangCode();
+  if (!lang || !isTheSportsConfigured()) return lookup;
+
+  const want = Array.from(
+    new Set(ids.filter((x): x is string => !!x && x.trim().length > 0).map((x) => x.trim())),
+  ).filter((id) => !i18nCache.has(`${type}:${id}`) && !i18nMissing.has(`${type}:${id}`));
+  if (want.length === 0) return lookup;
+
+  const nameField = `name_${lang}`;
+  const CHUNK = 50;
+  for (let i = 0; i < want.length; i += CHUNK) {
+    const chunk = want.slice(i, i + CHUNK);
+    try {
+      const data = await withSWR(
+        `ts:lang:${type}:${lang}:${chunk.join(",")}`,
+        I18N_TTL,
+        I18N_TTL,
+        () => tsGet("language/list", { type: String(type), uuid: chunk.join(",") }),
+      );
+      const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+      const got = new Set<string>();
+      for (const row of rows) {
+        const id = row?.id != null ? String(row.id) : "";
+        const ar = row?.[nameField];
+        if (id && typeof ar === "string" && ar.trim()) {
+          i18nCache.set(`${type}:${id}`, ar.trim());
+          got.add(id);
+        }
+      }
+      // علّم ما لم يرجع باسم بهذه اللغة كـmissing (لا نكرّر) — لا نعلّم عند فشل النداء.
+      for (const id of chunk) if (!got.has(id)) i18nMissing.add(`${type}:${id}`);
+    } catch {
+      // مهلة/تهدئة عابرة — لا نُعلّم missing؛ المستدعي يتراجع بهدوء.
+    }
+  }
+  return lookup;
+}
+
 // مفتاح يوم diary (YYYYMMDD). مهم: TheSports يفهرس الـdiary بتوقيت بكين (UTC+8)
 // لا UTC — فمباراة 17:00 UTC تقع تحت اليوم التالي. نحسب المفتاح بإزاحة ساعات.
 function dateKeyAt(timestampSec: number, offsetHours: number): string {
