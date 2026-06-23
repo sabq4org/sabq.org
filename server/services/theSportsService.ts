@@ -695,8 +695,10 @@ export interface TsStandingRow {
   goalDiff: number;
 }
 
-function parseStandingTables(results: any[], seasonId: string | null): Map<string, TsStandingRow> {
+function parseStandingTables(resultsRaw: any, seasonId: string | null): Map<string, TsStandingRow> {
   const out = new Map<string, TsStandingRow>();
+  // season/recent/table/detail يُرجع كائنًا واحدًا {promotions,tables}؛ table/live مصفوفة.
+  const results = Array.isArray(resultsRaw) ? resultsRaw : resultsRaw ? [resultsRaw] : [];
   for (const res of results) {
     if (seasonId && res?.season_id && res.season_id !== seasonId) continue;
     for (const table of Array.isArray(res?.tables) ? res.tables : []) {
@@ -721,35 +723,38 @@ function parseStandingTables(results: any[], seasonId: string | null): Map<strin
 }
 
 /**
- * الترتيب اللحظي لبطولة عبر TheSports. يُجرّب standing/table (الرسمي، متاح دائمًا
- * عند تفعيله) ثم يتراجع إلى table/live (الجداول الجارية عالميًّا، يُصفّى بموسم البطولة
- * — فيغطّي نافذة المباراة المباشرة قبل تفعيل standing/table). فارغ = لا إثراء.
+ * الترتيب اللحظي لبطولة عبر TheSports (المسار الصحيح المؤكَّد من الدعم 2026‑06‑23):
+ * `season/recent/table/detail?uuid=<seasonId>` — الترتيب الكامل المحدَّث آنيًّا (متاح
+ * دائمًا، لا أثناء المباريات فقط). يتراجع إلى `table/live` (الجداول الجارية عالميًّا،
+ * يُصفّى بموسم البطولة) عند تعذّره. فارغ = لا إثراء.
  */
 export async function getTsLiveStandings(
   competitionId: string,
   seasonId: string | null,
 ): Promise<Map<string, TsStandingRow>> {
-  if (!competitionId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
-  // 1) standing/table الرسمي (قد لا يكون مُفعَّلًا بعد → نتجاهل الخطأ بهدوء)
-  try {
-    const data = await withSWR(`ts:standing:${competitionId}`, 20 * 1000, 60 * 1000, () =>
-      tsGet("standing/table", { competition_id: competitionId }),
-    );
-    if (Array.isArray(data?.results) && data.results.length > 0) {
-      const map = parseStandingTables(data.results, null);
+  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
+  // 1) الترتيب الرسمي المحدَّث آنيًّا — الباراميتر هو `uuid` (معرّف الموسم)
+  if (seasonId) {
+    try {
+      const data = await withSWR(`ts:seasontable:${seasonId}`, 20 * 1000, 60 * 1000, () =>
+        tsGet("season/recent/table/detail", { uuid: seasonId }),
+      );
+      const map = parseStandingTables(data?.results, null);
       if (map.size > 0) return map;
+    } catch {
+      /* نتراجع إلى table/live */
     }
-  } catch {
-    /* غير مُفعَّل بعد — نُجرّب table/live */
   }
-  // 2) table/live (نافذة المباراة المباشرة) — يتطلّب موسم البطولة للتصفية
-  try {
-    const data = await withSWR(`ts:tablelive:${competitionId}`, 15 * 1000, 45 * 1000, () =>
-      tsGet("table/live", { competition_id: competitionId }),
-    );
-    if (Array.isArray(data?.results)) return parseStandingTables(data.results, seasonId);
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  // 2) table/live (نافذة المباراة المباشرة) — يُصفّى بموسم البطولة
+  if (competitionId) {
+    try {
+      const data = await withSWR(`ts:tablelive:${competitionId}`, 15 * 1000, 45 * 1000, () =>
+        tsGet("table/live", { competition_id: competitionId }),
+      );
+      return parseStandingTables(data?.results, seasonId);
+    } catch {
+      tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    }
   }
   return new Map();
 }

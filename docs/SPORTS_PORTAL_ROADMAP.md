@@ -110,18 +110,34 @@
 - **جسر الفرق بلا أسماء (`getWcTeamBridge` في `worldCupService`):** يطابق مبارياتنا (API-Football، `home.id/away.id`+timestamp) بمباريات TheSports (`match/recent/list` للموسم الحالي، `home_team_id/away_team_id`+`match_time`) عبر **تطابق وقت فريد** (±120ث)، فينكشف زوجا المعرّفين معًا. تصويت عبر كل مباريات المنتخب → اتجاه آمن. كاش 6س. **متحقَّق:** الأرجنتين→26، البرازيل→6، السعودية→23.
 - **قيمة الفريق + التأسيس (`team/additional/list`):** `getWcTeamExtra` → حقل `extra` في `/api/world-cup/team/:id`؛ تُعرض في ترويسة صفحة المنتخب (`WorldCupTeam`): القيمة السوقية للتشكيلة + سنة التأسيس. **متحقَّق:** الأرجنتين €807.5M (1893)، السعودية €40.7M (1959).
 - **حقائق البطولة (`competition/additional/list`):** `getWcCompetitionFacts` → نقطة جديدة `/api/world-cup/facts`؛ مكوّن `TournamentFacts` أسفل الهيرو: **حامل اللقب** (الأرجنتين، 3) + **الأكثر تتويجًا** (البرازيل، 5) + **الاستضافة** (الولايات المتحدة، كندا، المكسيك) — بأسمائنا وشعاراتنا عبر الجسر، وروابط لصفحات المنتخبات.
-- **الترتيب اللحظي (`getTsLiveStandings`):** يجرّب `standing/table` (الرسمي، متاح دائمًا فور تفعيله) ثم يتراجع إلى `table/live` (الجداول الجارية عالميًّا، يُصفّى بموسم المونديال — يغطّي نافذة المباراة المباشرة). `overlayLiveStandings` يطبّقه فوق صفوف API-Football عبر الجسر (نقاط/فارق/مركز)، يضيف `live:true`، فتظهر شارة **«تحديث لحظي»** نابضة في `StandingsSection` ويتسارع تحديث `/standings` إلى 20ث. آمن: لا بيانات → لا تغيير. النقاط تُضاف عند FT فقط (لا ازدواج مع «المتبقّية» في حساب التأهّل).
+- **الترتيب اللحظي (`getTsLiveStandings`) — مصحَّح بعد رد الدعم 2026‑06‑23:** المسار الصحيح هو **`season/recent/table/detail?uuid=<seasonId>`** (الترتيب الكامل المحدَّث آنيًّا، متاح دائمًا لا أثناء المباريات فقط) — يُرجع `{promotions, tables[].rows[]}` بحقول `team_id/position/points/total/won/draw/loss/goals/goals_against/goal_diff`. يتراجع إلى `table/live` عند تعذّره. `overlayLiveStandings(groups, hasLive)` يطبّق أرقام TheSports فوق صفوف API-Football عبر الجسر **دائمًا** (أدقّ/أسرع)، لكن يضع `live:true` (شارة **«تحديث لحظي»** النابضة + تسريع `/standings` إلى 20ث) **فقط أثناء مباراة مونديال جارية**. آمن: لا بيانات → لا تغيير.
 
-**خريطة نقاط TheSports (مُتحقَّقة 2026‑06‑23 من جهاز مُدرَج، اشتراك فعلي):**
+**خريطة نقاط TheSports (مصحَّحة 2026‑06‑23 برد الدعم الفني — «الخطأ كان مسارات غير صحيحة لا حجبًا»):**
 
-| ✅ تعمل الآن | ❌ تردّ «URL is not authorized … contact our business staff» (تحتاج تفعيلًا يدويًّا من جهتهم) |
-|---|---|
-| `match/diary` · `match/detail_live` · `table/live` · `match/lineup/detail` · `match/recent/list` · `team/additional/list` · `competition/additional/list` · `player/market/list` (بـ`uuid`) · `transfer/list` · `language/list` (مزامنة مُصفَّحة بلا uuid، الحقل العربي **`name_aa`**) | `standing/table` (الترتيب الرسمي — **أولوية**) · `match/player/stats/detail` · `match/team/stats/detail` · `player/additional/list` · `coach/additional/list` · `referee/additional/list` · `venue/additional/list` · `injury/list` · `match/tv` · FIFA ranking |
+كل ما كان يُظنّ «محجوبًا» كان بسبب **مسار خاطئ**. المسارات الصحيحة (مُتحقَّقة فعليًّا من جهاز مُدرَج):
 
-- **القيمة السوقية للاعب — مؤجَّلة:** `player/market/list?uuid=` يعمل، لكن ربط لاعبنا (API-Football) بـuuid لاعب TheSports غير موثوق حاليًّا: `player/additional/list` محجوب (لا اسم/صورة)، `match/lineup` محجوب، و`language/list` يعطي عربيًّا فقط (`name_aa`) بلا اسم إنجليزي للمطابقة. **يُفتح فور تفعيل `player/additional/list`.**
-- **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض `100003`) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). **إصلاح منفصل مقترح:** مزامنة دورية لقاموس `name_aa` بدل النداء بـuuid.
+| الحاجة | المسار الصحيح | الحالة |
+|---|---|---|
+| الترتيب اللحظي الكامل | `season/recent/table/detail?uuid=<seasonId>` | ✅ مُطبَّق |
+| الترتيب أثناء المباراة | `table/live?competition_id=` | ✅ احتياط |
+| إحصاء اللاعب لكل مباراة | `match/player_stats/detail?uuid=<matchId>` | ✅ يعمل (52 صفًّا) |
+| إحصاء الفريق لكل مباراة | `match/team_stats/detail?uuid=<matchId>` | ✅ يعمل |
+| **تصنيف فيفا للرجال** | `ranking/fifa/men` | ✅ يعمل (الأرجنتين #1، إسبانيا #2 — `team.id` يطابق جسرنا) |
+| الإصابات | `team/injury/list` | ✅ يعمل |
+| قنوات البثّ | `match/tv/list?uuid=<matchId>` | ✅ يعمل |
+| المدرب/الحكم/الملعب | `coach/list` · `referee/list` · `venue/list` (BASIC INFO) | ✅ يعمل |
+| انتقالات/قيمة/قدرة اللاعب | `player/transfer/list` · `player/market/list` · `player/ability/list` | ✅ يعمل |
+| ملف اللاعب (اسم/صورة) | `player/list` | ❌ ما زال «URL not authorized» — المسار الصحيح للملف غير مؤكَّد |
+| القيمة السوقية للفريق/التأسيس | `team/additional/list` | ✅ مُطبَّق |
+| حقائق البطولة | `competition/additional/list` | ✅ مُطبَّق |
+| التعريب | `language/list` (مزامنة مُصفَّحة بلا uuid، الحقل العربي **`name_aa`**) | ✅ يعمل |
 
-**نقاط مطلوب تفعيلها من دعم TheSports (رسالة جاهزة في سجلّ المحادثة):** الأولوية `standing/table` (الترتيب اللحظي الكامل)، ثم `match/player/stats/detail` + `match/team/stats/detail` + `player/additional/list` + `coach/additional/list` + `referee/additional/list` + `venue/additional/list` + `injury/list` + `match/tv` + FIFA ranking.
+- **القيمة السوقية للاعب — لا تزال مؤجَّلة:** `player/market/list`/`transfer/list`/`ability/list` تعمل، لكن **ملف اللاعب (`player/list`) ما زال يردّ «URL not authorized»** فلا اسم/صورة لربط لاعبنا (API-Football) بـuuid لاعب TheSports بثقة. يُفتح فور تأكيد مسار الملف الصحيح من الدعم.
+- **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). إصلاح منفصل مقترح: مزامنة دورية لقاموس `name_aa`.
+
+**ميزات جاهزة للبناء فورًا (المسارات مؤكَّدة):** تصنيف فيفا على صفحة المنتخب/القسم (`ranking/fifa/men`) · الإصابات قبل المباراة (`team/injury/list`) · قنوات البثّ في مركز المباراة (`match/tv/list`) · إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`).
+
+**مرجع توثيق TheSports:** https://www.thesports.com/docs/football · قائمة أخطاء API: https://www.thesports.com/helpcenter/3/58
 
 **التجارة:** نبدأ شهرًا واحدًا بـAdvanced Data ($1000) — يشمل Basic+Advanced لكل 1970+ دوري — ثم ربع سنوي. لا نأخذ Live Match Tracker (ويدجت iframe، نبني واجهتنا).
 
