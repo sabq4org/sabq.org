@@ -385,17 +385,24 @@ async function overlayLiveStandings(groups: WcGroup[], hasLive: boolean): Promis
         const lv = uuid ? live.get(uuid) : undefined;
         if (!lv) return r;
         changed = true;
+        // نأخذ كل حقل من TheSports فقط إن كان رقمًا صحيحًا، وإلا نبقي قيمة الأساس
+        // (تفادي حقول ناقصة من المزوّد تنتج undefined/null في الجدول). والفارق
+        // يُعاد حسابه من له/عليه لضمان عدم ظهوره فارغًا.
+        const num = (v: unknown, fallback: number): number =>
+          typeof v === "number" && Number.isFinite(v) ? v : fallback;
+        const goalsFor = num(lv.goals, r.goalsFor);
+        const goalsAgainst = num(lv.goalsAgainst, r.goalsAgainst);
         return {
           ...r,
-          rank: lv.position || r.rank,
-          played: lv.played,
-          win: lv.won,
-          draw: lv.draw,
-          lose: lv.loss,
-          goalsFor: lv.goals,
-          goalsAgainst: lv.goalsAgainst,
-          goalsDiff: lv.goalDiff,
-          points: lv.points,
+          rank: num(lv.position, r.rank) || r.rank,
+          played: num(lv.played, r.played),
+          win: num(lv.won, r.win),
+          draw: num(lv.draw, r.draw),
+          lose: num(lv.loss, r.lose),
+          goalsFor,
+          goalsAgainst,
+          goalsDiff: num(lv.goalDiff, goalsFor - goalsAgainst),
+          points: num(lv.points, r.points),
           // الأرقام دائمًا من TheSports (أدقّ/أسرع)؛ شارة «مباشر» أثناء مباراة جارية فقط
           live: hasLive ? true : r.live,
         };
@@ -442,6 +449,62 @@ export async function getStandingsWithQualification(): Promise<WcGroup[]> {
       ...g,
       rows: g.rows.map((r) => ({ ...r, qualifyStatus: status.get(r.team.id) ?? null })),
     };
+  });
+}
+
+/** يطبّق نتيجة منتخب واحد على صفّه (ترتيب مبدئي): مباراة + أهداف + نقاط. */
+function applyProvisionalResult(row: WcStandingRow, scored: number, conceded: number): void {
+  row.played += 1;
+  row.goalsFor += scored;
+  row.goalsAgainst += conceded;
+  row.goalsDiff = row.goalsFor - row.goalsAgainst;
+  if (scored > conceded) {
+    row.win += 1;
+    row.points += 3;
+  } else if (scored === conceded) {
+    row.draw += 1;
+    row.points += 1;
+  } else {
+    row.lose += 1;
+  }
+  row.live = true;
+}
+
+/**
+ * ترتيب مبدئي (provisional) — يطبّق نتائج المباريات الجارية فوق الترتيب الأساسي
+ * لحظيًا، فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية. لا ازدواج
+ * احتساب: المباراة الجارية ليست ضمن «played» الأساسي ولا ضمن جدول TheSports
+ * (الذي لا يُضيف النقاط إلا بعد النهاية). حالة التأهّل (qualifyStatus) تبقى على
+ * النتائج المؤكّدة لأنها تُحسب قبل هذا التطبيق.
+ */
+export function applyProvisionalLiveStandings(
+  groups: WcGroup[],
+  liveFixtures: WcFixture[],
+): WcGroup[] {
+  const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
+  if (live.length === 0) return groups;
+  return groups.map((g) => {
+    const draft = new Map<number, WcStandingRow>(g.rows.map((r) => [r.team.id, { ...r }]));
+    let changed = false;
+    for (const f of live) {
+      const home = draft.get(f.home.id);
+      const away = draft.get(f.away.id);
+      if (!home || !away) continue; // المباراة ليست داخل هذه المجموعة
+      const gh = f.goals.home ?? 0;
+      const ga = f.goals.away ?? 0;
+      applyProvisionalResult(home, gh, ga);
+      applyProvisionalResult(away, ga, gh);
+      changed = true;
+    }
+    if (!changed) return g;
+    const rows = [...draft.values()];
+    rows.sort(
+      (a, b) => b.points - a.points || b.goalsDiff - a.goalsDiff || b.goalsFor - a.goalsFor,
+    );
+    rows.forEach((r, i) => {
+      r.rank = i + 1;
+    });
+    return { ...g, rows };
   });
 }
 
