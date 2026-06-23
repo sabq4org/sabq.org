@@ -28,10 +28,9 @@ import {
   getTsTeamInjuries,
   getTsMatchTv,
   getTsMatchTeamStats,
-  getTsTeamPlayers,
-  tsRawSample,
   resolveTsNames,
   TS_I18N_TYPE,
+  type TsTeamStatSide,
 } from "./theSportsService";
 import pLimit from "p-limit";
 
@@ -553,20 +552,6 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
-  /** القيمة السوقية للاعب من TheSports (best-effort، عبر مطابقة الاسم داخل المنتخب) */
-  marketValue?: number | null;
-  marketValueCurrency?: string;
-}
-
-// تطبيع اسم لاعب للمطابقة بين مزوّدين: حروف لاتينية صغيرة بلا تشكيل/رموز، مسافة واحدة.
-function normPlayerName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 export interface WcSquad {
@@ -580,24 +565,16 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
     const entry = rows[0];
     if (!entry) return null;
     const tr = await resolveNames((entry.players ?? []).map((p: any) => p.name));
-    // إثراء القيمة السوقية من TheSports (best-effort) — مطابقة بالاسم الإنجليزي داخل المنتخب
-    const market = await getWcSquadMarketValues(teamId).catch(() => null);
     const players: WcSquadPlayer[] = (entry.players ?? [])
-      .map((p: any): WcSquadPlayer => {
-        const norm = normPlayerName(String(p.name ?? ""));
-        const mv = market?.get(norm) ?? market?.get(norm.split(" ").pop() ?? "");
-        return {
-          id: p.id ?? 0,
-          name: tr(p.name),
-          number: p.number ?? null,
-          position: POSITION_AR[p.position] ?? p.position ?? "",
-          positionEn: p.position ?? "",
-          age: p.age ?? null,
-          photo: p.photo ?? "",
-          marketValue: mv?.value ?? null,
-          marketValueCurrency: mv?.currency ?? "€",
-        };
-      })
+      .map((p: any): WcSquadPlayer => ({
+        id: p.id ?? 0,
+        name: tr(p.name),
+        number: p.number ?? null,
+        position: POSITION_AR[p.position] ?? p.position ?? "",
+        positionEn: p.position ?? "",
+        age: p.age ?? null,
+        photo: p.photo ?? "",
+      }))
       .sort(
         (a: WcSquadPlayer, b: WcSquadPlayer) =>
           (POSITION_ORDER[a.positionEn] ?? 9) - (POSITION_ORDER[b.positionEn] ?? 9) ||
@@ -605,29 +582,6 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
       );
     return { team: localizeTeam(entry.team), players };
   });
-}
-
-/**
- * خريطة القيمة السوقية للاعبي منتخب (اسم مُطبَّع → {value, currency}) من TheSports عبر
- * الجسر. تُبنى مفاتيح بالاسم الكامل واسم العائلة (آخر كلمة) لرفع نسبة المطابقة. best-effort.
- */
-async function getWcSquadMarketValues(
-  teamId: number,
-): Promise<Map<string, { value: number; currency: string }>> {
-  const out = new Map<string, { value: number; currency: string }>();
-  const bridge = await getWcTeamBridge();
-  const uuid = bridge.get(teamId);
-  if (!uuid) return out;
-  const players = await getTsTeamPlayers(uuid);
-  for (const pl of players) {
-    if (pl.marketValue == null || pl.marketValue <= 0) continue;
-    const entry = { value: pl.marketValue, currency: pl.marketValueCurrency };
-    const full = normPlayerName(pl.name);
-    if (full) out.set(full, entry);
-    const last = full.split(" ").pop();
-    if (last && last.length >= 3 && !out.has(last)) out.set(last, entry);
-  }
-  return out;
 }
 
 // المدرّب الحالي للمنتخب — المزود يُعيد كل من درّبه عبر التاريخ، والحالي
@@ -742,16 +696,55 @@ export interface WcInjury {
   until: string | null;
 }
 
-const INJURY_STATUS_AR: Record<string, string> = {
-  injured: "إصابة",
-  injury: "إصابة",
-  suspended: "إيقاف",
-  suspension: "إيقاف",
-  ban: "إيقاف",
-  doubtful: "مشكوك في جاهزيته",
-  questionable: "مشكوك في جاهزيته",
-  out: "غياب",
+// تعريب سبب الإصابة: المزوّد يرسله إنجليزيًّا قصيرًا ("Calf Injury", "Suspension").
+// نعرّب جزء الجسم + النمط "X Injury"، وإلا نُبقي النصّ كما هو (أفضل جهد).
+const INJURY_PART_AR: Record<string, string> = {
+  calf: "عضلة الساق",
+  knee: "الركبة",
+  hamstring: "أوتار الركبة الخلفية",
+  ankle: "الكاحل",
+  thigh: "الفخذ",
+  groin: "أعلى الفخذ",
+  achilles: "وتر العرقوب",
+  muscle: "إصابة عضلية",
+  back: "الظهر",
+  shoulder: "الكتف",
+  foot: "القدم",
+  hip: "الورك",
+  head: "الرأس",
+  chest: "الصدر",
+  wrist: "المعصم",
+  hand: "اليد",
+  toe: "إصبع القدم",
+  rib: "الضلع",
+  neck: "الرقبة",
+  elbow: "المرفق",
+  finger: "الإصبع",
+  shin: "الساق",
+  quadricep: "العضلة الرباعية",
+  abductor: "العضلة المبعّدة",
 };
+const INJURY_WHOLE_AR: Record<string, string> = {
+  suspension: "إيقاف",
+  suspended: "إيقاف",
+  ban: "إيقاف",
+  illness: "مرض",
+  ill: "مرض",
+  knock: "رضّة",
+  fatigue: "إجهاد",
+  "unknown injury": "إصابة غير محدّدة",
+  "knee injury": "إصابة في الركبة",
+};
+
+function translateInjuryReason(en: string | null): string | null {
+  if (!en) return null;
+  const low = en.toLowerCase().trim();
+  if (INJURY_WHOLE_AR[low]) return INJURY_WHOLE_AR[low];
+  const m = low.match(/^(.+?)\s+(injury|problem|strain|knock|surgery)$/);
+  if (m && INJURY_PART_AR[m[1]]) return `إصابة في ${INJURY_PART_AR[m[1]]}`;
+  if (INJURY_PART_AR[low]) return `إصابة في ${INJURY_PART_AR[low]}`;
+  return en; // غير معروف — نُبقي الإنجليزي بدل تشويهه
+}
 
 function fmtInjuryDate(ts: number | null): string | null {
   if (!ts || ts <= 0) return null;
@@ -769,8 +762,8 @@ function fmtInjuryDate(ts: number | null): string | null {
 
 /**
  * إصابات/غيابات منتخب عبر الجسر (TheSports) — أفضل جهد: غياب TheSports أو تعذّر
- * الربط → []. الأسماء معرَّبة best-effort (i18n type 5 ثم مترجم الأسماء)، ونسقط
- * أي صفّ بلا اسم قابل للعرض (لا قيمة لإصابة بلا لاعب).
+ * الربط → []. الأسماء عربية عبر language/list type 5 (`name_aa`)، والسبب يُعرَّب.
+ * نُسقط أي صفّ بلا اسم قابل للعرض (لا قيمة لإصابة بلا لاعب).
  */
 export async function getWcTeamInjuries(teamId: number): Promise<WcInjury[]> {
   const bridge = await getWcTeamBridge();
@@ -779,29 +772,23 @@ export async function getWcTeamInjuries(teamId: number): Promise<WcInjury[]> {
   const raw = await getTsTeamInjuries(uuid).catch(() => []);
   if (raw.length === 0) return [];
 
-  // 1) أسماء عربية من i18n للاعبين الذين لهم معرّف؛ وأسماء أنواع الإصابة (type 6).
-  const playerIds = raw.map((r) => r.playerId).filter((x): x is string => !!x);
-  const reasonIds = raw.map((r) => r.reasonId).filter((x): x is string => !!x);
+  // اسم اللاعب بالعربية مباشرةً من المزوّد (name_aa) — لا يأتي في رد الإصابات.
   const noop = (_: string | null | undefined): string | null => null;
-  const [i18nPlayer, i18nReason] = await Promise.all([
-    resolveTsNames(TS_I18N_TYPE.player, playerIds).catch(() => noop),
-    resolveTsNames(TS_I18N_TYPE.injury, reasonIds).catch(() => noop),
-  ]);
-
-  // 2) الاسم المرشّح: عربي i18n إن وُجد، وإلا اسم الرد (قد يكون إنجليزيًّا).
-  const candidates = raw.map((r) => (r.playerId ? i18nPlayer(r.playerId) : null) ?? r.playerName ?? null);
-  // مترجم الأسماء يمرّر العربي كما هو ويعرّب الإنجليزي.
-  const tr = await resolveNames(candidates.filter((x): x is string => !!x));
+  const nameOf = await resolveTsNames(
+    TS_I18N_TYPE.player,
+    raw.map((r) => r.playerId),
+  ).catch(() => noop);
 
   const out: WcInjury[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const base = candidates[i];
-    if (!base) continue; // بلا اسم → لا نعرض
-    const r = raw[i];
-    const reason = (r.reasonId ? i18nReason(r.reasonId) : null) ?? r.reason ?? null;
-    const statusKey = (r.status ?? "").toLowerCase();
-    const status = INJURY_STATUS_AR[statusKey] ?? r.status ?? null;
-    out.push({ player: tr(base), reason, status, until: fmtInjuryDate(r.endTime) });
+  for (const r of raw) {
+    const player = r.playerId ? nameOf(r.playerId) : null;
+    if (!player) continue; // بلا اسم → لا نعرض
+    out.push({
+      player,
+      reason: translateInjuryReason(r.reason),
+      status: null, // لا حقل حالة في رد المزوّد — السبب يكفي
+      until: fmtInjuryDate(r.endTime),
+    });
   }
   return out;
 }
@@ -849,26 +836,6 @@ export interface WcTvChannel {
   logo: string | null;
 }
 
-/**
- * تشخيص مؤقّت (يُحذف بعد ضبط الحقول): يكشف الشكل الخام لـ player/with_stat/list
- * (الأرجنتين) + جسر معرّف المباراة + match/tv/list — لقراءة أسماء الحقول الحقيقية
- * على الإنتاج (عنوان dev مُزال). fixtureId الافتراضي: الأردن×الأرجنتين (الجولة 3).
- */
-export async function getTsDebugSample(fixtureId = 1489421): Promise<unknown> {
-  const bridge = await getWcTeamBridge();
-  const argUuid = bridge.get(26) ?? null;
-  const playersRaw = argUuid
-    ? await tsRawSample("player/with_stat/list", { team_id: argUuid })
-    : null;
-  const playerSample =
-    playersRaw && Array.isArray((playersRaw as any).results)
-      ? (playersRaw as any).results.slice(0, 2)
-      : playersRaw;
-  const matchUuid = await getWcMatchTsId(fixtureId).catch(() => null);
-  const tvRaw = matchUuid ? await tsRawSample("match/tv/list", { uuid: matchUuid }) : null;
-  return { argUuid, matchUuid, playerSample, tvRaw };
-}
-
 /** قنوات بثّ مباراة عبر جسر المباراة (TheSports) — [] إن تعذّر الجسر/الجلب. */
 export async function getWcMatchTv(fixtureId: number): Promise<WcTvChannel[]> {
   const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
@@ -877,34 +844,60 @@ export async function getWcMatchTv(fixtureId: number): Promise<WcTvChannel[]> {
 }
 
 // إحصاء الفريق المفصّل (TheSports) عبر جسر المباراة — للمباريات المنتهية احتياطًا
-// خلف SportMonks. نُسمّي الأكواد المعروفة فقط (مُتحقَّقة تجريبيًّا) ونُسقط المجهول.
-const TS_TEAM_STAT_MAP: Record<number, { label: string; pct?: boolean }> = {
-  25: { label: "الاستحواذ", pct: true },
-  21: { label: "تسديدات على المرمى" },
-  22: { label: "تسديدات خارج المرمى" },
-  23: { label: "الهجمات" },
-  24: { label: "الهجمات الخطرة" },
-  2: { label: "الركنيات" },
-  3: { label: "البطاقات الصفراء" },
-  4: { label: "البطاقات الحمراء" },
-};
-const TS_TEAM_STAT_ORDER = [25, 21, 22, 23, 24, 2, 3, 4];
+// خلف SportMonks. الحقول **مسمّاة** (متحقَّقة حيًّا) فنختار منها لائحة مألوفة.
+// `acc` يحسب نسبة الدقّة من حقلَي العدّ (مثلًا passes + passes_accuracy).
+const TS_TEAM_STAT_FIELDS: { field: string; label: string; pct?: boolean; accOf?: string }[] = [
+  { field: "ball_possession", label: "الاستحواذ", pct: true },
+  { field: "shots", label: "إجمالي التسديدات" },
+  { field: "shots_on_target", label: "التسديدات على المرمى" },
+  { field: "passes", label: "التمريرات" },
+  { field: "passes_accuracy", label: "دقّة التمرير", pct: true, accOf: "passes" },
+  { field: "corner_kicks", label: "الركنيات" },
+  { field: "fouls", label: "الأخطاء" },
+  { field: "offsides", label: "التسلّل" },
+  { field: "yellow_cards", label: "البطاقات الصفراء" },
+  { field: "red_cards", label: "البطاقات الحمراء" },
+];
 
-/** إحصاء الفريقين المفصّل لمباراة عبر الجسر (TheSports) — [] إن تعذّر. أكواد معروفة فقط. */
+/** إحصاء الفريقين المفصّل لمباراة عبر الجسر (TheSports) — [] إن تعذّر. حقول مسمّاة. */
 export async function getWcMatchTeamStats(fixtureId: number): Promise<WcStatistic[]> {
   const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
   if (!uuid) return [];
-  const raw = await getTsMatchTeamStats(uuid).catch(() => []);
-  if (raw.length === 0) return [];
-  const byType = new Map(raw.map((r) => [r.type, r]));
+  const sides = await getTsMatchTeamStats(uuid).catch(() => []);
+  if (sides.length < 2) return [];
+
+  // إقران مضيف/ضيف بمعرّف TheSports عبر الجسر؛ وإلا نفترض الترتيب [مضيف، ضيف].
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  const bridge = await getWcTeamBridge();
+  const homeUuid = fx ? bridge.get(fx.home.id) : null;
+  let home = sides[0];
+  let away = sides[1];
+  if (homeUuid && sides[1].teamId === homeUuid) {
+    home = sides[1];
+    away = sides[0];
+  }
+
+  // قيمة الحقل (مع حساب نسبة الدقّة عند الحاجة) — null لو الحقل غائب.
+  const valOf = (side: TsTeamStatSide, f: (typeof TS_TEAM_STAT_FIELDS)[number]): number | null => {
+    const v = side.values[f.field];
+    if (v == null) return null;
+    if (f.accOf) {
+      const total = side.values[f.accOf];
+      if (!total) return null;
+      return Math.round((v / total) * 100);
+    }
+    return v;
+  };
+
   const out: WcStatistic[] = [];
-  for (const t of TS_TEAM_STAT_ORDER) {
-    const r = byType.get(t);
-    const meta = TS_TEAM_STAT_MAP[t];
-    if (!r || !meta) continue;
-    if (r.home === 0 && r.away === 0) continue; // إحصاء صفري للطرفين = غير مُبلَّغ
-    const suffix = meta.pct ? "%" : "";
-    out.push({ key: `ts:team:${t}`, label: meta.label, home: `${r.home}${suffix}`, away: `${r.away}${suffix}` });
+  for (const f of TS_TEAM_STAT_FIELDS) {
+    const h = valOf(home, f);
+    const a = valOf(away, f);
+    if (h == null && a == null) continue;
+    if ((h ?? 0) === 0 && (a ?? 0) === 0) continue; // صفر للطرفين = غير مُبلَّغ
+    const suffix = f.pct ? "%" : "";
+    out.push({ key: `ts:team:${f.field}`, label: f.label, home: `${h ?? 0}${suffix}`, away: `${a ?? 0}${suffix}` });
   }
   return out;
 }

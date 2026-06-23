@@ -17,7 +17,6 @@ import {
   getWcCompetitionFacts,
   getWcMatchTv,
   getWcMatchTeamStats,
-  getTsDebugSample,
   getTeamsRanked,
   getTopAssists,
   getTopCards,
@@ -343,18 +342,6 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error("[WorldCup] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
-    }
-  });
-
-  // تشخيص مؤقّت لكشف الشكل الخام (player/with_stat/list + match/tv) — يُحذف بعد الضبط
-  app.get("/api/world-cup/_tsraw", async (req, res) => {
-    res.set("Cache-Control", "private, no-store");
-    if (req.query.key !== "tsraw2026") return res.status(404).json({ message: "not found" });
-    const fixtureId = parseInt(String(req.query.fixtureId ?? ""), 10);
-    try {
-      res.json(await getTsDebugSample(Number.isFinite(fixtureId) ? fixtureId : undefined));
-    } catch (e) {
-      res.status(500).json({ error: String(e) });
     }
   });
 
