@@ -19,9 +19,8 @@ import {
   WC_STATUS_AR,
   localizeRound,
   localizeTeamName,
-  localizeVenue,
 } from "./worldCupNames";
-import { resolveNames } from "./worldCupNameTranslator";
+import { localizeAcTeam, localizeAcVenue } from "./asianCupNames";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 7; // AFC Asian Cup
@@ -124,9 +123,12 @@ export interface AcOverview {
 // ---------- محوّلات ----------
 
 function mapTeam(raw: any): AcTeam {
+  const id = raw?.id ?? 0;
+  const en = raw?.name ?? "";
+  // أولوية: قاموس كأس آسيا → قاموس المونديال → الإنجليزي
   return {
-    id: raw?.id ?? 0,
-    name: localizeTeamName(raw?.id, raw?.name ?? ""),
+    id,
+    name: localizeAcTeam(id, localizeTeamName(id, en)),
     logo: raw?.logo ?? "",
   };
 }
@@ -143,7 +145,7 @@ function statusOf(code: string, elapsed: number | null) {
 
 function mapFixture(raw: any): AcFixture {
   const code = raw?.fixture?.status?.short ?? "NS";
-  const venue = localizeVenue(raw?.fixture?.venue?.name, raw?.fixture?.venue?.city);
+  const venue = localizeAcVenue(raw?.fixture?.venue?.name, raw?.fixture?.venue?.city);
   const roundEn = raw?.league?.round ?? "";
   return {
     id: raw?.fixture?.id ?? 0,
@@ -165,12 +167,7 @@ function mapFixture(raw: any): AcFixture {
 export async function getAcTeams(): Promise<AcTeam[]> {
   return withSWR("ac:teams", TEAMS_TTL, TEAMS_TTL * 2, async () => {
     const raw = await apiGet("teams", { league: LEAGUE_ID, season: SEASON });
-    const tr = await resolveNames(raw.map((x: any) => x?.team?.name ?? ""));
-    const teams: AcTeam[] = raw.map((x: any): AcTeam => {
-      const id = x?.team?.id ?? 0;
-      const en = x?.team?.name ?? "";
-      return { id, name: localizeTeamName(id, tr(en) || en), logo: x?.team?.logo ?? "" };
-    });
+    const teams: AcTeam[] = raw.map((x: any): AcTeam => mapTeam(x?.team));
     return teams.sort((a, b) => {
       if (a.id === SAUDI_TEAM_ID) return -1;
       if (b.id === SAUDI_TEAM_ID) return 1;
