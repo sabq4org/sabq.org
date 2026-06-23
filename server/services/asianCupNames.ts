@@ -56,7 +56,7 @@ export const AC_VENUE_AR: Record<string, { name: string; city: string }> = {
   },
   "King Abdullah Sports City": { name: "مدينة الملك عبدالله الرياضية", city: "جدة" },
   "Aramco Stadium": { name: "ملعب أرامكو", city: "الخبر" },
-  "Kingdom Arena": { name: "كينغدوم أرينا", city: "الرياض" },
+  "Kingdom Arena": { name: "أرينا", city: "الرياض" },
   "Al-Shabab Club Stadium": { name: "ملعب نادي الشباب", city: "الرياض" },
   "Prince Abdullah al-Faisal Stadium": { name: "ملعب الأمير عبدالله الفيصل", city: "جدة" },
 };
