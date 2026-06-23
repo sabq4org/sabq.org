@@ -27,6 +27,7 @@
 - **التعريب:** قاموس محلّي موثوق `server/services/asianCupNames.ts` (`AC_TEAM_AR` لكل الـ24 منتخبًا بمعرّف API-Football + `AC_VENUE_AR`/`AC_CITY_AR` لملاعب ومدن الاستضافة) — **لا يعتمد تعريب TheSports المحجوب**. أولوية: قاموس كأس آسيا → قاموس المونديال → الإنجليزي.
 - **الباك‑إند:** `server/services/asianCupService.ts` (عميل API-Football، تعريب عبر `asianCupNames`، كاش SWR) → `getAcTeams`/`getAcFixtures`/`getAcStandings`/`getAcOverview` (عدّ تنازلي + مضيف + ملاعب من الجدول + تركيز السعودية). المسارات `server/routes/asianCup.ts` (`/api/asian-cup/{overview,teams,fixtures,standings}`) مُسجَّلة في `splitRoutesIndex.ts`.
 - **الويب:** `client/src/pages/AsianCup.tsx` + `client/src/components/asiancup/*` (`AcHero` بعدّ تنازلي وهالة، `AcSaudiSpotlight`، `AcGroups` رشيق، `AcSchedule` بتبويب الجولات وتجميع يومي، `AcTeams` شبكة المنتخبات مع إبراز المضيف، `AcHostShowcase` ملاعب من الجدول، `AcMatchCard` مشترك). كله data-driven مع حالات فارغة لبقة.
+- **مشاركة/SEO:** معالج هب في `server/routes/edgeMeta.ts` (`/^\/asian-cup\/?$/`) يحقن العنوان/الوصف + OG/Twitter + JSON-LD (CollectionPage + Breadcrumb). صورة المشاركة `public/branding/asian-cup-og-image.png` (1200×630، الشعار على هوية خضراء، نص عربي) — تُخدم من Railway عبر `/branding/*`. ميدلوير Pages يحقنها تلقائيًّا (`isInjectablePath('/asian-cup')=true`).
 - **متبقٍّ:** (1) تأكيد `competition_id` كأس آسيا من TheSports ثم ربط overlay اللحظي (يعيد استخدام نمط المونديال). (2) صفحة منتخب/مركز مباراة لكأس آسيا إن لزم. (3) parity iOS/Android بعد استقرار الويب.
 
 ---
