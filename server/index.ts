@@ -36,10 +36,19 @@ app.get("/health", async (_req, res) => {
     const { isDatabaseAvailable } = await import("./db");
     dbReady = isDatabaseAvailable();
   } catch {}
+  // حالة مزوّد TheSports للتشخيص (configured/inCooldown/lastError) — تُكشف هل
+  // تأخّر النتائج اللحظية سببه IP Railway غير مُدرج («URL/IP not authorized»)
+  // أم لا. بلا كشف أسرار (user/secret). أفضل جهد: لا تفشل /health لو تعذّر القراءة.
+  let theSports: unknown = null;
+  try {
+    const { getTheSportsStatus } = await import("./services/theSportsService");
+    theSports = getTheSportsStatus();
+  } catch {}
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbReady ? "connected" : "warming-up",
+    theSports,
   });
 });
 

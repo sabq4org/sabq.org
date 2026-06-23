@@ -65,6 +65,53 @@ const matchIdBridge = new Map<number, string>();
 const TS_FAIL_COOLDOWN_MS = 60 * 1000;
 let tsCooldownUntil = 0;
 
+// تتبّع آخر فشل للتشخيص: قبل هذا كان الـ cooldown يُفعَّل صامتًا بلا أثر في السجلات،
+// فلا يمكن تمييز «المزوّد خامل» عن «IP Railway غير مُدرج» عن «يعمل طبيعيًّا».
+// هذان المتغيّران يُقرآن عبر getTheSportsStatus() في /health فقط (لا يكشفان أسرارًا).
+let tsLastError: string | null = null;
+let tsLastErrorAt: number | null = null;
+
+/**
+ * يُفعّل الـcooldown ويسجّل سبب الفشل (رسالة TheSports الخام). يُستدعى من كل
+ * نقطة دخول عند فشل النداء. مركزيّ لتجنّب تكرار منطق التهدئة وضمان وجود أثر
+ * واحد قابل للتشخيص في السجلات.
+ */
+function armCooldown(reason: unknown): void {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  tsLastError = msg;
+  tsLastErrorAt = Date.now();
+  // تحذير واحد لكل فشل (لا نداء) — رسائل TheSports مثل «URL not authorized»
+  // أو «IP not authorized» تُظهر فورًا هل المشكلة إدراج IP أم لا.
+  console.warn(`[TheSports] cooldown armed (${TS_FAIL_COOLDOWN_MS}ms): ${msg}`);
+}
+
+/**
+ * لقطة تشخيصية لحالة مزوّد TheSports — تُستهلك من /health فقط. تكشف ما يلي:
+ *   - configured: هل ضُبطت THESPORTS_USER/SECRET؟
+ *   - inCooldown: هل نحن داخل فترة التهدئة (أي فشل حديث)؟
+ *   - cooldownRemainingMs: كم بقي على انتهاء التهدئة (0 لو لسنا فيها).
+ *   - lastError / lastErrorAt: آخر رسالة خطأ خام وزمنها (أداة التشخيص الرئيسية).
+ * لا تكشف أسرارًا (لا user/secret).
+ */
+export function getTheSportsStatus(): {
+  configured: boolean;
+  inCooldown: boolean;
+  cooldownRemainingMs: number;
+  lastError: string | null;
+  lastErrorAt: number | null;
+} {
+  const now = Date.now();
+  const inCooldown = now < tsCooldownUntil;
+  return {
+    configured: isTheSportsConfigured(),
+    inCooldown,
+    cooldownRemainingMs: inCooldown ? tsCooldownUntil - now : 0,
+    lastError: tsLastError,
+    lastErrorAt: tsLastErrorAt,
+  };
+}
+
 // مهلة قصيرة: نتيجة لحظية لا قيمة لها إن تأخّرت، والأهم ألّا تُبطئ صفحة المستخدم.
 const TS_HTTP_TIMEOUT_MS = 4000;
 
@@ -507,9 +554,9 @@ export async function getTheSportsFastScore(
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
     return buildFastScore(decoded);
-  } catch {
+  } catch (e) {
     // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    armCooldown(e); // يُسجّل رسالة TheSports الخام للتشخيص (URL/IP not authorized، إلخ).
     return null; // تراجع صامت لـ SportMonks ثم API-Football
   }
 }
@@ -537,8 +584,8 @@ export async function getTheSportsMatchLive(
       stats: decodeStats(live.stats),
       commentary: decodeCommentary(live.tlive),
     };
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return null;
   }
 }
@@ -578,8 +625,8 @@ export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> 
       totalPlayers: typeof r.total_players === "number" && r.total_players > 0 ? r.total_players : null,
       coachId: r.coach_id ? String(r.coach_id) : null,
     };
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return null;
   }
 }
@@ -618,8 +665,8 @@ export async function getTsCompetitionExtra(uuid: string): Promise<TsCompetition
       mostTitlesCount: typeof mt[1] === "number" ? mt[1] : null,
       host: r.host?.country ? String(r.host.country) : null,
     };
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return null;
   }
 }
@@ -655,8 +702,8 @@ export async function getTsCompetitionMatchPairs(
         away: String(m.away_team_id),
         time: Number(m.match_time),
       }));
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return [];
   }
 }
@@ -733,8 +780,8 @@ export async function getTsLiveStandings(
         tsGet("table/live", { competition_id: competitionId }),
       );
       return parseStandingTables(data?.results, seasonId);
-    } catch {
-      tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    } catch (e) {
+      armCooldown(e);
     }
   }
   return new Map();
@@ -776,8 +823,8 @@ export async function getTsMatchTv(matchUuid: string): Promise<TsTvChannel[]> {
     // نُبرز beIN (صاحب حقوق المونديال في الخليج/الشرق الأوسط) أولًا، ثم نحدّ الضجيج
     out.sort((a, b) => (/bein/i.test(b.name) ? 1 : 0) - (/bein/i.test(a.name) ? 1 : 0));
     return out.slice(0, 6);
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return [];
   }
 }
@@ -812,8 +859,8 @@ export async function getTsMatchTeamStats(matchUuid: string): Promise<TsTeamStat
         }
         return { teamId: String(r.team_id), values };
       });
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return [];
   }
 }
@@ -859,8 +906,8 @@ export async function getTsFifaRanking(): Promise<Map<string, TsFifaRank>> {
       map.set(teamId, { teamId, rank, points, change });
     }
     return map;
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return new Map();
   }
 }
@@ -895,8 +942,8 @@ export async function getTsTeamInjuries(uuid: string): Promise<TsInjury[]> {
       endTime: pickNum(r?.end_time),
       missedMatches: pickNum(r?.missed_matches),
     }));
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  } catch (e) {
+    armCooldown(e);
     return [];
   }
 }
