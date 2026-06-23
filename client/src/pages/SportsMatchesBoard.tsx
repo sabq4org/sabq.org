@@ -42,8 +42,11 @@ import {
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
 const RIYADH_TZ = "Asia/Riyadh";
-const LIVE_REFETCH_MS = 15_000;
-const TODAY_REFETCH_MS = 30_000;
+// إيقاع التحديث للنتيجة اللحظية — كاش SWR الخلفي (LIVE_TTL=15s، ts:detail_live=5s)
+// يمتص الجولة، فلا يصل كل طلب polling للمزوّد. 8ث بدل 15ث = تحديث أسرع بـ٤٤٪
+// مع بقاء الحمل ضمن الكاش (لا تأثير يُذكر على التكلفة/الـ rate-limit).
+const LIVE_REFETCH_MS = 8_000;
+const TODAY_REFETCH_MS = 15_000;
 
 // بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
 const PINNED_COMP_SLUGS = ["world-cup"];
@@ -509,6 +512,8 @@ export default function SportsMatchesBoard() {
     queryKey: ["/api/sports/today", { date }],
     staleTime: isToday ? LIVE_REFETCH_MS : TODAY_REFETCH_MS,
     refetchInterval: isToday ? TODAY_REFETCH_MS : false,
+    // إعادة الجلب عند الرجوع للتبويب — النتيجة اللحظية تهمّ المستخدم العائد للمتابعة.
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
@@ -518,6 +523,8 @@ export default function SportsMatchesBoard() {
     enabled: isToday,
     staleTime: LIVE_REFETCH_MS,
     refetchInterval: LIVE_REFETCH_MS,
+    // إعادة الجلب عند الرجوع للتبويب — النتيجة اللحظية تهمّ المستخدم العائد للمتابعة.
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
   const liveMatches = Array.isArray(liveData?.live) ? liveData!.live : [];

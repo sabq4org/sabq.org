@@ -45,6 +45,9 @@ export default function WorldCup() {
         fixture.timestamp * 1000 <= Date.now();
       return kickoffPassed ? 10_000 : 30_000;
     },
+    // إعادة الجلب عند الرجوع للتبويب — هذه الصفحة بلا مستمع visibilitychange يدوي،
+    // فآلية TanStack هي ما تُحدّث النتيجة عند عودة المستخدم للمتابعة.
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
 
@@ -53,6 +56,7 @@ export default function WorldCup() {
     // مباراة حية في الجدول → 20ث لتطازج نتائج بطاقات المباريات؛ غير ذلك → 60ث
     refetchInterval: (query) =>
       (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 20_000 : 60_000,
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
 
@@ -61,6 +65,7 @@ export default function WorldCup() {
     // ترتيب لحظي مفعّل (صفّ live) → 20ث لتطازج الجدول أثناء المباراة؛ غير ذلك → 5د
     refetchInterval: (query) =>
       (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 20_000 : 5 * 60_000,
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
 

@@ -20,7 +20,9 @@ import { useCanonical } from "@/hooks/useCanonical";
 import { ACCENT, MatchDialog, type SpLiveItem } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
 
-const LIVE_REFETCH_MS = 15_000;
+// إيقاع تحديث أسرع للنتيجة اللحظية — كاش SWR الخلفي يمتص الجولة، فلا تصل كل
+// دورة للمزوّد. 8ث بدل 15ث (مطابق لإيقاع SportsMatchesBoard للاتساق).
+const LIVE_REFETCH_MS = 8_000;
 
 // مباراة من البث المباشر العالمي — توسعة SpLiveItem بحقول الدولة/الدوري للتجميع.
 interface SpWorldLiveItem extends SpLiveItem {
@@ -68,6 +70,8 @@ export default function SportsLive() {
     queryKey: ["/api/sports/world-live"],
     staleTime: LIVE_REFETCH_MS,
     refetchInterval: LIVE_REFETCH_MS,
+    // إعادة الجلب عند الرجوع للتبويب — النتيجة اللحظية تهمّ المستخدم العائد للمتابعة.
+    refetchOnWindowFocus: true,
     refetchIntervalInBackground: false,
   });
   const matches = Array.isArray(data?.matches) ? data!.matches : [];

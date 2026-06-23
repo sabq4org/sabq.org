@@ -173,13 +173,15 @@ export function registerSportsRoutes(app: Express) {
   // لوحة مباشرة شاملة: كل مباريات الأندية السعودية المباشرة عبر كل البطولات.
   app.get("/api/sports/live", async (_req, res) => {
     if (!isSaudiLeagueConfigured()) {
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30");
+      res.set("Cache-Control", "public, max-age=5, s-maxage=30");
       res.json({ configured: false, live: [] });
       return;
     }
     try {
       const live = await overlayLiveBoardList(await getGlobalLiveFixtures());
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // max-age=5 للمتصفح (polling الويب كل 8ث لا يصطدم بكاش متصفح قديم)؛
+      // s-maxage/swr تبقى للـ CDN/edge.
+      res.set("Cache-Control", "public, max-age=5, s-maxage=30, stale-while-revalidate=60");
       res.json({ configured: true, live });
     } catch (error) {
       console.error("[Sports] global live failed:", error);
@@ -192,13 +194,15 @@ export function registerSportsRoutes(app: Express) {
   // المعروفة معرّبة مع fallback إنجليزي للدوريات الصغيرة.
   app.get("/api/sports/world-live", async (_req, res) => {
     if (!isSaudiLeagueConfigured()) {
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30");
+      res.set("Cache-Control", "public, max-age=5, s-maxage=30");
       res.json({ configured: false, matches: [] });
       return;
     }
     try {
       const matches = await getWorldLiveFixtures();
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // max-age=5 للمتصفح (polling الويب كل 8ث لا يصطدم بكاش متصفح قديم)؛
+      // s-maxage/swr تبقى للـ CDN/edge.
+      res.set("Cache-Control", "public, max-age=5, s-maxage=30, stale-while-revalidate=60");
       res.json({ configured: true, matches });
     } catch (error) {
       console.error("[Sports] world live failed:", error);
@@ -210,7 +214,7 @@ export function registerSportsRoutes(app: Express) {
   // لكل مباراة — نظرة سريعة موحّدة أعلى الصفحة، مستقلّة عن البطولة المختارة.
   app.get("/api/sports/today", async (req, res) => {
     if (!isSaudiLeagueConfigured()) {
-      res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+      res.set("Cache-Control", "public, max-age=10, s-maxage=60");
       res.json({ configured: false, today: [] });
       return;
     }
@@ -219,7 +223,9 @@ export function registerSportsRoutes(app: Express) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     try {
       const today = await overlayLiveBoardList(await getGlobalTodayFixtures(date));
-      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+      // max-age=10 للمتصفح (polling الويب كل 15ث لا يصطدم بكاش متصفح قديم)؛
+      // الجاري يُحدَّث أساسًا بكاش live فوق هذه القائمة.
+      res.set("Cache-Control", "public, max-age=10, s-maxage=60, stale-while-revalidate=120");
       res.json({ configured: true, date: date ?? null, today });
     } catch (error) {
       console.error("[Sports] global today failed:", error);
@@ -232,7 +238,7 @@ export function registerSportsRoutes(app: Express) {
     const comp = resolve(req, res);
     if (!comp) return;
     if (!isSaudiLeagueConfigured()) {
-      res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+      res.set("Cache-Control", "public, max-age=5, s-maxage=60");
       res.json({ configured: false, live: [], today: [], upcoming: [], results: [] });
       return;
     }
@@ -244,7 +250,9 @@ export function registerSportsRoutes(app: Express) {
       const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
       // الطبقة اللحظية: نتيجة TheSports الفائقة على المباريات الجارية (إن أُدرجت البطولة).
       const live = await overlayLiveFixturesForComp(mergedLive, comp.slug);
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // max-age=5 للمتصفح (polling الويب لا يصطدم بكاش متصفح قديم)؛
+      // s-maxage/swr تبقى للـ CDN/edge.
+      res.set("Cache-Control", "public, max-age=5, s-maxage=30, stale-while-revalidate=60");
       res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
     } catch (error) {
       console.error("[Sports] matches failed:", error);
@@ -382,7 +390,9 @@ export function registerSportsRoutes(app: Express) {
       // الطبقة اللحظية: نتيجة/أحداث/إحصاءات TheSports فوق بيانات API-Football
       // للمباريات الجارية في البطولات المُدرَجة — أفضل جهد (تتراجع بصمت).
       const detail = await overlayLiveMatchDetail(base);
-      const ttl = detail.fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
+      // max-age=5 للمتصفح للمباراة الجارية (polling الويب كل 8ث لا يصطدم بكاش متصفح)؛
+      // 120ث للمباريات غير الجارية. s-maxage/swr تبقى للـ CDN/edge.
+      const ttl = detail.fixture.status.live ? "max-age=5, s-maxage=15" : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
       res.json(detail);
     } catch (error) {
