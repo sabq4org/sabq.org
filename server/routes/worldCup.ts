@@ -15,7 +15,9 @@ import {
   getStandingsWithQualification,
   getTeamProfile,
   getWcCompetitionFacts,
-  getTeams,
+  getWcMatchTv,
+  getWcMatchTeamStats,
+  getTeamsRanked,
   getTopAssists,
   getTopCards,
   getTopScorers,
@@ -347,7 +349,7 @@ export function registerWorldCupRoutes(app: Express) {
     if (!guard(res)) return;
     try {
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
-      res.json({ teams: await getTeams() });
+      res.json({ teams: await getTeamsRanked() });
     } catch (error) {
       console.error("[WorldCup] teams failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة المنتخبات حاليًا" });
@@ -609,6 +611,43 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] commentary ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب التعليق المباشر حاليًا", items: [] });
+    }
+  });
+
+  // قنوات بثّ المباراة (TheSports عبر جسر المباراة) — «أين تُشاهد».
+  app.get("/api/world-cup/match/:id/tv", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      const channels = await getWcMatchTv(fixtureId);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ available: channels.length > 0, channels });
+    } catch (error) {
+      console.error(`[WorldCup] tv ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, channels: [] });
+    }
+  });
+
+  // إحصاء الفريقين المفصّل (TheSports عبر جسر المباراة) — احتياط للمباريات المنتهية.
+  app.get("/api/world-cup/match/:id/stats", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      const team = await getWcMatchTeamStats(fixtureId);
+      res.set(
+        "Cache-Control",
+        "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ available: team.length > 0, team });
+    } catch (error) {
+      console.error(`[WorldCup] match stats ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, team: [] });
     }
   });
 

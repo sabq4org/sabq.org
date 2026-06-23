@@ -8,6 +8,8 @@ export interface WcTeam {
   name: string;
   logo: string;
   winner: boolean | null;
+  /** ترتيب فيفا للمنتخب (TheSports) — في قائمة المنتخبات فقط، اختياري */
+  fifaRank?: number | null;
 }
 
 /** الزخم الهجومي عبر الزمن (من trends) — /api/world-cup/momentum/:id */
@@ -292,6 +294,30 @@ export interface WcTeamExtra {
   squadSize: number | null;
 }
 
+/** تصنيف فيفا للمنتخب — إثراء TheSports */
+export interface WcFifaRank {
+  rank: number;
+  points: number | null;
+  /** عدد المراكز المتغيّرة (موجب = صعد ▲، سالب = نزل ▼) — null إن تعذّر */
+  change: number | null;
+}
+
+/** إصابة/غياب لاعب — إثراء TheSports */
+export interface WcInjury {
+  player: string;
+  reason: string | null;
+  status: string | null;
+  until: string | null;
+}
+
+/** قناة بثّ مباراة — إثراء TheSports */
+export interface WcTvChannel {
+  name: string;
+  country: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
 export interface WcTeamProfile {
   team: WcTeam;
   isSaudi: boolean;
@@ -300,6 +326,8 @@ export interface WcTeamProfile {
   fixtures: WcFixture[];
   squad: WcSquadPlayer[];
   extra?: WcTeamExtra | null;
+  fifaRank?: WcFifaRank | null;
+  injuries?: WcInjury[];
 }
 
 /** حقائق البطولة — /api/world-cup/facts */

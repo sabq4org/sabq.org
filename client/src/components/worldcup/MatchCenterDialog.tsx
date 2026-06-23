@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   Square,
   Star,
+  Tv,
 } from "lucide-react";
 import { Cloud, CornerDownRight, Droplets, Flag, Hand, Rocket, Timer, UserX } from "lucide-react";
 import {
@@ -48,6 +49,7 @@ import {
   type WcMatchDetail,
   type WcMatchEvent,
   type WcStatistic,
+  type WcTvChannel,
 } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
 
@@ -485,14 +487,23 @@ function StatsTab({ detail }: { detail: WcMatchDetail }) {
     queryKey: [`/api/world-cup/match-facts/${detail.fixture.id}`],
     refetchInterval: detail.fixture.status.live ? 30_000 : false,
   });
+  // إحصاء الفريق المفصّل من TheSports (احتياط للمباريات المنتهية، خلف SportMonks).
+  const { data: tsStats } = useQuery<{ available: boolean; team: WcStatistic[] }>({
+    queryKey: [`/api/world-cup/match/${detail.fixture.id}/stats`],
+    enabled: detail.fixture.status.finished,
+  });
+  const tsTeam = Array.isArray(tsStats?.team) ? tsStats.team : [];
   // أثناء اللعب نُفضّل إحصاءات detail اللحظية (TheSports — أسرع) إن توفّرت؛ وإلا
-  // إحصائيات SportMonks الأعمق (حتى 16 سطرًا منتقى)؛ ثم API-Football عند غيابها.
+  // إحصائيات SportMonks الأعمق (حتى 16 سطرًا منتقى)؛ ثم TheSports المفصّل
+  // (للمنتهية)؛ ثم API-Football عند غيابها جميعًا.
   const stats =
     detail.fixture.status.live && detail.statistics.length > 0
       ? detail.statistics
       : (facts?.statistics?.length ?? 0) > 0
         ? facts!.statistics
-        : detail.statistics;
+        : tsTeam.length > 0
+          ? tsTeam
+          : detail.statistics;
   const weather = facts?.weather ?? null;
   const hasAbsentees = (facts?.absentees?.length ?? 0) > 0;
   const hasStats = stats.length > 0;
@@ -1201,6 +1212,48 @@ function CommentaryTab({ fixtureId, live }: { fixtureId: number; live: boolean }
   );
 }
 
+// ---------- قنوات البثّ «أين تُشاهد» (TheSports عبر جسر المباراة) ----------
+
+function MatchTvSection({ fixtureId }: { fixtureId: number }) {
+  const { data } = useQuery<{ available: boolean; channels: WcTvChannel[] }>({
+    queryKey: [`/api/world-cup/match/${fixtureId}/tv`],
+  });
+  const channels = Array.isArray(data?.channels) ? data.channels : [];
+  if (channels.length === 0) return null;
+  return (
+    <div className="rounded-xl bg-muted/30 ring-1 ring-border/60 px-3.5 py-2.5 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Tv className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300">أين تُشاهد المباراة</h4>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {channels.map((c, i) => {
+          const inner = (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-background ring-1 ring-border/60 px-2.5 py-1.5 text-xs">
+              {c.logo && <img src={c.logo} alt="" className="h-4 w-4 object-contain shrink-0" loading="lazy" />}
+              <span className="font-semibold">{c.name}</span>
+              {c.country && <span className="text-[10px] text-muted-foreground">{c.country}</span>}
+            </span>
+          );
+          return c.url ? (
+            <a
+              key={i}
+              href={c.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg hover-elevate active-elevate-2 transition-all"
+            >
+              {inner}
+            </a>
+          ) : (
+            <div key={i}>{inner}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -1275,6 +1328,8 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
             </div>
           )}
         </DialogHeader>
+
+        {fixture && !fixture.status.finished && <MatchTvSection fixtureId={fixture.id} />}
 
         {detail && (
           <Tabs
