@@ -142,21 +142,25 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
 export const TS_I18N_TYPE = { category: 1, country: 2, competition: 3, team: 4, player: 5, injury: 6 } as const;
 
 const I18N_TTL = 24 * 60 * 60 * 1000; // الأسماء شبه ثابتة
-const i18nCache = new Map<string, string>(); // `${type}:${id}` → الاسم باللغة المضبوطة
+const i18nCache = new Map<string, string>(); // `${type}:${id}` → الاسم العربي (name_aa)
 const i18nMissing = new Set<string>(); // معرّفات بلا ترجمة (لا نكرّر طلبها)
 
-function tsLangCode(): string | null {
-  const v = (process.env.THESPORTS_LANG || "").trim();
-  return v || null;
-}
+// العربية في TheSports هي الحقل `name_aa` (لا `name_ar`) — تحقّق حيّ 2026‑06‑23.
+const I18N_NAME_FIELD = "name_aa";
+// `language/list` **لا يدعم uuid متعدّدًا** (تحقّق حيّ): النداء بـuuid واحد فقط.
+// فنطلب واحدًا تلو الآخر بتزامن محدود، ونحدّ العدد لكل استدعاء حمايةً للحصة.
+const I18N_MAX_LOOKUPS = 80;
+const I18N_CONCURRENCY = 6;
 
 export function isTsLanguageEnabled(): boolean {
-  return isTheSportsConfigured() && !!tsLangCode();
+  // لم تعد تتطلّب THESPORTS_LANG — الأسماء العربية (name_aa) تُجلب متى توفّر الاشتراك.
+  return isTheSportsConfigured();
 }
 
 /**
- * يحلّ أسماء بلغة `THESPORTS_LANG` (مثلًا `ar`) لمجموعة معرّفات كيان من نوع واحد،
- * ثم يعيد دالة بحث متزامنة. أفضل جهد: يجلب غير المُكاش بدفعات uuid، ويتجاهل أي فشل.
+ * يحلّ الأسماء العربية (`name_aa`) لمجموعة معرّفات كيان من نوع واحد، ثم يعيد دالة
+ * بحث متزامنة. أفضل جهد: يجلب غير المُكاش (uuid واحد/نداء، تزامن محدود) ويتجاهل أي
+ * فشل. ملاحظة (PR #450): الحقل `name_aa` لا `name_ar`، والنداء مفرد لا متعدّد.
  */
 export async function resolveTsNames(
   type: number,
@@ -164,40 +168,32 @@ export async function resolveTsNames(
 ): Promise<(id: string | null | undefined) => string | null> {
   const lookup = (id: string | null | undefined): string | null =>
     id ? i18nCache.get(`${type}:${id}`) ?? null : null;
-  const lang = tsLangCode();
-  if (!lang || !isTheSportsConfigured()) return lookup;
+  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return lookup;
 
   const want = Array.from(
     new Set(ids.filter((x): x is string => !!x && x.trim().length > 0).map((x) => x.trim())),
-  ).filter((id) => !i18nCache.has(`${type}:${id}`) && !i18nMissing.has(`${type}:${id}`));
+  )
+    .filter((id) => !i18nCache.has(`${type}:${id}`) && !i18nMissing.has(`${type}:${id}`))
+    .slice(0, I18N_MAX_LOOKUPS);
   if (want.length === 0) return lookup;
 
-  const nameField = `name_${lang}`;
-  const CHUNK = 50;
-  for (let i = 0; i < want.length; i += CHUNK) {
-    const chunk = want.slice(i, i + CHUNK);
-    try {
-      const data = await withSWR(
-        `ts:lang:${type}:${lang}:${chunk.join(",")}`,
-        I18N_TTL,
-        I18N_TTL,
-        () => tsGet("language/list", { type: String(type), uuid: chunk.join(",") }),
-      );
-      const rows: any[] = Array.isArray(data?.results) ? data.results : [];
-      const got = new Set<string>();
-      for (const row of rows) {
-        const id = row?.id != null ? String(row.id) : "";
-        const ar = row?.[nameField];
-        if (id && typeof ar === "string" && ar.trim()) {
-          i18nCache.set(`${type}:${id}`, ar.trim());
-          got.add(id);
+  for (let i = 0; i < want.length; i += I18N_CONCURRENCY) {
+    const slice = want.slice(i, i + I18N_CONCURRENCY);
+    await Promise.all(
+      slice.map(async (id) => {
+        try {
+          const data = await withSWR(`ts:lang:${type}:${id}`, I18N_TTL, I18N_TTL, () =>
+            tsGet("language/list", { type: String(type), uuid: id }),
+          );
+          const row = Array.isArray(data?.results) ? data.results[0] : null;
+          const name = row?.[I18N_NAME_FIELD];
+          if (typeof name === "string" && name.trim()) i18nCache.set(`${type}:${id}`, name.trim());
+          else i18nMissing.add(`${type}:${id}`); // موجود بلا اسم عربي — لا نكرّر
+        } catch {
+          // مهلة/تهدئة عابرة — لا نُعلّم missing؛ المستدعي يتراجع بهدوء.
         }
-      }
-      // علّم ما لم يرجع باسم بهذه اللغة كـmissing (لا نكرّر) — لا نعلّم عند فشل النداء.
-      for (const id of chunk) if (!got.has(id)) i18nMissing.add(`${type}:${id}`);
-    } catch {
-      // مهلة/تهدئة عابرة — لا نُعلّم missing؛ المستدعي يتراجع بهدوء.
-    }
+      }),
+    );
   }
   return lookup;
 }
@@ -787,60 +783,35 @@ export async function getTsMatchTv(matchUuid: string): Promise<TsTvChannel[]> {
 }
 
 // ───────────────────── إحصاء المباراة المفصّل (match/team_stats/detail) ─────────────────────
-// نقطة مؤكَّدة من الدعم (2026‑06‑23). تُرجع إحصاء الفريقين لمباراة بمعرّفها (uuid).
-// أفضل جهد: أي فشل → [] فلا إثراء. كاش 2د حيًّا و30د للمنتهية (نُكاش 5د وسطًا).
-//
-// ⚠️ **بنية الرد غير متحقَّقة حيًّا** (أعلى عدم يقين من غيرها — لا نعرف الشكل لا
-// مجرّد أسماء الحقول). نحلّل دفاعيًّا ثلاثة أشكال محتملة: مصفوفة صفوف
-// {type,home,away}؛ كائن فيه `.stats`؛ أو {home:[{type,value}], away:[...]}.
-// نُرجع زوج القيمة لكل كود إحصاء خام؛ التسمية تتم في worldCupService (الأكواد
-// المعروفة فقط — انظر STAT_TYPE — ويُسقط المجهول لتفادي تسمية خاطئة).
-export interface TsTeamStat {
-  type: number;
-  home: number;
-  away: number;
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑23)**: `results` مصفوفة من كائنين (فريق لكل
+// كائن)، كلٌّ مسطّح بحقول **مسمّاة**: `team_id` + `ball_possession, shots,
+// shots_on_target, passes, passes_accuracy, corner_kicks, fouls, offsides,
+// yellow_cards, red_cards, tackles, interceptions, ...`. نُرجع جانبَي الفريقين
+// خامًّا (teamId + القيم)؛ التسمية والإقران (مضيف/ضيف) في worldCupService.
+// أفضل جهد: أي فشل → [].
+export interface TsTeamStatSide {
+  teamId: string;
+  values: Record<string, number>;
 }
 
-function parseTeamStats(resultsRaw: any): TsTeamStat[] {
-  const merged = new Map<number, { home: number; away: number }>();
-  const put = (type: any, side: "home" | "away", value: any) => {
-    const t = Number(type);
-    const v = Number(value);
-    if (!Number.isFinite(t) || !Number.isFinite(v)) return;
-    const cur = merged.get(t) ?? { home: 0, away: 0 };
-    cur[side] = v;
-    merged.set(t, cur);
-  };
-  const containers = Array.isArray(resultsRaw) ? resultsRaw : resultsRaw ? [resultsRaw] : [];
-  for (const c of containers) {
-    // الشكل 1/2: مصفوفة صفوف {type, home, away} مباشرةً أو تحت c.stats
-    const rows = Array.isArray(c) ? c : Array.isArray(c?.stats) ? c.stats : null;
-    if (rows) {
-      for (const r of rows) {
-        if (r?.type == null) continue;
-        if (r.home != null || r.away != null) {
-          put(r.type, "home", r.home ?? 0);
-          put(r.type, "away", r.away ?? 0);
-        }
-      }
-      continue;
-    }
-    // الشكل 3: {home:[{type,value}], away:[{type,value}]}
-    for (const side of ["home", "away"] as const) {
-      const arr = c?.[side] ?? c?.[`${side}_stats`];
-      if (Array.isArray(arr)) for (const r of arr) put(r?.type, side, r?.value ?? r?.count ?? r?.num);
-    }
-  }
-  return [...merged.entries()].map(([type, v]) => ({ type, home: v.home, away: v.away }));
-}
-
-export async function getTsMatchTeamStats(matchUuid: string): Promise<TsTeamStat[]> {
+export async function getTsMatchTeamStats(matchUuid: string): Promise<TsTeamStatSide[]> {
   if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
   try {
     const data = await withSWR(`ts:teamstats:${matchUuid}`, 2 * 60 * 1000, 30 * 60 * 1000, () =>
       tsGet("match/team_stats/detail", { uuid: matchUuid }),
     );
-    return parseTeamStats(data?.results);
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    return rows
+      .filter((r) => r?.team_id)
+      .map((r) => {
+        const values: Record<string, number> = {};
+        for (const [k, v] of Object.entries(r)) {
+          if (k === "team_id") continue;
+          const n = Number(v);
+          if (Number.isFinite(n)) values[k] = n;
+        }
+        return { teamId: String(r.team_id), values };
+      });
   } catch {
     tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
     return [];
@@ -848,18 +819,15 @@ export async function getTsMatchTeamStats(matchUuid: string): Promise<TsTeamStat
 }
 
 // ───────────────────── تصنيف فيفا للمنتخبات (ranking/fifa/men) ─────────────────────
-// نقطة مؤكَّدة من الدعم (2026‑06‑23): تُرجع ترتيب المنتخبات الرجالي بمعرّف فريق
-// TheSports (يطابق جسرنا مباشرة، لا حاجة لمطابقة أسماء). تُحدَّث ~شهريًّا فنُكاشها
-// طويلًا. أفضل جهد: أي فشل → خريطة فارغة فلا إثراء (لا عطل).
-//
-// ⚠️ أسماء الحقول لم تُتحقَّق حيًّا بعد (IP الجهاز المطوِّر غير مُدرَج) — نحلّل
-// دفاعيًّا أسماءً محتملة (team_id|team.id، ranking|rank|position، points،
-// والتغيّر من previous_ranking أو ranking_change). يلزم تأكيدها من جهاز مُدرَج.
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑23)**: `results` كائن فيه `items[]`، وكل عنصر:
+// `{ team:{id,name,logo}, region_id, ranking, points, previous_points, position_changed }`.
+// `team.id` يطابق جسرنا مباشرة (لا مطابقة أسماء). تُحدَّث ~شهريًّا فنُكاشها طويلًا.
+// أفضل جهد: أي فشل → خريطة فارغة فلا إثراء (لا عطل).
 export interface TsFifaRank {
   teamId: string;       // معرّف فريق TheSports (uuid) — يطابق الجسر
   rank: number;         // ترتيب المنتخب عالميًّا
   points: number | null;
-  change: number | null; // عدد المراكز المتغيّرة (موجب = صعد ▲، سالب = نزل ▼)
+  change: number | null; // عدد المراكز المتغيّرة (position_changed: موجب = صعد ▲، سالب = نزل ▼)
 }
 
 function pickNum(...vals: any[]): number | null {
@@ -877,24 +845,17 @@ export async function getTsFifaRanking(): Promise<Map<string, TsFifaRank>> {
     const data = await withSWR("ts:fifa:men", EXTRA_TTL, EXTRA_TTL * 2, () =>
       tsGet("ranking/fifa/men"),
     );
-    // الاستجابة: results = { pub_times, pub_time, items: [...] } — المصفوفة تحت items
-    const rows: any[] = Array.isArray(data?.results?.items)
-      ? data.results.items
-      : Array.isArray(data?.results)
-        ? data.results
-        : [];
+    // الاستجابة المتحقَّقة: results = { pub_time, pub_times, items: [...] }
+    const r0 = Array.isArray(data?.results) ? data.results[0] : data?.results;
+    const rows: any[] = Array.isArray(r0?.items) ? r0.items : [];
     const map = new Map<string, TsFifaRank>();
     for (const r of rows) {
-      const rawId = r?.team_id ?? r?.team?.id ?? (typeof r?.team === "string" ? r.team : null);
-      const teamId = rawId != null ? String(rawId) : "";
-      const rank = pickNum(r?.ranking, r?.rank, r?.position) ?? 0;
+      const teamId = r?.team?.id != null ? String(r.team.id) : "";
+      const rank = pickNum(r?.ranking, r?.rank) ?? 0;
       if (!teamId || !rank) continue;
-      const points = pickNum(r?.points, r?.point, r?.score);
-      // التغيّر: نفضّل اشتقاقه من الترتيب السابق (دلالة واضحة: موجب=صعد)، وإلا حقل صريح.
-      const prev = pickNum(r?.previous_ranking, r?.prev_ranking, r?.last_ranking, r?.old_ranking);
-      let change: number | null = null;
-      if (prev != null && prev > 0) change = prev - rank;
-      else change = pickNum(r?.ranking_change, r?.rank_change, r?.change);
+      const points = pickNum(r?.points);
+      // التغيّر المتحقَّق: position_changed (موجب=صعد ▲، سالب=نزل ▼).
+      const change = pickNum(r?.position_changed);
       map.set(teamId, { teamId, rank, points, change });
     }
     return map;
@@ -905,20 +866,17 @@ export async function getTsFifaRanking(): Promise<Map<string, TsFifaRank>> {
 }
 
 // ───────────────────── إصابات/غيابات الفريق (team/injury/list) ─────────────────────
-// نقطة مؤكَّدة من الدعم (2026‑06‑23). تُرجع لائحة المصابين/الغائبين لفريق بمعرّف
-// TheSports (uuid). أفضل جهد: أي فشل → [] فلا إثراء. كاش 6س (تتغيّر يوميًّا).
-//
-// ⚠️ أسماء الحقول غير متحقَّقة حيًّا — تحليل دفاعي: معرّف/اسم اللاعب، سبب نصّي،
-// معرّف نوع الإصابة (i18n type 6)، حالة الغياب، وقت البداية/النهاية المتوقّعة.
-// اسم اللاعب قد لا يأتي في الرد (نقطة ملف اللاعب محجوبة) — يُحلّ best-effort لاحقًا.
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑23)**: `results[0].injury` مصفوفة عناصر:
+// `{ player_id, competition_id, type, injury_id, reason, start_time, end_time, missed_matches }`.
+// **لا اسم لاعب في الرد** (يُحلّ بالاسم العربي عبر language/list type 5)، و`reason`
+// نصّ إنجليزي ("Calf Injury") يُعرَّب في worldCupService. أفضل جهد: أي فشل → [].
 export interface TsInjury {
   playerId: string | null;
-  playerName: string | null; // إن أتى في الرد مباشرة
-  reason: string | null;     // نصّ سبب الغياب إن وُجد
-  reasonId: string | null;   // معرّف نوع الإصابة (i18n type 6)
-  status: string | null;     // نوع الغياب (إصابة/إيقاف…) إن وُجد
+  reason: string | null;    // نصّ إنجليزي — يُعرَّب لاحقًا
+  injuryId: string | null;  // معرّف نوع الإصابة
   startTime: number | null;
   endTime: number | null;
+  missedMatches: number | null;
 }
 
 export async function getTsTeamInjuries(uuid: string): Promise<TsInjury[]> {
@@ -927,27 +885,16 @@ export async function getTsTeamInjuries(uuid: string): Promise<TsInjury[]> {
     const data = await withSWR(`ts:injury:${uuid}`, 6 * 60 * 60 * 1000, 12 * 60 * 60 * 1000, () =>
       tsGet("team/injury/list", { uuid }),
     );
-    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
-    const out: TsInjury[] = [];
-    for (const r of rows) {
-      const playerId =
-        r?.player_id != null ? String(r.player_id) : r?.player?.id != null ? String(r.player.id) : null;
-      const pName = r?.player_name ?? r?.player?.name ?? r?.name;
-      const reason = r?.reason ?? r?.desc ?? r?.description ?? null;
-      const reasonId =
-        r?.type != null && typeof r.type !== "object" ? String(r.type) : r?.injury_type != null ? String(r.injury_type) : null;
-      const status = r?.missing_type ?? r?.status ?? null;
-      out.push({
-        playerId,
-        playerName: typeof pName === "string" && pName.trim() ? pName.trim() : null,
-        reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
-        reasonId,
-        status: typeof status === "string" && status.trim() ? status.trim() : null,
-        startTime: pickNum(r?.start_time, r?.begin_time, r?.from),
-        endTime: pickNum(r?.end_time, r?.expected_end_time, r?.to),
-      });
-    }
-    return out;
+    const results: any[] = Array.isArray(data?.results) ? data.results : [];
+    const injuries: any[] = Array.isArray(results[0]?.injury) ? results[0].injury : [];
+    return injuries.map((r) => ({
+      playerId: r?.player_id != null ? String(r.player_id) : null,
+      reason: typeof r?.reason === "string" && r.reason.trim() ? r.reason.trim() : null,
+      injuryId: r?.injury_id != null ? String(r.injury_id) : null,
+      startTime: pickNum(r?.start_time),
+      endTime: pickNum(r?.end_time),
+      missedMatches: pickNum(r?.missed_matches),
+    }));
   } catch {
     tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
     return [];
