@@ -293,8 +293,18 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/fixtures", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=120");
-      res.json({ fixtures: await overlayLiveList(await getFixtures()) });
+      const fixtures = await overlayLiveList(await getFixtures());
+      // مباراة جارية → كاش لحظي (5ث على الـCDN، يُعاد التحقّق دومًا على المتصفح)
+      // وإلا فكاش أطول. بدون هذا يبتلع كاش المتصفح (max-age) نداءات الـpolling
+      // فتتجمّد النتائج أثناء البثّ حتى تحديث الصفحة يدويًا.
+      const hasLive = fixtures.some((f) => f.status?.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=15, s-maxage=30, stale-while-revalidate=120",
+      );
+      res.json({ fixtures });
     } catch (error) {
       console.error("[WorldCup] fixtures failed:", error);
       res.status(502).json({ message: "تعذر جلب جدول المباريات حاليًا" });
@@ -315,8 +325,18 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/standings", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=120, s-maxage=300, stale-while-revalidate=600");
-      res.json({ groups: await getStandingsWithQualification() });
+      const groups = await getStandingsWithQualification();
+      // ترتيب لحظي مفعّل (صفّ live) → كاش قصير ليتطازج الجدول أثناء المباراة.
+      // الافتراضي السابق (max-age=120) كان يحبس الجدول دقيقتين في المتصفح فيُلغي
+      // الترتيب اللحظي عمليًا حتى لو أعاد العميل الجلب كل 20ث.
+      const hasLive = groups.some((g) => (g.rows ?? []).some((r) => r.live));
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ groups });
     } catch (error) {
       console.error("[WorldCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
