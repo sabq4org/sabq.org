@@ -32,6 +32,8 @@ import {
   getTheSportsMatchLive,
   getTsCompetitionId,
   isTheSportsConfigured,
+  resolveTsNames,
+  TS_I18N_TYPE,
   type TsEvent,
   type TsMatchLive,
 } from "./theSportsService";
@@ -463,6 +465,16 @@ async function detectTsEventAlerts(
   } catch {
     /* أفضل جهد: نُبقي الأسماء كما وردت */
   }
+  // تفضيل أسماء المزوّد العربية (language/list) عبر معرّف اللاعب عند تفعيل
+  // THESPORTS_LANG؛ تتراجع لتعريب resolveNames. أفضل جهد تامّ.
+  let arById: (id: string | null | undefined) => string | null = () => null;
+  try {
+    const ids: (string | null | undefined)[] = [];
+    for (const ts of tsLive.values()) for (const e of ts.events) ids.push(e.playerId);
+    arById = await resolveTsNames(TS_I18N_TYPE.player, ids);
+  } catch {
+    /* أفضل جهد */
+  }
 
   for (const m of matches) {
     const ts = tsLive.get(m.id);
@@ -480,7 +492,7 @@ async function detectTsEventAlerts(
       const teamName = TEAM_NAME(m, e.team);
 
       if (e.type === "goal" || e.type === "penalty_goal") {
-        const who = e.player ? tr(e.player) : teamName || matchName;
+        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : teamName || matchName);
         const pen = e.type === "penalty_goal" ? " (ركلة جزاء)" : "";
         const assist = e.assist ? ` · صناعة ${tr(e.assist)}` : "";
         const score =
@@ -495,7 +507,7 @@ async function detectTsEventAlerts(
           teamRefIds,
         });
       } else if (e.type === "red" || e.type === "yellow_red") {
-        const who = e.player ? tr(e.player) : "";
+        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",
@@ -504,7 +516,7 @@ async function detectTsEventAlerts(
           teamRefIds,
         });
       } else if (e.type === "yellow") {
-        const who = e.player ? tr(e.player) : "";
+        const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
           kind: "card",

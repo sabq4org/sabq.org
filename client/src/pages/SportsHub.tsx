@@ -49,6 +49,7 @@ import {
   Gauge,
   Cloud,
   Droplets,
+  Activity,
 } from "lucide-react";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Header } from "@/components/Header";
@@ -121,6 +122,10 @@ interface SpXgPlayer { name: string; location: "home" | "away"; xg: number; }
 interface SpXg { available: boolean; home: SpXgSide; away: SpXgSide; topPlayers: SpXgPlayer[]; }
 interface SpPressurePoint { minute: number; net: number; }
 interface SpPressure { available: boolean; live: boolean; latest: { side: string; value: number } | null; points: SpPressurePoint[]; }
+interface SpMomentumPoint { label: string; minute: number; home: number; away: number; net: number; }
+interface SpMomentum { available: boolean; live: boolean; possession: { home: number; away: number } | null; points: SpMomentumPoint[]; }
+interface SpCommentaryItem { minute: number; extraMinute: number | null; goal: boolean; important: boolean; textAr: string; textEn: string; order: number; }
+interface SpCommentary { available: boolean; live: boolean; items: SpCommentaryItem[]; }
 interface SpWeather { type: string; temp: number | null; description: string; icon: string; humidity: string | null; }
 interface SpFactStat { key: string; label: string; home: string; away: string; }
 interface SpEventDetail { minute: number; location: "home" | "away"; klass: string; detail: string; }
@@ -1551,6 +1556,81 @@ function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure;
   );
 }
 
+// رسم الزخم الهجومي (الهجمات الخطيرة عبر الزمن) + شريط استحواذ — إثراء SportMonks.
+function SpMomentumView({ data, homeName, awayName }: { data?: SpMomentum; homeName: string; awayName: string }) {
+  const points = Array.isArray(data?.points) ? data!.points : [];
+  const possession = data?.possession ?? null;
+  if (points.length === 0 && !possession) {
+    return <div className="py-8 text-center text-muted-foreground text-sm">رسم الزخم يظهر هنا أثناء المباراة</div>;
+  }
+  const hPoss = possession ? Math.min(Math.max(possession.home, 0), 100) : 50;
+  return (
+    <div className="space-y-4">
+      {possession && (
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-bold text-primary tabular-nums">{hPoss}%</span>
+            <span className="text-muted-foreground font-medium">الاستحواذ</span>
+            <span className="font-bold text-amber-500 tabular-nums">{100 - hPoss}%</span>
+          </div>
+          <div className="flex h-2 rounded-full overflow-hidden bg-muted" dir="ltr">
+            <div className="bg-primary transition-all duration-700" style={{ width: `${hPoss}%` }} />
+            <div className="bg-amber-400 transition-all duration-700" style={{ width: `${100 - hPoss}%` }} />
+          </div>
+        </div>
+      )}
+      {points.length > 0 ? (
+        <div>
+          <p className="text-[11px] text-muted-foreground text-center mb-2">الزخم الهجومي — أعلى: {homeName} · أسفل: {awayName}</p>
+          <div dir="ltr">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={1}>
+                <XAxis dataKey="minute" tick={{ fontSize: 10 }} tickFormatter={(m) => `${m}'`} interval="preserveStartEnd" minTickGap={24} />
+                <YAxis hide />
+                <ReferenceLine y={0} stroke="hsl(var(--border))" />
+                <Bar dataKey="net" radius={[2, 2, 0, 0]}>
+                  {points.map((p) => (<Cell key={p.minute} fill={p.net >= 0 ? "#059669" : "#e11d48"} />))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground py-2">رسم الزخم الهجومي يظهر فور توفّره أثناء المباراة</p>
+      )}
+    </div>
+  );
+}
+
+// التعليق الحيّ — أبرز اللحظات معرَّبة، مع إبراز الأهداف واللحظات المهمّة.
+function SpCommentaryView({ data, live }: { data?: SpCommentary; live: boolean }) {
+  const items = Array.isArray(data?.items) ? data!.items : [];
+  if (items.length === 0) {
+    return (
+      <div className="py-8 text-center text-muted-foreground text-sm">
+        {live ? "التعليق اللحظي يبدأ مع صافرة البداية" : "لا يتوفّر تعليق لهذه المباراة"}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((item, index) => {
+        const highlight = item.goal || item.important;
+        return (
+          <div key={index}
+            className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${highlight ? "bg-emerald-500/10 ring-1 ring-emerald-500/20" : "bg-muted/40"}`}>
+            <span className="shrink-0 min-w-[2.75rem] text-center text-xs font-bold text-muted-foreground tabular-nums" dir="ltr">
+              {item.minute > 0 ? `${item.minute}'` : "—"}{item.minute > 0 && item.extraMinute ? `+${item.extraMinute}` : ""}
+            </span>
+            {item.goal ? <Goal className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <Activity className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />}
+            <p className="text-sm leading-relaxed flex-1 min-w-0 text-foreground">{item.textAr}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
@@ -1615,6 +1695,18 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
     refetchInterval: live ? 20_000 : false,
     staleTime: 20_000,
   });
+  const { data: momentum } = useQuery<SpMomentum>({
+    queryKey: [`/api/sports/match/${id}/momentum`],
+    enabled: id != null && matchStarted && tab === "momentum",
+    refetchInterval: live ? 30_000 : false,
+    staleTime: 25_000,
+  });
+  const { data: commentary } = useQuery<SpCommentary>({
+    queryKey: [`/api/sports/match/${id}/commentary`],
+    enabled: id != null && matchStarted && tab === "commentary",
+    refetchInterval: live ? 20_000 : false,
+    staleTime: 15_000,
+  });
 
   // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
   // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
@@ -1644,9 +1736,11 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
   const tabs = [
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
+    started ? { key: "commentary", label: "التعليق" } : null,
     started ? { key: "story", label: "ملخّص ذكي" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
+    started ? { key: "momentum", label: "الزخم" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
@@ -1801,6 +1895,12 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
           })()}
           {!isLoading && activeKey === "pressure" && (
             <SpPressureView data={pressure} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} live={live} />
+          )}
+          {!isLoading && activeKey === "momentum" && (
+            <SpMomentumView data={momentum} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} />
+          )}
+          {!isLoading && activeKey === "commentary" && (
+            <SpCommentaryView data={commentary} live={live} />
           )}
           {!isLoading && activeKey === "lineups" && lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}

@@ -56,6 +56,8 @@ import { getTeamOgImage } from "../services/sportsOgImage";
 import {
   getXg,
   getPressure,
+  getMomentum,
+  getCommentary,
   getMatchFacts,
   resolveSmIdByNames,
   isSportmonksConfigured,
@@ -466,6 +468,42 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] pressure failed:", error);
       res.status(502).json({ available: false, live: false, latest: null, points: [] });
+    }
+  });
+
+  // رسم الزخم الهجومي (الهجمات الخطيرة عبر الزمن) — إثراء SportMonks، نظير المونديال.
+  app.get("/api/sports/match/:id/momentum", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false, live: false, possession: null, points: [] });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json({ available: false, live: false, possession: null, points: [] });
+      res.set("Cache-Control", SM_ENRICH_CACHE);
+      res.json(await getMomentum(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] momentum failed:", error);
+      res.status(502).json({ available: false, live: false, possession: null, points: [] });
+    }
+  });
+
+  // التعليق الحيّ (أبرز اللحظات معرَّبة) — إثراء SportMonks، نظير المونديال.
+  app.get("/api/sports/match/:id/commentary", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false, live: false, items: [] });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json({ available: false, live: false, items: [] });
+      res.set("Cache-Control", SM_ENRICH_CACHE);
+      res.json(await getCommentary(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] commentary failed:", error);
+      res.status(502).json({ available: false, live: false, items: [] });
     }
   });
 

@@ -21,6 +21,8 @@ import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
   getTsCompetitionId,
+  resolveTsNames,
+  TS_I18N_TYPE,
   type TsEvent,
   type TsLiveStats,
 } from "./theSportsService";
@@ -885,6 +887,9 @@ async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplM
   const rawNames: (string | null | undefined)[] = [];
   for (const e of events) rawNames.push(e.player, e.assist, e.inPlayer, e.outPlayer);
   const tr = await resolveNames(rawNames);
+  // تفضيل أسماء المزوّد العربية (language/list) للاعب الرئيسي عبر معرّفه عند تفعيل
+  // THESPORTS_LANG؛ تتراجع لتعريب worldCupNameTranslator. أفضل جهد: لا تُعطّل شيئًا.
+  const arById = await resolveTsNames(TS_I18N_TYPE.player, events.map((e) => e.playerId));
   const out: SplMatchEvent[] = [];
   for (const e of events) {
     const meta = TS_EVENT_LABEL[e.type];
@@ -894,13 +899,13 @@ async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplM
     if (e.type === "sub") {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: tr(e.inPlayer), assist: e.outPlayer ? tr(e.outPlayer) : null,
+        player: arById(e.playerId) ?? tr(e.inPlayer), assist: e.outPlayer ? tr(e.outPlayer) : null,
         type: meta.type, label: meta.label,
       });
     } else {
       out.push({
         minute: e.minute, extra: null, teamId, team,
-        player: tr(e.player), assist: e.assist ? tr(e.assist) : null,
+        player: arById(e.playerId) ?? tr(e.player), assist: e.assist ? tr(e.assist) : null,
         type: meta.type, label: meta.label,
       });
     }
