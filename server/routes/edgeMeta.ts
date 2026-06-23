@@ -1694,6 +1694,64 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // Asian Cup 2027 (Saudi Arabia) hub landing
+  {
+    pattern: /^\/asian-cup\/?$/,
+    handle: async () => {
+      const description =
+        "كأس آسيا 2027 في السعودية — جدول المباريات بتوقيت الرياض، المجموعات، المنتخبات المتأهّلة، وملاعب الاستضافة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/asian-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>كأس آسيا 2027 — التغطية الكاملة من السعودية</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "كأس آسيا 2027 — التغطية الكاملة من السعودية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/asian-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "كأس آسيا 2027 — التغطية الكاملة",
+              description,
+              url: `${SITE_URL}/asian-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "كأس آسيا 2027",
+                  item: `${SITE_URL}/asian-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
   // World Cup 2026 hub landing
   {
     pattern: /^\/world-cup\/?$/,
