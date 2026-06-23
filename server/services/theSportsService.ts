@@ -629,8 +629,10 @@ export async function getTsCompetitionExtra(uuid: string): Promise<TsCompetition
 }
 
 // أزواج فرق مباريات بطولة في موسم معيّن (للجسر عبر مطابقة وقت البداية) — من
-// match/recent/list (يُرجع كل مباريات البطولة بأوقاتها ومعرّفات فريقيها).
+// match/recent/list (يُرجع كل مباريات البطولة بأوقاتها ومعرّفات فريقيها ومعرّف
+// المباراة `id`). نُضمّن `id` ليخدم جسر معرّف المباراة (قنوات البثّ/الإحصاء).
 export interface TsMatchPair {
+  id: string; // معرّف مباراة TheSports (uuid) — لجسر المباراة
   home: string;
   away: string;
   time: number;
@@ -651,59 +653,15 @@ export async function getTsCompetitionMatchPairs(
     const rows: any[] = Array.isArray(data?.results) ? data.results : [];
     return rows
       .filter((m) => (!seasonId || m.season_id === seasonId) && m.home_team_id && m.away_team_id && m.match_time)
-      .map((m) => ({ home: String(m.home_team_id), away: String(m.away_team_id), time: Number(m.match_time) }));
+      .map((m) => ({
+        id: m.id != null ? String(m.id) : "",
+        home: String(m.home_team_id),
+        away: String(m.away_team_id),
+        time: Number(m.match_time),
+      }));
   } catch {
     tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
     return [];
-  }
-}
-
-// تشخيص مؤقّت: يكشف هل المفاتيح مُهيّأة، وحالة التهدئة، وردّ المزوّد الحرفي على
-// نداء حقيقي (competition/additional/list للمونديال) — لتمييز «IP غير مُدرَج» عن
-// «مفاتيح خاطئة» عن «يعمل». يُحذف بعد حسم سبب فشل الإنتاج.
-/**
- * عنوان الخروج كما يراه الطرف البعيد **عبر نفس وكيل TheSports** (node:https + family:4
- * + keep-alive). مهمّ للتشخيص: قد يختلف عن عنوان `fetch` العام (undici) إن كان للخادم
- * أكثر من مسار خروج — وهو ما يقرّر أيّ IP يجب إدراجه في قائمة TheSports.
- */
-export function getTsEgressIp(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(
-      "https://api.ipify.org?format=json",
-      { agent: tsAgent, timeout: 8000 },
-      (res) => {
-        let b = "";
-        res.on("data", (c) => (b += c));
-        res.on("end", () => {
-          try {
-            resolve(String(JSON.parse(b).ip));
-          } catch {
-            reject(new Error(`bad ipify response: ${b.slice(0, 80)}`));
-          }
-        });
-      },
-    );
-    req.on("error", reject);
-    req.on("timeout", () => req.destroy(new Error("ipify timeout")));
-  });
-}
-
-export async function tsDiagnostic(): Promise<{
-  configured: boolean;
-  cooldownActive: boolean;
-  ok: boolean;
-  detail: string;
-}> {
-  if (!isTheSportsConfigured()) {
-    return { configured: false, cooldownActive: false, ok: false, detail: "THESPORTS_USER/SECRET غير مضبوطين" };
-  }
-  const cooldownActive = Date.now() < tsCooldownUntil;
-  try {
-    const data = await tsGet("competition/additional/list", { uuid: WC_COMPETITION_ID });
-    const n = Array.isArray(data?.results) ? data.results.length : 0;
-    return { configured: true, cooldownActive, ok: n > 0, detail: `ok results=${n}` };
-  } catch (e: any) {
-    return { configured: true, cooldownActive, ok: false, detail: String(e?.message ?? e) };
   }
 }
 
@@ -784,4 +742,211 @@ export async function getTsLiveStandings(
     }
   }
   return new Map();
+}
+
+// ───────────────────── قنوات بثّ المباراة (match/tv/list) ─────────────────────
+// نقطة مؤكَّدة من الدعم (2026‑06‑23): تُرجع قنوات بثّ مباراة بمعرّفها (uuid).
+// أفضل جهد: أي فشل → [] فلا قسم بثّ. كاش 6س (القنوات شبه ثابتة قبل المباراة).
+//
+// ⚠️ أسماء الحقول غير متحقَّقة حيًّا — تحليل دفاعي: اسم القناة، الدولة، الرابط، الشعار.
+export interface TsTvChannel {
+  name: string;
+  country: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
+export async function getTsMatchTv(matchUuid: string): Promise<TsTvChannel[]> {
+  if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:tv:${matchUuid}`, 6 * 60 * 60 * 1000, 12 * 60 * 60 * 1000, () =>
+      tsGet("match/tv/list", { uuid: matchUuid }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    const out: TsTvChannel[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const name = r?.name ?? r?.channel ?? r?.tv_name ?? r?.station;
+      if (typeof name !== "string" || !name.trim()) continue;
+      const key = name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const country = r?.country ?? r?.country_name ?? r?.region ?? null;
+      const url = r?.url ?? r?.link ?? r?.website ?? null;
+      const logo = r?.logo ?? r?.icon ?? r?.image ?? null;
+      out.push({
+        name: name.trim(),
+        country: typeof country === "string" && country.trim() ? country.trim() : null,
+        url: typeof url === "string" && url.trim() ? url.trim() : null,
+        logo: typeof logo === "string" && logo.trim() ? logo.trim() : null,
+      });
+    }
+    return out;
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return [];
+  }
+}
+
+// ───────────────────── إحصاء المباراة المفصّل (match/team_stats/detail) ─────────────────────
+// نقطة مؤكَّدة من الدعم (2026‑06‑23). تُرجع إحصاء الفريقين لمباراة بمعرّفها (uuid).
+// أفضل جهد: أي فشل → [] فلا إثراء. كاش 2د حيًّا و30د للمنتهية (نُكاش 5د وسطًا).
+//
+// ⚠️ **بنية الرد غير متحقَّقة حيًّا** (أعلى عدم يقين من غيرها — لا نعرف الشكل لا
+// مجرّد أسماء الحقول). نحلّل دفاعيًّا ثلاثة أشكال محتملة: مصفوفة صفوف
+// {type,home,away}؛ كائن فيه `.stats`؛ أو {home:[{type,value}], away:[...]}.
+// نُرجع زوج القيمة لكل كود إحصاء خام؛ التسمية تتم في worldCupService (الأكواد
+// المعروفة فقط — انظر STAT_TYPE — ويُسقط المجهول لتفادي تسمية خاطئة).
+export interface TsTeamStat {
+  type: number;
+  home: number;
+  away: number;
+}
+
+function parseTeamStats(resultsRaw: any): TsTeamStat[] {
+  const merged = new Map<number, { home: number; away: number }>();
+  const put = (type: any, side: "home" | "away", value: any) => {
+    const t = Number(type);
+    const v = Number(value);
+    if (!Number.isFinite(t) || !Number.isFinite(v)) return;
+    const cur = merged.get(t) ?? { home: 0, away: 0 };
+    cur[side] = v;
+    merged.set(t, cur);
+  };
+  const containers = Array.isArray(resultsRaw) ? resultsRaw : resultsRaw ? [resultsRaw] : [];
+  for (const c of containers) {
+    // الشكل 1/2: مصفوفة صفوف {type, home, away} مباشرةً أو تحت c.stats
+    const rows = Array.isArray(c) ? c : Array.isArray(c?.stats) ? c.stats : null;
+    if (rows) {
+      for (const r of rows) {
+        if (r?.type == null) continue;
+        if (r.home != null || r.away != null) {
+          put(r.type, "home", r.home ?? 0);
+          put(r.type, "away", r.away ?? 0);
+        }
+      }
+      continue;
+    }
+    // الشكل 3: {home:[{type,value}], away:[{type,value}]}
+    for (const side of ["home", "away"] as const) {
+      const arr = c?.[side] ?? c?.[`${side}_stats`];
+      if (Array.isArray(arr)) for (const r of arr) put(r?.type, side, r?.value ?? r?.count ?? r?.num);
+    }
+  }
+  return [...merged.entries()].map(([type, v]) => ({ type, home: v.home, away: v.away }));
+}
+
+export async function getTsMatchTeamStats(matchUuid: string): Promise<TsTeamStat[]> {
+  if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:teamstats:${matchUuid}`, 2 * 60 * 1000, 30 * 60 * 1000, () =>
+      tsGet("match/team_stats/detail", { uuid: matchUuid }),
+    );
+    return parseTeamStats(data?.results);
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return [];
+  }
+}
+
+// ───────────────────── تصنيف فيفا للمنتخبات (ranking/fifa/men) ─────────────────────
+// نقطة مؤكَّدة من الدعم (2026‑06‑23): تُرجع ترتيب المنتخبات الرجالي بمعرّف فريق
+// TheSports (يطابق جسرنا مباشرة، لا حاجة لمطابقة أسماء). تُحدَّث ~شهريًّا فنُكاشها
+// طويلًا. أفضل جهد: أي فشل → خريطة فارغة فلا إثراء (لا عطل).
+//
+// ⚠️ أسماء الحقول لم تُتحقَّق حيًّا بعد (IP الجهاز المطوِّر غير مُدرَج) — نحلّل
+// دفاعيًّا أسماءً محتملة (team_id|team.id، ranking|rank|position، points،
+// والتغيّر من previous_ranking أو ranking_change). يلزم تأكيدها من جهاز مُدرَج.
+export interface TsFifaRank {
+  teamId: string;       // معرّف فريق TheSports (uuid) — يطابق الجسر
+  rank: number;         // ترتيب المنتخب عالميًّا
+  points: number | null;
+  change: number | null; // عدد المراكز المتغيّرة (موجب = صعد ▲، سالب = نزل ▼)
+}
+
+function pickNum(...vals: any[]): number | null {
+  for (const v of vals) {
+    if (v == null || v === "") continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+export async function getTsFifaRanking(): Promise<Map<string, TsFifaRank>> {
+  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
+  try {
+    const data = await withSWR("ts:fifa:men", EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("ranking/fifa/men"),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    const map = new Map<string, TsFifaRank>();
+    for (const r of rows) {
+      const rawId = r?.team_id ?? r?.team?.id ?? (typeof r?.team === "string" ? r.team : null);
+      const teamId = rawId != null ? String(rawId) : "";
+      const rank = pickNum(r?.ranking, r?.rank, r?.position) ?? 0;
+      if (!teamId || !rank) continue;
+      const points = pickNum(r?.points, r?.point, r?.score);
+      // التغيّر: نفضّل اشتقاقه من الترتيب السابق (دلالة واضحة: موجب=صعد)، وإلا حقل صريح.
+      const prev = pickNum(r?.previous_ranking, r?.prev_ranking, r?.last_ranking, r?.old_ranking);
+      let change: number | null = null;
+      if (prev != null && prev > 0) change = prev - rank;
+      else change = pickNum(r?.ranking_change, r?.rank_change, r?.change);
+      map.set(teamId, { teamId, rank, points, change });
+    }
+    return map;
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return new Map();
+  }
+}
+
+// ───────────────────── إصابات/غيابات الفريق (team/injury/list) ─────────────────────
+// نقطة مؤكَّدة من الدعم (2026‑06‑23). تُرجع لائحة المصابين/الغائبين لفريق بمعرّف
+// TheSports (uuid). أفضل جهد: أي فشل → [] فلا إثراء. كاش 6س (تتغيّر يوميًّا).
+//
+// ⚠️ أسماء الحقول غير متحقَّقة حيًّا — تحليل دفاعي: معرّف/اسم اللاعب، سبب نصّي،
+// معرّف نوع الإصابة (i18n type 6)، حالة الغياب، وقت البداية/النهاية المتوقّعة.
+// اسم اللاعب قد لا يأتي في الرد (نقطة ملف اللاعب محجوبة) — يُحلّ best-effort لاحقًا.
+export interface TsInjury {
+  playerId: string | null;
+  playerName: string | null; // إن أتى في الرد مباشرة
+  reason: string | null;     // نصّ سبب الغياب إن وُجد
+  reasonId: string | null;   // معرّف نوع الإصابة (i18n type 6)
+  status: string | null;     // نوع الغياب (إصابة/إيقاف…) إن وُجد
+  startTime: number | null;
+  endTime: number | null;
+}
+
+export async function getTsTeamInjuries(uuid: string): Promise<TsInjury[]> {
+  if (!uuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:injury:${uuid}`, 6 * 60 * 60 * 1000, 12 * 60 * 60 * 1000, () =>
+      tsGet("team/injury/list", { uuid }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    const out: TsInjury[] = [];
+    for (const r of rows) {
+      const playerId =
+        r?.player_id != null ? String(r.player_id) : r?.player?.id != null ? String(r.player.id) : null;
+      const pName = r?.player_name ?? r?.player?.name ?? r?.name;
+      const reason = r?.reason ?? r?.desc ?? r?.description ?? null;
+      const reasonId =
+        r?.type != null && typeof r.type !== "object" ? String(r.type) : r?.injury_type != null ? String(r.injury_type) : null;
+      const status = r?.missing_type ?? r?.status ?? null;
+      out.push({
+        playerId,
+        playerName: typeof pName === "string" && pName.trim() ? pName.trim() : null,
+        reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
+        reasonId,
+        status: typeof status === "string" && status.trim() ? status.trim() : null,
+        startTime: pickNum(r?.start_time, r?.begin_time, r?.from),
+        endTime: pickNum(r?.end_time, r?.expected_end_time, r?.to),
+      });
+    }
+    return out;
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return [];
+  }
 }

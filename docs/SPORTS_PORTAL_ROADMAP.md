@@ -127,19 +127,85 @@
 | قنوات البثّ | `match/tv/list?uuid=<matchId>` | ✅ يعمل |
 | المدرب/الحكم/الملعب | `coach/list` · `referee/list` · `venue/list` (BASIC INFO) | ✅ يعمل |
 | انتقالات/قيمة/قدرة اللاعب | `player/transfer/list` · `player/market/list` · `player/ability/list` | ✅ يعمل |
-| ملف اللاعب (اسم/صورة) | `player/list` | ❌ ما زال «URL not authorized» — المسار الصحيح للملف غير مؤكَّد |
+| ملف اللاعب (اسم/صورة/مركز) | **`player/with_stat/list`** (BASIC INFO) | ✅ مؤكَّد من الدعم 2026‑06‑23 (لم يُتحقَّق الشكل بعد — انظر ملاحظة عنوان dev) |
 | القيمة السوقية للفريق/التأسيس | `team/additional/list` | ✅ مُطبَّق |
 | حقائق البطولة | `competition/additional/list` | ✅ مُطبَّق |
 | التعريب | `language/list` (مزامنة مُصفَّحة بلا uuid، الحقل العربي **`name_aa`**) | ✅ يعمل |
 
-- **القيمة السوقية للاعب — لا تزال مؤجَّلة:** `player/market/list`/`transfer/list`/`ability/list` تعمل، لكن **ملف اللاعب (`player/list`) ما زال يردّ «URL not authorized»** فلا اسم/صورة لربط لاعبنا (API-Football) بـuuid لاعب TheSports بثقة. يُفتح فور تأكيد مسار الملف الصحيح من الدعم.
+- **القيمة السوقية للاعب — صار المسار متاحًا (2026‑06‑23):** الدعم أكّد أن ملف اللاعب عبر **`player/with_stat/list`** (حزمة BASIC INFO، [الدوكس](https://www.thesports.com/docs/football#package:BASIC%20INFO,endpoint:Player)). مع `player/market/list`/`transfer/list`/`ability/list` العاملة، يكتمل بناء الميزة فور التحقّق من شكل الاستجابة وطريقة الربط (يُفضَّل المطابقة بالاسم الإنجليزي داخل المنتخب عبر `team_id`).
 - **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). إصلاح منفصل مقترح: مزامنة دورية لقاموس `name_aa`.
 
 **ميزات جاهزة للبناء فورًا (المسارات مؤكَّدة):** تصنيف فيفا على صفحة المنتخب/القسم (`ranking/fifa/men`) · الإصابات قبل المباراة (`team/injury/list`) · قنوات البثّ في مركز المباراة (`match/tv/list`) · إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`).
 
 **مرجع توثيق TheSports:** https://www.thesports.com/docs/football · قائمة أخطاء API: https://www.thesports.com/helpcenter/3/58
 
+**حسم اتصال الإنتاج بـTheSports (2026‑06‑23 — مُغلَق ✅):** ظهرت البيانات في dev لا في الإنتاج. بنقطة تشخيص مؤقّتة (`_tsdiag`، أُزيلت بعد الحسم) تبيّن: المفاتيح مضبوطة (`configured:true`) والمسار صحيح، لكن `ok:false` بسبب **`IP is not authorized`**. السبب الجذري: **عنوان خروج Railway غير ثابت** يتغيّر مع كل نشر (يفسّر «ظهور القيمة السوقية ثم اختفاءها» بين نشرين). **الحل:** تفعيل **Static Outbound IPs** على خدمة الـAPI (خطة Pro: Settings → Networking → Enable Static IPs → 3 عناوين) + إدراج **الثلاثة** لدى TheSports + إعادة نشر → `ok:true`. **تنبيه دائم:** لا تُغيَّر منطقة (Region) الخدمة لاحقًا — العناوين الثابتة تتغيّر بتغيّرها فتُعاد إدراجها.
+
+## حالة التسليم (Handoff — 2026‑06‑23)
+
+> لأي إيجنت يلتقط العمل: هذا ملخّص الحالة الحيّة وكيفية التحقّق وأين الكود.
+
+- **الفرع:** `feat/sports-arabic-match-center` — آخر commit `b408ad9`. **مطلوب:** دمج الـPR إلى `main` (يُدمج تلقائيًّا — أُعيد بناؤه فوق آخر `main`). بعد الدمج تختفي أي بقايا تشخيص ويستقرّ كل شيء.
+- **بيئة الإنتاج تعمل الآن:** اتصال TheSports `ok` بعد تثبيت Static Outbound IPs (انظر «حسم اتصال الإنتاج» أعلاه). لا تُغيَّر منطقة خدمة Railway.
+- **بيانات الاعتماد للفحص اليدوي:** `THESPORTS_USER`/`THESPORTS_SECRET` على Railway. مثال نداء:
+  `curl --ipv4 "https://api.thesports.com/v1/football/<path>?<params>&user=<U>&secret=<S>"`
+- **⚠️ قائمة IP لدى TheSports محدودة السعة:** عند تثبيت عناوين Railway الثلاثة (2026‑06‑23) **أُزيل عنوان dev السابق `188.50.158.76`** — فالفحص المحلي/الـdev **لم يعد يصل TheSports** (يردّ «IP is not authorized»). للفحص اليدوي من جهازك: أعِد إدراج عنوان جهازك مؤقّتًا لدى TheSports (وقد يلزم حذف أحد العناوين بسبب الحدّ)، أو افحص من الإنتاج. **هذا يحجب التحقّق من `player/with_stat/list` حاليًّا.**
+- **أين الكود:** خدمة المزوّد `server/services/theSportsService.ts` (نداء `tsGet`، وكيل IPv4، كاش `withSWR`، `getTsLiveStandings`, `parseStandingTables`, `getTsTeamExtra`, `getTsCompetitionExtra`, `resolveTsNames`). دمج المونديال `server/services/worldCupService.ts` (`getWcTeamBridge` جسر الفِرق، `overlayLiveStandings`, `getWcCompetitionFacts`, `getWcTeamExtra`). المسارات `server/routes/worldCup.ts`. الواجهة `client/src/pages/WorldCup.tsx` + `client/src/components/worldcup/*` + `client/src/pages/WorldCupTeam.tsx`.
+- **ثوابت مفيدة:** `WC_COMPETITION_ID = kp3glrw7hwqdyjv` · موسم المونديال الحالي يُجلب من `competition/additional/list`.`curSeasonId`.
+- **قبل أي push:** `npm run check` (نظيف حاليًّا) + تأكّد من الفرع (`git branch --show-current`).
+- **التالي المُوصى به:** النقطة #1 (تصنيف فيفا) — لا تحتاج جسرًا جديدًا.
+
+## النقاط القادمة (Backlog مُرتَّب — كلّ نقطة PR مستقل)
+
+**جاهزة فورًا (المسارات مؤكَّدة وتعمل في الإنتاج الآن):**
+1. ✅ **(مُنفَّذ باك‑إند+ويب 2026‑06‑23 — بانتظار تحقّق حقول حيّ)** **تصنيف فيفا للمنتخبات (`ranking/fifa/men`):** ترتيب المنتخب + النقاط + التغيّر (▲▼) في ترويسة صفحة المنتخب وبطاقات القسم. `team.id` يطابق الجسر مباشرة — لا حاجة لمطابقة أسماء. أبسط مكسب وأعلى قيمة بصرية. — التفاصيل في «سجلّ تنفيذ النقاط الجاهزة» أدناه.
+2. ✅ **(مُنفَّذ باك‑إند+ويب 2026‑06‑23 — صفحة المنتخب فقط، بانتظار تحقّق حقول حيّ)** **الإصابات قبل المباراة (`team/injury/list`):** قائمة الغائبين/المصابين لكل منتخب عبر الجسر. **قرار:** على **صفحة المنتخب** فقط — مركز المباراة يعرض الغيابات أصلًا من SportMonks (`match-facts.absentees`) ومبدأ #1 يمنع تكرار المزوّد. — التفاصيل أدناه.
+3. ✅ **(مُنفَّذ باك‑إند+ويب 2026‑06‑23 — بانتظار تحقّق حقول حيّ)** **قنوات البثّ (`match/tv/list?uuid=<matchId>`):** «أين تُشاهد المباراة» في مركز مباراة المونديال — بُني معه **جسر معرّف المباراة** (النقطة 7). — التفاصيل أدناه.
+4. ⚠️✅ **(جزئي 2026‑06‑23: إحصاء الفريق مُنفَّذ باك‑إند+ويب؛ إحصاء اللاعب مؤجَّل)** **إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`):** إحصاء **الفريقين** يعمل (احتياط للمنتهية خلف SportMonks عبر جسر المباراة). إحصاء **اللاعب مؤجَّل**: يعتمد على اسم اللاعب وهو العائق المؤكَّد نفسه (نقطة الملف محجوبة، النقطة 5). — التفاصيل أدناه.
+
+**جاهزة بعد تأكيد الدعم (المسار وصل، يبقى التحقّق):**
+5. **القيمة السوقية للاعب + سجلّ الانتقالات:** المسار الناقص وصل — **`player/with_stat/list`** (ملف اللاعب: اسم/صورة/مركز) + `player/market/list` + `transfer/list` + `ability/list` (كلها تعمل). **الخطوة المتبقّية:** التحقّق من شكل `player/with_stat/list?team_id=<uuid>` ثم الربط بالاسم الإنجليزي داخل المنتخب، فعرض القيمة/الانتقالات في بطاقة اللاعب. **عائق التحقّق:** عنوان dev مُزال من قائمة TheSports (انظر «حالة التسليم») — يلزم إعادة إدراج عنوان dev أو الفحص من الإنتاج.
+
+**ديون تقنية/تحسينات:**
+6. **إصلاح تعريب أسماء TheSports (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`؛ الصحيح **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الحل المقترح: مزامنة دورية لقاموس `name_aa` بدل النداء المباشر.
+7. ✅ **(مُنفَّذ 2026‑06‑23 مع النقطة 3)** **جسر معرّف المباراة (API-Football matchId ↔ TheSports `uuid`):** `getWcMatchTsId` يطابق فريقي مباراتنا (عبر جسر الفِرق → uuid) بزوج فرق مباراة TheSports من `match/recent/list` (تطابق الزوج فريد، أدقّ من الوقت وحده)، الوقت كفاصل عند تكرار اللقاء. كاش بعد أول حلّ. جاهز لإعادة الاستخدام في النقطة 4.
+8. **توحيد مركز المباراة:** دمج مركز المونديال (`MatchCenterDialog`) مع العام (`MatchDialog`) لإزالة الازدواج بعد الاستقرار.
+9. **parity على iOS/Android** لكل ما سبق بعد استقرار الويب (iOS أولًا ثم Android 1:1).
+
 **التجارة:** نبدأ شهرًا واحدًا بـAdvanced Data ($1000) — يشمل Basic+Advanced لكل 1970+ دوري — ثم ربع سنوي. لا نأخذ Live Match Tracker (ويدجت iframe، نبني واجهتنا).
+
+## سجلّ تنفيذ النقاط الجاهزة (يبدأ 2026‑06‑23)
+
+> قيد عامّ على كل ما يلي: **IP جهاز التطوير غير مُدرَج لدى TheSports** فكل نداء من dev يردّ «IP is not authorized». لذا الميزات بُنيت **بتحليل دفاعي** (تجريب أسماء حقول محتملة) و**typecheck نظيف**، لكن **أسماء الحقول لم تُتحقَّق حيًّا** — يلزم تأكيدها على الإنتاج (Static IPs مُدرَجة) أو من جهاز مُدرَج. أي خطأ في اسم حقل يسقط بهدوء لحالة فارغة (لا عطل).
+
+### النقطة 1 — تصنيف فيفا (`ranking/fifa/men`) ✅ باك‑إند+ويب (2026‑06‑23)
+- **الباك‑إند (`theSportsService.ts`):** `getTsFifaRanking()` → `Map<uuid, TsFifaRank{rank,points,change}>`، كاش 24س (`EXTRA_TTL`)، أفضل جهد. تحليل دفاعي لاسم الفريق (`team_id` | `team.id` | `team` نصّي)، والرتبة (`ranking` | `rank` | `position`)، والنقاط (`points` | `point` | `score`)، والتغيّر يُشتقّ من الترتيب السابق (`previous_ranking`/`prev_ranking`/`last_ranking`/`old_ranking`؛ موجب = صعد ▲) وإلا حقل صريح (`ranking_change`/`rank_change`/`change`). مساعد `pickNum`.
+- **الجسر (`worldCupService.ts`):** `getWcTeamFifaRank(teamId)` عبر `getWcTeamBridge` (API-Football id → uuid) + `getTsFifaRanking`. أُضيف `fifaRank` إلى `WcTeamProfile`، و`getTeamsRanked()` يُثري قائمة المنتخبات بحقل `WcTeam.fifaRank` الاختياري (دون تلويث كاش `getTeams` الطويل).
+- **المسار:** `/api/world-cup/team/:teamId` يرجّع `fifaRank`؛ `/api/world-cup/teams` يستخدم `getTeamsRanked`.
+- **الويب:** شريحة «تصنيف فيفا #N» + سهم ▲/▼ ملوّن في ترويسة `WorldCupTeam.tsx`؛ شارة رقم رتبة صغيرة فوق شعار كل منتخب في `TeamsSection.tsx`.
+- **⚠️ متبقٍّ:** تحقّق حيّ من أسماء حقول `ranking/fifa/men` واتجاه ▲▼ (هل الحقل الصريح موجب=صعود أم نزول؟) من جهاز مُدرَج. + parity iOS/Android لاحقًا (النقطة 9).
+
+### النقطة 2 — الإصابات/الغيابات (`team/injury/list`) ✅ باك‑إند+ويب (2026‑06‑23)
+- **قرار النطاق:** على **صفحة المنتخب** فقط. مركز المباراة يعرض الغيابات من SportMonks (`match-facts.absentees`)؛ مبدأ #1 (مزوّد واحد لكل بيانة) يمنع التكرار.
+- **الباك‑إند (`theSportsService.ts`):** `getTsTeamInjuries(uuid)` → `TsInjury[]`، كاش 6س، أفضل جهد. تحليل دفاعي: معرّف/اسم اللاعب (`player_id`/`player_name`/`player.*`)، سبب نصّي (`reason`/`desc`/`description`)، معرّف نوع الإصابة (`type`/`injury_type`)، الحالة (`missing_type`/`status`)، وقت البداية/النهاية (`start_time`/`end_time`/`expected_end_time`).
+- **الجسر (`worldCupService.ts`):** `getWcTeamInjuries(teamId)` عبر الجسر؛ الأسماء معرَّبة best-effort (i18n type 5 ثم `worldCupNameTranslator`)، ونوع الإصابة عبر i18n type 6، والحالة عبر قاموس `INJURY_STATUS_AR`، وتاريخ العودة بـ`Intl` (ميلادي/الرياض). **يُسقط أي صفّ بلا اسم قابل للعرض.** أُضيف `injuries` إلى `WcTeamProfile`.
+- **الويب:** قسم «الإصابات والغيابات» في `WorldCupTeam.tsx` (بطاقة قائمة: اسم + سبب + حالة + تاريخ العودة) — يظهر فقط عند وجود إصابات.
+- **⚠️ متبقٍّ + مخاطرة معروفة:** (1) أسماء حقول `team/injury/list` غير متحقَّقة حيًّا. (2) **اسم اللاعب هو نقطة الضعف:** نقطة ملف اللاعب محجوبة وتعريب i18n type 5 قد يكون معطوبًا (PR #450) — فإن لم يأتِ اسم في الرد ولا من i18n، **القائمة تظهر فارغة** (best-effort). يُحسَّن بعد إصلاح النقطة 6 وتأكيد مسار ملف اللاعب. + parity iOS/Android لاحقًا.
+
+### النقطة 3 — قنوات البثّ (`match/tv/list`) + جسر معرّف المباراة (النقطة 7) ✅ باك‑إند+ويب (2026‑06‑23)
+- **جسر معرّف المباراة (`worldCupService.ts`):** `getWcMatchTsId(fixtureId)` — يجلب مباراتنا (`getFixtures`) ويحلّ فريقيها عبر جسر الفِرق إلى uuid، ثم يطابق زوج الفرق في `getTsCompetitionMatchPairs` (وُسِّع ليُرجع `id` معرّف المباراة) — **تطابق الزوج فريد لكل مباراة** (لا التباس تزامن)، والوقت فاصل عند تكرار اللقاء. كاش بعد أول حلّ (`wcMatchIdBridge`).
+- **الباك‑إند (`theSportsService.ts`):** `getTsMatchTv(matchUuid)` → `TsTvChannel[]`، كاش 6س، أفضل جهد + إزالة تكرار بالاسم. تحليل دفاعي: الاسم (`name`/`channel`/`tv_name`/`station`)، الدولة (`country`/`country_name`/`region`)، الرابط (`url`/`link`/`website`)، الشعار (`logo`/`icon`/`image`). و`getWcMatchTv(fixtureId)` يجمع الجسر + الجلب.
+- **المسار:** `/api/world-cup/match/:id/tv` → `{ available, channels }` (كاش طويل، القنوات شبه ثابتة).
+- **الويب:** مكوّن `MatchTvSection` (شريط شرائح: شعار + اسم + دولة، روابط إن وُجدت) بين ترويسة `MatchCenterDialog` والتبويبات، **للمباريات غير المنتهية فقط**، يختفي عند غياب قنوات.
+- **⚠️ متبقٍّ:** تحقّق حيّ من أسماء حقول `match/tv/list` + مفتاح `id` في `match/recent/list`. + parity iOS/Android لاحقًا.
+
+### النقطة 4 — إحصاء المباراة المفصّل (`team_stats` + `player_stats`) ⚠️ جزئي (2026‑06‑23)
+- **قرار النطاق:** إحصاء **الفريق** فقط الآن (خالٍ من أسماء اللاعبين، آمن). إحصاء **اللاعب مؤجَّل** — يعتمد على اسم اللاعب وهو العائق المؤكَّد نفسه (نقطة ملف اللاعب محجوبة، النقطة 5) فلا قيمة لشبكة أرقام بلا أسماء.
+- **الباك‑إند (`theSportsService.ts`):** `getTsMatchTeamStats(matchUuid)` → `TsTeamStat[]{type,home,away}` عبر جسر المباراة، كاش 2د/30د. **أعلى عدم يقين:** **بنية الرد** مجهولة (لا مجرّد أسماء حقول)؛ `parseTeamStats` يحلّل ثلاثة أشكال محتملة (مصفوفة صفوف / كائن `.stats` / `{home:[],away:[]}`).
+- **الجسر (`worldCupService.ts`):** `getWcMatchTeamStats(fixtureId)` → `WcStatistic[]`؛ يُسمّي **الأكواد المعروفة تجريبيًّا فقط** (`TS_TEAM_STAT_MAP`: استحواذ٪/تسديدات على‑خارج المرمى/هجمات/خطرة/ركنيات/بطاقات) ويُسقط المجهول لتفادي تسمية خاطئة، ويُسقط الإحصاء الصفري للطرفين.
+- **المسار:** `/api/world-cup/match/:id/stats` → `{ available, team }`.
+- **الويب (`StatsTab`):** أُدخل إحصاء TheSports المفصّل في سلسلة الأولوية **للمباريات المنتهية**: SportMonks ← **TheSports المفصّل** ← API-Football (لا تكرار، يملأ الفجوة فقط). لا تغيير على سلوك المباشر (TheSports اللحظي يبقى الأول).
+- **⚠️ متبقٍّ:** (1) تحقّق حيّ من **بنية** `match/team_stats/detail` (الأهم) وتوسيع `TS_TEAM_STAT_MAP` بأكواد إضافية (تمريرات/تسديدات كلية/تسلّل…) بعد رؤية الرد. (2) **إحصاء اللاعب** بعد تأكيد مسار ملف اللاعب وإصلاح النقطة 6. + parity iOS/Android.
 
 ## مبادئ ملزمة أثناء التنفيذ
 1. مزوّد واحد لكل بيانة (مصفوفة `SPORTS_DATA_SOURCES.md`) — لا تداخل.

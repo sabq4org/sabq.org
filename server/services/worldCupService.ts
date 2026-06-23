@@ -24,6 +24,12 @@ import {
   getTsCompetitionExtra,
   getTsCompetitionMatchPairs,
   getTsLiveStandings,
+  getTsFifaRanking,
+  getTsTeamInjuries,
+  getTsMatchTv,
+  getTsMatchTeamStats,
+  resolveTsNames,
+  TS_I18N_TYPE,
 } from "./theSportsService";
 import pLimit from "p-limit";
 
@@ -82,6 +88,8 @@ export interface WcTeam {
   name: string;
   logo: string;
   winner: boolean | null;
+  /** ترتيب فيفا للمنتخب (TheSports) — يُملأ في قائمة المنتخبات فقط، اختياري */
+  fifaRank?: number | null;
 }
 
 export interface WcFixture {
@@ -515,6 +523,26 @@ export async function getTeams(): Promise<WcTeam[]> {
   });
 }
 
+/**
+ * قائمة المنتخبات مُثراة بترتيب فيفا (TheSports) عبر الجسر — أفضل جهد: غياب
+ * TheSports → القائمة كما هي بلا ترتيب. لا نلوّث كاش `getTeams` الطويل لأن الترتيب
+ * (خريطة منفصلة مكاشة) يتغيّر شهريًّا والقائمة موسميًّا.
+ */
+export async function getTeamsRanked(): Promise<WcTeam[]> {
+  const teams = await getTeams();
+  try {
+    const [bridge, ranking] = await Promise.all([getWcTeamBridge(), getTsFifaRanking()]);
+    if (ranking.size === 0) return teams;
+    return teams.map((t) => {
+      const uuid = bridge.get(t.id);
+      const r = uuid ? ranking.get(uuid) : null;
+      return r ? { ...t, fifaRank: r.rank } : t;
+    });
+  } catch {
+    return teams;
+  }
+}
+
 export interface WcSquadPlayer {
   id: number;
   name: string;
@@ -639,6 +667,181 @@ export async function getWcTeamExtra(teamId: number): Promise<WcTeamExtra | null
   };
 }
 
+export interface WcFifaRank {
+  rank: number;
+  points: number | null;
+  /** عدد المراكز المتغيّرة منذ التحديث السابق (موجب = صعد ▲) — null إن تعذّر */
+  change: number | null;
+}
+
+/** تصنيف فيفا لمنتخب عبر الجسر (معرّف API-Football → uuid → ترتيب TheSports) — null إن تعذّر. */
+export async function getWcTeamFifaRank(teamId: number): Promise<WcFifaRank | null> {
+  const [bridge, ranking] = await Promise.all([getWcTeamBridge(), getTsFifaRanking()]);
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const r = ranking.get(uuid);
+  if (!r) return null;
+  return { rank: r.rank, points: r.points, change: r.change };
+}
+
+export interface WcInjury {
+  /** اسم اللاعب معرَّبًا (best-effort) */
+  player: string;
+  /** سبب الغياب (نوع الإصابة معرَّب أو نصّ المزوّد) — null إن تعذّر */
+  reason: string | null;
+  /** نوع الغياب: إصابة/إيقاف/مشكوك… معرَّبًا — null إن تعذّر */
+  status: string | null;
+  /** العودة المتوقّعة (تاريخ ميلادي مختصر) — null إن غاب */
+  until: string | null;
+}
+
+const INJURY_STATUS_AR: Record<string, string> = {
+  injured: "إصابة",
+  injury: "إصابة",
+  suspended: "إيقاف",
+  suspension: "إيقاف",
+  ban: "إيقاف",
+  doubtful: "مشكوك في جاهزيته",
+  questionable: "مشكوك في جاهزيته",
+  out: "غياب",
+};
+
+function fmtInjuryDate(ts: number | null): string | null {
+  if (!ts || ts <= 0) return null;
+  try {
+    return new Intl.DateTimeFormat("ar", {
+      day: "numeric",
+      month: "long",
+      calendar: "gregory",
+      timeZone: TIMEZONE,
+    }).format(new Date(ts * 1000));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * إصابات/غيابات منتخب عبر الجسر (TheSports) — أفضل جهد: غياب TheSports أو تعذّر
+ * الربط → []. الأسماء معرَّبة best-effort (i18n type 5 ثم مترجم الأسماء)، ونسقط
+ * أي صفّ بلا اسم قابل للعرض (لا قيمة لإصابة بلا لاعب).
+ */
+export async function getWcTeamInjuries(teamId: number): Promise<WcInjury[]> {
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return [];
+  const raw = await getTsTeamInjuries(uuid).catch(() => []);
+  if (raw.length === 0) return [];
+
+  // 1) أسماء عربية من i18n للاعبين الذين لهم معرّف؛ وأسماء أنواع الإصابة (type 6).
+  const playerIds = raw.map((r) => r.playerId).filter((x): x is string => !!x);
+  const reasonIds = raw.map((r) => r.reasonId).filter((x): x is string => !!x);
+  const noop = (_: string | null | undefined): string | null => null;
+  const [i18nPlayer, i18nReason] = await Promise.all([
+    resolveTsNames(TS_I18N_TYPE.player, playerIds).catch(() => noop),
+    resolveTsNames(TS_I18N_TYPE.injury, reasonIds).catch(() => noop),
+  ]);
+
+  // 2) الاسم المرشّح: عربي i18n إن وُجد، وإلا اسم الرد (قد يكون إنجليزيًّا).
+  const candidates = raw.map((r) => (r.playerId ? i18nPlayer(r.playerId) : null) ?? r.playerName ?? null);
+  // مترجم الأسماء يمرّر العربي كما هو ويعرّب الإنجليزي.
+  const tr = await resolveNames(candidates.filter((x): x is string => !!x));
+
+  const out: WcInjury[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const base = candidates[i];
+    if (!base) continue; // بلا اسم → لا نعرض
+    const r = raw[i];
+    const reason = (r.reasonId ? i18nReason(r.reasonId) : null) ?? r.reason ?? null;
+    const statusKey = (r.status ?? "").toLowerCase();
+    const status = INJURY_STATUS_AR[statusKey] ?? r.status ?? null;
+    out.push({ player: tr(base), reason, status, until: fmtInjuryDate(r.endTime) });
+  }
+  return out;
+}
+
+// ---------- جسر معرّف المباراة (API-Football fixtureId ↔ TheSports match uuid) ----------
+// نطابق فريقي مباراتنا (عبر جسر الفِرق → uuid) بزوج فرق مباراة TheSports من
+// match/recent/list، فينكشف معرّف مباراة TheSports. تطابق الزوج فريد لكل مباراة
+// (لا التباس بالتزامن كما في جسر النتيجة اللحظي الذي يعتمد الوقت وحده). أفضل جهد:
+// غياب جسر الفِرق أو المباراة → null. يُكاش المعرّف بعد أول حلّ.
+const wcMatchIdBridge = new Map<number, string>();
+
+export async function getWcMatchTsId(fixtureId: number): Promise<string | null> {
+  const cached = wcMatchIdBridge.get(fixtureId);
+  if (cached) return cached;
+  const [fixtures, bridge, comp] = await Promise.all([
+    getFixtures(),
+    getWcTeamBridge(),
+    getTsCompetitionExtra(WC_COMPETITION_ID),
+  ]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx?.home?.id || !fx?.away?.id) return null;
+  const homeUuid = bridge.get(fx.home.id);
+  const awayUuid = bridge.get(fx.away.id);
+  if (!homeUuid || !awayUuid) return null;
+  const pairs = await getTsCompetitionMatchPairs(WC_COMPETITION_ID, comp?.curSeasonId ?? null);
+  const matches = pairs.filter(
+    (p) =>
+      p.id &&
+      ((p.home === homeUuid && p.away === awayUuid) || (p.home === awayUuid && p.away === homeUuid)),
+  );
+  if (matches.length === 0) return null;
+  // تكرار اللقاء نادر في المونديال — نختار الأقرب زمنيًّا لوقت بدء مباراتنا.
+  const best = matches.reduce((a, b) =>
+    Math.abs(b.time - fx.timestamp) < Math.abs(a.time - fx.timestamp) ? b : a,
+  );
+  if (!best.id) return null;
+  wcMatchIdBridge.set(fixtureId, best.id);
+  return best.id;
+}
+
+export interface WcTvChannel {
+  name: string;
+  country: string | null;
+  url: string | null;
+  logo: string | null;
+}
+
+/** قنوات بثّ مباراة عبر جسر المباراة (TheSports) — [] إن تعذّر الجسر/الجلب. */
+export async function getWcMatchTv(fixtureId: number): Promise<WcTvChannel[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  return getTsMatchTv(uuid).catch(() => []);
+}
+
+// إحصاء الفريق المفصّل (TheSports) عبر جسر المباراة — للمباريات المنتهية احتياطًا
+// خلف SportMonks. نُسمّي الأكواد المعروفة فقط (مُتحقَّقة تجريبيًّا) ونُسقط المجهول.
+const TS_TEAM_STAT_MAP: Record<number, { label: string; pct?: boolean }> = {
+  25: { label: "الاستحواذ", pct: true },
+  21: { label: "تسديدات على المرمى" },
+  22: { label: "تسديدات خارج المرمى" },
+  23: { label: "الهجمات" },
+  24: { label: "الهجمات الخطرة" },
+  2: { label: "الركنيات" },
+  3: { label: "البطاقات الصفراء" },
+  4: { label: "البطاقات الحمراء" },
+};
+const TS_TEAM_STAT_ORDER = [25, 21, 22, 23, 24, 2, 3, 4];
+
+/** إحصاء الفريقين المفصّل لمباراة عبر الجسر (TheSports) — [] إن تعذّر. أكواد معروفة فقط. */
+export async function getWcMatchTeamStats(fixtureId: number): Promise<WcStatistic[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  const raw = await getTsMatchTeamStats(uuid).catch(() => []);
+  if (raw.length === 0) return [];
+  const byType = new Map(raw.map((r) => [r.type, r]));
+  const out: WcStatistic[] = [];
+  for (const t of TS_TEAM_STAT_ORDER) {
+    const r = byType.get(t);
+    const meta = TS_TEAM_STAT_MAP[t];
+    if (!r || !meta) continue;
+    if (r.home === 0 && r.away === 0) continue; // إحصاء صفري للطرفين = غير مُبلَّغ
+    const suffix = meta.pct ? "%" : "";
+    out.push({ key: `ts:team:${t}`, label: meta.label, home: `${r.home}${suffix}`, away: `${r.away}${suffix}` });
+  }
+  return out;
+}
+
 export interface WcCompetitionFacts {
   defendingChampion: WcTeam | null;
   defendingChampionTitles: number | null;
@@ -712,15 +915,21 @@ export interface WcTeamProfile {
   squad: WcSquadPlayer[];
   /** إثراء TheSports (قيمة سوقية/تأسيس/حجم القائمة) — null إن تعذّر */
   extra: WcTeamExtra | null;
+  /** تصنيف فيفا للمنتخب (TheSports) — null إن تعذّر الربط/الجلب */
+  fifaRank: WcFifaRank | null;
+  /** إصابات/غيابات المنتخب (TheSports) — [] إن تعذّر/لا يوجد */
+  injuries: WcInjury[];
 }
 
 export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | null> {
-  const [fixtures, squad, groups, teams, extra] = await Promise.all([
+  const [fixtures, squad, groups, teams, extra, fifaRank, injuries] = await Promise.all([
     getFixtures(),
     getSquad(teamId).catch(() => null),
     getStandings().catch(() => [] as WcGroup[]),
     getTeams().catch(() => [] as WcTeam[]),
     getWcTeamExtra(teamId).catch(() => null),
+    getWcTeamFifaRank(teamId).catch(() => null),
+    getWcTeamInjuries(teamId).catch(() => [] as WcInjury[]),
   ]);
 
   const teamFixtures = fixtures
@@ -753,6 +962,8 @@ export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | nu
     fixtures: teamFixtures,
     squad: squad?.players ?? [],
     extra,
+    fifaRank,
+    injuries,
   };
 }
 
