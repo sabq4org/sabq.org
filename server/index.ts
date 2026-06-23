@@ -728,6 +728,20 @@ app.use("/api", writeLimiter);
 // Anti-scraping read throttle scoped to the public World Cup feed (see above).
 app.use("/api/world-cup", worldCupReadLimiter);
 
+// كأس آسيا 2027 — نفس سقف القراءة للمونديال (نقاط عامة بلا كتابة). الحدّ قابل
+// للضبط بـ ASIAN_CUP_READ_RATE_LIMIT، يفترض 300/دقيقة لكل هويّة/IP.
+const asianCupReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.ASIAN_CUP_READ_RATE_LIMIT) || 300,
+  handler: rateLimitHandler,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false, keyGeneratorIpFallback: false },
+  keyGenerator: rateLimitKey,
+  skip: (req) => req.method !== 'GET' && req.method !== 'HEAD',
+});
+app.use("/api/asian-cup", asianCupReadLimiter);
+
 // ============================================
 // APM (Application Performance Monitoring) Middleware
 // ============================================
