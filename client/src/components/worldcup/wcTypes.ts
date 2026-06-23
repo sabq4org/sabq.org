@@ -280,6 +280,9 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  /** القيمة السوقية للاعب من TheSports (best-effort) — null/غياب = غير متاحة */
+  marketValue?: number | null;
+  marketValueCurrency?: string;
 }
 
 export interface WcSquad {
