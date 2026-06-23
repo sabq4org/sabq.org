@@ -107,9 +107,19 @@ export function groupFixturesByDay(fixtures: AcFixture[]): AcDayGroup[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(f);
   }
+  const involvesSaudi = (f: AcFixture) =>
+    f.home.id === SAUDI_TEAM_ID || f.away.id === SAUDI_TEAM_ID;
   return Array.from(map.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, items]) => ({ key, label: formatKickoffDay(items[0].date), items }));
+    .map(([key, items]) => ({
+      key,
+      label: formatKickoffDay(items[0].date),
+      // مباراة المنتخب المضيف تتصدّر يومها (السعودية × فلسطين تتصدّر الجولة الأولى)
+      items: [...items].sort(
+        (a, b) =>
+          (involvesSaudi(a) ? 0 : 1) - (involvesSaudi(b) ? 0 : 1) || a.timestamp - b.timestamp,
+      ),
+    }));
 }
 
 /** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية). */
