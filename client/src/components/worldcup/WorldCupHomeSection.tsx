@@ -16,9 +16,15 @@ import type { WcOverview } from "./wcTypes";
 export default function WorldCupHomeSection() {
   const { data: overview } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    refetchInterval: 60_000,
+    // مطابق لـWorldCupHomeStrip: 20ث أثناء المباراة، 60ث غير ذلك (كاش مشترك)
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      const live =
+        (d?.live?.length ?? 0) > 0 || Boolean(d?.matchOfTheDay?.fixture?.status.live);
+      return live ? 20_000 : 60_000;
+    },
     refetchIntervalInBackground: false,
-    staleTime: 30_000,
+    staleTime: 15_000,
   });
   const { data: newsData } = useQuery<{ news: WcNewsItem[] }>({
     queryKey: ["/api/world-cup/news", { limit: 8 }],
