@@ -361,7 +361,7 @@ function computeGroupQualification(
 // ثم قيمه اللحظية (نقاط/فارق/مركز) — يحدّث الجدول أسرع من API-Football عند صافرة
 // النهاية وأثناء المباريات. النقاط لا تُضاف إلا عند انتهاء المباراة (لا ازدواج مع
 // «المتبقّية»). فارغ = لا تغيير (الترتيب اللحظي غير مُفعَّل/لا مباراة جارية).
-async function overlayLiveStandings(groups: WcGroup[]): Promise<WcGroup[]> {
+async function overlayLiveStandings(groups: WcGroup[], hasLive: boolean): Promise<WcGroup[]> {
   try {
     const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
     const [live, bridge] = await Promise.all([
@@ -387,7 +387,8 @@ async function overlayLiveStandings(groups: WcGroup[]): Promise<WcGroup[]> {
           goalsAgainst: lv.goalsAgainst,
           goalsDiff: lv.goalDiff,
           points: lv.points,
-          live: true,
+          // الأرقام دائمًا من TheSports (أدقّ/أسرع)؛ شارة «مباشر» أثناء مباراة جارية فقط
+          live: hasLive ? true : r.live,
         };
       });
       if (!changed) return g;
@@ -405,7 +406,8 @@ export async function getStandingsWithQualification(): Promise<WcGroup[]> {
     getStandings(),
     getFixtures().catch(() => [] as WcFixture[]),
   ]);
-  const groups = await overlayLiveStandings(baseGroups);
+  const hasLive = fixtures.some((f) => f.status.live);
+  const groups = await overlayLiveStandings(baseGroups, hasLive);
   const teamGroup = new Map<number, string>();
   for (const g of groups) for (const r of g.rows) teamGroup.set(r.team.id, g.groupEn);
 
