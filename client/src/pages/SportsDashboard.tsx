@@ -344,7 +344,12 @@ export default function SportsDashboard() {
     .map(({ c }) => c);
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
-    queryKey: [`/api/sports/${compSlug}/matches`], refetchInterval: 30_000, refetchIntervalInBackground: false,
+    queryKey: [`/api/sports/${compSlug}/matches`],
+    // مباراة جارية في البطولة → 8ث (نتيجة لحظية)؛ غير ذلك → 30ث
+    refetchInterval: (query) =>
+      (query.state.data?.live ?? []).some((f) => f.status.live) ? 8_000 : 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const matchesConfigured = matchesData?.configured ?? true;
   const matches = {
@@ -355,19 +360,33 @@ export default function SportsDashboard() {
   };
 
   const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
-    queryKey: ["/api/sports/today"], refetchInterval: 30_000, refetchIntervalInBackground: false,
+    queryKey: ["/api/sports/today"],
+    // يوجد مباشر اليوم → 10ث؛ غير ذلك → 30ث
+    refetchInterval: (query) =>
+      (query.state.data?.today ?? []).some((f) => f.status.live) ? 10_000 : 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
   const liveCount = todayMatches.filter((f) => f.status.live).length;
 
-  // نبض المباشر: نداء مخصّص أسرع (15ث) لكل المباريات الجارية عبر بطولاتنا —
+  // نبض المباشر: نداء مخصّص أسرع (7ث) لكل المباريات الجارية عبر بطولاتنا —
   // هنا تظهر النتيجة/الدقيقة اللحظية من TheSports فور توفّرها في الإنتاج.
   const { data: liveData } = useQuery<{ live: SpLiveItem[] }>({
-    queryKey: ["/api/sports/live"], refetchInterval: 15_000, refetchIntervalInBackground: false,
+    queryKey: ["/api/sports/live"], refetchInterval: 7_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
   });
   const liveMatches = (Array.isArray(liveData?.live) ? liveData!.live : []).filter((f) => f.status.live);
 
-  const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({ queryKey: [`/api/sports/${compSlug}/standings`], staleTime: 5 * 60_000, enabled: hasStandings });
+  const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({
+    queryKey: [`/api/sports/${compSlug}/standings`],
+    staleTime: 5 * 60_000,
+    enabled: hasStandings,
+    // ترتيب مبدئي لحظي مفعّل (صفّ live) → 8ث ليتحرّك الجدول مع المباراة
+    refetchInterval: (query) =>
+      (query.state.data?.standings ?? []).some((r) => r.live) ? 8_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
   const standings = Array.isArray(standingsData?.standings) ? standingsData.standings : [];
 
   const { data: scorersData } = useQuery<{ scorers: SpScorer[] }>({ queryKey: [`/api/sports/${compSlug}/scorers`], staleTime: 10 * 60_000, enabled: hasScorers });

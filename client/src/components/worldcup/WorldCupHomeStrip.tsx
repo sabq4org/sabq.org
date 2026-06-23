@@ -90,15 +90,16 @@ function TickingCountdown({ timestamp }: { timestamp: number }) {
 export default function WorldCupHomeStrip() {
   const { data } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    // مباراة جارية → 20ث لتتحرّك النتيجة لحظيًا في شريط الواجهة؛ غير ذلك → 60ث
+    // مباراة جارية → 8ث لتتحرّك النتيجة لحظيًا في شريط الواجهة؛ غير ذلك → 60ث
     refetchInterval: (query) => {
       const d = query.state.data;
       const live =
         (d?.live?.length ?? 0) > 0 || Boolean(d?.matchOfTheDay?.fixture?.status.live);
-      return live ? 20_000 : 60_000;
+      return live ? 8_000 : 60_000;
     },
     refetchIntervalInBackground: false,
-    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
   });
 
   const fixture = data?.matchOfTheDay?.fixture ?? null;

@@ -150,6 +150,11 @@ function StandingsPane({ slug }: { slug: string }) {
   const { data, isLoading } = useQuery<{ standings: SpStandingRow[] }>({
     queryKey: [`/api/sports/${slug}/standings`],
     staleTime: 120_000,
+    // ترتيب مبدئي لحظي مفعّل (صفّ live) → 8ث ليتحرّك الجدول مع المباراة
+    refetchInterval: (query) =>
+      (query.state.data?.standings ?? []).some((r) => r.live) ? 8_000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const rows = Array.isArray(data?.standings) ? data!.standings : [];
   if (isLoading) return <TabLoader />;

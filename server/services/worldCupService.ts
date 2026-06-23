@@ -6,6 +6,7 @@
  * للمزود. التوقيت يُطلب من المزود مباشرة بتوقيت الرياض.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,
@@ -44,8 +45,11 @@ const LEAGUE_ID = 1; // World Cup
 const SEASON = 2026;
 const TIMEZONE = "Asia/Riyadh";
 
-// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني
-const LIVE_TTL = 15 * 1000;
+// إيقاعات تحديث أقصر من CACHE_TTL العام — البيانات الحية تتغير بالثواني.
+// 8ث (كان 15): قائمة المباريات الجارية تُلتقط أسرع (بدء/انتهاء) لتطابق إيقاع
+// النتيجة اللحظية المُركّبة فوقها. النتيجة نفسها تأتي من TheSports (5ث)/SportMonks
+// (دفعة 4ث) في الطبقة، فلا يحدّها هذا الكاش.
+const LIVE_TTL = 8 * 1000;
 // 30ث (كان 60): يلتقط cron أخبار المونديال لحظة FT أبكر بعد صافرة النهاية،
 // فيقلّص تأخّر نشر تقرير ما بعد المباراة. البيانات الحية تتغيّر بالثواني.
 const FIXTURES_TTL = 30 * 1000;
@@ -385,17 +389,24 @@ async function overlayLiveStandings(groups: WcGroup[], hasLive: boolean): Promis
         const lv = uuid ? live.get(uuid) : undefined;
         if (!lv) return r;
         changed = true;
+        // نأخذ كل حقل من TheSports فقط إن كان رقمًا صحيحًا، وإلا نبقي قيمة الأساس
+        // (تفادي حقول ناقصة من المزوّد تنتج undefined/null في الجدول). والفارق
+        // يُعاد حسابه من له/عليه لضمان عدم ظهوره فارغًا.
+        const num = (v: unknown, fallback: number): number =>
+          typeof v === "number" && Number.isFinite(v) ? v : fallback;
+        const goalsFor = num(lv.goals, r.goalsFor);
+        const goalsAgainst = num(lv.goalsAgainst, r.goalsAgainst);
         return {
           ...r,
-          rank: lv.position || r.rank,
-          played: lv.played,
-          win: lv.won,
-          draw: lv.draw,
-          lose: lv.loss,
-          goalsFor: lv.goals,
-          goalsAgainst: lv.goalsAgainst,
-          goalsDiff: lv.goalDiff,
-          points: lv.points,
+          rank: num(lv.position, r.rank) || r.rank,
+          played: num(lv.played, r.played),
+          win: num(lv.won, r.win),
+          draw: num(lv.draw, r.draw),
+          lose: num(lv.loss, r.lose),
+          goalsFor,
+          goalsAgainst,
+          goalsDiff: num(lv.goalDiff, goalsFor - goalsAgainst),
+          points: num(lv.points, r.points),
           // الأرقام دائمًا من TheSports (أدقّ/أسرع)؛ شارة «مباشر» أثناء مباراة جارية فقط
           live: hasLive ? true : r.live,
         };
@@ -442,6 +453,24 @@ export async function getStandingsWithQualification(): Promise<WcGroup[]> {
       ...g,
       rows: g.rows.map((r) => ({ ...r, qualifyStatus: status.get(r.team.id) ?? null })),
     };
+  });
+}
+
+/**
+ * ترتيب مبدئي (provisional) — يطبّق نتائج المباريات الجارية فوق الترتيب الأساسي
+ * لحظيًا، فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية. حالة التأهّل
+ * (qualifyStatus) تبقى على النتائج المؤكّدة لأنها تُحسب قبل هذا التطبيق. المنطق
+ * مشترك مع البوابة الرياضية عبر liveStandings.applyProvisionalTable.
+ */
+export function applyProvisionalLiveStandings(
+  groups: WcGroup[],
+  liveFixtures: WcFixture[],
+): WcGroup[] {
+  const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
+  if (live.length === 0) return groups;
+  return groups.map((g) => {
+    const rows = applyProvisionalTable(g.rows, live);
+    return rows === g.rows ? g : { ...g, rows };
   });
 }
 

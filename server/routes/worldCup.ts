@@ -13,6 +13,7 @@ import {
   getPlayerIdentityEn,
   getSquad,
   getStandingsWithQualification,
+  applyProvisionalLiveStandings,
   getTeamProfile,
   getWcCompetitionFacts,
   getWcMatchTv,
@@ -325,7 +326,13 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/standings", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      const groups = await getStandingsWithQualification();
+      // نطبّق نتائج المباريات الجارية (بأحدث نتيجة لحظية من TheSports) فوق الترتيب
+      // فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية.
+      const [baseGroups, liveFx] = await Promise.all([
+        getStandingsWithQualification(),
+        overlayLiveList(await getLiveFixtures()).catch(() => [] as WcFixture[]),
+      ]);
+      const groups = applyProvisionalLiveStandings(baseGroups, liveFx);
       // ترتيب لحظي مفعّل (صفّ live) → كاش قصير ليتطازج الجدول أثناء المباراة.
       // الافتراضي السابق (max-age=120) كان يحبس الجدول دقيقتين في المتصفح فيُلغي
       // الترتيب اللحظي عمليًا حتى لو أعاد العميل الجلب كل 20ث.

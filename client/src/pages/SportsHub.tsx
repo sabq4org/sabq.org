@@ -79,6 +79,7 @@ export interface SpStandingRow {
   rank: number; team: SpTeam; played: number; win: number; draw: number; lose: number;
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
   home?: SpStandingSplit | null; away?: SpStandingSplit | null;
+  live?: boolean;
 }
 export interface SpScorer {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
