@@ -141,6 +141,19 @@
 
 **حسم اتصال الإنتاج بـTheSports (2026‑06‑23 — مُغلَق ✅):** ظهرت البيانات في dev لا في الإنتاج. بنقطة تشخيص مؤقّتة (`_tsdiag`، أُزيلت بعد الحسم) تبيّن: المفاتيح مضبوطة (`configured:true`) والمسار صحيح، لكن `ok:false` بسبب **`IP is not authorized`**. السبب الجذري: **عنوان خروج Railway غير ثابت** يتغيّر مع كل نشر (يفسّر «ظهور القيمة السوقية ثم اختفاءها» بين نشرين). **الحل:** تفعيل **Static Outbound IPs** على خدمة الـAPI (خطة Pro: Settings → Networking → Enable Static IPs → 3 عناوين) + إدراج **الثلاثة** لدى TheSports + إعادة نشر → `ok:true`. **تنبيه دائم:** لا تُغيَّر منطقة (Region) الخدمة لاحقًا — العناوين الثابتة تتغيّر بتغيّرها فتُعاد إدراجها.
 
+## حالة التسليم (Handoff — 2026‑06‑23)
+
+> لأي إيجنت يلتقط العمل: هذا ملخّص الحالة الحيّة وكيفية التحقّق وأين الكود.
+
+- **الفرع:** `feat/sports-arabic-match-center` — آخر commit `b408ad9`. **مطلوب:** دمج الـPR إلى `main` (يُدمج تلقائيًّا — أُعيد بناؤه فوق آخر `main`). بعد الدمج تختفي أي بقايا تشخيص ويستقرّ كل شيء.
+- **بيئة الإنتاج تعمل الآن:** اتصال TheSports `ok` بعد تثبيت Static Outbound IPs (انظر «حسم اتصال الإنتاج» أعلاه). لا تُغيَّر منطقة خدمة Railway.
+- **بيانات الاعتماد للفحص اليدوي:** `THESPORTS_USER`/`THESPORTS_SECRET` على Railway. للفحص من جهازك يلزم إدراج IP جهازك لدى TheSports. مثال نداء:
+  `curl --ipv4 "https://api.thesports.com/v1/football/<path>?<params>&user=<U>&secret=<S>"`
+- **أين الكود:** خدمة المزوّد `server/services/theSportsService.ts` (نداء `tsGet`، وكيل IPv4، كاش `withSWR`، `getTsLiveStandings`, `parseStandingTables`, `getTsTeamExtra`, `getTsCompetitionExtra`, `resolveTsNames`). دمج المونديال `server/services/worldCupService.ts` (`getWcTeamBridge` جسر الفِرق، `overlayLiveStandings`, `getWcCompetitionFacts`, `getWcTeamExtra`). المسارات `server/routes/worldCup.ts`. الواجهة `client/src/pages/WorldCup.tsx` + `client/src/components/worldcup/*` + `client/src/pages/WorldCupTeam.tsx`.
+- **ثوابت مفيدة:** `WC_COMPETITION_ID = kp3glrw7hwqdyjv` · موسم المونديال الحالي يُجلب من `competition/additional/list`.`curSeasonId`.
+- **قبل أي push:** `npm run check` (نظيف حاليًّا) + تأكّد من الفرع (`git branch --show-current`).
+- **التالي المُوصى به:** النقطة #1 (تصنيف فيفا) — لا تحتاج جسرًا جديدًا.
+
 ## النقاط القادمة (Backlog مُرتَّب — كلّ نقطة PR مستقل)
 
 **جاهزة فورًا (المسارات مؤكَّدة وتعمل في الإنتاج الآن):**
