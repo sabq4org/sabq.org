@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { ListOrdered } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WcGroup, WcStandingRow } from "./wcTypes";
+import type { WcGroup, WcQualifyStatus, WcStandingRow } from "./wcTypes";
 
 interface StandingsSectionProps {
   groups: WcGroup[] | undefined;
@@ -14,6 +14,13 @@ const FORM_COLOR: Record<string, string> = {
   W: "bg-emerald-500",
   D: "bg-zinc-400",
   L: "bg-red-500",
+};
+
+// شارات حالة التأهّل (تُحسب خادميًّا من المباريات المتبقّية)
+const QUALIFY_META: Record<WcQualifyStatus, { dot: string; bar: string; label: string }> = {
+  qualified: { dot: "bg-emerald-500", bar: "border-emerald-500 bg-emerald-500/[0.08]", label: "تأهّل" },
+  contention: { dot: "bg-amber-500", bar: "border-amber-500 bg-amber-500/[0.06]", label: "في الصراع" },
+  eliminated: { dot: "bg-red-500", bar: "border-red-400/60", label: "خارج" },
 };
 
 function FormDots({ form }: { form: string | null }) {
@@ -28,14 +35,18 @@ function FormDots({ form }: { form: string | null }) {
 }
 
 function StandingRowItem({ row }: { row: WcStandingRow }) {
-  const highlight =
-    row.rank <= 2
+  const meta = row.qualifyStatus ? QUALIFY_META[row.qualifyStatus] : null;
+  // حالة التأهّل تتقدّم على تلوين المركز؛ وعند انتهاء دور المجموعات نعود للمركز.
+  const highlight = meta
+    ? `border-r-2 ${meta.bar}`
+    : row.rank <= 2
       ? "bg-emerald-500/[0.08] border-r-2 border-emerald-500"
       : row.rank === 3
         ? "bg-amber-500/[0.08] border-r-2 border-amber-500"
         : "border-r-2 border-transparent";
+  const dim = row.qualifyStatus === "eliminated" ? "opacity-60" : "";
   return (
-    <div className={`grid grid-cols-[1.25rem_1fr_2rem_2.5rem_2rem] items-center gap-1 rounded-md px-2 py-1.5 text-sm ${highlight}`}>
+    <div className={`grid grid-cols-[1.25rem_1fr_2rem_2.5rem_2rem] items-center gap-1 rounded-md px-2 py-1.5 text-sm ${highlight} ${dim}`}>
       <span className="text-center text-xs text-muted-foreground tabular-nums">{row.rank}</span>
       <div className="flex items-center gap-2 min-w-0">
         <Link
@@ -57,19 +68,44 @@ function StandingRowItem({ row }: { row: WcStandingRow }) {
 }
 
 export function StandingsSection({ groups, isLoading }: StandingsSectionProps) {
+  const hasStatus = (groups ?? []).some((g) => g.rows.some((r) => r.qualifyStatus));
+  const isLive = (groups ?? []).some((g) => g.rows.some((r) => r.live));
   return (
     <section dir="rtl" className="py-10 bg-muted/30" id="standings">
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-emerald-500/10">
-            <ListOrdered className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/10">
+              <ListOrdered className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-bold">ترتيب المجموعات</h2>
+                {isLive && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-bold text-red-600 dark:text-red-400">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                    </span>
+                    تحديث لحظي
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                يتأهل الأول والثاني من كل مجموعة مباشرة، ومعهما أفضل 8 منتخبات من أصحاب المركز الثالث
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold">ترتيب المجموعات</h2>
-            <p className="text-sm text-muted-foreground">
-              يتأهل الأول والثاني من كل مجموعة مباشرة، ومعهما أفضل 8 منتخبات من أصحاب المركز الثالث
-            </p>
-          </div>
+          {hasStatus && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+              {(["qualified", "contention", "eliminated"] as WcQualifyStatus[]).map((s) => (
+                <span key={s} className="flex items-center gap-1.5">
+                  <span className={`h-2.5 w-3.5 rounded-sm ${QUALIFY_META[s].dot}`} />
+                  {QUALIFY_META[s].label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {isLoading && (

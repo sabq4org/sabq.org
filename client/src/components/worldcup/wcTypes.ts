@@ -147,6 +147,8 @@ export interface WcFixture {
   penalties: { home: number | null; away: number | null } | null;
 }
 
+export type WcQualifyStatus = "qualified" | "eliminated" | "contention";
+
 export interface WcStandingRow {
   rank: number;
   team: WcTeam;
@@ -159,6 +161,10 @@ export interface WcStandingRow {
   goalsDiff: number;
   points: number;
   form: string | null;
+  // حالة التأهّل للمركزين الأوّلين (تُحسب خادميًّا) — null حين ينتهي دور المجموعات
+  qualifyStatus?: WcQualifyStatus | null;
+  // true إذا حُدِّث الصفّ لحظيًّا من TheSports
+  live?: boolean;
 }
 
 export interface WcGroup {
@@ -279,6 +285,13 @@ export interface WcSquad {
   players: WcSquadPlayer[];
 }
 
+export interface WcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
 export interface WcTeamProfile {
   team: WcTeam;
   isSaudi: boolean;
@@ -286,6 +299,23 @@ export interface WcTeamProfile {
   group: WcGroup | null;
   fixtures: WcFixture[];
   squad: WcSquadPlayer[];
+  extra?: WcTeamExtra | null;
+}
+
+/** حقائق البطولة — /api/world-cup/facts */
+export interface WcCompetitionFacts {
+  defendingChampion: WcTeam | null;
+  defendingChampionTitles: number | null;
+  mostTitles: { teams: WcTeam[]; count: number } | null;
+  host: string | null;
+}
+
+/** تنسيق القيمة السوقية بالعربية المختصرة (مليار/مليون) مع رمز العملة */
+export function formatMarketValue(value: number | null, currency = "€"): string | null {
+  if (value == null || value <= 0) return null;
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "")} مليار ${currency}`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")} مليون ${currency}`;
+  return `${value.toLocaleString("en-US")} ${currency}`;
 }
 
 export interface WcPlayerCareerStop {

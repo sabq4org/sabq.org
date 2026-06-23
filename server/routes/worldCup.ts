@@ -12,8 +12,9 @@ import {
   getPlayerCard,
   getPlayerIdentityEn,
   getSquad,
-  getStandings,
+  getStandingsWithQualification,
   getTeamProfile,
+  getWcCompetitionFacts,
   getTeams,
   getTopAssists,
   getTopCards,
@@ -313,10 +314,22 @@ export function registerWorldCupRoutes(app: Express) {
     if (!guard(res)) return;
     try {
       res.set("Cache-Control", "public, max-age=120, s-maxage=300, stale-while-revalidate=600");
-      res.json({ groups: await getStandings() });
+      res.json({ groups: await getStandingsWithQualification() });
     } catch (error) {
       console.error("[WorldCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
+    }
+  });
+
+  // حقائق البطولة (حامل اللقب + الأكثر تتويجًا + الدول المضيفة) — إثراء TheSports.
+  app.get("/api/world-cup/facts", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      res.json(await getWcCompetitionFacts());
+    } catch (error) {
+      console.error("[WorldCup] facts failed:", error);
+      res.status(502).json({ message: "تعذر جلب حقائق البطولة حاليًا" });
     }
   });
 

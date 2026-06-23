@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog } from "lucide-react";
+import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -13,11 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MatchCard } from "@/components/worldcup/MatchCard";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
 import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
-import type {
-  WcFixture,
-  WcSquadPlayer,
-  WcStandingRow,
-  WcTeamProfile,
+import {
+  formatMarketValue,
+  type WcFixture,
+  type WcSquadPlayer,
+  type WcStandingRow,
+  type WcTeamProfile,
 } from "@/components/worldcup/wcTypes";
 
 const POSITION_SECTIONS = [
@@ -207,6 +208,18 @@ export default function WorldCupTeam() {
                       <span className="inline-flex items-center gap-1.5">
                         <UserCog className="h-4 w-4" />
                         المدرّب: {data.coach}
+                      </span>
+                    )}
+                    {data.extra?.marketValue != null && (
+                      <span className="inline-flex items-center gap-1.5" title="القيمة السوقية للتشكيلة">
+                        <Wallet className="h-4 w-4" />
+                        {formatMarketValue(data.extra.marketValue, data.extra.marketValueCurrency)}
+                      </span>
+                    )}
+                    {data.extra?.foundation != null && (
+                      <span className="inline-flex items-center gap-1.5" title="سنة التأسيس">
+                        <Landmark className="h-4 w-4" />
+                        تأسّس {data.extra.foundation}
                       </span>
                     )}
                   </div>
