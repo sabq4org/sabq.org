@@ -307,6 +307,7 @@ export default function SportsDashboard() {
 
   const { data: cardsData } = useQuery<{ yellow: SpCardLeader[]; red: SpCardLeader[] }>({ queryKey: [`/api/sports/${compSlug}/cards`], staleTime: 10 * 60_000, enabled: hasScorers && scorersTab === "cards" });
   const yellowLeaders = Array.isArray(cardsData?.yellow) ? cardsData.yellow : [];
+  const redLeaders = Array.isArray(cardsData?.red) ? cardsData.red : [];
 
   const { data: shortsByCat } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts", { categoryId: sportsCatId, limit: 12 }], enabled: !!sportsCatId, staleTime: 10 * 60_000 });
   const { data: shortsFeatured } = useQuery<{ shorts: SpShort[] }>({ queryKey: ["/api/shorts/featured", { limit: 12 }], staleTime: 10 * 60_000 });
@@ -462,7 +463,7 @@ export default function SportsDashboard() {
                   <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">بانتظار أولى الصناعات — يظهر ترتيب صنّاع الأهداف هنا مع انطلاق المنافسة.</div>
                 )
               ) : (
-                yellowLeaders.length ? <CardLeaders leaders={yellowLeaders} /> : (
+                yellowLeaders.length ? <CardLeaders leaders={yellowLeaders} red={redLeaders} /> : (
                   <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">لا تتوفّر بيانات البطاقات لهذه البطولة بعد.</div>
                 )
               )}

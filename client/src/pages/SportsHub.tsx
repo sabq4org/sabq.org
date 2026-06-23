@@ -274,41 +274,50 @@ export function useSportsFollows() {
   return { isAuthed: !!user, follows, has, get, toggle, setNotify };
 }
 
-// أزرار متابعة الفريق: نجمة المتابعة + جرس كتم الإشعارات (يظهر عند المتابعة فقط).
-// تظهر للمستخدم المسجَّل فقط.
-function TeamFollowControls({ refId, refName, refLogo }: {
-  refId: string | number; refName: string; refLogo?: string | null;
+// أزرار المتابعة: نجمة المتابعة + جرس كتم الإشعارات (يظهر عند المتابعة فقط).
+// تدعم الفريق والبطولة (kind)، وتظهر للمستخدم المسجَّل فقط.
+export function FollowControls({ kind = "team", refId, refName, refLogo, size = "sm" }: {
+  kind?: SpFollow["kind"]; refId: string | number; refName: string; refLogo?: string | null;
+  size?: "sm" | "md";
 }) {
   const { isAuthed, has, get, toggle, setNotify } = useSportsFollows();
   if (!isAuthed) return null;
-  const active = has("team", refId);
-  const follow = get("team", refId);
+  const active = has(kind, refId);
+  const follow = get(kind, refId);
   const muted = follow ? !follow.notify : false;
+  const followLabel = kind === "competition" ? "متابعة البطولة" : "متابعة الفريق";
+  const btnPad = size === "md" ? "px-3.5 py-1.5 text-sm" : "px-2.5 py-1 text-xs";
+  const iconSize = size === "md" ? "w-4 h-4" : "w-3.5 h-3.5";
   return (
     <div className="flex items-center gap-1">
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); void toggle("team", refId, refName, refLogo); }}
-        title={active ? "إلغاء المتابعة" : "متابعة الفريق"}
+        onClick={(e) => { e.stopPropagation(); void toggle(kind, refId, refName, refLogo); }}
+        title={active ? "إلغاء المتابعة" : followLabel}
         aria-pressed={active}
-        className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs font-bold transition-colors hover:bg-muted"
+        className={`inline-flex items-center gap-1 rounded-full border border-border ${btnPad} font-bold transition-colors hover:bg-muted`}
       >
-        <Star className={`w-3.5 h-3.5 ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+        <Star className={`${iconSize} ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
         {active ? "متابَع" : "متابعة"}
       </button>
       {active && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); void setNotify("team", refId, muted); }}
+          onClick={(e) => { e.stopPropagation(); void setNotify(kind, refId, muted); }}
           title={muted ? "تفعيل الإشعارات" : "كتم الإشعارات"}
           aria-pressed={!muted}
           className="inline-flex items-center justify-center rounded-full border border-border p-1.5 transition-colors hover:bg-muted"
         >
-          {muted ? <BellOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Bell className="w-3.5 h-3.5 text-primary" />}
+          {muted ? <BellOff className={`${iconSize} text-muted-foreground`} /> : <Bell className={`${iconSize} text-primary`} />}
         </button>
       )}
     </div>
   );
+}
+
+// اسم متوافق مع الاستخدام القديم داخل MatchDialog.
+function TeamFollowControls(props: { refId: string | number; refName: string; refLogo?: string | null }) {
+  return <FollowControls kind="team" {...props} />;
 }
 
 // صفّ نتائج مدمج لمباراة اليوم (بنفس نمط بطاقة النتائج المدمجة) — للجوال.
@@ -1116,11 +1125,34 @@ function LineupTeam({ lineup }: { lineup: SpLineup }) {
     </div>
   );
 }
-// الموجة 2: قائمة متصدّري البطاقات (إنذارات + طرد).
-export function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
+// الموجة 2: قائمة متصدّري البطاقات (إنذارات + طرد). عند تمرير قائمة الطرد
+// (red) تظهر مفاتيح تبديل بين «الإنذارات» و«الطرد».
+export function CardLeaders({ leaders, red }: { leaders: SpCardLeader[]; red?: SpCardLeader[] }) {
+  const hasRed = Array.isArray(red) && red.length > 0;
+  const [view, setView] = useState<"yellow" | "red">("yellow");
+  const list = view === "red" && hasRed ? red! : leaders;
   return (
-    <div className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border">
-      {leaders.map((p) => (
+    <div className="space-y-2">
+      {hasRed && (
+        <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setView("yellow")}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${view === "yellow" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+          >
+            <span className="w-2.5 h-3.5 rounded-sm bg-amber-400" /> الإنذارات
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("red")}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${view === "red" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+          >
+            <span className="w-2.5 h-3.5 rounded-sm bg-red-500" /> الطرد
+          </button>
+        </div>
+      )}
+      <div className="bg-card rounded-2xl border border-border overflow-hidden divide-y divide-border">
+      {list.map((p) => (
         <div key={p.id || p.rank} className="flex items-center gap-3 px-4 py-2.5">
           <span className="w-5 text-center font-bold text-muted-foreground text-sm tabular-nums shrink-0">{p.rank}</span>
           {p.photo ? <img src={p.photo} alt="" className="w-9 h-9 rounded-full object-cover bg-muted shrink-0" loading="lazy" /> : <span className="w-9 h-9 rounded-full bg-muted shrink-0" />}
@@ -1146,6 +1178,7 @@ export function CardLeaders({ leaders }: { leaders: SpCardLeader[] }) {
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -1524,9 +1557,10 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
     refetchInterval: (q) => (q.state.data?.fixture?.status?.live ? 15_000 : false),
   });
   const [tab, setTab] = useState("events");
-  // المعاينة بالذكاء الاصطناعي عند الطلب فقط (لا تتولّد تلقائيًا عند فتح المباراة).
+  // المعاينة/الملخّص بالذكاء الاصطناعي عند الطلب فقط (لا تتولّد تلقائيًا عند الفتح).
   const [previewRequested, setPreviewRequested] = useState(false);
-  useEffect(() => { setPreviewRequested(false); setTab("events"); }, [id]);
+  const [storyRequested, setStoryRequested] = useState(false);
+  useEffect(() => { setPreviewRequested(false); setStoryRequested(false); setTab("events"); }, [id]);
   // البند 12: توقّعات تُجلب بكسل للمباريات غير المبدوءة فقط.
   const fixtureStatus = data?.fixture?.status;
   const isUpcoming = !!fixtureStatus && !fixtureStatus.finished && !fixtureStatus.live;
@@ -1541,6 +1575,15 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
     queryKey: [`/api/sports/match/${id}/preview`],
     enabled: id != null && isUpcoming && tab === "preview" && previewRequested,
     staleTime: 30 * 60_000,
+  });
+  // الملخّص الذكي: للمباريات الجارية/المنتهية، عند الطلب. سرد لحظي وقت المباراة.
+  const storyLive = !!fixtureStatus?.live;
+  const storyStarted = !!fixtureStatus && (fixtureStatus.finished || fixtureStatus.live);
+  const { data: story, isLoading: storyLoading } = useQuery<SpMatchStory>({
+    queryKey: [`/api/sports/match/${id}/story`],
+    enabled: id != null && storyStarted && tab === "story" && storyRequested,
+    staleTime: storyLive ? 60_000 : 30 * 60_000,
+    refetchInterval: storyLive && tab === "story" && storyRequested ? 90_000 : false,
   });
   const homeId = data?.fixture?.home?.id;
   const awayId = data?.fixture?.away?.id;
@@ -1601,6 +1644,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
   const tabs = [
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
+    started ? { key: "story", label: "ملخّص ذكي" } : null,
     stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
@@ -1705,6 +1749,24 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                 <button type="button" onClick={() => setPreviewRequested(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
                   <Sparkles className="w-4 h-4" /> ولّد المعاينة بالذكاء الاصطناعي
+                </button>
+              </div>
+            )
+          )}
+          {!isLoading && activeKey === "story" && (
+            storyRequested ? (
+              <AiNarrative loading={storyLoading} text={story?.text} kind="story" live={story?.live ?? storyLive} />
+            ) : (
+              <div className="py-8 text-center">
+                <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
+                <p className="text-sm text-muted-foreground mb-4">
+                  {storyLive
+                    ? "سرد لحظي يلخّص أبرز ما يجري في المباراة حتى الآن."
+                    : "ملخّص ذكي يحكي قصّة المباراة وأبرز محطّاتها."}
+                </p>
+                <button type="button" onClick={() => setStoryRequested(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
+                  <Sparkles className="w-4 h-4" /> {storyLive ? "ولّد السرد اللحظي" : "ولّد الملخّص الذكي"}
                 </button>
               </div>
             )

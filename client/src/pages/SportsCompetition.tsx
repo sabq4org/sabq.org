@@ -34,6 +34,7 @@ import {
   CardLeaders,
   COMP_CATEGORY_LABELS,
   COMP_STATUS_LABELS,
+  FollowControls,
   MatchDialog,
   PodiumCard,
   StandingsTable,
@@ -205,9 +206,10 @@ function CardsPane({ slug }: { slug: string }) {
     staleTime: 300_000,
   });
   const yellow = Array.isArray(data?.yellow) ? data!.yellow : [];
+  const red = Array.isArray(data?.red) ? data!.red : [];
   if (isLoading) return <TabLoader />;
   if (yellow.length === 0) return <TabEmpty text="لا تتوفّر إحصاءات بطاقات لهذه البطولة." />;
-  return <CardLeaders leaders={yellow} />;
+  return <CardLeaders leaders={yellow} red={red} />;
 }
 
 // ---------- المباريات (نفس صف صفحة «مباريات اليوم») ----------
@@ -374,6 +376,17 @@ export default function SportsCompetition() {
                   )}
                 </div>
               </div>
+              {comp && (
+                <div className="shrink-0 self-start">
+                  <FollowControls
+                    kind="competition"
+                    refId={slug}
+                    refName={comp.name}
+                    refLogo={comp.logo}
+                    size="md"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
