@@ -12,8 +12,8 @@ import {
   getPlayerCard,
   getPlayerIdentityEn,
   getSquad,
-  getStandingsWithQualification,
-  applyProvisionalLiveStandings,
+  getStandings,
+  buildGroupStandings,
   getTeamProfile,
   getWcCompetitionFacts,
   getWcMatchTv,
@@ -326,16 +326,15 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/standings", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      // نطبّق نتائج المباريات الجارية (بأحدث نتيجة لحظية من TheSports) فوق الترتيب
-      // فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية.
-      const [baseGroups, liveFx] = await Promise.all([
-        getStandingsWithQualification(),
-        overlayLiveList(await getLiveFixtures()).catch(() => [] as WcFixture[]),
+      // نبني الجدول من المباريات نفسها (مصدر واحد متّسق): مباريات مُركّبة بأحدث
+      // نتيجة من TheSports — المنتهية تُحتسب نهائيًّا فور الصافرة (لا فجوة انتظار)
+      // والجارية تُطبَّق مبدئيًّا فيتحرّك الجدول مع كل هدف.
+      const [baseGroups, fixtures] = await Promise.all([
+        getStandings(),
+        overlayLiveList(await getFixtures()),
       ]);
-      const groups = applyProvisionalLiveStandings(baseGroups, liveFx);
+      const groups = buildGroupStandings(baseGroups, fixtures);
       // ترتيب لحظي مفعّل (صفّ live) → كاش قصير ليتطازج الجدول أثناء المباراة.
-      // الافتراضي السابق (max-age=120) كان يحبس الجدول دقيقتين في المتصفح فيُلغي
-      // الترتيب اللحظي عمليًا حتى لو أعاد العميل الجلب كل 20ث.
       const hasLive = groups.some((g) => (g.rows ?? []).some((r) => r.live));
       res.set(
         "Cache-Control",

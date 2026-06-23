@@ -6,7 +6,6 @@
  * للمزود. التوقيت يُطلب من المزود مباشرة بتوقيت الرياض.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
-import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,
@@ -369,109 +368,119 @@ function computeGroupQualification(
   return result;
 }
 
-/** الترتيب مع حالة التأهّل لكل منتخب — يدمج المباريات المتبقّية لكل مجموعة. */
-// يطبّق ترتيب TheSports اللحظي فوق صفوف API-Football: لكل صفّ نجد uuid عبر الجسر
-// ثم قيمه اللحظية (نقاط/فارق/مركز) — يحدّث الجدول أسرع من API-Football عند صافرة
-// النهاية وأثناء المباريات. النقاط لا تُضاف إلا عند انتهاء المباراة (لا ازدواج مع
-// «المتبقّية»). فارغ = لا تغيير (الترتيب اللحظي غير مُفعَّل/لا مباراة جارية).
-async function overlayLiveStandings(groups: WcGroup[], hasLive: boolean): Promise<WcGroup[]> {
-  try {
-    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
-    const [live, bridge] = await Promise.all([
-      getTsLiveStandings(WC_COMPETITION_ID, comp?.curSeasonId ?? null),
-      getWcTeamBridge(),
-    ]);
-    if (live.size === 0 || bridge.size === 0) return groups;
-    return groups.map((g) => {
-      let changed = false;
-      const rows = g.rows.map((r) => {
-        const uuid = bridge.get(r.team.id);
-        const lv = uuid ? live.get(uuid) : undefined;
-        if (!lv) return r;
-        changed = true;
-        // نأخذ كل حقل من TheSports فقط إن كان رقمًا صحيحًا، وإلا نبقي قيمة الأساس
-        // (تفادي حقول ناقصة من المزوّد تنتج undefined/null في الجدول). والفارق
-        // يُعاد حسابه من له/عليه لضمان عدم ظهوره فارغًا.
-        const num = (v: unknown, fallback: number): number =>
-          typeof v === "number" && Number.isFinite(v) ? v : fallback;
-        const goalsFor = num(lv.goals, r.goalsFor);
-        const goalsAgainst = num(lv.goalsAgainst, r.goalsAgainst);
-        return {
-          ...r,
-          rank: num(lv.position, r.rank) || r.rank,
-          played: num(lv.played, r.played),
-          win: num(lv.won, r.win),
-          draw: num(lv.draw, r.draw),
-          lose: num(lv.loss, r.lose),
-          goalsFor,
-          goalsAgainst,
-          goalsDiff: num(lv.goalDiff, goalsFor - goalsAgainst),
-          points: num(lv.points, r.points),
-          // الأرقام دائمًا من TheSports (أدقّ/أسرع)؛ شارة «مباشر» أثناء مباراة جارية فقط
-          live: hasLive ? true : r.live,
-        };
-      });
-      if (!changed) return g;
-      rows.sort((a, b) => a.rank - b.rank || b.points - a.points || b.goalsDiff - a.goalsDiff);
-      return { ...g, rows };
-    });
-  } catch (error) {
-    console.warn("[WorldCup] live standings overlay failed:", error);
-    return groups;
-  }
+// صفّ ترتيب مُصفّر لمنتخب (نقطة انطلاق الحساب من المباريات).
+function blankStandingRow(team: WcTeam, form: string | null): WcStandingRow {
+  return {
+    rank: 0,
+    team,
+    played: 0,
+    win: 0,
+    draw: 0,
+    lose: 0,
+    goalsFor: 0,
+    goalsAgainst: 0,
+    goalsDiff: 0,
+    points: 0,
+    form,
+    live: false,
+  };
 }
 
+// تطبيق نتيجة مباراة واحدة على صفّ منتخب.
+function accumulateMatch(row: WcStandingRow, scored: number, conceded: number, live: boolean): void {
+  row.played += 1;
+  row.goalsFor += scored;
+  row.goalsAgainst += conceded;
+  row.goalsDiff = row.goalsFor - row.goalsAgainst;
+  if (scored > conceded) {
+    row.win += 1;
+    row.points += 3;
+  } else if (scored === conceded) {
+    row.draw += 1;
+    row.points += 1;
+  } else {
+    row.lose += 1;
+  }
+  if (live) row.live = true;
+}
+
+// فرز وترقيم محلّي (1..N): نقاط ← فارق ← له ← الاسم. لا نثق بترتيب المزوّد لأنه
+// متأخّر/مختلط (شوهد بفجوات 1,2,4,5 وبخلط مصادر).
+function rankGroupRows(rows: WcStandingRow[]): WcStandingRow[] {
+  rows.sort(
+    (a, b) =>
+      b.points - a.points ||
+      b.goalsDiff - a.goalsDiff ||
+      b.goalsFor - a.goalsFor ||
+      a.team.name.localeCompare(b.team.name, "ar"),
+  );
+  rows.forEach((r, i) => {
+    r.rank = i + 1;
+  });
+  return rows;
+}
+
+/**
+ * يبني جدول كل مجموعة من المباريات نفسها (مصدر واحد متّسق) بدل الوثوق بنقطة
+ * standings لدى المزوّد (المتأخّرة/المختلطة). المنتهية تُحتسب نهائيًّا؛ الجارية
+ * تُطبَّق مبدئيًّا (provisional) وتُعلَّم live فيتحرّك الجدول مع كل هدف ولا تختفي
+ * النتيجة لحظة الصافرة (تتحوّل من «جارية» إلى «منتهية» في نفس المصدر).
+ *
+ * حالة التأهّل تُحسب من النتائج **المؤكّدة فقط** (المنتهية) + المباريات المتبقّية
+ * (تشمل الجارية) كي لا نُعلن تأهّلًا/إقصاءً بناءً على نتيجة لم تُحسم بعد.
+ *
+ * البنية (أعضاء كل مجموعة + أسماء/شعارات) من baseGroups؛ والأرقام كلها من fixtures.
+ */
+export function buildGroupStandings(baseGroups: WcGroup[], fixtures: WcFixture[]): WcGroup[] {
+  return baseGroups.map((g) => {
+    const ids = new Set(g.rows.map((r) => r.team.id));
+    const display = new Map<number, WcStandingRow>();
+    const confirmed = new Map<number, WcStandingRow>();
+    for (const r of g.rows) {
+      display.set(r.team.id, blankStandingRow(r.team, r.form ?? null));
+      confirmed.set(r.team.id, blankStandingRow(r.team, r.form ?? null));
+    }
+
+    const remaining: RemainingMatch[] = [];
+    for (const f of fixtures) {
+      if (!ids.has(f.home.id) || !ids.has(f.away.id)) continue; // داخل المجموعة فقط
+      const gh = f.goals.home;
+      const ga = f.goals.away;
+      const hasScore = gh != null && ga != null;
+      if (f.status.finished && hasScore) {
+        accumulateMatch(display.get(f.home.id)!, gh!, ga!, false);
+        accumulateMatch(display.get(f.away.id)!, ga!, gh!, false);
+        accumulateMatch(confirmed.get(f.home.id)!, gh!, ga!, false);
+        accumulateMatch(confirmed.get(f.away.id)!, ga!, gh!, false);
+      } else if (f.status.live && hasScore) {
+        // جارية: ترتيب مبدئي على العرض فقط، وتبقى ضمن «المتبقّية» للتأهّل.
+        accumulateMatch(display.get(f.home.id)!, gh!, ga!, true);
+        accumulateMatch(display.get(f.away.id)!, ga!, gh!, true);
+        remaining.push({ homeId: f.home.id, awayId: f.away.id });
+      } else if (!f.status.finished) {
+        remaining.push({ homeId: f.home.id, awayId: f.away.id }); // مقرّرة لم تبدأ
+      }
+    }
+
+    const rows = rankGroupRows([...display.values()]);
+    const status =
+      remaining.length > 0
+        ? computeGroupQualification([...confirmed.values()], remaining)
+        : null;
+    return {
+      ...g,
+      rows: rows.map((r) => ({ ...r, qualifyStatus: status ? status.get(r.team.id) ?? null : null })),
+    };
+  });
+}
+
+/** الترتيب مع حالة التأهّل — يُحسب من المباريات (المنتهية نهائيّة، الجارية مبدئية). */
 export async function getStandingsWithQualification(): Promise<WcGroup[]> {
   const [baseGroups, fixtures] = await Promise.all([
     getStandings(),
     getFixtures().catch(() => [] as WcFixture[]),
   ]);
-  const hasLive = fixtures.some((f) => f.status.live);
-  const groups = await overlayLiveStandings(baseGroups, hasLive);
-  const teamGroup = new Map<number, string>();
-  for (const g of groups) for (const r of g.rows) teamGroup.set(r.team.id, g.groupEn);
-
-  const remainingByGroup = new Map<string, RemainingMatch[]>();
-  for (const f of fixtures) {
-    if (f.status.finished) continue;
-    const hg = teamGroup.get(f.home.id);
-    const ag = teamGroup.get(f.away.id);
-    if (!hg || !ag || hg !== ag) continue; // مباريات الإقصاء (TBD) تُستبعد تلقائيًّا
-    const arr = remainingByGroup.get(hg) ?? [];
-    arr.push({ homeId: f.home.id, awayId: f.away.id });
-    remainingByGroup.set(hg, arr);
-  }
-
-  return groups.map((g) => {
-    const remaining = remainingByGroup.get(g.groupEn) ?? [];
-    // دور المجموعات منتهٍ لهذه المجموعة → لا حالة (الشجرة تتكفّل بالتأهّل)
-    if (remaining.length === 0) {
-      return { ...g, rows: g.rows.map((r) => ({ ...r, qualifyStatus: null })) };
-    }
-    const status = computeGroupQualification(g.rows, remaining);
-    return {
-      ...g,
-      rows: g.rows.map((r) => ({ ...r, qualifyStatus: status.get(r.team.id) ?? null })),
-    };
-  });
-}
-
-/**
- * ترتيب مبدئي (provisional) — يطبّق نتائج المباريات الجارية فوق الترتيب الأساسي
- * لحظيًا، فيتحرّك الجدول مع كل هدف بدل الانتظار حتى صافرة النهاية. حالة التأهّل
- * (qualifyStatus) تبقى على النتائج المؤكّدة لأنها تُحسب قبل هذا التطبيق. المنطق
- * مشترك مع البوابة الرياضية عبر liveStandings.applyProvisionalTable.
- */
-export function applyProvisionalLiveStandings(
-  groups: WcGroup[],
-  liveFixtures: WcFixture[],
-): WcGroup[] {
-  const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
-  if (live.length === 0) return groups;
-  return groups.map((g) => {
-    const rows = applyProvisionalTable(g.rows, live);
-    return rows === g.rows ? g : { ...g, rows };
-  });
+  return buildGroupStandings(baseGroups, fixtures);
 }
 
 export interface WcScorer {
