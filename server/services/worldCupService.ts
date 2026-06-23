@@ -28,8 +28,6 @@ import {
   getTsTeamInjuries,
   getTsMatchTv,
   getTsMatchTeamStats,
-  getTsTeamPlayers,
-  tsRawSample,
   resolveTsNames,
   TS_I18N_TYPE,
 } from "./theSportsService";
@@ -553,20 +551,6 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
-  /** القيمة السوقية للاعب من TheSports (best-effort، عبر مطابقة الاسم داخل المنتخب) */
-  marketValue?: number | null;
-  marketValueCurrency?: string;
-}
-
-// تطبيع اسم لاعب للمطابقة بين مزوّدين: حروف لاتينية صغيرة بلا تشكيل/رموز، مسافة واحدة.
-function normPlayerName(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 export interface WcSquad {
@@ -580,24 +564,16 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
     const entry = rows[0];
     if (!entry) return null;
     const tr = await resolveNames((entry.players ?? []).map((p: any) => p.name));
-    // إثراء القيمة السوقية من TheSports (best-effort) — مطابقة بالاسم الإنجليزي داخل المنتخب
-    const market = await getWcSquadMarketValues(teamId).catch(() => null);
     const players: WcSquadPlayer[] = (entry.players ?? [])
-      .map((p: any): WcSquadPlayer => {
-        const norm = normPlayerName(String(p.name ?? ""));
-        const mv = market?.get(norm) ?? market?.get(norm.split(" ").pop() ?? "");
-        return {
-          id: p.id ?? 0,
-          name: tr(p.name),
-          number: p.number ?? null,
-          position: POSITION_AR[p.position] ?? p.position ?? "",
-          positionEn: p.position ?? "",
-          age: p.age ?? null,
-          photo: p.photo ?? "",
-          marketValue: mv?.value ?? null,
-          marketValueCurrency: mv?.currency ?? "€",
-        };
-      })
+      .map((p: any): WcSquadPlayer => ({
+        id: p.id ?? 0,
+        name: tr(p.name),
+        number: p.number ?? null,
+        position: POSITION_AR[p.position] ?? p.position ?? "",
+        positionEn: p.position ?? "",
+        age: p.age ?? null,
+        photo: p.photo ?? "",
+      }))
       .sort(
         (a: WcSquadPlayer, b: WcSquadPlayer) =>
           (POSITION_ORDER[a.positionEn] ?? 9) - (POSITION_ORDER[b.positionEn] ?? 9) ||
@@ -605,29 +581,6 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
       );
     return { team: localizeTeam(entry.team), players };
   });
-}
-
-/**
- * خريطة القيمة السوقية للاعبي منتخب (اسم مُطبَّع → {value, currency}) من TheSports عبر
- * الجسر. تُبنى مفاتيح بالاسم الكامل واسم العائلة (آخر كلمة) لرفع نسبة المطابقة. best-effort.
- */
-async function getWcSquadMarketValues(
-  teamId: number,
-): Promise<Map<string, { value: number; currency: string }>> {
-  const out = new Map<string, { value: number; currency: string }>();
-  const bridge = await getWcTeamBridge();
-  const uuid = bridge.get(teamId);
-  if (!uuid) return out;
-  const players = await getTsTeamPlayers(uuid);
-  for (const pl of players) {
-    if (pl.marketValue == null || pl.marketValue <= 0) continue;
-    const entry = { value: pl.marketValue, currency: pl.marketValueCurrency };
-    const full = normPlayerName(pl.name);
-    if (full) out.set(full, entry);
-    const last = full.split(" ").pop();
-    if (last && last.length >= 3 && !out.has(last)) out.set(last, entry);
-  }
-  return out;
 }
 
 // المدرّب الحالي للمنتخب — المزود يُعيد كل من درّبه عبر التاريخ، والحالي
@@ -847,26 +800,6 @@ export interface WcTvChannel {
   country: string | null;
   url: string | null;
   logo: string | null;
-}
-
-/**
- * تشخيص مؤقّت (يُحذف بعد ضبط الحقول): يكشف الشكل الخام لـ player/with_stat/list
- * (الأرجنتين) + جسر معرّف المباراة + match/tv/list — لقراءة أسماء الحقول الحقيقية
- * على الإنتاج (عنوان dev مُزال). fixtureId الافتراضي: الأردن×الأرجنتين (الجولة 3).
- */
-export async function getTsDebugSample(fixtureId = 1489421): Promise<unknown> {
-  const bridge = await getWcTeamBridge();
-  const argUuid = bridge.get(26) ?? null;
-  const playersRaw = argUuid
-    ? await tsRawSample("player/with_stat/list", { team_id: argUuid })
-    : null;
-  const playerSample =
-    playersRaw && Array.isArray((playersRaw as any).results)
-      ? (playersRaw as any).results.slice(0, 2)
-      : playersRaw;
-  const matchUuid = await getWcMatchTsId(fixtureId).catch(() => null);
-  const tvRaw = matchUuid ? await tsRawSample("match/tv/list", { uuid: matchUuid }) : null;
-  return { argUuid, matchUuid, playerSample, tvRaw };
 }
 
 /** قنوات بثّ مباراة عبر جسر المباراة (TheSports) — [] إن تعذّر الجسر/الجلب. */

@@ -588,70 +588,6 @@ export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> 
   }
 }
 
-// تشخيص مؤقّت: جلب خام لنقاط محدَّدة (allowlist) لكشف أسماء الحقول الحقيقية على
-// الإنتاج (عنوان dev مُزال من قائمة TheSports فتعذّر الفحص المحلي). يُحذف بعد الضبط.
-const TS_RAW_DEBUG_PATHS = new Set([
-  "player/with_stat/list",
-  "match/tv/list",
-  "player/transfer/list",
-  "player/market/list",
-]);
-export async function tsRawSample(path: string, params: Record<string, string>): Promise<any> {
-  if (!TS_RAW_DEBUG_PATHS.has(path)) return { error: "path not allowed" };
-  if (!isTheSportsConfigured()) return { error: "not configured" };
-  try {
-    return await tsGet(path, params);
-  } catch (e: any) {
-    return { error: String(e?.message ?? e) };
-  }
-}
-
-export interface TsTeamPlayer {
-  id: string; // معرّف اللاعب لدى TheSports (uuid)
-  name: string; // الاسم الإنجليزي (للمطابقة مع لاعبنا) — best-effort
-  logo: string; // صورة اللاعب
-  position: string;
-  marketValue: number | null;
-  marketValueCurrency: string;
-}
-
-/**
- * لاعبو منتخب من TheSports عبر `player/with_stat/list?team_id=<uuid>` (حزمة BASIC INFO،
- * مؤكَّد من الدعم 2026‑06‑23). تحليل **متسامح** للحقول (شكل الاستجابة لم يُتحقَّق محليًّا
- * بعد إزالة عنوان dev — انظر docs/SPORTS_PORTAL_ROADMAP.md): نجرّب أسماء حقول متعدّدة
- * للقيمة السوقية والاسم والمركز. فارغ = لا إثراء (best-effort).
- */
-export async function getTsTeamPlayers(teamUuid: string): Promise<TsTeamPlayer[]> {
-  if (!teamUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
-  try {
-    const data = await withSWR(`ts:team:players:${teamUuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
-      tsGet("player/with_stat/list", { team_id: teamUuid }),
-    );
-    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
-    const out: TsTeamPlayer[] = [];
-    for (const raw of rows) {
-      // قد يكون اللاعب على المستوى الأعلى أو ضمن حقل player داخل عنصر «with_stat»
-      const p = raw?.player && typeof raw.player === "object" ? raw.player : raw;
-      const id = p?.id ?? raw?.player_id;
-      const name = p?.name ?? p?.short_name ?? p?.en_name;
-      if (!id || typeof name !== "string" || !name) continue;
-      out.push({
-        id: String(id),
-        name,
-        logo: typeof p?.logo === "string" ? p.logo : typeof p?.photo === "string" ? p.photo : "",
-        position: typeof p?.position === "string" ? p.position : "",
-        marketValue: pickNum(p?.market_value, p?.marketvalue, p?.value, raw?.market_value),
-        marketValueCurrency:
-          typeof p?.market_value_currency === "string" ? p.market_value_currency : "€",
-      });
-    }
-    return out;
-  } catch {
-    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
-    return [];
-  }
-}
-
 export interface TsCompetitionExtra {
   id: string;
   name: string;
@@ -826,26 +762,24 @@ export async function getTsMatchTv(matchUuid: string): Promise<TsTvChannel[]> {
     const data = await withSWR(`ts:tv:${matchUuid}`, 6 * 60 * 60 * 1000, 12 * 60 * 60 * 1000, () =>
       tsGet("match/tv/list", { uuid: matchUuid }),
     );
-    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    // الشكل المتحقَّق (2026‑06‑23): results[0].tv = [{ country_id, names: [..] }]
+    const results: any[] = Array.isArray(data?.results) ? data.results : [];
+    const entries: any[] = Array.isArray(results[0]?.tv) ? results[0].tv : [];
     const out: TsTvChannel[] = [];
     const seen = new Set<string>();
-    for (const r of rows) {
-      const name = r?.name ?? r?.channel ?? r?.tv_name ?? r?.station;
-      if (typeof name !== "string" || !name.trim()) continue;
-      const key = name.trim().toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const country = r?.country ?? r?.country_name ?? r?.region ?? null;
-      const url = r?.url ?? r?.link ?? r?.website ?? null;
-      const logo = r?.logo ?? r?.icon ?? r?.image ?? null;
-      out.push({
-        name: name.trim(),
-        country: typeof country === "string" && country.trim() ? country.trim() : null,
-        url: typeof url === "string" && url.trim() ? url.trim() : null,
-        logo: typeof logo === "string" && logo.trim() ? logo.trim() : null,
-      });
+    for (const e of entries) {
+      const names: any[] = Array.isArray(e?.names) ? e.names : [];
+      for (const nm of names) {
+        if (typeof nm !== "string" || !nm.trim()) continue;
+        const key = nm.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ name: nm.trim(), country: null, url: null, logo: null });
+      }
     }
-    return out;
+    // نُبرز beIN (صاحب حقوق المونديال في الخليج/الشرق الأوسط) أولًا، ثم نحدّ الضجيج
+    out.sort((a, b) => (/bein/i.test(b.name) ? 1 : 0) - (/bein/i.test(a.name) ? 1 : 0));
+    return out.slice(0, 6);
   } catch {
     tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
     return [];
