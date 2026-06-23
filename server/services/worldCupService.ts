@@ -18,6 +18,13 @@ import {
   localizeVenue,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
+import {
+  WC_COMPETITION_ID,
+  getTsTeamExtra,
+  getTsCompetitionExtra,
+  getTsCompetitionMatchPairs,
+  getTsLiveStandings,
+} from "./theSportsService";
 import pLimit from "p-limit";
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -198,6 +205,8 @@ export async function getFixtureIdentity(fixtureId: number): Promise<WcFixtureId
   });
 }
 
+export type WcQualifyStatus = "qualified" | "eliminated" | "contention";
+
 export interface WcStandingRow {
   rank: number;
   team: WcTeam;
@@ -210,6 +219,11 @@ export interface WcStandingRow {
   goalsDiff: number;
   points: number;
   form: string | null;
+  // حالة التأهّل للمركزين الأوّلين داخل المجموعة (تُحسب من المباريات المتبقّية).
+  // null = دور المجموعات منتهٍ/غير متاح. أفضل الثوالث لا يُحسب هنا.
+  qualifyStatus?: WcQualifyStatus | null;
+  // true إذا حُدِّث هذا الصفّ لحظيًّا من TheSports (أسرع من تحديث API-Football).
+  live?: boolean;
 }
 
 export interface WcGroup {
@@ -275,6 +289,148 @@ export async function getStandings(): Promise<WcGroup[]> {
             form: row.form ?? null,
           })),
       }));
+  });
+}
+
+// ---------- حالة التأهّل (تُحسب من الترتيب + المباريات المتبقّية) ----------
+// نُعدّد كل احتمالات نتائج مباريات المجموعة المتبقّية (3^n: فوز مضيف/تعادل/فوز ضيف)
+// ونحكم لكل منتخب بالنقاط فقط (دون افتراض فارق أهداف) حكمًا تحفّظيًّا:
+//   • متأهّل: في كل سيناريو لا يسبقه أو يساويه في النقاط أكثر من منتخب واحد.
+//   • خارج:   في كل سيناريو يسبقه منتخبان على الأقل في النقاط (يستحيل بلوغ المركزين).
+//   • غير ذلك: «في الصراع».
+// نقتصر على المركزين الأوّلين داخل المجموعة (محدّد ودقيق)؛ سباق «أفضل الثوالث» عبر
+// المجموعات لا يُحسب هنا. كسر التعادل عند التساوي يُعامَل ضد المنتخب (تحفّظًا) فلا
+// نُعلن تأهّلًا أو إقصاءً إلا حين يكون مؤكّدًا رياضيًّا.
+interface RemainingMatch {
+  homeId: number;
+  awayId: number;
+}
+
+function computeGroupQualification(
+  rows: WcStandingRow[],
+  remaining: RemainingMatch[],
+): Map<number, WcQualifyStatus> {
+  const ids = rows.map((r) => r.team.id).filter((id) => id > 0);
+  const basePoints = new Map(rows.map((r) => [r.team.id, r.points] as const));
+  const result = new Map<number, WcQualifyStatus>();
+  // حدّ أمان: لن تتجاوز مباريات المجموعة المتبقّية 6 فعليًّا (3^6=729).
+  if (ids.length === 0 || remaining.length > 12) {
+    for (const id of ids) result.set(id, "contention");
+    return result;
+  }
+  const stillQualified = new Map<number, boolean>(ids.map((id) => [id, true]));
+  const stillEliminated = new Map<number, boolean>(ids.map((id) => [id, true]));
+  const total = 3 ** remaining.length;
+  for (let mask = 0; mask < total; mask++) {
+    const pts = new Map(basePoints);
+    let m = mask;
+    for (const match of remaining) {
+      const o = m % 3; // 0=فوز المضيف، 1=تعادل، 2=فوز الضيف
+      m = Math.floor(m / 3);
+      if (o === 0) pts.set(match.homeId, (pts.get(match.homeId) ?? 0) + 3);
+      else if (o === 1) {
+        pts.set(match.homeId, (pts.get(match.homeId) ?? 0) + 1);
+        pts.set(match.awayId, (pts.get(match.awayId) ?? 0) + 1);
+      } else pts.set(match.awayId, (pts.get(match.awayId) ?? 0) + 3);
+    }
+    for (const id of ids) {
+      const p = pts.get(id) ?? 0;
+      let geq = 0; // منتخبات نقاطها ≥ نقاطه (قد تسبقه بكسر التعادل)
+      let gt = 0; // منتخبات نقاطها > نقاطه (تسبقه يقينًا)
+      for (const other of ids) {
+        if (other === id) continue;
+        const op = pts.get(other) ?? 0;
+        if (op >= p) geq++;
+        if (op > p) gt++;
+      }
+      if (geq > 1) stillQualified.set(id, false);
+      if (gt < 2) stillEliminated.set(id, false);
+    }
+  }
+  for (const id of ids) {
+    result.set(
+      id,
+      stillQualified.get(id) ? "qualified" : stillEliminated.get(id) ? "eliminated" : "contention",
+    );
+  }
+  return result;
+}
+
+/** الترتيب مع حالة التأهّل لكل منتخب — يدمج المباريات المتبقّية لكل مجموعة. */
+// يطبّق ترتيب TheSports اللحظي فوق صفوف API-Football: لكل صفّ نجد uuid عبر الجسر
+// ثم قيمه اللحظية (نقاط/فارق/مركز) — يحدّث الجدول أسرع من API-Football عند صافرة
+// النهاية وأثناء المباريات. النقاط لا تُضاف إلا عند انتهاء المباراة (لا ازدواج مع
+// «المتبقّية»). فارغ = لا تغيير (الترتيب اللحظي غير مُفعَّل/لا مباراة جارية).
+async function overlayLiveStandings(groups: WcGroup[]): Promise<WcGroup[]> {
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    const [live, bridge] = await Promise.all([
+      getTsLiveStandings(WC_COMPETITION_ID, comp?.curSeasonId ?? null),
+      getWcTeamBridge(),
+    ]);
+    if (live.size === 0 || bridge.size === 0) return groups;
+    return groups.map((g) => {
+      let changed = false;
+      const rows = g.rows.map((r) => {
+        const uuid = bridge.get(r.team.id);
+        const lv = uuid ? live.get(uuid) : undefined;
+        if (!lv) return r;
+        changed = true;
+        return {
+          ...r,
+          rank: lv.position || r.rank,
+          played: lv.played,
+          win: lv.won,
+          draw: lv.draw,
+          lose: lv.loss,
+          goalsFor: lv.goals,
+          goalsAgainst: lv.goalsAgainst,
+          goalsDiff: lv.goalDiff,
+          points: lv.points,
+          live: true,
+        };
+      });
+      if (!changed) return g;
+      rows.sort((a, b) => a.rank - b.rank || b.points - a.points || b.goalsDiff - a.goalsDiff);
+      return { ...g, rows };
+    });
+  } catch (error) {
+    console.warn("[WorldCup] live standings overlay failed:", error);
+    return groups;
+  }
+}
+
+export async function getStandingsWithQualification(): Promise<WcGroup[]> {
+  const [baseGroups, fixtures] = await Promise.all([
+    getStandings(),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  const groups = await overlayLiveStandings(baseGroups);
+  const teamGroup = new Map<number, string>();
+  for (const g of groups) for (const r of g.rows) teamGroup.set(r.team.id, g.groupEn);
+
+  const remainingByGroup = new Map<string, RemainingMatch[]>();
+  for (const f of fixtures) {
+    if (f.status.finished) continue;
+    const hg = teamGroup.get(f.home.id);
+    const ag = teamGroup.get(f.away.id);
+    if (!hg || !ag || hg !== ag) continue; // مباريات الإقصاء (TBD) تُستبعد تلقائيًّا
+    const arr = remainingByGroup.get(hg) ?? [];
+    arr.push({ homeId: f.home.id, awayId: f.away.id });
+    remainingByGroup.set(hg, arr);
+  }
+
+  return groups.map((g) => {
+    const remaining = remainingByGroup.get(g.groupEn) ?? [];
+    // دور المجموعات منتهٍ لهذه المجموعة → لا حالة (الشجرة تتكفّل بالتأهّل)
+    if (remaining.length === 0) {
+      return { ...g, rows: g.rows.map((r) => ({ ...r, qualifyStatus: null })) };
+    }
+    const status = computeGroupQualification(g.rows, remaining);
+    return {
+      ...g,
+      rows: g.rows.map((r) => ({ ...r, qualifyStatus: status.get(r.team.id) ?? null })),
+    };
   });
 }
 
@@ -410,6 +566,135 @@ export async function getCoach(teamId: number): Promise<string | null> {
   });
 }
 
+// ---------- جسر الربط مع TheSports + بيانات إثرائية ----------
+// نربط معرّف المنتخب لدى API-Football بمعرّف TheSports (uuid) **دون أسماء**:
+// نطابق كل مباراة لدينا (لها home.id/away.id ووقت بداية) بمباراة TheSports
+// (لها home_team_id/away_team_id ووقت) عبر تطابق وقت البداية. التطابق الفريد فقط
+// (مباراة واحدة بنفس التوقيت ±دقيقتين) يُعتمد، فينكشف زوجا المعرّفين معًا. نصوّت
+// عبر كل مباريات المنتخب فيغلب المعرّف الصحيح حتى لو اختلف ترتيب المضيف/الضيف
+// أحيانًا. أفضل جهد: غياب TheSports → خريطة فارغة → لا إثراء (لا عطل).
+const WC_BRIDGE_TTL = 6 * 60 * 60 * 1000;
+let wcTeamBridge: { at: number; map: Map<number, string> } | null = null;
+
+export async function getWcTeamBridge(): Promise<Map<number, string>> {
+  if (wcTeamBridge && Date.now() - wcTeamBridge.at < WC_BRIDGE_TTL) return wcTeamBridge.map;
+  const map = new Map<number, string>();
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    const [fixtures, pairs] = await Promise.all([
+      getFixtures(),
+      getTsCompetitionMatchPairs(WC_COMPETITION_ID, comp?.curSeasonId ?? null),
+    ]);
+    if (pairs.length > 0) {
+      const votes = new Map<number, Map<string, number>>();
+      const vote = (apiId: number, uuid: string) => {
+        if (!apiId || !uuid) return;
+        const m = votes.get(apiId) ?? new Map<string, number>();
+        m.set(uuid, (m.get(uuid) ?? 0) + 1);
+        votes.set(apiId, m);
+      };
+      for (const fx of fixtures) {
+        if (!fx.home.id || !fx.away.id || !fx.timestamp) continue;
+        const hits = pairs.filter((p) => Math.abs(p.time - fx.timestamp) <= 120);
+        if (hits.length !== 1) continue; // تطابق فريد فقط → اتجاه آمن
+        vote(fx.home.id, hits[0].home);
+        vote(fx.away.id, hits[0].away);
+      }
+      for (const [apiId, m] of votes) {
+        let best = "";
+        let bestN = 0;
+        for (const [uuid, n] of m) if (n > bestN) ((best = uuid), (bestN = n));
+        if (best) map.set(apiId, best);
+      }
+    }
+  } catch (error) {
+    console.warn("[WorldCup] TheSports team bridge failed:", error);
+  }
+  wcTeamBridge = { at: Date.now(), map };
+  return map;
+}
+
+export interface WcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
+/** بيانات إثرائية لمنتخب (قيمة سوقية/تأسيس/حجم القائمة) من TheSports — null إن تعذّر الربط. */
+export async function getWcTeamExtra(teamId: number): Promise<WcTeamExtra | null> {
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const x = await getTsTeamExtra(uuid);
+  if (!x) return null;
+  if (x.marketValue == null && x.foundation == null && x.totalPlayers == null) return null;
+  return {
+    marketValue: x.marketValue,
+    marketValueCurrency: x.marketValueCurrency,
+    foundation: x.foundation,
+    squadSize: x.totalPlayers,
+  };
+}
+
+export interface WcCompetitionFacts {
+  defendingChampion: WcTeam | null;
+  defendingChampionTitles: number | null;
+  mostTitles: { teams: WcTeam[]; count: number } | null;
+  host: string | null;
+}
+
+/** حقائق البطولة من TheSports: حامل اللقب + الأكثر تتويجًا + الدول المضيفة. */
+export async function getWcCompetitionFacts(): Promise<WcCompetitionFacts> {
+  const empty: WcCompetitionFacts = {
+    defendingChampion: null,
+    defendingChampionTitles: null,
+    mostTitles: null,
+    host: null,
+  };
+  try {
+    const comp = await getTsCompetitionExtra(WC_COMPETITION_ID);
+    if (!comp) return empty;
+    const [bridge, teams] = await Promise.all([getWcTeamBridge(), getTeams().catch(() => [] as WcTeam[])]);
+    const byId = new Map(teams.map((t) => [t.id, t]));
+    const rev = new Map<string, number>();
+    for (const [id, uuid] of bridge) rev.set(uuid, id);
+    const toTeam = (uuid: string | null): WcTeam | null => {
+      if (!uuid) return null;
+      const id = rev.get(uuid);
+      return id ? byId.get(id) ?? null : null;
+    };
+    const champTeams = comp.mostTitlesTeamIds.map(toTeam).filter((t): t is WcTeam => !!t);
+    return {
+      defendingChampion: toTeam(comp.titleHolderTeamId),
+      defendingChampionTitles: comp.titleHolderCount,
+      mostTitles: comp.mostTitlesCount != null && champTeams.length > 0 ? { teams: champTeams, count: comp.mostTitlesCount } : null,
+      host: localizeHostCountries(comp.host),
+    };
+  } catch (error) {
+    console.warn("[WorldCup] competition facts failed:", error);
+    return empty;
+  }
+}
+
+// أسماء الدول المضيفة من TheSports تأتي إنجليزية مفصولة بفواصل ("United States,Canadian,Mexico").
+const HOST_COUNTRY_AR: Record<string, string> = {
+  "united states": "الولايات المتحدة",
+  usa: "الولايات المتحدة",
+  canadian: "كندا",
+  canada: "كندا",
+  mexico: "المكسيك",
+};
+function localizeHostCountries(raw: string | null): string | null {
+  if (!raw) return null;
+  const parts = raw
+    .split(/[,،]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((c) => HOST_COUNTRY_AR[c.toLowerCase()] ?? c);
+  return parts.length ? parts.join("، ") : null;
+}
+
 // ---------- صفحة المنتخب المتكاملة ----------
 // تجمّع كل ما يخص منتخبًا واحدًا في طلب واحد: هويته + مجموعته وترتيبه +
 // كل مبارياته (منتهية/مباشرة/قادمة) + قائمته الكاملة + المدرّب. كلها مبنية
@@ -423,14 +708,17 @@ export interface WcTeamProfile {
   group: WcGroup | null;
   fixtures: WcFixture[];
   squad: WcSquadPlayer[];
+  /** إثراء TheSports (قيمة سوقية/تأسيس/حجم القائمة) — null إن تعذّر */
+  extra: WcTeamExtra | null;
 }
 
 export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | null> {
-  const [fixtures, squad, groups, teams] = await Promise.all([
+  const [fixtures, squad, groups, teams, extra] = await Promise.all([
     getFixtures(),
     getSquad(teamId).catch(() => null),
     getStandings().catch(() => [] as WcGroup[]),
     getTeams().catch(() => [] as WcTeam[]),
+    getWcTeamExtra(teamId).catch(() => null),
   ]);
 
   const teamFixtures = fixtures
@@ -462,6 +750,7 @@ export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | nu
     group,
     fixtures: teamFixtures,
     squad: squad?.players ?? [],
+    extra,
   };
 }
 

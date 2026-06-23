@@ -98,6 +98,31 @@
 - **موصول:** أسماء اللاعب الرئيسي في الطبقة اللحظية (`mapTsEventsToSpl`) والتنبيهات (`detectTsEventAlerts`) — تُفضَّل أسماء المزوّد العربية عبر `player_id`، وتتراجع لتعريب `worldCupNameTranslator` (الذي يمرّر العربي أصلًا كما هو).
 - **متطلّب التفعيل:** `THESPORTS_LANG=ar` + إدراج IP الإنتاج. **تبقّى:** توسيع لأسماء الصانع/التبديل (التقاط `assist1_id`/`in_player_id`/`out_player_id`)، وأسماء الفِرق/البطولات عند تبنّي تشكيلات/ترتيبات TheSports.
 
+**إثراء المونديال — حالة التأهّل (2026‑06‑23، قيد التجربة في dev):** أضفنا حساب «حالة التأهّل» لجدول ترتيب المونديال — لا يحتاج TheSports (يُحسب من الترتيب + المباريات المتبقّية الموجودة عبر API-Football، قابل للتجربة الآن).
+- **الحساب (`computeGroupQualification` في `worldCupService`):** brute‑force لكل احتمالات مباريات المجموعة المتبقّية (3^n)، وحُكم تحفّظي بالنقاط فقط (دون افتراض فارق أهداف): **متأهّل** = في كل سيناريو لا يسبقه/يساويه أكثر من منتخب · **خارج** = في كل سيناريو يسبقه منتخبان فأكثر · غير ذلك **في الصراع**. يقتصر على المركزين الأوّلين داخل المجموعة (سباق أفضل الثوالث مُؤجَّل).
+- **الواجهة:** `getStandingsWithQualification` يُغذّي `/api/world-cup/standings` بحقل `qualifyStatus` لكل صف؛ `StandingsSection` يلوّن الصفوف (أخضر/كهرماني/أحمر) + مفتاح ألوان، ويعتم المُقصى. عند انتهاء دور مجموعة → `null` (الشجرة تتكفّل).
+- **مُجرَّب في dev (الترتيب الحالي):** فرنسا+النرويج (6 نقاط) متأهّلان، السنغال+العراق (0) خارج؛ الأردن «خارج» بصحّة لأن توزيع المباريات المتبقّية يمنع بلوغه المركزين. typecheck نظيف.
+
+**إثراء المونديال — قيمة الفريق + حقائق البطولة + الترتيب اللحظي (2026‑06‑23، مُجرَّب في dev، اشتراك فعلي):**
+
+بعد تفعيل الاشتراك المدفوع وإدراج IP، فُحصت نقاط TheSports فعليًّا (من جهاز مُدرَج) واتّضحت الخريطة الدقيقة أدناه. بُنيت ثلاث ميزات تعتمد فقط نقاطًا **مُتحقَّق أنها تعمل**:
+
+- **جسر الفرق بلا أسماء (`getWcTeamBridge` في `worldCupService`):** يطابق مبارياتنا (API-Football، `home.id/away.id`+timestamp) بمباريات TheSports (`match/recent/list` للموسم الحالي، `home_team_id/away_team_id`+`match_time`) عبر **تطابق وقت فريد** (±120ث)، فينكشف زوجا المعرّفين معًا. تصويت عبر كل مباريات المنتخب → اتجاه آمن. كاش 6س. **متحقَّق:** الأرجنتين→26، البرازيل→6، السعودية→23.
+- **قيمة الفريق + التأسيس (`team/additional/list`):** `getWcTeamExtra` → حقل `extra` في `/api/world-cup/team/:id`؛ تُعرض في ترويسة صفحة المنتخب (`WorldCupTeam`): القيمة السوقية للتشكيلة + سنة التأسيس. **متحقَّق:** الأرجنتين €807.5M (1893)، السعودية €40.7M (1959).
+- **حقائق البطولة (`competition/additional/list`):** `getWcCompetitionFacts` → نقطة جديدة `/api/world-cup/facts`؛ مكوّن `TournamentFacts` أسفل الهيرو: **حامل اللقب** (الأرجنتين، 3) + **الأكثر تتويجًا** (البرازيل، 5) + **الاستضافة** (الولايات المتحدة، كندا، المكسيك) — بأسمائنا وشعاراتنا عبر الجسر، وروابط لصفحات المنتخبات.
+- **الترتيب اللحظي (`getTsLiveStandings`):** يجرّب `standing/table` (الرسمي، متاح دائمًا فور تفعيله) ثم يتراجع إلى `table/live` (الجداول الجارية عالميًّا، يُصفّى بموسم المونديال — يغطّي نافذة المباراة المباشرة). `overlayLiveStandings` يطبّقه فوق صفوف API-Football عبر الجسر (نقاط/فارق/مركز)، يضيف `live:true`، فتظهر شارة **«تحديث لحظي»** نابضة في `StandingsSection` ويتسارع تحديث `/standings` إلى 20ث. آمن: لا بيانات → لا تغيير. النقاط تُضاف عند FT فقط (لا ازدواج مع «المتبقّية» في حساب التأهّل).
+
+**خريطة نقاط TheSports (مُتحقَّقة 2026‑06‑23 من جهاز مُدرَج، اشتراك فعلي):**
+
+| ✅ تعمل الآن | ❌ تردّ «URL is not authorized … contact our business staff» (تحتاج تفعيلًا يدويًّا من جهتهم) |
+|---|---|
+| `match/diary` · `match/detail_live` · `table/live` · `match/lineup/detail` · `match/recent/list` · `team/additional/list` · `competition/additional/list` · `player/market/list` (بـ`uuid`) · `transfer/list` · `language/list` (مزامنة مُصفَّحة بلا uuid، الحقل العربي **`name_aa`**) | `standing/table` (الترتيب الرسمي — **أولوية**) · `match/player/stats/detail` · `match/team/stats/detail` · `player/additional/list` · `coach/additional/list` · `referee/additional/list` · `venue/additional/list` · `injury/list` · `match/tv` · FIFA ranking |
+
+- **القيمة السوقية للاعب — مؤجَّلة:** `player/market/list?uuid=` يعمل، لكن ربط لاعبنا (API-Football) بـuuid لاعب TheSports غير موثوق حاليًّا: `player/additional/list` محجوب (لا اسم/صورة)، `match/lineup` محجوب، و`language/list` يعطي عربيًّا فقط (`name_aa`) بلا اسم إنجليزي للمطابقة. **يُفتح فور تفعيل `player/additional/list`.**
+- **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض `100003`) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). **إصلاح منفصل مقترح:** مزامنة دورية لقاموس `name_aa` بدل النداء بـuuid.
+
+**نقاط مطلوب تفعيلها من دعم TheSports (رسالة جاهزة في سجلّ المحادثة):** الأولوية `standing/table` (الترتيب اللحظي الكامل)، ثم `match/player/stats/detail` + `match/team/stats/detail` + `player/additional/list` + `coach/additional/list` + `referee/additional/list` + `venue/additional/list` + `injury/list` + `match/tv` + FIFA ranking.
+
 **التجارة:** نبدأ شهرًا واحدًا بـAdvanced Data ($1000) — يشمل Basic+Advanced لكل 1970+ دوري — ثم ربع سنوي. لا نأخذ Live Match Tracker (ويدجت iframe، نبني واجهتنا).
 
 ## مبادئ ملزمة أثناء التنفيذ

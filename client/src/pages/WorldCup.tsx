@@ -15,6 +15,7 @@ import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
 import { TeamsSection } from "@/components/worldcup/TeamsSection";
+import { TournamentFacts } from "@/components/worldcup/TournamentFacts";
 import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worldcup/wcTypes";
 
 export default function WorldCup() {
@@ -57,7 +58,9 @@ export default function WorldCup() {
 
   const { data: standingsData, isLoading: standingsLoading } = useQuery<{ groups: WcGroup[] }>({
     queryKey: ["/api/world-cup/standings"],
-    refetchInterval: 5 * 60_000,
+    // ترتيب لحظي مفعّل (صفّ live) → 20ث لتطازج الجدول أثناء المباراة؛ غير ذلك → 5د
+    refetchInterval: (query) =>
+      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 20_000 : 5 * 60_000,
     refetchIntervalInBackground: false,
   });
 
@@ -77,6 +80,7 @@ export default function WorldCup() {
 
       <main className="flex-1">
         <HeroSection overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
+        <TournamentFacts />
         <SaudiSpotlight
           saudi={overview?.saudi}
           onOpenMatch={setOpenFixtureId}

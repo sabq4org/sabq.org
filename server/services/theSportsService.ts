@@ -546,3 +546,188 @@ export async function getTheSportsMatchLive(
     return null;
   }
 }
+
+// ───────────────────── بيانات إثرائية شبه ثابتة (additional/list, market) ─────────────────────
+// نقاط مُفعَّلة في الباقة (متحقَّق منها 2026‑06‑23): team/additional/list (uuid مفرد)،
+// competition/additional/list، player/market/list (uuid مفرد)، match/recent/list.
+// كلّها أفضل جهد: أي فشل/تهدئة/IP غير مُدرَج → null فيتراجع المستدعي بهدوء.
+const EXTRA_TTL = 24 * 60 * 60 * 1000; // بيانات شبه ثابتة (قيمة سوقية/تأسيس/حامل لقب)
+
+export interface TsTeamExtra {
+  id: string;
+  name: string;
+  logo: string;
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  totalPlayers: number | null;
+  coachId: string | null;
+}
+
+export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> {
+  if (!uuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:team:extra:${uuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("team/additional/list", { uuid }),
+    );
+    const r = Array.isArray(data?.results) ? data.results[0] : null;
+    if (!r?.id) return null;
+    return {
+      id: String(r.id),
+      name: typeof r.name === "string" ? r.name : "",
+      logo: typeof r.logo === "string" ? r.logo : "",
+      marketValue: typeof r.market_value === "number" && r.market_value > 0 ? r.market_value : null,
+      marketValueCurrency: typeof r.market_value_currency === "string" ? r.market_value_currency : "€",
+      foundation: typeof r.foundation_time === "number" && r.foundation_time > 0 ? r.foundation_time : null,
+      totalPlayers: typeof r.total_players === "number" && r.total_players > 0 ? r.total_players : null,
+      coachId: r.coach_id ? String(r.coach_id) : null,
+    };
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return null;
+  }
+}
+
+export interface TsCompetitionExtra {
+  id: string;
+  name: string;
+  logo: string;
+  curSeasonId: string | null;
+  titleHolderTeamId: string | null;
+  titleHolderCount: number | null;
+  mostTitlesTeamIds: string[];
+  mostTitlesCount: number | null;
+  host: string | null;
+}
+
+export async function getTsCompetitionExtra(uuid: string): Promise<TsCompetitionExtra | null> {
+  if (!uuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:comp:extra:${uuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("competition/additional/list", { uuid }),
+    );
+    const r = Array.isArray(data?.results) ? data.results[0] : null;
+    if (!r?.id) return null;
+    // title_holder: [team_id, titles] · most_titles: [[team_id,...], titles]
+    const th = Array.isArray(r.title_holder) ? r.title_holder : [];
+    const mt = Array.isArray(r.most_titles) ? r.most_titles : [];
+    return {
+      id: String(r.id),
+      name: typeof r.name === "string" ? r.name : "",
+      logo: typeof r.logo === "string" ? r.logo : "",
+      curSeasonId: r.cur_season_id ? String(r.cur_season_id) : null,
+      titleHolderTeamId: th[0] ? String(th[0]) : null,
+      titleHolderCount: typeof th[1] === "number" ? th[1] : null,
+      mostTitlesTeamIds: Array.isArray(mt[0]) ? mt[0].map((x: any) => String(x)) : [],
+      mostTitlesCount: typeof mt[1] === "number" ? mt[1] : null,
+      host: r.host?.country ? String(r.host.country) : null,
+    };
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return null;
+  }
+}
+
+// أزواج فرق مباريات بطولة في موسم معيّن (للجسر عبر مطابقة وقت البداية) — من
+// match/recent/list (يُرجع كل مباريات البطولة بأوقاتها ومعرّفات فريقيها).
+export interface TsMatchPair {
+  home: string;
+  away: string;
+  time: number;
+}
+
+export async function getTsCompetitionMatchPairs(
+  competitionId: string,
+  seasonId: string | null,
+): Promise<TsMatchPair[]> {
+  if (!competitionId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(
+      `ts:recent:${competitionId}`,
+      6 * 60 * 60 * 1000,
+      12 * 60 * 60 * 1000,
+      () => tsGet("match/recent/list", { competition_id: competitionId }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    return rows
+      .filter((m) => (!seasonId || m.season_id === seasonId) && m.home_team_id && m.away_team_id && m.match_time)
+      .map((m) => ({ home: String(m.home_team_id), away: String(m.away_team_id), time: Number(m.match_time) }));
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+    return [];
+  }
+}
+
+// ───────────────────── الترتيب اللحظي (real-time standings) ─────────────────────
+// صفّ ترتيب واحد بمعرّف فريق TheSports (uuid). يُطابَق لاحقًا بصفوفنا عبر الجسر.
+export interface TsStandingRow {
+  teamId: string;
+  position: number;
+  points: number;
+  played: number;
+  won: number;
+  draw: number;
+  loss: number;
+  goals: number;
+  goalsAgainst: number;
+  goalDiff: number;
+}
+
+function parseStandingTables(results: any[], seasonId: string | null): Map<string, TsStandingRow> {
+  const out = new Map<string, TsStandingRow>();
+  for (const res of results) {
+    if (seasonId && res?.season_id && res.season_id !== seasonId) continue;
+    for (const table of Array.isArray(res?.tables) ? res.tables : []) {
+      for (const r of Array.isArray(table?.rows) ? table.rows : []) {
+        if (!r?.team_id) continue;
+        out.set(String(r.team_id), {
+          teamId: String(r.team_id),
+          position: Number(r.position) || 0,
+          points: Number(r.points) || 0,
+          played: Number(r.total) || 0,
+          won: Number(r.won) || 0,
+          draw: Number(r.draw) || 0,
+          loss: Number(r.loss) || 0,
+          goals: Number(r.goals) || 0,
+          goalsAgainst: Number(r.goals_against) || 0,
+          goalDiff: Number(r.goal_diff) || 0,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * الترتيب اللحظي لبطولة عبر TheSports. يُجرّب standing/table (الرسمي، متاح دائمًا
+ * عند تفعيله) ثم يتراجع إلى table/live (الجداول الجارية عالميًّا، يُصفّى بموسم البطولة
+ * — فيغطّي نافذة المباراة المباشرة قبل تفعيل standing/table). فارغ = لا إثراء.
+ */
+export async function getTsLiveStandings(
+  competitionId: string,
+  seasonId: string | null,
+): Promise<Map<string, TsStandingRow>> {
+  if (!competitionId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
+  // 1) standing/table الرسمي (قد لا يكون مُفعَّلًا بعد → نتجاهل الخطأ بهدوء)
+  try {
+    const data = await withSWR(`ts:standing:${competitionId}`, 20 * 1000, 60 * 1000, () =>
+      tsGet("standing/table", { competition_id: competitionId }),
+    );
+    if (Array.isArray(data?.results) && data.results.length > 0) {
+      const map = parseStandingTables(data.results, null);
+      if (map.size > 0) return map;
+    }
+  } catch {
+    /* غير مُفعَّل بعد — نُجرّب table/live */
+  }
+  // 2) table/live (نافذة المباراة المباشرة) — يتطلّب موسم البطولة للتصفية
+  try {
+    const data = await withSWR(`ts:tablelive:${competitionId}`, 15 * 1000, 45 * 1000, () =>
+      tsGet("table/live", { competition_id: competitionId }),
+    );
+    if (Array.isArray(data?.results)) return parseStandingTables(data.results, seasonId);
+  } catch {
+    tsCooldownUntil = Date.now() + TS_FAIL_COOLDOWN_MS;
+  }
+  return new Map();
+}
