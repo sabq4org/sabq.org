@@ -29,6 +29,7 @@ import {
   getTsMatchTv,
   getTsMatchTeamStats,
   getTsTeamPlayers,
+  tsRawSample,
   resolveTsNames,
   TS_I18N_TYPE,
 } from "./theSportsService";
@@ -846,6 +847,26 @@ export interface WcTvChannel {
   country: string | null;
   url: string | null;
   logo: string | null;
+}
+
+/**
+ * تشخيص مؤقّت (يُحذف بعد ضبط الحقول): يكشف الشكل الخام لـ player/with_stat/list
+ * (الأرجنتين) + جسر معرّف المباراة + match/tv/list — لقراءة أسماء الحقول الحقيقية
+ * على الإنتاج (عنوان dev مُزال). fixtureId الافتراضي: الأردن×الأرجنتين (الجولة 3).
+ */
+export async function getTsDebugSample(fixtureId = 1489421): Promise<unknown> {
+  const bridge = await getWcTeamBridge();
+  const argUuid = bridge.get(26) ?? null;
+  const playersRaw = argUuid
+    ? await tsRawSample("player/with_stat/list", { team_id: argUuid })
+    : null;
+  const playerSample =
+    playersRaw && Array.isArray((playersRaw as any).results)
+      ? (playersRaw as any).results.slice(0, 2)
+      : playersRaw;
+  const matchUuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  const tvRaw = matchUuid ? await tsRawSample("match/tv/list", { uuid: matchUuid }) : null;
+  return { argUuid, matchUuid, playerSample, tvRaw };
 }
 
 /** قنوات بثّ مباراة عبر جسر المباراة (TheSports) — [] إن تعذّر الجسر/الجلب. */

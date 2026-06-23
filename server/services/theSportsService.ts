@@ -588,6 +588,24 @@ export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> 
   }
 }
 
+// تشخيص مؤقّت: جلب خام لنقاط محدَّدة (allowlist) لكشف أسماء الحقول الحقيقية على
+// الإنتاج (عنوان dev مُزال من قائمة TheSports فتعذّر الفحص المحلي). يُحذف بعد الضبط.
+const TS_RAW_DEBUG_PATHS = new Set([
+  "player/with_stat/list",
+  "match/tv/list",
+  "player/transfer/list",
+  "player/market/list",
+]);
+export async function tsRawSample(path: string, params: Record<string, string>): Promise<any> {
+  if (!TS_RAW_DEBUG_PATHS.has(path)) return { error: "path not allowed" };
+  if (!isTheSportsConfigured()) return { error: "not configured" };
+  try {
+    return await tsGet(path, params);
+  } catch (e: any) {
+    return { error: String(e?.message ?? e) };
+  }
+}
+
 export interface TsTeamPlayer {
   id: string; // معرّف اللاعب لدى TheSports (uuid)
   name: string; // الاسم الإنجليزي (للمطابقة مع لاعبنا) — best-effort
@@ -925,7 +943,12 @@ export async function getTsFifaRanking(): Promise<Map<string, TsFifaRank>> {
     const data = await withSWR("ts:fifa:men", EXTRA_TTL, EXTRA_TTL * 2, () =>
       tsGet("ranking/fifa/men"),
     );
-    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    // الاستجابة: results = { pub_times, pub_time, items: [...] } — المصفوفة تحت items
+    const rows: any[] = Array.isArray(data?.results?.items)
+      ? data.results.items
+      : Array.isArray(data?.results)
+        ? data.results
+        : [];
     const map = new Map<string, TsFifaRank>();
     for (const r of rows) {
       const rawId = r?.team_id ?? r?.team?.id ?? (typeof r?.team === "string" ? r.team : null);
