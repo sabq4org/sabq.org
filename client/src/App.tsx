@@ -356,6 +356,7 @@ const GulfLiveCoverage = lazy(() => retryImport(() => import("@/pages/GulfLiveCo
 const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
 const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")));
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
+const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -868,6 +869,7 @@ function Router() {
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
+        <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
