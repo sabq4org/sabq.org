@@ -42,8 +42,15 @@ import {
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
 const RIYADH_TZ = "Asia/Riyadh";
-const LIVE_REFETCH_MS = 15_000;
-const TODAY_REFETCH_MS = 30_000;
+
+// إيقاع الاستطلاع اللحظي — مطابق لبقية صفحات سبق سبورت (لوحة البطولة/المونديال،
+// رفع التأخير في #465): نتيجة لحظية كل 8ث أثناء وجود مباراة جارية، وتهدئة إلى
+// 30ث عند غياب المباشر (توفير الحصة)، مع اعتبار اللحظي قديمًا بعد 5ث ليُعاد جلبه
+// فورًا عند العودة للتبويب/الشبكة بدل انتظار دورة الاستطلاع التالية.
+const LIVE_ACTIVE_MS = 8_000;
+const LIVE_IDLE_MS = 30_000;
+const TODAY_ACTIVE_MS = 10_000;
+const LIVE_STALE_MS = 5_000;
 
 // بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
 const PINNED_COMP_SLUGS = ["world-cup"];
@@ -197,8 +204,9 @@ function EventMark({ type }: { type: string }) {
 function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
   const { data, isLoading } = useQuery<BoardMatchDetail>({
     queryKey: [`/api/sports/match/${fixture.id}`],
-    staleTime: LIVE_REFETCH_MS,
-    refetchInterval: fixture.status.live ? LIVE_REFETCH_MS : false,
+    staleTime: LIVE_STALE_MS,
+    refetchInterval: fixture.status.live ? LIVE_ACTIVE_MS : false,
+    refetchOnWindowFocus: true,
   });
 
   // أهداف + كروت مرتّبة بالدقيقة في قائمة واحدة محاذاة لليمين.
@@ -507,18 +515,25 @@ export default function SportsMatchesBoard() {
 
   const { data: todayData, isLoading, refetch: refetchToday } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today", { date }],
-    staleTime: isToday ? LIVE_REFETCH_MS : TODAY_REFETCH_MS,
-    refetchInterval: isToday ? TODAY_REFETCH_MS : false,
+    staleTime: isToday ? LIVE_STALE_MS : LIVE_IDLE_MS,
+    // يوم اليوم: يوجد مباشر → 10ث، غير ذلك → 30ث؛ يوم آخر (ماضٍ/قادم): بلا استطلاع
+    refetchInterval: isToday
+      ? (query) => ((query.state.data?.today ?? []).some((f) => f.status.live) ? TODAY_ACTIVE_MS : LIVE_IDLE_MS)
+      : false,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const todayMatches = Array.isArray(todayData?.today) ? todayData!.today : [];
 
   const { data: liveData, isFetching: isLiveFetching, refetch: refetchLive } = useQuery<{ live: SpLiveItem[] }>({
     queryKey: ["/api/sports/live"],
     enabled: isToday,
-    staleTime: LIVE_REFETCH_MS,
-    refetchInterval: LIVE_REFETCH_MS,
+    staleTime: LIVE_STALE_MS,
+    // مباراة جارية → 8ث (نتيجة لحظية)؛ لا مباشر → 30ث (تهدئة)
+    refetchInterval: (query) =>
+      (query.state.data?.live ?? []).some((f) => f.status.live) ? LIVE_ACTIVE_MS : LIVE_IDLE_MS,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const liveMatches = Array.isArray(liveData?.live) ? liveData!.live : [];
   const allMatches = useMemo(
