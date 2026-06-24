@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark, Award, Bandage, BarChart3 } from "lucide-react";
+import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark, Award, Bandage, BarChart3, MapPin, Shirt } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -212,10 +212,30 @@ export default function WorldCupTeam() {
                         {data.group.group}
                       </span>
                     )}
-                    {data.coach && (
+                    {(data.coach || data.coachInfo) && (
                       <span className="inline-flex items-center gap-1.5">
-                        <UserCog className="h-4 w-4" />
-                        المدرّب: {data.coach}
+                        {data.coachInfo?.photo ? (
+                          <img
+                            src={data.coachInfo.photo}
+                            alt={data.coach || data.coachInfo.name}
+                            className="h-5 w-5 rounded-full object-cover ring-1 ring-white/40 bg-white/20"
+                          />
+                        ) : (
+                          <UserCog className="h-4 w-4" />
+                        )}
+                        المدرّب: {data.coach || data.coachInfo?.name}
+                      </span>
+                    )}
+                    {data.coachInfo?.formation && (
+                      <span className="inline-flex items-center gap-1.5" title="الخطة المفضّلة للمدرّب">
+                        <Shirt className="h-4 w-4" />
+                        <span dir="ltr">{data.coachInfo.formation}</span>
+                      </span>
+                    )}
+                    {data.venue?.name && (
+                      <span className="inline-flex items-center gap-1.5" title="ملعب المنتخب">
+                        <MapPin className="h-4 w-4" />
+                        {data.venue.name}
                       </span>
                     )}
                     {data.fifaRank && (
@@ -287,6 +307,40 @@ export default function WorldCupTeam() {
                           <GroupRow key={row.team.id} row={row} currentTeamId={data.team.id} />
                         ))}
                       </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* الملعب */}
+            {data.venue?.name && (
+              <section className="py-8 border-b border-border/60">
+                <div className="container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <MapPin className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h2 className="text-xl font-bold">الملعب</h2>
+                  </div>
+                  <Card className="border-0 dark:border dark:border-card-border">
+                    <CardContent className="p-4 flex items-center gap-4 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-bold truncate">{data.venue.name}</p>
+                        {(data.venue.city || data.venue.country) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {[data.venue.city, data.venue.country].filter(Boolean).join("، ")}
+                          </p>
+                        )}
+                      </div>
+                      {data.venue.capacity != null && (
+                        <div className="text-center shrink-0">
+                          <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                            {data.venue.capacity.toLocaleString("ar-EG")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">سعة المقاعد</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

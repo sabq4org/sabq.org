@@ -362,6 +362,23 @@ export interface WcMatchPlayerStats {
   away: { team: WcTeam; players: WcPlayerStatLine[] } | null;
 }
 
+/** المدرّب (صورة/خطة/عمر/جنسية) من TheSports */
+export interface WcCoachInfo {
+  name: string;
+  photo: string;
+  formation: string | null;
+  age: number | null;
+  nationality: string | null;
+}
+
+/** ملعب المنتخب (اسم/سعة/مدينة/دولة) من TheSports */
+export interface WcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  country: string | null;
+}
+
 export interface WcTeamProfile {
   team: WcTeam;
   isSaudi: boolean;
@@ -373,6 +390,8 @@ export interface WcTeamProfile {
   fifaRank?: WcFifaRank | null;
   injuries?: WcInjury[];
   seasonStats?: WcTeamSeasonStats;
+  coachInfo?: WcCoachInfo | null;
+  venue?: WcVenueInfo | null;
 }
 
 /** حقائق البطولة — /api/world-cup/facts */
