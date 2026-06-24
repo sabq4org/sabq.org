@@ -4,6 +4,7 @@
  * استدعاء API إضافي. الخانات غير المحسومة تظهر «يُحدَّد لاحقًا» (لا بيانات وهمية).
  */
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,6 +15,18 @@ interface KnockoutBracketProps {
   fixtures: WcFixture[];
   isLoading: boolean;
   onOpenMatch: (fixtureId: number) => void;
+}
+
+// شكل استجابة /api/world-cup/bracket (مصدر البنية الخادمي — API-Football حاليًّا،
+// وTheSports bracket/season لاحقًا كمصدر أساسي دون تغيير في الواجهة).
+interface BracketRoundDto {
+  round: string;
+  roundEn: string;
+  matches: WcFixture[];
+}
+interface BracketDto {
+  source: string;
+  rounds: BracketRoundDto[];
 }
 
 // ترتيب الأدوار الإقصائية ومسمياتها العربية — ثابتة حتى تظهر العناوين
@@ -117,17 +130,34 @@ function BracketMatch({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id: nu
 }
 
 export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBracketProps) {
+  // مصدر البنية من الخادم (يُركّب أحدث نتيجة لحظية ويُمهّد لإثراء TheSports). يتراجع
+  // للمباريات الممرَّرة من الصفحة عند تعذّره فلا تتعطّل الشجرة.
+  const { data: bracketData } = useQuery<BracketDto>({
+    queryKey: ["/api/world-cup/bracket"],
+    refetchInterval: (query) =>
+      (query.state.data?.rounds ?? []).some((r) => r.matches.some((m) => m.status.live))
+        ? 8_000
+        : 5 * 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+
+  const sourceFixtures = useMemo(() => {
+    const fromServer = bracketData?.rounds?.flatMap((r) => r.matches) ?? [];
+    return fromServer.length > 0 ? fromServer : fixtures;
+  }, [bracketData, fixtures]);
+
   const { columns, thirdPlace, hasAny } = useMemo(() => {
     const cols: BracketColumn[] = KNOCKOUT_ROUNDS.map(({ key, label }) => ({
       key,
       label,
-      matches: fixtures
+      matches: sourceFixtures
         .filter((f) => norm(f.roundEn) === key)
         .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id),
     }));
-    const third = fixtures.find((f) => THIRD_PLACE_KEYS.has(norm(f.roundEn))) ?? null;
+    const third = sourceFixtures.find((f) => THIRD_PLACE_KEYS.has(norm(f.roundEn))) ?? null;
     return { columns: cols, thirdPlace: third, hasAny: cols.some((c) => c.matches.length > 0) };
-  }, [fixtures]);
+  }, [sourceFixtures]);
 
   // الأعمدة التي بها مباريات فعلًا — تحدّد طرفَي الشجرة (أول/آخر) للموصّلات
   const liveCols = columns.filter((c) => c.matches.length > 0);

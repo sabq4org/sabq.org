@@ -136,8 +136,9 @@
 |---|---|---|
 | الترتيب اللحظي الكامل | `season/recent/table/detail?uuid=<seasonId>` | ✅ مُطبَّق |
 | الترتيب أثناء المباراة | `table/live?competition_id=` | ✅ احتياط |
-| إحصاء اللاعب لكل مباراة | `match/player_stats/detail?uuid=<matchId>` | ✅ يعمل (52 صفًّا) |
+| إحصاء اللاعب لكل مباراة | `match/player_stats/detail?uuid=<matchId>` (BASIC DATA — Player statistics/historical matches) | ✅ يعمل (52 صفًّا) — مؤكَّد من الدعم 2026‑06‑24 |
 | إحصاء الفريق لكل مباراة | `match/team_stats/detail?uuid=<matchId>` | ✅ يعمل |
+| **إحصاء الفريق للموسم** | **`season/recent/team/stat?uuid=<seasonId>`** (ADVANCED DATA — Season team statistics/newest season) | ✅ مؤكَّد من الدعم 2026‑06‑24 (لم يُتحقَّق الشكل بعد — يلزم إدراج IP) |
 | **تصنيف فيفا للرجال** | `ranking/fifa/men` | ✅ يعمل (الأرجنتين #1، إسبانيا #2 — `team.id` يطابق جسرنا) |
 | الإصابات | `team/injury/list` | ✅ يعمل |
 | قنوات البثّ | `match/tv/list?uuid=<matchId>` | ✅ يعمل |
@@ -152,6 +153,30 @@
 - **خلل مكتشف في تعريب الأسماء (PR #450):** `resolveTsNames` ينادي `language/list` بـ`uuid=` (مرفوض) ويقرأ `name_ar`، بينما الصحيح: **بلا uuid (مزامنة مُصفَّحة)** والحقل **`name_aa`**. الأثر صامت (يتراجع للنقل الصوتي). إصلاح منفصل مقترح: مزامنة دورية لقاموس `name_aa`.
 
 **ميزات جاهزة للبناء فورًا (المسارات مؤكَّدة):** تصنيف فيفا على صفحة المنتخب/القسم (`ranking/fifa/men`) · الإصابات قبل المباراة (`team/injury/list`) · قنوات البثّ في مركز المباراة (`match/tv/list`) · إحصاء المباراة المفصّل (`match/player_stats/detail` + `match/team_stats/detail`).
+
+**تأكيد الدعم لمسارَي الإحصاءات (2026‑06‑24):** بعد سؤالنا عن «إحصاء اللاعب لكل مباراة» و«إحصاء الفريق للموسم»، أكّد الدعم رسميًّا:
+- **إحصاء اللاعب لكل مباراة** → `match/player_stats/detail` (BASIC DATA — *Player statistics (historical matches)*). نفس المسار المتحقَّق سابقًا (52 صفًّا).
+- **إحصاء الفريق للموسم** → `season/recent/team/stat` (ADVANCED DATA — *Season team statistics (newest season)*). **مسار جديد** لم يكن في خريطتنا.
+> الحقول التفصيلية في «sample responses» بالتوثيق (صفحة SPA لا تُقرأ آليًّا). **البناء محجوب على إدراج عنوان خروج الفحص `78.95.50.229` لدى TheSports** (5 خانات متاحة) لمعاينة شكل الاستجابة الحيّ قبل التنفيذ — يخدم أيضًا التحقّق من `bracket/season` (شجرة الأدوار).
+
+**معاينة الأشكال الحيّة (2026‑06‑24 — بعد إدراج `78.95.50.229`، معرّف الموسم `e4wyrn4hgjzq86p`):**
+
+1. **`bracket/season?uuid=<seasonId>`** → `results = { brackets[], groups[], rounds[], match_ups[] }`:
+   - `rounds[]`: `{ id, bracket_id, group_id, name ("1/16 Finals"…), abbr (R32/R16/QF/SF/F/Third place), number }`.
+   - `match_ups[]`: `{ id, round_id, number, type_id, state_id, home_team_id, away_team_id, winner_team_id, home_score, away_score, parent_ids[], children_ids[], match_ids[], note }`. معرّفات الفرق uuid (تُسمّى عبر `season/recent/team/stat` أو `language/list type4`).
+   - **⚠️ قرار: لا نفعّل TheSports للـBracket الآن.** كل المواجهات (R32 → **النهائي**) مملوءة سلفًا بمنتخبين (`state_id=1`, `winner=""`, نتيجة 0-0) رغم عدم اكتمال المجموعات → **بذور/توقّعات للقرعة لا منتخبات محسومة**. عرضها يُظهر تأهّلات خاطئة. **المصدر يبقى API-Football** (`buildBracket` في `worldCupService` + `/api/world-cup/bracket`) الذي يُظهر الإقصائيات الرسمية فور نشرها. يُعاد النظر في استخدام TheSports للشجرة لاحقًا (مثلًا كشف تعبئة فعلية عبر `winner_team_id`/`state_id` المتقدّم، أو جسر `match_ids` لفتح مركز المباراة).
+2. **`season/recent/team/stat?uuid=<seasonId>`** → `results[]` (48 منتخبًا)، كلٌّ: `team{id,name,logo}` (الشعار حقيقي من TheSports) + إحصاءات موسمية مسمّاة: `matches, goals, penalty, assists, yellow_cards, red_cards, shots, shots_on_target, dribble(_succ), clearances, blocked_shots, tackles, passes, passes_accuracy (عدد مكتمل لا نسبة), key_passes, crosses(_accuracy), long_balls(_accuracy), duels(_won), fouls, was_fouled, goals_against, interceptions, offsides, corner_kicks, ball_possession, freekicks, saves, big_chance_missed/created, aerial_won/lost, poss_losts…`.
+3. **`match/player_stats/detail?uuid=<matchId>`** → `results[]` (≈52 صفًّا لكل مباراة)، كلٌّ: `{ player_id, team_id, first (1=أساسي), minutes_played, rating, goals, penalty, assists, shots, shots_on_target, passes, passes_accuracy, key_passes, dribble(_succ), tackles, interceptions, clearances, blocked_shots, duels(_won), fouls, was_fouled, offsides, dispossessed, saves, crosses, long_balls, aerial_won/lost, big_chance_missed/created… }`. أسماء اللاعبين عبر `language/list type5` (`name_aa`). الصفوف بقيم 0 (لم يشارك) تُسقط.
+
+**مُنفَّذ ومتحقَّق حيًّا (2026‑06‑24):**
+
+- **إحصاء المنتخب في البطولة (`season/recent/team/stat`):**
+  - الخادم: `getTsSeasonTeamStats(seasonUuid)` في `theSportsService` (كاش 30د) → `getWcSeasonTeamStatsMap` (نداء واحد يخدم كل المنتخبات) + `getWcTeamSeasonStats(teamId)` في `worldCupService` (عبر الجسر، انتقاء ~15 بندًا مُعرَّبًا، حساب نسبة دقّة التمرير/الثنائيات). يُضاف `seasonStats` إلى `WcTeamProfile` (مسار `/api/world-cup/team/:id`).
+  - الواجهة: قسم «إحصاء المنتخب في البطولة» في `WorldCupTeam.tsx` (شبكة بطاقات). **تحقّق حيّ:** الأرجنتين (مباراتان): 5 أهداف، 0 مستقبَلة، استحواذ 51%، دقّة تمرير 89%.
+- **تقييم/إحصاء اللاعب لكل مباراة (`match/player_stats/detail`):**
+  - الخادم: `getTsMatchPlayerStats(matchUuid)` في `theSportsService` (كاش 2د/30د) → `getWcMatchPlayerStats(fixtureId)` في `worldCupService` (جسر المباراة + إقران مضيف/ضيف + تعريب الأسماء `type5` مع احتياط اسم التشكيلة، إسقاط من لم يشارك، ترتيب بالتقييم). مسار جديد `/api/world-cup/match/:id/player-stats`.
+  - الواجهة: تبويب «التقييمات» في `MatchCenterDialog` يستخدم TheSports **احتياطًا** عند غياب تقييمات API-Football (مكوّن `TsRatingsFallback`، مجموعة لكل فريق، شارة تقييم ملوّنة). **تحقّق حيّ:** المكسيك×ج.أفريقيا (كينونيز 8.5)، أمريكا×باراغواي (بالوغون 9.1، هدفان)، البرازيل×المغرب (فينيسيوس 8.0).
+  - ملاحظة: لا نقر على بطاقة اللاعب في الاحتياط (لا يتوفّر معرّف API-Football هنا)، وبعض الأسماء بصيغة «العائلة، الاسم» من `name_aa`.
 
 **مرجع توثيق TheSports:** https://www.thesports.com/docs/football · قائمة أخطاء API: https://www.thesports.com/helpcenter/3/58
 

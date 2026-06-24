@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark, Award, Bandage } from "lucide-react";
+import { ArrowRight, CalendarRange, ListOrdered, Users, UserCog, Wallet, Landmark, Award, Bandage, BarChart3 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -330,6 +330,47 @@ export default function WorldCupTeam() {
                           </li>
                         ))}
                       </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* إحصاء المنتخب في البطولة (TheSports) */}
+            {data.seasonStats?.available && data.seasonStats.items.length > 0 && (
+              <section className="py-8 border-b border-border/60">
+                <div className="container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold">إحصاء المنتخب في البطولة</h2>
+                      {data.seasonStats.matches > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          من {data.seasonStats.matches} مباراة
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Card className="border-0 dark:border dark:border-card-border">
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {data.seasonStats.items.map((s, i) => (
+                          <div
+                            key={`${s.label}-${i}`}
+                            className="rounded-xl bg-muted/40 px-3 py-2.5 text-center"
+                          >
+                            <p className="text-lg font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+                              {s.value}
+                              {s.percent ? "%" : ""}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                              {s.label}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </CardContent>
                   </Card>
                 </div>

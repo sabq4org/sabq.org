@@ -329,6 +329,39 @@ export interface WcTvChannel {
   logo: string | null;
 }
 
+/** بند إحصائي للموسم — إثراء TheSports (season/recent/team/stat) */
+export interface WcSeasonStatItem {
+  label: string;
+  value: number;
+  percent?: boolean;
+}
+
+/** إحصاء المنتخب في البطولة — إثراء TheSports */
+export interface WcTeamSeasonStats {
+  available: boolean;
+  matches: number;
+  items: WcSeasonStatItem[];
+}
+
+/** سطر إحصاء/تقييم لاعب في مباراة — إثراء TheSports (match/player_stats/detail) */
+export interface WcPlayerStatLine {
+  name: string;
+  rating: number | null;
+  starter: boolean;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+/** تقييمات لاعبي المباراة (مضيف/ضيف) — إثراء TheSports */
+export interface WcMatchPlayerStats {
+  available: boolean;
+  home: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+  away: { team: WcTeam; players: WcPlayerStatLine[] } | null;
+}
+
 export interface WcTeamProfile {
   team: WcTeam;
   isSaudi: boolean;
@@ -339,6 +372,7 @@ export interface WcTeamProfile {
   extra?: WcTeamExtra | null;
   fifaRank?: WcFifaRank | null;
   injuries?: WcInjury[];
+  seasonStats?: WcTeamSeasonStats;
 }
 
 /** حقائق البطولة — /api/world-cup/facts */

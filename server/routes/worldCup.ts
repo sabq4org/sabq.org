@@ -14,10 +14,12 @@ import {
   getSquad,
   getStandings,
   buildGroupStandings,
+  buildBracket,
   getTeamProfile,
   getWcCompetitionFacts,
   getWcMatchTv,
   getWcMatchTeamStats,
+  getWcMatchPlayerStats,
   getWcMomentumTs,
   getWcPressureTs,
   getPlayerMarket,
@@ -352,6 +354,28 @@ export function registerWorldCupRoutes(app: Express) {
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
     }
   });
+  // شجرة الأدوار الإقصائية (Bracket) — تُبنى من المباريات نفسها مع تركيب أحدث
+  // نتيجة لحظية فتتحرّك مع المباريات الجارية. (TheSports bracket/season سيُضاف
+  // لاحقًا كمصدر بنية أساسي بعد إدراج عنوان الخروج والتحقّق من شكل الاستجابة.)
+  app.get("/api/world-cup/bracket", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      const fixtures = await overlayLiveList(await getFixtures());
+      const bracket = buildBracket(fixtures);
+      const hasLive = bracket.rounds.some((r) => r.matches.some((m) => m.status?.live));
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json(bracket);
+    } catch (error) {
+      console.error("[WorldCup] bracket failed:", error);
+      res.status(502).json({ message: "تعذر جلب شجرة الأدوار الإقصائية حاليًا" });
+    }
+  });
+
   // حقائق البطولة (حامل اللقب + الأكثر تتويجًا + الدول المضيفة) — إثراء TheSports.
   app.get("/api/world-cup/facts", async (_req, res) => {
     if (!guard(res)) return;
@@ -705,6 +729,27 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] match stats ${fixtureId} failed:`, error);
       res.status(502).json({ available: false, team: [] });
+    }
+  });
+
+  // تقييمات/إحصاء اللاعبين لكل مباراة (TheSports عبر جسر المباراة) — للمباريات
+  // الجارية/المنتهية. كاش قصير أثناء المباراة (التقييمات تتغيّر) وأطول بعدها.
+  app.get("/api/world-cup/match/:id/player-stats", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      const data = await getWcMatchPlayerStats(fixtureId);
+      res.set(
+        "Cache-Control",
+        "public, max-age=60, s-maxage=180, stale-while-revalidate=600",
+      );
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] match player-stats ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, home: null, away: null });
     }
   });
 
