@@ -70,7 +70,10 @@ struct WorldCupView: View {
         .sheet(item: $selectedMatch) { sel in
             WorldCupMatchCenter(fixtureId: sel.id)
         }
-        .sheet(isPresented: $showPredictions) {
+        // ملء الشاشة (لا sheet): الرأس الأخضر «الملعب» يمتد حتى الحافة العليا بلا
+        // فجوة فاتحة فوقه (الـ sheet بنمط large يترك شريطًا علويًا يكشف الصفحة خلفها).
+        // الإغلاق عبر زر X في الرأس.
+        .fullScreenCover(isPresented: $showPredictions) {
             WCPredictionsView()
         }
         .sabqRTL()
