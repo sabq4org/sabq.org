@@ -17,12 +17,17 @@ struct WorldCupMatchCenter: View {
     @State private var showActivityDeniedAlert = false
     private let liveManager = LiveMatchActivityManager.shared
 
-    enum Tab: String, CaseIterable { case events = "الأحداث", pressure = "الضغط", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
+    enum Tab: String, CaseIterable { case commentary = "التعليق", events = "الأحداث", momentum = "الزخم", pressure = "الضغط", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات", prediction = "التوقعات" }
     @State private var tab: Tab = .events
+    // ضبط افتراضي مرّة واحدة: التعليق الحي يتصدّر عند بثّ المباراة (كالويب)
+    @State private var didPickDefaultTab = false
 
     private var tabs: [Tab] {
-        var t: [Tab] = [.events]
-        if let d = detail, d.fixture.status.live || d.fixture.status.finished { t.append(.pressure) }
+        let started = (detail?.fixture.status.live ?? false) || (detail?.fixture.status.finished ?? false)
+        var t: [Tab] = []
+        if started { t.append(.commentary) }   // مباشر/التعليق أولًا
+        t.append(.events)
+        if started { t.append(contentsOf: [.momentum, .pressure]) }
         t.append(contentsOf: [.lineups, .stats])
         if let d = detail, !d.ratings.isEmpty { t.append(.ratings) }
         t.append(.prediction)
@@ -37,6 +42,9 @@ struct WorldCupMatchCenter: View {
                         WCLoading().padding(.top, 30)
                     } else if let detail {
                         header(detail.fixture)
+                        if !detail.fixture.status.finished {
+                            WCTvStrip(fixtureId: detail.fixture.id)
+                        }
                         if liveActivityEligible(detail.fixture) {
                             liveFollowButton(detail)
                         }
@@ -138,7 +146,15 @@ struct WorldCupMatchCenter: View {
 
     private func load(force: Bool = false) async {
         if let r = try? await APIClient.shared.fetchWorldCupMatch(fixtureId: fixtureId, ignoreCache: force) {
-            await MainActor.run { detail = r; loading = false }
+            await MainActor.run {
+                detail = r
+                loading = false
+                // أول تحميل لمباراة جارية: ابدأ على «التعليق» الحي كالويب
+                if !didPickDefaultTab {
+                    didPickDefaultTab = true
+                    if r.fixture.status.live { tab = .commentary }
+                }
+            }
         } else { await MainActor.run { loading = false } }
     }
 
@@ -200,7 +216,12 @@ struct WorldCupMatchCenter: View {
     @ViewBuilder private func content(_ d: WCMatchDetail) -> some View {
         let openPlayer: (Int?) -> Void = { selectedPlayer = WCPlayerSelection($0) }
         switch tab {
+        case .commentary:
+            WCCommentaryView(fixtureId: d.fixture.id, live: d.fixture.status.live)
         case .events: WCEventsTimeline(detail: d, onOpenPlayer: openPlayer)
+        case .momentum:
+            WCMomentumView(fixtureId: d.fixture.id, live: d.fixture.status.live,
+                           homeName: d.fixture.home.name, awayName: d.fixture.away.name)
         case .pressure:
             WCPressureView(fixtureId: d.fixture.id, live: d.fixture.status.live,
                            homeName: d.fixture.home.name, awayName: d.fixture.away.name)
@@ -334,8 +355,7 @@ struct WCEventsTimeline: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.emerald.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.emerald.opacity(0.25), lineWidth: 1))
+        .wcElevatedCard()
     }
 
     private func minuteTiny(_ ev: WCMatchEvent) -> some View {
@@ -427,7 +447,7 @@ struct WCEventsTimeline: View {
             WCRemoteImage(url: team.logo).frame(width: 20, height: 20)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     @ViewBuilder private func icon(_ type: String) -> some View {
@@ -557,7 +577,44 @@ struct WCPitch: View {
             if !lineup.coach.isEmpty {
                 Text("المدرب: \(lineup.coach)").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
             }
+            if !lineup.substitutes.isEmpty {
+                bench
+            }
         }
+    }
+
+    // دكة البدلاء — شبكة مدمجة (رقم + اسم) قابلة للنقر لفتح بطاقة اللاعب
+    private var bench: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                Text("دكة البدلاء").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                Text("(\(lineup.substitutes.count))").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(lineup.substitutes) { p in
+                    Button { onOpenPlayer(p.id) } label: { benchRow(p) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func benchRow(_ p: WCLineupPlayer) -> some View {
+        HStack(spacing: 8) {
+            Text(p.number.map { "\($0)" } ?? "•")
+                .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
+                .environment(\.layoutDirection, .leftToRight)
+            Text(p.name)
+                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WCTheme.chipFill))
     }
 
     private var pitch: some View {
@@ -725,7 +782,7 @@ struct WCStatsView: View {
             Spacer()
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     // MARK: الغيابات
@@ -743,7 +800,7 @@ struct WCStatsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     private func absenteeCol(_ team: WCTeam, _ players: [WCAbsentee]) -> some View {
@@ -846,7 +903,7 @@ struct WCRatingsView: View {
             ratingBadge(p.rating)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard()
     }
 
     private func subtitle(_ p: WCPlayerRating) -> String {
@@ -1056,7 +1113,210 @@ struct WCPredictionView: View {
             Spacer()
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.chipFill))
+        .wcElevatedCard(cornerRadius: 12)
+    }
+}
+
+// MARK: - قنوات البث (شريط أعلى مركز المباراة)
+
+struct WCTvStrip: View {
+    let fixtureId: Int
+    @State private var channels: [WCTvChannel] = []
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(width: 0, height: 0)
+            if !channels.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "tv.fill").font(.system(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
+                        Text("القنوات الناقلة").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(channels) { ch in
+                                chip(ch)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .task(id: fixtureId) {
+            if let r = try? await APIClient.shared.fetchWorldCupTv(fixtureId: fixtureId), r.available {
+                await MainActor.run { channels = r.channels }
+            }
+        }
+    }
+
+    @ViewBuilder private func chip(_ ch: WCTvChannel) -> some View {
+        let content = HStack(spacing: 6) {
+            if let logo = ch.logo, !logo.isEmpty {
+                WCRemoteImage(url: logo).frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "play.tv").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            Text(ch.name).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            if let c = ch.country, !c.isEmpty {
+                Text(c).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        .background(Capsule().fill(WCTheme.chipFill))
+        .overlay(Capsule().stroke(WCTheme.cardStroke.opacity(0.6), lineWidth: 0.5))
+
+        if let urlString = ch.url, let url = URL(string: urlString) {
+            Button { openURL(url) } label: { content }.buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - التعليق الحي (/world-cup/commentary/:id)
+//
+// تعليق نصّي أحدثُه بالأعلى، يتجدّد كل ١٥ث أثناء البث. الأهداف واللحظات
+// المهمّة مُبرَزة بلون العلامة وأيقونة.
+
+struct WCCommentaryView: View {
+    let fixtureId: Int
+    let live: Bool
+    @State private var data: WCCommentary?
+
+    private var items: [WCCommentaryItem] {
+        (data?.items ?? []).sorted { $0.order > $1.order }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if items.isEmpty {
+                emptyText("التعليق الحي يبدأ مع صافرة الانطلاق")
+            } else {
+                ForEach(items) { item in row(item) }
+            }
+        }
+        .task(id: fixtureId) { await loop() }
+    }
+
+    private func row(_ item: WCCommentaryItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(item.minuteLabel)
+                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit())
+                .foregroundStyle(item.goal ? WCTheme.emeraldDeep : WCTheme.onDarkDim)
+                .frame(minWidth: 40, alignment: .leading)
+                .environment(\.layoutDirection, .leftToRight)
+            if item.goal {
+                Image(systemName: "soccerball").font(.system(size: 13)).foregroundStyle(WCTheme.emeraldDeep)
+            } else if item.important {
+                Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(WCTheme.gold)
+            }
+            Text(item.textAr.isEmpty ? item.textEn : item.textAr)
+                .font(SabqFonts.app(size: 14, weight: item.goal || item.important ? .bold : .regular))
+                .foregroundStyle(WCTheme.onDark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(item.goal ? WCTheme.emerald.opacity(0.10) : WCTheme.chipFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(item.goal ? WCTheme.emerald.opacity(0.35) : .clear, lineWidth: 1)
+        )
+    }
+
+    private func loop() async {
+        while !Task.isCancelled {
+            if let r = try? await APIClient.shared.fetchWorldCupCommentary(fixtureId: fixtureId, ignoreCache: live), r.available {
+                await MainActor.run { data = r }
+            }
+            let isLive = data?.live ?? live
+            if !isLive { return }   // مباراة منتهية/لم تبدأ — لا داعي للاستطلاع
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+        }
+    }
+}
+
+// MARK: - الزخم/الاستحواذ (/world-cup/momentum/:id)
+
+struct WCMomentumView: View {
+    let fixtureId: Int
+    let live: Bool
+    let homeName: String
+    let awayName: String
+    @State private var data: WCMomentum?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if let d = data, (d.possession != nil || !d.points.isEmpty) {
+                if let pos = d.possession { possessionBar(pos) }
+                if !d.points.isEmpty {
+                    Text("الزخم الهجومي عبر دقائق المباراة — أعلى: \(homeName) · أسفل: \(awayName)")
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        .multilineTextAlignment(.center)
+                    chart(d.points)
+                }
+            } else {
+                emptyText("مؤشّر الزخم والاستحواذ يظهر هنا أثناء المباراة")
+            }
+        }
+        .task(id: fixtureId) {
+            if let r = try? await APIClient.shared.fetchWorldCupMomentum(fixtureId: fixtureId, ignoreCache: live), r.available {
+                await MainActor.run { data = r }
+            }
+        }
+    }
+
+    private func possessionBar(_ pos: WCPossession) -> some View {
+        let total = CGFloat(max(1, pos.home + pos.away))
+        return VStack(spacing: 6) {
+            HStack {
+                Text("\(homeName) \(pos.home)%")
+                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                Spacer()
+                Text("الاستحواذ").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                Spacer()
+                Text("\(awayName) \(pos.away)%")
+                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            }
+            // RTL: المضيف (زمردي) يمينًا، الضيف (سماوي) يسارًا
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    Rectangle().fill(WCTheme.emeraldDeep).frame(width: geo.size.width * CGFloat(pos.home) / total)
+                    Rectangle().fill(WCTheme.sky)
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+        }
+        .padding(12)
+        .wcElevatedCard()
+    }
+
+    private func chart(_ points: [WCMomentumPoint]) -> some View {
+        Chart(points) { p in
+            BarMark(
+                x: .value("الدقيقة", p.minute),
+                y: .value("الزخم", p.net)
+            )
+            .foregroundStyle(p.net >= 0 ? WCTheme.emeraldDeep : WCTheme.sky)
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                AxisValueLabel {
+                    if let m = value.as(Int.self) {
+                        Text("\(m)'").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .chartYAxis(.hidden)
+        .frame(height: 180)
+        .environment(\.layoutDirection, .leftToRight)
     }
 }
 

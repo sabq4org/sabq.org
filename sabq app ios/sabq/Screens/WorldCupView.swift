@@ -20,11 +20,17 @@ struct WorldCupView: View {
     @State private var scorersLoading = true
 
     @State private var selectedMatch: WCMatchSelection?
+    @State private var showPredictions = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 22) {
                 WCHeroSection(overview: overview, isLoading: overviewLoading) { open($0) }
+
+                WCPredictCTA { showPredictions = true }
+                    .padding(.horizontal, 16)
+
+                WCFactsSection()
 
                 if let pid = pulseFixtureId {
                     WCPulseCard(fixtureId: pid) { open($0) }
@@ -39,6 +45,8 @@ struct WorldCupView: View {
 
                 WCStandingsSection(groups: standings, isLoading: standingsLoading)
 
+                WCKnockoutSection { open($0) }
+
                 WCRacesSection(
                     scorers: scorers,
                     scorersLoading: scorersLoading,
@@ -46,9 +54,12 @@ struct WorldCupView: View {
                 )
 
                 WCTeamsSection()
+
+                WCNewsSection()
             }
             .padding(.bottom, 36)
         }
+        .sabqAutoHideTabBar()
         .background(WCTheme.sectionBackground.ignoresSafeArea())
         .navigationTitle("مونديال 2026")
         .navigationBarTitleDisplayMode(.inline)
@@ -58,6 +69,9 @@ struct WorldCupView: View {
         .refreshable { await loadAll(force: true) }
         .sheet(item: $selectedMatch) { sel in
             WorldCupMatchCenter(fixtureId: sel.id)
+        }
+        .sheet(isPresented: $showPredictions) {
+            WCPredictionsView()
         }
         .sabqRTL()
     }
@@ -123,6 +137,8 @@ struct WCHeroSection: View {
     let isLoading: Bool
     let onOpenMatch: (Int) -> Void
 
+    @State private var selectedTeam: WCTeam?
+
     private var motd: WCMatchOfDay? { overview?.matchOfTheDay }
     private var liveCount: Int { overview?.live.count ?? 0 }
 
@@ -135,6 +151,9 @@ struct WCHeroSection: View {
         .padding(.top, 52) // يُنزِل المحتوى أسفل شريط التنقّل الشفّاف (لا تداخل مع العنوان/الزر)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity)
+        .sheet(item: $selectedTeam) { team in
+            WCTeamSheet(team: team).presentationDetents([.large])
+        }
         // لا كتلة خلفية للهيرو — يجلس مباشرة على خلفية الصفحة الزرقاء الخفيفة جدًا
         // (sectionBackground). النصوص والبطاقة تكيّفية تُقرأ على الفاتح والليلي.
     }
@@ -143,7 +162,7 @@ struct WCHeroSection: View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 pill(icon: "trophy.fill", text: "تغطية خاصة",
-                     bg: WCTheme.emerald.opacity(0.14), fg: WCTheme.emeraldDeep)
+                     bg: WCTheme.gold.opacity(0.18), fg: WCTheme.gold)
                 if liveCount > 0 {
                     pill(icon: "dot.radiowaves.left.and.right",
                          text: liveCount == 1 ? "مباراة مباشرة" : "\(liveCount) مباريات مباشرة",
@@ -215,14 +234,17 @@ struct WCHeroSection: View {
     }
 
     private func teamColumn(_ team: WCTeam) -> some View {
-        VStack(spacing: 8) {
-            WCTeamLogo(team: team, size: 64, ring: WCTheme.cardStroke)
-            Text(team.name)
-                .font(SabqFonts.app(size: 16, weight: .heavy))
-                .foregroundStyle(WCTheme.onDark)
-                .multilineTextAlignment(.center)
+        Button { selectedTeam = team } label: {
+            VStack(spacing: 8) {
+                WCTeamLogo(team: team, size: 64, ring: WCTheme.cardStroke)
+                Text(team.name)
+                    .font(SabqFonts.app(size: 16, weight: .heavy))
+                    .foregroundStyle(WCTheme.onDark)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
     }
 
     private func centerColumn(_ f: WCFixture) -> some View {
@@ -579,6 +601,7 @@ struct WCMatchCard: View {
 struct WCStandingsSection: View {
     let groups: [WCGroup]
     let isLoading: Bool
+    @State private var selectedTeam: WCTeam?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -601,6 +624,9 @@ struct WCStandingsSection: View {
                 .padding(.horizontal, 16)
             }
         }
+        .sheet(item: $selectedTeam) { team in
+            WCTeamSheet(team: team).presentationDetents([.large])
+        }
     }
 
     private func groupCard(_ group: WCGroup) -> some View {
@@ -614,7 +640,8 @@ struct WCStandingsSection: View {
                 .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
             }
             ForEach(group.rows) { row in
-                standingRow(row)
+                Button { selectedTeam = row.team } label: { standingRow(row) }
+                    .buttonStyle(.plain)
             }
         }
         .padding(14)
@@ -623,11 +650,24 @@ struct WCStandingsSection: View {
     }
 
     private func standingRow(_ row: WCStandingRow) -> some View {
-        let highlight: Color = row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear)
+        // حالة التأهّل من الخادم إن توفّرت، وإلا تقدير بالمركز (الأول/الثاني تأهّل، الثالث منافِس)
+        let highlight: Color = row.qualifyStatus != nil
+            ? row.qualifyColor
+            : (row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear))
         return HStack(spacing: 8) {
             Text("\(row.rank)").font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
             WCTeamLogo(team: row.team, size: 20, ring: WCTheme.cardStroke)
             Text(row.team.name).font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            if row.live == true {
+                Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
+            }
+            if let label = row.qualifyLabel {
+                Text(label)
+                    .font(SabqFonts.app(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(row.qualifyColor))
+            }
             if let form = row.form { WCFormDots(form: form) }
             Spacer()
             Text("\(row.played)").frame(width: 28)
@@ -750,9 +790,9 @@ struct WCPulseCard: View {
             .background(Capsule().fill(WCTheme.liveRed.opacity(0.25)))
         } else if p.status.finished {
             Text(p.status.label.isEmpty ? "انتهت" : p.status.label)
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.8))
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.liveRed)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(.white.opacity(0.12)))
+                .background(Capsule().fill(WCTheme.liveRed.opacity(0.20)))
         } else {
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 Text("تبدأ بعد \(WCFormat.countdown(to: p.timestamp))")

@@ -514,6 +514,12 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             .interpolation(.high)
             .frame(width: drawnW, height: drawnH)
             .offset(x: offsetX, y: offsetY)
+            // داخل كروسيل TabView (.page) يُعيد GeometryReader قياس الصفحة
+            // أثناء السحب، فتتغيّر أبعاد الحاوية ومعها الإزاحة المحسوبة. بدون
+            // هذا يلتقط SwiftUI تلك التغيّرات ضمن أنيميشن السحب فتبدو الصورة
+            // «تنزلق من مكانها» عند الانتقال بين الشرائح. تعطيل الأنيميشن عند
+            // تغيّر الحجم يثبّت الصورة (الظهور الأول يبقى بتلاشٍ عبر transition).
+            .animation(nil, value: container)
     }
 
     @MainActor

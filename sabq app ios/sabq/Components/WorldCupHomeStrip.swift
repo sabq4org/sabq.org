@@ -55,50 +55,102 @@ struct WorldCupHomeStrip: View {
         .task { await store.loadIfNeeded() }
     }
 
-    private func card(_ f: WCFixture) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("مونديال 2026")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                Text("تغطية حية بتوقيت الرياض")
-                    .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.emerald.opacity(0.8))
-                    .lineLimit(1).minimumScaleFactor(0.7)
-            }
-            .fixedSize(horizontal: false, vertical: true)
+    // هوية المونديال: أخضر زمردي حيّ مع توهّج أخضر فاتح خفيف في الزاوية،
+    // والشعار الرسمي يوفّر اللمسة الذهبية بدل اللون المنفصل.
+    private var cardGradient: LinearGradient {
+        LinearGradient(
+            colors: [WCTheme.heroTop, WCTheme.royal, WCTheme.heroBottom],
+            startPoint: .topTrailing, endPoint: .bottomLeading
+        )
+    }
 
-            Spacer(minLength: 4)
+    private func card(_ f: WCFixture) -> some View {
+        HStack(spacing: 12) {
+            // شعار البطولة الرسمي (على خلفية بيضاء لإبراز الرقم الأسود) + الهوية
+            HStack(spacing: 10) {
+                Image("WorldCupEmblem")
+                    .resizable().scaledToFit()
+                    .frame(height: 32)
+                    .padding(.horizontal, 6).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white))
+                    .shadow(color: .black.opacity(0.20), radius: 5, y: 2)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("مونديال 2026")
+                        .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    statusLine(f)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 6)
 
             HStack(spacing: 8) {
-                WCRemoteImage(url: f.home.logo).padding(3).frame(width: 30, height: 30).background(Circle().fill(.white))
+                logo(f.home.logo)
                 centerColumn(f)
-                WCRemoteImage(url: f.away.logo).padding(3).frame(width: 30, height: 30).background(Circle().fill(.white))
+                logo(f.away.logo)
             }
 
             Spacer(minLength: 4)
 
-            Image(systemName: "chevron.left").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+            Image(systemName: "chevron.left")
+                .font(SabqFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(.white.opacity(0.9))
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, 13)
         .background(
-            LinearGradient(colors: [WCTheme.stadiumTop, WCTheme.stadiumBottom],
-                           startPoint: .topTrailing, endPoint: .bottomLeading)
+            cardGradient
+                .overlay(alignment: .topLeading) {
+                    // توهّج أخضر فاتح ناعم يضيف عمقًا دون لون دخيل
+                    Circle()
+                        .fill(WCTheme.leaf.opacity(0.20))
+                        .frame(width: 140, height: 140)
+                        .blur(radius: 50)
+                        .offset(x: -30, y: -50)
+                }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(.white.opacity(0.08), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: WCTheme.royal.opacity(0.30), radius: 14, x: 0, y: 7)
+    }
+
+    private func logo(_ url: String) -> some View {
+        WCRemoteImage(url: url)
+            .padding(3).frame(width: 32, height: 32)
+            .background(Circle().fill(.white))
+            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+    }
+
+    /// السطر الثاني تحت العنوان: «مباشر» عند البث، أو شعار التغطية.
+    @ViewBuilder private func statusLine(_ f: WCFixture) -> some View {
+        if f.status.live {
+            HStack(spacing: 4) {
+                Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
+                Text("مباشر الآن")
+                    .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(.white)
+            }
+        } else {
+            Text("تغطية حية بتوقيت الرياض")
+                .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
     }
 
     @ViewBuilder private func centerColumn(_ f: WCFixture) -> some View {
         if f.started {
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .font(SabqFonts.app(size: 18, weight: .black)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(.white)
                     .environment(\.layoutDirection, .leftToRight)
                 WCStatusPill(fixture: f, onDark: true)
             }
         } else {
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 Text(WCFormat.time(f))
                     .font(SabqFonts.app(size: 14, weight: .black))
                     .foregroundStyle(.white)
@@ -107,7 +159,8 @@ struct WorldCupHomeStrip: View {
                 // عدّاد يتحرّك كل ثانية (TimelineView) كما في الهيرو
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                        .font(SabqFonts.app(size: 10, weight: .semibold))
+                        .foregroundStyle(WCTheme.leaf)
                         .lineLimit(1).fixedSize()
                 }
             }

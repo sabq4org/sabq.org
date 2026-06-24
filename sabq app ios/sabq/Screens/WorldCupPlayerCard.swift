@@ -36,6 +36,7 @@ struct WCPlayerSheet: View {
                         identityHeader(player)
                         factTiles(player)
                         birthLine(player)
+                        WCPlayerMarketSection(playerId: playerId)
                         if let stats = player.stats {
                             WCPlayerStatsGrid(stats: stats, isGoalkeeper: player.positionEn == "Goalkeeper")
                         }
@@ -88,7 +89,7 @@ struct WCPlayerSheet: View {
                 }
                 HStack(spacing: 6) {
                     if !p.position.isEmpty {
-                        chip(p.position, fill: WCTheme.emeraldDeep.opacity(0.35), fg: WCTheme.emerald)
+                        chip(p.position, fill: WCTheme.emerald.opacity(0.15), fg: WCTheme.emeraldDeep)
                     }
                     if let number = p.number {
                         HStack(spacing: 3) {
@@ -517,4 +518,110 @@ struct WCPlayerFormSection: View {
         if r >= 6 { return WCTheme.gold }
         return WCTheme.liveRed
     }
+}
+
+// MARK: - القيمة السوقية + مخطّط تاريخها (/world-cup/player/:id/market)
+//
+// تكافؤ مع PlayerCardDialog على الويب: القيمة الحاليّة بارزة + مخطّط خطّي
+// لتطوّرها عبر السنوات (TheSports). نقطة منفصلة تُجلب ذاتيًا وتُخفى بهدوء
+// إن رجعت available=false (503 قبل تفعيل TheSports).
+
+struct WCPlayerMarketSection: View {
+    let playerId: Int
+    @State private var market: WCPlayerMarket?
+    @State private var loaded = false
+
+    private var history: [WCMarketPoint] { market?.history ?? [] }
+
+    // القيمة الحالية: القيمة المعتمدة، وإلا آخر نقطة في السجل (مطابقة للويب)
+    private var current: Double? { market?.marketValue ?? history.last?.value }
+
+    var body: some View {
+        Group {
+            if let m = market, m.available, (current != nil || history.count >= 2) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.gold)
+                        Text("القيمة السوقية").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.gold)
+                        Spacer()
+                        if let v = current {
+                            Text(Self.format(v, currency: m.currency))
+                                .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit())
+                                .foregroundStyle(WCTheme.onDark)
+                                .environment(\.layoutDirection, .leftToRight)
+                        }
+                    }
+                    if history.count >= 2 { chart(history, currency: m.currency) }
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.card))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.gold.opacity(0.25), lineWidth: 1))
+            } else {
+                EmptyView()
+            }
+        }
+        .task(id: playerId) {
+            guard !loaded else { return }
+            loaded = true
+            market = try? await APIClient.shared.fetchWorldCupPlayerMarket(playerId: playerId)
+        }
+    }
+
+    private func chart(_ points: [WCMarketPoint], currency: String) -> some View {
+        Chart(points) { p in
+            LineMark(x: .value("التاريخ", p.date), y: .value("القيمة", p.value))
+                .foregroundStyle(WCTheme.gold)
+                .interpolationMethod(.monotone)
+            AreaMark(x: .value("التاريخ", p.date), y: .value("القيمة", p.value))
+                .foregroundStyle(WCTheme.gold.opacity(0.15))
+                .interpolationMethod(.monotone)
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine().foregroundStyle(WCTheme.cardStroke)
+                AxisValueLabel {
+                    if let d = value.as(Double.self) {
+                        Text(Self.compact(d)).font(SabqFonts.app(size: 8)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                AxisValueLabel {
+                    if let d = value.as(Date.self) {
+                        Text(Self.year.string(from: d)).font(SabqFonts.app(size: 8)).foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+            }
+        }
+        .frame(height: 120)
+        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    // "80.0 مليون €" / "750 ألف €"
+    static func format(_ value: Double, currency: String) -> String {
+        if value >= 1_000_000 {
+            return String(format: "%.1f مليون %@", value / 1_000_000, currency)
+        }
+        if value >= 1_000 {
+            return String(format: "%.0f ألف %@", value / 1_000, currency)
+        }
+        return String(format: "%.0f %@", value, currency)
+    }
+
+    // مختصر لمحور الرسم: 80م / 750ك
+    static func compact(_ value: Double) -> String {
+        if value >= 1_000_000 { return String(format: "%.0fم", value / 1_000_000) }
+        if value >= 1_000 { return String(format: "%.0fك", value / 1_000) }
+        return String(format: "%.0f", value)
+    }
+
+    static let year: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy"
+        return f
+    }()
 }
