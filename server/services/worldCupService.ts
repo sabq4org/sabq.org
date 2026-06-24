@@ -21,6 +21,8 @@ import { resolveNames } from "./worldCupNameTranslator";
 import {
   WC_COMPETITION_ID,
   getTsTeamExtra,
+  getTsCoach,
+  getTsVenue,
   getTsCompetitionExtra,
   getTsCompetitionMatchPairs,
   getTsLiveStandings,
@@ -786,6 +788,84 @@ export async function getWcTeamExtra(teamId: number): Promise<WcTeamExtra | null
     foundation: x.foundation,
     squadSize: x.totalPlayers,
   };
+}
+
+// ---------- معلومات أساسية: المدرّب + الملعب (TheSports BASIC INFO) ----------
+// معرّفا المدرّب/الملعب يأتيان من `team/additional/list` (نفس النداء المُكاش للقيمة
+// السوقية) فلا نداء إضافي للجلب. ثم نحلّ كلًّا عبر `coach/list`/`venue/list?uuid=`.
+// التعريب: اسم المدرّب/الملعب لاتيني عند المزوّد (لا i18n لهما) — نمرّره كما هو؛
+// الجنسية/دولة الملعب نُعرّبها عبر i18n type 2 (country) أفضل جهد. كله best‑effort.
+
+export interface WcCoachInfo {
+  name: string;
+  /** صورة المدرّب — "" إن غابت */
+  photo: string;
+  /** الخطة المفضّلة مثل "4-3-3" — null إن غابت */
+  formation: string | null;
+  age: number | null;
+  /** جنسية المدرّب بالعربية إن توفّرت عبر i18n — null إن تعذّر */
+  nationality: string | null;
+}
+
+export interface WcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  /** دولة الملعب بالعربية إن توفّرت عبر i18n، وإلا الإنجليزية، وإلا null */
+  country: string | null;
+}
+
+export interface WcTeamBasics {
+  coach: WcCoachInfo | null;
+  venue: WcVenueInfo | null;
+}
+
+/**
+ * المدرّب (صورة/خطة/عمر/جنسية) وملعب المنتخب من TheSports عبر الجسر — كلاهما
+ * مشتقّ من `team/additional/list` المُكاش. أفضل جهد: تعذّر الجسر/الجلب → null لكلٍّ.
+ */
+export async function getWcTeamBasics(teamId: number): Promise<WcTeamBasics> {
+  const empty: WcTeamBasics = { coach: null, venue: null };
+  const bridge = await getWcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return empty;
+  const x = await getTsTeamExtra(uuid).catch(() => null);
+  if (!x) return empty;
+
+  const [tsCoach, tsVenue] = await Promise.all([
+    x.coachId ? getTsCoach(x.coachId).catch(() => null) : Promise.resolve(null),
+    x.venueId ? getTsVenue(x.venueId).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  // تعريب الدول (جنسية المدرّب + دولة الملعب) عبر i18n type 2 — نداء مجمّع واحد.
+  const countryIds = [tsCoach?.countryId, tsVenue?.countryId].filter((c): c is string => !!c);
+  const countryAr =
+    countryIds.length > 0
+      ? await resolveTsNames(TS_I18N_TYPE.country, countryIds).catch(
+          () => (_: string | null | undefined) => null as string | null,
+        )
+      : (_: string | null | undefined) => null as string | null;
+
+  const coach: WcCoachInfo | null = tsCoach
+    ? {
+        name: tsCoach.name,
+        photo: tsCoach.logo,
+        formation: tsCoach.preferredFormation,
+        age: tsCoach.age,
+        nationality: countryAr(tsCoach.countryId),
+      }
+    : null;
+
+  const venue: WcVenueInfo | null = tsVenue
+    ? {
+        name: tsVenue.name,
+        capacity: tsVenue.capacity,
+        city: tsVenue.city,
+        country: countryAr(tsVenue.countryId) ?? tsVenue.country,
+      }
+    : null;
+
+  return { coach, venue };
 }
 
 export interface WcFifaRank {
@@ -1574,10 +1654,14 @@ export interface WcTeamProfile {
   injuries: WcInjury[];
   /** إحصاء المنتخب في البطولة (TheSports season stats) — available:false إن تعذّر */
   seasonStats: WcTeamSeasonStats;
+  /** المدرّب (صورة/خطة/عمر/جنسية) من TheSports — null إن تعذّر */
+  coachInfo: WcCoachInfo | null;
+  /** ملعب المنتخب (اسم/سعة/مدينة/دولة) من TheSports — null إن تعذّر */
+  venue: WcVenueInfo | null;
 }
 
 export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | null> {
-  const [fixtures, squad, groups, teams, extra, fifaRank, injuries, seasonStats] = await Promise.all([
+  const [fixtures, squad, groups, teams, extra, fifaRank, injuries, seasonStats, basics] = await Promise.all([
     getFixtures(),
     getSquad(teamId).catch(() => null),
     getStandings().catch(() => [] as WcGroup[]),
@@ -1586,6 +1670,7 @@ export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | nu
     getWcTeamFifaRank(teamId).catch(() => null),
     getWcTeamInjuries(teamId).catch(() => [] as WcInjury[]),
     getWcTeamSeasonStats(teamId).catch(() => ({ available: false, matches: 0, items: [] }) as WcTeamSeasonStats),
+    getWcTeamBasics(teamId).catch(() => ({ coach: null, venue: null }) as WcTeamBasics),
   ]);
 
   const teamFixtures = fixtures
@@ -1621,6 +1706,8 @@ export async function getTeamProfile(teamId: number): Promise<WcTeamProfile | nu
     fifaRank,
     injuries,
     seasonStats,
+    coachInfo: basics.coach,
+    venue: basics.venue,
   };
 }
 

@@ -605,6 +605,7 @@ export interface TsTeamExtra {
   foundation: number | null;
   totalPlayers: number | null;
   coachId: string | null;
+  venueId: string | null;
 }
 
 export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> {
@@ -624,6 +625,81 @@ export async function getTsTeamExtra(uuid: string): Promise<TsTeamExtra | null> 
       foundation: typeof r.foundation_time === "number" && r.foundation_time > 0 ? r.foundation_time : null,
       totalPlayers: typeof r.total_players === "number" && r.total_players > 0 ? r.total_players : null,
       coachId: r.coach_id ? String(r.coach_id) : null,
+      venueId: r.venue_id ? String(r.venue_id) : null,
+    };
+  } catch (e) {
+    armCooldown(e);
+    return null;
+  }
+}
+
+// المدرّب والملعب — معلومات أساسية (BASIC INFO). متحقَّق حيًّا (2026‑06‑24): كلاهما
+// عبر `?uuid=<id>` المفرد (دلالة الـuuid = معرّف الكيان نفسه؛ round‑trip صحيح). معرّفا
+// المدرّب/الملعب لمنتخبٍ يأتيان من `team/additional/list` (coach_id/venue_id)، ولمباراة
+// من `match/lineup/detail` (coach_id) و`match` (venue_id/referee_id). أفضل جهد كالعادة.
+
+export interface TsCoach {
+  id: string;
+  name: string;
+  /** صورة المدرّب (قد تكون فارغة) */
+  logo: string;
+  /** الخطة المفضّلة مثل "4-3-3" — null إن غابت */
+  preferredFormation: string | null;
+  age: number | null;
+  /** معرّف جنسية المدرّب (country_id) — يُحلّ لاسم عربي عبر i18n type 2 */
+  countryId: string | null;
+}
+
+export async function getTsCoach(coachId: string): Promise<TsCoach | null> {
+  if (!coachId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:coach:${coachId}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("coach/list", { uuid: coachId }),
+    );
+    const r = Array.isArray(data?.results) ? data.results[0] : null;
+    if (!r?.id || !r?.name) return null;
+    return {
+      id: String(r.id),
+      name: String(r.name),
+      logo: typeof r.logo === "string" ? r.logo : "",
+      preferredFormation:
+        typeof r.preferred_formation === "string" && r.preferred_formation.trim()
+          ? r.preferred_formation.trim()
+          : null,
+      age: typeof r.age === "number" && r.age > 0 ? r.age : null,
+      countryId: r.country_id ? String(r.country_id) : null,
+    };
+  } catch (e) {
+    armCooldown(e);
+    return null;
+  }
+}
+
+export interface TsVenue {
+  id: string;
+  name: string;
+  capacity: number | null;
+  city: string;
+  /** اسم الدولة (إنجليزي كما يرده المزوّد) — null إن غاب */
+  country: string | null;
+  countryId: string | null;
+}
+
+export async function getTsVenue(venueId: string): Promise<TsVenue | null> {
+  if (!venueId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:venue:${venueId}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("venue/list", { uuid: venueId }),
+    );
+    const r = Array.isArray(data?.results) ? data.results[0] : null;
+    if (!r?.id || !r?.name) return null;
+    return {
+      id: String(r.id),
+      name: String(r.name),
+      capacity: typeof r.capacity === "number" && r.capacity > 0 ? r.capacity : null,
+      city: typeof r.city === "string" ? r.city : "",
+      country: typeof r.country === "string" && r.country.trim() ? r.country.trim() : null,
+      countryId: r.country_id ? String(r.country_id) : null,
     };
   } catch (e) {
     armCooldown(e);
