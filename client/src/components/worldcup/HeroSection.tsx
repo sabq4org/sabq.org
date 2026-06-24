@@ -296,15 +296,30 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
     : [];
   const liveCount = liveMatches.length;
 
-  // مباراتان (أو أكثر) تجريان الآن في وقت واحد → بطاقة كبيرة لكلٍّ منها بدل
-  // إبراز واحدة وحشر الباقي في شريط مصغّر (ختام دور المجموعات تحديدًا)
-  const multiLive = liveCount >= 2;
-  const heroFixtures = multiLive ? liveMatches : fixture ? [fixture] : [];
+  // مباريات قادمة تنطلق في التوقيت نفسه للمباراة المميّزة (لم تبدأ بعد)
+  const upcomingPeers =
+    fixture && !fixture.status.live && !fixture.status.finished
+      ? today.filter(
+          (f) => !f.status.live && !f.status.finished && f.timestamp === fixture.timestamp
+        )
+      : [];
+
+  // أبرز كل المباريات المتزامنة ببطاقات كبيرة بدل إبراز واحدة وحشر الباقي:
+  //  • مباراتان (أو أكثر) تجريان الآن في وقت واحد، أو
+  //  • مباراتان قادمتان تنطلقان في التوقيت نفسه (ختام دور المجموعات تحديدًا)
+  const multiHero = liveCount >= 2 || upcomingPeers.length >= 2;
+  const heroFixtures = !multiHero
+    ? fixture
+      ? [fixture]
+      : []
+    : liveCount >= 2
+      ? liveMatches
+      : upcomingPeers;
   const heroIds = new Set(heroFixtures.map((f) => f.id));
-  // متعدد الحيّ: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
+  // متعدد: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
   // مفرد: يعرض كل مباريات اليوم مع إبراز البطاقة المميّزة — كما كان.
-  const stripMatches = multiLive ? today.filter((f) => !heroIds.has(f.id)) : today;
-  const showStrip = multiLive ? stripMatches.length >= 1 : today.length >= 2;
+  const stripMatches = multiHero ? today.filter((f) => !heroIds.has(f.id)) : today;
+  const showStrip = multiHero ? stripMatches.length >= 1 : today.length >= 2;
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
@@ -394,7 +409,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.1 }}
             className={`mx-auto ${
-              multiLive ? "max-w-5xl grid gap-4 sm:gap-6 md:grid-cols-2" : "max-w-3xl"
+              multiHero ? "max-w-5xl grid gap-4 sm:gap-6 md:grid-cols-2" : "max-w-3xl"
             }`}
           >
             {heroFixtures.map((f) => (
@@ -403,7 +418,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
                 fixture={f}
                 prediction={f.id === fixture?.id ? motd?.prediction : null}
                 onOpenMatch={onOpenMatch}
-                compact={multiLive}
+                compact={multiHero}
               />
             ))}
           </motion.div>
@@ -413,7 +428,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
         {!isLoading && showStrip && (
           <TodayStrip
             matches={stripMatches}
-            activeId={multiLive ? undefined : fixture?.id}
+            activeId={multiHero ? undefined : fixture?.id}
             onOpenMatch={onOpenMatch}
           />
         )}
