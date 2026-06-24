@@ -45,7 +45,7 @@ struct WorldCupView: View {
 
                 WCStandingsSection(groups: standings, isLoading: standingsLoading)
 
-                WCKnockoutSection { open($0) }
+                WCKnockoutSection(fixtures: fixtures, groups: standings) { open($0) }
 
                 WCRacesSection(
                     scorers: scorers,
@@ -143,12 +143,52 @@ struct WCHeroSection: View {
     @State private var selectedTeam: WCTeam?
 
     private var motd: WCMatchOfDay? { overview?.matchOfTheDay }
-    private var liveCount: Int { overview?.live.count ?? 0 }
+    private var featured: WCFixture? { motd?.fixture }
+    private var today: [WCFixture] { overview?.today ?? [] }
+    private var liveMatches: [WCFixture] { (overview?.live ?? []).filter { $0.status.live } }
+    private var liveCount: Int { liveMatches.count }
+
+    // مباريات قادمة تنطلق في التوقيت نفسه للمباراة المميّزة (لم تبدأ بعد) — ختام
+    // دور المجموعات تحديدًا. مطابق منطق الويب HeroSection.
+    private var upcomingPeers: [WCFixture] {
+        guard let f = featured, !f.status.live, !f.status.finished else { return [] }
+        return today.filter { !$0.status.live && !$0.status.finished && $0.timestamp == f.timestamp }
+    }
+
+    // نُبرز كل المباريات المتزامنة ببطاقات كبيرة بدل إبراز واحدة وحشر الباقي:
+    //  • مباراتان (أو أكثر) تجريان الآن، أو
+    //  • مباراتان قادمتان تنطلقان في التوقيت نفسه.
+    private var multiHero: Bool { liveCount >= 2 || upcomingPeers.count >= 2 }
+
+    private var heroFixtures: [WCFixture] {
+        if !multiHero { return featured.map { [$0] } ?? [] }
+        return liveCount >= 2 ? liveMatches : upcomingPeers
+    }
+
+    private var heroIds: Set<Int> { Set(heroFixtures.map(\.id)) }
+
+    // الشريط: في الوضع المتعدد يعرض بقية مباريات اليوم فقط (لا تكرار للبطاقات
+    // الكبيرة)؛ في المفرد يعرض كل مباريات اليوم مع إبراز المميّزة.
+    private var stripMatches: [WCFixture] { multiHero ? today.filter { !heroIds.contains($0.id) } : today }
+    private var showStrip: Bool { multiHero ? stripMatches.count >= 1 : today.count >= 2 }
+
+    // توقع كل بطاقة من خريطة overview.predictions؛ والمميّزة تتراجع لتوقعها
+    // الجاهز في matchOfTheDay عند غيابه من الخريطة.
+    private func prediction(for f: WCFixture) -> WCPrediction? {
+        overview?.prediction(for: f.id) ?? (f.id == featured?.id ? motd?.prediction : nil)
+    }
 
     var body: some View {
         VStack(spacing: 18) {
             header
             card
+            if !isLoading, showStrip {
+                WCHeroTodayStrip(
+                    matches: stripMatches,
+                    activeId: multiHero ? nil : featured?.id,
+                    onOpenMatch: onOpenMatch
+                )
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 52) // يُنزِل المحتوى أسفل شريط التنقّل الشفّاف (لا تداخل مع العنوان/الزر)
@@ -189,17 +229,23 @@ struct WCHeroSection: View {
             }
             .frame(maxWidth: .infinity).padding(.vertical, 30)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(WCTheme.card))
-        } else if let motd {
-            matchCard(motd)
-        } else {
+        } else if heroFixtures.isEmpty {
             WCEmptyDark(icon: "sparkles", title: "تغطية المونديال تنطلق قريبًا",
                         subtitle: "جدول المباريات والنتائج الحية ستجدها هنا أولًا بأول")
+        } else if heroFixtures.count == 1 {
+            matchCard(heroFixtures[0], compact: false)
+        } else {
+            // بطاقة كبيرة لكل مباراة متزامنة — تتراصّ عموديًّا (نمط الموبايل)
+            VStack(spacing: 14) {
+                ForEach(heroFixtures) { f in
+                    matchCard(f, compact: true)
+                }
+            }
         }
     }
 
-    private func matchCard(_ motd: WCMatchOfDay) -> some View {
-        let f = motd.fixture
-        return VStack(spacing: 16) {
+    private func matchCard(_ f: WCFixture, compact: Bool) -> some View {
+        VStack(spacing: compact ? 13 : 16) {
             HStack(spacing: 6) {
                 Text(f.status.live ? "تجري الآن" : (WCFormat.dayKey(f.date) == WCFormat.todayKey() ? "مباراة اليوم" : "المباراة القادمة"))
                     .foregroundStyle(WCTheme.emeraldDeep)
@@ -209,15 +255,15 @@ struct WCHeroSection: View {
             .font(SabqFonts.app(size: 12, weight: .semibold))
 
             HStack(alignment: .top, spacing: 8) {
-                teamColumn(f.home)
-                centerColumn(f)
-                teamColumn(f.away)
+                teamColumn(f.home, compact: compact)
+                centerColumn(f, compact: compact)
+                teamColumn(f.away, compact: compact)
             }
 
             if !f.started {
                 WCCountdownChips(timestamp: f.timestamp)
             }
-            if let p = motd.prediction, !f.status.finished {
+            if let p = prediction(for: f), !f.status.finished {
                 WCProbabilityBar(fixture: f, prediction: p)
             }
 
@@ -229,19 +275,19 @@ struct WCHeroSection: View {
                     .background(Capsule().fill(WCTheme.royal))
             }
         }
-        .padding(20)
+        .padding(compact ? 16 : 20)
         .frame(maxWidth: .infinity)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(WCTheme.card))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
         .shadow(color: WCTheme.royal.opacity(0.10), radius: 16, x: 0, y: 8)
     }
 
-    private func teamColumn(_ team: WCTeam) -> some View {
+    private func teamColumn(_ team: WCTeam, compact: Bool) -> some View {
         Button { selectedTeam = team } label: {
             VStack(spacing: 8) {
-                WCTeamLogo(team: team, size: 64, ring: WCTheme.cardStroke)
+                WCTeamLogo(team: team, size: compact ? 52 : 64, ring: WCTheme.cardStroke)
                 Text(team.name)
-                    .font(SabqFonts.app(size: 16, weight: .heavy))
+                    .font(SabqFonts.app(size: compact ? 14 : 16, weight: .heavy))
                     .foregroundStyle(WCTheme.onDark)
                     .multilineTextAlignment(.center)
             }
@@ -250,12 +296,12 @@ struct WCHeroSection: View {
         .buttonStyle(.plain)
     }
 
-    private func centerColumn(_ f: WCFixture) -> some View {
+    private func centerColumn(_ f: WCFixture, compact: Bool) -> some View {
         VStack(spacing: 6) {
             if f.started {
                 // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .font(SabqFonts.app(size: 40, weight: .black))
+                    .font(SabqFonts.app(size: compact ? 34 : 40, weight: .black))
                     .foregroundStyle(WCTheme.onDark)
                     .environment(\.layoutDirection, .leftToRight)
                 if let pen = f.penalties {
@@ -265,7 +311,7 @@ struct WCHeroSection: View {
                 WCStatusPill(fixture: f, onDark: false)
             } else {
                 Text(WCFormat.time(f))
-                    .font(SabqFonts.app(size: 26, weight: .black))
+                    .font(SabqFonts.app(size: compact ? 22 : 26, weight: .black))
                     .foregroundStyle(WCTheme.onDark)
                 Label(WCFormat.day(f), systemImage: "calendar")
                     .font(SabqFonts.app(size: 11))
@@ -273,7 +319,7 @@ struct WCHeroSection: View {
                     .labelStyle(.titleAndIcon)
             }
         }
-        .frame(minWidth: 110)
+        .frame(minWidth: compact ? 92 : 110)
     }
 
     private func pill(icon: String, text: String, bg: Color, fg: Color) -> some View {
@@ -284,6 +330,77 @@ struct WCHeroSection: View {
         .foregroundStyle(fg)
         .padding(.horizontal, 12).padding(.vertical, 5)
         .background(Capsule().fill(bg))
+    }
+}
+
+/// شريط «مباريات اليوم» أسفل الهيرو — بقية مباريات اليوم غير المعروضة كبطاقات
+/// كبيرة (الوضع المتعدد)، أو كل مباريات اليوم مع إبراز المميّزة (الوضع المفرد).
+/// مطابق TodayStrip في الويب: شارة لكل مباراة بالشعارين والنتيجة/الموعد والحالة.
+struct WCHeroTodayStrip: View {
+    let matches: [WCFixture]
+    let activeId: Int?
+    let onOpenMatch: (Int) -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: "calendar").font(SabqFonts.app(size: 11, weight: .bold))
+                Text("مباريات اليوم").font(SabqFonts.app(size: 12, weight: .bold))
+                Text("(\(matches.count))").font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            .foregroundStyle(WCTheme.emeraldDeep)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(matches) { f in
+                        chip(f)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func chip(_ f: WCFixture) -> some View {
+        let active = f.id == activeId
+        return Button { onOpenMatch(f.id) } label: {
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    WCTeamLogo(team: f.home, size: 22, ring: WCTheme.cardStroke)
+                    // الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه — كبطاقة المباراة المميّزة
+                    Text(f.started ? "\(f.goals.away ?? 0) - \(f.goals.home ?? 0)" : WCFormat.time(f))
+                        .font(SabqFonts.app(size: 13, weight: .black))
+                        .foregroundStyle(WCTheme.onDark)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .frame(minWidth: 44)
+                    WCTeamLogo(team: f.away, size: 22, ring: WCTheme.cardStroke)
+                }
+                Group {
+                    if f.status.live {
+                        HStack(spacing: 3) {
+                            Circle().fill(WCTheme.liveRed).frame(width: 5, height: 5)
+                            Text(f.status.elapsed != nil ? "\(f.status.elapsed!)'" : "مباشر")
+                        }
+                        .foregroundStyle(WCTheme.liveRed)
+                    } else {
+                        Text(f.status.finished ? "انتهت" : "لم تبدأ")
+                            .foregroundStyle(WCTheme.onDarkDim)
+                    }
+                }
+                .font(SabqFonts.app(size: 10, weight: .semibold))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(active ? WCTheme.emerald.opacity(0.15) : WCTheme.chipFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(active ? WCTheme.emerald.opacity(0.5) : WCTheme.cardStroke.opacity(0.4), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
