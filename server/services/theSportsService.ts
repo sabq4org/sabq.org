@@ -947,3 +947,213 @@ export async function getTsTeamInjuries(uuid: string): Promise<TsInjury[]> {
     return [];
   }
 }
+
+// ───────────────────── زخم/ضغط المباراة (match/trend/detail) ─────────────────────
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑24)**: `results = { count, per, data:[[...],[...]] }`.
+// `data` مصفوفة أشواط (count شوطًا، per دقيقة لكل شوط)، كل قيمة −100..100 = صافي
+// الزخم اللحظي لتلك الدقيقة (موجب = هجمة المضيف، سالب = هجمة الضيف). نسطّح الأشواط
+// إلى سلسلة دقيقة‑بدقيقة. أفضل جهد: أي فشل → null فيتراجع المستدعي لـSportMonks.
+export interface TsTrend {
+  perMinutes: number; // دقائق لكل شوط (عادة 45)
+  values: { minute: number; value: number }[]; // مسطّحة عبر الأشواط (value: −100..100)
+}
+
+export async function getTsMatchTrend(matchUuid: string): Promise<TsTrend | null> {
+  if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:trend:${matchUuid}`, LIVE_TTL, LIVE_SWR, () =>
+      tsGet("match/trend/detail", { uuid: matchUuid }),
+    );
+    const r = data?.results;
+    const per = pickNum(r?.per) ?? 45;
+    const halves: any[] = Array.isArray(r?.data) ? r.data : [];
+    const values: { minute: number; value: number }[] = [];
+    halves.forEach((half, h) => {
+      if (!Array.isArray(half)) return;
+      half.forEach((v: any, i: number) => {
+        const n = Number(v);
+        if (Number.isFinite(n)) values.push({ minute: h * per + i + 1, value: n });
+      });
+    });
+    if (values.length === 0) return null;
+    return { perMinutes: per, values };
+  } catch (e) {
+    armCooldown(e);
+    return null;
+  }
+}
+
+// ───────────────────── التشكيلات والخطط (match/lineup/detail) ─────────────────────
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑24)**: `results = { confirmed, home_formation,
+// away_formation, coach_id:{home,away}, lineup:{home:[],away:[]}, injury:[] }`. كل
+// لاعب: `{ id, first(1=أساسي), captain, name, logo, shirt_number, position, x, y, rating }`.
+// الأسماء إنجليزية → نُعرّبها عبر resolveTsNames(type player). أفضل جهد: أي فشل → null.
+export interface TsLineupPlayer {
+  id: string;
+  name: string;        // خام (إنجليزي) — للمطابقة
+  nameAr: string | null; // معرَّب (name_aa) إن توفّر
+  starter: boolean;
+  captain: boolean;
+  shirtNumber: number | null;
+  position: string | null;
+  x: number | null;    // 0..100 (عمق الملعب) — قد يكون 0 لبعض المباريات
+  y: number | null;    // 0..100 (عرض الملعب)
+  rating: number | null;
+  photo: string | null;
+}
+export interface TsLineup {
+  confirmed: boolean;
+  homeFormation: string | null;
+  awayFormation: string | null;
+  home: TsLineupPlayer[];
+  away: TsLineupPlayer[];
+}
+
+export async function getTsLineup(matchUuid: string): Promise<TsLineup | null> {
+  if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return null;
+  try {
+    const data = await withSWR(`ts:lineup:${matchUuid}`, 60 * 1000, 5 * 60 * 1000, () =>
+      tsGet("match/lineup/detail", { uuid: matchUuid }),
+    );
+    const r = data?.results;
+    if (!r) return null;
+    const lp = r.lineup ?? {};
+    const mapSide = (arr: any): TsLineupPlayer[] =>
+      (Array.isArray(arr) ? arr : []).map((p: any): TsLineupPlayer => {
+        const rt = Number(p?.rating);
+        return {
+          id: p?.id != null ? String(p.id) : "",
+          name: typeof p?.name === "string" ? p.name : "",
+          nameAr: null,
+          starter: Number(p?.first) === 1,
+          captain: Number(p?.captain) === 1,
+          shirtNumber: pickNum(p?.shirt_number),
+          position: typeof p?.position === "string" && p.position ? p.position : null,
+          x: pickNum(p?.x),
+          y: pickNum(p?.y),
+          rating: Number.isFinite(rt) && rt > 0 ? rt : null,
+          photo: typeof p?.logo === "string" && p.logo ? p.logo : null,
+        };
+      });
+    const home = mapSide(lp.home);
+    const away = mapSide(lp.away);
+    if (home.length === 0 && away.length === 0) return null;
+    // تعريب أسماء اللاعبين (name_aa) دفعةً واحدة
+    const lookup = await resolveTsNames(
+      TS_I18N_TYPE.player,
+      [...home, ...away].map((p) => p.id),
+    );
+    for (const p of [...home, ...away]) p.nameAr = lookup(p.id);
+    return {
+      confirmed: Number(r?.confirmed) === 1,
+      homeFormation: typeof r?.home_formation === "string" && r.home_formation ? r.home_formation : null,
+      awayFormation: typeof r?.away_formation === "string" && r.away_formation ? r.away_formation : null,
+      home,
+      away,
+    };
+  } catch (e) {
+    armCooldown(e);
+    return null;
+  }
+}
+
+// ───────────────────── قائمة المنتخب (team/squad/list) ─────────────────────
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑24)**: `results[0] = { id, team, squad:[
+// { player:{id,name}, position, shirt_number } ] }`. تُستخدم كجسر لربط لاعبي
+// API-Football (بالاسم/الرقم) بمعرّفات TheSports (للقيمة السوقية وتاريخها).
+export interface TsSquadPlayer {
+  id: string;
+  name: string; // إنجليزي
+  position: string | null;
+  shirtNumber: number | null;
+}
+
+export async function getTsTeamSquad(teamUuid: string): Promise<TsSquadPlayer[]> {
+  if (!teamUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:squad:${teamUuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("team/squad/list", { uuid: teamUuid }),
+    );
+    const r0 = Array.isArray(data?.results) ? data.results[0] : null;
+    const sq: any[] = Array.isArray(r0?.squad) ? r0.squad : [];
+    return sq
+      .map((s: any): TsSquadPlayer => ({
+        id: s?.player?.id != null ? String(s.player.id) : "",
+        name: typeof s?.player?.name === "string" ? s.player.name : "",
+        position: typeof s?.position === "string" && s.position ? s.position : null,
+        shirtNumber: pickNum(s?.shirt_number),
+      }))
+      .filter((p) => p.id);
+  } catch (e) {
+    armCooldown(e);
+    return [];
+  }
+}
+
+// ───────────────────── القيمة السوقية للاعبين (player/with_stat/list) ─────────────────────
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑24)**: لكل لاعب `{ id, market_value,
+// market_value_currency, ability, ... }`. نطلب على مستوى البطولة (نداء واحد مكاش
+// طويلًا) ونعيد خريطة uuid → القيمة السوقية. أفضل جهد: أي فشل → خريطة فارغة.
+export interface TsPlayerMarket {
+  marketValue: number | null;
+  currency: string;
+}
+
+export async function getTsCompetitionPlayerMarket(
+  competitionId: string,
+): Promise<Map<string, TsPlayerMarket>> {
+  if (!competitionId || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
+  try {
+    const data = await withSWR(`ts:pstat:${competitionId}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("player/with_stat/list", { competition_id: competitionId }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    const map = new Map<string, TsPlayerMarket>();
+    for (const r of rows) {
+      const id = r?.id != null ? String(r.id) : "";
+      if (!id) continue;
+      const mv = pickNum(r?.market_value);
+      map.set(id, {
+        marketValue: mv != null && mv > 0 ? mv : null,
+        currency: typeof r?.market_value_currency === "string" && r.market_value_currency ? r.market_value_currency : "€",
+      });
+    }
+    return map;
+  } catch (e) {
+    armCooldown(e);
+    return new Map();
+  }
+}
+
+// ───────────────────── تاريخ القيمة السوقية للاعب (player/market/list) ─────────────────────
+// نقطة + بنية **متحقَّقة حيًّا (2026‑06‑24)**: `results[0] = { id, history:[
+// { market_time, market_value, market_value_currency, team_id, age } ] }`. أفضل جهد: [].
+export interface TsMarketPoint {
+  time: number; // ثوانٍ (epoch)
+  value: number;
+  currency: string;
+  age: number | null;
+}
+
+export async function getTsPlayerMarketHistory(playerUuid: string): Promise<TsMarketPoint[]> {
+  if (!playerUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(`ts:market:${playerUuid}`, EXTRA_TTL, EXTRA_TTL * 2, () =>
+      tsGet("player/market/list", { uuid: playerUuid }),
+    );
+    const r0 = Array.isArray(data?.results) ? data.results[0] : null;
+    const hist: any[] = Array.isArray(r0?.history) ? r0.history : [];
+    return hist
+      .map((h: any): TsMarketPoint => ({
+        time: pickNum(h?.market_time) ?? 0,
+        value: pickNum(h?.market_value) ?? 0,
+        currency: typeof h?.market_value_currency === "string" && h.market_value_currency ? h.market_value_currency : "€",
+        age: pickNum(h?.age),
+      }))
+      .filter((h) => h.time > 0 && h.value > 0)
+      .sort((a, b) => a.time - b.time);
+  } catch (e) {
+    armCooldown(e);
+    return [];
+  }
+}

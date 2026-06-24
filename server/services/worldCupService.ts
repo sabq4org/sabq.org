@@ -28,10 +28,17 @@ import {
   getTsTeamInjuries,
   getTsMatchTv,
   getTsMatchTeamStats,
+  getTsMatchTrend,
+  getTsLineup,
+  getTsTeamSquad,
+  getTsPlayerMarketHistory,
   resolveTsNames,
   TS_I18N_TYPE,
   type TsTeamStatSide,
+  type TsLineup,
+  type TsLineupPlayer,
 } from "./theSportsService";
+import { type WcMomentum, type WcPressure } from "./sportmonksService";
 import pLimit from "p-limit";
 
 const API_BASE = "https://v3.football.api-sports.io";
@@ -590,6 +597,9 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  /** القيمة السوقية (TheSports) — null إن تعذّر الربط */
+  marketValue: number | null;
+  marketValueCurrency: string;
 }
 
 export interface WcSquad {
@@ -602,17 +612,28 @@ export async function getSquad(teamId: number): Promise<WcSquad | null> {
     const rows = await apiGet("players/squads", { team: teamId });
     const entry = rows[0];
     if (!entry) return null;
-    const tr = await resolveNames((entry.players ?? []).map((p: any) => p.name));
-    const players: WcSquadPlayer[] = (entry.players ?? [])
-      .map((p: any): WcSquadPlayer => ({
-        id: p.id ?? 0,
-        name: tr(p.name),
-        number: p.number ?? null,
-        position: POSITION_AR[p.position] ?? p.position ?? "",
-        positionEn: p.position ?? "",
-        age: p.age ?? null,
-        photo: p.photo ?? "",
-      }))
+    const raw: any[] = entry.players ?? [];
+    const tr = await resolveNames(raw.map((p: any) => p.name));
+    // القيمة السوقية عبر جسر TheSports (الاسم الإنجليزي + الرقم) — أفضل جهد
+    const market = await getWcSquadMarket(
+      teamId,
+      raw.map((p: any) => ({ id: p.id ?? 0, enName: p.name ?? "", number: p.number ?? null })),
+    ).catch(() => new Map<number, WcPlayerMarketInfo>());
+    const players: WcSquadPlayer[] = raw
+      .map((p: any): WcSquadPlayer => {
+        const mv = market.get(p.id ?? 0);
+        return {
+          id: p.id ?? 0,
+          name: tr(p.name),
+          number: p.number ?? null,
+          position: POSITION_AR[p.position] ?? p.position ?? "",
+          positionEn: p.position ?? "",
+          age: p.age ?? null,
+          photo: p.photo ?? "",
+          marketValue: mv?.marketValue ?? null,
+          marketValueCurrency: mv?.currency ?? "€",
+        };
+      })
       .sort(
         (a: WcSquadPlayer, b: WcSquadPlayer) =>
           (POSITION_ORDER[a.positionEn] ?? 9) - (POSITION_ORDER[b.positionEn] ?? 9) ||
@@ -938,6 +959,302 @@ export async function getWcMatchTeamStats(fixtureId: number): Promise<WcStatisti
     out.push({ key: `ts:team:${f.field}`, label: f.label, home: `${h ?? 0}${suffix}`, away: `${a ?? 0}${suffix}` });
   }
   return out;
+}
+
+// ---------- الزخم/الضغط اللحظي من TheSports (match/trend/detail) ----------
+// أسرع وأدقّ من SportMonks: مؤشّر زخم لحظي (−100..100) دقيقة‑بدقيقة. نُحوّله إلى
+// نفس شكلَي WcMomentum/WcPressure فلا تتغيّر الواجهة. الاستحواذ من إحصاء الفريق
+// (ball_possession). أفضل جهد: تعذّر الجسر/الترند → null فيتراجع الراوتر لـSportMonks.
+
+function trendToPoints(values: { minute: number; value: number }[]) {
+  return values.map((v) => ({
+    label: `${v.minute}'`,
+    minute: v.minute,
+    home: v.value > 0 ? v.value : 0,
+    away: v.value < 0 ? v.value : 0, // سالبة لتُرسم أسفل الصفر (كاصطلاح SportMonks)
+    net: v.value,
+  }));
+}
+
+/** الزخم اللحظي من TheSports — null إن تعذّر (يتراجع الراوتر لـSportMonks). */
+export async function getWcMomentumTs(fixtureId: number): Promise<WcMomentum | null> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return null;
+  const [trend, fixtures, sides] = await Promise.all([
+    getTsMatchTrend(uuid),
+    getFixtures().catch(() => [] as WcFixture[]),
+    getTsMatchTeamStats(uuid).catch(() => [] as TsTeamStatSide[]),
+  ]);
+  if (!trend || trend.values.length === 0) return null;
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  const live = !!fx?.status.live;
+
+  // الاستحواذ من إحصاء الفريق (إقران مضيف/ضيف عبر الجسر)
+  let possession: { home: number; away: number } | null = null;
+  if (fx && sides.length >= 2) {
+    const bridge = await getWcTeamBridge();
+    const homeUuid = bridge.get(fx.home.id);
+    let home = sides[0];
+    let away = sides[1];
+    if (homeUuid && sides[1].teamId === homeUuid) {
+      home = sides[1];
+      away = sides[0];
+    }
+    const h = home.values.ball_possession;
+    const a = away.values.ball_possession;
+    if (h != null || a != null) {
+      possession = {
+        home: h ?? (a != null ? 100 - a : 0),
+        away: a ?? (h != null ? 100 - h : 0),
+      };
+    }
+  }
+
+  return { available: true, live, possession, points: trendToPoints(trend.values) };
+}
+
+/** مؤشّر الضغط اللحظي من TheSports — null إن تعذّر. */
+export async function getWcPressureTs(fixtureId: number): Promise<WcPressure | null> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return null;
+  const [trend, fixtures] = await Promise.all([
+    getTsMatchTrend(uuid),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  if (!trend || trend.values.length === 0) return null;
+  const live = !!fixtures.find((f) => f.id === fixtureId)?.status.live;
+  const last = trend.values[trend.values.length - 1].value;
+  const latest: WcPressure["latest"] = {
+    side: last > 0 ? "home" : last < 0 ? "away" : "even",
+    value: Math.abs(last),
+  };
+  return { available: true, live, latest, points: trendToPoints(trend.values) };
+}
+
+// ---------- التشكيلات والخطط من TheSports (match/lineup/detail) ----------
+// نحوّل قوائم TheSports إلى WcLineup[] (نفس شكل API-Football) ليعرضها مركز
+// المباراة دون تغيير. الإحداثيات x/y → شبكة "صف:عمود" عند توفّرها لرسم الملعب،
+// وإلا grid=null فتظهر القوائم نصيًّا. الأسماء معرَّبة (name_aa) مع fallback إنجليزي.
+
+// x = عمق الملعب (0=خط مرمى الفريق .. 100=مرمى الخصم). نحوّله إلى أرقام صفوف
+// متتابعة (الحارس صف 1) بتجميع اللاعبين على قيم x المتقاربة، والعمود من ترتيب y.
+function tsPlayersToGrid(players: TsLineupPlayer[]): Map<string, string> {
+  const grid = new Map<string, string>();
+  const withXy = players.filter((p) => p.starter && (p.x != null || p.y != null) && (p.x || p.y));
+  if (withXy.length < 7) return grid; // إحداثيات غير موثوقة (أصفار) → بلا ملعب
+  // اجمع على قيم x متقاربة (±6) كصفوف
+  const sorted = [...withXy].sort((a, b) => (a.x ?? 0) - (b.x ?? 0));
+  const rows: TsLineupPlayer[][] = [];
+  for (const p of sorted) {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs((last[0].x ?? 0) - (p.x ?? 0)) <= 6) last.push(p);
+    else rows.push([p]);
+  }
+  rows.forEach((row, ri) => {
+    row.sort((a, b) => (a.y ?? 0) - (b.y ?? 0));
+    row.forEach((p, ci) => grid.set(p.id, `${ri + 1}:${ci + 1}`));
+  });
+  return grid;
+}
+
+function tsLineupToWc(
+  side: TsLineupPlayer[],
+  formation: string | null,
+  team: WcTeam,
+): WcLineup {
+  const gridMap = tsPlayersToGrid(side);
+  const toPlayer = (p: TsLineupPlayer): WcLineupPlayer => ({
+    id: 0, // معرّفات TheSports نصّية ولا تطابق API-Football → لا فتح بطاقة لاعب
+    name: p.nameAr || p.name,
+    number: p.shirtNumber,
+    position: p.position,
+    grid: gridMap.get(p.id) ?? null,
+  });
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    formation,
+    coach: "",
+    startXI: side.filter((p) => p.starter).map(toPlayer),
+    substitutes: side.filter((p) => !p.starter).map(toPlayer),
+  };
+}
+
+/** تشكيلتا المباراة من TheSports بشكل WcLineup[] — [] إن تعذّر الجسر/الجلب. */
+export async function getWcLineupsTs(fixtureId: number): Promise<WcLineup[]> {
+  const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+  if (!uuid) return [];
+  const [lineup, fixtures] = await Promise.all([
+    getTsLineup(uuid).catch(() => null as TsLineup | null),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+  if (!lineup) return [];
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx) return [];
+  const out: WcLineup[] = [];
+  if (lineup.home.length > 0) out.push(tsLineupToWc(lineup.home, lineup.homeFormation, fx.home));
+  if (lineup.away.length > 0) out.push(tsLineupToWc(lineup.away, lineup.awayFormation, fx.away));
+  return out;
+}
+
+// ---------- القيمة السوقية للاعبين (player/with_stat/list + team/squad/list) ----------
+// نربط لاعب API-Football (اسم إنجليزي + رقم قميص) بلاعب TheSports (uuid) عبر قائمة
+// منتخب TheSports، ثم نأخذ قيمته السوقية من خريطة البطولة. أفضل جهد: تعذّر الربط
+// → خريطة فارغة (لا قيمة، لا عطل).
+
+/** تطبيع اسم لاتيني للمطابقة: حروف صغيرة، بلا تشكيل/علامات، مسافة واحدة. */
+function normNameKey(s: string | null | undefined): string {
+  return (s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface WcPlayerMarketInfo {
+  marketValue: number | null;
+  currency: string;
+  tsPlayerId: string;
+}
+
+// نطابق لاعب API-Football بلاعب TheSports داخل المنتخب: الاسم الكامل المطبّع أولًا
+// (API-Football يعطي اسمًا كاملًا في players/squads فالمطابقة دقيقة)، ثم رقم القميص
+// مع تأكيد تقاطع اسم العائلة (حماية من إعادة ترقيم)، ثم اسم العائلة الفريد.
+function matchTsPlayer(
+  ap: { enName: string; number: number | null },
+  tsSquad: { id: string; name: string; shirtNumber: number | null }[],
+  byName: Map<string, { id: string; name: string; shirtNumber: number | null }>,
+  byNum: Map<number, { id: string; name: string; shirtNumber: number | null }>,
+  byLast: Map<string, { id: string; name: string; shirtNumber: number | null }[]>,
+): string | null {
+  const key = normNameKey(ap.enName);
+  const apLast = key.split(" ").pop() ?? "";
+  const exact = key ? byName.get(key) : undefined;
+  if (exact) return exact.id;
+  if (ap.number) {
+    const byNumber = byNum.get(ap.number);
+    if (byNumber) {
+      const tsLast = normNameKey(byNumber.name).split(" ").pop() ?? "";
+      // تأكيد تقاطع اسم العائلة لتجنّب مطابقة رقم للاعب مختلف
+      if (!apLast || !tsLast || apLast === tsLast || tsLast.includes(apLast) || apLast.includes(tsLast)) {
+        return byNumber.id;
+      }
+    }
+  }
+  if (apLast) {
+    const cands = byLast.get(apLast);
+    if (cands && cands.length === 1) return cands[0].id; // اسم عائلة فريد فقط
+  }
+  return null;
+}
+
+/**
+ * يربط لاعبي API-Football (id + اسم إنجليزي + رقم) بمعرّفات TheSports عبر قائمة
+ * المنتخب، ثم يجلب قيمتهم السوقية الحاليّة من player/market/list (آخر قيمة في
+ * التاريخ). نداء/لاعب مكاش 24س. أفضل جهد: تعذّر أي شيء → خريطة فارغة (لا قيمة).
+ */
+export async function getWcSquadMarket(
+  teamId: number,
+  apiPlayers: { id: number; enName: string; number: number | null }[],
+): Promise<Map<number, WcPlayerMarketInfo>> {
+  const out = new Map<number, WcPlayerMarketInfo>();
+  try {
+    const bridge = await getWcTeamBridge();
+    const tsTeam = bridge.get(teamId);
+    if (!tsTeam) return out;
+    const tsSquad = await getTsTeamSquad(tsTeam);
+    if (tsSquad.length === 0) return out;
+
+    const byName = new Map<string, (typeof tsSquad)[number]>();
+    const byNum = new Map<number, (typeof tsSquad)[number]>();
+    const byLast = new Map<string, (typeof tsSquad)[number][]>();
+    for (const s of tsSquad) {
+      const key = normNameKey(s.name);
+      if (key) byName.set(key, s);
+      if (s.shirtNumber) byNum.set(s.shirtNumber, s);
+      const last = key.split(" ").pop() ?? "";
+      if (last) {
+        if (!byLast.has(last)) byLast.set(last, []);
+        byLast.get(last)!.push(s);
+      }
+    }
+
+    const matched: { apiId: number; tsId: string }[] = [];
+    for (const ap of apiPlayers) {
+      const tsId = matchTsPlayer(ap, tsSquad, byName, byNum, byLast);
+      if (tsId) matched.push({ apiId: ap.id, tsId });
+    }
+    if (matched.length === 0) return out;
+
+    // القيمة الحاليّة = آخر قيمة في تاريخ player/market/list (نداء/لاعب مكاش 24س)
+    const limit = pLimit(5);
+    await Promise.all(
+      matched.map(({ apiId, tsId }) =>
+        limit(async () => {
+          const hist = await getTsPlayerMarketHistory(tsId).catch(() => []);
+          const last = hist.length ? hist[hist.length - 1] : null;
+          out.set(apiId, {
+            marketValue: last ? last.value : null,
+            currency: last ? last.currency : "€",
+            tsPlayerId: tsId,
+          });
+        }),
+      ),
+    );
+  } catch {
+    /* أفضل جهد */
+  }
+  return out;
+}
+
+/** تاريخ القيمة السوقية للاعب (عبر منتخبه) — [] إن تعذّر. */
+export async function getWcPlayerMarketHistory(
+  teamId: number,
+  player: { id: number; enName: string; number: number | null },
+): Promise<{ marketValue: number | null; currency: string; history: { time: number; value: number }[] }> {
+  const empty = { marketValue: null as number | null, currency: "€", history: [] as { time: number; value: number }[] };
+  const market = await getWcSquadMarket(teamId, [player]).catch(() => new Map<number, WcPlayerMarketInfo>());
+  const info = market.get(player.id);
+  if (!info) return empty;
+  const hist = await getTsPlayerMarketHistory(info.tsPlayerId).catch(() => []);
+  return {
+    marketValue: info.marketValue ?? (hist.length ? hist[hist.length - 1].value : null),
+    currency: info.currency,
+    history: hist.map((h) => ({ time: h.time, value: h.value })),
+  };
+}
+
+export interface WcPlayerMarket {
+  available: boolean;
+  marketValue: number | null;
+  currency: string;
+  history: { time: number; value: number }[];
+}
+
+/**
+ * القيمة السوقية وتاريخها للاعب عبر معرّفه (API-Football): نجلب اسمه الإنجليزي
+ * ومنتخبه ورقمه، ثم نربطه بـTheSports. كاش طويل (القيمة تتغيّر ببطء).
+ */
+export async function getPlayerMarket(playerId: number): Promise<WcPlayerMarket> {
+  const empty: WcPlayerMarket = { available: false, marketValue: null, currency: "€", history: [] };
+  return withSWR(`wc:playermarket:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    const [profileRows, statsRows] = await Promise.all([
+      apiGet("players/profiles", { player: playerId }),
+      apiGet("players", { id: playerId, season: SEASON, league: LEAGUE_ID }).catch(() => [] as any[]),
+    ]);
+    const p = profileRows[0]?.player;
+    if (!p?.id) return empty;
+    const enName = [p.firstname, p.lastname].filter(Boolean).join(" ").trim() || p.name || "";
+    const st = statsRows[0]?.statistics?.[0];
+    const teamId = st?.team?.id ?? 0;
+    const number = st?.games?.number ?? p.number ?? null;
+    if (!teamId || !enName) return empty;
+    const res = await getWcPlayerMarketHistory(teamId, { id: playerId, enName, number });
+    if (res.marketValue == null && res.history.length === 0) return empty;
+    return { available: true, marketValue: res.marketValue, currency: res.currency, history: res.history };
+  });
 }
 
 export interface WcCompetitionFacts {
@@ -1884,7 +2201,7 @@ export async function getMatchDetail(
 
     const events: WcMatchEvent[] = localizeMatchEvents(item, tr);
 
-    const lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
+    let lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({
         id: p.player?.id ?? 0,
         name: tr(p.player?.name),
@@ -1901,6 +2218,13 @@ export async function getMatchDetail(
         substitutes: (lineup.substitutes ?? []).map(mapPlayer),
       };
     });
+
+    // تشكيلات API-Football تتأخّر/تغيب لبعض مباريات المونديال → نتراجع لتشكيلات
+    // TheSports (أسرع نشرًا، وبأرقام/خطط/إحداثيات ملعب). أفضل جهد: لا تعطّل المباراة.
+    if (lineups.length === 0) {
+      const tsLineups = await getWcLineupsTs(fixtureId).catch(() => [] as WcLineup[]);
+      if (tsLineups.length > 0) lineups = tsLineups;
+    }
 
     // تقييمات اللاعبين — يرسلها المزود ضمن نفس الرد بعد انطلاق المباراة
     const ratings: WcPlayerRating[] = (item.players ?? [])

@@ -307,6 +307,25 @@ function TacticalPitch({
       {lineup.coach && (
         <p className="text-[11px] text-muted-foreground">المدرب: {lineup.coach}</p>
       )}
+      {lineup.substitutes.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[10px] font-bold text-muted-foreground mb-1">البدلاء</p>
+          <div className="flex flex-wrap gap-1">
+            {lineup.substitutes.map((s, idx) => (
+              <button
+                key={`${s.id}-${idx}`}
+                type="button"
+                onClick={() => s.id > 0 && onOpenPlayer(s.id)}
+                disabled={s.id <= 0}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] hover-elevate active-elevate-2 transition-all disabled:cursor-default"
+              >
+                {s.number != null && <span className="font-black tabular-nums">{s.number}</span>}
+                <span className="truncate max-w-[7rem]">{s.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -922,7 +941,7 @@ function MomentumTab({
 }) {
   const { data, isLoading } = useQuery<WcMomentum>({
     queryKey: [`/api/world-cup/momentum/${fixtureId}`],
-    refetchInterval: live ? 30_000 : false,
+    refetchInterval: live ? 12_000 : false,
   });
 
   if (isLoading) {
@@ -958,7 +977,7 @@ function MomentumTab({
       {points.length > 0 ? (
         <div>
           <p className="text-[11px] text-muted-foreground mb-2 text-center">
-            الزخم الهجومي (الهجمات الخطيرة) — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
+            الزخم الهجومي اللحظي — أعلى: ضغط {homeName} · أسفل: ضغط {awayName}
           </p>
           <div dir="ltr">
             <ResponsiveContainer width="100%" height={180}>
@@ -1037,7 +1056,7 @@ function PressureTab({
 }) {
   const { data, isLoading } = useQuery<WcPressure>({
     queryKey: [`/api/world-cup/pressure/${fixtureId}`],
-    refetchInterval: live ? 20_000 : false,
+    refetchInterval: live ? 12_000 : false,
   });
 
   if (isLoading) {

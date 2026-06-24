@@ -280,6 +280,17 @@ export interface WcSquadPlayer {
   positionEn: string;
   age: number | null;
   photo: string;
+  /** القيمة السوقية (TheSports) — null إن تعذّر الربط */
+  marketValue: number | null;
+  marketValueCurrency: string;
+}
+
+/** القيمة السوقية وتاريخها للاعب — /api/world-cup/player/:id/market */
+export interface WcPlayerMarket {
+  available: boolean;
+  marketValue: number | null;
+  currency: string;
+  history: { time: number; value: number }[];
 }
 
 export interface WcSquad {
