@@ -182,8 +182,8 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
       alerts.push({
         fixtureId: m.id,
         kind: "kickoff",
-        title: "🔴 انطلقت المباراة",
-        body: `بدأت الآن مباراة ${matchName} · ${m.competition}`,
+        title: "🟢 صافرة البداية",
+        body: `انطلقت الآن مباراة ${matchName} · ${m.competition}`,
         teamRefIds,
       });
     }
@@ -202,7 +202,7 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
       alerts.push({
         fixtureId: m.id,
         kind: "goal",
-        title: `⚽ هدف لـ${scorer}`,
+        title: `⚽️ هدف لـ${scorer}!`,
         body: `${m.home.name} ${fmtScore(m)} ${m.away.name}${minute}`,
         teamRefIds,
       });
@@ -213,7 +213,7 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
       alerts.push({
         fixtureId: m.id,
         kind: "fulltime",
-        title: "🏁 انتهت المباراة",
+        title: "🏁 صافرة النهاية",
         body: `${m.home.name} ${fmtScore(m)} ${m.away.name} · ${m.competition}`,
         teamRefIds,
       });
@@ -279,7 +279,7 @@ async function detectEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "var",
-          title: "🎦 مراجعة الفار",
+          title: "🎦 مراجعة الفار (VAR)",
           body: `${e.label} · ${matchName}${minute}`,
           teamRefIds,
         });
@@ -502,7 +502,7 @@ async function detectTsEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "goal",
-          title: `⚽ هدف! ${who}${pen}`,
+          title: `⚽️ هدف! ${who}${pen}`,
           body: `${score}${minute}${assist}`,
           teamRefIds,
         });
@@ -528,7 +528,7 @@ async function detectTsEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "var",
-          title: "🎦 مراجعة الفار",
+          title: "🎦 مراجعة الفار (VAR)",
           body: `${matchName}${minute}`,
           teamRefIds,
         });
