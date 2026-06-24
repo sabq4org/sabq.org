@@ -63,6 +63,14 @@ import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import { invalidateArticleWrite } from "../services/contentInvalidation";
 import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
+import { isWorldCupConfigured } from "../services/worldCupService";
+import {
+  submitPrediction,
+  getMyPredictions,
+  getLeaderboard,
+  getUpcomingPredictableMatches,
+  getMatchPredictionsSummary,
+} from "../services/wcPredictionsService";
 
 const router = Router();
 
@@ -7985,6 +7993,106 @@ router.get("/contributor/ranking", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /contributor/ranking error:", error);
     res.status(500).json({ success: false, message: "فشل في جلب الترتيب" });
+  }
+});
+
+// ==========================================
+// مسابقة توقّعات كأس العالم — نسخة الموبايل (Bearer)
+// ==========================================
+//
+// نظيرة /api/world-cup/predictions/* لكن بمصادقة جلسة العضو (verifyMemberSession)
+// بدل Passport. تستهلك نفس wcPredictionsService فالنتائج/التسوية موحّدة بين
+// الويب والتطبيق. القراءات العامة (leaderboard/match) متاحة بلا دخول؛ today
+// تُرفق توقّع المستخدم متى كان مسجّلًا؛ POST/mine تتطلّب جلسة.
+
+const WC_PRED_NOT_CONFIGURED = { configured: false, message: "مسابقة التوقّعات غير مفعّلة حاليًا" };
+
+function wcPredGuard(res: Response): boolean {
+  if (!isWorldCupConfigured()) {
+    res.status(503).json(WC_PRED_NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+router.get("/world-cup/predictions/today", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    const matches = await getUpcomingPredictableMatches(session?.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ matches });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] today error:", error);
+    res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
+  }
+});
+
+router.post("/world-cup/predictions", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const fixtureId = Number(req.body?.fixtureId);
+    const predHome = Number(req.body?.predHome);
+    const predAway = Number(req.body?.predAway);
+    if (!Number.isFinite(fixtureId)) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const result = await submitPrediction(session.userId, fixtureId, predHome, predAway);
+    if (!result.ok) {
+      const map = {
+        NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+        LOCKED: { code: 409, message: "أُغلق التوقّع — انطلقت المباراة" },
+        INVALID: { code: 400, message: "نتيجة غير صالحة" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+router.get("/world-cup/predictions/mine", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ predictions: await getMyPredictions(session.userId) });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] mine error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+router.get("/world-cup/predictions/leaderboard", async (_req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json({ leaders: await getLeaderboard() });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] leaderboard error:", error);
+    res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
+  }
+});
+
+router.get("/world-cup/predictions/match/:fixtureId", async (req: Request, res: Response) => {
+  if (!wcPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId)) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+    res.json(await getMatchPredictionsSummary(fixtureId));
+  } catch (error) {
+    console.error("[Mobile WC Predictions] match summary error:", error);
+    res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
   }
 });
 
