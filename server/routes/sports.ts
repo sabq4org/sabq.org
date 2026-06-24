@@ -33,6 +33,7 @@ import {
   getPlayerInjuries,
   getPlayerSeasonHistory,
   getPlayerTransfers,
+  getSeasonOutlook,
   getSquad,
   getStandings,
   getTeamProfile,
@@ -147,6 +148,25 @@ export function registerSportsRoutes(app: Express) {
       console.error("[Sports] competitions meta failed:", error);
       // تدهور بسلاسة إلى القائمة الأساسية دون شعار/موسم/حالة.
       res.json({ configured: true, competitions: listCompetitions() });
+    }
+  });
+
+  // نظرة الموسم: جاهزية ما قبل الموسم/العطلة (بطل الموسم المنتهي + عدّ تنازلي
+  // للموسم القادم + افتتاحياته فور نشر الجدول). يتحوّل تلقائيًا إلى in-season.
+  app.get("/api/sports/:comp/outlook", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, outlook: null });
+      return;
+    }
+    try {
+      const outlook = await getSeasonOutlook(comp);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=1800, stale-while-revalidate=3600");
+      res.json({ configured: true, outlook });
+    } catch (error) {
+      console.error("[Sports] outlook failed:", error);
+      res.json({ configured: true, outlook: null });
     }
   });
 

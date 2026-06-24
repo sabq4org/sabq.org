@@ -1752,7 +1752,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
       <motion.div
         initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
         dir="rtl" onClick={(e) => e.stopPropagation()}
-        className="bg-card w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] flex flex-col overflow-hidden border border-border"
+        className="bg-card w-full sm:max-w-lg lg:max-w-3xl sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] lg:max-h-[85vh] flex flex-col overflow-hidden border border-border"
       >
         <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4 pt-5">
           <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-10 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
@@ -1798,10 +1798,10 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
             ))}
           </div>
         )}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6">
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (
-            <>
+            <div className="lg:max-w-2xl lg:mx-auto">
             {facts?.halftime && (
               <div className="mb-3 text-center text-[11px] text-muted-foreground">
                 نتيجة الشوط الأول{" "}
@@ -1832,7 +1832,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                 );
               })}
             </ul>
-            </>
+            </div>
           )}
           {!isLoading && activeKey === "preview" && (
             previewRequested ? (
@@ -1903,7 +1903,11 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
           {!isLoading && activeKey === "commentary" && (
             <SpCommentaryView data={commentary} live={live} />
           )}
-          {!isLoading && activeKey === "lineups" && lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
+          {!isLoading && activeKey === "lineups" && (
+            <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
+              {lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
+            </div>
+          )}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
           {!isLoading && activeKey === "h2h" && fx && h2hData && (
             <H2HView h2h={h2hData} homeId={fx.home.id} homeName={fx.home.name} awayName={fx.away.name} />
@@ -1961,7 +1965,7 @@ function RatingsList({ id, homeId }: { id: number; homeId: number | null }) {
         </div>
       )}
 
-      <ul className="space-y-1.5">
+      <ul className="space-y-1.5 lg:grid lg:grid-cols-2 lg:gap-x-3 lg:gap-y-1.5 lg:space-y-0">
         {players.map((p) => {
           const sideClass = homeId != null ? (p.teamId === homeId ? "border-r-primary" : "border-r-amber-500") : "border-r-transparent";
           return (
