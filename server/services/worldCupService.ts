@@ -2652,6 +2652,9 @@ export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة قد تُعرض كبطاقة Hero
+  // كبيرة (الحيّة + المتزامنة القادمة)، لا المميّزة وحدها.
+  predictions: Record<number, WcPrediction>;
   saudi: {
     next: WcFixture | null;
     fixtures: WcFixture[];
@@ -2680,14 +2683,33 @@ export async function getOverview(): Promise<WcOverview> {
     (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a)
   )[0] ?? null;
 
-  let motdPrediction: WcPrediction | null = null;
+  // توقعات لكل المباريات التي قد تُعرض كبطاقات Hero كبيرة: الحيّة جميعها +
+  // المباراة المميّزة + المباريات القادمة المتزامنة معها (نفس وقت الانطلاق).
+  // getPrediction مُخزَّن (SWR) فجلب عدة مباريات لا يكلّف نداءات متكرّرة للمزود.
+  const predictionTargets = new Set<number>();
+  for (const f of live) predictionTargets.add(f.id);
   if (motdFixture && !motdFixture.status.finished) {
-    try {
-      motdPrediction = await getPrediction(motdFixture.id);
-    } catch (error) {
-      console.warn("[WorldCup] match-of-the-day prediction failed:", error);
+    predictionTargets.add(motdFixture.id);
+    for (const f of today) {
+      if (!f.status.finished && f.timestamp === motdFixture.timestamp) {
+        predictionTargets.add(f.id);
+      }
     }
   }
+
+  const predictions: Record<number, WcPrediction> = {};
+  await Promise.all(
+    [...predictionTargets].map(async (id) => {
+      try {
+        const pred = await getPrediction(id);
+        if (pred) predictions[id] = pred;
+      } catch (error) {
+        console.warn(`[WorldCup] prediction failed for fixture ${id}:`, error);
+      }
+    })
+  );
+
+  const motdPrediction = motdFixture ? predictions[motdFixture.id] ?? null : null;
 
   const saudiFixtures = fixtures.filter(
     (f) => f.home.id === SAUDI_TEAM_ID || f.away.id === SAUDI_TEAM_ID
@@ -2707,6 +2729,7 @@ export async function getOverview(): Promise<WcOverview> {
     live,
     today,
     matchOfTheDay: motdFixture ? { fixture: motdFixture, prediction: motdPrediction } : null,
+    predictions,
     saudi: { next: saudiNext, fixtures: saudiFixtures, group: saudiGroup },
     updatedAt: new Date().toISOString(),
   };
