@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Trophy } from "lucide-react";
+import { CheckCircle2, Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatKickoffTime, type WcFixture, type WcGroup, type WcStandingRow, type WcTeam } from "./wcTypes";
@@ -88,37 +88,60 @@ function computeQualified(groups: WcGroup[], fixtures: WcFixture[]): QualifiedGr
 function QualifiedSoFar({ qualifiedGroups }: { qualifiedGroups: QualifiedGroup[] }) {
   const total = qualifiedGroups.reduce((n, q) => n + q.qualifiers.length, 0);
   return (
-    <div className="mt-2 text-right">
-      <p className="mb-4 flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
-        <Trophy className="h-4 w-4" />
-        المتأهّلون حتى الآن
-        <span className="text-muted-foreground">({total})</span>
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3.5 py-1.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+          <Trophy className="h-4 w-4" />
+          المتأهّلون حتى الآن
+          <span className="grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-emerald-600 px-1.5 text-[11px] font-black text-white tabular-nums">
+            {total}
+          </span>
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {KNOCKOUT_ROUNDS.map((r) => (
+            <span
+              key={r.key}
+              className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground"
+            >
+              {r.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {qualifiedGroups.map(({ group, qualifiers }) => (
-          <div key={group.groupEn} className="rounded-lg border border-border bg-card p-3">
-            <p className="mb-2 text-xs font-bold text-muted-foreground">{group.group}</p>
-            <div className="space-y-1.5">
+          <div
+            key={group.groupEn}
+            className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+          >
+            <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
+              <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">{group.group}</p>
+              <span className="text-[10px] font-semibold text-muted-foreground">متأهّل</span>
+            </div>
+            <div className="divide-y divide-border/60">
               {qualifiers.map((r) => (
                 <Link
                   key={r.team.id}
                   href={`/world-cup/team/${r.team.id}`}
-                  className="flex items-center gap-2 rounded px-1 -mx-1 transition-all hover-elevate active-elevate-2"
+                  className="flex items-center gap-2.5 px-3 py-2.5 transition-all hover-elevate active-elevate-2"
                   data-testid={`wc-qualified-${r.team.id}`}
                 >
-                  <span className="w-4 text-center text-[10px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-[10px] font-black tabular-nums text-emerald-700 dark:text-emerald-300">
                     {r.rank}
                   </span>
-                  <span className="h-5 w-5 shrink-0 rounded-full bg-white p-px ring-1 ring-border">
+                  <span className="h-6 w-6 shrink-0 rounded-full bg-white p-0.5 ring-1 ring-border">
                     <img src={r.team.logo} alt={r.team.name} className="h-full w-full object-contain" loading="lazy" />
                   </span>
-                  <span className="truncate text-sm font-semibold">{r.team.name}</span>
+                  <span className="flex-1 truncate text-sm font-bold">{r.team.name}</span>
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                 </Link>
               ))}
             </div>
           </div>
         ))}
       </div>
+
       <p className="mt-4 text-center text-xs text-muted-foreground">
         تُحدَّد المواجهات وأفضل 8 من أصحاب المركز الثالث بعد اكتمال دور المجموعات (28 يونيو 2026).
       </p>
@@ -261,7 +284,11 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
 
         {isLoading && <Skeleton className="h-[420px] rounded-xl" />}
 
-        {!isLoading && !hasAny && (
+        {!isLoading && !hasAny && qualifiedGroups.length > 0 && (
+          <QualifiedSoFar qualifiedGroups={qualifiedGroups} />
+        )}
+
+        {!isLoading && !hasAny && qualifiedGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center sm:p-8">
             <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
               {KNOCKOUT_ROUNDS.map((r) => (
@@ -273,13 +300,9 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
                 </span>
               ))}
             </div>
-            {qualifiedGroups.length > 0 ? (
-              <QualifiedSoFar qualifiedGroups={qualifiedGroups} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات (28 يونيو 2026) — وسيظهر مسار البطولة هنا تلقائيًا لحظة بلحظة.
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات (28 يونيو 2026) — وسيظهر مسار البطولة هنا تلقائيًا لحظة بلحظة.
+            </p>
           </div>
         )}
 
