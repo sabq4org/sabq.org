@@ -50,6 +50,9 @@ import {
   type WcMatchEvent,
   type WcStatistic,
   type WcTvChannel,
+  type WcMatchPlayerStats,
+  type WcPlayerStatLine,
+  type WcTeam,
 } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
 
@@ -800,6 +803,75 @@ function ratingColor(rating: number): string {
   return "bg-red-500 text-white";
 }
 
+// احتياط TheSports: تقييمات/إحصاء لاعبي المباراة عند غياب تقييمات API-Football.
+// مجموعة لكل فريق، مرتّبة بالتقييم تنازليًّا (الخادم يرتّبها). بلا صور/نقر بطاقة
+// لاعب (لا يتوفّر معرّف API-Football هنا) — جدول أرقام نظيف.
+function TsRatingRow({ player, teamLogo }: { player: WcPlayerStatLine; teamLogo: string }) {
+  const meta = [
+    player.minutes ? `${player.minutes} د` : null,
+    player.goals ? `${player.goals} ⚽` : null,
+    player.assists ? `${player.assists} صناعة` : null,
+    player.yellow ? `${player.yellow} 🟨` : null,
+    player.red ? `${player.red} 🟥` : null,
+    player.starter ? null : "بديل",
+  ].filter(Boolean);
+  return (
+    <div className="w-full flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2 text-right">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold truncate">{player.name}</p>
+        {meta.length > 0 && (
+          <p className="text-[10px] text-muted-foreground">{meta.join(" · ")}</p>
+        )}
+      </div>
+      <img src={teamLogo} alt="" className="h-4 w-4 object-contain shrink-0" loading="lazy" />
+      {player.rating != null ? (
+        <span className={`rounded-md px-1.5 py-0.5 text-xs font-black tabular-nums shrink-0 ${ratingColor(player.rating)}`}>
+          {player.rating.toFixed(1)}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground shrink-0">—</span>
+      )}
+    </div>
+  );
+}
+
+function TsRatingsFallback({ fixtureId, live }: { fixtureId: number; live: boolean }) {
+  const { data, isLoading } = useQuery<WcMatchPlayerStats>({
+    queryKey: [`/api/world-cup/match/${fixtureId}/player-stats`],
+    refetchInterval: live ? 60_000 : false,
+  });
+  if (isLoading) {
+    return <Skeleton className="h-[360px] rounded-xl" />;
+  }
+  if (!data?.available || (!data.home && !data.away)) {
+    return (
+      <p className="text-center text-sm text-muted-foreground py-8">
+        تقييمات اللاعبين تظهر هنا بعد انطلاق المباراة
+      </p>
+    );
+  }
+  const sides = [data.home, data.away].filter(
+    (s): s is { team: WcTeam; players: WcPlayerStatLine[] } => !!s && s.players.length > 0,
+  );
+  return (
+    <div className="space-y-4 py-1">
+      {sides.map((side) => (
+        <div key={side.team.id}>
+          <div className="flex items-center gap-2 mb-2">
+            <img src={side.team.logo} alt={side.team.name} className="h-5 w-5 object-contain" loading="lazy" />
+            <h4 className="text-sm font-bold">{side.team.name}</h4>
+          </div>
+          <div className="space-y-1.5">
+            {side.players.map((p, i) => (
+              <TsRatingRow key={`${side.team.id}-${p.name}-${i}`} player={p} teamLogo={side.team.logo} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RatingsTab({
   detail,
   onOpenPlayer,
@@ -807,11 +879,13 @@ function RatingsTab({
   detail: WcMatchDetail;
   onOpenPlayer: (playerId: number) => void;
 }) {
+  // تقييمات API-Football أولًا (صور + بطاقة لاعب)، وإلا احتياط TheSports.
   if (detail.ratings.length === 0) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-8">
-        تقييمات اللاعبين تظهر هنا بعد انطلاق المباراة
-      </p>
+      <TsRatingsFallback
+        fixtureId={detail.fixture.id}
+        live={detail.fixture.status.live}
+      />
     );
   }
   const teamLogo = (teamId: number) =>
@@ -1378,7 +1452,9 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               )}
               <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
               <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
-              {detail.ratings.length > 0 && (
+              {(detail.ratings.length > 0 ||
+                detail.fixture.status.live ||
+                detail.fixture.status.finished) && (
                 <TabsTrigger value="ratings" className="gap-1">
                   <Star className="h-3 w-3 text-amber-500" />
                   التقييمات
@@ -1425,7 +1501,9 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
               <TabsContent value="stats" className="mt-0">
                 <StatsTab detail={detail} />
               </TabsContent>
-              {detail.ratings.length > 0 && (
+              {(detail.ratings.length > 0 ||
+                detail.fixture.status.live ||
+                detail.fixture.status.finished) && (
                 <TabsContent value="ratings" className="mt-0">
                   <RatingsTab detail={detail} onOpenPlayer={onOpenPlayer} />
                 </TabsContent>

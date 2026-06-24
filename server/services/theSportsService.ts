@@ -1157,3 +1157,101 @@ export async function getTsPlayerMarketHistory(playerUuid: string): Promise<TsMa
     return [];
   }
 }
+
+// ───────────────────── إحصاء الفريق للموسم (season/recent/team/stat) ─────────────────────
+// نقطة ADVANCED DATA (Season team statistics/newest season) — مؤكَّدة من الدعم
+// 2026‑06‑24. بنية متحقَّقة حيًّا: `results` مصفوفة (منتخب لكل عنصر):
+// `{ team:{id,name,logo}, matches, goals, goals_against, ball_possession, shots,
+//    shots_on_target, passes, passes_accuracy(عدد مكتمل لا نسبة), key_passes,
+//    big_chance_created, corner_kicks, tackles, interceptions, duels, duels_won,
+//    fouls, yellow_cards, red_cards, … }`. نُرجع لكل فريق teamId+name+logo+القيم
+// الخام المسمّاة. أفضل جهد: أي فشل → [].
+export interface TsSeasonTeamStat {
+  teamId: string;
+  name: string;
+  logo: string;
+  values: Record<string, number>;
+}
+
+export async function getTsSeasonTeamStats(seasonUuid: string): Promise<TsSeasonTeamStat[]> {
+  if (!seasonUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(
+      `ts:seasonteamstat:${seasonUuid}`,
+      30 * 60 * 1000,
+      60 * 60 * 1000,
+      () => tsGet("season/recent/team/stat", { uuid: seasonUuid }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    return rows
+      .filter((r) => r?.team?.id)
+      .map((r) => {
+        const values: Record<string, number> = {};
+        for (const [k, v] of Object.entries(r)) {
+          if (k === "team") continue;
+          const n = Number(v);
+          if (Number.isFinite(n)) values[k] = n;
+        }
+        return {
+          teamId: String(r.team.id),
+          name: typeof r.team.name === "string" ? r.team.name : "",
+          logo: typeof r.team.logo === "string" ? r.team.logo : "",
+          values,
+        };
+      });
+  } catch (e) {
+    armCooldown(e);
+    return [];
+  }
+}
+
+// ───────────────────── إحصاء اللاعب لكل مباراة (match/player_stats/detail) ─────────────────────
+// نقطة BASIC DATA (Player statistics/historical matches) — مؤكَّدة من الدعم 2026‑06‑24.
+// بنية متحقَّقة حيًّا: `results` مصفوفة (≈52 صفًّا)، كلٌّ مسطّح بحقول مسمّاة:
+// `{ player_id, team_id, first(1=أساسي), minutes_played, rating, goals, penalty,
+//    assists, shots, shots_on_target, passes, passes_accuracy, key_passes,
+//    dribble(_succ), tackles, interceptions, clearances, duels(_won), fouls,
+//    was_fouled, offsides, dispossessed, saves, … }`. أسماء اللاعبين تُحلّ بالعربية
+// عبر language/list type5 (`name_aa`) في worldCupService. أفضل جهد: أي فشل → [].
+export interface TsPlayerMatchStat {
+  playerId: string;
+  teamId: string;
+  starter: boolean;     // first === 1
+  minutes: number;      // minutes_played
+  rating: number | null;
+  values: Record<string, number>;
+}
+
+export async function getTsMatchPlayerStats(matchUuid: string): Promise<TsPlayerMatchStat[]> {
+  if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const data = await withSWR(
+      `ts:playerstats:${matchUuid}`,
+      2 * 60 * 1000,
+      30 * 60 * 1000,
+      () => tsGet("match/player_stats/detail", { uuid: matchUuid }),
+    );
+    const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    return rows
+      .filter((r) => r?.player_id)
+      .map((r) => {
+        const values: Record<string, number> = {};
+        for (const [k, v] of Object.entries(r)) {
+          if (k === "player_id" || k === "team_id") continue;
+          const n = Number(v);
+          if (Number.isFinite(n)) values[k] = n;
+        }
+        return {
+          playerId: String(r.player_id),
+          teamId: r?.team_id != null ? String(r.team_id) : "",
+          starter: Number(r?.first) === 1,
+          minutes: pickNum(r?.minutes_played) ?? 0,
+          rating: pickNum(r?.rating),
+          values,
+        };
+      });
+  } catch (e) {
+    armCooldown(e);
+    return [];
+  }
+}
