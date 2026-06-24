@@ -457,6 +457,10 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     @ViewBuilder let placeholder: () -> Placeholder
 
     @State private var image: UIImage?
+    // التلاشي يُدار بـ opacity مستقلة بدل .transition — حتى لا يلتقط أنيميشن
+    // الإدراج إعادةَ حساب إزاحة التركيز أثناء استقرار التخطيط عند التحميل
+    // (كان ذلك يُحدث «انزلاق الصورة + فراغ جانبي» لحظيًا، أوضحه عرض Pro Max).
+    @State private var shown = false
 
     init(
         url: URL?,
@@ -473,7 +477,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             ZStack(alignment: .topLeading) {
                 if let image {
                     focalImage(image, in: proxy.size)
-                        .transition(.opacity.animation(.easeOut(duration: 0.25)))
+                        .opacity(shown ? 1 : 0)
                 } else {
                     placeholder()
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -526,10 +530,15 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
     private func loadImage(for requestedURL: URL?) async {
         guard let requestedURL else {
             image = nil
+            shown = false
             return
         }
         if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+            // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
+            // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
             image = cached
+            shown = false
+            withAnimation(.easeOut(duration: 0.2)) { shown = true }
             return
         }
 
@@ -563,11 +572,14 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
-            withAnimation(.easeOut(duration: 0.25)) {
-                image = loaded
-            }
+            // ضبط الصورة بلا أنيميشن (موضع نهائي فورًا) ثم تلاشي الشفافية فقط —
+            // يمنع التقاطَ أنيميشنِ الإدراج لإعادة حساب إزاحة التركيز.
+            image = loaded
+            shown = false
+            withAnimation(.easeOut(duration: 0.25)) { shown = true }
         } else {
             image = nil
+            shown = false
         }
     }
 }
