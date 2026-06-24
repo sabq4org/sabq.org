@@ -4,15 +4,17 @@
  * استدعاء API إضافي. الخانات غير المحسومة تظهر «يُحدَّد لاحقًا» (لا بيانات وهمية).
  */
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatKickoffTime, type WcFixture, type WcTeam } from "./wcTypes";
+import { formatKickoffTime, type WcFixture, type WcGroup, type WcStandingRow, type WcTeam } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
 
 interface KnockoutBracketProps {
   fixtures: WcFixture[];
+  groups: WcGroup[];
   isLoading: boolean;
   onOpenMatch: (fixtureId: number) => void;
 }
@@ -56,6 +58,73 @@ function defaultRoundKey(cols: BracketColumn[]): string | undefined {
 
 /** منتخب محسوم فعلًا (له معرّف وشعار) مقابل خانة بانتظار التأهل */
 const isResolved = (team: WcTeam): boolean => Boolean(team?.id && team?.logo);
+
+interface QualifiedGroup {
+  group: WcGroup;
+  qualifiers: WcStandingRow[];
+}
+
+/**
+ * المتأهّلون المؤكَّدون حتى الآن لكل مجموعة — قبل أن يوفّر المزوّد مباريات خروج
+ * المغلوب. منتخب يُعدّ متأهّلًا إذا:
+ *   • حسمه الخادم رياضيًّا (qualifyStatus === "qualified")، أو
+ *   • اكتملت كل مباريات مجموعته وهو في المركزين الأوّلين (عندها qualifyStatus = null).
+ * أفضل 8 من أصحاب المركز الثالث لا يُحسبون هنا (يتحدّدون بعد اكتمال كل المجموعات).
+ */
+function computeQualified(groups: WcGroup[], fixtures: WcFixture[]): QualifiedGroup[] {
+  const out: QualifiedGroup[] = [];
+  for (const g of groups) {
+    const ids = new Set(g.rows.map((r) => r.team.id));
+    const groupMatches = fixtures.filter((f) => ids.has(f.home.id) && ids.has(f.away.id));
+    const complete = groupMatches.length > 0 && groupMatches.every((f) => f.status.finished);
+    const qualifiers = g.rows
+      .filter((r) => r.qualifyStatus === "qualified" || (complete && r.rank <= 2))
+      .sort((a, b) => a.rank - b.rank);
+    if (qualifiers.length > 0) out.push({ group: g, qualifiers });
+  }
+  return out;
+}
+
+function QualifiedSoFar({ qualifiedGroups }: { qualifiedGroups: QualifiedGroup[] }) {
+  const total = qualifiedGroups.reduce((n, q) => n + q.qualifiers.length, 0);
+  return (
+    <div className="mt-2 text-right">
+      <p className="mb-4 flex items-center justify-center gap-2 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+        <Trophy className="h-4 w-4" />
+        المتأهّلون حتى الآن
+        <span className="text-muted-foreground">({total})</span>
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {qualifiedGroups.map(({ group, qualifiers }) => (
+          <div key={group.groupEn} className="rounded-lg border border-border bg-card p-3">
+            <p className="mb-2 text-xs font-bold text-muted-foreground">{group.group}</p>
+            <div className="space-y-1.5">
+              {qualifiers.map((r) => (
+                <Link
+                  key={r.team.id}
+                  href={`/world-cup/team/${r.team.id}`}
+                  className="flex items-center gap-2 rounded px-1 -mx-1 transition-all hover-elevate active-elevate-2"
+                  data-testid={`wc-qualified-${r.team.id}`}
+                >
+                  <span className="w-4 text-center text-[10px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {r.rank}
+                  </span>
+                  <span className="h-5 w-5 shrink-0 rounded-full bg-white p-px ring-1 ring-border">
+                    <img src={r.team.logo} alt={r.team.name} className="h-full w-full object-contain" loading="lazy" />
+                  </span>
+                  <span className="truncate text-sm font-semibold">{r.team.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        تُحدَّد المواجهات وأفضل 8 من أصحاب المركز الثالث بعد اكتمال دور المجموعات (28 يونيو 2026).
+      </p>
+    </div>
+  );
+}
 
 interface BracketColumn {
   key: string;
@@ -129,7 +198,7 @@ function BracketMatch({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id: nu
   );
 }
 
-export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBracketProps) {
+export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: KnockoutBracketProps) {
   // مصدر البنية من الخادم (يُركّب أحدث نتيجة لحظية ويُمهّد لإثراء TheSports). يتراجع
   // للمباريات الممرَّرة من الصفحة عند تعذّره فلا تتعطّل الشجرة.
   const { data: bracketData } = useQuery<BracketDto>({
@@ -159,6 +228,13 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
     return { columns: cols, thirdPlace: third, hasAny: cols.some((c) => c.matches.length > 0) };
   }, [sourceFixtures]);
 
+  // المتأهّلون المؤكَّدون حتى الآن — يُعرضون مكان النص التحفيزي قبل توفّر مباريات
+  // خروج المغلوب، ويُعبَّأون تدريجيًّا فور حسم كل مجموعة (أول/ثاني).
+  const qualifiedGroups = useMemo(
+    () => (hasAny ? [] : computeQualified(groups, fixtures)),
+    [hasAny, groups, fixtures],
+  );
+
   // الأعمدة التي بها مباريات فعلًا — تحدّد طرفَي الشجرة (أول/آخر) للموصّلات
   const liveCols = columns.filter((c) => c.matches.length > 0);
   const firstKey = liveCols[0]?.key;
@@ -186,8 +262,8 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
         {isLoading && <Skeleton className="h-[420px] rounded-xl" />}
 
         {!isLoading && !hasAny && (
-          <div className="rounded-xl border border-dashed border-border bg-muted/30 p-8 text-center">
-            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+          <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center sm:p-8">
+            <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
               {KNOCKOUT_ROUNDS.map((r) => (
                 <span
                   key={r.key}
@@ -197,9 +273,13 @@ export function KnockoutBracket({ fixtures, isLoading, onOpenMatch }: KnockoutBr
                 </span>
               ))}
             </div>
-            <p className="text-sm text-muted-foreground">
-              تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات (28 يونيو 2026) — وسيظهر مسار البطولة هنا تلقائيًا لحظة بلحظة.
-            </p>
+            {qualifiedGroups.length > 0 ? (
+              <QualifiedSoFar qualifiedGroups={qualifiedGroups} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                تبدأ الأدوار الإقصائية بعد اكتمال دور المجموعات (28 يونيو 2026) — وسيظهر مسار البطولة هنا تلقائيًا لحظة بلحظة.
+              </p>
+            )}
           </div>
         )}
 
