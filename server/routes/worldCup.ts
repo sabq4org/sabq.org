@@ -18,6 +18,9 @@ import {
   getWcCompetitionFacts,
   getWcMatchTv,
   getWcMatchTeamStats,
+  getWcMomentumTs,
+  getWcPressureTs,
+  getPlayerMarket,
   getTeamsRanked,
   getTopAssists,
   getTopCards,
@@ -44,6 +47,7 @@ import {
 import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
+  isTheSportsConfigured,
   type TsEvent,
   type TsEventType,
   type TsLiveStats,
@@ -456,6 +460,25 @@ export function registerWorldCupRoutes(app: Express) {
     }
   });
 
+  // القيمة السوقية وتاريخها للاعب (TheSports) — جسر بالاسم الإنجليزي/الرقم عبر منتخبه.
+  app.get("/api/world-cup/player/:id/market", async (req, res) => {
+    if (!isTheSportsConfigured()) {
+      return res.status(503).json({ available: false, marketValue: null, currency: "€", history: [] });
+    }
+    const playerId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: "معرّف لاعب غير صالح" });
+    }
+    try {
+      const data = await getPlayerMarket(playerId);
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=43200");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] player market ${playerId} failed:`, error);
+      res.status(502).json({ available: false, marketValue: null, currency: "€", history: [] });
+    }
+  });
+
   app.get("/api/world-cup/assists", async (_req, res) => {
     if (!guard(res)) return;
     try {
@@ -478,9 +501,9 @@ export function registerWorldCupRoutes(app: Express) {
     }
   });
 
-  // الزخم الهجومي عبر الزمن (من trends — إضافة Match Facts بـSportMonks).
+  // الزخم الهجومي عبر الزمن — TheSports أولًا (لحظي أدقّ/أسرع)، وإلا SportMonks.
   app.get("/api/world-cup/momentum/:id", async (req, res) => {
-    if (!isSportmonksConfigured()) {
+    if (!isTheSportsConfigured() && !isSportmonksConfigured()) {
       return res
         .status(503)
         .json({ configured: false, message: "رسم الزخم غير مفعّل حاليًا", points: [] });
@@ -491,11 +514,15 @@ export function registerWorldCupRoutes(app: Express) {
     }
     const directSmId = Number(req.query.smId) || undefined;
     try {
-      const data = await getMomentum(fixtureId, { directSmId });
+      let data = await getWcMomentumTs(fixtureId).catch(() => null);
+      if ((!data || !data.available) && isSportmonksConfigured()) {
+        data = await getMomentum(fixtureId, { directSmId });
+      }
+      if (!data) data = { available: false, live: false, possession: null, points: [] };
       res.set(
         "Cache-Control",
         data.live
-          ? "public, max-age=15, s-maxage=20, stale-while-revalidate=40"
+          ? "public, max-age=8, s-maxage=10, stale-while-revalidate=30"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600"
       );
       res.json(data);
@@ -505,9 +532,9 @@ export function registerWorldCupRoutes(app: Express) {
     }
   });
 
-  // مؤشّر الضغط لحظة بلحظة (Pressure Index — إضافة SportMonks).
+  // مؤشّر الضغط لحظة بلحظة — TheSports أولًا (Attack Momentum)، وإلا SportMonks.
   app.get("/api/world-cup/pressure/:id", async (req, res) => {
-    if (!isSportmonksConfigured()) {
+    if (!isTheSportsConfigured() && !isSportmonksConfigured()) {
       return res
         .status(503)
         .json({ configured: false, message: "مؤشّر الضغط غير مفعّل حاليًا", points: [] });
@@ -518,11 +545,15 @@ export function registerWorldCupRoutes(app: Express) {
     }
     const directSmId = Number(req.query.smId) || undefined;
     try {
-      const data = await getPressure(fixtureId, { directSmId });
+      let data = await getWcPressureTs(fixtureId).catch(() => null);
+      if ((!data || !data.available) && isSportmonksConfigured()) {
+        data = await getPressure(fixtureId, { directSmId });
+      }
+      if (!data) data = { available: false, live: false, latest: null, points: [] };
       res.set(
         "Cache-Control",
         data.live
-          ? "public, max-age=15, s-maxage=20, stale-while-revalidate=40"
+          ? "public, max-age=8, s-maxage=10, stale-while-revalidate=30"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600"
       );
       res.json(data);

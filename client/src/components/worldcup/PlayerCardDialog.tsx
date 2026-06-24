@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Cake, History, Ruler, Shirt, Trophy, Weight } from "lucide-react";
+import { Activity, Cake, History, Ruler, Shirt, TrendingUp, Trophy, Weight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { WcPlayerCard, WcPlayerCareerStop, WcPlayerTournamentStats } from "./wcTypes";
+import { formatMarketValue, type WcPlayerCard, type WcPlayerCareerStop, type WcPlayerMarket, type WcPlayerTournamentStats } from "./wcTypes";
 
 /**
  * بطاقة اللاعب الشاملة — تُفتح بالضغط على أي لاعب في مركز المونديال
@@ -245,6 +245,66 @@ function PlayerForm({ playerId }: { playerId: number }) {
   );
 }
 
+// مخطّط بسيط (SVG) لتطوّر القيمة السوقية عبر الزمن — أخضر صاعد/أحمر هابط.
+function MarketSparkline({ history }: { history: { time: number; value: number }[] }) {
+  if (history.length < 2) return null;
+  const W = 260;
+  const H = 56;
+  const pad = 4;
+  const vals = history.map((h) => h.value);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const n = history.length;
+  const pts = history
+    .map((h, i) => {
+      const x = pad + (i / (n - 1)) * (W - 2 * pad);
+      const y = H - pad - ((h.value - min) / span) * (H - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const up = vals[n - 1] >= vals[0];
+  const stroke = up ? "#10b981" : "#ef4444";
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-14" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// القيمة السوقية وتاريخها (TheSports) — /api/world-cup/player/:id/market
+function PlayerMarketValue({ playerId }: { playerId: number }) {
+  const { data } = useQuery<WcPlayerMarket>({
+    queryKey: [`/api/world-cup/player/${playerId}/market`],
+    enabled: playerId != null,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+  if (!data?.available) return null;
+  const history = Array.isArray(data.history) ? data.history : [];
+  const current = data.marketValue ?? (history.length ? history[history.length - 1].value : null);
+  const formatted = formatMarketValue(current, data.currency);
+  if (!formatted && history.length < 2) return null;
+  const peak = history.length ? Math.max(...history.map((h) => h.value)) : null;
+  return (
+    <div>
+      <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1">
+        <TrendingUp className="h-3.5 w-3.5" />
+        القيمة السوقية
+      </h4>
+      <div className="rounded-xl bg-muted/40 px-3 py-3">
+        <div className="flex items-baseline justify-between mb-1">
+          <span className="text-lg font-black text-emerald-600 tabular-nums">{formatted ?? "—"}</span>
+          {peak != null && peak !== current && (
+            <span className="text-[10px] text-muted-foreground">الأعلى: {formatMarketValue(peak, data.currency)}</span>
+          )}
+        </div>
+        {history.length >= 2 && <MarketSparkline history={history} />}
+      </div>
+    </div>
+  );
+}
+
 export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
   const { data: player, isLoading } = useQuery<WcPlayerCard>({
     queryKey: [`/api/world-cup/player/${playerId}`],
@@ -349,6 +409,8 @@ export function PlayerCardDialog({ playerId, onClose }: PlayerCardDialogProps) {
               {player.stats && (
                 <TournamentStats stats={player.stats} isGoalkeeper={player.positionEn === "Goalkeeper"} />
               )}
+
+              {playerId != null && <PlayerMarketValue playerId={playerId} />}
 
               {playerId != null && <PlayerForm playerId={playerId} />}
 
