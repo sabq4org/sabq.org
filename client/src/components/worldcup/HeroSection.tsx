@@ -185,9 +185,9 @@ function TodayStrip({
   );
 }
 
-// شريط احتمالات النتيجة لبطاقة Hero. المباراة المميّزة تأتيها التوقعات جاهزة
-// من overview؛ أما البطاقات المتزامنة الأخرى فنجلب احتمالاتها حسب الطلب من
-// /api/world-cup/forecast/:id (نفس مصدر مركز المباراة) لتظهر التوقعات لكلٍّ منها.
+// شريط احتمالات النتيجة لبطاقة Hero. التوقع يأتي جاهزًا من overview.predictions
+// لكل مباراة حيّة/متزامنة؛ وعند غيابه (مباراة قادمة بلا توقع مزوّد) نتراجع إلى
+// /api/world-cup/forecast/:id (نفس مصدر مركز المباراة) حسب الطلب.
 function HeroPrediction({
   fixture,
   prediction,
@@ -345,6 +345,11 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
       ? liveMatches
       : upcomingPeers;
   const heroIds = new Set(heroFixtures.map((f) => f.id));
+  // توقع كل مباراة من خريطة overview.predictions (تُرفق لكل مباراة حيّة/متزامنة)؛
+  // المباراة المميّزة تتراجع لتوقعها الجاهز في matchOfTheDay عند الغياب.
+  const predictions = overview?.predictions ?? {};
+  const predictionFor = (f: WcFixture): WcPrediction | null =>
+    predictions[f.id] ?? (f.id === fixture?.id ? motd?.prediction ?? null : null);
   // متعدد: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
   // مفرد: يعرض كل مباريات اليوم مع إبراز البطاقة المميّزة — كما كان.
   const stripMatches = multiHero ? today.filter((f) => !heroIds.has(f.id)) : today;
@@ -445,7 +450,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
               <MatchHeroCard
                 key={f.id}
                 fixture={f}
-                prediction={f.id === fixture?.id ? motd?.prediction : null}
+                prediction={predictionFor(f)}
                 onOpenMatch={onOpenMatch}
                 compact={multiHero}
               />
