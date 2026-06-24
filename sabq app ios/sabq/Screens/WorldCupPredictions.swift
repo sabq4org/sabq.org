@@ -91,6 +91,11 @@ struct WCPredictionsView: View {
             }
             .sheet(isPresented: $showLogin) { LoginSheet() }
         }
+        // شريط حالة أبيض على الرأس الأخضر: نفرض تفضيل النمط الداكن (يبيّض ساعة/
+        // بطارية النظام) مع تثبيت بيئة الألوان على «فاتح» للمحتوى داخليًا — فتبقى
+        // البطاقات بيضاء كما هي ولا تتأثّر بألوان WCTheme الديناميكية.
+        .environment(\.colorScheme, .light)
+        .preferredColorScheme(.dark)
         .sabqRTL()
     }
 
@@ -256,9 +261,10 @@ private struct WCPredTodayTab: View {
     private func stepBtn(_ icon: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
+                .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(WCTheme.emeraldDeep))
+                .shadow(color: WCTheme.emeraldDeep.opacity(0.3), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
     }
