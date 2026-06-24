@@ -24,13 +24,27 @@ interface HeroSectionProps {
   onOpenMatch: (fixtureId: number) => void;
 }
 
-function TeamSide({ team, align }: { team: WcFixture["home"]; align: "start" | "end" }) {
+function TeamSide({
+  team,
+  align,
+  compact = false,
+}: {
+  team: WcFixture["home"];
+  align: "start" | "end";
+  compact?: boolean;
+}) {
   return (
     <div className={`flex flex-col items-center gap-2 sm:gap-3 ${align === "start" ? "sm:items-start" : "sm:items-end"}`}>
-      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-white p-2 ring-4 ring-white/15 shadow-xl">
+      <div
+        className={`${
+          compact ? "h-12 w-12 sm:h-16 sm:w-16" : "h-16 w-16 sm:h-20 sm:w-20"
+        } rounded-full bg-white p-2 ring-4 ring-white/15 shadow-xl`}
+      >
         <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
       </div>
-      <span className="text-lg sm:text-2xl font-extrabold text-white text-center">{team.name}</span>
+      <span className={`${compact ? "text-base sm:text-xl" : "text-lg sm:text-2xl"} font-extrabold text-white text-center`}>
+        {team.name}
+      </span>
     </div>
   );
 }
@@ -146,8 +160,8 @@ function TodayStrip({
   activeId: number | undefined;
   onOpenMatch: (id: number) => void;
 }) {
-  // أقل من مباراتين: البطاقة المميّزة تكفي — لا داعي لشريط مكرّر
-  if (matches.length < 2) return null;
+  // لا مباريات متبقية للعرض في الشريط
+  if (matches.length === 0) return null;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -169,11 +183,128 @@ function TodayStrip({
   );
 }
 
+function MatchHeroCard({
+  fixture,
+  prediction,
+  onOpenMatch,
+  compact = false,
+}: {
+  fixture: WcFixture;
+  prediction?: WcPrediction | null;
+  onOpenMatch: (id: number) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`h-full rounded-3xl bg-white/[0.06] ${
+        compact ? "p-5 sm:p-6" : "p-6 sm:p-8"
+      } ring-1 ring-white/10 backdrop-blur-md shadow-2xl`}
+    >
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-emerald-100/70">
+          <span className="font-bold text-emerald-200">
+            {fixture.status.live
+              ? "تجري الآن"
+              : riyadhDayKey(fixture.date) === todayRiyadhKey()
+                ? "مباراة اليوم"
+                : "المباراة القادمة"}
+          </span>
+          <span>·</span>
+          <span>{fixture.round}</span>
+          <span className="hidden sm:inline">·</span>
+          <span className="hidden sm:flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {fixture.venue.name} — {fixture.venue.city}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6">
+          <TeamSide team={fixture.home} align="end" compact={compact} />
+
+          <div className="flex flex-col items-center gap-2 min-w-[7rem]">
+            {fixture.status.live || fixture.status.finished ? (
+              <>
+                {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه */}
+                <div className="text-4xl sm:text-5xl font-black text-white tabular-nums" dir="ltr">
+                  {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
+                </div>
+                {fixture.penalties && (
+                  <span className="text-xs text-emerald-100/80" dir="ltr">
+                    ({fixture.penalties.away} - {fixture.penalties.home}) ركلات الترجيح
+                  </span>
+                )}
+                <Badge
+                  className={
+                    fixture.status.live
+                      ? "bg-red-500 text-white border-0 gap-1"
+                      : "bg-white/10 text-emerald-100 border-0"
+                  }
+                >
+                  {fixture.status.live && <Radio className="h-3 w-3 animate-pulse" />}
+                  {fixture.status.live && fixture.status.elapsed != null ? (
+                    <>
+                      {fixture.status.label} — <LiveMinute status={fixture.status} />
+                    </>
+                  ) : (
+                    fixture.status.label
+                  )}
+                </Badge>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl sm:text-3xl font-black text-white">
+                  {formatKickoffTime(fixture.date)}
+                </div>
+                <span className="flex items-center gap-1 text-xs text-emerald-100/70">
+                  <CalendarDays className="h-3 w-3" />
+                  {formatKickoffDay(fixture.date)}
+                </span>
+              </>
+            )}
+          </div>
+
+          <TeamSide team={fixture.away} align="start" compact={compact} />
+        </div>
+
+        {!fixture.status.live && !fixture.status.finished && (
+          <CountdownChips timestamp={fixture.timestamp} />
+        )}
+
+        {prediction && !fixture.status.finished && (
+          <ProbabilityBar fixture={fixture} prediction={prediction} />
+        )}
+
+        <div className="flex justify-center">
+          <Button
+            onClick={() => onOpenMatch(fixture.id)}
+            className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300 font-bold rounded-full px-6"
+          >
+            مركز المباراة
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionProps) {
   const motd = overview?.matchOfTheDay ?? null;
   const fixture = motd?.fixture;
-  const liveCount = overview?.live.length ?? 0;
   const today = Array.isArray(overview?.today) ? overview.today : [];
+  const liveMatches = Array.isArray(overview?.live)
+    ? overview.live.filter((f) => f.status.live)
+    : [];
+  const liveCount = liveMatches.length;
+
+  // مباراتان (أو أكثر) تجريان الآن في وقت واحد → بطاقة كبيرة لكلٍّ منها بدل
+  // إبراز واحدة وحشر الباقي في شريط مصغّر (ختام دور المجموعات تحديدًا)
+  const multiLive = liveCount >= 2;
+  const heroFixtures = multiLive ? liveMatches : fixture ? [fixture] : [];
+  const heroIds = new Set(heroFixtures.map((f) => f.id));
+  // متعدد الحيّ: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
+  // مفرد: يعرض كل مباريات اليوم مع إبراز البطاقة المميّزة — كما كان.
+  const stripMatches = multiLive ? today.filter((f) => !heroIds.has(f.id)) : today;
+  const showStrip = multiLive ? stripMatches.length >= 1 : today.length >= 2;
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
@@ -233,14 +364,9 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           </p>
         </motion.div>
 
-        {/* بطاقة مباراة اليوم */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.1 }}
-          className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl"
-        >
-          {isLoading && (
+        {/* بطاقة مباراة اليوم — أو بطاقة كبيرة لكل مباراة تجري الآن في وقت واحد */}
+        {isLoading && (
+          <div className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl">
             <div className="space-y-4">
               <Skeleton className="h-5 w-40 mx-auto bg-white/10" />
               <div className="flex items-center justify-between">
@@ -249,105 +375,48 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
                 <Skeleton className="h-20 w-20 rounded-full bg-white/10" />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {!isLoading && !fixture && (
+        {!isLoading && heroFixtures.length === 0 && (
+          <div className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl">
             <div className="text-center text-emerald-100/80 py-6 flex flex-col items-center gap-2">
               <Sparkles className="h-8 w-8 text-emerald-300" />
               <p className="font-bold text-white">تغطية المونديال تنطلق قريبًا</p>
               <p className="text-sm">تابعنا — جدول المباريات والنتائج الحية ستجدها هنا أولًا بأول</p>
             </div>
-          )}
+          </div>
+        )}
 
-          {fixture && (
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-emerald-100/70">
-                <span className="font-bold text-emerald-200">
-                  {fixture.status.live
-                    ? "تجري الآن"
-                    : riyadhDayKey(fixture.date) === todayRiyadhKey()
-                      ? "مباراة اليوم"
-                      : "المباراة القادمة"}
-                </span>
-                <span>·</span>
-                <span>{fixture.round}</span>
-                <span className="hidden sm:inline">·</span>
-                <span className="hidden sm:flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {fixture.venue.name} — {fixture.venue.city}
-                </span>
-              </div>
+        {!isLoading && heroFixtures.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
+            className={`mx-auto ${
+              multiLive ? "max-w-5xl grid gap-4 sm:gap-6 md:grid-cols-2" : "max-w-3xl"
+            }`}
+          >
+            {heroFixtures.map((f) => (
+              <MatchHeroCard
+                key={f.id}
+                fixture={f}
+                prediction={f.id === fixture?.id ? motd?.prediction : null}
+                onOpenMatch={onOpenMatch}
+                compact={multiLive}
+              />
+            ))}
+          </motion.div>
+        )}
 
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-6">
-                <TeamSide team={fixture.home} align="end" />
-
-                <div className="flex flex-col items-center gap-2 min-w-[7rem]">
-                  {fixture.status.live || fixture.status.finished ? (
-                    <>
-                      {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه */}
-                      <div className="text-4xl sm:text-5xl font-black text-white tabular-nums" dir="ltr">
-                        {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
-                      </div>
-                      {fixture.penalties && (
-                        <span className="text-xs text-emerald-100/80" dir="ltr">
-                          ({fixture.penalties.away} - {fixture.penalties.home}) ركلات الترجيح
-                        </span>
-                      )}
-                      <Badge
-                        className={
-                          fixture.status.live
-                            ? "bg-red-500 text-white border-0 gap-1"
-                            : "bg-white/10 text-emerald-100 border-0"
-                        }
-                      >
-                        {fixture.status.live && <Radio className="h-3 w-3 animate-pulse" />}
-                        {fixture.status.live && fixture.status.elapsed != null ? (
-                          <>
-                            {fixture.status.label} — <LiveMinute status={fixture.status} />
-                          </>
-                        ) : (
-                          fixture.status.label
-                        )}
-                      </Badge>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-2xl sm:text-3xl font-black text-white">
-                        {formatKickoffTime(fixture.date)}
-                      </div>
-                      <span className="flex items-center gap-1 text-xs text-emerald-100/70">
-                        <CalendarDays className="h-3 w-3" />
-                        {formatKickoffDay(fixture.date)}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                <TeamSide team={fixture.away} align="start" />
-              </div>
-
-              {!fixture.status.live && !fixture.status.finished && (
-                <CountdownChips timestamp={fixture.timestamp} />
-              )}
-
-              {motd?.prediction && !fixture.status.finished && (
-                <ProbabilityBar fixture={fixture} prediction={motd.prediction} />
-              )}
-
-              <div className="flex justify-center">
-                <Button
-                  onClick={() => onOpenMatch(fixture.id)}
-                  className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300 font-bold rounded-full px-6"
-                >
-                  مركز المباراة
-                </Button>
-              </div>
-            </div>
-          )}
-        </motion.div>
-
-        {/* شريط مباريات اليوم — يظهر حين تُقام عدة مباريات في اليوم نفسه */}
-        {!isLoading && <TodayStrip matches={today} activeId={fixture?.id} onOpenMatch={onOpenMatch} />}
+        {/* شريط مباريات اليوم — بقية مباريات اليوم غير المعروضة كبطاقات كبيرة */}
+        {!isLoading && showStrip && (
+          <TodayStrip
+            matches={stripMatches}
+            activeId={multiLive ? undefined : fixture?.id}
+            onOpenMatch={onOpenMatch}
+          />
+        )}
       </div>
     </section>
   );
