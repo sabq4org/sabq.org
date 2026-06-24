@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { CalendarDays, MapPin, Radio, Sparkles, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import {
   todayRiyadhKey,
   type WcCountdown,
   type WcFixture,
+  type WcForecast,
   type WcOverview,
   type WcPrediction,
 } from "./wcTypes";
@@ -183,6 +185,33 @@ function TodayStrip({
   );
 }
 
+// شريط احتمالات النتيجة لبطاقة Hero. المباراة المميّزة تأتيها التوقعات جاهزة
+// من overview؛ أما البطاقات المتزامنة الأخرى فنجلب احتمالاتها حسب الطلب من
+// /api/world-cup/forecast/:id (نفس مصدر مركز المباراة) لتظهر التوقعات لكلٍّ منها.
+function HeroPrediction({
+  fixture,
+  prediction,
+}: {
+  fixture: WcFixture;
+  prediction?: WcPrediction | null;
+}) {
+  const { data } = useQuery<WcForecast>({
+    queryKey: [`/api/world-cup/forecast/${fixture.id}`],
+    enabled: !prediction && !fixture.status.finished,
+    staleTime: 5 * 60_000,
+  });
+  const ft = prediction
+    ? { home: prediction.home, draw: prediction.draw, away: prediction.away }
+    : data?.fulltime ?? null;
+  if (!ft) return null;
+  return (
+    <ProbabilityBar
+      fixture={fixture}
+      prediction={{ ...ft, advice: prediction?.advice ?? null }}
+    />
+  );
+}
+
 function MatchHeroCard({
   fixture,
   prediction,
@@ -270,8 +299,8 @@ function MatchHeroCard({
           <CountdownChips timestamp={fixture.timestamp} />
         )}
 
-        {prediction && !fixture.status.finished && (
-          <ProbabilityBar fixture={fixture} prediction={prediction} />
+        {!fixture.status.finished && (
+          <HeroPrediction fixture={fixture} prediction={prediction} />
         )}
 
         <div className="flex justify-center">
