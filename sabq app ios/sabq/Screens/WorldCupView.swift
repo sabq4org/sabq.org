@@ -441,7 +441,17 @@ struct WCMatchesSection: View {
     @State private var userTab: Tab?
 
     private var live: [WCFixture] { fixtures.filter { $0.status.live } }
-    private var today: [WCFixture] { fixtures.filter { WCFormat.dayKey($0.date) == WCFormat.todayKey() } }
+    private var today: [WCFixture] {
+        // المنتهية تنزل أسفل غير المنتهية (مباشرة ثم قادمة)، وداخل كل مجموعة بترتيب
+        // توقيت الانطلاق تصاعديًا — حتى لا تتصدّر نتائجُ مباريات سبق أن انتهت القائمةَ.
+        func rank(_ f: WCFixture) -> Int { f.status.live ? 0 : (f.status.finished ? 2 : 1) }
+        return fixtures
+            .filter { WCFormat.dayKey($0.date) == WCFormat.todayKey() }
+            .sorted { a, b in
+                let (ra, rb) = (rank(a), rank(b))
+                return ra != rb ? ra < rb : a.timestamp < b.timestamp
+            }
+    }
     private var upcoming: [WCFixture] { fixtures.filter { !$0.status.live && !$0.status.finished } }
     private var finished: [WCFixture] { fixtures.filter { $0.status.finished }.reversed() }
 
