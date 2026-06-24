@@ -12,6 +12,10 @@ struct ContentView: View {
     @State private var revisionsStore = ArticleRevisionsStore()
     @State private var selectedTab: AppTab = .home
     @State private var navigationPath = NavigationPath()
+    /// Match center presented from a sports-alert deep link (sabq://match/:id).
+    /// WorldCupMatchCenter owns its own NavigationStack + dismiss, so it fits a
+    /// sheet (the same way the World Cup hub opens it).
+    @State private var deepLinkMatch: DeepLinkMatch?
     /// Singleton owns the latest deep link captured from a notification tap
     /// (cold start, foreground, or background restore). We watch it via the
     /// onChange handler below and translate it into a NavigationPath entry.
@@ -176,6 +180,9 @@ struct ContentView: View {
                     notificationsStore.pendingDeepLink = nil
                 }
             }
+            .sheet(item: $deepLinkMatch) { sel in
+                WorldCupMatchCenter(fixtureId: sel.id)
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 // When the app returns to the foreground (after being in
                 // background long enough that push handlers didn't fire),
@@ -266,9 +273,16 @@ struct ContentView: View {
         case .feedback(let id):
             SabqAnalytics.notificationOpen(type: "feedback", articleId: id)
             navigationPath.append(EditorialNotificationsRoute())
+        case .match(let id):
+            SabqAnalytics.notificationOpen(type: "match", articleId: String(id))
+            deepLinkMatch = DeepLinkMatch(id: id)
         }
     }
 }
+
+/// Identifiable wrapper so a match fixture id can drive a `.sheet(item:)`
+/// presentation of the match center from a sports-alert deep link.
+struct DeepLinkMatch: Identifiable { let id: Int }
 
 // MARK: - Notification-driven routes
 

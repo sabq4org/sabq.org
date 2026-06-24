@@ -55,9 +55,9 @@ struct WCStatusPill: View {
         } else if fixture.status.finished {
             Text(fixture.status.label)
                 .font(SabqFonts.app(size: 11, weight: .semibold))
-                .foregroundStyle(onDark ? Color.white.opacity(0.85) : WCTheme.onDarkDim)
+                .foregroundStyle(WCTheme.liveRed)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(onDark ? Color.white.opacity(0.12) : WCTheme.chipFill))
+                .background(Capsule().fill(WCTheme.liveRed.opacity(onDark ? 0.20 : 0.12)))
         } else {
             Text(WCFormat.time(fixture))
                 .font(SabqFonts.app(size: 11, weight: .bold))

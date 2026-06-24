@@ -14,6 +14,8 @@ nonisolated struct WCTeam: Decodable, Identifiable, Hashable {
     let name: String
     let logo: String
     let winner: Bool?
+    /// تصنيف فيفا (يصل فقط من /world-cup/teams المُرتّبة) — null خلاف ذلك
+    let fifaRank: Int?
 }
 
 nonisolated struct WCStatus: Decodable, Hashable {
@@ -76,8 +78,29 @@ nonisolated struct WCStandingRow: Decodable, Identifiable, Hashable {
     let goalsDiff: Int
     let points: Int
     let form: String?
+    /// "qualified" | "contention" | "eliminated" — null عند انتهاء/غياب دور المجموعات
+    let qualifyStatus: String?
+    /// true إذا حُدِّث الصفّ لحظيًّا من TheSports
+    let live: Bool?
 
     var id: Int { team.id }
+
+    var qualifyColor: Color {
+        switch qualifyStatus {
+        case "qualified": return WCTheme.emeraldDeep
+        case "contention": return WCTheme.gold
+        case "eliminated": return WCTheme.liveRed
+        default: return .clear
+        }
+    }
+
+    var qualifyLabel: String? {
+        switch qualifyStatus {
+        case "qualified": return "تأهّل"
+        case "eliminated": return "خارج"
+        default: return nil
+        }
+    }
 }
 
 nonisolated struct WCGroup: Decodable, Identifiable, Hashable {
@@ -300,6 +323,184 @@ nonisolated struct WCXg: Decodable, Hashable {
     let topPlayers: [WCXgPlayer]
 }
 
+// MARK: - مسابقة التوقّعات (/api/v1/world-cup/predictions/*)
+//
+// نسخة الموبايل بمصادقة Bearer. توقّع دقيق بالأهداف لكل مباراة قبل انطلاقها،
+// يُغلق عند البدء. جائزة كل مباراة 500 نقطة تُقسَّم على المصيبين.
+
+nonisolated struct WCMyPrediction: Decodable, Hashable {
+    let predHome: Int
+    let predAway: Int
+    let status: String        // pending | correct | incorrect
+    let pointsAwarded: Int
+}
+
+nonisolated struct WCMatchSettlement: Decodable, Hashable {
+    let status: String        // open | locked | settled
+    let finalHome: Int?
+    let finalAway: Int?
+    let winnersCount: Int
+    let pointsPerWinner: Int
+    let predictionsCount: Int
+}
+
+nonisolated struct WCPredictableMatch: Decodable, Identifiable, Hashable {
+    let fixture: WCFixture
+    let locked: Bool
+    let predictionsCount: Int
+    let myPrediction: WCMyPrediction?
+    let settlement: WCMatchSettlement?
+
+    var id: Int { fixture.id }
+}
+
+nonisolated struct WCPredTodayResponse: Decodable, Hashable {
+    let matches: [WCPredictableMatch]
+}
+
+// سجل توقّعاتي — صفّ مسطّح يجمع التوقّع بلقطة المباراة
+nonisolated struct WCPredictionHistoryItem: Decodable, Identifiable, Hashable {
+    let fixtureId: String
+    let predHome: Int
+    let predAway: Int
+    let status: String
+    let pointsAwarded: Int
+    let createdAt: String?
+    let kickoffAt: String?
+    let homeTeamName: String?
+    let homeTeamLogo: String?
+    let awayTeamName: String?
+    let awayTeamLogo: String?
+    let finalHome: Int?
+    let finalAway: Int?
+    let matchStatus: String?
+    let winnersCount: Int?
+    let pointsPerWinner: Int?
+
+    var id: String { fixtureId }
+    var settled: Bool { (finalHome != nil && finalAway != nil) || matchStatus == "settled" }
+}
+
+nonisolated struct WCPredMineResponse: Decodable, Hashable {
+    let predictions: [WCPredictionHistoryItem]
+}
+
+nonisolated struct WCPredLeader: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let userId: String
+    let name: String
+    let avatar: String?
+    let totalPoints: Int
+    let correctCount: Int
+    let playedCount: Int
+
+    var id: String { userId }
+}
+
+nonisolated struct WCLeaderboardResponse: Decodable, Hashable {
+    let leaders: [WCPredLeader]
+}
+
+nonisolated struct WCSubmittedPrediction: Decodable, Hashable {
+    let predHome: Int
+    let predAway: Int
+    let status: String
+}
+
+nonisolated struct WCPredSubmitResponse: Decodable, Hashable {
+    let prediction: WCSubmittedPrediction
+}
+
+nonisolated struct WCPredictionSubmitBody: Encodable {
+    let fixtureId: Int
+    let predHome: Int
+    let predAway: Int
+}
+
+// MARK: - القيمة السوقية للاعب (/world-cup/player/:id/market)
+
+nonisolated struct WCMarketPoint: Decodable, Identifiable, Hashable {
+    let time: Int       // ختم زمني (ثوانٍ) لنقطة التقييم
+    let value: Double   // القيمة بالعملة (يورو غالبًا)
+
+    var id: Int { time }
+    var date: Date { Date(timeIntervalSince1970: TimeInterval(time)) }
+}
+
+nonisolated struct WCPlayerMarket: Decodable, Hashable {
+    let available: Bool
+    let marketValue: Double?
+    let currency: String
+    let history: [WCMarketPoint]
+}
+
+// MARK: - التعليق الحي (/world-cup/commentary/:id)
+//
+// تعليق نصّي لحظة بلحظة من SportMonks (مُعرَّب على الخادم). order يرتّب
+// المجريات، goal/important لإبراز اللحظات الحاسمة. أفضل جهد — يُخفى عند الغياب.
+
+nonisolated struct WCCommentaryItem: Decodable, Identifiable, Hashable {
+    let minute: Int
+    let extraMinute: Int?
+    let goal: Bool
+    let important: Bool
+    let textAr: String
+    let textEn: String
+    let order: Int
+
+    var id: String { "\(order)-\(minute)-\(extraMinute ?? 0)" }
+    var minuteLabel: String { "\(minute)'\(extraMinute.map { "+\($0)" } ?? "")" }
+}
+
+nonisolated struct WCCommentary: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let items: [WCCommentaryItem]
+}
+
+// MARK: - الزخم/الاستحواذ (/world-cup/momentum/:id)
+//
+// مؤشّر زخم هجومي عبر دقائق المباراة + استحواذ كلّي. net موجب للمضيف وسالب
+// للضيف. أفضل جهد (TheSports أو SportMonks) — يُخفى عند الغياب.
+
+nonisolated struct WCMomentumPoint: Decodable, Identifiable, Hashable {
+    let label: String
+    let minute: Int
+    let home: Double
+    let away: Double
+    let net: Double
+
+    var id: Int { minute }
+}
+
+nonisolated struct WCPossession: Decodable, Hashable {
+    let home: Int
+    let away: Int
+}
+
+nonisolated struct WCMomentum: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let possession: WCPossession?
+    let points: [WCMomentumPoint]
+}
+
+// MARK: - قنوات البث (/world-cup/match/:id/tv)
+
+nonisolated struct WCTvChannel: Decodable, Identifiable, Hashable {
+    let name: String
+    let country: String?
+    let url: String?
+    let logo: String?
+
+    var id: String { "\(name)-\(country ?? "")" }
+}
+
+nonisolated struct WCTvListing: Decodable, Hashable {
+    let available: Bool
+    let channels: [WCTvChannel]
+}
+
 // MARK: - نبض المباراة (/world-cup/pulse/:id)
 //
 // حزمة خفيفة بنداء واحد للودجت الحيّ: نتيجة/دقيقة لحظية + زخم + آخر VAR.
@@ -374,6 +575,9 @@ nonisolated struct WCSquadPlayer: Decodable, Identifiable, Hashable {
     let positionEn: String
     let age: Int?
     let photo: String
+    /// القيمة السوقية (TheSports) — null إن تعذّر الربط
+    let marketValue: Double?
+    let marketValueCurrency: String?
 }
 
 nonisolated struct WCSquad: Decodable, Hashable {
@@ -386,6 +590,62 @@ nonisolated struct WCSquad: Decodable, Hashable {
 // تجمّع الخادم لكل ما يخص منتخبًا واحدًا: هويته + مجموعته وترتيبها +
 // كل مبارياته (منتهية/مباشرة/قادمة) + قائمته الكاملة + المدرّب.
 
+nonisolated struct WCTeamExtra: Decodable, Hashable {
+    let marketValue: Double?
+    let marketValueCurrency: String?
+    let foundation: Int?
+    let squadSize: Int?
+}
+
+nonisolated struct WCFifaRank: Decodable, Hashable {
+    let rank: Int
+    let points: Double?
+    /// عدد المراكز المتغيّرة منذ التحديث السابق (موجب = صعد) — null إن تعذّر
+    let change: Int?
+}
+
+nonisolated struct WCInjury: Decodable, Identifiable, Hashable {
+    let player: String
+    let reason: String?
+    let status: String?
+    let until: String?
+
+    var id: String { "\(player)-\(reason ?? "")" }
+}
+
+nonisolated struct WCSeasonStatItem: Decodable, Identifiable, Hashable {
+    let label: String
+    let value: Double
+    let percent: Bool?
+
+    var id: String { label }
+    var display: String {
+        if percent == true { return "\(Int(value))%" }
+        return value == value.rounded() ? "\(Int(value))" : String(format: "%.1f", value)
+    }
+}
+
+nonisolated struct WCTeamSeasonStats: Decodable, Hashable {
+    let available: Bool
+    let matches: Int
+    let items: [WCSeasonStatItem]
+}
+
+nonisolated struct WCCoachInfo: Decodable, Hashable {
+    let name: String
+    let photo: String
+    let formation: String?
+    let age: Int?
+    let nationality: String?
+}
+
+nonisolated struct WCVenueInfo: Decodable, Hashable {
+    let name: String
+    let capacity: Int?
+    let city: String
+    let country: String?
+}
+
 nonisolated struct WCTeamProfile: Decodable, Hashable {
     let team: WCTeam
     let isSaudi: Bool
@@ -395,6 +655,13 @@ nonisolated struct WCTeamProfile: Decodable, Hashable {
     let group: WCGroup?
     let fixtures: [WCFixture]
     let squad: [WCSquadPlayer]
+    /// إثراء TheSports — قد تكون null جميعها قبل تفعيل المزود
+    let extra: WCTeamExtra?
+    let fifaRank: WCFifaRank?
+    let injuries: [WCInjury]?
+    let seasonStats: WCTeamSeasonStats?
+    let coachInfo: WCCoachInfo?
+    let venue: WCVenueInfo?
 }
 
 // MARK: - بطاقة اللاعب الشاملة (/world-cup/player/:id)
@@ -472,6 +739,78 @@ nonisolated struct WCPlayerCard: Decodable, Hashable {
     let injury: WCPlayerInjury?
 }
 
+// MARK: - شجرة الأدوار الإقصائية (/world-cup/bracket)
+//
+// يبني الخادم الشجرة من المباريات (دور 32 → النهائي + مباراة المركز الثالث).
+// قبل اعتماد القرعة قد تصل الجولات فارغة فيُخفى القسم تلقائيًا.
+
+nonisolated struct WCBracketRound: Decodable, Identifiable, Hashable {
+    let round: String
+    let roundEn: String
+    let matches: [WCFixture]
+
+    var id: String { roundEn }
+}
+
+nonisolated struct WCBracket: Decodable, Hashable {
+    let source: String
+    let rounds: [WCBracketRound]
+}
+
+// MARK: - أخبار المونديال (/world-cup/news)
+//
+// مصدرها جدول المقالات (مولّدة آليًا + تحريرية). الـ slug يفتح المقال داخل
+// التطبيق عبر ArticleSlugRoute. home/away اسم+شعار فقط (لبطاقة المباراة).
+
+nonisolated struct WCNewsSide: Decodable, Hashable {
+    let name: String
+    let logo: String
+}
+
+nonisolated struct WCNewsFocalPoint: Decodable, Hashable {
+    let x: Double
+    let y: Double
+}
+
+nonisolated struct WCNewsItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let slug: String
+    let excerpt: String?
+    let imageUrl: String?
+    let imageFocalPoint: WCNewsFocalPoint?
+    let publishedAt: String?
+    /// "preview" (ما قبل المباراة) | "report" (تقرير) | "news"
+    let kind: String
+    let fixtureId: Int?
+    let home: WCNewsSide?
+    let away: WCNewsSide?
+
+    var publishedDate: Date? { publishedAt.flatMap { SabqFormatters.parseISO8601($0) } }
+}
+
+// MARK: - حقائق البطولة (/world-cup/facts)
+//
+// حامل اللقب + الأكثر تتويجًا + الدول المضيفة. كل الحقول قد تكون null قبل
+// اعتماد المزود لها فيُخفى القسم/البطاقة المعنيّة دون أثر.
+
+nonisolated struct WCMostTitles: Decodable, Hashable {
+    let teams: [WCTeam]
+    let count: Int
+}
+
+nonisolated struct WCCompetitionFacts: Decodable, Hashable {
+    let defendingChampion: WCTeam?
+    let defendingChampionTitles: Int?
+    let mostTitles: WCMostTitles?
+    let host: String?
+
+    /// هل توجد أي حقيقة لعرضها أصلًا؟ (يُخفى القسم كاملًا إن لا)
+    var hasContent: Bool {
+        defendingChampion != nil || mostTitles != nil || (host?.isEmpty == false)
+    }
+}
+
 // MARK: - Response envelopes
 
 private nonisolated struct WCFixturesResponse: Decodable { let fixtures: [WCFixture] }
@@ -479,6 +818,7 @@ private nonisolated struct WCStandingsResponse: Decodable { let groups: [WCGroup
 private nonisolated struct WCScorersResponse: Decodable { let scorers: [WCScorer] }
 private nonisolated struct WCLeadersResponse: Decodable { let leaders: [WCLeader] }
 private nonisolated struct WCTeamsResponse: Decodable { let teams: [WCTeam] }
+private nonisolated struct WCNewsResponse: Decodable { let news: [WCNewsItem] }
 
 // MARK: - APIClient — World Cup reads
 //
@@ -520,6 +860,22 @@ extension APIClient {
     func fetchWorldCupTeams() async throws -> [WCTeam] {
         try await get(WCTeamsResponse.self, path: "/world-cup/teams",
                       apiRoot: URLConstants.publicAPI).teams
+    }
+
+    func fetchWorldCupBracket(ignoreCache: Bool = false) async throws -> WCBracket {
+        try await get(WCBracket.self, path: "/world-cup/bracket",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupNews(limit: Int = 8) async throws -> [WCNewsItem] {
+        try await get(WCNewsResponse.self, path: "/world-cup/news",
+                      query: ["limit": String(limit)],
+                      apiRoot: URLConstants.publicAPI).news
+    }
+
+    func fetchWorldCupFacts(ignoreCache: Bool = false) async throws -> WCCompetitionFacts {
+        try await get(WCCompetitionFacts.self, path: "/world-cup/facts",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
     func fetchWorldCupSquad(teamId: Int) async throws -> WCSquad {
@@ -573,6 +929,49 @@ extension APIClient {
         try await get(WCPlayerForm.self, path: "/world-cup/player/\(playerId)/form",
                       apiRoot: URLConstants.publicAPI)
     }
+
+    // مسابقة التوقّعات — مسارات الموبايل (Bearer) عبر mobileAPI
+    func fetchWCPredictionsToday(ignoreCache: Bool = false) async throws -> [WCPredictableMatch] {
+        try await get(WCPredTodayResponse.self, path: "/world-cup/predictions/today",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).matches
+    }
+
+    @discardableResult
+    func submitWCPrediction(fixtureId: Int, predHome: Int, predAway: Int) async throws -> WCSubmittedPrediction {
+        try await post(WCPredSubmitResponse.self, path: "/world-cup/predictions",
+                       body: WCPredictionSubmitBody(fixtureId: fixtureId, predHome: predHome, predAway: predAway),
+                       apiRoot: URLConstants.mobileAPI).prediction
+    }
+
+    func fetchWCMyPredictions() async throws -> [WCPredictionHistoryItem] {
+        try await get(WCPredMineResponse.self, path: "/world-cup/predictions/mine",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI).predictions
+    }
+
+    func fetchWCLeaderboard() async throws -> [WCPredLeader] {
+        try await get(WCLeaderboardResponse.self, path: "/world-cup/predictions/leaderboard",
+                      apiRoot: URLConstants.mobileAPI).leaders
+    }
+
+    func fetchWorldCupPlayerMarket(playerId: Int) async throws -> WCPlayerMarket {
+        try await get(WCPlayerMarket.self, path: "/world-cup/player/\(playerId)/market",
+                      apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupCommentary(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCCommentary {
+        try await get(WCCommentary.self, path: "/world-cup/commentary/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupMomentum(fixtureId: Int, ignoreCache: Bool = false) async throws -> WCMomentum {
+        try await get(WCMomentum.self, path: "/world-cup/momentum/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupTv(fixtureId: Int) async throws -> WCTvListing {
+        try await get(WCTvListing.self, path: "/world-cup/match/\(fixtureId)/tv",
+                      apiRoot: URLConstants.publicAPI)
+    }
 }
 
 // MARK: - World Cup shared helpers (theme, formatting, navigation)
@@ -597,49 +996,61 @@ nonisolated enum WCTheme {
         })
     }
 
-    // ── علامة المونديال: أزرق ملكي + ذهبي (ثابتة عبر الوضعين) ──
-    static let royal = Color(red: 0.16, green: 0.36, blue: 0.96)   // الأزرق الأساسي
-    static let azure = Color(red: 0.30, green: 0.62, blue: 1.0)    // أزرق ساطع (إبراز/مباشر)
+    // ── علامة المونديال: أخضر زمردي + ذهبي (هوية الملعب) ──
+    static let royal = Color(red: 0.06, green: 0.50, blue: 0.33)   // الأخضر الأساسي (الاسم تاريخي)
+    static let azure = Color(red: 0.16, green: 0.74, blue: 0.48)   // أخضر ساطع (إبراز/مباشر)
     static let liveRed = Color(red: 0.93, green: 0.26, blue: 0.30)
-    static let sky = Color(red: 0.35, green: 0.66, blue: 0.96)     // أزرق فاتح (سلسلة ثانية/الضيف)
+    static let sky = Color(red: 0.18, green: 0.70, blue: 0.60)     // تركوازي (سلسلة ثانية/الضيف)
     static let gold = Color(red: 0.96, green: 0.72, blue: 0.20)    // ذهبي (تتويج/تمييز)
-    static let leaf = Color(red: 0.13, green: 0.78, blue: 0.64)    // تركوازي «إيجابي» (تقييم جيد)
+    static let leaf = Color(red: 0.45, green: 0.78, blue: 0.30)    // أخضر فاتح «إيجابي» (تقييم جيد)
 
-    // أسماء سابقة (أخضر) مُعاد توجيهها للأزرق — تبقى لتفادي لمس كل المواضع:
     static let emerald = azure // تعبئة/إبراز ساطع
-    // نص/أيقونة/تعبئة-علامة تكيّفية: غامق على الفاتح، أزرق متوسّط على الليلي —
+    // نص/أيقونة/تعبئة-علامة تكيّفية: أخضر غامق على الفاتح، أخضر فاتح على الليلي —
     // يصلح نصًّا على البطاقات وتعبئةً بنصٍّ أبيض على السواء.
-    static let emeraldDeep = dyn((0.11, 0.24, 0.60, 1), (0.27, 0.50, 0.96, 1))
+    static let emeraldDeep = dyn((0.04, 0.42, 0.28, 1), (0.22, 0.80, 0.52, 1))
 
-    // ── الهيرو + شريط التنقّل: تدرّج أزرق ملكي حيّ (بدل الكحلي شبه الأسود) ──
-    // أعلى أغمق قليلًا لوضوح أيقونات الحالة البيضاء، وأسفل أزرق أسطع؛ نصوصه بيضاء.
-    static let heroTop = Color(red: 0.10, green: 0.24, blue: 0.62)
-    static let heroBottom = Color(red: 0.16, green: 0.38, blue: 0.86)
+    // ── الهيرو + شريط التنقّل: تدرّج أخضر زمردي حيّ ──
+    // أعلى أغمق قليلًا لوضوح أيقونات الحالة البيضاء، وأسفل أخضر أسطع؛ نصوصه بيضاء.
+    static let heroTop = Color(red: 0.03, green: 0.34, blue: 0.22)
+    static let heroBottom = Color(red: 0.08, green: 0.56, blue: 0.36)
 
-    // ── البطاقات المميّزة/الملعب: أزرق داكن ثابت (نصوصها بيضاء) ──
-    static let stadiumTop = Color(red: 0.05, green: 0.11, blue: 0.27)
-    static let stadiumBottom = Color(red: 0.07, green: 0.17, blue: 0.40)
-    static let pitchTop = Color(red: 0.08, green: 0.20, blue: 0.44)
-    static let pitchBottom = Color(red: 0.05, green: 0.13, blue: 0.30)
+    // ── البطاقات المميّزة/الملعب: أخضر داكن ثابت (نصوصها بيضاء) ──
+    static let stadiumTop = Color(red: 0.03, green: 0.18, blue: 0.12)
+    static let stadiumBottom = Color(red: 0.05, green: 0.28, blue: 0.18)
+    static let pitchTop = Color(red: 0.06, green: 0.34, blue: 0.20)
+    static let pitchBottom = Color(red: 0.04, green: 0.22, blue: 0.13)
 
     // ── أسطح/نصوص تكيّفية (فاتح افتراضيًا، ليلي تلقائيًا) ──
-    static let onDark = dyn((0.07, 0.11, 0.20, 1), (1, 1, 1, 1))       // نص أساسي
-    static let onDarkDim = dyn((0.38, 0.44, 0.56, 1), (1, 1, 1, 0.62)) // نص ثانوي
+    static let onDark = dyn((0.06, 0.13, 0.10, 1), (1, 1, 1, 1))       // نص أساسي
+    static let onDarkDim = dyn((0.36, 0.46, 0.42, 1), (1, 1, 1, 0.62)) // نص ثانوي
     static let card = dyn((1, 1, 1, 1), (1, 1, 1, 0.06))              // سطح بطاقة
-    static let cardStroke = dyn((0.11, 0.24, 0.60, 0.12), (1, 1, 1, 0.10))
-    static let chipFill = dyn((0.16, 0.36, 0.96, 0.08), (1, 1, 1, 0.10))
+    static let cardStroke = dyn((0.04, 0.42, 0.28, 0.12), (1, 1, 1, 0.10))
+    // ظل البطاقات: خفيف في الفاتح ليرفعها عن الخلفية الخضراء، ومعدوم في الليلي
+    static let cardShadow = dyn((0.04, 0.20, 0.13, 0.10), (0, 0, 0, 0))
+    static let chipFill = dyn((0.10, 0.55, 0.35, 0.08), (1, 1, 1, 0.10))
 
-    /// خلفية القسم — أزرق خفيف جدًا (مائل للأزرق) في الفاتح، وأزرق داكن في الليلي.
+    /// خلفية القسم — أخضر خفيف جدًا في الفاتح، وأخضر داكن في الليلي.
     /// لا كتلة داكنة خلف الهيرو؛ المحتوى يجلس مباشرة على هذه الخلفية الخفيفة.
     static var sectionBackground: LinearGradient {
         LinearGradient(
             colors: [
-                dyn((0.91, 0.94, 0.99, 1), (0.04, 0.09, 0.22, 1)),
-                dyn((0.94, 0.96, 0.995, 1), (0.05, 0.12, 0.28, 1)),
-                dyn((0.92, 0.95, 0.99, 1), (0.04, 0.09, 0.22, 1)),
+                dyn((0.91, 0.97, 0.93, 1), (0.03, 0.12, 0.08, 1)),
+                dyn((0.94, 0.98, 0.95, 1), (0.04, 0.16, 0.11, 1)),
+                dyn((0.91, 0.97, 0.93, 1), (0.03, 0.12, 0.08, 1)),
             ],
             startPoint: .top, endPoint: .bottom
         )
+    }
+}
+
+extension View {
+    /// سطح بطاقة مرتفع: أبيض في الفاتح مع حدّ وظلّ خفيف — يفصل المحتوى
+    /// بوضوح عن خلفية القسم الخضراء بدل التدرّجات الخضراء المتقاربة.
+    func wcElevatedCard(cornerRadius: CGFloat = 14) -> some View {
+        self
+            .background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(WCTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
+            .shadow(color: WCTheme.cardShadow, radius: 6, y: 2)
     }
 }
 

@@ -21,6 +21,7 @@ enum NotificationDeepLink: Hashable {
     case opinion(slug: String)
     case draft(id: String)
     case feedback(id: String)
+    case match(id: Int)
 }
 
 /// Coordinator owned by `sabqApp` — exposes the latest APNs device token
@@ -123,6 +124,7 @@ final class NotificationsStore {
         // sabq://opinion/<slug>   — opinion article detail
         // sabq://draft/<id>       — editorial notifications (draft surface)
         // sabq://feedback/<id>    — editorial notifications (feedback surface)
+        // sabq://match/<id>       — match center (sports alerts: goal/kickoff/…)
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
@@ -132,6 +134,9 @@ final class NotificationsStore {
         case "opinion" where !value.isEmpty: return .opinion(slug: value)
         case "draft" where !value.isEmpty:   return .draft(id: value)
         case "feedback" where !value.isEmpty: return .feedback(id: value)
+        case "match":
+            if let id = Int(value) { return .match(id: id) }
+            return nil
         default: return nil
         }
     }

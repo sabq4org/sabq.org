@@ -288,7 +288,18 @@ struct WCTeamsSection: View {
     private func teamTile(_ team: WCTeam) -> some View {
         let isSaudi = team.id == WCTheme.saudiId
         return VStack(spacing: 6) {
-            WCTeamLogo(team: team, size: 38, ring: WCTheme.cardStroke)
+            ZStack(alignment: .topTrailing) {
+                WCTeamLogo(team: team, size: 38, ring: WCTheme.cardStroke)
+                if let rank = team.fifaRank {
+                    Text("#\(rank)")
+                        .font(SabqFonts.app(size: 8, weight: .black).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Capsule().fill(WCTheme.emeraldDeep))
+                        .environment(\.layoutDirection, .leftToRight)
+                        .offset(x: 8, y: -4)
+                }
+            }
             Text(team.name).font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).multilineTextAlignment(.center)
             if isSaudi {
@@ -362,9 +373,14 @@ struct WCTeamSheet: View {
                     VStack(alignment: .leading, spacing: 22) {
                         headerCard
                         followBar
+                        quickFacts
                         if let group = profile?.group, !group.rows.isEmpty {
                             groupTable(group)
                         }
+                        coachCard
+                        venueCard
+                        injuriesSection
+                        seasonStatsSection
                         matchesSection
                         squadSection
                     }
@@ -452,10 +468,18 @@ struct WCTeamSheet: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            LinearGradient(colors: [WCTheme.emeraldDeep, WCTheme.stadiumTop],
+            LinearGradient(colors: [WCTheme.heroTop, WCTheme.heroBottom],
                            startPoint: .topTrailing, endPoint: .bottomLeading)
+                .overlay(alignment: .topLeading) {
+                    Circle()
+                        .fill(WCTheme.gold.opacity(0.16))
+                        .frame(width: 150, height: 150)
+                        .blur(radius: 55)
+                        .offset(x: -30, y: -50)
+                }
         )
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: WCTheme.heroTop.opacity(0.25), radius: 12, x: 0, y: 6)
     }
 
     // MARK: متابعة التنبيهات
@@ -563,13 +587,24 @@ struct WCTeamSheet: View {
 
     @ViewBuilder private func groupRow(_ row: WCStandingRow) -> some View {
         let isCurrent = row.team.id == teamId
-        let qualify: Color = row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear)
+        let qualify: Color = row.qualifyStatus != nil
+            ? row.qualifyColor
+            : (row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear))
         let content = HStack(spacing: 8) {
             Text("\(row.rank)").foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
             WCTeamLogo(team: row.team, size: 20, ring: WCTheme.cardStroke)
             Text(row.team.name)
                 .font(SabqFonts.app(size: 13, weight: isCurrent ? .black : .semibold))
                 .foregroundStyle(WCTheme.onDark).lineLimit(1)
+            if row.live == true {
+                Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
+            }
+            if let label = row.qualifyLabel {
+                Text(label)
+                    .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(row.qualifyColor))
+            }
             Spacer()
             Text("\(row.played)").frame(width: 28)
             Text(row.goalsDiff > 0 ? "+\(row.goalsDiff)" : "\(row.goalsDiff)").frame(width: 36)
@@ -589,6 +624,189 @@ struct WCTeamSheet: View {
             content
         } else {
             Button { switchTeam(to: row.team) } label: { content }.buttonStyle(.plain)
+        }
+    }
+
+    // MARK: حقائق سريعة (فيفا / قيمة / تأسيس / حجم القائمة)
+
+    @ViewBuilder private var quickFacts: some View {
+        let fifa = profile?.fifaRank
+        let extra = profile?.extra
+        let facts: [(value: String, label: String, accent: Color?)] = [
+            fifa.map { ("#\($0.rank)", "تصنيف فيفا", WCTheme.emeraldDeep as Color?) },
+            extra?.marketValue.map {
+                (WCPlayerMarketSection.format($0, currency: extra?.marketValueCurrency ?? "€"), "القيمة السوقية", WCTheme.gold as Color?)
+            },
+            extra?.foundation.map { ("\($0)", "التأسيس", nil) },
+            extra?.squadSize.map { ("\($0)", "حجم القائمة", nil) },
+        ].compactMap { $0 }
+
+        if !facts.isEmpty {
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    ForEach(facts, id: \.label) { f in
+                        VStack(spacing: 2) {
+                            Text(f.value)
+                                .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit())
+                                .foregroundStyle(f.accent ?? WCTheme.onDark)
+                                .lineLimit(1).minimumScaleFactor(0.7)
+                                .environment(\.layoutDirection, .leftToRight)
+                            Text(f.label)
+                                .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9).padding(.horizontal, 6)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WCTheme.card))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+                    }
+                }
+                if let change = fifa?.change, change != 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: change > 0 ? "arrow.up.right" : "arrow.down.right")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("\(abs(change)) مركزًا عن التحديث السابق")
+                            .font(SabqFonts.app(size: 10))
+                    }
+                    .foregroundStyle(change > 0 ? WCTheme.emerald : WCTheme.liveRed)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+            }
+        }
+    }
+
+    // MARK: المدرّب
+
+    @ViewBuilder private var coachCard: some View {
+        if let c = profile?.coachInfo {
+            HStack(spacing: 12) {
+                if c.photo.isEmpty {
+                    Image(systemName: "person.crop.square.fill")
+                        .font(.system(size: 34)).foregroundStyle(WCTheme.onDarkDim)
+                        .frame(width: 52, height: 52)
+                } else {
+                    WCRemoteImage(url: c.photo, contentMode: .fill)
+                        .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("المدرّب").font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                    Text(c.name).font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    HStack(spacing: 8) {
+                        if let f = c.formation, !f.isEmpty {
+                            chipText(f).environment(\.layoutDirection, .leftToRight)
+                        }
+                        if let nat = c.nationality, !nat.isEmpty {
+                            Text(nat).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                        if let age = c.age {
+                            Text("\(age) سنة").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        }
+    }
+
+    private func chipText(_ t: String) -> some View {
+        Text(t)
+            .font(SabqFonts.app(size: 11, weight: .bold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+            .padding(.horizontal, 8).padding(.vertical, 2)
+            .background(Capsule().fill(WCTheme.chipFill))
+    }
+
+    // MARK: الملعب
+
+    @ViewBuilder private var venueCard: some View {
+        if let v = profile?.venue {
+            HStack(spacing: 12) {
+                Image(systemName: "sportscourt.fill")
+                    .font(.system(size: 22)).foregroundStyle(WCTheme.emerald)
+                    .frame(width: 44, height: 44)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.chipFill))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("الملعب").font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                    Text(v.name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    HStack(spacing: 8) {
+                        let place = [v.city, v.country].compactMap { ($0 ?? "").isEmpty ? nil : $0 }.joined(separator: "، ")
+                        if !place.isEmpty {
+                            Text(place).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                        }
+                        if let cap = v.capacity {
+                            HStack(spacing: 3) {
+                                Image(systemName: "person.2.fill").font(.system(size: 9))
+                                Text("\(cap.formatted())").environment(\.layoutDirection, .leftToRight)
+                            }
+                            .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        }
+    }
+
+    // MARK: الإصابات والغيابات
+
+    @ViewBuilder private var injuriesSection: some View {
+        let injuries = profile?.injuries ?? []
+        if !injuries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "bandage.fill").font(.system(size: 13)).foregroundStyle(WCTheme.liveRed)
+                    Text("الإصابات والغيابات").font(SabqFonts.app(size: 15, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                }
+                ForEach(injuries) { inj in
+                    HStack(spacing: 10) {
+                        Circle().fill(WCTheme.liveRed.opacity(0.8)).frame(width: 7, height: 7)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(inj.player).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                            let detail = [inj.status, inj.reason].compactMap { ($0 ?? "").isEmpty ? nil : $0 }.joined(separator: " · ")
+                            if !detail.isEmpty {
+                                Text(detail).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                            }
+                        }
+                        Spacer()
+                        if let until = inj.until, !until.isEmpty {
+                            Text("العودة: \(until)")
+                                .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+                }
+            }
+        }
+    }
+
+    // MARK: إحصاء المنتخب في البطولة
+
+    @ViewBuilder private var seasonStatsSection: some View {
+        if let s = profile?.seasonStats, s.available, !s.items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar.fill").font(.system(size: 13)).foregroundStyle(WCTheme.emerald)
+                    Text("أرقام المنتخب في البطولة").font(SabqFonts.app(size: 15, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                    Spacer()
+                    if s.matches > 0 {
+                        Text("\(s.matches) مباراة")
+                            .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Capsule().fill(WCTheme.chipFill))
+                    }
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                    ForEach(s.items) { item in
+                        WCFactTile(value: item.display, label: item.label)
+                    }
+                }
+            }
         }
     }
 
@@ -662,8 +880,15 @@ struct WCTeamSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(p.name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                    if let age = p.age {
-                        Text("\(age) سنة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    HStack(spacing: 6) {
+                        if let age = p.age {
+                            Text("\(age) سنة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                        if let mv = p.marketValue, mv > 0 {
+                            Text(WCPlayerMarketSection.format(mv, currency: p.marketValueCurrency ?? "€"))
+                                .font(SabqFonts.app(size: 10, weight: .semibold)).foregroundStyle(WCTheme.gold)
+                                .environment(\.layoutDirection, .leftToRight)
+                        }
                     }
                 }
                 Spacer()
