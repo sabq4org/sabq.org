@@ -92,7 +92,12 @@ export default function WorldCup() {
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <PredictionsCTA />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
-        <KnockoutBracket fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
+        <KnockoutBracket
+          fixtures={fixtures}
+          groups={groups}
+          isLoading={fixturesLoading}
+          onOpenMatch={setOpenFixtureId}
+        />
         <ScorersSection
           scorers={scorers}
           isLoading={scorersLoading}
