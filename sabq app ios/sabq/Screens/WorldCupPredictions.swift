@@ -218,6 +218,11 @@ private struct WCPredTodayTab: View {
     @ViewBuilder private func inputView(_ m: WCPredictableMatch) -> some View {
         let id = m.fixture.id
         let input = inputs[id] ?? ScoreInput(home: 0, away: 0)
+        let saved = m.myPrediction
+        // «غير محفوظ»: لا يوجد توقّع بعد، أو القيمة اختلفت عمّا حُفظ. نُظهر الزرّ
+        // الأخضر الطويل في هذه الحالة فقط — وإلا سطر تأكيد هادئ، لتقليل ازدحام
+        // الأخضر المتكرّر عبر البطاقات.
+        let dirty = saved == nil || saved!.predHome != input.home || saved!.predAway != input.away
         VStack(spacing: 10) {
             HStack(spacing: 16) {
                 stepper(value: input.home) { setHome(id, $0) }
@@ -226,23 +231,33 @@ private struct WCPredTodayTab: View {
             }
             .environment(\.layoutDirection, .leftToRight)
 
-            Button { Task { await submit(m) } } label: {
-                HStack(spacing: 6) {
-                    if submitting.contains(id) {
-                        ProgressView().controlSize(.small).tint(.white)
-                    } else {
-                        Image(systemName: m.myPrediction != nil ? "checkmark.circle.fill" : "paperplane.fill")
-                            .font(.system(size: 13))
+            if dirty {
+                Button { Task { await submit(m) } } label: {
+                    HStack(spacing: 6) {
+                        if submitting.contains(id) {
+                            ProgressView().controlSize(.small).tint(.white)
+                        } else {
+                            Image(systemName: saved != nil ? "checkmark.circle.fill" : "paperplane.fill")
+                                .font(.system(size: 12))
+                        }
+                        Text(saved != nil ? "تحديث التوقّع" : "حفظ التوقّع")
+                            .font(SabqFonts.app(size: 13, weight: .bold))
                     }
-                    Text(m.myPrediction != nil ? "تحديث التوقّع" : "حفظ التوقّع")
-                        .font(SabqFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity).padding(.vertical, 9)
+                    .background(Capsule().fill(WCTheme.emeraldDeep))
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).padding(.vertical, 11)
-                .background(Capsule().fill(WCTheme.emeraldDeep))
+                .buttonStyle(.plain)
+                .disabled(submitting.contains(id))
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 12)).foregroundStyle(WCTheme.emerald)
+                    Text("تم حفظ توقّعك")
+                        .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 7)
             }
-            .buttonStyle(.plain)
-            .disabled(submitting.contains(id))
         }
     }
 
@@ -259,12 +274,13 @@ private struct WCPredTodayTab: View {
     }
 
     private func stepBtn(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        // خلفية خضراء فاتحة بأيقونة خضراء داكنة بدل الدائرة الصلبة + الظل —
+        // واضحة وقابلة للّمس لكن هادئة (تقلّل ازدحام الأخضر في كل بطاقة).
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(WCTheme.emeraldDeep))
-                .shadow(color: WCTheme.emeraldDeep.opacity(0.3), radius: 3, y: 1)
+                .font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(WCTheme.emerald.opacity(0.14)))
         }
         .buttonStyle(.plain)
     }
