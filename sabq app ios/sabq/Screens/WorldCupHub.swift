@@ -96,10 +96,15 @@ struct WCFactsSection: View {
 // افتراضيًا أول دور فيه مباراة حيّة، ثم قادمة، ثم أول دور غير فارغ.
 
 struct WCKnockoutSection: View {
+    // المباريات والترتيب يمرّان من الشاشة الأم لحساب «المتأهّلون حتى الآن» قبل
+    // أن يوفّر المزوّد مباريات خروج المغلوب — دون نداء API إضافي.
+    var fixtures: [WCFixture] = []
+    var groups: [WCGroup] = []
     let onOpenMatch: (Int) -> Void
 
     @State private var bracket: WCBracket?
     @State private var userRound: String?   // roundEn المختار يدويًا
+    @State private var selectedTeam: WCTeam?
 
     private var rounds: [WCBracketRound] { bracket?.rounds ?? [] }
     private var playableRounds: [WCBracketRound] { rounds.filter { !$0.matches.isEmpty } }
@@ -112,6 +117,24 @@ struct WCKnockoutSection: View {
     private var selectedEn: String? { userRound ?? defaultRoundEn }
     private var selectedRound: WCBracketRound? {
         playableRounds.first { $0.roundEn == selectedEn }
+    }
+
+    // المتأهّلون المؤكَّدون حتى الآن لكل مجموعة — منتخب يُعدّ متأهّلًا إذا حسمه
+    // الخادم رياضيًّا (qualifyStatus == "qualified")، أو اكتملت كل مباريات مجموعته
+    // وهو في المركزين الأوّلين (عندها qualifyStatus = null). مطابق computeQualified
+    // في الويب. أفضل 8 من أصحاب المركز الثالث لا يُحسبون هنا.
+    private var qualifiedGroups: [WCQualifiedGroup] {
+        var out: [WCQualifiedGroup] = []
+        for g in groups {
+            let ids = Set(g.rows.map { $0.team.id })
+            let groupMatches = fixtures.filter { ids.contains($0.home.id) && ids.contains($0.away.id) }
+            let complete = !groupMatches.isEmpty && groupMatches.allSatisfy { $0.status.finished }
+            let qualifiers = g.rows
+                .filter { $0.qualifyStatus == "qualified" || (complete && $0.rank <= 2) }
+                .sorted { $0.rank < $1.rank }
+            if !qualifiers.isEmpty { out.append(WCQualifiedGroup(group: g, qualifiers: qualifiers)) }
+        }
+        return out
     }
 
     var body: some View {
@@ -129,6 +152,9 @@ struct WCKnockoutSection: View {
             if let r = try? await APIClient.shared.fetchWorldCupBracket() {
                 await MainActor.run { bracket = r }
             }
+        }
+        .sheet(item: $selectedTeam) { team in
+            WCTeamSheet(team: team).presentationDetents([.large])
         }
     }
 
@@ -166,27 +192,147 @@ struct WCKnockoutSection: View {
         }
     }
 
-    // قبل اعتماد القرعة/انطلاق الأدوار — بطاقة معرّفة بالمراحل بدل إخفاء كامل
-    private var emptyCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            WCSectionHeader(icon: "trophy", title: "الأدوار الإقصائية",
-                            subtitle: "تبدأ بعد اكتمال دور المجموعات")
-                .padding(.horizontal, 16)
+    // قبل اعتماد القرعة/انطلاق الأدوار: نعرض «المتأهّلون حتى الآن» فور حسم أول
+    // مجموعة، وإلا بطاقة معرّفة بالمراحل بدل إخفاء كامل.
+    @ViewBuilder private var emptyCard: some View {
+        if !qualifiedGroups.isEmpty {
+            WCQualifiedSoFar(qualifiedGroups: qualifiedGroups) { selectedTeam = $0 }
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                WCSectionHeader(icon: "trophy", title: "الأدوار الإقصائية",
+                                subtitle: "تبدأ بعد اكتمال دور المجموعات")
+                    .padding(.horizontal, 16)
 
-            VStack(spacing: 10) {
-                ForEach(["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"], id: \.self) { label in
-                    HStack {
-                        Image(systemName: "flag.checkered").font(.system(size: 12)).foregroundStyle(WCTheme.gold)
-                        Text(label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
-                        Spacer()
-                        Text("يُحدَّد لاحقًا").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                VStack(spacing: 10) {
+                    ForEach(["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"], id: \.self) { label in
+                        HStack {
+                            Image(systemName: "flag.checkered").font(.system(size: 12)).foregroundStyle(WCTheme.gold)
+                            Text(label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                            Spacer()
+                            Text("يُحدَّد لاحقًا").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 11)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+}
+
+// مجموعة مع منتخباتها المتأهّلة — حامل خفيف لـ ForEach.
+struct WCQualifiedGroup: Identifiable {
+    let group: WCGroup
+    let qualifiers: [WCStandingRow]
+    var id: String { group.groupEn }
+}
+
+/// لوحة «المتأهّلون حتى الآن» — تُعرض مكان النص التحفيزي قبل توفّر مباريات خروج
+/// المغلوب، وتُعبَّأ تدريجيًّا فور حسم كل مجموعة (أول/ثاني). مطابق QualifiedSoFar
+/// في الويب: ترويسة بعدّاد + شارات الأدوار، شبكة بطاقات للمجموعات، وحاشية.
+struct WCQualifiedSoFar: View {
+    let qualifiedGroups: [WCQualifiedGroup]
+    let onSelectTeam: (WCTeam) -> Void
+
+    private let rounds = ["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"]
+    private var total: Int { qualifiedGroups.reduce(0) { $0 + $1.qualifiers.count } }
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header.padding(.horizontal, 16)
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(qualifiedGroups) { item in
+                    groupCard(item)
                 }
             }
             .padding(.horizontal, 16)
+
+            Text("تُحدَّد المواجهات وأفضل 8 من أصحاب المركز الثالث بعد اكتمال دور المجموعات (28 يونيو 2026).")
+                .font(SabqFonts.app(size: 11))
+                .foregroundStyle(WCTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.top, 2)
         }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "trophy.fill").font(SabqFonts.app(size: 13, weight: .bold))
+                Text("المتأهّلون حتى الآن").font(SabqFonts.app(size: 14, weight: .bold))
+                Text("\(total)")
+                    .font(SabqFonts.app(size: 11, weight: .black))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7).padding(.vertical, 2)
+                    .background(Capsule().fill(WCTheme.emeraldDeep))
+            }
+            .foregroundStyle(WCTheme.emeraldDeep)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Capsule().fill(WCTheme.emerald.opacity(0.12)))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(rounds, id: \.self) { r in
+                        Text(r)
+                            .font(SabqFonts.app(size: 11, weight: .semibold))
+                            .foregroundStyle(WCTheme.onDarkDim)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Capsule().fill(WCTheme.chipFill))
+                            .overlay(Capsule().stroke(WCTheme.cardStroke.opacity(0.4), lineWidth: 1))
+                    }
+                }
+            }
+        }
+    }
+
+    private func groupCard(_ item: WCQualifiedGroup) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(item.group.group)
+                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .foregroundStyle(WCTheme.emeraldDeep)
+                Spacer()
+                Text("متأهّل")
+                    .font(SabqFonts.app(size: 9, weight: .semibold))
+                    .foregroundStyle(WCTheme.onDarkDim)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(WCTheme.chipFill)
+
+            ForEach(Array(item.qualifiers.enumerated()), id: \.element.id) { index, row in
+                if index > 0 { Divider().overlay(WCTheme.cardStroke.opacity(0.4)) }
+                Button { onSelectTeam(row.team) } label: { qualifierRow(row) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.cardStroke.opacity(0.5), lineWidth: 0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func qualifierRow(_ row: WCStandingRow) -> some View {
+        HStack(spacing: 8) {
+            Text("\(row.rank)")
+                .font(SabqFonts.app(size: 10, weight: .black))
+                .foregroundStyle(WCTheme.emeraldDeep)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
+            WCTeamLogo(team: row.team, size: 24, ring: WCTheme.cardStroke)
+            Text(row.team.name)
+                .font(SabqFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(WCTheme.onDark)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Image(systemName: "checkmark.circle.fill")
+                .font(SabqFonts.app(size: 14))
+                .foregroundStyle(WCTheme.emerald)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
     }
 }
 
