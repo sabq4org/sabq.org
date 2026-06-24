@@ -57,6 +57,7 @@ struct sabqApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
+                .task { await requestPushPermissionIfNeeded() }
                 .fullScreenCover(isPresented: .constant(!hasOnboarded)) {
                     OnboardingView()
                         .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
@@ -71,6 +72,22 @@ struct sabqApp: App {
             if newPhase == .background || newPhase == .inactive {
                 Task { await LoyaltyEventQueue.shared.flushNow() }
             }
+        }
+    }
+
+    /// Safety net for users who completed onboarding under an older build (or
+    /// browse without signing in): on launch, if the notification permission
+    /// is still undetermined we surface the system prompt once. Guarded by
+    /// `hasOnboarded` so it never fires while the onboarding cover is up —
+    /// the onboarding flow itself requests permission on completion. Calling
+    /// requestAuthorization when the status is already granted/denied is a
+    /// no-op (no prompt), so this is idempotent.
+    @MainActor
+    private func requestPushPermissionIfNeeded() async {
+        guard hasOnboarded else { return }
+        let status = await NotificationsStore.shared.currentAuthorizationStatus()
+        if status == .notDetermined {
+            _ = await NotificationsStore.shared.requestPermission()
         }
     }
 }
