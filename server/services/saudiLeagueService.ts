@@ -1954,6 +1954,117 @@ export async function listCompetitionsWithMeta() {
   }));
 }
 
+// ---------- نظرة الموسم (Season Outlook) — جاهزية ما قبل الموسم/العطلة ----------
+
+const OUTLOOK_TTL = 30 * 60 * 1000;
+
+/** مباريات موسم محدّد (غير الحالي) — يُستخدم لاستكشاف جدول الموسم القادم قبل أن يصبح current. */
+async function getFixturesForSeason(comp: SaudiCompetition, season: number): Promise<SplFixture[]> {
+  return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL * 5, FIXTURES_TTL * 10, async () => {
+    const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
+    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+  });
+}
+
+export interface SplSeasonOutlook {
+  /** in-season: مباريات جارية/قادمة الآن · pre-season: انطلاق قريب بجدول منشور · off-season: انتهى ولا جدول جديد بعد. */
+  phase: "in-season" | "pre-season" | "off-season" | "unknown";
+  season: number;
+  status: CompetitionStatus;
+  start: string | null;
+  end: string | null;
+  /** بطل الموسم المنتهي (متصدّر الجدول النهائي للدوريات فقط). */
+  champion: { id: number; name: string; logo: string } | null;
+  /** الموسم القادم (إن اختُلف عن الحالي). */
+  nextSeason: number | null;
+  /** تاريخ انطلاق الموسم القادم (YYYY-MM-DD) إن توفّر. */
+  nextSeasonStart: string | null;
+  /** توقيت أول مباراة قادمة (ms) — للعدّ التنازلي. */
+  firstKickoff: number | null;
+  /** أيام متبقّية حتى أول مباراة. */
+  daysUntilKickoff: number | null;
+  /** مباريات الجولة الأولى للموسم القادم (مقصورة) — لإبراز الافتتاح. */
+  openers: SplFixture[];
+}
+
+/**
+ * يكشف حالة البطولة بين المواسم تلقائيًا. المنطق:
+ *  1. جارٍ: حالة ongoing أو وجود مباراة مباشرة/قادمة في الموسم الحالي.
+ *  2. ما قبل الموسم: الموسم الحالي لم يبدأ بعد (upcoming) ⇒ افتتاحياته؛ أو الموسم
+ *     انتهى لكن جدول الموسم القادم نُشر ⇒ افتتاحياته + عدّ تنازلي.
+ *  3. عطلة: الموسم انتهى ولا جدول للموسم القادم بعد (نُبرز البطل وننتظر النشر).
+ * كل النداءات أفضل جهد؛ يتراجع لـ in-season/unknown بسلاسة عند الشك.
+ */
+export async function getSeasonOutlook(comp: SaudiCompetition): Promise<SplSeasonOutlook> {
+  return withSWR(`spl:outlook:${comp.id}`, OUTLOOK_TTL, OUTLOOK_TTL * 2, async () => {
+    const meta = await getCompetitionMeta(comp);
+    const fixtures = await getFixtures(comp).catch(() => [] as SplFixture[]);
+    const now = Date.now();
+    const hasLive = fixtures.some((f) => f.status.live);
+    // قادمة في الموسم الحالي (سماح 3 ساعات للجارية حديثًا).
+    const futureCurrent = fixtures
+      .filter((f) => !f.status.finished && f.timestamp * 1000 >= now - 3 * 3_600_000)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    let champion: SplSeasonOutlook["champion"] = null;
+    if (comp.type === "league" && comp.hasStandings && meta.status === "finished") {
+      const table = await getStandings(comp).catch(() => [] as SplStandingRow[]);
+      const top = table[0];
+      if (top && top.played > 0) champion = { id: top.team.id, name: top.team.name, logo: top.team.logo };
+    }
+
+    const base = { season: meta.season, status: meta.status, start: meta.start, end: meta.end, champion };
+    const buildPre = (
+      openersAll: SplFixture[],
+      nextSeason: number,
+      nextSeasonStart: string | null,
+    ): SplSeasonOutlook => {
+      const sorted = [...openersAll].sort((a, b) => a.timestamp - b.timestamp);
+      const first = sorted[0];
+      const kickoff = first.timestamp * 1000;
+      return {
+        ...base,
+        phase: "pre-season",
+        nextSeason,
+        nextSeasonStart: nextSeasonStart ?? first.date.slice(0, 10),
+        firstKickoff: kickoff,
+        daysUntilKickoff: Math.max(0, Math.ceil((kickoff - now) / 86_400_000)),
+        openers: sorted.filter((f) => f.round === first.round).slice(0, 10),
+      };
+    };
+
+    // 1) جارٍ.
+    if (meta.status === "ongoing" || hasLive || (meta.status !== "upcoming" && futureCurrent.length > 0)) {
+      return { ...base, phase: "in-season", nextSeason: null, nextSeasonStart: null, firstKickoff: null, daysUntilKickoff: null, openers: [] };
+    }
+
+    // 2أ) الموسم الحالي لم يبدأ بعد.
+    if (meta.status === "upcoming" && futureCurrent.length > 0) {
+      return buildPre(futureCurrent, meta.season, meta.start);
+    }
+
+    // 2ب/3) الموسم انتهى ⇒ نتفقّد الموسم القادم.
+    const nextSeason = meta.season + 1;
+    let nextSeasonStart: string | null = null;
+    try {
+      const lgRows = await apiGet("leagues", { id: comp.id });
+      const seasons: any[] = lgRows[0]?.seasons ?? [];
+      const ns = seasons.find((s: any) => s.year === nextSeason);
+      nextSeasonStart = typeof ns?.start === "string" ? ns.start : null;
+    } catch {
+      /* أفضل جهد */
+    }
+
+    const nextFx = await getFixturesForSeason(comp, nextSeason).catch(() => [] as SplFixture[]);
+    const futureNext = nextFx.filter((f) => f.timestamp * 1000 >= now);
+    if (futureNext.length > 0) {
+      return buildPre(futureNext, nextSeason, nextSeasonStart);
+    }
+
+    return { ...base, phase: "off-season", nextSeason, nextSeasonStart, firstKickoff: null, daysUntilKickoff: null, openers: [] };
+  });
+}
+
 // ---------- البند 5: تطوّر أداء اللاعب عبر المواسم ----------
 
 export interface SplPlayerSeasonPoint {

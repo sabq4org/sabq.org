@@ -306,6 +306,102 @@ function FollowsStrip({ todayMatches, onOpen }: { todayMatches: SpLiveItem[]; on
 }
 
 // ============================================================
+// نظرة الموسم — جاهزية ما قبل الموسم / العطلة
+// ============================================================
+type SpSeasonOutlook = {
+  phase: "in-season" | "pre-season" | "off-season" | "unknown";
+  season: number;
+  status: string;
+  start: string | null;
+  end: string | null;
+  champion: { id: number; name: string; logo: string } | null;
+  nextSeason: number | null;
+  nextSeasonStart: string | null;
+  firstKickoff: number | null;
+  daysUntilKickoff: number | null;
+  openers: SpFixture[];
+};
+
+const seasonLabel = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, "0")}`;
+const outlookDateFmt = new Intl.DateTimeFormat("ar", {
+  calendar: "gregory",
+  numberingSystem: "latn",
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "Asia/Riyadh",
+});
+
+function SeasonOutlookBanner({ outlook, onOpen }: { outlook: SpSeasonOutlook; onOpen: (id: number) => void }) {
+  if (outlook.phase === "in-season" || outlook.phase === "unknown") return null;
+  const kickoff = outlook.firstKickoff ? outlookDateFmt.format(new Date(outlook.firstKickoff)) : null;
+
+  if (outlook.phase === "off-season") {
+    return (
+      <div className="mb-6 rounded-3xl border border-border bg-gradient-to-l from-amber-500/10 via-card to-card p-5 sm:p-6">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="p-3 rounded-2xl bg-amber-500/15 shrink-0"><Trophy className="w-7 h-7 text-amber-500" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">انتهى موسم {seasonLabel(outlook.season)}</div>
+            {outlook.champion ? (
+              <div className="flex items-center gap-2 mt-1">
+                {outlook.champion.logo && <img src={outlook.champion.logo} alt="" className="w-8 h-8 object-contain shrink-0" />}
+                <span className="text-lg sm:text-xl font-black text-foreground truncate">{outlook.champion.name} <span className="text-amber-500">بطلاً 🏆</span></span>
+              </div>
+            ) : (
+              <div className="text-lg font-black text-foreground mt-1">في انتظار الموسم الجديد</div>
+            )}
+            <p className="text-sm text-muted-foreground mt-1.5">الموسم الجديد قريبًا — يظهر الجدول والعدّ التنازلي والترتيب هنا فور إعلان المواعيد.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ما قبل الموسم — عدّ تنازلي + افتتاحيات الجولة الأولى
+  return (
+    <div className="mb-6 rounded-3xl border border-primary/30 bg-gradient-to-l from-primary/15 via-card to-card p-5 sm:p-6">
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="text-center shrink-0 px-5 py-2.5 rounded-2xl bg-primary/15 border border-primary/20">
+          <div className="text-3xl sm:text-4xl font-black text-primary tabular-nums leading-none">{outlook.daysUntilKickoff ?? "—"}</div>
+          <div className="text-[10px] font-bold text-primary/80 mt-1">يومًا</div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary uppercase tracking-wide">
+            <Flame className="w-3.5 h-3.5" /> ينطلق موسم {outlook.nextSeason ? seasonLabel(outlook.nextSeason) : ""}
+          </div>
+          <h3 className="text-lg sm:text-xl font-black text-foreground mt-1">العدّ التنازلي بدأ</h3>
+          {kickoff && (
+            <p className="text-sm text-muted-foreground mt-1 inline-flex items-center gap-1.5"><CalendarDays className="w-4 h-4" /> أولى المباريات {kickoff}</p>
+          )}
+        </div>
+      </div>
+      {outlook.openers.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {outlook.openers.slice(0, 6).map((f) => (
+            <button
+              key={f.id}
+              onClick={() => onOpen(f.id)}
+              className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 hover:border-primary/40 transition-colors"
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                {f.home.logo && <img src={f.home.logo} alt="" className="w-5 h-5 object-contain shrink-0" />}
+                <span className="text-xs font-bold truncate">{f.home.name}</span>
+              </span>
+              <span className="text-[10px] text-muted-foreground shrink-0">×</span>
+              <span className="flex items-center gap-1.5 min-w-0 justify-end">
+                <span className="text-xs font-bold truncate">{f.away.name}</span>
+                {f.away.logo && <img src={f.away.logo} alt="" className="w-5 h-5 object-contain shrink-0" />}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // الصفحة
 // ============================================================
 export default function SportsDashboard() {
@@ -352,6 +448,13 @@ export default function SportsDashboard() {
     refetchOnWindowFocus: true,
   });
   const matchesConfigured = matchesData?.configured ?? true;
+
+  // نظرة الموسم: تكشف العطلة/ما قبل الموسم لإظهار البطل والعدّ التنازلي تلقائيًا.
+  const { data: outlookData } = useQuery<{ outlook: SpSeasonOutlook | null }>({
+    queryKey: [`/api/sports/${compSlug}/outlook`],
+    staleTime: 10 * 60_000,
+  });
+  const outlook = outlookData?.outlook ?? null;
   const matches = {
     live: Array.isArray(matchesData?.live) ? matchesData!.live : [],
     today: Array.isArray(matchesData?.today) ? matchesData!.today : [],
@@ -520,6 +623,7 @@ export default function SportsDashboard() {
                   </div>
                 </div>
               )}
+              {outlook && <SeasonOutlookBanner outlook={outlook} onOpen={setOpenMatch} />}
               <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />
             </div>
 
