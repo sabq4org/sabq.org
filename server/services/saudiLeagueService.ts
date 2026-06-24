@@ -46,6 +46,12 @@ const API_BASE = "https://v3.football.api-sports.io";
 const TIMEZONE = "Asia/Riyadh";
 
 const LIVE_TTL = 15 * 1000;
+// لوحتا «مباريات اليوم» (/sports/matches) و«البث المباشر» (/sports/live) تستهلكان
+// نداءً واحدًا مجمّعًا (live=all) يُحدَّث للجميع عبر withSWR (نداء واحد لكل نافذة
+// مهما كثُر الزوّار). نخفض إيقاعه إلى 8ث ليطابق استطلاع العميل التكيّفي (#488)
+// فلا تنتظر النتيجة/كشف «جارية الآن» نافذة 15ث — مهمّ للبطولات غير المُدرَجة في
+// طبقة TheSports اللحظية (5ث) إذ تأتي نتيجتها من القاعدة (API-Football) فقط.
+const LIVE_BOARD_TTL = 8 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
 const MATCH_DETAIL_TTL = 20 * 1000;
@@ -332,7 +338,7 @@ export interface SplLiveBoardItem extends SplFixture {
  * كل بطولة على حدة، ويتيح شريطًا مباشرًا موحّدًا بصرف النظر عن البطولة المختارة.
  */
 export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
-  return withSWR(`spl:live:all`, LIVE_TTL, LIVE_TTL * 2, async () => {
+  return withSWR(`spl:live:all`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
     return rows
@@ -430,7 +436,7 @@ const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amate
  * fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
  */
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
-  return withSWR(`spl:world-live`, LIVE_TTL, LIVE_TTL * 2, async () => {
+  return withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const [rows, ongoing] = await Promise.all([
       apiGet("fixtures", { live: "all", timezone: TIMEZONE }),
       getOngoingLeagueIds().catch(() => new Set<number>()),
