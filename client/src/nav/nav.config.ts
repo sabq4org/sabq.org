@@ -938,6 +938,15 @@ export const navConfig: NavItem[] = [
         permissions: ["settings.view", "articles.create"],
       },
       {
+        id: "sportmonks_news",
+        labelKey: "nav.sportmonks_news",
+        labelAr: "أخبار SportMonks (المونديال)",
+        path: "/dashboard/sportmonks-news",
+        icon: Trophy,
+        roles: ["admin"],
+        permissions: ["settings.view", "articles.create"],
+      },
+      {
         id: "integrations",
         labelKey: "nav.integrations",
         labelAr: "التكاملات",
