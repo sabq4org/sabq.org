@@ -88,16 +88,36 @@ let lastCleanup = 0;
 const eventSeen = new Map<number, Set<string>>();
 let lastEventCleanup = 0;
 
-const eventSig = (e: SplMatchEvent): string =>
-  `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
+const eventSig = (e: SplMatchEvent): string => {
+  // البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع → نتجاهل الدقيقة المتذبذبة لمنع تكرار الإشعار.
+  if (e.type === "yellow-card" || e.type === "red-card") {
+    return `${e.type}|${e.teamId}|${e.player}`;
+  }
+  return `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
+};
 
 // توقيعات أحداث TheSports المُرسَلة لكل مباراة مونديال (منفصلة عن توقيعات
 // API-Football كي لا تتصادم عند تبدّل المصدر). أول رصدٍ = خطّ أساس بلا إرسال.
 const tsEventSeen = new Map<number, Set<string>>();
 let lastTsEventCleanup = 0;
 
-const tsEventSig = (e: TsEvent): string =>
-  `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${e.player ?? e.inPlayer ?? ""}`;
+// توقيع مستقرّ ضد تذبذب دقيقة المزوّد (السبب الشائع لتكرار إشعار البطاقة، مثل ظهور
+// نفس البطاقة عند د83 ثم د84):
+//   - البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع في المباراة → بلا دقيقة.
+//   - الأهداف: قد تتعدّد للاعب الواحد → نُميّزها بالنتيجة التراكمية الثابتة بدل الدقيقة.
+//   - غير ذلك (فار/تبديل): نُبقي الدقيقة/الثانية للتمييز.
+const tsEventSig = (e: TsEvent): string => {
+  const who = e.playerId ?? e.player ?? e.inPlayer ?? "";
+  if (e.type === "yellow" || e.type === "red" || e.type === "yellow_red") {
+    return `${e.type}|${e.team ?? ""}|${who}`;
+  }
+  if (e.type === "goal" || e.type === "penalty_goal") {
+    const score =
+      e.homeScore != null && e.awayScore != null ? `${e.homeScore}-${e.awayScore}` : String(e.minute);
+    return `${e.type}|${who}|${score}`;
+  }
+  return `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${who}`;
+};
 
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
 
@@ -106,7 +126,9 @@ const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?
 // التالية «تأسيس» المباراة الجارية بصمت وتكبت أحداثها (انطلاق/بطاقة كانت قبل
 // إعادة التشغيل). نحفظها في Redis بعد كل دورة ونُحمّلها مرّةً عند الإقلاع، فتُستأنف
 // الأحداث الجديدة فقط دون تكرار وبلا إغراق. القائد وحده يكتب (لا تسابق).
-const STATE_KEY = "sports_alerts:baseline:v1";
+// v2: تغيّرت صيغة توقيع الأحداث (dedup مستقلّ عن الدقيقة للبطاقات). نتجاهل حالة v1
+// القديمة فتُعيد الدورة الأولى تأسيس المباريات الجارية بصمت بدل إعادة إرسال أحداثها.
+const STATE_KEY = "sports_alerts:baseline:v2";
 const STATE_TTL_SEC = 6 * 3600; // يكفي مباراة + استراحة
 let stateHydrated = false;
 
@@ -175,15 +197,15 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
     if (!prev) continue;
 
     const teamRefIds = [String(m.home.id), String(m.away.id)];
-    const matchName = `${m.home.name} × ${m.away.name}`;
+    const matchName = `${m.home.name} ضد ${m.away.name}`;
 
     // انطلاق المباراة
     if (!prev.live && !prev.finished && cur.live) {
       alerts.push({
         fixtureId: m.id,
         kind: "kickoff",
-        title: "🟢 صافرة البداية",
-        body: `انطلقت الآن مباراة ${matchName} · ${m.competition}`,
+        title: "🟢 انطلقت المباراة",
+        body: `${matchName} · ${m.competition}`,
         teamRefIds,
       });
     }
@@ -198,12 +220,12 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
     ) {
       const homeScored = cur.homeGoals > prev.homeGoals;
       const scorer = homeScored ? m.home.name : m.away.name;
-      const minute = m.status.elapsed != null ? ` · د.${m.status.elapsed}` : "";
+      const minute = m.status.elapsed != null ? ` · د${m.status.elapsed}` : "";
       alerts.push({
         fixtureId: m.id,
         kind: "goal",
-        title: `⚽️ هدف لـ${scorer}!`,
-        body: `${m.home.name} ${fmtScore(m)} ${m.away.name}${minute}`,
+        title: `⚽️ ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
+        body: `هدف ${scorer}${minute}`,
         teamRefIds,
       });
     }
@@ -213,8 +235,8 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
       alerts.push({
         fixtureId: m.id,
         kind: "fulltime",
-        title: "🏁 صافرة النهاية",
-        body: `${m.home.name} ${fmtScore(m)} ${m.away.name} · ${m.competition}`,
+        title: `🏁 انتهت المباراة · ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
+        body: m.competition,
         teamRefIds,
       });
     }
@@ -262,25 +284,27 @@ async function detectEventAlerts(
     eventSeen.set(m.id, new Set(events.map(eventSig)));
     if (!prev) continue; // خطّ أساس فقط
 
-    const matchName = `${m.home.name} × ${m.away.name}`;
+    const matchName = `${m.home.name} ضد ${m.away.name}`;
     for (const e of events) {
       if (prev.has(eventSig(e))) continue; // ليس جديدًا
-      const minute = e.minute != null ? ` · د.${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
+      const minute = e.minute != null ? ` · د${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
       if (e.type === "yellow-card" || e.type === "red-card") {
         const icon = e.type === "red-card" ? "🟥" : "🟨";
         out.push({
           fixtureId: m.id,
           kind: "card",
-          title: `${icon} ${e.label}`,
-          body: `${e.player ? `${e.player} · ` : ""}${e.team || matchName}${minute}`,
+          title: `${icon} ${e.label}${e.team ? ` · ${e.team}` : ""}`,
+          body: `${e.player || matchName}${minute}`,
           teamRefIds,
         });
       } else if (e.type === "var") {
+        // التفصيل المعرّب (إلغاء هدف/احتساب ركلة...)؛ نُسقط البادئة العامة لتفادي التكرار مع العنوان.
+        const detail = e.label && e.label !== "مراجعة الفار" ? `${e.label} · ` : "";
         out.push({
           fixtureId: m.id,
           kind: "var",
-          title: "🎦 مراجعة الفار (VAR)",
-          body: `${e.label} · ${matchName}${minute}`,
+          title: "🎦 مراجعة الفار",
+          body: `${detail}${matchName}${minute}`,
           teamRefIds,
         });
       }
@@ -480,7 +504,7 @@ async function detectTsEventAlerts(
     const ts = tsLive.get(m.id);
     if (!ts) continue;
     const teamRefIds = [String(m.home.id), String(m.away.id)];
-    const matchName = `${m.home.name} × ${m.away.name}`;
+    const matchName = `${m.home.name} ضد ${m.away.name}`;
 
     const prev = tsEventSeen.get(m.id);
     tsEventSeen.set(m.id, new Set(ts.events.map(tsEventSig)));
@@ -488,7 +512,7 @@ async function detectTsEventAlerts(
 
     for (const e of ts.events) {
       if (prev.has(tsEventSig(e))) continue; // ليس جديدًا
-      const minute = e.minute ? ` · د.${e.minute}` : "";
+      const minute = e.minute ? ` · د${e.minute}` : "";
       const teamName = TEAM_NAME(m, e.team);
 
       if (e.type === "goal" || e.type === "penalty_goal") {
@@ -502,8 +526,8 @@ async function detectTsEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "goal",
-          title: `⚽️ هدف! ${who}${pen}`,
-          body: `${score}${minute}${assist}`,
+          title: `⚽️ ${score}`,
+          body: `هدف ${who}${pen}${minute}${assist}`,
           teamRefIds,
         });
       } else if (e.type === "red" || e.type === "yellow_red") {
@@ -511,8 +535,8 @@ async function detectTsEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "card",
-          title: "🟥 بطاقة حمراء",
-          body: `${who ? `${who} · ` : ""}${teamName || matchName}${minute}`,
+          title: `🟥 بطاقة حمراء${teamName ? ` · ${teamName}` : ""}`,
+          body: `${who || matchName}${minute}`,
           teamRefIds,
         });
       } else if (e.type === "yellow") {
@@ -520,15 +544,15 @@ async function detectTsEventAlerts(
         out.push({
           fixtureId: m.id,
           kind: "card",
-          title: "🟨 بطاقة صفراء",
-          body: `${who ? `${who} · ` : ""}${teamName || matchName}${minute}`,
+          title: `🟨 بطاقة صفراء${teamName ? ` · ${teamName}` : ""}`,
+          body: `${who || matchName}${minute}`,
           teamRefIds,
         });
       } else if (e.type === "var") {
         out.push({
           fixtureId: m.id,
           kind: "var",
-          title: "🎦 مراجعة الفار (VAR)",
+          title: "🎦 مراجعة الفار",
           body: `${matchName}${minute}`,
           teamRefIds,
         });
