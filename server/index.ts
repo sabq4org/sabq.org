@@ -1834,6 +1834,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // مسودّات أخبار SportMonks: نفس نمط التسجيل الدائم وفحص القيادة داخل
+      // الدورة (sportmonksNewsJob). خلف WC_NEWS_ENABLED + توكن SportMonks.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportmonksNewsJob } = await import("./jobs/sportmonksNewsJob");
+            startSportmonksNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sportmonks news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المونديال: نفس نمط أخبار المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح الفائزين نقاطهم فور انتهاء المباراة.
       if (enableBackgroundWorkers) {

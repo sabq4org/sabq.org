@@ -57,6 +57,124 @@ async function smGet(path: string, params: Record<string, string> = {}): Promise
   return response.json();
 }
 
+// ---------- أخبار SportMonks التحريرية (معاينات + تقارير) ----------
+// مادة تحريرية إنجليزية جاهزة من المزود لكل مباراة مونديال: معاينة ما قبل
+// المباراة (سرد فقرتين) وتقرير ما بعدها (وقائع بالدقائق + اقتباسات). نستوردها
+// مسودّات عربية في لوحة التحكم بعد إعادة الصياغة بصوت سبق. كل شيء «أفضل جهد»:
+// غياب التوكن أو فشل النداء يرجّع مصفوفة فارغة دون عطل.
+
+export interface SmNewsLine {
+  id: number;
+  newsitem_id: number;
+  /** نص السطر الإنجليزي (فقرة معاينة، أو واقعة مباراة، أو اقتباس) */
+  text: string;
+  /** prematch: home | away — postmatch: line */
+  type: string;
+}
+
+export interface SmNewsFixtureRef {
+  id: number;
+  name: string; // "Cape Verde Islands vs Saudi Arabia"
+  starting_at: string; // "2026-06-27 00:00:00" (UTC)
+  starting_at_timestamp: number; // ثوانٍ يونكس
+  result_info: string | null; // "Saudi Arabia won after full-time." | null
+  state_id: number;
+  league_id: number;
+}
+
+export interface SmNewsLeagueRef {
+  id: number;
+  name: string;
+  image_path: string | null;
+  short_code: string | null;
+}
+
+export interface SmNewsItem {
+  id: number; // معرّف الخبر (newsitem)
+  fixture_id: number;
+  league_id: number;
+  title: string; // عنوان إنجليزي
+  type: "prematch" | "postmatch";
+  lines: SmNewsLine[];
+  fixture: SmNewsFixtureRef | null;
+  league: SmNewsLeagueRef | null;
+}
+
+const NEWS_INCLUDE = "lines;fixture;league";
+const NEWS_TTL = 5 * 60 * 1000;
+const NEWS_SWR = 2 * 60 * 1000;
+
+function normalizeNewsItem(raw: any): SmNewsItem | null {
+  if (!raw || typeof raw.id !== "number") return null;
+  const lines: SmNewsLine[] = Array.isArray(raw.lines)
+    ? raw.lines
+        .filter((l: any) => l && typeof l.text === "string" && l.text.trim())
+        .map((l: any) => ({
+          id: Number(l.id),
+          newsitem_id: Number(l.newsitem_id),
+          text: String(l.text).trim(),
+          type: String(l.type || "line"),
+        }))
+    : [];
+  if (!lines.length) return null; // خبر بلا نص لا يفيدنا
+  return {
+    id: Number(raw.id),
+    fixture_id: Number(raw.fixture_id),
+    league_id: Number(raw.league_id),
+    title: String(raw.title || "").trim(),
+    type: raw.type === "postmatch" ? "postmatch" : "prematch",
+    lines,
+    fixture: raw.fixture
+      ? {
+          id: Number(raw.fixture.id),
+          name: String(raw.fixture.name || ""),
+          starting_at: String(raw.fixture.starting_at || ""),
+          starting_at_timestamp: Number(raw.fixture.starting_at_timestamp || 0),
+          result_info: raw.fixture.result_info ?? null,
+          state_id: Number(raw.fixture.state_id || 0),
+          league_id: Number(raw.fixture.league_id || 0),
+        }
+      : null,
+    league: raw.league
+      ? {
+          id: Number(raw.league.id),
+          name: String(raw.league.name || ""),
+          image_path: raw.league.image_path ?? null,
+          short_code: raw.league.short_code ?? null,
+        }
+      : null,
+  };
+}
+
+async function fetchNews(path: string, cacheKey: string): Promise<SmNewsItem[]> {
+  if (!isSportmonksConfigured()) return [];
+  try {
+    const data = await withSWR(cacheKey, NEWS_TTL, NEWS_SWR, () =>
+      smGet(path, { include: NEWS_INCLUDE })
+    );
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    return rows.map(normalizeNewsItem).filter((x: SmNewsItem | null): x is SmNewsItem => x !== null);
+  } catch (error) {
+    console.warn(`[SportMonks] news fetch failed (${path}):`, error);
+    return [];
+  }
+}
+
+/** معاينات المباريات القادمة (pre-match) — قائمة عامة لكل مباراة مجدولة قريبًا */
+export function fetchPrematchNews(): Promise<SmNewsItem[]> {
+  return fetchNews("news/pre-match/upcoming", "sm:news:prematch");
+}
+
+/**
+ * تقارير ما بعد المباراة (post-match) — المباريات المنتهية المتاحة.
+ * تنبيه: المزود يرجّع الصفحة الأولى (50 عنصرًا، الأقدم أولًا). كافٍ في دور
+ * المجموعات (< 50 مباراة)، لكن بعد تجاوز 50 مباراة (الأدوار الإقصائية) ستسقط
+ * أحدث المباريات خارج الصفحة الأولى — يلزم حينها ترقيم بالمؤشّر (next_cursor).
+ */
+export function fetchPostmatchNews(): Promise<SmNewsItem[]> {
+  return fetchNews("news/post-match", "sm:news:postmatch");
+}
+
 // ---------- مطابقة أسماء المنتخبات بين المزوّدين ----------
 
 function normTeam(name: string): string {
