@@ -1910,6 +1910,80 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
 export type WcPrediction = typeof wcPredictions.$inferSelect;
 export type WcPredictionMatch = typeof wcPredictionMatches.$inferSelect;
 
+// ============================================================================
+// Asian Cup 2027 — Smart Predictions Game
+// Fixtures are NOT stored (fetched live from API-Football via asianCupService).
+// Unlike the World Cup pool-split, scoring here is SKILL-BASED and per-user:
+// tier points (outcome / margin / exact) × boldness multiplier (rewards
+// correctly calling unlikely outcomes, derived from the model win-probability)
+// × streak multiplier. Each settled row stores the full breakdown so the UI can
+// explain exactly how a score was earned, and so settlement stays idempotent.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess + the
+// settled breakdown.
+export const acPredictions = pgTable("ac_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  // 'pending' until the match settles, then 'correct' (outcome hit) | 'incorrect'.
+  status: text("status").notNull().default("pending"),
+  // Per-tier hits, set at settlement (margin/exact imply outcome).
+  outcomeHit: boolean("outcome_hit").notNull().default(false),
+  marginHit: boolean("margin_hit").notNull().default(false),
+  exactHit: boolean("exact_hit").notNull().default(false),
+  // Multipliers actually applied, stored ×100 (e.g. 125 = ×1.25) for transparency.
+  boldnessMult: integer("boldness_mult").notNull().default(100),
+  streakMult: integer("streak_mult").notNull().default(100),
+  // Final skill-based points credited for this match (0 when outcome missed).
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_ac_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_ac_pred_user").on(table.userId),
+  index("idx_ac_pred_fixture").on(table.fixtureId),
+  // "user history ordered by kickoff" + streak recomputation at settlement.
+  index("idx_ac_pred_user_settled").on(table.userId, table.settledAt),
+]);
+
+// Per-fixture state. Holds the pre-kickoff model probabilities snapshot (frozen
+// once the match locks) used to price boldness, plus the settlement anchor and
+// display snapshots — same rationale as wc_prediction_matches.
+export const acPredictionMatches = pgTable("ac_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamId: integer("home_team_id").notNull().default(0),
+  awayTeamId: integer("away_team_id").notNull().default(0),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  // Model win-probabilities snapshot as whole percents (0-100), frozen at lock.
+  // boldness for a pick reads the percent of the predicted outcome from here.
+  probHome: integer("prob_home").notNull().default(33),
+  probDraw: integer("prob_draw").notNull().default(34),
+  probAway: integer("prob_away").notNull().default(33),
+  finalHome: integer("final_home"),   // null until settled
+  finalAway: integer("final_away"),   // null until settled
+  // 'open' (accepting predictions) | 'locked' (kicked off) | 'settled'.
+  status: text("status").notNull().default("open"),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  outcomeWinners: integer("outcome_winners").notNull().default(0), // got the result right
+  exactWinners: integer("exact_winners").notNull().default(0),     // nailed the scoreline
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),  // THE idempotency guard
+}, (table) => [
+  index("idx_ac_pred_match_status").on(table.status),
+]);
+
+export type AcPrediction = typeof acPredictions.$inferSelect;
+export type AcPredictionMatch = typeof acPredictionMatches.$inferSelect;
+
 // Loyalty Rewards (available rewards)
 export const loyaltyRewards = pgTable("loyalty_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
