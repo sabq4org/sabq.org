@@ -368,6 +368,8 @@ const SportsLive = lazy(() => retryImport(() => import("@/pages/SportsLive")));
 const SportsCompetition = lazy(() => retryImport(() => import("@/pages/SportsCompetition")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
+// هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
+const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -872,6 +874,8 @@ function Router() {
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         <Route path="/asian-cup/predictions">{() => <LazyRoute component={AsianCupPredictions} />}</Route>
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
+        {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
+        <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
