@@ -35,7 +35,10 @@ function isLatin(name: string): boolean {
  *   const tr = await resolveNames([...allRawNames]);
  *   const arabic = tr(rawName);
  */
-export async function resolveNames(rawNames: (string | null | undefined)[]): Promise<(name: string | null | undefined) => string> {
+export async function resolveNames(
+  rawNames: (string | null | undefined)[],
+  opts?: { skipAi?: boolean },
+): Promise<(name: string | null | undefined) => string> {
   const names = Array.from(
     new Set(rawNames.filter((n): n is string => !!n && n.trim().length > 0).map((n) => n.trim()))
   );
@@ -73,8 +76,10 @@ export async function resolveNames(rawNames: (string | null | undefined)[]): Pro
     }
   }
 
-  // (4) الـAI للأسماء الجديدة فقط — دفعة واحدة
-  if (stillUnresolved.length > 0 && (process.env.OPENAI_API_KEY || "").trim()) {
+  // (4) الـAI للأسماء الجديدة فقط — دفعة واحدة.
+  // skipAi: نتخطّى نداء الـAI (نُرجع فورًا بالمتاح من القاموس/DB) لمسارات لا
+  // تحتمل مهلة الترجمة داخل الطلب؛ الاستدعاء بالخلفية يملأ DB للمرّة التالية.
+  if (!opts?.skipAi && stillUnresolved.length > 0 && (process.env.OPENAI_API_KEY || "").trim()) {
     try {
       const translated = await aiTransliterate(stillUnresolved);
       const toPersist: { source: string; arabic: string }[] = [];
