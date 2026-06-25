@@ -5545,6 +5545,89 @@ router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
+// المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
+//   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة
+//   POST /api/v1/sports/match/:id/predict   إرسال/تعديل (يُقفل عند الانطلاق)
+//   GET  /api/v1/sports/predictions/me       توقّعاتي + إحصاءاتي
+// ==========================================
+const clampPredGoals = (v: unknown): number | null => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 && n <= 30 ? n : null;
+};
+
+router.get("/sports/match/:id/predict", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ success: false, message: "معرّف مباراة غير صحيح" });
+    const { getMyPrediction } = await import("../services/sportsPredictionsService");
+    const prediction = await getMyPrediction(session.userId, id);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, prediction });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/match/:id/predict error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب توقّعك حاليًا" });
+  }
+});
+
+router.post("/sports/match/:id/predict", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ success: false, message: "معرّف مباراة غير صحيح" });
+    const { predHome, predAway, kickoffTs, competitionSlug, homeId, awayId, homeName, awayName, homeLogo, awayLogo } = req.body ?? {};
+    const ph = clampPredGoals(predHome);
+    const pa = clampPredGoals(predAway);
+    const ko = Number(kickoffTs);
+    if (ph == null || pa == null || !Number.isFinite(ko) || ko <= 0 || !homeName || !awayName) {
+      return res.status(400).json({ success: false, message: "بيانات التوقّع غير مكتملة" });
+    }
+    const { submitPrediction } = await import("../services/sportsPredictionsService");
+    const result = await submitPrediction(session.userId, {
+      fixtureId: id,
+      kickoffTs: ko,
+      competitionSlug: competitionSlug ? String(competitionSlug) : null,
+      homeId: Number.isFinite(Number(homeId)) ? Number(homeId) : null,
+      awayId: Number.isFinite(Number(awayId)) ? Number(awayId) : null,
+      homeName: String(homeName),
+      awayName: String(awayName),
+      homeLogo: homeLogo ? String(homeLogo) : null,
+      awayLogo: awayLogo ? String(awayLogo) : null,
+      predHome: ph,
+      predAway: pa,
+    });
+    res.set("Cache-Control", "private, no-store");
+    if (result.locked) {
+      return res.status(409).json({ success: false, message: "أُقفل التوقّع — انطلقت المباراة" });
+    }
+    res.json({ success: true, prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/match/:id/predict error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ توقّعك حاليًا" });
+  }
+});
+
+router.get("/sports/predictions/me", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { listMyPredictions, getUserStats } = await import("../services/sportsPredictionsService");
+    const [predictions, stats] = await Promise.all([
+      listMyPredictions(session.userId),
+      getUserStats(session.userId),
+    ]);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, predictions, stats });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/me error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+// ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
 // POST /api/v1/live-activity/register   { fixtureId, token }
 // POST /api/v1/live-activity/end        { token }
@@ -6557,13 +6640,28 @@ router.get("/bookmarks", async (req: Request, res: Response) => {
   }
 });
 
+// يقبل بعض عملاء الموبايل الـslug بدل معرّف المقال (UUID)، فيفشل قيد المفتاح
+// الأجنبي bookmarks_article_id_articles_id_fk. نحوّل أي مدخل (معرّف أو slug) إلى
+// المعرّف الحقيقي قبل الكتابة، ونعيد المعرّف نفسه إن كان UUID صالحًا أصلًا.
+async function resolveArticleId(idOrSlug: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(or(eq(articles.id, idOrSlug), eq(articles.slug, idOrSlug)))
+    .limit(1);
+  return row?.id ?? null;
+}
+
 router.post("/bookmarks/:articleId", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);
     if (!session) {
       return res.status(401).json({ success: false, message: "غير مسجل" });
     }
-    const articleId = req.params.articleId;
+    const articleId = await resolveArticleId(req.params.articleId);
+    if (!articleId) {
+      return res.status(404).json({ success: false, message: "المقال غير موجود" });
+    }
     const [existing] = await db
       .select({ id: bookmarks.id })
       .from(bookmarks)
@@ -6585,10 +6683,12 @@ router.delete("/bookmarks/:articleId", async (req: Request, res: Response) => {
     if (!session) {
       return res.status(401).json({ success: false, message: "غير مسجل" });
     }
-    const articleId = req.params.articleId;
+    // نحذف بكلا القيمتين (المعرّف المُحوَّل والمدخل الخام) لتغطية أي محفوظات قديمة.
+    const resolvedId = await resolveArticleId(req.params.articleId);
+    const ids = [req.params.articleId, ...(resolvedId ? [resolvedId] : [])];
     await db
       .delete(bookmarks)
-      .where(and(eq(bookmarks.articleId, articleId), eq(bookmarks.userId, session.userId)));
+      .where(and(inArray(bookmarks.articleId, ids), eq(bookmarks.userId, session.userId)));
     res.json({ success: true, isBookmarked: false });
   } catch (error) {
     console.error("[Mobile API] DELETE /bookmarks error:", error);

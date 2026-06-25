@@ -169,10 +169,19 @@ export function localizeEvent(type: string, detail: string): { type: string; lab
   if (t === "var") {
     const varDetail: Record<string, string> = {
       "Goal cancelled": "إلغاء هدف بعد مراجعة الفار",
+      "Goal confirmed": "تأكيد هدف بعد مراجعة الفار",
       "Penalty confirmed": "احتساب ركلة جزاء بعد مراجعة الفار",
+      "Penalty cancelled": "إلغاء ركلة جزاء بعد مراجعة الفار",
       "Goal Disallowed - offside": "إلغاء هدف بداعي التسلل",
+      "Goal Disallowed - Foul": "إلغاء هدف بداعي خطأ",
+      "Goal Disallowed - Handball": "إلغاء هدف بداعي لمسة يد",
+      "Penalty - Foul": "احتساب ركلة جزاء بعد مراجعة الفار",
+      "Red card": "بطاقة حمراء بعد مراجعة الفار",
+      "Red Card": "بطاقة حمراء بعد مراجعة الفار",
+      "Card upgrade": "ترقية بطاقة بعد مراجعة الفار",
     };
-    return { type: "var", label: varDetail[detail] ?? `مراجعة الفار${detail ? ` — ${detail}` : ""}` };
+    // لا نُسرّب التفصيل الإنجليزي الخام؛ غير المعروف يعود إلى العبارة العامة المعرّبة.
+    return { type: "var", label: varDetail[detail] ?? "مراجعة الفار" };
   }
   return { type: t, label: detail || type };
 }
