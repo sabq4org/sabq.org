@@ -226,7 +226,14 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const matches = await getWorldLiveFixtures();
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // أثناء وجود مباريات جارية: كاش حافة قصير جدًّا (5ث) فلا يبتلع CDN استطلاع
+      // العميل (8ث) — مطابق لـ/api/sports/live. خلاف ذلك كاش أطول يكفي.
+      res.set(
+        "Cache-Control",
+        matches.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+      );
       res.json({ configured: true, matches });
     } catch (error) {
       console.error("[Sports] world live failed:", error);

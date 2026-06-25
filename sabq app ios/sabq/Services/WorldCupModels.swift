@@ -123,6 +123,16 @@ nonisolated struct WCOverview: Decodable, Hashable {
     let matchOfTheDay: WCMatchOfDay?
     let saudi: WCSaudi
     let updatedAt: String
+    /// توقعات النتيجة مفهرسة بمعرّف المباراة — يرسلها الخادم لكل مباراة قد تُعرض
+    /// كبطاقة Hero كبيرة (الحيّة + المتزامنة القادمة)، لا المميّزة وحدها. مفاتيح
+    /// JSON نصّية دائمًا فنفكّها [String: …] ثم نبحث بالمعرّف عبر prediction(for:).
+    /// optional حتى تبقى الاستجابات الأقدم (قبل #483) قابلة للفكّ.
+    let predictions: [String: WCPrediction]?
+
+    /// توقع مباراة بعينها من خريطة overview (إن أرسله الخادم).
+    func prediction(for fixtureId: Int) -> WCPrediction? {
+        predictions?[String(fixtureId)]
+    }
 }
 
 nonisolated struct WCScorer: Decodable, Identifiable, Hashable {
