@@ -369,6 +369,8 @@ const SportsLive = lazy(() => retryImport(() => import("@/pages/SportsLive")));
 const SportsCompetition = lazy(() => retryImport(() => import("@/pages/SportsCompetition")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
+// مركز انتقالات الدوري السعودي — موجز موحّد للصفقات على /sports/transfers
+const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTransfers")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -883,6 +885,7 @@ function Router() {
         <Route path="/sports/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
         <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         <Route path="/sports/live">{() => <LazyRoute component={SportsLive} />}</Route>
+        <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
         {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}
         <Route path="/sports2/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>

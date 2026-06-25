@@ -447,6 +447,8 @@ export const SPL_TRANSFER_TYPE_AR: Record<string, string> = {
   "n/a": "غير معلوم",
   "loan end": "انتهاء إعارة",
   swap: "تبادل",
+  transfer: "انتقال", // المزوّد يرسلها لانتقال دائم بلا مبلغ معلن
+  "-": "انتقال",
 };
 
 export function localizeSplTransferType(type: string | null | undefined): string {
@@ -454,7 +456,14 @@ export function localizeSplTransferType(type: string | null | undefined): string
   if (!raw) return "غير معلوم";
   const key = raw.toLowerCase();
   if (SPL_TRANSFER_TYPE_AR[key]) return SPL_TRANSFER_TYPE_AR[key];
-  // مبلغ صفقة أو نص غير معروف → يُعرض كما ورد (الأرقام/العملات عالمية).
+  // مطابقة بالكلمة للصيغ المركّبة (Free agent / Loan / End of loan / Transfer)
+  // قبل الرجوع للنصّ الخام — المزوّد يخلط الصيغ.
+  if (/[€$£]/.test(raw) || /\d/.test(raw)) return raw; // مبلغ صفقة → كما ورد
+  if (key.includes("loan") && key.includes("end")) return "انتهاء إعارة";
+  if (key.includes("loan")) return "إعارة";
+  if (key.includes("free")) return "انتقال حر";
+  if (key.includes("transfer") || key === "-") return "انتقال";
+  // نص غير معروف → يُعرض كما ورد.
   return raw;
 }
 

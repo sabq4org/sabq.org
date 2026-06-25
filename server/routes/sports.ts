@@ -33,6 +33,7 @@ import {
   getPlayerInjuries,
   getPlayerSeasonHistory,
   getPlayerTransfers,
+  getLeagueTransfers,
   getSeasonOutlook,
   getSquad,
   getStandings,
@@ -226,7 +227,14 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       const matches = await getWorldLiveFixtures();
-      res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+      // أثناء وجود مباريات جارية: كاش حافة قصير جدًّا (5ث) فلا يبتلع CDN استطلاع
+      // العميل (8ث) — مطابق لـ/api/sports/live. خلاف ذلك كاش أطول يكفي.
+      res.set(
+        "Cache-Control",
+        matches.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+      );
       res.json({ configured: true, matches });
     } catch (error) {
       console.error("[Sports] world live failed:", error);
@@ -725,6 +733,25 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] team transfers failed:", error);
       res.status(502).json({ message: "تعذر جلب انتقالات النادي حاليًا" });
+    }
+  });
+
+  // مركز الانتقالات — موجز موحّد لكل أندية دوري روشن (وصل/غادر) في قائمة واحدة.
+  // ?since=عدد الأشهر للنافذة (افتراضي 18). يتدهور بسلاسة إلى قائمة فارغة بلا مفتاح.
+  app.get("/api/sports/transfers", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, clubs: [], transfers: [], stats: { total: 0, withFee: 0, loans: 0, free: 0 } });
+      return;
+    }
+    const sinceRaw = parseId(typeof req.query.since === "string" ? req.query.since : "");
+    const sinceMonths = sinceRaw != null && sinceRaw > 0 && sinceRaw <= 60 ? sinceRaw : 18;
+    try {
+      const result = await getLeagueTransfers(sinceMonths);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ configured: true, ...result });
+    } catch (error) {
+      console.error("[Sports] league transfers failed:", error);
+      res.status(502).json({ message: "تعذر جلب مركز الانتقالات حاليًا" });
     }
   });
 

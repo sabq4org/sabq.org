@@ -46,6 +46,12 @@ const API_BASE = "https://v3.football.api-sports.io";
 const TIMEZONE = "Asia/Riyadh";
 
 const LIVE_TTL = 15 * 1000;
+// لوحتا «مباريات اليوم» (/sports/matches) و«البث المباشر» (/sports/live) تستهلكان
+// نداءً واحدًا مجمّعًا (live=all) يُحدَّث للجميع عبر withSWR (نداء واحد لكل نافذة
+// مهما كثُر الزوّار). نخفض إيقاعه إلى 8ث ليطابق استطلاع العميل التكيّفي (#488)
+// فلا تنتظر النتيجة/كشف «جارية الآن» نافذة 15ث — مهمّ للبطولات غير المُدرَجة في
+// طبقة TheSports اللحظية (5ث) إذ تأتي نتيجتها من القاعدة (API-Football) فقط.
+const LIVE_BOARD_TTL = 8 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
 const MATCH_DETAIL_TTL = 20 * 1000;
@@ -332,7 +338,7 @@ export interface SplLiveBoardItem extends SplFixture {
  * كل بطولة على حدة، ويتيح شريطًا مباشرًا موحّدًا بصرف النظر عن البطولة المختارة.
  */
 export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
-  return withSWR(`spl:live:all`, LIVE_TTL, LIVE_TTL * 2, async () => {
+  return withSWR(`spl:live:all`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
     return rows
@@ -430,7 +436,7 @@ const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amate
  * fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
  */
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
-  return withSWR(`spl:world-live`, LIVE_TTL, LIVE_TTL * 2, async () => {
+  return withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const [rows, ongoing] = await Promise.all([
       apiGet("fixtures", { live: "all", timezone: TIMEZONE }),
       getOngoingLeagueIds().catch(() => new Set<number>()),
@@ -2233,6 +2239,173 @@ export async function getTeamTransfers(teamId: number, limit = 15): Promise<SplT
     return {
       arrivals: arrivals.sort(byDateDesc).slice(0, limit),
       departures: departures.sort(byDateDesc).slice(0, limit),
+    };
+  });
+}
+
+// ---------- البند 8.ب: مركز انتقالات الدوري (موجز موحّد لكل الأندية) ----------
+//
+// يجمع حركة الوصول/المغادرة لكل أندية دوري روشن في موجز واحد مرتّب زمنيًا،
+// ليغذّي صفحة «مركز الانتقالات» العامة. يعيد استخدام نقطة transfers ذاتها
+// (نفس مزوّد API-Football) لكنه يجمع ويزيل التكرار عبر الأندية.
+//
+// ملاحظة عن «المبلغ»: API-Football يضع قيمة الصفقة داخل حقل type كنصّ
+// (مثل "€ 80M") وغالبًا يأتي "Free"/"Loan"/"N/A" — فنُصنّف النوع ونعرض
+// المبلغ عند توفّره فقط (لا نختلق رقمًا).
+
+export interface SplClub {
+  id: number;
+  name: string;
+  logo: string;
+}
+
+const CLUBS_TTL = 12 * 60 * 60 * 1000; // قائمة الأندية تتغيّر بين المواسم فقط
+
+/** أندية دوري روشن للموسم الحالي (لقائمة الفلترة + معرفة «نادٍ سعودي»). */
+export async function getProLeagueClubs(): Promise<SplClub[]> {
+  const comp = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const season = await seasonFor(comp);
+  return withSWR(`spl:clubs:${comp.id}`, CLUBS_TTL, CLUBS_TTL * 2, async () => {
+    const rows = await apiGet("teams", { league: comp.id, season });
+    return rows
+      .map((r: any): SplClub => ({
+        id: r.team?.id ?? 0,
+        name: localizeSplTeamName(r.team?.id, r.team?.name ?? ""),
+        logo: r.team?.logo ?? "",
+      }))
+      .filter((c: SplClub) => c.id > 0)
+      .sort((a: SplClub, b: SplClub) => a.name.localeCompare(b.name, "ar"));
+  });
+}
+
+export type SplTransferKind = "money" | "free" | "loan" | "loanend" | "other";
+
+/** تصنيف قيمة حقل type الخام (قبل التعريب) إلى فئة قابلة للفلترة. */
+function classifyTransferKind(raw: string | null | undefined): SplTransferKind {
+  const s = (raw ?? "").trim();
+  const low = s.toLowerCase();
+  if (!s || low === "n/a") return "other";
+  if (low.includes("loan") && low.includes("end")) return "loanend";
+  if (low.includes("loan")) return "loan";
+  if (low.includes("free")) return "free";
+  if (/[€$£]/.test(s) || /\d/.test(s)) return "money";
+  return "other";
+}
+
+export interface SplLeagueTransfer {
+  id: string; // مفتاح إزالة التكرار
+  date: string; // ISO yyyy-mm-dd
+  type: string; // النوع المعروض (مُعرَّب) أو المبلغ كما ورد
+  kind: SplTransferKind;
+  feeValue: number | null; // المبلغ بالأرقام (يورو) إن أمكن تحليله — للفرز فقط
+  player: { id: number; name: string };
+  from: { id: number; name: string; logo: string };
+  to: { id: number; name: string; logo: string };
+  inClubId: number | null; // نادي روشن المستقبِل (إن وُجد)
+  outClubId: number | null; // نادي روشن المُطلِق (إن وُجد)
+}
+
+export interface SplLeagueTransfersResult {
+  clubs: SplClub[];
+  transfers: SplLeagueTransfer[];
+  topDeals: SplLeagueTransfer[]; // أبرز الصفقات بمبلغ معلن (كامل السجل، الأعلى مبلغًا)
+  stats: { total: number; withFee: number; loans: number; free: number };
+}
+
+/** يحلّل مبلغ الصفقة من نصّ مثل "€ 80M" / "€ 500K" إلى رقم (يورو). null عند التعذّر. */
+function parseFeeValue(raw: string | null | undefined): number | null {
+  const s = (raw ?? "").trim();
+  const m = s.match(/([\d.]+)\s*([MmKk]?)/);
+  if (!m) return null;
+  const num = parseFloat(m[1]);
+  if (!Number.isFinite(num)) return null;
+  const unit = m[2].toLowerCase();
+  const mult = unit === "m" ? 1_000_000 : unit === "k" ? 1_000 : 1;
+  return num * mult;
+}
+
+const LEAGUE_TRANSFERS_TTL = 60 * 60 * 1000; // الانتقالات تتحرّك في النوافذ فقط
+
+export async function getLeagueTransfers(sinceMonths = 18, limit = 250): Promise<SplLeagueTransfersResult> {
+  const clubs = await getProLeagueClubs();
+  const clubIds = new Set(clubs.map((c) => c.id));
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - sinceMonths);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
+  return withSWR(`spl:transfers:league:${sinceMonths}`, LEAGUE_TRANSFERS_TTL, LEAGUE_TRANSFERS_TTL * 2, async () => {
+    // انتقالات كل نادٍ بالتوازي — كل نداء مُكاش على حدة («أفضل جهد»: فشل نادٍ لا يُسقط الباقي).
+    const perClub = await Promise.all(clubs.map((c) => apiGet("transfers", { team: c.id }).catch(() => [] as any[])));
+
+    // مرحلة أولى: التقط الانتقالات الحقيقية التي تخصّ ناديًا من روشن (تنقّل بين ناديين
+    // مختلفين)، مع علم «حديثة» للموجز الزمني — بلا تعريب بعد (نؤجّله للمعروض فقط).
+    interface Pending { pid: number; rawName: string; t: any; inId: number; outId: number; recent: boolean; fee: number | null; }
+    const seen = new Set<string>();
+    const pending: Pending[] = [];
+    for (const rows of perClub) {
+      for (const it of rows) {
+        const pid = it.player?.id ?? 0;
+        const rawName = it.player?.name ?? "";
+        for (const t of it.transfers ?? []) {
+          const date = t.date ?? "";
+          if (!date) continue;
+          const inId = t.teams?.in?.id ?? 0;
+          const outId = t.teams?.out?.id ?? 0;
+          if (inId && outId && inId === outId) continue; // تجديد عقد/زيادة لا تنقّل
+          if (!clubIds.has(inId) && !clubIds.has(outId)) continue;
+          const key = `${pid}|${date}|${outId}|${inId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          pending.push({ pid, rawName, t, inId, outId, recent: date >= cutoffIso, fee: parseFeeValue(t.type) });
+        }
+      }
+    }
+
+    // اختر المعروض أولًا (موجز حديث + أبرز الصفقات)، ثم عرّب أسماءه فقط — لا نترجم
+    // مئات الأسماء التاريخية غير المعروضة (تجنّبًا لمهلة الـAI داخل الطلب).
+    const recentRaw = pending
+      .filter((p) => p.recent)
+      .sort((a, b) => b.t.date.localeCompare(a.t.date))
+      .slice(0, limit);
+    const topRaw = pending
+      .filter((p) => p.fee != null && classifyTransferKind(p.t.type) === "money")
+      .sort((a, b) => (b.fee ?? 0) - (a.fee ?? 0))
+      .slice(0, 8);
+
+    const names = new Set<string>();
+    for (const p of [...recentRaw, ...topRaw]) if (p.rawName) names.add(p.rawName);
+    // لا نحبس على الـAI: نعرّب بالمتاح فورًا (قاموس + كاش DB)، ونطلق ترجمة
+    // الناقص بالخلفية لتملأ DB فتظهر مُعرَّبة في التحديث التالي (نمط مُثبَت).
+    const nameList = [...names];
+    const tr = await resolveNames(nameList, { skipAi: true });
+    void resolveNames(nameList).catch(() => {});
+
+    const build = ({ pid, rawName, t, inId, outId, fee }: Pending): SplLeagueTransfer => ({
+      id: `${pid}|${t.date}|${outId}|${inId}`,
+      date: t.date,
+      type: localizeSplTransferType(t.type),
+      kind: classifyTransferKind(t.type),
+      feeValue: fee,
+      player: { id: pid, name: localizeSplPlayerName(pid, rawName, tr) },
+      from: { id: outId, name: localizeSplTeamName(outId, t.teams?.out?.name ?? ""), logo: t.teams?.out?.logo ?? "" },
+      to: { id: inId, name: localizeSplTeamName(inId, t.teams?.in?.name ?? ""), logo: t.teams?.in?.logo ?? "" },
+      inClubId: clubIds.has(inId) ? inId : null,
+      outClubId: clubIds.has(outId) ? outId : null,
+    });
+
+    const transfers = recentRaw.map(build);
+    const topDeals = topRaw.map(build);
+
+    return {
+      clubs,
+      transfers,
+      topDeals,
+      stats: {
+        total: transfers.length,
+        withFee: transfers.filter((t) => t.kind === "money").length,
+        loans: transfers.filter((t) => t.kind === "loan" || t.kind === "loanend").length,
+        free: transfers.filter((t) => t.kind === "free").length,
+      },
     };
   });
 }

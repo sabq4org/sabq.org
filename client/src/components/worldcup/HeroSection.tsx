@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { CalendarDays, MapPin, Radio, Sparkles, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import {
   todayRiyadhKey,
   type WcCountdown,
   type WcFixture,
+  type WcForecast,
   type WcOverview,
   type WcPrediction,
 } from "./wcTypes";
@@ -183,6 +185,33 @@ function TodayStrip({
   );
 }
 
+// شريط احتمالات النتيجة لبطاقة Hero. التوقع يأتي جاهزًا من overview.predictions
+// لكل مباراة حيّة/متزامنة؛ وعند غيابه (مباراة قادمة بلا توقع مزوّد) نتراجع إلى
+// /api/world-cup/forecast/:id (نفس مصدر مركز المباراة) حسب الطلب.
+function HeroPrediction({
+  fixture,
+  prediction,
+}: {
+  fixture: WcFixture;
+  prediction?: WcPrediction | null;
+}) {
+  const { data } = useQuery<WcForecast>({
+    queryKey: [`/api/world-cup/forecast/${fixture.id}`],
+    enabled: !prediction && !fixture.status.finished,
+    staleTime: 5 * 60_000,
+  });
+  const ft = prediction
+    ? { home: prediction.home, draw: prediction.draw, away: prediction.away }
+    : data?.fulltime ?? null;
+  if (!ft) return null;
+  return (
+    <ProbabilityBar
+      fixture={fixture}
+      prediction={{ ...ft, advice: prediction?.advice ?? null }}
+    />
+  );
+}
+
 function MatchHeroCard({
   fixture,
   prediction,
@@ -270,8 +299,8 @@ function MatchHeroCard({
           <CountdownChips timestamp={fixture.timestamp} />
         )}
 
-        {prediction && !fixture.status.finished && (
-          <ProbabilityBar fixture={fixture} prediction={prediction} />
+        {!fixture.status.finished && (
+          <HeroPrediction fixture={fixture} prediction={prediction} />
         )}
 
         <div className="flex justify-center">
@@ -316,6 +345,11 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
       ? liveMatches
       : upcomingPeers;
   const heroIds = new Set(heroFixtures.map((f) => f.id));
+  // توقع كل مباراة من خريطة overview.predictions (تُرفق لكل مباراة حيّة/متزامنة)؛
+  // المباراة المميّزة تتراجع لتوقعها الجاهز في matchOfTheDay عند الغياب.
+  const predictions = overview?.predictions ?? {};
+  const predictionFor = (f: WcFixture): WcPrediction | null =>
+    predictions[f.id] ?? (f.id === fixture?.id ? motd?.prediction ?? null : null);
   // متعدد: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
   // مفرد: يعرض كل مباريات اليوم مع إبراز البطاقة المميّزة — كما كان.
   const stripMatches = multiHero ? today.filter((f) => !heroIds.has(f.id)) : today;
@@ -416,7 +450,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
               <MatchHeroCard
                 key={f.id}
                 fixture={f}
-                prediction={f.id === fixture?.id ? motd?.prediction : null}
+                prediction={predictionFor(f)}
                 onOpenMatch={onOpenMatch}
                 compact={multiHero}
               />

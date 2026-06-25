@@ -470,6 +470,8 @@ export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة تُعرض كبطاقة Hero
+  predictions?: Record<number, WcPrediction>;
   saudi: {
     next: WcFixture | null;
     fixtures: WcFixture[];
