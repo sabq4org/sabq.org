@@ -30,6 +30,14 @@ export const LOYALTY_ACTIONS = {
    *  cron can re-run safely without ever double-awarding a match. Awarded by
    *  `settleFinishedMatches` in server/services/wcPredictionsService.ts. */
   WC_PREDICTION_WIN: "WC_PREDICTION_WIN",
+  /** Asian Cup 2027 smart-prediction reward. Source = the API-Football
+   *  fixtureId. Unlike the World Cup pool-split, `points` is the user's OWN
+   *  skill-based total for that match (tier points × boldness × streak),
+   *  always passed explicitly to awardPoints. No daily cap; the lifetime
+   *  dedup window keeps (userId, action, fixtureId) at most once so the
+   *  per-minute settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/acPredictionsService.ts. */
+  AC_PREDICTION_WIN: "AC_PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -50,6 +58,9 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   // Nominal default only — the settlement engine ALWAYS overrides this with
   // floor(500 / winners) when calling awardPoints.
   WC_PREDICTION_WIN: 500,
+  // Nominal default only — the smart engine ALWAYS overrides this with the
+  // user's computed per-match total (tier × boldness × streak).
+  AC_PREDICTION_WIN: 30,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -70,6 +81,9 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   // No daily cap — wins are inherently rate-limited by the match schedule,
   // and the lifetime dedup below already prevents re-awarding a given match.
   WC_PREDICTION_WIN: null,
+  // Same rationale as the World Cup — one settleable match per fixture, dedup
+  // below is the real guard.
+  AC_PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -97,6 +111,8 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   // award a user once, which is the last line of defense that lets the
   // settlement cron re-run / reconcile without double-paying.
   WC_PREDICTION_WIN: 100000,
+  // Same lifetime, source=fixtureId dedup as the World Cup.
+  AC_PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------

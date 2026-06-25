@@ -1847,6 +1847,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسوية توقّعات كأس آسيا الذكية: نفس نمط المونديال — تسجيل دائم وفحص
+      // القيادة داخل الدورة، يمنح كل مستخدم نقاطه المهاريّة فور انتهاء المباراة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startAcPredictionsJob } = await import("./jobs/acPredictionsJob");
+            startAcPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting asian cup predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {

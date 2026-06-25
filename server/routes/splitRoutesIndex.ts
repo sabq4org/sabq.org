@@ -39,6 +39,7 @@ import { registerSpaNewsRoutes } from "./spaNews";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
+import acPredictionsRouter from "./acPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -90,6 +91,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
   app.use(wcPredictionsRouter);
+  app.use(acPredictionsRouter);
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
