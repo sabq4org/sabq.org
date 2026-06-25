@@ -28,6 +28,7 @@ import {
   Flame,
   Radio,
   ChevronLeft,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -666,6 +667,21 @@ export default function SportsDashboard() {
               )}
             </section>
           )}
+
+          {/* مركز الانتقالات — مدخل لموجز صفقات دوري روشن */}
+          <section id="transfers" className="scroll-mt-16">
+            <Link href="/sports/transfers"
+              className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/40">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ArrowLeftRight className="w-6 h-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-black text-foreground">مركز الانتقالات</div>
+                <div className="text-sm text-muted-foreground">مَن وصل ومَن غادر في دوري روشن — موجز الصفقات بالنوع والمبلغ عند توفّره</div>
+              </div>
+              <ChevronLeft className={`w-5 h-5 shrink-0 ${ACCENT} transition-transform group-hover:-translate-x-1`} />
+            </Link>
+          </section>
 
           {/* لوحة المتصدّرين (المجتمع) */}
           <section id="leaderboard" className="scroll-mt-16">

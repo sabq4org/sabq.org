@@ -33,6 +33,7 @@ import {
   getPlayerInjuries,
   getPlayerSeasonHistory,
   getPlayerTransfers,
+  getLeagueTransfers,
   getSeasonOutlook,
   getSquad,
   getStandings,
@@ -732,6 +733,25 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] team transfers failed:", error);
       res.status(502).json({ message: "تعذر جلب انتقالات النادي حاليًا" });
+    }
+  });
+
+  // مركز الانتقالات — موجز موحّد لكل أندية دوري روشن (وصل/غادر) في قائمة واحدة.
+  // ?since=عدد الأشهر للنافذة (افتراضي 18). يتدهور بسلاسة إلى قائمة فارغة بلا مفتاح.
+  app.get("/api/sports/transfers", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ configured: false, clubs: [], transfers: [], stats: { total: 0, withFee: 0, loans: 0, free: 0 } });
+      return;
+    }
+    const sinceRaw = parseId(typeof req.query.since === "string" ? req.query.since : "");
+    const sinceMonths = sinceRaw != null && sinceRaw > 0 && sinceRaw <= 60 ? sinceRaw : 18;
+    try {
+      const result = await getLeagueTransfers(sinceMonths);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ configured: true, ...result });
+    } catch (error) {
+      console.error("[Sports] league transfers failed:", error);
+      res.status(502).json({ message: "تعذر جلب مركز الانتقالات حاليًا" });
     }
   });
 
