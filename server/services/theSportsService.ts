@@ -287,7 +287,7 @@ async function getDiaryRaw(dateKey: string): Promise<any[]> {
 // المونديال) نمتنع عن الربط ونرجع null، فلا نخاطر بربط خاطئ يعطي نتيجة مباراة
 // أخرى. يتراجع المستدعي بهدوء لـSportMonks/API-Football. (الأسماء محجوبة في
 // diary، فلا يمكن فضّ الالتباس بالأسماء بعد — يأتي لاحقًا عبر results_extra.)
-async function resolveTsMatchId(
+export async function resolveTsMatchId(
   fixtureId: number,
   kickoffTs: number,
   competitionId: string

@@ -29,6 +29,11 @@ import {
   getLiveFixtures,
   getMatchDetail,
   getMatchPlayerRatings,
+  getMatchTeamStats,
+  getMatchTvChannels,
+  getPlayerForm,
+  getPlayerMarketValue,
+  getTeamInjuries,
   getPlayerCard,
   getPlayerInjuries,
   getPlayerSeasonHistory,
@@ -62,9 +67,11 @@ import {
   getMomentum,
   getCommentary,
   getMatchFacts,
+  getForecast,
   resolveSmIdByNames,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
+import { resolveNames } from "../services/worldCupNameTranslator";
 import {
   addFollow,
   isValidFollowKind,
@@ -92,6 +99,19 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 /** مفتاح يوم بتوقيت الرياض (YYYY-MM-DD) لتصنيف "مباريات اليوم" بدقة محلية. */
 function riyadhDayKey(ts: number): string {
   return dayKeyFmt.format(new Date(ts * 1000));
+}
+
+/**
+ * موسم أرشيفي اختياري عبر ?season=YYYY — لإبقاء بيانات موسم منتهٍ (مثل 2025/2026)
+ * متاحةً بعد أن يحوّل المزوّد "الموسم الحالي" تلقائيًا للموسم الجديد في أغسطس.
+ * إضافيٌّ بحت: غيابه يبقي السلوك الافتراضي (الموسم الحالي). يتجاهل القيم غير
+ * الصالحة. عند تمريره نخدم بيانات ثابتة (دون تركيب الطبقة اللحظية).
+ */
+function parseSeason(req: Request): number | undefined {
+  const raw = String(req.query.season || "").trim();
+  if (!/^\d{4}$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return n >= 2000 && n <= 2100 ? n : undefined;
 }
 
 /** يقسّم جدول البطولة إلى مباشر/اليوم/قادمة/نتائج جاهزة للعرض. */
@@ -180,9 +200,10 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      const season = parseSeason(req);
       const [yellow, red] = await Promise.all([
-        getTopYellowCards(comp).catch(() => []),
-        getTopRedCards(comp).catch(() => []),
+        getTopYellowCards(comp, season).catch(() => []),
+        getTopRedCards(comp, season).catch(() => []),
       ]);
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
       res.json({ configured: true, yellow, red });
@@ -278,6 +299,14 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      // أرشيف: موسم سابق ثابت — كله نتائج، بلا طبقة لحظية، وكاش طويل.
+      const season = parseSeason(req);
+      if (season) {
+        const buckets = bucketFixtures(await getFixtures(comp, season));
+        res.set("Cache-Control", "public, max-age=600, s-maxage=86400, stale-while-revalidate=86400");
+        res.json({ configured: true, live: [], today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
+        return;
+      }
       const [fixtures, liveNow] = await Promise.all([getFixtures(comp), getLiveFixtures(comp)]);
       const buckets = bucketFixtures(fixtures);
       // دمج المباشر من نقطة live (أدقّ) مع ما التُقط من الجدول.
@@ -307,7 +336,7 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const { rounds, current } = await getCompetitionRounds(comp);
+      const { rounds, current } = await getCompetitionRounds(comp, parseSeason(req));
       res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
       res.json({ configured: true, rounds, current });
     } catch (error) {
@@ -330,7 +359,7 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const fixtures = await getFixturesByRound(comp, name);
+      const fixtures = await getFixturesByRound(comp, name, parseSeason(req));
       res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
       res.json({ configured: true, fixtures });
     } catch (error) {
@@ -348,6 +377,13 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
+      // أرشيف: جدول موسم سابق نهائي — بلا طبقة لحظية، كاش طويل.
+      const season = parseSeason(req);
+      if (season) {
+        res.set("Cache-Control", "public, max-age=600, s-maxage=86400, stale-while-revalidate=86400");
+        res.json({ configured: true, standings: await getStandings(comp, season) });
+        return;
+      }
       // ترتيب مبدئي لحظي: نطبّق نتائج مباريات البطولة الجارية فوق الجدول فيتحرّك
       // مع كل هدف. كاش واعٍ للبثّ: قصير أثناء وجود مباراة جارية وإلا أطول.
       const [base, liveNow] = await Promise.all([
@@ -379,7 +415,7 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, scorers: await getTopScorers(comp) });
+      res.json({ configured: true, scorers: await getTopScorers(comp, parseSeason(req)) });
     } catch (error) {
       console.error("[Sports] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدافين حاليًا" });
@@ -414,7 +450,7 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
-      res.json({ configured: true, assists: await getTopAssists(comp) });
+      res.json({ configured: true, assists: await getTopAssists(comp, parseSeason(req)) });
     } catch (error) {
       console.error("[Sports] assists failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة صنّاع الأهداف حاليًا" });
@@ -476,6 +512,48 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // قنوات بثّ المباراة («أين تُشاهد») — TheSports، أفضل جهد. تُخفى الواجهة إن فرغت.
+  app.get("/api/sports/match/:id/tv", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, channels: [] });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const tv = await getMatchTvChannels(id);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400");
+      res.json(tv);
+    } catch (error) {
+      console.error("[Sports] match tv failed:", error);
+      res.json({ available: false, channels: [] });
+    }
+  });
+
+  // إحصاء الفريقين المفصّل (TheSports) — احتياط لتبويب الأرقام، أفضل جهد.
+  app.get("/api/sports/match/:id/stats", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, rows: [] });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const stats = await getMatchTeamStats(id);
+      res.set("Cache-Control", "public, max-age=120, s-maxage=600, stale-while-revalidate=3600");
+      res.json(stats);
+    } catch (error) {
+      console.error("[Sports] match team stats failed:", error);
+      res.json({ available: false, rows: [] });
+    }
+  });
+
   // ---------- إثراء SportMonks للبوابة (xG/الضغط/معطيات) — سعودي/آسيا وغيرها ----------
   // نحلّ معرّف SportMonks من هوية مباراة API-Football ثم نعيد استخدام دوال البناء
   // عبر directSmId (نفس منطق المونديال، بلا تكرار). كلها best-effort بحُرّاس توفّر.
@@ -505,11 +583,37 @@ export function registerSportsRoutes(app: Express) {
       if (!smId) {
         return res.json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
       }
+      const xg = await getXg(id, { directSmId: smId });
+      // تعريب أسماء «الأعلى خطورة» (تأتي إنجليزية من SportMonks) أفضل جهد.
+      if (xg.topPlayers.length > 0) {
+        const tr = await resolveNames(xg.topPlayers.map((tp) => tp.name)).catch(() => null);
+        if (tr) xg.topPlayers = xg.topPlayers.map((tp) => ({ ...tp, name: tr(tp.name) || tp.name }));
+      }
       res.set("Cache-Control", SM_ENRICH_CACHE);
-      res.json(await getXg(id, { directSmId: smId }));
+      res.json(xg);
     } catch (error) {
       console.error("[Sports] xg failed:", error);
       res.status(502).json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+    }
+  });
+
+  // توقّعات احتمالية متقدّمة (SportMonks) — فرصة مزدوجة/BTTS/أكثر-أقل/أرجح النتائج.
+  app.get("/api/sports/match/:id/forecast", async (req, res) => {
+    const empty = { available: false, fulltime: null, btts: null, doubleChance: null, goals: [], correctScores: [] };
+    if (!isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json(empty);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(await getForecast(id, { directSmId: smId }));
+    } catch (error) {
+      console.error("[Sports] forecast failed:", error);
+      res.json(empty);
     }
   });
 
@@ -579,8 +683,14 @@ export function registerSportsRoutes(app: Express) {
       if (!smId) {
         return res.json({ available: false, statistics: [], weather: null, absentees: [], eventDetails: [], halftime: null });
       }
+      const facts = await getMatchFacts(id, { directSmId: smId });
+      // تعريب أسماء المغيبين (تأتي إنجليزية من SportMonks، تُحلّ غالبًا للمباريات القادمة) أفضل جهد.
+      if (facts.absentees.length > 0) {
+        const tr = await resolveNames(facts.absentees.map((a) => a.name)).catch(() => null);
+        if (tr) facts.absentees = facts.absentees.map((a) => ({ ...a, name: tr(a.name) || a.name }));
+      }
       res.set("Cache-Control", SM_ENRICH_CACHE);
-      res.json(await getMatchFacts(id, { directSmId: smId }));
+      res.json(facts);
     } catch (error) {
       console.error("[Sports] facts failed:", error);
       res.status(502).json({ available: false, statistics: [], weather: null, absentees: [], eventDetails: [], halftime: null });
@@ -736,6 +846,29 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // إصابات/غيابات النادي (TheSports) — يلزم ?comp=<slug> لبناء جسر الفِرق الصحيح.
+  // أفضل جهد: غياب TheSports/تعذّر الربط/IP غير مُدرَج → [] فتُخفى الواجهة.
+  app.get("/api/sports/team/:id/injuries", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ injuries: [] });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف نادٍ غير صحيح" });
+      return;
+    }
+    const comp = typeof req.query.comp === "string" ? req.query.comp : null;
+    try {
+      const injuries = await getTeamInjuries(id, comp);
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=21600");
+      res.json({ injuries });
+    } catch (error) {
+      console.error("[Sports] team injuries failed:", error);
+      res.json({ injuries: [] });
+    }
+  });
+
   // مركز الانتقالات — موجز موحّد لكل أندية دوري روشن (وصل/غادر) في قائمة واحدة.
   // ?since=عدد الأشهر للنافذة (افتراضي 18). يتدهور بسلاسة إلى قائمة فارغة بلا مفتاح.
   app.get("/api/sports/transfers", async (req, res) => {
@@ -813,6 +946,48 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // القيمة السوقية للاعب + تاريخها (TheSports) — lazy، أفضل جهد، تُخفى إن فرغت.
+  app.get("/api/sports/player/:id/market", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, value: null, currency: "€", peak: null, history: [] });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف لاعب غير صحيح" });
+      return;
+    }
+    try {
+      const market = await getPlayerMarketValue(id);
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      res.json(market);
+    } catch (error) {
+      console.error("[Sports] player market failed:", error);
+      res.json({ available: false, value: null, currency: "€", peak: null, history: [] });
+    }
+  });
+
+  // فورمة اللاعب (SportMonks) — آخر مبارياته بتقييم/xG. lazy، أفضل جهد، تُخفى إن فرغت.
+  app.get("/api/sports/player/:id/form", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.json({ available: false, matches: [] });
+      return;
+    }
+    const id = parseId(req.params.id);
+    if (id == null) {
+      res.status(400).json({ message: "معرّف لاعب غير صحيح" });
+      return;
+    }
+    try {
+      const form = await getPlayerForm(id);
+      res.set("Cache-Control", "public, max-age=1800, s-maxage=10800, stale-while-revalidate=21600");
+      res.json(form);
+    } catch (error) {
+      console.error("[Sports] player form failed:", error);
+      res.json({ available: false, matches: [] });
     }
   });
 
