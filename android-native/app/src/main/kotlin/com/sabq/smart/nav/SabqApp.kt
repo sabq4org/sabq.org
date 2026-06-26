@@ -108,8 +108,25 @@ object SabqRoutes {
     const val ContributorDashboard = "dashboard/contributor"
     const val WorldCup = "world-cup"
     const val WorldCupMatch = "world-cup/match/{id}"
+    const val WorldCupTeam = "world-cup/team/{id}?name={name}&logo={logo}"
+    const val WorldCupPredictions = "world-cup/predictions"
+    // مُقترب — analytical-angles surface (landing + angle + topic + writer).
+    const val Muqtarab = "muqtarab"
+    const val MuqtarabAngle = "muqtarab/angle/{slug}"
+    const val MuqtarabTopic = "muqtarab/topic/{angleSlug}/{topicSlug}"
+    const val MuqtarabWriter = "muqtarab/writer/{id}"
 
     fun worldCupMatch(id: Int): String = "world-cup/match/$id"
+
+    fun worldCupTeam(id: Int, name: String, logo: String): String =
+        "world-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun muqtarabAngle(slug: String): String = "muqtarab/angle/${Uri.encode(slug)}"
+
+    fun muqtarabTopic(angleSlug: String, topicSlug: String): String =
+        "muqtarab/topic/${Uri.encode(angleSlug)}/${Uri.encode(topicSlug)}"
+
+    fun muqtarabWriter(id: String): String = "muqtarab/writer/${Uri.encode(id)}"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
 
@@ -250,6 +267,12 @@ fun SabqApp(
                             hArticle.slug?.let { slug ->
                                 navController.navigate(SabqRoutes.articleDetail(slug))
                             }
+                        },
+                        onMuqtarabAllClick = {
+                            navController.navigate(SabqRoutes.Muqtarab)
+                        },
+                        onMuqtarabTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
                         },
                     )
                 }
@@ -452,6 +475,15 @@ fun SabqApp(
                     com.sabq.smart.feature.worldcup.WorldCupScreen(
                         onBack = { navController.popBackStack() },
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
+                        onOpenArticle = { slug -> navController.navigate(SabqRoutes.articleDetail(slug)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.worldCupTeam(team.id, team.name, team.logo)) },
+                        onOpenPredictions = { navController.navigate(SabqRoutes.WorldCupPredictions) },
+                    )
+                }
+                composable(SabqRoutes.WorldCupPredictions) {
+                    com.sabq.smart.feature.worldcup.WorldCupPredictionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
                     )
                 }
                 composable(
@@ -460,6 +492,79 @@ fun SabqApp(
                 ) {
                     com.sabq.smart.feature.worldcup.WorldCupMatchCenterScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.WorldCupTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) {
+                    com.sabq.smart.feature.worldcup.WorldCupTeamScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(SabqRoutes.Muqtarab) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabLandingScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabAngle,
+                    arguments = listOf(navArgument("slug") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabAngleScreen(
+                        onBack = { navController.popBackStack() },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                        onWriterClick = { id ->
+                            navController.navigate(SabqRoutes.muqtarabWriter(id))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabTopic,
+                    arguments = listOf(
+                        navArgument("angleSlug") { type = NavType.StringType },
+                        navArgument("topicSlug") { type = NavType.StringType },
+                    ),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabTopicScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onWriterClick = { id ->
+                            navController.navigate(SabqRoutes.muqtarabWriter(id))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.MuqtarabWriter,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.muqtarab.MuqtarabWriterScreen(
+                        onBack = { navController.popBackStack() },
+                        onAngleClick = { slug ->
+                            navController.navigate(SabqRoutes.muqtarabAngle(slug))
+                        },
+                        onTopicClick = { angleSlug, topicSlug ->
+                            navController.navigate(SabqRoutes.muqtarabTopic(angleSlug, topicSlug))
+                        },
                     )
                 }
                 composable(SabqRoutes.Notifications) {

@@ -3,6 +3,7 @@ package com.sabq.smart.data.api
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -477,6 +478,56 @@ interface SabqApi {
     @GET("api/v1/contributor/ranking")
     suspend fun getContributorRanking(): ApiContributorRanking
 
+    // -- مُقترب (Muqtarab analytical angles) -------------------------
+    // Public namespace (NOT v1), no auth. Paths mirror iOS
+    // `MuqtarabModels.swift` `APIClient` extension 1:1.
+
+    /** All active angles (with topic-count + writer stats). Returns a
+     *  bare `[ApiMuqAngle]` array. iOS: `fetchMuqtarabAngles`. */
+    @GET("api/muqtarab/angles")
+    suspend fun getMuqtarabAngles(
+        @Query("active") active: Boolean = true,
+        @Query("withStats") withStats: Boolean = true,
+    ): List<ApiMuqAngle>
+
+    /** Latest/featured published topics (home strip + landing). Bare
+     *  `[ApiMuqTopic]` array. iOS: `fetchMuqtarabFeaturedTopics`. */
+    @GET("api/muqtarab/topics/featured")
+    suspend fun getMuqtarabFeaturedTopics(
+        @Query("limit") limit: Int = 8,
+    ): List<ApiMuqTopic>
+
+    /** A single angle's header + writer. iOS:
+     *  `fetchMuqtarabAngleDetail`. */
+    @GET("api/muqtarab/angles/{slug}")
+    suspend fun getMuqtarabAngleDetail(@Path("slug") slug: String): ApiMuqAngleDetail
+
+    /** A single angle's published topics. iOS:
+     *  `fetchMuqtarabAngleTopics`. */
+    @GET("api/muqtarab/angles/{slug}/topics")
+    suspend fun getMuqtarabAngleTopics(
+        @Path("slug") slug: String,
+        @Query("limit") limit: Int = 30,
+    ): ApiMuqTopicsResponse
+
+    /** A published topic + its angle + writer. iOS:
+     *  `fetchMuqtarabTopic`. */
+    @GET("api/muqtarab/angles/{angleSlug}/topics/{topicSlug}")
+    suspend fun getMuqtarabTopic(
+        @Path("angleSlug") angleSlug: String,
+        @Path("topicSlug") topicSlug: String,
+    ): ApiMuqTopicDetailResponse
+
+    /** Writer page: bio + their angles + published topics. iOS:
+     *  `fetchMuqtarabWriter`. */
+    @GET("api/muqtarab/writers/{id}")
+    suspend fun getMuqtarabWriter(@Path("id") id: String): ApiMuqWriterProfile
+
+    /** Best-effort view registration for a topic. iOS:
+     *  `reportMuqtarabTopicView`. */
+    @POST("api/muqtarab/topics/{id}/view")
+    suspend fun reportMuqtarabTopicView(@Path("id") id: String): retrofit2.Response<Unit>
+
     // -- World Cup 2026 (نقاط عامة على api.sabq.org مباشرة، مطابقة لـiOS) ----
     // روابط مطلقة تتجاوز baseUrl(sabq.org) لتضرب الخادم مباشرة دون وسيط Pages.
 
@@ -509,4 +560,76 @@ interface SabqApi {
 
     @GET("https://api.sabq.org/api/world-cup/player/{id}")
     suspend fun getWorldCupPlayer(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerCard
+
+    @GET("https://api.sabq.org/api/world-cup/facts")
+    suspend fun getWorldCupFacts(): com.sabq.smart.feature.worldcup.WcCompetitionFacts
+
+    @GET("https://api.sabq.org/api/world-cup/bracket")
+    suspend fun getWorldCupBracket(): com.sabq.smart.feature.worldcup.WcBracket
+
+    @GET("https://api.sabq.org/api/world-cup/news")
+    suspend fun getWorldCupNews(@Query("limit") limit: Int = 8): com.sabq.smart.feature.worldcup.WcNewsResponse
+
+    @GET("https://api.sabq.org/api/world-cup/team/{id}")
+    suspend fun getWorldCupTeam(@Path("id") teamId: Int): com.sabq.smart.feature.worldcup.WcTeamProfile
+
+    // -- إثراء مركز المباراة (أفضل-جهد، عبر api.sabq.org) ------------------
+    @GET("https://api.sabq.org/api/world-cup/match-facts/{id}")
+    suspend fun getWorldCupMatchFacts(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcMatchFacts
+
+    @GET("https://api.sabq.org/api/world-cup/xg/{id}")
+    suspend fun getWorldCupXg(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcXg
+
+    @GET("https://api.sabq.org/api/world-cup/forecast/{id}")
+    suspend fun getWorldCupForecast(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcForecast
+
+    @GET("https://api.sabq.org/api/world-cup/pressure/{id}")
+    suspend fun getWorldCupPressure(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcPressure
+
+    @GET("https://api.sabq.org/api/world-cup/momentum/{id}")
+    suspend fun getWorldCupMomentum(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcMomentum
+
+    @GET("https://api.sabq.org/api/world-cup/commentary/{id}")
+    suspend fun getWorldCupCommentary(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcCommentary
+
+    @GET("https://api.sabq.org/api/world-cup/match/{id}/tv")
+    suspend fun getWorldCupTv(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcTvListing
+
+    @GET("https://api.sabq.org/api/world-cup/pulse/{id}")
+    suspend fun getWorldCupPulse(@Path("id") fixtureId: Int): com.sabq.smart.feature.worldcup.WcPulse
+
+    @GET("https://api.sabq.org/api/world-cup/player/{id}/market")
+    suspend fun getWorldCupPlayerMarket(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerMarket
+
+    @GET("https://api.sabq.org/api/world-cup/player/{id}/form")
+    suspend fun getWorldCupPlayerForm(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerForm
+
+    // -- المتابعة الرياضية + تنبيهات المباريات (Bearer، عبر sabq.org) --------
+    @GET("api/v1/sports/follows")
+    suspend fun getSportsFollows(): com.sabq.smart.feature.worldcup.SportsFollowsResponse
+
+    @POST("api/v1/sports/follows")
+    suspend fun addSportsFollow(@Body body: com.sabq.smart.feature.worldcup.SportsFollowBody)
+
+    @HTTP(method = "DELETE", path = "api/v1/sports/follows", hasBody = true)
+    suspend fun removeSportsFollow(@Body body: com.sabq.smart.feature.worldcup.SportsFollowBody)
+
+    @GET("api/v1/sports/alert-prefs")
+    suspend fun getSportsAlertPrefs(): com.sabq.smart.feature.worldcup.SportsAlertPrefsResponse
+
+    @PUT("api/v1/sports/alert-prefs")
+    suspend fun updateSportsAlertPrefs(@Body prefs: com.sabq.smart.feature.worldcup.SportsAlertPreferences)
+
+    // -- مسابقة التوقّعات (Bearer، عبر sabq.org) --------------------------
+    @GET("api/v1/world-cup/predictions/today")
+    suspend fun getWcPredictionsToday(): com.sabq.smart.feature.worldcup.WcPredTodayResponse
+
+    @POST("api/v1/world-cup/predictions")
+    suspend fun submitWcPrediction(@Body body: com.sabq.smart.feature.worldcup.WcPredictionSubmitBody)
+
+    @GET("api/v1/world-cup/predictions/mine")
+    suspend fun getWcMyPredictions(): com.sabq.smart.feature.worldcup.WcPredMineResponse
+
+    @GET("api/v1/world-cup/predictions/leaderboard")
+    suspend fun getWcLeaderboard(): com.sabq.smart.feature.worldcup.WcLeaderboardResponse
 }

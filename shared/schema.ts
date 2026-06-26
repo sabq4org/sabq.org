@@ -12262,6 +12262,9 @@ export const pushDevices = pgTable("push_devices", {
   deviceToken: text("device_token").notNull().unique(),
   tokenProvider: varchar("token_provider", { length: 10 }).default("fcm").notNull(), // fcm, expo
   platform: varchar("platform", { length: 20 }).default("ios").notNull(), // ios, android
+  // معرّف حزمة التطبيق (apns-topic). يميّز تطبيقات APNs المتعددة على نفس الخادم
+  // (الأخبار com.sabq.sabqorg، الرياضة com.sabq.sports). فارغ = الـbundle الافتراضي.
+  bundleId: text("bundle_id"),
   deviceName: text("device_name"),
   osVersion: text("os_version"),
   appVersion: text("app_version"),
@@ -12294,6 +12297,9 @@ export const liveActivityTokens = pgTable("live_activity_tokens", {
   fixtureId: integer("fixture_id").notNull(),
   pushToken: text("push_token").notNull().unique(),
   userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  // bundle التطبيق المُصدِر للنشاط — يحدّد apns-topic للدفع
+  // (`<bundleId>.push-type.liveactivity`). فارغ = الـbundle الافتراضي للخادم.
+  bundleId: text("bundle_id"),
   // بصمة آخر حالة دُفعت — لتفادي دفع تحديث مكرّر بلا تغيير.
   lastContentHash: text("last_content_hash"),
   lastPushedAt: timestamp("last_pushed_at"),

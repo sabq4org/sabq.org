@@ -1,35 +1,53 @@
 import SwiftUI
 
-// جذر التطبيق — خمسة تبويبات. الرئيسية (نظرة موحّدة) · البطولات (روشن افتراضي) ·
-// المباشر (لوحة مباشرة شاملة) · المجتمع (توقّعات/متصدّرون — v1.1) · حسابي (v1.1).
-// مركز المباراة وصفحات النادي/اللاعب تُفتح كـ push/sheet من داخل هذه التبويبات.
+// جذر التطبيق — خمسة تبويبات. روشن (هب الدوري مباشرةً = الرئيسية) · البطولات
+// (بقية البطولات) · المباشر (لوحة مباشرة شاملة) · الأخبار (تغطية سبق الرياضية) ·
+// حسابي. مركز المباراة وصفحات النادي/اللاعب تُفتح كـ sheet من داخل هذه التبويبات.
 struct RootTabView: View {
+    // يُضبط بعد إتمام/تخطّي الشاشات التعريفية — يمنع ظهورها ثانيةً.
+    @AppStorage("ob_seen_v1") private var onboardingSeen = false
+    @State private var showOnboarding = false
+    @Environment(SpTabBarVisibility.self) private var tabBarVis
+
     init() {
-        // مظهر شريط التبويب داكن متناسق مع الخلفية الفاخرة.
+        // شريط تبويب أبيض نظيف (تصميم كأس آسيا الأبيض على الويب).
         let appearance = UITabBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(red: 0.03, green: 0.10, blue: 0.08, alpha: 1)
+        appearance.configureWithDefaultBackground()
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 
+    private var tabBarVisibility: Visibility { tabBarVis.hidden ? .hidden : .visible }
+
     var body: some View {
         TabView {
             HomeView()
-                .tabItem { Label("الرئيسية", systemImage: "house.fill") }
+                .tabItem { Label("روشن", systemImage: "trophy.fill") }
+                .toolbar(tabBarVisibility, for: .tabBar)
 
             CompetitionsView()
-                .tabItem { Label("البطولات", systemImage: "trophy.fill") }
+                .tabItem { Label("البطولات", systemImage: "sportscourt.fill") }
+                .toolbar(tabBarVisibility, for: .tabBar)
 
             LiveView()
                 .tabItem { Label("المباشر", systemImage: "dot.radiowaves.left.and.right") }
+                .toolbar(tabBarVisibility, for: .tabBar)
 
-            CommunityView()
-                .tabItem { Label("المجتمع", systemImage: "person.2.fill") }
+            NewsView()
+                .tabItem { Label("الأخبار", systemImage: "newspaper.fill") }
+                .toolbar(tabBarVisibility, for: .tabBar)
 
             AccountView()
                 .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
+                .toolbar(tabBarVisibility, for: .tabBar)
         }
-        .tint(SpTheme.gold)
+        .tint(SpTheme.green)
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView {
+                onboardingSeen = true
+                showOnboarding = false
+            }
+        }
+        .onAppear { if !onboardingSeen { showOnboarding = true } }
     }
 }

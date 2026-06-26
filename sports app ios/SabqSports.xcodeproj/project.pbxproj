@@ -1,30 +1,42 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	classes = {};
+	classes = {
+	};
 	objectVersion = 56;
 	objects = {
+
 /* Begin PBXBuildFile section */
-		5B000001 /* SabqSportsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000001; };
-		5B000002 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000002; };
-		5B000003 /* URLConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000003; };
-		5B000004 /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000004; };
-		5B000005 /* SportsTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000005; };
-		5B000006 /* SportsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000006; };
-		5B000007 /* SportsRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000007; };
-		5B000008 /* SportsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000008; };
-		5B000009 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000009; };
-		5B00000A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000A; };
-		5B00000B /* CompetitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000B; };
-		5B00000C /* CompetitionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000C; };
-		5B00000D /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000D; };
-		5B00000E /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000E; };
-		5B00000F /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000F; };
-		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020; };
-		5B000021 /* InfoPlist.strings (Arabic) in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021; };
-		5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022; };
-		5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023; };
-		5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024; };
+		5B000001 /* SabqSportsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000001 /* SabqSportsApp.swift */; };
+		5B000002 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000002 /* APIClient.swift */; };
+		5B000003 /* URLConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000003 /* URLConstants.swift */; };
+		5B000004 /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000004 /* FontRegistration.swift */; };
+		5B000005 /* SportsTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000005 /* SportsTheme.swift */; };
+		5B000006 /* SportsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000006 /* SportsModels.swift */; };
+		5B000007 /* SportsRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000007 /* SportsRTL.swift */; };
+		5B000008 /* SportsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000008 /* SportsComponents.swift */; };
+		5B000009 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000009 /* RootTabView.swift */; };
+		5B00000A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000A /* HomeView.swift */; };
+		5B00000B /* CompetitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000B /* CompetitionsView.swift */; };
+		5B00000C /* CompetitionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000C /* CompetitionDetailView.swift */; };
+		5B00000D /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000D /* LiveView.swift */; };
+		5B00000E /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000E /* CommunityView.swift */; };
+		5B00000F /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000F /* AccountView.swift */; };
+		5B000010 /* MatchCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000010 /* MatchCenterView.swift */; };
+		5B000011 /* TeamPlayerPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000011 /* TeamPlayerPages.swift */; };
+		5B000012 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000012 /* AuthStore.swift */; };
+		5B000013 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000013 /* OnboardingView.swift */; };
+		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020 /* Assets.xcassets */; };
+		5B000021 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021 /* InfoPlist.strings */; };
+		5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.woff2 */; };
+		5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */; };
+		5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.woff2 */; };
+		5B000102 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
+		5B000103 /* SpLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000103 /* SpLiveActivityManager.swift */; };
+		5B000112 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
+		5B000104 /* SabqSportsWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000104 /* SabqSportsWidgetsBundle.swift */; };
+		5B000105 /* SpMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000105 /* SpMatchLiveActivity.swift */; };
+		5B000120 /* SabqSportsWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5C000100 /* SabqSportsWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +55,10 @@
 		5C00000D /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveView.swift; sourceTree = "<group>"; };
 		5C00000E /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
 		5C00000F /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		5C000010 /* MatchCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchCenterView.swift; sourceTree = "<group>"; };
+		5C000011 /* TeamPlayerPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamPlayerPages.swift; sourceTree = "<group>"; };
+		5C000012 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
+		5C000013 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		5C000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5C000021 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
 		5C000022 /* IBMPlexSansArabic-Regular.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.woff2"; sourceTree = "<group>"; };
@@ -51,15 +67,24 @@
 		5C000030 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000031 /* SabqSports.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSports.entitlements; sourceTree = "<group>"; };
 		5C000040 /* SabqSports.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SabqSports.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C000100 /* SabqSportsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqSportsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C000101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		5C000102 /* SpMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchActivity.swift; sourceTree = "<group>"; };
+		5C000103 /* SpLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpLiveActivityManager.swift; sourceTree = "<group>"; };
+		5C000104 /* SabqSportsWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SabqSportsWidgetsBundle.swift; sourceTree = "<group>"; };
+		5C000105 /* SpMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		5D000000 /* Root */ = {
+		5D000000 = {
 			isa = PBXGroup;
-			children = (5D000001 /* SabqSports */, 5D000006 /* Products */);
+			children = (
+				5D000001 /* SabqSports */,
+				5D000100 /* SabqSportsWidgets */,
+				5D000006 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
-		5D000006 /* Products */ = { isa = PBXGroup; children = (5C000040 /* SabqSports.app */); name = Products; sourceTree = "<group>"; };
 		5D000001 /* SabqSports */ = {
 			isa = PBXGroup;
 			children = (
@@ -71,47 +96,168 @@
 				5C000020 /* Assets.xcassets */,
 				5C000030 /* Info.plist */,
 				5C000031 /* SabqSports.entitlements */,
-				5C000001 /* SabqSportsApp.swift */
+				5C000001 /* SabqSportsApp.swift */,
 			);
 			path = SabqSports;
 			sourceTree = "<group>";
 		};
-		5D000002 /* Screens */ = { isa = PBXGroup; children = (5C000009, 5C00000A, 5C00000B, 5C00000C, 5C00000D, 5C00000E, 5C00000F); path = Screens; sourceTree = "<group>"; };
-		5D000003 /* Components */ = { isa = PBXGroup; children = (5C000007, 5C000008); path = Components; sourceTree = "<group>"; };
-		5D000004 /* Services */ = { isa = PBXGroup; children = (5C000006, 5C000005, 5C000002, 5C000004, 5C000003); path = Services; sourceTree = "<group>"; };
-		5D000005 /* Resources */ = { isa = PBXGroup; children = (5D000008 /* Fonts */,); path = Resources; sourceTree = "<group>"; };
-		5D000008 /* Fonts */ = { isa = PBXGroup; children = (5C000022, 5C000023, 5C000024); path = Fonts; sourceTree = "<group>"; };
-		5D000007 /* ar.lproj */ = { isa = PBXGroup; children = (5C000021 /* InfoPlist.strings */); path = ar.lproj; sourceTree = "<group>"; };
+		5D000002 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				5C000009 /* RootTabView.swift */,
+				5C00000A /* HomeView.swift */,
+				5C00000B /* CompetitionsView.swift */,
+				5C00000C /* CompetitionDetailView.swift */,
+				5C00000D /* LiveView.swift */,
+				5C00000E /* CommunityView.swift */,
+				5C00000F /* AccountView.swift */,
+				5C000010 /* MatchCenterView.swift */,
+				5C000011 /* TeamPlayerPages.swift */,
+				5C000013 /* OnboardingView.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		5D000003 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				5C000007 /* SportsRTL.swift */,
+				5C000008 /* SportsComponents.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		5D000004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				5C000006 /* SportsModels.swift */,
+				5C000005 /* SportsTheme.swift */,
+				5C000002 /* APIClient.swift */,
+				5C000004 /* FontRegistration.swift */,
+				5C000003 /* URLConstants.swift */,
+				5C000012 /* AuthStore.swift */,
+				5C000102 /* SpMatchActivity.swift */,
+				5C000103 /* SpLiveActivityManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		5D000005 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5D000008 /* Fonts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		5D000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5C000040 /* SabqSports.app */,
+				5C000100 /* SabqSportsWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5D000100 /* SabqSportsWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				5C000104 /* SabqSportsWidgetsBundle.swift */,
+				5C000105 /* SpMatchLiveActivity.swift */,
+				5C000101 /* Info.plist */,
+			);
+			path = SabqSportsWidgets;
+			sourceTree = "<group>";
+		};
+		5D000007 /* ar.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				5C000021 /* InfoPlist.strings */,
+			);
+			path = ar.lproj;
+			sourceTree = "<group>";
+		};
+		5D000008 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				5C000022 /* IBMPlexSansArabic-Regular.woff2 */,
+				5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */,
+				5C000024 /* IBMPlexSansArabic-Bold.woff2 */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		5E000000 /* SabqSports */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5F000001 /* Build configuration list for SabqSports */;
-			buildPhases = (5A000001 /* Sources */, 5A000002 /* Resources */);
-			buildRules = ();
-			dependencies = ();
+			buildConfigurationList = 5F000001 /* Build configuration list for PBXNativeTarget "SabqSports" */;
+			buildPhases = (
+				5A000001 /* Sources */,
+				5A000002 /* Resources */,
+				5A000110 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E000200 /* PBXTargetDependency */,
+			);
 			name = SabqSports;
 			productName = SabqSports;
 			productReference = 5C000040 /* SabqSports.app */;
 			productType = "com.apple.product-type.application";
+		};
+		5E000100 /* SabqSportsWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5F000102 /* Build configuration list for PBXNativeTarget "SabqSportsWidgets" */;
+			buildPhases = (
+				5A000101 /* Sources */,
+				5A000102 /* Frameworks */,
+				5A000103 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SabqSportsWidgets;
+			productName = SabqSportsWidgets;
+			productReference = 5C000100 /* SabqSportsWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
 		5E600000 /* Project object */ = {
 			isa = PBXProject;
-			attributes = { LastSwiftUpdateCheck = 1500; LastUpgradeCheck = 1500; TargetAttributes = { 5E000000 = { CreatedOnToolsVersion = 15.0; }; }; };
-			buildConfigurationList = 5F000004 /* Build configuration list for project */;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					5E000000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					5E000100 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 5F000004 /* Build configuration list for PBXProject "SabqSports" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = ar;
 			hasScannedForEncodings = 0;
-			knownRegions = (ar, Base);
+			knownRegions = (
+				ar,
+				Base,
+			);
 			mainGroup = 5D000000;
 			productRefGroup = 5D000006 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (5E000000 /* SabqSports */);
+			targets = (
+				5E000000 /* SabqSports */,
+				5E000100 /* SabqSportsWidgets */,
+			);
 		};
 /* End PBXProject section */
 
@@ -119,21 +265,156 @@
 		5A000002 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (5B000020, 5B000021, 5B000022, 5B000023, 5B000024);
+			files = (
+				5B000020 /* Assets.xcassets in Resources */,
+				5B000021 /* InfoPlist.strings in Resources */,
+				5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */,
+				5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */,
+				5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A000103 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5A000102 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		5A000110 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5B000120 /* SabqSportsWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		5A000001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (5B000001, 5B000002, 5B000003, 5B000004, 5B000005, 5B000006, 5B000007, 5B000008, 5B000009, 5B00000A, 5B00000B, 5B00000C, 5B00000D, 5B00000E, 5B00000F);
+			files = (
+				5B000001 /* SabqSportsApp.swift in Sources */,
+				5B000002 /* APIClient.swift in Sources */,
+				5B000003 /* URLConstants.swift in Sources */,
+				5B000004 /* FontRegistration.swift in Sources */,
+				5B000005 /* SportsTheme.swift in Sources */,
+				5B000006 /* SportsModels.swift in Sources */,
+				5B000007 /* SportsRTL.swift in Sources */,
+				5B000008 /* SportsComponents.swift in Sources */,
+				5B000009 /* RootTabView.swift in Sources */,
+				5B00000A /* HomeView.swift in Sources */,
+				5B00000B /* CompetitionsView.swift in Sources */,
+				5B00000C /* CompetitionDetailView.swift in Sources */,
+				5B00000D /* LiveView.swift in Sources */,
+				5B00000E /* CommunityView.swift in Sources */,
+				5B00000F /* AccountView.swift in Sources */,
+				5B000010 /* MatchCenterView.swift in Sources */,
+				5B000011 /* TeamPlayerPages.swift in Sources */,
+				5B000013 /* OnboardingView.swift in Sources */,
+				5B000012 /* AuthStore.swift in Sources */,
+				5B000102 /* SpMatchActivity.swift in Sources */,
+				5B000103 /* SpLiveActivityManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A000101 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5B000112 /* SpMatchActivity.swift in Sources */,
+				5B000104 /* SabqSportsWidgetsBundle.swift in Sources */,
+				5B000105 /* SpMatchLiveActivity.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		5E000200 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E000100 /* SabqSportsWidgets */;
+			targetProxy = 5E000300 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		5E000300 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E600000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E000100;
+			remoteInfo = SabqSportsWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin XCBuildConfiguration section */
+		5F000100 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "سبق الرياضي";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		5F000101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "سبق الرياضي";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		5F000000 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -155,19 +436,19 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SWIFT_VERSION = 5.0;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -189,78 +470,111 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				VALIDATE_PRODUCT = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SWIFT_VERSION = 5.0;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
-		5F000003 /* Debug (SabqSports) */ = {
+		5F000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
-				"CODE_SIGN_STYLE" = Automatic;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSports/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "سبق الرياضي";
+				INFOPLIST_KEY_CFBundleDisplayName = VARA;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path");
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
-		5F000005 /* Release (SabqSports) */ = {
+		5F000005 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
-				"CODE_SIGN_STYLE" = Automatic;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSports/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "سبق الرياضي";
+				INFOPLIST_KEY_CFBundleDisplayName = VARA;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path");
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5F000001 /* Build configuration list for SabqSports */ = { isa = XCConfigurationList; buildConfigurations = (5F000003, 5F000005); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		5F000004 /* Build configuration list for project */ = { isa = XCConfigurationList; buildConfigurations = (5F000000, 5F000002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		5F000001 /* Build configuration list for PBXNativeTarget "SabqSports" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F000003 /* Debug */,
+				5F000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5F000004 /* Build configuration list for PBXProject "SabqSports" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F000000 /* Debug */,
+				5F000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5F000102 /* Build configuration list for PBXNativeTarget "SabqSportsWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F000100 /* Debug */,
+				5F000101 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 5E600000 /* Project object */;

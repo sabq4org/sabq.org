@@ -174,7 +174,7 @@ fun WcCountdownChips(timestamp: Int) {
             )
             Text(
                 "حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات",
-                color = Color.White,
+                color = WcColors.onDark,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -197,11 +197,11 @@ private fun chip(value: Int, label: String) {
         modifier = Modifier
             .width(54.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.10f))
+            .background(WcColors.chipFill)
             .padding(vertical = 6.dp),
     ) {
-        Text("$value", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-        Text(label, color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 10.sp)
+        Text("$value", color = WcColors.onDark, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        Text(label, color = WcColors.emeraldDeep, fontSize = 10.sp)
     }
 }
 
@@ -214,18 +214,18 @@ fun WcProbabilityBar(fixture: WcFixture, prediction: WcPrediction) {
     val a = prediction.away * 100 / total
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("فوز ${fixture.home.name} $h%", color = WcColors.emerald.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text("تعادل $d%", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text("فوز ${fixture.away.name} $a%", color = WcColors.emerald.copy(alpha = 0.9f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text("فوز ${fixture.home.name} $h%", color = WcColors.emeraldDeep, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text("تعادل $d%", color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text("فوز ${fixture.away.name} $a%", color = WcColors.emeraldDeep, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
         }
         Row(
             modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50)),
         ) {
             Box(modifier = Modifier.weight(h.coerceAtLeast(1).toFloat()).fillMaxHeight().background(WcColors.emerald))
-            Box(modifier = Modifier.weight(d.coerceAtLeast(1).toFloat()).fillMaxHeight().background(Color.White.copy(alpha = 0.55f)))
+            Box(modifier = Modifier.weight(d.coerceAtLeast(1).toFloat()).fillMaxHeight().background(WcColors.onDarkDim.copy(alpha = 0.45f)))
             Box(modifier = Modifier.weight(a.coerceAtLeast(1).toFloat()).fillMaxHeight().background(WcColors.sky))
         }
-        Text("توقعات خوارزمية للاستئناس من مزود البيانات", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp)
+        Text("توقعات خوارزمية للاستئناس من مزود البيانات", color = WcColors.onDarkDim, fontSize = 10.sp)
     }
 }
 
@@ -249,7 +249,7 @@ fun WcSectionHeader(icon: androidx.compose.ui.graphics.vector.ImageVector, title
 @Composable
 fun WcLoading() {
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+        CircularProgressIndicator(color = WcColors.emerald, strokeWidth = 2.dp)
     }
 }
 

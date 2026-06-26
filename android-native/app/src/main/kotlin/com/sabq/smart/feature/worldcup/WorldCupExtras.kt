@@ -196,16 +196,16 @@ private fun RaceEmpty(message: String) {
 // ---------- المنتخبات + قائمة المنتخب ----------
 
 @Composable
-fun TeamsSection(state: WorldCupViewModel.UiState, viewModel: WorldCupViewModel) {
+fun TeamsSection(state: WorldCupViewModel.UiState, onOpenTeam: (WcTeam) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.padding(horizontal = 16.dp)) {
-            WcSectionHeader(Icons.Filled.Groups, "المنتخبات", "48 منتخبًا — اضغط على أي منتخب لعرض قائمته")
+            WcSectionHeader(Icons.Filled.Groups, "المنتخبات", "48 منتخبًا — اضغط على أي منتخب لصفحته المتكاملة")
         }
         if (state.teamsLoading) WcLoading()
         else Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
             state.teams.chunked(4).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    row.forEach { team -> Box(Modifier.weight(1f)) { TeamTile(team) { viewModel.openSquad(team) } } }
+                    row.forEach { team -> Box(Modifier.weight(1f)) { TeamTile(team) { onOpenTeam(team) } } }
                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
@@ -239,7 +239,7 @@ fun SquadDialog(team: WcTeam, squad: WcSquad?, loading: Boolean, onDismiss: () -
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = WcColors.stadiumMid,
+        containerColor = WcColors.sheetBackground,
         dragHandle = { WcSheetHandle() },
     ) {
         ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {

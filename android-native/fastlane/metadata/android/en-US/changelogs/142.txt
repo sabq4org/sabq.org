@@ -1,0 +1,5 @@
+What's new in 10.1.1 — World Cup 2026:
+• Complete player profiles: tap any player in the World Cup section to see their full card — club career, trophies, and live tournament stats
+• New Saudi squad strip in the Green Falcons journey — every national team player one tap away
+• Players are now tappable everywhere: team squads, top scorers, lineups, ratings, and match events
+• Improved layouts with fuller-width cards and sheets

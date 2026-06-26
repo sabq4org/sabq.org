@@ -79,6 +79,18 @@ sabq app ios/test-results/
 sabq app ios/sabq 2026-05-18 08-30-20/
 sabq app ios/**/xcuserdata/
 sabq app ios/**/*.xcuserstate
+# Sports SwiftUI app (sports app ios/) — sources tracked, build state ignored.
+sports app ios/build/
+sports app ios/DerivedData/
+sports app ios/test-results/
+sports app ios/**/xcuserdata/
+sports app ios/**/*.xcuserstate
+# Asian Cup SwiftUI app (asian-cup app ios/) — same rule.
+asian-cup app ios/build/
+asian-cup app ios/DerivedData/
+asian-cup app ios/**/xcuserdata/
+asian-cup app ios/**/*.xcuserstate
+.DS_Store
 .vercel
 .env*
 # Templates stay tracked — only filled-in env files are secret.

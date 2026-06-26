@@ -12,6 +12,8 @@ import com.sabq.smart.data.HomeExtrasRepository
 import com.sabq.smart.data.InsightsRepository
 import com.sabq.smart.data.LoyaltyRepository
 import com.sabq.smart.data.LoyaltySummary
+import com.sabq.smart.data.MuqTopic
+import com.sabq.smart.data.MuqtarabRepository
 import com.sabq.smart.data.Section
 import com.sabq.smart.data.Story
 import com.sabq.smart.data.TodayInsights
@@ -64,6 +66,10 @@ sealed interface HomeFeedUiState {
          *  of season / no articles) — Home then renders nothing in
          *  this slot. */
         val hajjBlock: HajjBlock? = null,
+        /** Featured «مُقترب» topics — rendered as a horizontal strip
+         *  with an "الكل" link to the Muqtarab landing. Empty hides
+         *  the whole block. */
+        val muqtarabTopics: List<MuqTopic> = emptyList(),
     ) : HomeFeedUiState
 }
 
@@ -74,6 +80,7 @@ class HomeFeedViewModel @Inject constructor(
     private val bookmarks: BookmarksStore,
     private val insightsRepo: InsightsRepository,
     private val loyaltyRepo: LoyaltyRepository,
+    private val muqtarabRepo: MuqtarabRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<HomeFeedUiState>(HomeFeedUiState.Loading)
@@ -228,6 +235,7 @@ class HomeFeedViewModel @Inject constructor(
             val calendarJob = async { runCatching { extrasRepo.getCalendarUpcoming() }.getOrDefault(emptyList()) }
             val audioJob = async { runCatching { extrasRepo.getLatestAudioNewsletter() }.getOrNull() }
             val hajjJob = async { runCatching { extrasRepo.getHajjBlock() }.getOrNull() }
+            val muqtarabJob = async { runCatching { muqtarabRepo.getFeaturedTopics(limit = 6) }.getOrDefault(emptyList()) }
             // Auth-required side-fetches. Anonymous users will 401 here;
             // we swallow that and the personal-journey block stays
             // hidden because [journeyInsights] remains null.
@@ -245,6 +253,7 @@ class HomeFeedViewModel @Inject constructor(
             val calendar = calendarJob.await().take(3)
             val audioNewsletter = audioJob.await()
             val hajjBlock = hajjJob.await()
+            val muqtarabTopics = muqtarabJob.await()
             val insights = insightsJob.await()
             val loyalty = loyaltyJob.await()
 
@@ -258,6 +267,7 @@ class HomeFeedViewModel @Inject constructor(
                         calendar = calendar,
                         audioNewsletter = audioNewsletter,
                         hajjBlock = hajjBlock,
+                        muqtarabTopics = muqtarabTopics,
                         journeyInsights = insights,
                         loyaltySummary = loyalty,
                     )

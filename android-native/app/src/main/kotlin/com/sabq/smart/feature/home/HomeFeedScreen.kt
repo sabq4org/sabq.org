@@ -113,6 +113,8 @@ fun HomeFeedScreen(
     onStoryClick: (com.sabq.smart.data.Story) -> Unit = {},
     onAudioNewslettersClick: () -> Unit = {},
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit = {},
+    onMuqtarabAllClick: () -> Unit = {},
+    onMuqtarabTopicClick: (angleSlug: String, topicSlug: String) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
@@ -158,6 +160,8 @@ fun HomeFeedScreen(
                 onStoryClick = onStoryClick,
                 onAudioNewslettersClick = onAudioNewslettersClick,
                 onHajjArticleClick = onHajjArticleClick,
+                onMuqtarabAllClick = onMuqtarabAllClick,
+                onMuqtarabTopicClick = onMuqtarabTopicClick,
                 onToggleDarkMode = {
                     // Mirrors iOS: tapping the header sun/moon flips the
                     // user's explicit darkMode flag. If the user was in
@@ -196,6 +200,8 @@ private fun LoadedFeed(
     onStoryClick: (com.sabq.smart.data.Story) -> Unit,
     onAudioNewslettersClick: () -> Unit,
     onHajjArticleClick: (com.sabq.smart.data.HajjArticle) -> Unit,
+    onMuqtarabAllClick: () -> Unit,
+    onMuqtarabTopicClick: (angleSlug: String, topicSlug: String) -> Unit,
     onToggleDarkMode: () -> Unit,
     onEndReached: () -> Unit,
     onRefresh: () -> Unit,
@@ -313,18 +319,6 @@ private fun LoadedFeed(
             }
         }
 
-        // Opinions preview — horizontal rail of up to 5 cards +
-        // "الكل" link to the full Opinions list.
-        if (state.opinions.isNotEmpty()) {
-            item {
-                OpinionsPreviewRail(
-                    opinions = state.opinions,
-                    onArticleClick = onArticleClick,
-                    onSeeAllClick = onOpinionsAllClick,
-                )
-            }
-        }
-
         // Trending preview — top-3 list inside a SurfaceCard.
         if (state.trending.isNotEmpty()) {
             item {
@@ -399,6 +393,34 @@ private fun LoadedFeed(
                     style = SabqTheme.typography.meta,
                     color = SabqTheme.colors.tertiaryInk,
                     modifier = Modifier.fillMaxWidth().padding(8.dp),
+                )
+            }
+        }
+
+        // مقالات الرأي و«مُقترب» تُعرضان أسفل «آخر الأخبار» — مطابقة iOS
+        // (HomeFeedView.swift: opinionsPreviewSection ثم MuqtarabHomeStrip
+        // بعد latestArticlesSection).
+
+        // Opinions preview — horizontal rail of up to 5 cards +
+        // "الكل" link to the full Opinions list.
+        if (state.opinions.isNotEmpty()) {
+            item {
+                OpinionsPreviewRail(
+                    opinions = state.opinions,
+                    onArticleClick = onArticleClick,
+                    onSeeAllClick = onOpinionsAllClick,
+                )
+            }
+        }
+
+        // مُقترب — featured analytical topics strip + "الكل" link.
+        // Hidden entirely when the backend returns no featured topics.
+        if (state.muqtarabTopics.isNotEmpty()) {
+            item {
+                com.sabq.smart.feature.muqtarab.MuqtarabHomeStrip(
+                    topics = state.muqtarabTopics,
+                    onAllClick = onMuqtarabAllClick,
+                    onTopicClick = onMuqtarabTopicClick,
                 )
             }
         }

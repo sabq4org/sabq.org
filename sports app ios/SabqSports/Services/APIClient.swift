@@ -76,6 +76,73 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
+    /// POST بجسم JSON — للمصادقة والمتابعة (يطبّق Bearer إن وُجد).
+    func post<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
+    /// طلب بلا قراءة جسم الاستجابة (POST/DELETE للمتابعة). jsonBody مُرمَّز مسبقًا.
+    @discardableResult
+    func send(
+        method: String,
+        path: String,
+        jsonBody: Data? = nil,
+        query: [String: String] = [:],
+        apiRoot: String? = nil
+    ) async throws -> Int {
+        let url = try buildURL(path: path, query: query, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        applyHeaders(&request)
+        if let jsonBody { request.httpBody = jsonBody }
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        try ensureSuccess(http, data: data)
+        return http.statusCode
+    }
+
+    /// طلب بأي HTTP method يقرأ ويفكّ جسم الاستجابة (PUT للتفضيلات).
+    func requestJSON<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        method: String,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
+    static func deviceInfo() -> SpDeviceInfo {
+        let b = Bundle.main
+        let v = (b.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (b.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+        return SpDeviceInfo(
+            platform: "ios",
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            appVersion: "\(v) (\(build))",
+            deviceName: "iPhone",
+            deviceId: nil
+        )
+    }
+
     // MARK: - Internals
 
     private func buildURL(path: String, query: [String: String] = [:], apiRoot: String? = nil) throws -> URL {
