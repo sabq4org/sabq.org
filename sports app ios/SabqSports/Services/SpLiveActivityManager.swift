@@ -135,15 +135,9 @@ final class SpLiveActivityManager {
 
     private func makeState(from f: SpFixture) -> SpMatchActivityAttributes.ContentState {
         var minute = ""
-        var clockStart: Int? = nil
         if f.status.live, let m = f.status.elapsed, m > 0 {
-            let extraM = f.status.extra ?? 0
-            let extra = extraM > 0 ? "+\(extraM)" : ""
+            let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
             minute = "\(m)\(extra)'"
-            // مرجع العدّاد الحيّ — يتوقّف في الاستراحة (لا نضبطه حينها).
-            if !isHalftime(f.status.label) {
-                clockStart = Int(Date().timeIntervalSince1970) - (m * 60 + extraM * 60)
-            }
         }
         return .init(
             homeScore: f.goals.home ?? 0,
@@ -152,13 +146,8 @@ final class SpLiveActivityManager {
             statusLabel: f.status.finished ? "انتهت" : f.status.label,
             isLive: f.status.live,
             isFinished: f.status.finished,
-            lastEvent: nil,
-            clockStartEpoch: clockStart
+            lastEvent: nil
         )
-    }
-
-    private func isHalftime(_ label: String) -> Bool {
-        label.contains("استراحة") || label.contains("بين الشوطين")
     }
 
     /// تاريخ تقادم الحالة: قصير أثناء اللعب؛ وحتى الانطلاق+دقيقتين للمباراة القادمة

@@ -124,20 +124,6 @@ function lastEventText(detail: WcMatchDetail): string | null {
   return `${icon} ${minute} ${who}`;
 }
 
-// حالات تتوقّف فيها الكرة فلا يتحرّك العدّاد الحيّ (استراحة/ترجيح/انتهاء).
-const CLOCK_PAUSED_STATES = new Set(["HT", "BREAK", "PENALTIES", "INPLAY_PENALTIES"]);
-
-/** مرجع بدء توقيت الشوط: now − الدقائق المنقضية (بالثواني). غائب حين تتوقّف الكرة. */
-function clockStartEpochFor(
-  isLive: boolean,
-  elapsedMinutes: number,
-  stateDevName: string | null,
-): number | undefined {
-  if (!isLive || elapsedMinutes <= 0) return undefined;
-  if (stateDevName && CLOCK_PAUSED_STATES.has(stateDevName)) return undefined;
-  return Math.floor(Date.now() / 1000) - elapsedMinutes * 60;
-}
-
 function buildContentState(
   detail: WcMatchDetail,
   live?: WcLiveScore | null,
@@ -151,11 +137,6 @@ function buildContentState(
     isLive: f.status.live,
     isFinished: f.status.finished,
     lastEvent: lastEventText(detail),
-    clockStartEpoch: clockStartEpochFor(
-      f.status.live,
-      (f.status.elapsed ?? 0) + (f.status.extra ?? 0),
-      null,
-    ),
   };
   // تجاوز لحظي من SportMonks للنتيجة/الدقيقة/الحالة (يكسر تأخّر كاش API-Football).
   // lastEvent يبقى من API-Football (عربي مُعرَّب) — ثانوي ومقبول تأخّره قليلًا.
@@ -168,17 +149,9 @@ function buildContentState(
       statusLabel: LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel,
       isLive: live.live,
       isFinished: live.finished || base.isFinished,
-      clockStartEpoch: clockStartEpochFor(live.live, live.minute, live.stateDevName),
     };
   }
   return base;
-}
-
-/** بصمة التغيّر — تستبعد clockStartEpoch (يتغيّر كل دفعة) كي لا نُغرق APNs.
- *  العدّاد يتحرّك ذاتيًّا على الجهاز؛ الدفع يحدث فقط عند تغيّر النتيجة/الدقيقة/الحالة. */
-function contentHash(state: LiveActivityContentState): string {
-  const { clockStartEpoch, ...rest } = state;
-  return JSON.stringify(rest);
 }
 
 function staleDateFor(detail: WcMatchDetail): number {
@@ -259,7 +232,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
 
     const state = buildContentState(detail, live);
-    const hash = contentHash(state);
+    const hash = JSON.stringify(state);
     const finished = state.isFinished;
     const staleDate = staleDateFor(detail);
     const nowSec = Math.floor(Date.now() / 1000);

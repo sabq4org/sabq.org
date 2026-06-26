@@ -285,9 +285,6 @@ export interface LiveActivityContentState {
   isLive: boolean;
   isFinished: boolean;
   lastEvent: string | null;
-  /** مرجع بدء توقيت الشوط (epoch ثوانٍ) — يعرضه iOS كعدّاد حيّ ذاتي الحركة.
-   *  غائب في الاستراحة/قبل البدء/الانتهاء كي يتوقّف العدّاد. */
-  clockStartEpoch?: number;
 }
 
 export interface LiveActivityUpdateOptions {

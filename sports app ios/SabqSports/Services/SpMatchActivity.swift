@@ -91,14 +91,10 @@ struct SpMatchActivityAttributes: ActivityAttributes {
         var isFinished: Bool
         /// آخر حدث بارز للعرض السريع: «⚽ 23' محمد» أو «🟨 41' سالم».
         var lastEvent: String?
-        /// مرجع بدء توقيت الشوط (epoch ثوانٍ): الويدجت يعرض عدّادًا حيًّا يتحرّك
-        /// ذاتيًّا من هذه اللحظة دون انتظار دفعة. يُضبط فقط حين تكون الكرة جارية
-        /// (لا في الاستراحة/الانتهاء) — كل دفعة تعيد ضبطه ليتزامن مع الدقيقة الحقيقية.
-        var clockStartEpoch: Int?
 
         public init(homeScore: Int = 0, awayScore: Int = 0, minute: String = "",
                     statusLabel: String = "", isLive: Bool = false, isFinished: Bool = false,
-                    lastEvent: String? = nil, clockStartEpoch: Int? = nil) {
+                    lastEvent: String? = nil) {
             self.homeScore = homeScore
             self.awayScore = awayScore
             self.minute = minute
@@ -106,7 +102,6 @@ struct SpMatchActivityAttributes: ActivityAttributes {
             self.isLive = isLive
             self.isFinished = isFinished
             self.lastEvent = lastEvent
-            self.clockStartEpoch = clockStartEpoch
         }
     }
 
