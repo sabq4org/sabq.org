@@ -369,8 +369,12 @@ const SportsLive = lazy(() => retryImport(() => import("@/pages/SportsLive")));
 const SportsCompetition = lazy(() => retryImport(() => import("@/pages/SportsCompetition")));
 const SportsTeam = lazy(() => retryImport(() => import("@/pages/SportsTeam")));
 const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")));
+// صفحة المباراة المستقلة (مركز مباراة كامل قابل للمشاركة) — /sports/match/:id
+const SportsMatch = lazy(() => retryImport(() => import("@/pages/SportsMatch")));
 // مركز انتقالات الدوري السعودي — موجز موحّد للصفقات على /sports/transfers
 const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTransfers")));
+// بوابة رياضية متخصصة بتصميم مستقل على /sports10
+const Sports10 = lazy(() => retryImport(() => import("@/pages/Sports10")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -879,10 +883,13 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
+        {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}
+        <Route path="/sports10">{() => <LazyRoute component={Sports10} />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
         <Route path="/sports/player/:id">{() => <LazyRoute component={SportsPlayer} />}</Route>
+        <Route path="/sports/match/:id">{() => <LazyRoute component={SportsMatch} />}</Route>
         <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         <Route path="/sports/live">{() => <LazyRoute component={SportsLive} />}</Route>
         <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>

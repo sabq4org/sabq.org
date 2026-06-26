@@ -7,7 +7,7 @@
 import { useEffect } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight, ArrowRight, Cake, MapPin, Ruler, Stethoscope, TrendingUp, Trophy, User, Weight } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Cake, Flame, MapPin, Ruler, Stethoscope, TrendingUp, Trophy, User, Weight } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,12 +32,21 @@ interface SpPlayerTransfer {
   toId: number; to: string; toLogo: string;
 }
 interface SpPlayerInjury { date: string; type: string; reason: string; team: string; competition: string; }
+interface SpMarketPoint { time: number; value: number; }
+interface SpPlayerMarket { available: boolean; value: number | null; currency: string; peak: number | null; history: SpMarketPoint[]; }
+interface SpFormMatch {
+  date: string; opponent: string; opponentLogo: string;
+  homeAway: "home" | "away"; result: "W" | "D" | "L";
+  scoreFor: number; scoreAgainst: number; xg: number | null; goals: number; rating: number | null; league: string;
+}
+interface SpPlayerForm { available: boolean; matches: SpFormMatch[]; }
 interface SpPlayerCard {
   id: number; name: string; fullName: string | null; photo: string;
   position: string; number: number | null; age: number | null;
   birthDate: string | null; birthPlace: string | null; nationality: string | null;
   height: number | null; weight: number | null;
   seasonStats: SpPlayerSeasonStats[]; career: SpPlayerCareerStop[]; trophies: SpPlayerTrophy[];
+  currentTeam?: { id: number; name: string; logo: string } | null;
   history?: SpPlayerSeasonPoint[]; transfers?: SpPlayerTransfer[]; injuries?: SpPlayerInjury[];
 }
 
@@ -111,6 +120,127 @@ function PerformanceChart({ points }: { points: SpPlayerSeasonPoint[] }) {
       <div className="flex items-center justify-center gap-4 mt-4 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-primary" /> أهداف</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-400" /> صناعة</span>
+      </div>
+    </Card>
+  );
+}
+
+// القيمة السوقية: صياغة مختصرة (45M / 800K) بعملة المزوّد.
+function fmtMoney(value: number, currency: string): string {
+  const cur = currency || "€";
+  if (value >= 1_000_000) return `${cur}${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (value >= 1_000) return `${cur}${Math.round(value / 1_000)}K`;
+  return `${cur}${value}`;
+}
+
+const marketDateFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "short", year: "numeric" });
+
+// القيمة السوقية للاعب + منحنى تطوّرها (TheSports) — sparkline SVG خفيف بلا اعتمادية.
+function MarketValueCard({ market }: { market: SpPlayerMarket }) {
+  const pts = market.history;
+  const hasTrend = pts.length > 1;
+  const max = Math.max(1, ...pts.map((p) => p.value));
+  const min = Math.min(...pts.map((p) => p.value));
+  const W = 260;
+  const H = 56;
+  const path = hasTrend
+    ? pts
+        .map((p, i) => {
+          const x = (i / (pts.length - 1)) * W;
+          const y = H - ((p.value - min) / Math.max(1, max - min)) * (H - 6) - 3;
+          return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(" ")
+    : "";
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp className="w-5 h-5 text-emerald-500" />
+        <h2 className="font-bold text-lg">القيمة السوقية</h2>
+      </div>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          {market.value != null && (
+            <div className="text-3xl font-black text-foreground tabular-nums" dir="ltr">{fmtMoney(market.value, market.currency)}</div>
+          )}
+          {market.peak != null && market.peak !== market.value && (
+            <div className="text-xs text-muted-foreground mt-1">
+              الذروة <span className="font-bold tabular-nums" dir="ltr">{fmtMoney(market.peak, market.currency)}</span>
+            </div>
+          )}
+        </div>
+        {hasTrend && (
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="max-w-full overflow-visible">
+            <path d={path} fill="none" stroke="rgb(16 185 129)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            <circle
+              cx={W}
+              cy={H - ((pts[pts.length - 1].value - min) / Math.max(1, max - min)) * (H - 6) - 3}
+              r={3}
+              fill="rgb(16 185 129)"
+            />
+          </svg>
+        )}
+      </div>
+      {hasTrend && (
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 tabular-nums" dir="ltr">
+          <span>{marketDateFmt.format(new Date(pts[0].time * 1000))}</span>
+          <span>{marketDateFmt.format(new Date(pts[pts.length - 1].time * 1000))}</span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// الفورمة الأخيرة: آخر مباريات اللاعب (نتيجة/تقييم/xG) من SportMonks.
+function ratingPillColor(r: number): string {
+  if (r >= 7.5) return "bg-emerald-500 text-white";
+  if (r >= 6.5) return "bg-amber-400 text-amber-950";
+  return "bg-zinc-400 text-white";
+}
+const RESULT_AR: Record<"W" | "D" | "L", { label: string; cls: string }> = {
+  W: { label: "ف", cls: "bg-emerald-500 text-white" },
+  D: { label: "ت", cls: "bg-zinc-400 text-white" },
+  L: { label: "خ", cls: "bg-red-500 text-white" },
+};
+const formDateFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "short" });
+function fmtFormDate(iso: string): string {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? formDateFmt.format(t) : "";
+}
+
+function RecentFormCard({ matches }: { matches: SpFormMatch[] }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Flame className="w-5 h-5 text-orange-500" />
+        <h2 className="font-bold text-lg">الفورمة الأخيرة</h2>
+        <span className="text-[11px] text-muted-foreground">آخر {matches.length} مباريات</span>
+      </div>
+      <div className="space-y-2">
+        {matches.map((m, i) => (
+          <div key={`${m.date}-${i}`} className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+            <span className={`flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-black shrink-0 ${RESULT_AR[m.result].cls}`}>
+              {RESULT_AR[m.result].label}
+            </span>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {m.opponentLogo && <img src={m.opponentLogo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground truncate">
+                  <span className="text-[10px] text-muted-foreground ml-1">{m.homeAway === "home" ? "ضد" : "على"}</span>
+                  {m.opponent}
+                </div>
+                <div className="text-[10px] text-muted-foreground tabular-nums">{fmtFormDate(m.date)} · <span dir="ltr">{m.scoreFor}-{m.scoreAgainst}</span></div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {m.goals > 0 && <span className="text-[11px] font-bold text-foreground" title="أهداف">⚽ {m.goals}</span>}
+              {m.xg != null && m.xg > 0 && <span className="text-[10px] text-muted-foreground tabular-nums" title="الأهداف المتوقّعة">xG {m.xg}</span>}
+              {m.rating != null && (
+                <span className={`px-1.5 py-0.5 rounded text-[11px] font-black tabular-nums ${ratingPillColor(m.rating)}`}>{m.rating.toFixed(1)}</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </Card>
   );
@@ -190,6 +320,20 @@ export default function SportsPlayer() {
     staleTime: 10 * 60_000,
   });
 
+  // القيمة السوقية (TheSports) — منفصلة وغير حاجبة, أفضل جهد.
+  const { data: market } = useQuery<SpPlayerMarket>({
+    queryKey: [`/api/sports/player/${id}/market`],
+    enabled: Number.isFinite(id) && id > 0 && !!data,
+    staleTime: 30 * 60_000,
+  });
+
+  // الفورمة الأخيرة (SportMonks) — منفصلة وغير حاجبة، أفضل جهد.
+  const { data: form } = useQuery<SpPlayerForm>({
+    queryKey: [`/api/sports/player/${id}/form`],
+    enabled: Number.isFinite(id) && id > 0 && !!data,
+    staleTime: 30 * 60_000,
+  });
+
   useEffect(() => {
     document.title = data?.name ? `${data.name} | الرياضة - سبق` : "اللاعب | الرياضة - سبق";
   }, [data?.name]);
@@ -197,6 +341,9 @@ export default function SportsPlayer() {
 
   const notFound = isError || (!isLoading && !data);
   const isGk = data?.position?.includes("حراسة");
+  // النادي الحالي = أحدث ناد في المسيرة (تحسبه الخدمة، يستبعد المنتخب) — أدقّ بعد
+  // الانتقالات من «أكثر البطولات مشاركةً». تراجع لأكثر البطولات مشاركةً عند غيابه.
+  const currentClub = data?.currentTeam ?? data?.seasonStats?.[0]?.team ?? null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
@@ -231,6 +378,16 @@ export default function SportsPlayer() {
                 <div className="min-w-0">
                   <h1 className="text-2xl sm:text-3xl font-black text-foreground">{data.name}</h1>
                   {data.fullName && <p className="text-sm text-muted-foreground mt-0.5">{data.fullName}</p>}
+                  {/* النادي الحالي — أكثر بطولة مشاركةً هذا الموسم (مصدره seasonStats). */}
+                  {currentClub && (
+                    <Link
+                      href={currentClub.id ? `/sports/team/${currentClub.id}` : "#"}
+                      className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-foreground hover:text-primary transition-colors"
+                    >
+                      {currentClub.logo && <img src={currentClub.logo} alt="" className="w-6 h-6 object-contain" loading="lazy" />}
+                      {currentClub.name}
+                    </Link>
+                  )}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     {data.position && <Badge variant="secondary">{data.position}</Badge>}
                     {data.number != null && <Badge variant="outline" className="tabular-nums">#{data.number}</Badge>}
@@ -248,6 +405,12 @@ export default function SportsPlayer() {
               <BioItem icon={<Ruler className="w-4 h-4" />} label="الطول" value={data.height != null ? `${data.height} سم` : ""} />
               <BioItem icon={<Weight className="w-4 h-4" />} label="الوزن" value={data.weight != null ? `${data.weight} كجم` : ""} />
             </div>
+
+            {/* القيمة السوقية (TheSports) — تظهر فقط عند توفّرها */}
+            {market?.available && market.value != null && <MarketValueCard market={market} />}
+
+            {/* الفورمة الأخيرة (SportMonks) — تظهر فقط عند توفّرها */}
+            {form?.available && form.matches.length > 0 && <RecentFormCard matches={form.matches} />}
 
             {/* تطوّر الأداء (الموجة 2) */}
             {data.history && data.history.length > 1 && <PerformanceChart points={data.history} />}

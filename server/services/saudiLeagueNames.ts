@@ -480,6 +480,52 @@ export function localizeSplInjuryType(type: string | null | undefined): string {
   return SPL_INJURY_TYPE_AR[raw.toLowerCase()] ?? raw;
 }
 
+// سبب الإصابة من TheSports (team/injury/list) نصّ إنجليزي حُرّ (مثل "calf muscle
+// injury" / "knee surgery") — نعرّبه أفضل جهد. غير المعروف يبقى كما ورد بدل تشويهه.
+const SPL_INJURY_PART_AR: Record<string, string> = {
+  knee: "الركبة",
+  hamstring: "أوتار الركبة الخلفية",
+  ankle: "الكاحل",
+  thigh: "الفخذ",
+  calf: "عضلة الساق",
+  "calf muscle": "عضلة الساق",
+  groin: "أعلى الفخذ",
+  muscle: "عضلية",
+  back: "الظهر",
+  shoulder: "الكتف",
+  foot: "القدم",
+  hip: "الورك",
+  achilles: "وتر العرقوب",
+  head: "الرأس",
+  rib: "الأضلاع",
+  wrist: "المعصم",
+  toe: "إصبع القدم",
+  finger: "الإصبع",
+  neck: "الرقبة",
+  elbow: "المرفق",
+};
+
+const SPL_INJURY_WHOLE_AR: Record<string, string> = {
+  illness: "وعكة صحية",
+  suspended: "إيقاف",
+  suspension: "إيقاف",
+  knock: "رضّة",
+  fatigue: "إجهاد",
+  "unknown injury": "إصابة غير محدّدة",
+  "knee injury": "إصابة في الركبة",
+};
+
+export function localizeSplInjuryReason(en: string | null | undefined): string | null {
+  if (!en) return null;
+  const low = en.toLowerCase().trim();
+  if (!low) return null;
+  if (SPL_INJURY_WHOLE_AR[low]) return SPL_INJURY_WHOLE_AR[low];
+  const m = low.match(/^(.+?)\s+(injury|problem|strain|knock|surgery)$/);
+  if (m && SPL_INJURY_PART_AR[m[1]]) return `إصابة في ${SPL_INJURY_PART_AR[m[1]]}`;
+  if (SPL_INJURY_PART_AR[low]) return `إصابة في ${SPL_INJURY_PART_AR[low]}`;
+  return en; // غير معروف — نُبقي الإنجليزي بدل تشويهه
+}
+
 // ---------- أسماء اللاعبين والمدربين (تعريب بالمعرّف) ----------
 //
 // المزوّد يعيد أسماء اللاعبين بصيغ مختلفة بين النقاط ("R. Mahrez" في التشكيلة،

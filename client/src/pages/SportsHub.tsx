@@ -30,8 +30,11 @@ import {
   Clock,
   Flame,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Search,
   X,
+  Maximize2,
   ChevronLeft,
   ChevronRight,
   Crown,
@@ -50,6 +53,7 @@ import {
   Cloud,
   Droplets,
   Activity,
+  Tv,
 } from "lucide-react";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Header } from "@/components/Header";
@@ -79,6 +83,7 @@ export interface SpStandingRow {
   rank: number; team: SpTeam; played: number; win: number; draw: number; lose: number;
   goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string | null;
   home?: SpStandingSplit | null; away?: SpStandingSplit | null;
+  trend?: "up" | "down" | "same" | null;
   live?: boolean;
 }
 export interface SpScorer {
@@ -118,6 +123,16 @@ interface SpMatchRatings {
 interface SpMatchStory { text: string; generatedAt: number; live: boolean; }
 interface SpMatchPreview { text: string; generatedAt: number; }
 // إثراءات SportMonks (سعودي/آسيا) — /api/sports/match/:id/{xg,pressure,facts}
+interface SpOverUnderLine { line: number; over: number; under: number; }
+interface SpCorrectScore { score: string; prob: number; }
+interface SpForecast {
+  available: boolean;
+  fulltime: { home: number; draw: number; away: number } | null;
+  btts: { yes: number; no: number } | null;
+  doubleChance: { homeOrDraw: number; awayOrDraw: number; homeOrAway: number } | null;
+  goals: SpOverUnderLine[];
+  correctScores: SpCorrectScore[];
+}
 interface SpXgSide { xg: number; xgot: number; }
 interface SpXgPlayer { name: string; location: "home" | "away"; xg: number; }
 interface SpXg { available: boolean; home: SpXgSide; away: SpXgSide; topPlayers: SpXgPlayer[]; }
@@ -130,7 +145,8 @@ interface SpCommentary { available: boolean; live: boolean; items: SpCommentaryI
 interface SpWeather { type: string; temp: number | null; description: string; icon: string; humidity: string | null; }
 interface SpFactStat { key: string; label: string; home: string; away: string; }
 interface SpEventDetail { minute: number; location: "home" | "away"; klass: string; detail: string; }
-interface SpFacts { available: boolean; statistics: SpFactStat[]; weather: SpWeather | null; eventDetails: SpEventDetail[]; halftime: { home: number; away: number } | null; }
+interface SpAbsentee { name: string; location: "home" | "away"; reason: string; }
+interface SpFacts { available: boolean; statistics: SpFactStat[]; weather: SpWeather | null; absentees?: SpAbsentee[]; eventDetails: SpEventDetail[]; halftime: { home: number; away: number } | null; }
 interface SpFollow { id: string; kind: "team" | "competition"; refId: string; refName: string; refLogo: string | null; notify: boolean; }
 export type SpCompetitionCategory = "saudi" | "gulf" | "arab" | "european" | "world";
 export type SpCompetitionStatus = "ongoing" | "upcoming" | "finished" | "unknown";
@@ -890,8 +906,13 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
                 return (
                   <tr key={r.team.id} className={`${rowTone} transition-colors hover:bg-primary/[0.045]`}>
                     <td className="border-b border-border/35 py-1.5 px-1.5 text-center sm:py-2 sm:px-2">
-                      <span className={`inline-grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-black tabular-nums ${positionTone}`}>
-                        {pos}
+                      <span className="inline-flex items-center justify-center gap-1">
+                        <span className={`inline-grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-black tabular-nums ${positionTone}`}>
+                          {pos}
+                        </span>
+                        {scope === "all" && r.trend === "up" && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label="صاعد" />}
+                        {scope === "all" && r.trend === "down" && <ArrowDown className="h-3 w-3 text-rose-500" aria-label="هابط" />}
+                        {scope === "all" && r.trend === "same" && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت" />}
                       </span>
                     </td>
                     <td className="border-b border-border/35 py-1.5 px-3 sm:py-2">
@@ -1205,6 +1226,135 @@ function PredictionBar({ prediction, homeName, awayName }: { prediction: SpPredi
         <div className="bg-amber-400" style={{ width: `${awayPct}%` }} />
       </div>
       {advice && <div className="text-[11px] text-muted-foreground mt-2 text-center">التوصية: <span className="font-semibold text-foreground">{advice}</span></div>}
+    </div>
+  );
+}
+
+// شريط مزدوج (نِسبتان) للتوقّعات — يُظهر النسبة داخل الشريط إن اتّسعت.
+function ForecastSplit({ title, left, right }: {
+  title: string;
+  left: { label: string; value: number; color: string };
+  right: { label: string; value: number; color: string };
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-bold text-muted-foreground">{title}</p>
+      <div className="flex h-6 w-full overflow-hidden rounded-lg text-[11px] font-bold text-white" dir="rtl">
+        <div className="flex items-center justify-center" style={{ width: `${left.value}%`, backgroundColor: left.color }}>
+          {left.value >= 16 ? `${left.value}%` : ""}
+        </div>
+        <div className="flex items-center justify-center" style={{ width: `${right.value}%`, backgroundColor: right.color }}>
+          {right.value >= 16 ? `${right.value}%` : ""}
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>{left.label} <span className="font-bold tabular-nums text-foreground">{left.value}%</span></span>
+        <span>{right.label} <span className="font-bold tabular-nums text-foreground">{right.value}%</span></span>
+      </div>
+    </div>
+  );
+}
+
+function OverUnderRow({ ou }: { ou: SpOverUnderLine }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="font-bold tabular-nums shrink-0 w-9" dir="ltr">{ou.line}</span>
+      <div className="flex h-5 flex-1 overflow-hidden rounded-md text-[10px] font-bold text-white" dir="rtl">
+        <div className="flex items-center justify-center bg-emerald-500" style={{ width: `${ou.over}%` }}>
+          {ou.over >= 20 ? `${ou.over}%` : ""}
+        </div>
+        <div className="flex items-center justify-center bg-zinc-400" style={{ width: `${ou.under}%` }}>
+          {ou.under >= 20 ? `${ou.under}%` : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// تبويب التوقّعات الاحتمالية (SportMonks): نتيجة المباراة + فرصة مزدوجة + الفريقان
+// يسجلان + مجموع الأهداف + أرجح النتائج. خوارزمية المزود، للاستئناس لا ترجيحًا.
+function ForecastView({ data, homeName, awayName }: { data: SpForecast; homeName: string; awayName: string }) {
+  const ft = data.fulltime;
+  const ftRows = ft
+    ? [
+        { label: `فوز ${homeName}`, value: ft.home, color: "bg-primary" },
+        { label: "التعادل", value: ft.draw, color: "bg-muted-foreground/40" },
+        { label: `فوز ${awayName}`, value: ft.away, color: "bg-amber-400" },
+      ]
+    : [];
+  return (
+    <div className="space-y-5 lg:max-w-2xl lg:mx-auto">
+      {ftRows.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold text-muted-foreground">نتيجة المباراة</p>
+          {ftRows.map((row) => (
+            <div key={row.label} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold text-foreground">{row.label}</span>
+                <span className="font-black tabular-nums text-foreground">{row.value}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className={`h-full rounded-full ${row.color}`} style={{ width: `${row.value}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.doubleChance && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">الفرصة المزدوجة</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: `${homeName} أو تعادل`, value: data.doubleChance.homeOrDraw },
+              { label: "بلا تعادل", value: data.doubleChance.homeOrAway },
+              { label: `${awayName} أو تعادل`, value: data.doubleChance.awayOrDraw },
+            ].map((c) => (
+              <div key={c.label} className="rounded-lg bg-muted/50 px-1.5 py-2">
+                <p className="text-base font-black tabular-nums text-foreground">{c.value}%</p>
+                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{c.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.btts && (
+        <ForecastSplit
+          title="الفريقان يسجلان"
+          left={{ label: "نعم", value: data.btts.yes, color: "rgb(16 185 129)" }}
+          right={{ label: "لا", value: data.btts.no, color: "rgb(161 161 170)" }}
+        />
+      )}
+
+      {data.goals.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">
+            مجموع الأهداف — <span className="text-emerald-600">أكثر</span> / <span className="text-zinc-500">أقل</span> من
+          </p>
+          <div className="space-y-1.5">
+            {data.goals.map((ou) => <OverUnderRow key={ou.line} ou={ou} />)}
+          </div>
+        </div>
+      )}
+
+      {data.correctScores.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-bold text-muted-foreground">أرجح النتائج <span className="font-normal">(الرقم الأول للمضيف)</span></p>
+          <div className="flex flex-wrap gap-2">
+            {data.correctScores.map((cs) => (
+              <div key={cs.score} className="rounded-lg bg-muted/50 px-2.5 py-1.5 text-center min-w-[3.5rem]">
+                <p className="text-sm font-black tabular-nums text-foreground" dir="ltr">{cs.score}</p>
+                <p className="text-[10px] text-muted-foreground tabular-nums">{cs.prob}%</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground text-center pt-1">
+        توقّعات خوارزمية من مزوّد البيانات — للاستئناس وليست ترجيحًا تحريريًا
+      </p>
     </div>
   );
 }
@@ -1525,6 +1675,48 @@ function SpWeatherChip({ w }: { w: SpWeather }) {
   );
 }
 
+// غيابات المباراة (إصابة/إيقاف) من SportMonks — تظهر للمباراة القادمة في تبويب «معاينة».
+function AbsenteesCard({ absentees, homeName, awayName, homeLogo, awayLogo }: {
+  absentees: SpAbsentee[]; homeName: string; awayName: string; homeLogo?: string; awayLogo?: string;
+}) {
+  const home = absentees.filter((a) => a.location === "home");
+  const away = absentees.filter((a) => a.location === "away");
+  const side = (name: string, logo: string | undefined, list: SpAbsentee[]) => (
+    <div className="min-w-0 flex-1">
+      <div className="mb-2 flex items-center gap-2">
+        {logo && <img src={logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />}
+        <span className="truncate text-sm font-bold text-foreground">{name}</span>
+      </div>
+      {list.length === 0 ? (
+        <p className="text-xs text-muted-foreground">لا غيابات معروفة</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {list.map((a, i) => (
+            <li key={`${a.name}-${i}`} className="flex items-center gap-1.5 text-xs">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />
+              <span className="font-semibold text-foreground truncate">{a.name}</span>
+              {a.reason && <span className="text-muted-foreground shrink-0">· {a.reason}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+  return (
+    <div className="rounded-xl border border-border bg-card p-3.5">
+      <div className="mb-3 flex items-center gap-2">
+        <Plus className="h-4 w-4 rotate-45 text-rose-500" />
+        <span className="text-sm font-black text-foreground">غيابات المباراة</span>
+      </div>
+      <div className="flex gap-4">
+        {side(homeName, homeLogo, home)}
+        <div className="w-px shrink-0 bg-border" />
+        {side(awayName, awayLogo, away)}
+      </div>
+    </div>
+  );
+}
+
 function SpPressureView({ data, homeName, awayName, live }: { data?: SpPressure; homeName: string; awayName: string; live: boolean }) {
   const points = Array.isArray(data?.points) ? data!.points : [];
   if (points.length === 0) {
@@ -1632,7 +1824,7 @@ function SpCommentaryView({ data, live }: { data?: SpCommentary; live: boolean }
   );
 }
 
-export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+export function MatchCenter({ id, scrollable = false }: { id: number | null; scrollable?: boolean }) {
   const { data, isLoading } = useQuery<SpMatchDetail>({
     queryKey: [`/api/sports/match/${id}`], enabled: id != null,
     refetchInterval: (q) => (q.state.data?.fixture?.status?.live ? 15_000 : false),
@@ -1680,7 +1872,8 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
   const matchStarted = !!data?.fixture && (data.fixture.status.finished || live);
   const { data: facts } = useQuery<SpFacts>({
     queryKey: [`/api/sports/match/${id}/facts`],
-    enabled: id != null && matchStarted && (tab === "events" || tab === "stats"),
+    // للمباريات الجارية/المنتهية: أحداث/إحصاءات. وللقادمة: المغيبون في تبويب «معاينة».
+    enabled: id != null && ((matchStarted && (tab === "events" || tab === "stats")) || (isUpcoming && tab === "preview")),
     refetchInterval: live ? 12_000 : false,
     staleTime: 20_000,
   });
@@ -1708,38 +1901,46 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
     refetchInterval: live ? 20_000 : false,
     staleTime: 15_000,
   });
-
-  // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
-  // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
-  useEffect(() => {
-    if (id == null) return;
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const prev = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-    return () => {
-      body.style.position = prev.position;
-      body.style.top = prev.top;
-      body.style.width = prev.width;
-      body.style.overflow = prev.overflow;
-      window.scrollTo(0, scrollY);
-    };
-  }, [id]);
+  // قنوات البثّ («أين تُشاهد») — للمباريات غير المنتهية فقط (قادمة/جارية).
+  const fixtureFinished = !!data?.fixture?.status?.finished;
+  // إحصاء TheSports المفصّل — احتياط يملأ الفجوة حين تغيب إحصاءات API-Football
+  // (المباريات المنتهية فقط؛ الجارية تأخذ إحصاء TheSports اللحظي عبر التراكب).
+  const hasApiStatsEarly = !!data?.statistics && data.statistics.rows.length > 0;
+  const { data: tsStats } = useQuery<{ available: boolean; rows: SpStatRow[] }>({
+    queryKey: [`/api/sports/match/${id}/stats`],
+    enabled: id != null && fixtureFinished && !hasApiStatsEarly,
+    staleTime: 10 * 60_000,
+  });
+  const { data: tvData } = useQuery<{ available: boolean; channels: { name: string; url: string | null }[] }>({
+    queryKey: [`/api/sports/match/${id}/tv`],
+    enabled: id != null && !!data?.fixture && !fixtureFinished,
+    staleTime: 30 * 60_000,
+  });
+  // التوقّعات الاحتمالية المتقدّمة (SportMonks) — قبل المباراة (قادمة/جارية).
+  const { data: forecast } = useQuery<SpForecast>({
+    queryKey: [`/api/sports/match/${id}/forecast`],
+    enabled: id != null && !!data?.fixture && !fixtureFinished,
+    staleTime: 15 * 60_000,
+  });
 
   if (id == null) return null;
   const fx = data?.fixture, stats = data?.statistics;
   const events = Array.isArray(data?.events) ? data!.events : [];
   const lineups = Array.isArray(data?.lineups) ? data!.lineups : [];
   const started = !!fx && (fx.status.finished || fx.status.live);
+  // إحصاءات بديلة من SportMonks (facts.statistics) حين تغيب إحصاءات API-Football،
+  // فيظهر تبويب «نبض الأرقام» لمباريات أكثر بدل أن يُهدَر مصدر جاهز.
+  const factStatRows: SpStatRow[] = (facts?.statistics ?? []).map((s) => ({ type: s.key, label: s.label, home: s.home, away: s.away }));
+  const tsStatRows: SpStatRow[] = tsStats?.available && Array.isArray(tsStats.rows) ? tsStats.rows : [];
+  const hasApiStats = !!stats && stats.rows.length > 0;
+  const hasStatsTab = hasApiStats || factStatRows.length > 0 || tsStatRows.length > 0;
   const tabs = [
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
+    forecast?.available ? { key: "forecast", label: "توقّعات" } : null,
     events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
     started ? { key: "commentary", label: "التعليق" } : null,
     started ? { key: "story", label: "ملخّص ذكي" } : null,
-    stats && stats.rows.length > 0 ? { key: "stats", label: "نبض الأرقام" } : null,
+    hasStatsTab ? { key: "stats", label: "نبض الأرقام" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
@@ -1748,14 +1949,8 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
   ].filter(Boolean) as { key: string; label: string }[];
   const activeKey = tabs.some((t) => t.key === tab) ? tab : tabs[0]?.key;
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
-        dir="rtl" onClick={(e) => e.stopPropagation()}
-        className="bg-card w-full sm:max-w-lg lg:max-w-3xl sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] lg:max-h-[85vh] flex flex-col overflow-hidden border border-border"
-      >
+    <div className={`flex flex-col ${scrollable ? "h-full overflow-hidden" : ""}`} dir="rtl">
         <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4 pt-5">
-          <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-10 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
           {isLoading || !fx ? <Skeleton className="h-16 rounded-lg" /> : (
             <>
               <div className="text-center text-xs text-muted-foreground mb-2">{fx.round} {fx.venue.name ? `· ${fx.venue.name}` : ""}</div>
@@ -1786,6 +1981,21 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
             </>
           )}
         </div>
+        {tvData?.available && tvData.channels.length > 0 && (
+          <div className="shrink-0 border-b border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground mb-2">
+              <Tv className="w-3.5 h-3.5" />
+              <span>أين تُشاهد المباراة</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {tvData.channels.map((c, i) => (
+                <span key={`${c.name}-${i}`} className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-semibold text-foreground">
+                  {c.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
         {fx && <MatchPredict fixture={fx} />}
         {tabs.length > 0 && (
@@ -1798,7 +2008,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
             ))}
           </div>
         )}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6">
+        <div className={`${scrollable ? "flex-1 min-h-0 overflow-y-auto overscroll-contain " : ""}p-4 lg:p-6`}>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
           {!isLoading && activeKey === "events" && (
             <div className="lg:max-w-2xl lg:mx-auto">
@@ -1835,18 +2045,32 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
             </div>
           )}
           {!isLoading && activeKey === "preview" && (
-            previewRequested ? (
-              <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
-            ) : (
-              <div className="py-8 text-center">
-                <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
-                <p className="text-sm text-muted-foreground mb-4">معاينة ذكية تحلّل الفريقين وتوقّع مجريات المباراة قبل انطلاقها.</p>
-                <button type="button" onClick={() => setPreviewRequested(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
-                  <Sparkles className="w-4 h-4" /> ولّد المعاينة بالذكاء الاصطناعي
-                </button>
-              </div>
-            )
+            <div className="space-y-4">
+              {facts?.absentees && facts.absentees.length > 0 && (
+                <AbsenteesCard
+                  absentees={facts.absentees}
+                  homeName={fx?.home.name ?? ""}
+                  awayName={fx?.away.name ?? ""}
+                  homeLogo={fx?.home.logo}
+                  awayLogo={fx?.away.logo}
+                />
+              )}
+              {previewRequested ? (
+                <AiNarrative loading={previewLoading} text={preview?.text} kind="preview" />
+              ) : (
+                <div className="py-8 text-center">
+                  <Sparkles className={`w-8 h-8 mx-auto mb-3 ${ACCENT}`} />
+                  <p className="text-sm text-muted-foreground mb-4">معاينة ذكية تحلّل الفريقين وتوقّع مجريات المباراة قبل انطلاقها.</p>
+                  <button type="button" onClick={() => setPreviewRequested(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90">
+                    <Sparkles className="w-4 h-4" /> ولّد المعاينة بالذكاء الاصطناعي
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {!isLoading && activeKey === "forecast" && forecast?.available && (
+            <ForecastView data={forecast} homeName={fx?.home.name ?? ""} awayName={fx?.away.name ?? ""} />
           )}
           {!isLoading && activeKey === "story" && (
             storyRequested ? (
@@ -1866,12 +2090,16 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
               </div>
             )
           )}
-          {!isLoading && activeKey === "stats" && stats && (() => {
+          {!isLoading && activeKey === "stats" && hasStatsTab && (() => {
+            // مصدر الأرقام: API-Football إن توفّر، ثم SportMonks، ثم TheSports المفصّل (يملأ الفجوة).
+            const statRows = hasApiStats ? stats!.rows : factStatRows.length > 0 ? factStatRows : tsStatRows;
+            const homeName = stats?.home.name ?? fx?.home.name ?? "";
+            const awayName = stats?.away.name ?? fx?.away.name ?? "";
             // استخراج الاستحواذ لعرضه كشريط بارز بالأعلى، وبقية الإحصاءات تحته.
-            const possession = stats.rows.find((r) => r.type === "Ball Possession");
-            const otherRows = stats.rows.filter((r) => r.type !== "Ball Possession");
+            const possession = statRows.find((r) => r.type === "Ball Possession");
+            const otherRows = statRows.filter((r) => r.type !== "Ball Possession");
             // جائزة «رجل المباراة»: صاحب أعلى xG (إن توفّر) — لمسة إبداعية تبرز الأداء.
-            const xgRow = stats.rows.find((r) => /expected.*goals|xg/i.test(r.type));
+            const xgRow = statRows.find((r) => /expected.*goals|xg/i.test(r.type));
             const xgHome = xgRow ? parseFloat(String(xgRow.home).replace(/[^0-9.]/g, "")) : NaN;
             const xgAway = xgRow ? parseFloat(String(xgRow.away).replace(/[^0-9.]/g, "")) : NaN;
             const motm = Number.isFinite(xgHome) && Number.isFinite(xgAway)
@@ -1886,7 +2114,7 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
                   <div className="mb-4 flex items-center gap-2 rounded-xl bg-gradient-to-l from-amber-500/15 to-transparent ring-1 ring-amber-500/30 px-3 py-2">
                     <Crown className="w-4 h-4 text-amber-500 shrink-0" />
                     <span className="text-xs font-bold text-foreground">
-                      رجل المباراة (حسب الأهداف المتوقّعة): {motm === "home" ? stats.home.name : stats.away.name}
+                      رجل المباراة (حسب الأهداف المتوقّعة): {motm === "home" ? homeName : awayName}
                     </span>
                   </div>
                 )}
@@ -1914,6 +2142,44 @@ export function MatchDialog({ id, onClose }: { id: number | null; onClose: () =>
           )}
           {!isLoading && tabs.length === 0 && <div className="py-8 text-center text-muted-foreground text-sm">لا توجد تفاصيل متاحة لهذه المباراة بعد</div>}
         </div>
+    </div>
+  );
+}
+
+// نافذة المباراة (modal) — غلاف رفيع حول MatchCenter: تعتيم + قفل تمرير الخلفية +
+// زر إغلاق. نفس المحتوى الغني يُعاد استخدامه في صفحة /sports/match/:id المستقلّة.
+export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+  // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
+  // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
+  useEffect(() => {
+    if (id == null) return;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    body.style.overflow = "hidden";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      body.style.overflow = prev.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [id]);
+
+  if (id == null) return null;
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
+        dir="rtl" onClick={(e) => e.stopPropagation()}
+        className="relative bg-card w-full sm:max-w-lg lg:max-w-3xl sm:rounded-2xl rounded-t-2xl max-h-[90dvh] sm:max-h-[88vh] lg:max-h-[85vh] flex flex-col overflow-hidden border border-border"
+      >
+        <button onClick={onClose} aria-label="إغلاق" className="absolute left-2 top-2 z-20 inline-flex items-center justify-center w-9 h-9 rounded-full bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
+        <Link href={`/sports/match/${id}`} onClick={onClose} aria-label="فتح صفحة المباراة" className="absolute right-2 top-2 z-20 inline-flex h-9 items-center gap-1 rounded-full bg-card/80 px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"><Maximize2 className="w-4 h-4" /> صفحة المباراة</Link>
+        <MatchCenter id={id} scrollable />
       </motion.div>
     </div>
   );

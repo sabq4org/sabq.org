@@ -48,7 +48,7 @@ import {
 import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
-import { getTeamSeoMeta } from "../services/saudiLeagueService";
+import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService";
 
 const router = Router();
 
@@ -1633,6 +1633,54 @@ const ROUTE_HANDLERS: RouteHandler[] = [
           ...(t.competitionName
             ? { memberOf: { "@type": "SportsOrganization", name: t.competitionName } }
             : {}),
+        },
+      };
+    },
+  },
+  // البوابة الرياضية — صفحة المباراة: /sports/match/:id
+  // معاينة مشاركة غنيّة (واتساب/تويتر): "الفريق ضد الفريق" + النتيجة/الموعد +
+  // الجولة + الملعب. القسم تجريبي ⇒ noindex, follow.
+  {
+    pattern: /^\/sports\/match\/(\d+)/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      if (!Number.isFinite(id) || id <= 0) return null;
+      const fx = await getMatchSeoMeta(id).catch(() => null);
+      if (!fx) return null;
+      const canonical = `${SITE_URL}/sports/match/${id}`;
+      const score =
+        fx.status.finished || fx.status.live
+          ? `${fx.home.name} ${fx.goals.home ?? 0} - ${fx.goals.away ?? 0} ${fx.away.name}`
+          : `${fx.home.name} ضد ${fx.away.name}`;
+      const parts: string[] = [];
+      if (fx.status.finished) parts.push(`انتهت المباراة: ${score}.`);
+      else if (fx.status.live) parts.push(`مباشر الآن: ${score}.`);
+      else parts.push(`${score}.`);
+      if (fx.competitionName) parts.push(fx.round ? `${fx.competitionName} · ${fx.round}.` : `${fx.competitionName}.`);
+      if (fx.venueName) parts.push(`ملعب ${fx.venueName}.`);
+      parts.push("تابع المجريات والتشكيلات والإحصاءات والتقييمات لحظة بلحظة على سبق.");
+      const image = fx.home.logo || fx.away.logo || undefined;
+      return {
+        title: `${fx.home.name} ضد ${fx.away.name}${fx.competitionName ? ` — ${fx.competitionName}` : ""} | سبق`,
+        description: trunc(parts.join(" "), 220),
+        ...(image ? { image: abs(image) } : {}),
+        canonical,
+        robots: "noindex, follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@type": "SportsEvent",
+          name: `${fx.home.name} ضد ${fx.away.name}`,
+          url: canonical,
+          ...(fx.kickoffIso ? { startDate: fx.kickoffIso } : {}),
+          ...(fx.venueName ? { location: { "@type": "StadiumOrArena", name: fx.venueName } } : {}),
+          competitor: [
+            { "@type": "SportsTeam", name: fx.home.name, ...(fx.home.logo ? { logo: abs(fx.home.logo) } : {}) },
+            { "@type": "SportsTeam", name: fx.away.name, ...(fx.away.logo ? { logo: abs(fx.away.logo) } : {}) },
+          ],
+          ...(fx.competitionName ? { superEvent: { "@type": "SportsOrganization", name: fx.competitionName } } : {}),
         },
       };
     },

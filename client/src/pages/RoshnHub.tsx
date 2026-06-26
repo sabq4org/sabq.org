@@ -14,8 +14,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
+  CalendarDays,
   ChevronLeft,
   Crown,
+  Flame,
   Goal,
   Handshake,
   ShieldHalf,
@@ -25,18 +27,21 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { formatNumber } from "@/lib/format";
 import {
   CardLeaders,
   MatchDialog,
+  MatchHub,
   PodiumCard,
   StandingsTable,
   TitleRace,
   type SpAssister,
   type SpCardLeader,
   type SpCompetition,
+  type SpFixture,
   type SpScorer,
   type SpStandingRow,
 } from "./SportsHub";
@@ -58,27 +63,40 @@ interface CompHistory {
   topScorer: { id: number; name: string; photo: string; team: { id: number; name: string; logo: string }; goals: number } | null;
 }
 
-interface RoundFixture {
+// نظرة الموسم — تكشف المرحلة (جارٍ/ما قبل/عطلة) وبطل الموسم المنتهي والعدّ التنازلي
+// للموسم القادم. تُستهلَك من /api/sports/pro-league/outlook (لا API جديد).
+interface OutlookFixture {
   id: number;
-  date: string;
-  timestamp: number;
-  status: { code: string; label: string; elapsed: number | null; live: boolean; finished: boolean };
-  round: string;
   home: { id: number; name: string; logo: string };
   away: { id: number; name: string; logo: string };
-  goals: { home: number | null; away: number | null };
+}
+
+interface SeasonOutlook {
+  phase: "in-season" | "pre-season" | "off-season" | "unknown";
+  season: number;
+  status: string;
+  start: string | null;
+  end: string | null;
+  champion: { id: number; name: string; logo: string } | null;
+  nextSeason: number | null;
+  nextSeasonStart: string | null;
+  firstKickoff: number | null;
+  daysUntilKickoff: number | null;
+  openers: OutlookFixture[];
 }
 
 // ---------- مساعدات ----------
 
 const seasonLabel = (s: number | null | undefined): string => (s == null ? "" : `${s}/${s + 1}`);
 
-const kickoff = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-  weekday: "short",
+// تاريخ انطلاق الموسم القادم (بلا توقيت) — لبانر العدّ التنازلي.
+const outlookDateFmt = new Intl.DateTimeFormat("ar", {
+  calendar: "gregory",
+  numberingSystem: "latn",
+  weekday: "long",
   day: "numeric",
   month: "long",
-  hour: "numeric",
-  minute: "2-digit",
+  timeZone: "Asia/Riyadh",
 });
 
 // بقية البطولات السعودية — روابط لصفحة البطولة العامة الموجودة.
@@ -94,14 +112,23 @@ const OTHER_SAUDI: { slug: string; name: string }[] = [
 function RoshnHero({
   comp,
   history,
+  outlook,
   leader,
+  runnerUp,
   topScorer,
 }: {
   comp: SpCompetition | undefined;
   history: CompHistory | null;
+  outlook: SeasonOutlook | null;
   leader: SpStandingRow | undefined;
+  runnerUp: SpStandingRow | undefined;
   topScorer: SpScorer | undefined;
 }) {
+  // الموسم المنتهي (عطلة أو ما قبل الموسم الجديد): البطل من /outlook (متصدّر الجدول
+  // النهائي) لا من /history (الذي يعطي بطل الموسم الأسبق فيظهر مربكًا بعد الختام).
+  const seasonOver = outlook?.phase === "off-season" || outlook?.phase === "pre-season";
+  const champion = seasonOver ? outlook?.champion ?? null : null;
+  const seasonYear = outlook?.season ?? comp?.season ?? null;
   return (
     <section
       dir="rtl"
@@ -130,7 +157,9 @@ function RoshnHero({
               دوري <span style={{ color: GOLD }}>روشن</span>
             </h1>
             <p className="mt-3 max-w-md text-sm text-white/70 sm:text-base">
-              نخبة الكرة السعودية في مكان واحد — الترتيب، الهدّافون، البطاقات، والأندية، تتحدّث لحظة بلحظة.
+              {seasonOver
+                ? `ختام موسم ${seasonYear != null ? seasonLabel(seasonYear) : ""} — الترتيب النهائي، الهدّافون، والأرقام الكاملة في مكان واحد.`
+                : "نخبة الكرة السعودية في مكان واحد — الترتيب، الهدّافون، البطاقات، والأندية، تتحدّث لحظة بلحظة."}
             </p>
             {comp?.season != null && (
               <div className="mt-4 inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-bold text-white/85 backdrop-blur">
@@ -146,34 +175,68 @@ function RoshnHero({
           )}
         </div>
 
-        {/* شريط: حامل اللقب + المتصدّر + الهدّاف */}
+        {/* شريط الأبطال — يتكيّف حسب المرحلة:
+            - الموسم منتهٍ: بطل الموسم + الوصيف + هدّاف الموسم.
+            - الموسم جارٍ: حامل اللقب (الموسم الأسبق) + المتصدّر الحالي + الهدّاف. */}
         <div className="mt-9 grid gap-3 sm:grid-cols-3">
-          {history?.champion && (
-            <HeroStat
-              icon={<Crown className="h-5 w-5" style={{ color: GOLD }} fill="currentColor" />}
-              eyebrow={`حامل اللقب${history.previousSeason ? ` · ${seasonLabel(history.previousSeason)}` : ""}`}
-              logo={history.champion.logo}
-              title={history.champion.name}
-              gold
-            />
-          )}
-          {leader && (
-            <HeroStat
-              icon={<Trophy className="h-5 w-5 text-white/80" />}
-              eyebrow="متصدّر الموسم الحالي"
-              logo={leader.team.logo}
-              title={leader.team.name}
-              meta={`${formatNumber(leader.points)} نقطة`}
-            />
-          )}
-          {topScorer && (
-            <HeroStat
-              icon={<Goal className="h-5 w-5 text-white/80" />}
-              eyebrow="هدّاف الموسم"
-              photo={topScorer.photo}
-              title={topScorer.name}
-              meta={`${formatNumber(topScorer.goals)} هدف`}
-            />
+          {seasonOver && champion ? (
+            <>
+              <HeroStat
+                icon={<Crown className="h-5 w-5" style={{ color: GOLD }} fill="currentColor" />}
+                eyebrow={`بطل الدوري${seasonYear != null ? ` · موسم ${seasonLabel(seasonYear)}` : ""}`}
+                logo={champion.logo}
+                title={champion.name}
+                gold
+              />
+              {runnerUp && (
+                <HeroStat
+                  icon={<Trophy className="h-5 w-5 text-white/80" />}
+                  eyebrow="الوصيف"
+                  logo={runnerUp.team.logo}
+                  title={runnerUp.team.name}
+                  meta={`${formatNumber(runnerUp.points)} نقطة`}
+                />
+              )}
+              {topScorer && (
+                <HeroStat
+                  icon={<Goal className="h-5 w-5 text-white/80" />}
+                  eyebrow="هدّاف الموسم"
+                  photo={topScorer.photo}
+                  title={topScorer.name}
+                  meta={`${formatNumber(topScorer.goals)} هدف`}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              {history?.champion && (
+                <HeroStat
+                  icon={<Crown className="h-5 w-5" style={{ color: GOLD }} fill="currentColor" />}
+                  eyebrow={`حامل اللقب${history.previousSeason ? ` · ${seasonLabel(history.previousSeason)}` : ""}`}
+                  logo={history.champion.logo}
+                  title={history.champion.name}
+                  gold
+                />
+              )}
+              {leader && (
+                <HeroStat
+                  icon={<Trophy className="h-5 w-5 text-white/80" />}
+                  eyebrow="متصدّر الموسم الحالي"
+                  logo={leader.team.logo}
+                  title={leader.team.name}
+                  meta={`${formatNumber(leader.points)} نقطة`}
+                />
+              )}
+              {topScorer && (
+                <HeroStat
+                  icon={<Goal className="h-5 w-5 text-white/80" />}
+                  eyebrow="هدّاف الموسم"
+                  photo={topScorer.photo}
+                  title={topScorer.name}
+                  meta={`${formatNumber(topScorer.goals)} هدف`}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
@@ -224,6 +287,92 @@ function HeroStat({
   );
 }
 
+// ---------- بانر الموسم (عطلة / عدّ تنازلي للموسم الجديد) ----------
+
+function RoshnSeasonBanner({ outlook, onOpen }: { outlook: SeasonOutlook; onOpen: (id: number) => void }) {
+  if (outlook.phase === "in-season" || outlook.phase === "unknown") return null;
+  const kickoffLabel = outlook.firstKickoff ? outlookDateFmt.format(new Date(outlook.firstKickoff)) : null;
+
+  // ما قبل الموسم — العدّ التنازلي + افتتاحيات الجولة الأولى (أعلى قيمة قرب أغسطس).
+  if (outlook.phase === "pre-season") {
+    return (
+      <section
+        dir="rtl"
+        className="rounded-3xl border p-5 sm:p-6"
+        style={{ borderColor: `${GOLD}44`, background: `linear-gradient(105deg, ${GOLD}14, transparent 70%)` }}
+      >
+        <div className="flex flex-wrap items-center gap-4">
+          <div
+            className="shrink-0 rounded-2xl border px-5 py-2.5 text-center"
+            style={{ borderColor: `${GOLD}40`, background: `${GOLD}1a` }}
+          >
+            <div className="text-3xl font-black leading-none tabular-nums sm:text-4xl" style={{ color: GOLD }}>
+              {outlook.daysUntilKickoff ?? "—"}
+            </div>
+            <div className="mt-1 text-[10px] font-bold text-muted-foreground">يومًا</div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide" style={{ color: GOLD }}>
+              <Flame className="h-3.5 w-3.5" /> ينطلق موسم {outlook.nextSeason != null ? seasonLabel(outlook.nextSeason) : ""}
+            </div>
+            <h3 className="mt-1 text-lg font-black text-foreground sm:text-xl">العدّ التنازلي بدأ</h3>
+            {kickoffLabel && (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" /> أولى المباريات {kickoffLabel}
+              </p>
+            )}
+          </div>
+        </div>
+        {outlook.openers.length > 0 && (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {outlook.openers.slice(0, 6).map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onOpen(f.id)}
+                className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition hover:border-emerald-700/40"
+                data-testid={`roshn-opener-${f.id}`}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {f.home.logo && <img src={f.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain" loading="lazy" />}
+                  <span className="truncate text-xs font-bold">{f.home.name}</span>
+                </span>
+                <span className="shrink-0 text-[10px] text-muted-foreground">×</span>
+                <span className="flex min-w-0 items-center justify-end gap-1.5">
+                  <span className="truncate text-xs font-bold">{f.away.name}</span>
+                  {f.away.logo && <img src={f.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain" loading="lazy" />}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // عطلة — الموسم انتهى ولا جدول جديد بعد؛ شريط هادئ يؤكّد قرب الموسم الجديد.
+  return (
+    <section dir="rtl" className="rounded-3xl border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="shrink-0 rounded-2xl p-3" style={{ background: `${GOLD}1f` }}>
+          <Trophy className="h-7 w-7" style={{ color: GOLD }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            انتهى موسم {seasonLabel(outlook.season)}
+          </div>
+          <div className="mt-1 text-lg font-black text-foreground sm:text-xl">
+            {outlook.nextSeason != null ? `الاستعداد لموسم ${seasonLabel(outlook.nextSeason)}` : "في انتظار الموسم الجديد"}
+          </div>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            ينطلق الموسم الجديد في أغسطس — يظهر الجدول والعدّ التنازلي وأولى المباريات هنا فور إعلان المواعيد.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ---------- عنوان مقطع ----------
 
 function SectionHead({ icon, title, hint, href }: { icon: React.ReactNode; title: string; hint?: string; href?: string }) {
@@ -247,82 +396,26 @@ function SectionHead({ icon, title, hint, href }: { icon: React.ReactNode; title
   );
 }
 
-// ---------- الجولة الحالية ----------
+// ---------- مركز المباريات (مباشر/اليوم/قادمة/النتائج + تصفّح الجولات) ----------
 
-function RoundResultCard({ fx, onOpen }: { fx: RoundFixture; onOpen: (id: number) => void }) {
-  const started = fx.status.live || fx.status.finished;
-  const Side = ({ t, align }: { t: RoundFixture["home"]; align: "start" | "end" }) => (
-    <div className={`flex min-w-0 flex-1 items-center gap-2 ${align === "end" ? "flex-row-reverse" : ""}`}>
-      <span className="h-7 w-7 shrink-0 rounded-full bg-white p-0.5 ring-1 ring-border">
-        {t.logo ? <img src={t.logo} alt={t.name} className="h-full w-full object-contain" loading="lazy" /> : null}
-      </span>
-      <span className="truncate text-sm font-bold">{t.name}</span>
-    </div>
-  );
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(fx.id)}
-      className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-right transition hover:border-emerald-700/40 hover:shadow-sm"
-      data-testid={`roshn-round-${fx.id}`}
-    >
-      <Side t={fx.home} align="start" />
-      <div className="shrink-0 px-1 text-center" dir="ltr">
-        {started ? (
-          <span className="rounded-md bg-muted px-2 py-0.5 text-sm font-black tabular-nums">
-            {fx.goals.home ?? 0} - {fx.goals.away ?? 0}
-          </span>
-        ) : (
-          <span className="block text-[10px] font-semibold leading-tight text-muted-foreground">
-            {kickoff.format(new Date(fx.date))}
-          </span>
-        )}
-        {fx.status.live && (
-          <span className="mt-0.5 block text-[9px] font-black text-red-600 dark:text-red-400">
-            ● {fx.status.elapsed != null ? `${fx.status.elapsed}'` : "مباشر"}
-          </span>
-        )}
-      </div>
-      <Side t={fx.away} align="end" />
-    </button>
-  );
-}
-
-function CurrentRoundPane({ onOpen }: { onOpen: (id: number) => void }) {
-  const { data: roundsData } = useQuery<{ rounds: { key: string; label: string }[]; current: string | null }>({
-    queryKey: [`/api/sports/${SLUG}/rounds`],
-    staleTime: 5 * 60_000,
-  });
-  const current = roundsData?.current ?? null;
-  const label = roundsData?.rounds?.find((r) => r.key === current)?.label ?? "الجولة الحالية";
-
-  const { data, isLoading } = useQuery<{ fixtures: RoundFixture[] }>({
-    // مفتاح بكائن وسائط → دالة الجلب الافتراضية تبني ?name=... عبر apiUrl (لا fetch خام).
-    queryKey: [`/api/sports/${SLUG}/round`, { name: current ?? "" }],
-    enabled: Boolean(current),
+function MatchCenterPane({ onOpen }: { onOpen: (id: number) => void }) {
+  const { data } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
+    queryKey: [`/api/sports/${SLUG}/matches`],
     staleTime: 60_000,
-    refetchInterval: (q) => ((q.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : false),
+    refetchInterval: (q) => ((q.state.data?.live ?? []).length > 0 ? 15_000 : false),
   });
-
-  const fixtures = Array.isArray(data?.fixtures) ? data!.fixtures : [];
-  if (!current || (!isLoading && fixtures.length === 0)) return null;
+  const configured = data?.configured ?? true;
+  const buckets = {
+    live: Array.isArray(data?.live) ? data!.live : [],
+    today: Array.isArray(data?.today) ? data!.today : [],
+    upcoming: Array.isArray(data?.upcoming) ? data!.upcoming : [],
+    results: Array.isArray(data?.results) ? data!.results : [],
+  };
 
   return (
     <section>
-      <SectionHead icon={<Trophy className="h-4 w-4" />} title={label} hint="مباريات الجولة الجارية" />
-      {isLoading ? (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/60" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {fixtures.map((fx) => (
-            <RoundResultCard key={fx.id} fx={fx} onOpen={onOpen} />
-          ))}
-        </div>
-      )}
+      <SectionHead icon={<Trophy className="h-4 w-4" />} title="مركز المباريات" hint="مباشر · اليوم · قادمة · النتائج · الجولات" />
+      <MatchHub data={buckets} configured={configured} compSlug={SLUG} onOpen={onOpen} />
     </section>
   );
 }
@@ -357,6 +450,47 @@ function ClubsGrid({ rows }: { rows: SpStandingRow[] }) {
   );
 }
 
+// ---------- أرقام الموسم القياسية (محسوبة من الترتيب — بلا نقطة جديدة) ----------
+
+function SeasonRecordsCard({ rows }: { rows: SpStandingRow[] }) {
+  if (rows.length < 2) return null;
+  const pick = (score: (r: SpStandingRow) => number) =>
+    rows.reduce((best, r) => (score(r) > score(best) ? r : best), rows[0]);
+  const bestAttack = pick((r) => r.goalsFor);
+  const bestDefense = pick((r) => -r.goalsAgainst);
+  const mostWins = pick((r) => r.win);
+  const bestDiff = pick((r) => r.goalsDiff);
+
+  const records: { label: string; team: SpStandingRow["team"]; value: string }[] = [
+    { label: "أفضل هجوم", team: bestAttack.team, value: `${formatNumber(bestAttack.goalsFor)} هدف` },
+    { label: "أفضل دفاع", team: bestDefense.team, value: `${formatNumber(bestDefense.goalsAgainst)} عليه` },
+    { label: "أكثر فوزًا", team: mostWins.team, value: `${formatNumber(mostWins.win)} فوز` },
+    { label: "أفضل فارق", team: bestDiff.team, value: `${bestDiff.goalsDiff > 0 ? "+" : ""}${formatNumber(bestDiff.goalsDiff)}` },
+  ];
+
+  return (
+    <section>
+      <SectionHead icon={<Goal className="h-4 w-4" />} title="أرقام الموسم" hint="أبرز القياسات في جدول الدوري" />
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        {records.map((rec) => (
+          <Link
+            key={rec.label}
+            href={`/sports/team/${rec.team.id}`}
+            className="group flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: PETROL }}>{rec.label}</span>
+            <span className="flex items-center gap-2">
+              {rec.team.logo && <img src={rec.team.logo} alt="" className="h-8 w-8 shrink-0 object-contain" loading="lazy" />}
+              <span className="line-clamp-1 text-sm font-black text-foreground">{rec.team.name}</span>
+            </span>
+            <span className="text-xs font-bold tabular-nums text-muted-foreground">{rec.value}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ---------- الصفحة ----------
 
 export default function RoshnHub() {
@@ -382,6 +516,12 @@ export default function RoshnHub() {
     staleTime: 6 * 60 * 60_000,
   });
   const history = historyData?.history ?? null;
+
+  const { data: outlookData } = useQuery<{ outlook: SeasonOutlook | null }>({
+    queryKey: [`/api/sports/${SLUG}/outlook`],
+    staleTime: 30 * 60_000,
+  });
+  const outlook = outlookData?.outlook ?? null;
 
   const { data: standingsData, isLoading: standingsLoading } = useQuery<{ standings: SpStandingRow[] }>({
     queryKey: [`/api/sports/${SLUG}/standings`],
@@ -414,10 +554,18 @@ export default function RoshnHub() {
       <Header user={user || undefined} />
 
       <main className="flex-1">
-        <RoshnHero comp={comp} history={history} leader={standings[0]} topScorer={scorers[0]} />
+        <RoshnHero
+          comp={comp}
+          history={history}
+          outlook={outlook}
+          leader={standings[0]}
+          runnerUp={standings[1]}
+          topScorer={scorers[0]}
+        />
 
         <div className="mx-auto max-w-6xl space-y-10 px-4 py-10 sm:px-6">
-          <CurrentRoundPane onOpen={setOpenMatch} />
+          {outlook && <RoshnSeasonBanner outlook={outlook} onOpen={setOpenMatch} />}
+          <MatchCenterPane onOpen={setOpenMatch} />
 
           {/* الترتيب */}
           <section>
@@ -433,6 +581,9 @@ export default function RoshnHub() {
               <Empty />
             )}
           </section>
+
+          {/* أرقام الموسم القياسية — محسوبة من الترتيب */}
+          {standings.length > 0 && <SeasonRecordsCard rows={standings} />}
 
           {/* الهدّافون + صنّاع الأهداف */}
           {scorers.length > 0 && (
@@ -467,6 +618,9 @@ export default function RoshnHub() {
 
           {/* الأندية */}
           <ClubsGrid rows={standings} />
+
+          {/* أخبار الدوري — تتدهور بسلاسة إن لم توجد مطابقات */}
+          <SportsNewsBlock query="دوري روشن" title="أخبار دوري روشن" />
 
           {/* بطولات سعودية أخرى */}
           <section>

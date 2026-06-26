@@ -242,6 +242,24 @@ function CoachCard({ coach }: { coach: SpCoach }) {
           </div>
         </div>
       </div>
+
+      {/* المسيرة التدريبية — متاحة في المزوّد وكانت مهملة؛ نعرض آخر المحطّات. */}
+      {Array.isArray(coach.career) && coach.career.length > 1 && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <div className="text-[11px] font-bold text-muted-foreground mb-2.5">المسيرة التدريبية</div>
+          <div className="space-y-1.5">
+            {coach.career.slice(0, 6).map((c, i) => (
+              <div key={`${c.team}-${i}`} className="flex items-center gap-2 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/50 shrink-0" />
+                <span className="font-semibold text-foreground flex-1 min-w-0 truncate">{c.team}</span>
+                <span className="text-muted-foreground tabular-nums shrink-0" dir="ltr">
+                  {fmtMonth(c.start) || "—"} {c.end ? `– ${fmtMonth(c.end)}` : "– الآن"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -427,6 +445,14 @@ export default function SportsTeam() {
     staleTime: 10 * 60_000,
   });
 
+  // الإصابات/الغيابات (TheSports) — تُجلب بعد معرفة سلَك بطولة النادي، أفضل جهد.
+  const { data: injuriesData } = useQuery<{ injuries: { player: string; reason: string | null; until: string | null }[] }>({
+    queryKey: [`/api/sports/team/${id}/injuries`, { comp: data?.competitionSlug }],
+    enabled: Number.isFinite(id) && id > 0 && !!data?.competitionSlug,
+    staleTime: 30 * 60_000,
+  });
+  const injuries = Array.isArray(injuriesData?.injuries) ? injuriesData!.injuries : [];
+
   useEffect(() => {
     document.title = data?.team?.name ? `${data.team.name} | الرياضة - سبق` : "النادي | الرياضة - سبق";
   }, [data?.team?.name]);
@@ -501,6 +527,18 @@ export default function SportsTeam() {
                 </div>
               </div>
 
+              {/* صورة الملعب — متاحة من المزوّد وكانت مهملة؛ تمنح الصفحة طابعًا بصريًا. */}
+              {data.team.venue?.image && (
+                <div className="mt-5 overflow-hidden rounded-xl border border-border">
+                  <img
+                    src={data.team.venue.image}
+                    alt={data.team.venue.name || data.team.name}
+                    className="h-40 w-full object-cover sm:h-52"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
               {data.standing && (
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-5 border-t border-border">
                   <div className="text-center">
@@ -527,6 +565,17 @@ export default function SportsTeam() {
                   </div>
                 </div>
               )}
+
+              {data.standing && data.competitionSlug && (
+                <div className="mt-4 text-center">
+                  <Link
+                    href={`/sports/competition/${data.competitionSlug}`}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5" /> عرض الترتيب الكامل للدوري
+                  </Link>
+                </div>
+              )}
             </Card>
 
             {/* نبض الأرقام (يسار) + الجهاز الفني والهدّافون فوق بعض (يمين) — استغلالًا
@@ -541,6 +590,27 @@ export default function SportsTeam() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* الإصابات والغيابات (TheSports) — تظهر فقط عند توفّرها */}
+            {injuries.length > 0 && (
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Activity className="w-5 h-5 text-red-500" />
+                  <h2 className="font-bold text-lg">الإصابات والغيابات</h2>
+                  <Badge variant="secondary" className="tabular-nums">{injuries.length}</Badge>
+                </div>
+                <div className="space-y-2.5">
+                  {injuries.map((inj, i) => (
+                    <div key={`${inj.player}-${i}`} className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                      <span className="font-semibold text-sm text-foreground flex-1 min-w-0 truncate">{inj.player}</span>
+                      {inj.reason && <span className="text-xs text-muted-foreground shrink-0">{inj.reason}</span>}
+                      {inj.until && <span className="text-[11px] text-muted-foreground/80 tabular-nums shrink-0" dir="ltr">{inj.until}</span>}
+                    </div>
+                  ))}
+                </div>
+              </Card>
             )}
 
             {/* المباريات */}
