@@ -432,7 +432,7 @@ struct WCEventsTimeline: View {
                 .environment(\.layoutDirection, .leftToRight)
             icon(ev.type)
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(ev.label)\(ev.player.isEmpty ? "" : " — \(ev.player)")")
+                Text(ev.player.isEmpty ? ev.label : "\(ev.player) (\(ev.label))")
                     .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 if let extra {
                     Text(extra).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.sky).lineLimit(1)

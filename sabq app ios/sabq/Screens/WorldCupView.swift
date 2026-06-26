@@ -263,8 +263,8 @@ struct WCHeroSection: View {
             if !f.started {
                 WCCountdownChips(timestamp: f.timestamp)
             }
-            if let p = prediction(for: f), !f.status.finished {
-                WCProbabilityBar(fixture: f, prediction: p)
+            if !f.status.finished {
+                WCHeroPrediction(fixture: f, prediction: prediction(for: f))
             }
 
             Button { onOpenMatch(f.id) } label: {
@@ -380,7 +380,7 @@ struct WCHeroTodayStrip: View {
                     if f.status.live {
                         HStack(spacing: 3) {
                             Circle().fill(WCTheme.liveRed).frame(width: 5, height: 5)
-                            Text(f.status.elapsed != nil ? "\(f.status.elapsed!)'" : "مباشر")
+                            Text(chipLiveText(f.status))
                         }
                         .foregroundStyle(WCTheme.liveRed)
                     } else {
@@ -401,6 +401,16 @@ struct WCHeroTodayStrip: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    /// نص الحالة الحيّة للشارة المختصرة: الدقيقة أثناء اللعب، وإلا نص الحالة
+    /// («استراحة الشوطين»/«ركلات الترجيح») بدل دقيقة مجمّدة. يبقى مختصرًا بلا اسم الشوط.
+    private func chipLiveText(_ s: WCStatus) -> String {
+        let running = ["1H", "2H", "ET", "LIVE"].contains(s.code) && s.elapsed != nil
+        if running, let e = s.elapsed {
+            return (s.extra ?? 0) > 0 ? "\(e)+\(s.extra!)'" : "\(e)'"
+        }
+        return s.label.isEmpty ? "مباشر" : s.label
     }
 }
 
@@ -1005,8 +1015,12 @@ struct WCPulseCard: View {
     }
 
     private func liveMinute(_ p: WCPulse) -> String {
-        let e = p.status.elapsed ?? 0
-        let x = p.status.extra.map { "+\($0)" } ?? ""
+        let s = p.status
+        // حالة النبض بلا code — نكتشف توقّف العدّاد من النص المعرّب
+        // (استراحة الشوطين/استراحة الوقت الإضافي/ركلات الترجيح/موقوفة)
+        let stopped = s.label.contains("استراحة") || s.label.contains("ترجيح") || s.label.contains("موقوف")
+        guard !stopped, let e = s.elapsed else { return s.label.isEmpty ? "مباشر" : s.label }
+        let x = (s.extra ?? 0) > 0 ? "+\(s.extra!)" : ""
         return "د. \(e)\(x)"
     }
 
