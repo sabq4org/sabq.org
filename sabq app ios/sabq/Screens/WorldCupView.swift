@@ -1016,9 +1016,10 @@ struct WCPulseCard: View {
 
     private func liveMinute(_ p: WCPulse) -> String {
         let s = p.status
-        // العدّاد يجري في أشواط اللعب فقط — وإلا نعرض نص الحالة («استراحة الشوطين»)
-        let running = ["1H", "2H", "ET", "LIVE"].contains(s.code) && s.elapsed != nil
-        guard running, let e = s.elapsed else { return s.label.isEmpty ? "مباشر" : s.label }
+        // حالة النبض بلا code — نكتشف توقّف العدّاد من النص المعرّب
+        // (استراحة الشوطين/استراحة الوقت الإضافي/ركلات الترجيح/موقوفة)
+        let stopped = s.label.contains("استراحة") || s.label.contains("ترجيح") || s.label.contains("موقوف")
+        guard !stopped, let e = s.elapsed else { return s.label.isEmpty ? "مباشر" : s.label }
         let x = (s.extra ?? 0) > 0 ? "+\(s.extra!)" : ""
         return "د. \(e)\(x)"
     }
