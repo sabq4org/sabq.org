@@ -57,7 +57,21 @@ struct LiveView: View {
             .toolbar(.hidden, for: .navigationBar)
         }
         .task { await load() }
+        .task { await pollLive() }
         .refreshable { await load(force: true) }
+    }
+
+    // تحديث دوري صامت أثناء عرض التبويب — كي تتقدّم النتائج/الدقائق وتنتقل
+    // «لم تبدأ» → «مباشر» دون تحديث الصفحة يدويًا. لا يلمس مؤشّر التحميل.
+    // يتسارع (15ث) عند وجود مباراة جارية، ويتباطأ (40ث) عدا ذلك.
+    private func pollLive() async {
+        while !Task.isCancelled {
+            let hasLive = today.contains { $0.status.live } || !world.isEmpty
+            let delay: UInt64 = hasLive ? 15_000_000_000 : 40_000_000_000
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { break }
+            await load(force: true)
+        }
     }
 
     // MARK: - الترويسة + التبويبات
