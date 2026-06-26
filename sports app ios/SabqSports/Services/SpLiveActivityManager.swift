@@ -43,13 +43,27 @@ final class SpLiveActivityManager {
     // MARK: بدء النشاط
     func start(for fixture: SpFixture) {
         guard isSupported, activities[fixture.id] == nil else { return }
+        // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.
+        activeFixtureIds.insert(fixture.id)
+        Task { await startAsync(for: fixture) }
+    }
+
+    private func startAsync(for fixture: SpFixture) async {
+        guard activities[fixture.id] == nil else { return }
+        // نزّل شعارَي الفريقين للحاوية المشتركة (أفضل-جهد، بمهلة قصيرة).
+        async let homeFile = SpSharedContainer.cacheLogo(from: fixture.home.logo)
+        async let awayFile = SpSharedContainer.cacheLogo(from: fixture.away.logo)
+        let (hFile, aFile) = await (homeFile, awayFile)
+
         let attrs = SpMatchActivityAttributes(
             fixtureId: fixture.id,
             homeName: fixture.home.name,
             awayName: fixture.away.name,
             homeLogo: fixture.home.logo,
             awayLogo: fixture.away.logo,
-            competition: fixture.competition ?? "دوري روشن",
+            homeLogoFile: hFile,
+            awayLogoFile: aFile,
+            competition: fixture.competition ?? "",
             kickoff: fixture.kickoff
         )
         let state = makeState(from: fixture)
@@ -63,14 +77,16 @@ final class SpLiveActivityManager {
             activeFixtureIds.insert(fixture.id)
             observePushToken(activity)
         } catch {
-            // فشل الطلب (الإذن مغلق/تجاوز الحدّ) — نتجاهل بصمت.
+            // فشل الطلب (الإذن مغلق/تجاوز الحدّ) — تراجَع عن الإظهار التفاؤلي.
+            activeFixtureIds.remove(fixture.id)
         }
     }
 
     // MARK: تحديث الحالة الحيّة
-    func update(with fixture: SpFixture) {
+    func update(with fixture: SpFixture, lastEvent: String? = nil) {
         guard let activity = activities[fixture.id] else { return }
-        let state = makeState(from: fixture)
+        var state = makeState(from: fixture)
+        if let lastEvent { state.lastEvent = lastEvent }
         Task {
             await activity.update(.init(state: state, staleDate: staleDate(for: fixture)))
             // أنهِ النشاط تلقائيًّا بعد نهاية المباراة بفترة قصيرة.
@@ -134,9 +150,11 @@ final class SpLiveActivityManager {
         )
     }
 
-    /// تاريخ تقادم الحالة: قصير أثناء اللعب (تُعرض «قديمة» إن انقطع التحديث).
+    /// تاريخ تقادم الحالة: قصير أثناء اللعب؛ وحتى الانطلاق+دقيقتين للمباراة القادمة
+    /// كي لا يُعتَّم العدّاد التنازلي قبل البدء.
     private func staleDate(for f: SpFixture) -> Date? {
-        if f.status.live { return Date().addingTimeInterval(90) }
+        if f.status.live { return Date().addingTimeInterval(120) }
+        if !f.started, f.kickoff > Date() { return f.kickoff.addingTimeInterval(120) }
         return nil
     }
 

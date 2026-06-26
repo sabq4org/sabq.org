@@ -1,5 +1,70 @@
 import Foundation
 import ActivityKit
+#if canImport(UIKit)
+import UIKit
+#endif
+
+// MARK: - الحاوية المشتركة (App Group) لتمرير شعارات الأندية للويدجت
+//
+// إضافة الويدجت تعمل في عملية منفصلة ولا تستطيع تحميل صور عبر الشبكة، فنُنزّل
+// شعار كل فريق في التطبيق ونكتبه في حاوية App Group مشتركة، ثم يقرأه الويدجت
+// من القرص. اسم الملف يُخزَّن في سمات النشاط (ثابتة طوال عمره).
+
+enum SpSharedContainer {
+    static let appGroup = "group.com.sabq.sports"
+
+    static func logosDir() -> URL? {
+        guard let base = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { return nil }
+        let dir = base.appendingPathComponent("LiveActivityLogos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// اسم ملف ثابت مشتق من رابط الشعار (لتفادي إعادة التنزيل).
+    static func fileName(for urlString: String) -> String {
+        let hash = urlString.hashValue
+        return "logo_\(UInt(bitPattern: hash)).png"
+    }
+
+    #if canImport(UIKit)
+    /// يقرأ صورة شعار من الحاوية المشتركة (للويدجت).
+    static func image(named name: String?) -> UIImage? {
+        guard let name, let dir = logosDir() else { return nil }
+        let url = dir.appendingPathComponent(name)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// يُنزّل شعارًا ويكتبه في الحاوية، ويعيد اسم الملف (للتطبيق). أفضل-جهد.
+    static func cacheLogo(from urlString: String) async -> String? {
+        guard !urlString.isEmpty, let url = URL(string: urlString), let dir = logosDir() else { return nil }
+        let name = fileName(for: urlString)
+        let dest = dir.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: dest.path) { return name }
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let img = UIImage(data: data) else { return nil }
+        // أعد الترميز PNG بحجم معقول (≤120px) لتقليل حجم الحاوية.
+        let sized = img.sp_resized(maxDimension: 120)
+        guard let png = sized.pngData() else { return nil }
+        try? png.write(to: dest, options: .atomic)
+        return name
+    }
+    #endif
+}
+
+#if canImport(UIKit)
+private extension UIImage {
+    func sp_resized(maxDimension: CGFloat) -> UIImage {
+        let m = max(size.width, size.height)
+        guard m > maxDimension, m > 0 else { return self }
+        let scale = maxDimension / m
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
+    }
+}
+#endif
 
 // MARK: - سمات Live Activity للمباراة (مشتركة بين التطبيق وإضافة الويدجت)
 //
@@ -45,16 +110,23 @@ struct SpMatchActivityAttributes: ActivityAttributes {
     var awayName: String
     var homeLogo: String
     var awayLogo: String
+    /// اسم ملف شعار الفريق في الحاوية المشتركة (إن نُزِّل) — يقرأه الويدجت.
+    var homeLogoFile: String?
+    var awayLogoFile: String?
     var competition: String
     var kickoff: Date
 
     public init(fixtureId: Int, homeName: String, awayName: String,
-                homeLogo: String, awayLogo: String, competition: String, kickoff: Date) {
+                homeLogo: String, awayLogo: String,
+                homeLogoFile: String? = nil, awayLogoFile: String? = nil,
+                competition: String, kickoff: Date) {
         self.fixtureId = fixtureId
         self.homeName = homeName
         self.awayName = awayName
         self.homeLogo = homeLogo
         self.awayLogo = awayLogo
+        self.homeLogoFile = homeLogoFile
+        self.awayLogoFile = awayLogoFile
         self.competition = competition
         self.kickoff = kickoff
     }

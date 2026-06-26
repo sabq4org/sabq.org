@@ -63,6 +63,29 @@ struct SpMatchCenter: View {
     /// المباراة المعروضة: التفاصيل إن وصلت، وإلا المعاينة الفورية.
     private var fixture: SpFixture? { detail?.fixture ?? preview }
 
+    /// أهلية المتابعة اللحظية: جارية، أو قادمة باقٍ على انطلاقها ساعة أو أقل.
+    private func liveFollowEligible(_ f: SpFixture) -> Bool {
+        if f.status.live { return true }
+        if f.status.finished { return false }
+        let secs = f.kickoff.timeIntervalSinceNow
+        return secs <= 3600 && secs > -120
+    }
+
+    /// آخر هدف/بطاقة لعرضه أسفل بطاقة شاشة القفل (يطابق صياغة الخادم).
+    private func lastEventText(_ events: [SpMatchEvent]) -> String? {
+        let ranked = events.sorted {
+            ($0.minute ?? 0, $0.extra ?? 0) > ($1.minute ?? 0, $1.extra ?? 0)
+        }
+        let kinds = ["goal", "yellow-card", "red-card", "missed-penalty"]
+        guard let ev = ranked.first(where: { kinds.contains($0.type) }) else { return nil }
+        let icon = ev.type == "goal" ? "⚽" : ev.type == "yellow-card" ? "🟨"
+            : ev.type == "red-card" ? "🟥" : "❌"
+        let extra = (ev.extra ?? 0) > 0 ? "+\(ev.extra!)" : ""
+        let minute = "\(ev.minute ?? 0)\(extra)'"
+        let who = ev.player.isEmpty ? ev.label : ev.player
+        return "\(icon) \(minute) \(who)"
+    }
+
     /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر سبق الرياضي.
     private var shareTitle: String {
         guard let f = fixture else { return "مباراة عبر سبق الرياضي" }
@@ -131,8 +154,8 @@ struct SpMatchCenter: View {
                             .foregroundStyle(following ? SpTheme.gold : SpTheme.green)
                     }
                 }
-                // متابعة لحظية على شاشة القفل (Live Activity) — للمباريات الجارية فقط.
-                if f.status.live && liveActivity.isSupported {
+                // متابعة لحظية على شاشة القفل (Live Activity) — جارية أو قريبة (≤ ساعة).
+                if liveActivity.isSupported && liveFollowEligible(f) {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
                             liveActivity.toggle(for: f)
@@ -1420,8 +1443,10 @@ struct SpMatchCenter: View {
         do {
             self.detail = try await detailRes
             self.loadError = nil
-            // حدّث نشاط شاشة القفل بأحدث نتيجة (no-op إن لم يكن قائمًا).
-            if let f = self.detail?.fixture { liveActivity.update(with: f) }
+            // حدّث نشاط شاشة القفل بأحدث نتيجة وآخر حدث (no-op إن لم يكن قائمًا).
+            if let d = self.detail {
+                liveActivity.update(with: d.fixture, lastEvent: lastEventText(d.events))
+            }
         } catch {
             self.loadError = error.localizedDescription
         }

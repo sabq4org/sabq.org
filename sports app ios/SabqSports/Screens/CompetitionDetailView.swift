@@ -124,7 +124,10 @@ struct CompetitionDetailView: View {
 
     private var compLogo: some View {
         Group {
-            if let l = comp.logo, !l.isEmpty {
+            if comp.slug == SportsConstants.defaultComp {
+                // دوري روشن — الشعار الرسمي (أصل محلّي).
+                Image("RSLLogo").resizable().scaledToFit().padding(6)
+            } else if let l = comp.logo, !l.isEmpty {
                 AsyncImage(url: URL(string: l)) { phase in
                     if case .success(let img) = phase {
                         img.resizable().scaledToFit().padding(8)
@@ -137,7 +140,7 @@ struct CompetitionDetailView: View {
             }
         }
         .frame(width: 64, height: 64)
-        .background(Circle().fill(.white.opacity(0.15)))
+        .background(Circle().fill(comp.slug == SportsConstants.defaultComp ? .white : .white.opacity(0.15)))
     }
 
     @ViewBuilder private var statusBadge: some View {
