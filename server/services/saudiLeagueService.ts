@@ -9,6 +9,7 @@
  * من طلب واحد للمزود.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import pLimit from "p-limit";
 import { aiManager, AI_MODELS } from "../ai-manager";
 import {
   WC_FINISHED_STATUSES,
@@ -2404,11 +2405,17 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
   }
 }
 
+// تقييد التوازي عند جلب ميتا كل البطولات: بلا تقييد كان الإقلاع البارد يُطلق
+// +34 نداءً متوازيًا لـ`leagues` دفعةً واحدة، فيتجاوز حدّ API-Football في الدقيقة،
+// فتفشل معه نداءات المباريات/الترتيب اللحظية. 3 متوازية تبقينا تحت الحدّ، وكل
+// نجاح يُكاش موسمًا كاملًا فتهدأ العاصفة بعد أول دورة. مشترك لمنع رشقات متزامنة.
+const compMetaLimit = pLimit(3);
+
 /** قائمة البطولات مُثراة بالشعار والموسم وحالته — لترويسة البطولة الديناميكية في الواجهة. */
 export async function listCompetitionsWithMeta() {
   const base = listCompetitions();
   const metas = await Promise.all(
-    SAUDI_COMPETITIONS.map((c) => getCompetitionMeta(c).catch(() => null))
+    SAUDI_COMPETITIONS.map((c) => compMetaLimit(() => getCompetitionMeta(c).catch(() => null)))
   );
   return base.map((c, i) => ({
     ...c,
