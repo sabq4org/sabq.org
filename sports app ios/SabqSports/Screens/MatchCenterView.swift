@@ -179,6 +179,9 @@ struct SpMatchCenter: View {
             }
         }
         .task { await load() }
+        // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
+        // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
+        .task(id: detail?.fixture.id) { await pollLive() }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }
@@ -1427,6 +1430,40 @@ struct SpMatchCenter: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
+    }
+
+    // MARK: - الاستطلاع اللحظي
+
+    /// استطلاع دوري أثناء جريان المباراة — يجلب التفاصيل الطازجة (الأهداف/الكروت/
+    /// الدقيقة/النتيجة) تلقائيًّا كما يفعل الويب. يتوقّف عند انتهاء المباراة، ويبقى
+    /// بإيقاع أبطأ للمباراة القادمة القريبة كي يلتقط لحظة الانطلاق.
+    private func pollLive() async {
+        while !Task.isCancelled {
+            let f = detail?.fixture ?? preview
+            // المباراة منتهية أو غير معروفة → لا حاجة للاستطلاع.
+            if f == nil || f?.status.finished == true { return }
+            let live = f?.status.live == true
+            let secsToKickoff = f?.kickoff.timeIntervalSinceNow ?? .greatestFiniteMagnitude
+            // قادمة وبعيدة (> نصف ساعة) → لا داعي للاستطلاع الآن.
+            if !live && secsToKickoff > 1800 { return }
+            let seconds: UInt64 = live ? 10 : 25
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            if Task.isCancelled { return }
+            await refreshLive()
+        }
+    }
+
+    /// إعادة جلب التفاصيل اللحظية فقط (طازجة بلا كاش) — خفيفة مقارنةً بـ load الكامل.
+    private func refreshLive() async {
+        guard let fresh = try? await APIClient.shared.fetchMatchDetail(id: fixtureId, ignoreCache: true)
+        else { return }
+        self.detail = fresh
+        // حدّث نشاط شاشة القفل بأحدث نتيجة/حدث (no-op إن لم يكن قائمًا).
+        liveActivity.update(with: fresh.fixture, lastEvent: lastEventText(fresh.events))
+        // التعليق اللحظي المُعرَّب — أفضل جهد، لا يعطّل الباقي.
+        if hasCommentary {
+            self.commentary = try? await APIClient.shared.fetchCommentary(matchId: fixtureId)
+        }
     }
 
     // MARK: - التحميل

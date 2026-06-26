@@ -30,6 +30,23 @@ final class WorldCupHomeStore {
             lastFetch = Date()
         }
     }
+
+    /// تحديث لحظي أثناء اللعب — يتجاوز عتبة الـ30ث ويتجاهل الكاش كي تتحرّك
+    /// النتيجة/الدقيقة على الواجهة الرئيسية تلقائيًّا (كما يفعل الويب).
+    func refreshLive() async {
+        if fetching { return }
+        fetching = true
+        defer { fetching = false }
+        if let result = try? await APIClient.shared.fetchWorldCupOverview(ignoreCache: true) {
+            overview = result
+            lastFetch = Date()
+        }
+    }
+
+    /// هل مباراة اليوم جارية الآن؟ (لتقرير الحاجة للاستطلاع الدوري).
+    var matchOfTheDayLive: Bool {
+        overview?.matchOfTheDay?.fixture.status.live ?? false
+    }
 }
 
 // MARK: - شريط المونديال في الواجهة الرئيسية
@@ -52,7 +69,17 @@ struct WorldCupHomeStrip: View {
                 .buttonStyle(.plain)
             }
         }
-        .task { await store.loadIfNeeded() }
+        .task {
+            // تحميل أولي ثم استطلاع لحظي أثناء جريان مباراة اليوم — تتحدّث
+            // النتيجة/الدقيقة على الواجهة دون مغادرة الصفحة (كما في الويب).
+            await store.loadIfNeeded()
+            while !Task.isCancelled {
+                guard store.matchOfTheDayLive else { return }
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                if Task.isCancelled { return }
+                await store.refreshLive()
+            }
+        }
     }
 
     // هوية المونديال: أخضر زمردي حيّ مع توهّج أخضر فاتح خفيف في الزاوية،
