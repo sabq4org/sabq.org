@@ -541,8 +541,15 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       locale,
       language, // alias for locale (مبرمج التطبيقات يرسل language)
       timezone,
-      userId 
+      userId,
+      bundleId, // معرّف الحزمة (apns-topic) لتوجيه التطبيقات المتعددة
     } = req.body;
+
+    // تجاهل القيم غير الصالحة وحدّ الطول دفاعيًا (نخزّن الـbundle كنص اختياري)
+    const safeBundleId =
+      typeof bundleId === "string" && bundleId.length > 0 && bundleId.length <= 255
+        ? bundleId
+        : undefined;
 
     // Support both 'token' and 'deviceToken' field names
     const finalToken = deviceToken || token;
@@ -590,6 +597,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
           appVersion,
           locale: deviceLocale,
           timezone,
+          ...(safeBundleId ? { bundleId: safeBundleId } : {}),
           isActive: true,
           lastActiveAt: new Date(),
           updatedAt: new Date(),
@@ -636,6 +644,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
         appVersion,
         locale: deviceLocale,
         timezone,
+        ...(safeBundleId ? { bundleId: safeBundleId } : {}),
       })
       .returning({ id: pushDevices.id });
 
@@ -5639,6 +5648,10 @@ router.post("/live-activity/register", async (req: Request, res: Response) => {
     const { registerLiveActivityToken } = await import("../services/liveActivityService");
     const fixtureId = Number(req.body?.fixtureId);
     const token = typeof req.body?.token === "string" ? req.body.token : null;
+    const bundleId =
+      typeof req.body?.bundleId === "string" && req.body.bundleId.length > 0 && req.body.bundleId.length <= 255
+        ? req.body.bundleId
+        : null;
     if (!Number.isFinite(fixtureId) || !token || token.length < 20) {
       return res.status(400).json({ success: false, message: "fixtureId/token مطلوبان" });
     }
@@ -5652,7 +5665,7 @@ router.post("/live-activity/register", async (req: Request, res: Response) => {
       userId = session?.userId ?? null;
     } catch { /* زائر */ }
 
-    await registerLiveActivityToken(fixtureId, token, userId);
+    await registerLiveActivityToken(fixtureId, token, userId, bundleId);
     res.json({ success: true });
   } catch (error) {
     console.error("[Mobile API] /live-activity/register error:", error);

@@ -12,7 +12,19 @@ nonisolated enum URLConstants {
     /// `/sports/today`, `/sports/live`, `/sports/match/:id` … بلا مصادقة.
     static let publicAPI = "\(apiOrigin)/api"
 
-    /// `https://api.sabq.org/api/v1` — محجوز للتوقّعات/المتابعة/التنبيهات
-    /// (Apple Sign-In + Bearer) في v1.1. النسخة الأولى تصفّح فقط بلا تسجيل دخول.
+    /// `https://api.sabq.org/api/v1` — التوقّعات/المتابعة/التنبيهات (Bearer).
     static let mobileAPI = "\(apiOrigin)/api/v1"
+
+    /// يحوّل رابط صورة نسبيًّا (مثل `/uploads/...`) إلى مطلق على `sabq.org`
+    /// (نظير absolutize في التطبيق الرئيسي) — روابط profileImageUrl قد تكون نسبية.
+    static func absolutize(_ raw: String) -> String {
+        if raw.hasPrefix("http") { return raw }
+        return "\(webOrigin)\(raw.hasPrefix("/") ? "" : "/")\(raw)"
+    }
+
+    // ── روابط المشاركة الاجتماعية (روابط عميقة لموقع سبق) ──
+    // تطابق صفحات الويب القائمة: /sports/match·team·player/:id.
+    static func matchShareURL(_ id: Int) -> URL? { URL(string: "\(webOrigin)/sports/match/\(id)") }
+    static func teamShareURL(_ id: Int) -> URL? { URL(string: "\(webOrigin)/sports/team/\(id)") }
+    static func playerShareURL(_ id: Int) -> URL? { URL(string: "\(webOrigin)/sports/player/\(id)") }
 }

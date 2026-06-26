@@ -52,6 +52,7 @@ export async function registerLiveActivityToken(
   fixtureId: number,
   pushToken: string,
   userId?: string | null,
+  bundleId?: string | null,
 ): Promise<void> {
   const existing = await db
     .select({ id: liveActivityTokens.id })
@@ -65,6 +66,7 @@ export async function registerLiveActivityToken(
       .set({
         fixtureId,
         userId: userId ?? null,
+        ...(bundleId ? { bundleId } : {}),
         isActive: true,
         // إعادة الضبط تفرض دفعًا فوريًا في الدورة التالية لمزامنة البطاقة.
         lastContentHash: null,
@@ -76,6 +78,7 @@ export async function registerLiveActivityToken(
       fixtureId,
       pushToken,
       userId: userId ?? null,
+      bundleId: bundleId ?? null,
     });
   }
 }
@@ -242,6 +245,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
         event: finished ? "end" : "update",
         contentState: state,
+        bundleId: t.bundleId,
         staleDate,
         dismissalDate: finished ? nowSec + TWO_HOURS_SEC : undefined,
       });

@@ -9,10 +9,12 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { sportsFollows, type SportsFollow } from "@shared/schema";
 
-export type SportsFollowKind = "team" | "competition";
+// "match" = متابعة مباراة مفردة (refId = fixtureId كنص). يصل لمتابعها إشعار
+// الهدف/الانطلاق/النهاية/البطاقة/الفار حتى لو لم يتابع أيًّا من الفريقين.
+export type SportsFollowKind = "team" | "competition" | "match";
 
 export function isValidFollowKind(kind: unknown): kind is SportsFollowKind {
-  return kind === "team" || kind === "competition";
+  return kind === "team" || kind === "competition" || kind === "match";
 }
 
 export interface AddFollowInput {
@@ -117,4 +119,36 @@ export async function getTeamFollowerUserIds(teamRefIds: string[]): Promise<stri
       ),
     );
   return rows.map((r) => r.userId);
+}
+
+/**
+ * معرّفات المستخدمين الذين يتابعون أيًّا من المباريات المعطاة (kind="match")
+ * وإشعاراتهم مفعّلة. refId = fixtureId كنص.
+ */
+export async function getMatchFollowerUserIds(fixtureIds: string[]): Promise<string[]> {
+  if (fixtureIds.length === 0) return [];
+  const rows = await db
+    .selectDistinct({ userId: sportsFollows.userId })
+    .from(sportsFollows)
+    .where(
+      and(
+        eq(sportsFollows.kind, "match"),
+        eq(sportsFollows.notify, true),
+        inArray(sportsFollows.refId, fixtureIds),
+      ),
+    );
+  return rows.map((r) => r.userId);
+}
+
+/**
+ * مجموعة معرّفات المباريات (fixtureId كنص) التي يتابعها أحدٌ ما بإشعارات مفعّلة.
+ * يستخدمها جوب التنبيهات لإلغاء «تحصين نداء الأحداث بمتابعي الفريق» للمباريات
+ * المتابَعة مفردةً — كي تصل بطاقات/فار المباراة المتابَعة حتى بلا متابعة فريق.
+ */
+export async function getFollowedMatchFixtureIds(): Promise<Set<string>> {
+  const rows = await db
+    .selectDistinct({ refId: sportsFollows.refId })
+    .from(sportsFollows)
+    .where(and(eq(sportsFollows.kind, "match"), eq(sportsFollows.notify, true)));
+  return new Set(rows.map((r) => r.refId));
 }

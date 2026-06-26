@@ -62,6 +62,7 @@ fun WorldCupHomeStrip(onClick: () -> Unit, viewModel: WorldCupStripViewModel = h
     val overview by viewModel.overview.collectAsStateWithLifecycle()
     val f = overview?.matchOfTheDay?.fixture ?: return
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalWcForceDark provides true) {
     ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
         Row(
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -83,6 +84,7 @@ fun WorldCupHomeStrip(onClick: () -> Unit, viewModel: WorldCupStripViewModel = h
             Spacer(Modifier.weight(1f))
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = WcColors.emerald, modifier = Modifier.size(20.dp))
         }
+    }
     }
 }
 

@@ -6,14 +6,14 @@ import Foundation
 
 // MARK: - الكيانات الأساسية
 
-nonisolated struct SpTeam: Decodable, Identifiable, Hashable {
+nonisolated struct SpTeam: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String
     let winner: Bool?
 }
 
-nonisolated struct SpStatus: Decodable, Hashable {
+nonisolated struct SpStatus: Codable, Hashable {
     let code: String
     let label: String
     let elapsed: Int?
@@ -22,12 +22,12 @@ nonisolated struct SpStatus: Decodable, Hashable {
     let finished: Bool
 }
 
-nonisolated struct SpScore: Decodable, Hashable {
+nonisolated struct SpScore: Codable, Hashable {
     let home: Int?
     let away: Int?
 }
 
-nonisolated struct SpVenue: Decodable, Hashable {
+nonisolated struct SpVenue: Codable, Hashable {
     let name: String
     let city: String
 }
@@ -35,7 +35,7 @@ nonisolated struct SpVenue: Decodable, Hashable {
 // مباراة — تخدم مباريات البطولة (بلا competition) ولوحة اليوم/المباشر
 // (SplLiveBoardItem = SplFixture + competition + competitionSlug) عبر جعل
 // حقلَي البطولة اختياريين.
-nonisolated struct SpFixture: Decodable, Identifiable, Hashable {
+nonisolated struct SpFixture: Codable, Identifiable, Hashable {
     let id: Int
     let date: String
     let timestamp: Int
@@ -49,6 +49,9 @@ nonisolated struct SpFixture: Decodable, Identifiable, Hashable {
     let competitionSlug: String?
 
     var started: Bool { status.live || status.finished }
+
+    /// لحظة انطلاق المباراة (من الطابع الزمني) — أساس العدّاد التنازلي.
+    var kickoff: Date { Date(timeIntervalSince1970: TimeInterval(timestamp)) }
 }
 
 nonisolated struct SpStandingRow: Decodable, Identifiable, Hashable {
@@ -111,6 +114,73 @@ nonisolated struct SpLiveResponse: Decodable {
     let live: [SpFixture]
 }
 
+// عنصر البث المباشر العالمي — كل مباراة قائمة الآن في العالم (لا بطولاتنا فقط)
+// مع بلدها وبطولتها وشعارها. competitionSlug غير null لبطولاتنا المُدرَجة.
+nonisolated struct SpWorldLiveItem: Decodable, Identifiable {
+    let competition: String?
+    let competitionSlug: String?
+    let country: String
+    let countryAr: String
+    let flag: String?
+    let leagueId: Int
+    let leagueLogo: String?
+    let fixture: SpFixture   // يُفكّ من نفس الكائن المسطّح
+    var id: Int { fixture.id }
+
+    enum CodingKeys: String, CodingKey {
+        case competition, competitionSlug, country, countryAr, flag, leagueId, leagueLogo
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        competition = try c.decodeIfPresent(String.self, forKey: .competition)
+        competitionSlug = try c.decodeIfPresent(String.self, forKey: .competitionSlug)
+        country = (try? c.decode(String.self, forKey: .country)) ?? ""
+        countryAr = (try? c.decode(String.self, forKey: .countryAr)) ?? ""
+        flag = try c.decodeIfPresent(String.self, forKey: .flag)
+        leagueId = (try? c.decode(Int.self, forKey: .leagueId)) ?? 0
+        leagueLogo = try c.decodeIfPresent(String.self, forKey: .leagueLogo)
+        fixture = try SpFixture(from: decoder)
+    }
+}
+
+nonisolated struct SpWorldLiveResponse: Decodable {
+    let configured: Bool
+    let matches: [SpWorldLiveItem]
+}
+
+// خبر رياضي من صحافة سبق (/api/v1/articles?section=sports). المفاتيح snake_case.
+nonisolated struct SpArticle: Decodable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let excerpt: String?
+    let imageUrl: String?
+    let articleUrl: String?
+    let slug: String?
+    let publishedAt: String?
+    let readingMinutes: Int?
+    let author: String?
+    let isBreaking: Bool?
+    let isFeatured: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, subtitle, excerpt, slug, author
+        case imageUrl = "image_url"
+        case articleUrl = "article_url"
+        case publishedAt = "published_at"
+        case readingMinutes = "reading_minutes"
+        case isBreaking = "is_breaking"
+        case isFeatured = "is_featured"
+    }
+}
+
+nonisolated struct SpArticlesResponse: Decodable {
+    let articles: [SpArticle]
+    let total: Int?
+    let hasMore: Bool?
+}
+
 nonisolated struct SpMatchesResponse: Decodable {
     let configured: Bool
     let live: [SpFixture]
@@ -129,6 +199,793 @@ nonisolated struct SpScorersResponse: Decodable {
     let scorers: [SpScorer]
 }
 
+// صنّاع الأهداف — SplAssister على الخادم يطابق SpScorer (rank/id/name/photo/team/goals/assists/matches).
+nonisolated struct SpAssistsResponse: Decodable {
+    let configured: Bool
+    let assists: [SpScorer]
+}
+
+// مركز الانتقالات (مستوى الدوري) — أبرز الصفقات بمبلغ معلن من كامل السجل.
+nonisolated struct SpTransferClub: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+}
+
+nonisolated struct SpTransferPlayer: Decodable, Hashable {
+    let id: Int
+    let name: String
+}
+
+nonisolated struct SpLeagueTransfer: Decodable, Identifiable, Hashable {
+    let id: String
+    let date: String
+    let type: String      // المبلغ/النوع كما يُعرض (مُعرَّب)
+    let kind: String      // permanent | loan | free | …
+    let player: SpTransferPlayer
+    let from: SpTransferClub
+    let to: SpTransferClub
+    let inClubId: Int?
+    let outClubId: Int?
+}
+
+nonisolated struct SpLeagueTransfersResponse: Decodable {
+    let configured: Bool
+    let topDeals: [SpLeagueTransfer]?
+    let transfers: [SpLeagueTransfer]?
+}
+
+// ملخّص ذكي للمباراة — نصّ عربي مُولَّد (AI) عبر /match/:id/story.
+nonisolated struct SpMatchStory: Decodable {
+    let text: String
+    let generatedAt: Double?
+    let live: Bool?
+}
+
+// تقييمات اللاعبين — أفضل لاعب + تقييمات XI عبر /match/:id/players.
+nonisolated struct SpMotm: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let team: String
+    let rating: Double
+}
+
+nonisolated struct SpRatedPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let photo: String
+    let teamId: Int
+    let team: String
+    let number: Int?
+    let pos: String?
+    let rating: Double?
+    let minutes: Int?
+    let goals: Int?
+    let assists: Int?
+    let yellow: Int?
+    let red: Int?
+    let captain: Bool?
+}
+
+nonisolated struct SpMatchPlayers: Decodable {
+    let motm: SpMotm?
+    let players: [SpRatedPlayer]
+}
+
+// المواجهات المباشرة — السجلّ + آخر اللقاءات عبر /h2h.
+nonisolated struct SpH2HTeam: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+}
+
+nonisolated struct SpH2HSummary: Decodable, Hashable {
+    let total: Int
+    let homeWins: Int
+    let draws: Int
+    let awayWins: Int
+}
+
+nonisolated struct SpH2HMeeting: Decodable, Identifiable, Hashable {
+    let id: Int
+    let timestamp: Int
+    let date: String
+    let competition: String
+    let home: SpH2HTeam
+    let away: SpH2HTeam
+    let goals: SpScore
+}
+
+nonisolated struct SpH2HResponse: Decodable {
+    let configured: Bool
+    let summary: SpH2HSummary?
+    let meetings: [SpH2HMeeting]
+}
+
+// نظرة الموسم — جاهزية ما قبل الموسم/العطلة: بطل الموسم المنتهي + عدّ تنازلي
+// للموسم القادم + مباريات الافتتاح. تملأ الرئيسية بمحتوى سعودي خارج المواسم.
+nonisolated struct SpOutlookChampion: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+}
+
+nonisolated struct SpOutlook: Decodable {
+    let phase: String            // in-season | pre-season | off-season | unknown
+    let season: Int
+    let champion: SpOutlookChampion?
+    let nextSeason: Int?
+    let nextSeasonStart: String?
+    let firstKickoff: Int?       // ms — للعدّ التنازلي
+    let daysUntilKickoff: Int?
+    let openers: [SpFixture]
+}
+
+nonisolated struct SpOutlookResponse: Decodable {
+    let configured: Bool
+    let outlook: SpOutlook?
+}
+
+// MARK: - تفاصيل المباراة (مركز المباراة) — مطابق SplMatchDetail
+
+// قيمة إحصائية قد تصل رقمًا (12) أو نصًّا ("55%") أو null. نخزّن النص للعرض
+// والرقم (إن وُجد) لشريط المقارنة.
+nonisolated struct SpStatValue: Decodable, Hashable {
+    let text: String
+    let number: Double?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let i = try? c.decode(Int.self) {
+            text = "\(i)"; number = Double(i)
+        } else if let d = try? c.decode(Double.self) {
+            text = String(format: "%g", d); number = d
+        } else if let s = try? c.decode(String.self) {
+            text = s
+            let digits = s.prefix { $0.isNumber || $0 == "." }
+            number = Double(digits)
+        } else {
+            text = "—"; number = nil
+        }
+    }
+}
+
+nonisolated struct SpMatchEvent: Decodable, Identifiable, Hashable {
+    let minute: Int?
+    let extra: Int?
+    let teamId: Int
+    let team: String
+    let player: String
+    let assist: String?
+    let type: String     // goal | card | subst | var | ...
+    let label: String
+    var id: String { "\(minute ?? 0)-\(extra ?? 0)-\(teamId)-\(player)-\(type)-\(label)" }
+}
+
+nonisolated struct SpStatRow: Decodable, Identifiable, Hashable {
+    let type: String
+    let label: String
+    let home: SpStatValue?
+    let away: SpStatValue?
+    var id: String { type }
+}
+
+nonisolated struct SpLineupPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let number: Int?
+    let name: String
+    let pos: String
+    let grid: String?
+}
+
+nonisolated struct SpLineup: Decodable, Hashable {
+    let team: SpTeam
+    let formation: String?
+    let coach: String?
+    let startXI: [SpLineupPlayer]
+    let substitutes: [SpLineupPlayer]
+}
+
+nonisolated struct SpMatchStatistics: Decodable, Hashable {
+    let home: SpStatSide
+    let away: SpStatSide
+    let rows: [SpStatRow]
+}
+
+nonisolated struct SpStatSide: Decodable, Hashable {
+    let id: Int
+    let name: String
+}
+
+nonisolated struct SpMatchDetail: Decodable {
+    let fixture: SpFixture
+    let events: [SpMatchEvent]
+    let statistics: SpMatchStatistics?
+    let lineups: [SpLineup]
+    let leagueId: Int?
+}
+
+// MARK: - المصادقة (عضو سبق عبر Bearer — /api/v1/auth/apple)
+
+/// مفتاح ترميز ديناميكي للقراءة المرنة من JSON.
+nonisolated struct SpFlexKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(_ s: String) { stringValue = s }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
+}
+
+nonisolated struct SpMember: Decodable, Hashable {
+    let id: String
+    let name: String?       // الاسم الكامل (firstName + lastName، أو name/fullName)
+    let email: String?
+    let avatar: String?     // profileImageUrl
+
+    init(id: String, name: String?, email: String?, avatar: String?) {
+        self.id = id; self.name = name; self.email = email; self.avatar = avatar
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: SpFlexKey.self)
+        if let s = try? c.decode(String.self, forKey: SpFlexKey("id")) { id = s }
+        else if let i = try? c.decode(Int.self, forKey: SpFlexKey("id")) { id = String(i) }
+        else { id = "" }
+
+        // الاسم الثنائي: firstName + lastName أولًا، ثم name/fullName.
+        let first = (try? c.decode(String.self, forKey: SpFlexKey("firstName"))) ?? ""
+        let last = (try? c.decode(String.self, forKey: SpFlexKey("lastName"))) ?? ""
+        let combined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        if !combined.isEmpty {
+            name = combined
+        } else {
+            name = (try? c.decode(String.self, forKey: SpFlexKey("name")))
+                ?? (try? c.decode(String.self, forKey: SpFlexKey("fullName")))
+        }
+        email = try? c.decode(String.self, forKey: SpFlexKey("email"))
+        let rawAvatar = (try? c.decode(String.self, forKey: SpFlexKey("profileImageUrl")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("profile_image_url")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("avatar")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("avatarUrl")))
+        // روابط الصور قد تكون نسبية → نحوّلها لمطلقة على sabq.org.
+        if let r = rawAvatar, !r.isEmpty {
+            avatar = URLConstants.absolutize(r)
+        } else {
+            avatar = nil
+        }
+    }
+}
+
+nonisolated struct SpLoginResponse: Decodable {
+    let token: String?
+    let member: SpMember?
+    let message: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: SpFlexKey.self)
+        token = (try? c.decode(String.self, forKey: SpFlexKey("token")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("access_token")))
+        member = (try? c.decode(SpMember.self, forKey: SpFlexKey("user")))
+            ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("member")))
+            ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("data")))
+        message = try? c.decode(String.self, forKey: SpFlexKey("message"))
+    }
+}
+
+/// استجابة /members/profile — العضو مغلَّف بـuser (أو member/data/مباشر).
+nonisolated struct SpProfileResponse: Decodable {
+    let member: SpMember?
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: SpFlexKey.self)
+        member = (try? c.decode(SpMember.self, forKey: SpFlexKey("user")))
+            ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("member")))
+            ?? (try? c.decode(SpMember.self, forKey: SpFlexKey("data")))
+            ?? (try? SpMember(from: decoder))
+    }
+}
+
+nonisolated struct SpDeviceInfo: Encodable {
+    let platform: String
+    let osVersion: String
+    let appVersion: String
+    let deviceName: String?
+    let deviceId: String?
+}
+
+nonisolated struct SpAppleAuthRequest: Encodable {
+    let identityToken: String
+    let fullName: AppleFullName?
+    let email: String?
+    let deviceInfo: SpDeviceInfo?
+    struct AppleFullName: Encodable { let firstName: String?; let lastName: String? }
+}
+
+/// دخول بحساب سبق — البريد أو الجوال + كلمة المرور (nil يُحذف من JSON تلقائيًّا).
+nonisolated struct SpLoginRequest: Encodable {
+    let email: String?
+    let phone: String?
+    let password: String
+    let deviceInfo: SpDeviceInfo?
+}
+
+// MARK: - المتابعة + تفضيلات التنبيهات (تتطلّب جلسة)
+
+nonisolated struct SpFollow: Decodable, Identifiable, Hashable {
+    let id: String
+    let kind: String       // team | competition
+    let refId: String
+    let refName: String
+    let refLogo: String?
+    var key: String { "\(kind):\(refId)" }
+}
+
+nonisolated struct SpFollowsResponse: Decodable {
+    let success: Bool?
+    let follows: [SpFollow]
+}
+
+nonisolated struct SpFollowBody: Encodable {
+    let kind: String
+    let refId: String
+    let refName: String
+    let refLogo: String?
+}
+
+nonisolated struct SpAlertPrefs: Decodable, Hashable {
+    var kickoff: Bool
+    var goals: Bool
+    var cards: Bool
+    var varReview: Bool
+    var fulltime: Bool
+
+    init(kickoff: Bool = true, goals: Bool = true, cards: Bool = true, varReview: Bool = true, fulltime: Bool = true) {
+        self.kickoff = kickoff; self.goals = goals; self.cards = cards; self.varReview = varReview; self.fulltime = fulltime
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: SpFlexKey.self)
+        func b(_ k: String) -> Bool { (try? c.decode(Bool.self, forKey: SpFlexKey(k))) ?? true }
+        kickoff = b("kickoff"); goals = b("goals"); cards = b("cards"); varReview = b("varReview"); fulltime = b("fulltime")
+    }
+}
+
+nonisolated struct SpAlertPrefsResponse: Decodable {
+    let success: Bool?
+    let preferences: SpAlertPrefs
+}
+
+nonisolated struct SpAlertPrefsBody: Encodable {
+    let kickoff: Bool
+    let goals: Bool
+    let cards: Bool
+    let varReview: Bool
+    let fulltime: Bool
+}
+
+// MARK: - المجتمع — لوحة المتصدّرين (عامّة)
+
+nonisolated struct SpLeaderboardEntry: Decodable, Identifiable, Hashable {
+    let userId: String
+    let name: String
+    let avatar: String?
+    let totalPoints: Int
+    let predictions: Int
+    let exact: Int
+    let correct: Int
+    let rank: Int
+    var id: String { userId }
+}
+
+nonisolated struct SpLeaderboardResponse: Decodable {
+    let period: String?
+    let leaderboard: [SpLeaderboardEntry]
+}
+
+// توقّع المستخدم لمباراة (المجتمع) — مطابق صفّ sports_predictions (camelCase).
+nonisolated struct SpPrediction: Decodable, Hashable {
+    let fixtureId: Int
+    let homeName: String
+    let awayName: String
+    let homeLogo: String?
+    let awayLogo: String?
+    let predHome: Int
+    let predAway: Int
+    let actualHome: Int?
+    let actualAway: Int?
+    let points: Int?
+    let kickoffTs: Int?
+    let competitionSlug: String?
+}
+
+nonisolated struct SpPredictionResponse: Decodable {
+    let success: Bool?
+    let prediction: SpPrediction?
+}
+
+nonisolated struct SpUserStats: Decodable, Hashable {
+    let totalPoints: Int
+    let predictions: Int
+    let exact: Int
+    let correct: Int
+}
+
+nonisolated struct SpMyPredictionsResponse: Decodable {
+    let success: Bool?
+    let predictions: [SpPrediction]
+    let stats: SpUserStats?
+}
+
+nonisolated struct SpPredictBody: Encodable {
+    let predHome: Int
+    let predAway: Int
+    let kickoffTs: Int
+    let competitionSlug: String?
+    let homeId: Int?
+    let awayId: Int?
+    let homeName: String
+    let awayName: String
+    let homeLogo: String?
+    let awayLogo: String?
+}
+
+/// تسجيل رمز جهاز APNs — /api/v1/devices/register (userId من الجسم، tokenProvider=apns).
+nonisolated struct SpDeviceRegisterBody: Encodable {
+    let deviceToken: String
+    let platform: String
+    let tokenProvider: String
+    let userId: String
+    let language: String
+    let appVersion: String?
+    let osVersion: String?
+    let timezone: String?
+    /// معرّف الحزمة (apns-topic). يميّز تطبيق الرياضة عن الأخبار على نفس خادم APNs.
+    let bundleId: String?
+}
+
+/// تسجيل توكن Live Activity — /api/v1/live-activity/register.
+nonisolated struct SpLiveActivityRegisterBody: Encodable {
+    let fixtureId: Int
+    let token: String
+    let bundleId: String?
+}
+
+/// إلغاء توكن Live Activity — /api/v1/live-activity/end.
+nonisolated struct SpLiveActivityEndBody: Encodable {
+    let token: String
+}
+
+// MARK: - إثراء المباراة (SportMonks) — xG/الزخم/الضغط/الوقائع
+
+nonisolated struct SpXgSide: Decodable, Hashable { let xg: Double; let xgot: Double }
+nonisolated struct SpXgPlayer: Decodable, Hashable {
+    let name: String
+    let location: String   // home | away
+    let xg: Double
+}
+nonisolated struct SpXg: Decodable {
+    let available: Bool
+    let home: SpXgSide
+    let away: SpXgSide
+    let topPlayers: [SpXgPlayer]
+}
+
+nonisolated struct SpPossession: Decodable, Hashable { let home: Int; let away: Int }
+
+/// نقطة تدفّق (زخم/ضغط) — net موجب = أفضلية المضيف، سالب = الضيف.
+nonisolated struct SpFlowPoint: Decodable, Hashable {
+    let label: String
+    let minute: Int
+    let home: Double
+    let away: Double
+    let net: Double
+}
+
+nonisolated struct SpMomentum: Decodable {
+    let available: Bool
+    let live: Bool
+    let possession: SpPossession?
+    let points: [SpFlowPoint]
+}
+
+nonisolated struct SpPressureLatest: Decodable { let side: String; let value: Double }
+nonisolated struct SpPressure: Decodable {
+    let available: Bool
+    let live: Bool
+    let latest: SpPressureLatest?
+    let points: [SpFlowPoint]
+}
+
+nonisolated struct SpFactStat: Decodable, Hashable {
+    let key: String
+    let label: String
+    let home: String
+    let away: String
+}
+nonisolated struct SpWeather: Decodable {
+    let temp: Int?
+    let description: String?
+    let icon: String?
+    let humidity: String?
+}
+nonisolated struct SpAbsentee: Decodable, Hashable {
+    let name: String
+    let location: String
+    let reason: String
+}
+nonisolated struct SpHalftime: Decodable { let home: Int?; let away: Int? }
+nonisolated struct SpMatchFacts: Decodable {
+    let available: Bool
+    let statistics: [SpFactStat]
+    let weather: SpWeather?
+    let absentees: [SpAbsentee]
+    let halftime: SpHalftime?
+}
+
+// التعليق اللحظي المُعرَّب (أبرز اللحظات) — /sports/match/:id/commentary.
+nonisolated struct SpCommentaryItem: Decodable, Identifiable, Hashable {
+    let minute: Int
+    let extraMinute: Int?
+    let goal: Bool
+    let important: Bool
+    let textAr: String
+    let order: Int
+    var id: String { "\(order)-\(minute)-\(extraMinute ?? 0)" }
+
+    enum CodingKeys: String, CodingKey { case minute, extraMinute, goal, important, textAr, order }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        minute = (try? c.decode(Int.self, forKey: .minute)) ?? 0
+        extraMinute = try? c.decodeIfPresent(Int.self, forKey: .extraMinute)
+        goal = (try? c.decode(Bool.self, forKey: .goal)) ?? false
+        important = (try? c.decode(Bool.self, forKey: .important)) ?? false
+        textAr = (try? c.decode(String.self, forKey: .textAr)) ?? ""
+        order = (try? c.decode(Int.self, forKey: .order)) ?? 0
+    }
+}
+nonisolated struct SpCommentary: Decodable {
+    let available: Bool
+    let live: Bool
+    let items: [SpCommentaryItem]
+}
+
+// MARK: - صفحة النادي (مطابق SplTeamProfile) — نداء واحد ?with=stats
+
+nonisolated struct SpVenueInfo: Decodable, Hashable {
+    let name: String
+    let city: String
+    let capacity: Int?
+    let image: String?
+}
+
+nonisolated struct SpTeamInfo: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+    let country: String?
+    let founded: Int?
+    let venue: SpVenueInfo?
+}
+
+nonisolated struct SpSquadPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String
+    let positionEn: String
+    let age: Int?
+    let photo: String
+}
+
+nonisolated struct SpStatTriple: Decodable, Hashable {
+    let total: Int
+    let home: Int
+    let away: Int
+}
+
+nonisolated struct SpTeamStatFixtures: Decodable, Hashable {
+    let played: SpStatTriple
+    let wins: SpStatTriple
+    let draws: SpStatTriple
+    let loses: SpStatTriple
+}
+
+nonisolated struct SpGoalSide: Decodable, Hashable {
+    let total: Int
+    let average: String?
+}
+
+nonisolated struct SpTeamStatGoals: Decodable, Hashable {
+    let `for`: SpGoalSide
+    let against: SpGoalSide
+}
+
+nonisolated struct SpTeamCards: Decodable, Hashable {
+    let yellowTotal: Int
+    let redTotal: Int
+}
+
+nonisolated struct SpTeamStatSummary: Decodable, Hashable {
+    let cleanSheets: SpStatTriple
+    let failedToScore: SpStatTriple
+    let cards: SpTeamCards
+    let mostUsedFormation: String?
+}
+
+nonisolated struct SpTeamStatBiggest: Decodable, Hashable {
+    let winsHome: String?
+    let winsAway: String?
+    let losesHome: String?
+    let losesAway: String?
+    let streakWin: Int?
+    let streakLose: Int?
+    let streakDraw: Int?
+}
+
+nonisolated struct SpTeamStats: Decodable, Hashable {
+    let leagueId: Int?
+    let season: Int?
+    let fixtures: SpTeamStatFixtures
+    let goals: SpTeamStatGoals
+    let summary: SpTeamStatSummary
+    let biggest: SpTeamStatBiggest?
+}
+
+// إصابات النادي (TheSports) — /team/:id/injuries.
+nonisolated struct SpTeamInjury: Decodable, Identifiable, Hashable {
+    let player: String
+    let reason: String?
+    let until: String?
+    var id: String { player + (until ?? "") }
+}
+nonisolated struct SpTeamInjuriesResponse: Decodable {
+    let injuries: [SpTeamInjury]
+}
+
+// انتقالات النادي — /team/:id/transfers (واصلون/مغادرون).
+nonisolated struct SpTeamTransferItem: Decodable, Identifiable, Hashable {
+    let date: String
+    let type: String
+    let playerId: Int
+    let player: String
+    let teamId: Int
+    let team: String
+    let teamLogo: String
+    var id: String { "\(playerId)-\(date)-\(teamId)" }
+}
+nonisolated struct SpTeamTransfersResponse: Decodable {
+    let arrivals: [SpTeamTransferItem]
+    let departures: [SpTeamTransferItem]
+}
+
+nonisolated struct SpCoachCareer: Decodable, Hashable {
+    let team: String
+    let start: String?
+    let end: String?
+}
+
+nonisolated struct SpCoach: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let photo: String
+    let nationality: String
+    let age: Int?
+    let startDate: String?
+    let career: [SpCoachCareer]
+}
+
+nonisolated struct SpTeamScorer: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let photo: String
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let matches: Int
+}
+
+nonisolated struct SpTeamProfile: Decodable {
+    let team: SpTeamInfo
+    let standing: SpStandingRow?
+    let competitionSlug: String?
+    let competitionName: String?
+    let fixtures: [SpFixture]
+    let squad: [SpSquadPlayer]
+    let stats: SpTeamStats?
+    let coach: SpCoach?
+    let topScorers: [SpTeamScorer]
+}
+
+// MARK: - بطاقة اللاعب (مطابق SplPlayerCard)
+
+nonisolated struct SpPlayerSeasonStats: Decodable, Hashable {
+    let competition: String
+    let team: SpTeam
+    let matches: Int
+    let lineups: Int
+    let minutes: Int
+    let rating: Double?
+    let goals: Int
+    let assists: Int
+    let yellow: Int
+    let red: Int
+    let saves: Int
+    let conceded: Int
+}
+
+nonisolated struct SpPlayerCareerStop: Decodable, Identifiable, Hashable {
+    let teamId: Int
+    let team: String
+    let logo: String
+    let seasons: [Int]
+    var id: Int { teamId }
+}
+
+nonisolated struct SpPlayerTrophy: Decodable, Hashable {
+    let competition: String
+    let country: String
+    let season: String
+    let place: String
+    let winner: Bool
+}
+
+// سجل المواسم (?with=extras) — موسم بموسم.
+nonisolated struct SpPlayerHistory: Decodable, Identifiable, Hashable {
+    let season: Int
+    let competition: String
+    let matches: Int
+    let goals: Int
+    let assists: Int
+    var id: String { "\(season)-\(competition)" }
+}
+
+nonisolated struct SpPlayerCard: Decodable {
+    let id: Int
+    let name: String
+    let fullName: String?
+    let photo: String
+    let position: String
+    let number: Int?
+    let age: Int?
+    let birthDate: String?
+    let birthPlace: String?
+    let nationality: String?
+    let height: Int?
+    let weight: Int?
+    let seasonStats: [SpPlayerSeasonStats]
+    let career: [SpPlayerCareerStop]
+    let trophies: [SpPlayerTrophy]
+    let history: [SpPlayerHistory]?   // مع ?with=extras
+}
+
+// فورمة اللاعب — آخر المباريات (/player/:id/form).
+nonisolated struct SpFormMatch: Decodable, Identifiable, Hashable {
+    let date: String
+    let opponent: String
+    let opponentLogo: String?
+    let homeAway: String?
+    let result: String        // W | D | L
+    let scoreFor: Int?
+    let scoreAgainst: Int?
+    let xg: Double?
+    let goals: Int?
+    let rating: Double?
+    let league: String?
+    var id: String { date + opponent }
+}
+nonisolated struct SpPlayerForm: Decodable {
+    let available: Bool
+    let matches: [SpFormMatch]
+}
+
+// القيمة السوقية (TheSports) — /player/:id/market.
+nonisolated struct SpPlayerMarket: Decodable {
+    let available: Bool
+    let value: Double?
+    let currency: String?
+    let peak: Double?
+}
+
 // MARK: - ثوابت
 
 nonisolated enum SportsConstants {
@@ -137,6 +994,45 @@ nonisolated enum SportsConstants {
 
     /// ترتيب عرض فئات البطولات (السعودية أولًا).
     static let categoryOrder = ["saudi", "gulf", "arab", "european", "world"]
+
+    /// شرائح البطولات السعودية (category == "saudi") — لحصر الرئيسية/المباشر على
+    /// الكرة السعودية. نقاط /sports/today و /sports/live تُرجِع كل بطولاتنا (خليجي/
+    /// عربي/أوروبي/عالمي) لا السعودية فقط، فنُرشّح عليها هنا. ثابتة ومعروفة؛ حدّثها
+    /// إذا أضاف الخادم بطولة سعودية جديدة.
+    static let saudiSlugs: Set<String> = [
+        "pro-league", "division-1", "division-2", "kings-cup", "super-cup", "womens-league",
+    ]
+
+    /// هل المباراة ضمن بطولة سعودية؟ (عبر competitionSlug من لوحة اليوم/المباشر).
+    static func isSaudi(_ slug: String?) -> Bool {
+        guard let slug else { return false }
+        return saudiSlugs.contains(slug)
+    }
+
+    /// معرّفات الأندية/المنتخب السعودية (api-sports) — لإبراز مبارياتها حتى في
+    /// البطولات القارية (دوري أبطال آسيا/كأس العالم للأندية) لا السعودية فقط.
+    /// مأخوذة من SPL_TEAM_AR في الخادم (روشن + السيدات) + المنتخب الأول (23).
+    static let saudiTeamIds: Set<Int> = [
+        23, // المنتخب السعودي
+        // دوري روشن للرجال
+        2928, 2929, 2931, 2932, 2933, 2934, 2936, 2938, 2939, 2940,
+        2944, 2945, 2956, 2977, 2992, 10509, 10511, 10513,
+        // الدوري الممتاز للسيدات
+        24884, 27712, 27713, 27714, 27715, 27716, 27717, 27718,
+    ]
+
+    /// هل هذه المباراة «سعودية» للرئيسية/المباشر؟ بطولة سعودية، أو نادٍ/منتخب
+    /// سعودي يلعب في بطولة قارية (الهلال/النصر/الأهلي/الاتحاد في دوري الأبطال…).
+    static func isSaudiFixture(_ f: SpFixture) -> Bool {
+        isSaudi(f.competitionSlug)
+            || saudiTeamIds.contains(f.home.id)
+            || saudiTeamIds.contains(f.away.id)
+    }
+
+    /// رتبة الفئة للترتيب (السعودية أولًا) — للوحات المجمّعة حسب البطولة.
+    static func categoryRank(_ category: String) -> Int {
+        categoryOrder.firstIndex(of: category) ?? categoryOrder.count
+    }
 
     static func categoryLabel(_ category: String) -> String {
         switch category {
@@ -175,7 +1071,10 @@ enum SpFormat {
     private static func fmt(_ pattern: String) -> DateFormatter {
         let f = DateFormatter()
         f.timeZone = riyadh
-        f.locale = Locale(identifier: "ar-SA")
+        // أسماء عربية + أرقام لاتينية + تقويم ميلادي (22:00 / 27 يونيو) — نتجنّب
+        // ar-SA لأنه يفترض التقويم الهجري (يظهر «محرم» بدل «يونيو»).
+        f.locale = Locale(identifier: "ar-u-nu-latn")
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = pattern
         return f
     }
@@ -188,6 +1087,36 @@ enum SpFormat {
     static func kickoffTime(_ iso: String?) -> String {
         guard let iso, let d = SpDateMath.date(from: iso) else { return "" }
         return fmt("HH:mm").string(from: d)
+    }
+
+    /// تاريخ قصير «15 مايو» — لشريط معلومة النتيجة المنتهية.
+    static func dayMonth(_ iso: String?) -> String {
+        guard let iso, let d = SpDateMath.date(from: iso) else { return "" }
+        return fmt("d MMMM").string(from: d)
+    }
+
+    /// اسم اليوم «السبت» — لشريط اختيار اليوم.
+    static func weekdayName(_ date: Date) -> String { fmt("EEEE").string(from: date) }
+
+    /// «27 يونيو» (أرقام لاتينية) — لشريط اختيار اليوم.
+    static func dayMonthLabel(_ date: Date) -> String { fmt("d MMMM").string(from: date) }
+
+    /// مفتاح التاريخ YYYY-MM-DD بتوقيت الرياض — لاستعلام /sports/today?date=.
+    static func dateKey(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.timeZone = riyadh
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+
+    /// وقت نسبي بالعربية («قبل ٣ ساعات») — لبطاقات الأخبار.
+    static func relativeArabic(_ iso: String?) -> String {
+        guard let iso, let d = SpDateMath.date(from: iso) else { return "" }
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "ar")
+        f.unitsStyle = .full
+        return f.localizedString(for: d, relativeTo: Date())
     }
 }
 
@@ -213,6 +1142,12 @@ extension APIClient {
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
+    /// البث المباشر العالمي — كل مباريات العالم القائمة الآن (لتبويب «المباشر»).
+    func fetchWorldLive(ignoreCache: Bool = false) async throws -> SpWorldLiveResponse {
+        try await get(SpWorldLiveResponse.self, path: "/sports/world-live",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
     func fetchMatches(comp: String, ignoreCache: Bool = false) async throws -> SpMatchesResponse {
         try await get(SpMatchesResponse.self, path: "/sports/\(comp)/matches",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
@@ -225,6 +1160,195 @@ extension APIClient {
 
     func fetchScorers(comp: String, ignoreCache: Bool = false) async throws -> SpScorersResponse {
         try await get(SpScorersResponse.self, path: "/sports/\(comp)/scorers",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAssists(comp: String, ignoreCache: Bool = false) async throws -> SpAssistsResponse {
+        try await get(SpAssistsResponse.self, path: "/sports/\(comp)/assists",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchLeagueTransfers(since: Int = 18, ignoreCache: Bool = false) async throws -> SpLeagueTransfersResponse {
+        try await get(SpLeagueTransfersResponse.self, path: "/sports/transfers",
+                      query: ["since": String(since)], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchOutlook(comp: String, ignoreCache: Bool = false) async throws -> SpOutlookResponse {
+        try await get(SpOutlookResponse.self, path: "/sports/\(comp)/outlook",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchMatchDetail(id: Int, ignoreCache: Bool = false) async throws -> SpMatchDetail {
+        try await get(SpMatchDetail.self, path: "/sports/match/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    // إثراء مركز المباراة: ملخّص ذكي + تقييمات اللاعبين + المواجهات.
+    func fetchStory(matchId: Int, ignoreCache: Bool = false) async throws -> SpMatchStory {
+        try await get(SpMatchStory.self, path: "/sports/match/\(matchId)/story", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchMatchPlayers(matchId: Int, ignoreCache: Bool = false) async throws -> SpMatchPlayers {
+        try await get(SpMatchPlayers.self, path: "/sports/match/\(matchId)/players", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchH2H(home: Int, away: Int, ignoreCache: Bool = false) async throws -> SpH2HResponse {
+        try await get(SpH2HResponse.self, path: "/sports/h2h",
+                      query: ["home": String(home), "away": String(away)], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    // إثراء المباراة (SportMonks) — أفضل جهد، يُخفى تبويب التحليل إن لم يتوفّر.
+    func fetchXg(matchId: Int, ignoreCache: Bool = false) async throws -> SpXg {
+        try await get(SpXg.self, path: "/sports/match/\(matchId)/xg", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchMomentum(matchId: Int, ignoreCache: Bool = false) async throws -> SpMomentum {
+        try await get(SpMomentum.self, path: "/sports/match/\(matchId)/momentum", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchPressure(matchId: Int, ignoreCache: Bool = false) async throws -> SpPressure {
+        try await get(SpPressure.self, path: "/sports/match/\(matchId)/pressure", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchMatchFacts(matchId: Int, ignoreCache: Bool = false) async throws -> SpMatchFacts {
+        try await get(SpMatchFacts.self, path: "/sports/match/\(matchId)/facts", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchCommentary(matchId: Int, ignoreCache: Bool = false) async throws -> SpCommentary {
+        try await get(SpCommentary.self, path: "/sports/match/\(matchId)/commentary", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    /// لوحة المتصدّرين (عامّة) — period: all | month | week.
+    func fetchLeaderboard(period: String = "all", ignoreCache: Bool = false) async throws -> [SpLeaderboardEntry] {
+        try await get(SpLeaderboardResponse.self, path: "/sports/leaderboard",
+                      query: ["period": period], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).leaderboard
+    }
+
+    // توقّعات المباريات (جلسة عضو، عبر mobileAPI).
+    func fetchMyPrediction(matchId: Int) async throws -> SpPrediction? {
+        try await get(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI).prediction
+    }
+    func submitPrediction(_ body: SpPredictBody, matchId: Int) async throws -> SpPrediction? {
+        try await post(SpPredictionResponse.self, path: "/sports/match/\(matchId)/predict",
+                       body: body, apiRoot: URLConstants.mobileAPI).prediction
+    }
+    func fetchMyPredictions() async throws -> SpMyPredictionsResponse {
+        try await get(SpMyPredictionsResponse.self, path: "/sports/predictions/me",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// تسجيل رمز جهاز APNs ليصله بثّ التنبيهات (يلزم userId لربط الجهاز بالعضو).
+    func registerDevice(deviceToken: String, userId: String) async throws {
+        let info = APIClient.deviceInfo()
+        let body = SpDeviceRegisterBody(
+            deviceToken: deviceToken, platform: "ios", tokenProvider: "apns",
+            userId: userId, language: "ar", appVersion: info.appVersion,
+            osVersion: info.osVersion, timezone: TimeZone.current.identifier,
+            bundleId: Bundle.main.bundleIdentifier
+        )
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "POST", path: "/devices/register", jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// تسجيل توكن Live Activity (نشاط شاشة القفل) ليدفع الخادم تحديثات النتيجة
+    /// عبر APNs حتى والتطبيق مغلق. عامّة (تعمل للزوّار؛ الخادم يربط userId إن وُجد).
+    func registerLiveActivity(fixtureId: Int, pushToken: String) async throws {
+        let body = SpLiveActivityRegisterBody(
+            fixtureId: fixtureId, token: pushToken,
+            bundleId: Bundle.main.bundleIdentifier)
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "POST", path: "/live-activity/register",
+                       jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إلغاء توكن نشاط مباشر (عند إيقاف المستخدم للمتابعة) كي يتوقّف الدفع.
+    func endLiveActivity(pushToken: String) async throws {
+        let body = SpLiveActivityEndBody(token: pushToken)
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "POST", path: "/live-activity/end",
+                       jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// تحديث ملف العضو (صورة/اسم) من /members/profile.
+    func fetchMemberProfile(ignoreCache: Bool = true) async throws -> SpMember? {
+        try await get(SpProfileResponse.self, path: "/members/profile", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).member
+    }
+
+    // المتابعة + التفضيلات (Bearer، عبر mobileAPI).
+    func fetchFollows(ignoreCache: Bool = true) async throws -> [SpFollow] {
+        try await get(SpFollowsResponse.self, path: "/sports/follows", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).follows
+    }
+    func addFollow(kind: String, refId: String, refName: String, refLogo: String?) async throws {
+        let data = try JSONEncoder().encode(SpFollowBody(kind: kind, refId: refId, refName: refName, refLogo: refLogo))
+        try await send(method: "POST", path: "/sports/follows", jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+    func removeFollow(kind: String, refId: String) async throws {
+        try await send(method: "DELETE", path: "/sports/follows", query: ["kind": kind, "refId": refId], apiRoot: URLConstants.mobileAPI)
+    }
+    func fetchAlertPrefs(ignoreCache: Bool = true) async throws -> SpAlertPrefs {
+        try await get(SpAlertPrefsResponse.self, path: "/sports/alert-prefs", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).preferences
+    }
+    @discardableResult
+    func updateAlertPrefs(_ p: SpAlertPrefs) async throws -> SpAlertPrefs {
+        let body = SpAlertPrefsBody(kickoff: p.kickoff, goals: p.goals, cards: p.cards, varReview: p.varReview, fulltime: p.fulltime)
+        return try await requestJSON(SpAlertPrefsResponse.self, method: "PUT", path: "/sports/alert-prefs", body: body, apiRoot: URLConstants.mobileAPI).preferences
+    }
+
+    /// دخول بحساب سبق بالبريد/الجوال + كلمة المرور. يكتشف البريد بوجود «@».
+    func loginWithIdentifier(_ identifier: String, password: String) async throws -> SpLoginResponse {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isEmail = trimmed.contains("@")
+        let body = SpLoginRequest(
+            email: isEmail ? trimmed.lowercased() : nil,
+            phone: isEmail ? nil : trimmed,
+            password: password,
+            deviceInfo: APIClient.deviceInfo()
+        )
+        return try await post(SpLoginResponse.self, path: "/auth/login", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// تبديل هوية Apple بجلسة عضو سبق (Bearer). نقطة /api/v1/auth/apple معفاة CSRF.
+    func loginWithApple(identityToken: String, firstName: String?, lastName: String?, email: String?) async throws -> SpLoginResponse {
+        let fullName: SpAppleAuthRequest.AppleFullName? =
+            (firstName != nil || lastName != nil) ? .init(firstName: firstName, lastName: lastName) : nil
+        let body = SpAppleAuthRequest(identityToken: identityToken, fullName: fullName, email: email, deviceInfo: APIClient.deviceInfo())
+        return try await post(SpLoginResponse.self, path: "/auth/apple", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// أخبار سبق الرياضية (تصنيف «رياضة») — عبر mobileAPI، عامّة بلا مصادقة.
+    func fetchSportsNews(limit: Int = 14, offset: Int = 0, ignoreCache: Bool = false) async throws -> SpArticlesResponse {
+        try await get(SpArticlesResponse.self, path: "/articles",
+                      query: ["section": "sports", "limit": "\(limit)", "offset": "\(offset)"],
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// صفحة النادي المتكاملة (هوية+ترتيب+مباريات+تشكيلة+إحصاءات+مدرب+هدّافون).
+    func fetchTeamProfile(id: Int, withStats: Bool = true, ignoreCache: Bool = false) async throws -> SpTeamProfile {
+        try await get(SpTeamProfile.self, path: "/sports/team/\(id)",
+                      query: withStats ? ["with": "stats"] : [:],
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    /// بطاقة اللاعب (هوية + أرقام الموسم + المسيرة + الألقاب + سجل المواسم via extras).
+    func fetchPlayerCard(id: Int, ignoreCache: Bool = false) async throws -> SpPlayerCard {
+        try await get(SpPlayerCard.self, path: "/sports/player/\(id)",
+                      query: ["with": "extras"], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    // إثراء النادي (المرحلة 3): إصابات + انتقالات.
+    func fetchTeamInjuries(id: Int, comp: String?, ignoreCache: Bool = false) async throws -> SpTeamInjuriesResponse {
+        var q: [String: String] = [:]
+        if let comp { q["comp"] = comp }
+        return try await get(SpTeamInjuriesResponse.self, path: "/sports/team/\(id)/injuries",
+                             query: q, ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchTeamTransfers(id: Int, ignoreCache: Bool = false) async throws -> SpTeamTransfersResponse {
+        try await get(SpTeamTransfersResponse.self, path: "/sports/team/\(id)/transfers",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    // إثراء اللاعب (المرحلة 4): فورمة + قيمة سوقية.
+    func fetchPlayerForm(id: Int, ignoreCache: Bool = false) async throws -> SpPlayerForm {
+        try await get(SpPlayerForm.self, path: "/sports/player/\(id)/form",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchPlayerMarket(id: Int, ignoreCache: Bool = false) async throws -> SpPlayerMarket {
+        try await get(SpPlayerMarket.self, path: "/sports/player/\(id)/market",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 }

@@ -27,7 +27,11 @@ import {
   type SplLiveBoardItem,
   type SplMatchEvent,
 } from "./saudiLeagueService";
-import { getTeamFollowerUserIds } from "./sportsFollowsService";
+import {
+  getTeamFollowerUserIds,
+  getMatchFollowerUserIds,
+  getFollowedMatchFixtureIds,
+} from "./sportsFollowsService";
 import {
   getTheSportsMatchLive,
   getTsCompetitionId,
@@ -265,13 +269,16 @@ async function detectEventAlerts(
 ): Promise<DetectedAlert[]> {
   const out: DetectedAlert[] = [];
   const allIds = new Set(matches.map((m) => m.id));
+  // المباريات المتابَعة مفردةً — لا نُحصّن نداء أحداثها بمتابعة الفريق.
+  const matchFollowedIds = await getFollowedMatchFixtureIds();
 
   for (const m of matches) {
     if (!m.status.live) continue;
     if (tsHandledIds.has(m.id)) continue; // بطاقات/فار المونديال من TheSports اللحظي
     const teamRefIds = [String(m.home.id), String(m.away.id)];
     const followers = await getTeamFollowerUserIds(teamRefIds);
-    if (followers.length === 0) continue; // لا متابع → لا نداء API
+    // لا متابع فريق ولا متابع مباراة → لا نداء API (توفير).
+    if (followers.length === 0 && !matchFollowedIds.has(String(m.id))) continue;
 
     let events: SplMatchEvent[];
     try {
@@ -332,21 +339,26 @@ async function pushToUserDevices(
 ): Promise<void> {
   try {
     const devices = await db
-      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider })
+      .select({
+        token: pushDevices.deviceToken,
+        provider: pushDevices.tokenProvider,
+        bundleId: pushDevices.bundleId,
+      })
       .from(pushDevices)
       .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)));
     if (devices.length === 0) return;
 
-    const apnsTokens = devices.filter((d) => d.provider === "apns").map((d) => d.token);
+    const apnsDevices = devices.filter((d) => d.provider === "apns");
     const fcmTokens = devices.filter((d) => d.provider === "fcm").map((d) => d.token);
 
-    if (apnsTokens.length > 0 && isApnsConfigured()) {
+    if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(
-        apnsTokens.map((t) =>
+        // apns-topic لكل جهاز حسب تطبيقه (الرياضة com.sabq.sports، الأخبار الافتراضي).
+        apnsDevices.map((d) =>
           sendPushNotification(
-            t,
+            d.token,
             createCustomNotificationPayload(title, body, { ...data, priority: "time-sensitive" }),
-            { priority: "10", pushType: "alert" },
+            { priority: "10", pushType: "alert", topic: d.bundleId ?? undefined },
           ).catch(() => undefined),
         ),
       );
@@ -362,7 +374,12 @@ async function pushToUserDevices(
 
 /** توصيل تنبيه واحد لكل متابعي الفريقين (inbox + بثّ + دفع). */
 async function dispatchAlert(alert: DetectedAlert): Promise<number> {
-  const followers = await getTeamFollowerUserIds(alert.teamRefIds);
+  // متابعو الفريقين ∪ متابعو هذه المباراة مفردةً (مزالة التكرار).
+  const [teamFollowers, matchFollowers] = await Promise.all([
+    getTeamFollowerUserIds(alert.teamRefIds),
+    getMatchFollowerUserIds([String(alert.fixtureId)]),
+  ]);
+  const followers = Array.from(new Set([...teamFollowers, ...matchFollowers]));
   if (followers.length === 0) return 0;
   // ترشيح المتابعين بحسب تفضيلهم لنوع هذا الحدث (بلا صفّ تفضيلات = الكل مفعّل).
   const userIds = await filterUsersByEventPref(followers, ALERT_KIND_TO_PREF[alert.kind]);

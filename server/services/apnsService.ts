@@ -192,6 +192,8 @@ export async function sendPushNotification(
     expiration?: number;
     collapseId?: string;
     pushType?: "alert" | "background" | "voip" | "complication" | "fileprovider" | "mdm";
+    // تجاوز apns-topic لكل جهاز (تطبيقات APNs متعددة). فارغ = bundle الافتراضي.
+    topic?: string;
   } = {}
 ): Promise<ApnsResponse> {
   const credentials = getApnsCredentials();
@@ -218,7 +220,7 @@ export async function sendPushNotification(
         ":method": "POST",
         ":path": path,
         "authorization": `bearer ${token}`,
-        "apns-topic": credentials.bundleId,
+        "apns-topic": options.topic || credentials.bundleId,
         "apns-push-type": options.pushType || "alert",
         "apns-priority": options.priority || "10",
         ...(options.expiration && { "apns-expiration": options.expiration.toString() }),
@@ -288,6 +290,8 @@ export interface LiveActivityContentState {
 export interface LiveActivityUpdateOptions {
   event: "update" | "end";
   contentState: LiveActivityContentState;
+  /** bundle التطبيق المُصدِر للنشاط — يحدّد apns-topic. فارغ = الـbundle الافتراضي. */
+  bundleId?: string | null;
   /** متى تُعتبر بيانات النشاط قديمة (ثوانٍ Unix) — يُعتّمها النظام بعدها. */
   staleDate?: number;
   /** للحدث "end": متى يزيل النظام النشاط تلقائيًا (ثوانٍ Unix). */
@@ -341,8 +345,9 @@ export async function sendLiveActivityUpdate(
         ":method": "POST",
         ":path": path,
         authorization: `bearer ${token}`,
-        // الموضوع الخاص بأنشطة Live Activity
-        "apns-topic": `${credentials.bundleId}.push-type.liveactivity`,
+        // الموضوع الخاص بأنشطة Live Activity — يتبع bundle التطبيق المُصدِر
+        // (الرياضة com.sabq.sports)، وإلا الـbundle الافتراضي للخادم.
+        "apns-topic": `${options.bundleId || credentials.bundleId}.push-type.liveactivity`,
         "apns-push-type": "liveactivity",
         "apns-priority": "10",
       };
