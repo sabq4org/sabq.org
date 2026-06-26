@@ -615,13 +615,19 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     // IMPORTANT: Deactivate old tokens for the same user/device before registering new one
     // This prevents duplicate notifications and ensures only the latest token is used
     if (userId) {
-      // Deactivate all other tokens for this user on the same platform
+      // Deactivate old tokens for this user — but ONLY within the SAME app
+      // (bundleId). Both Sabq apps (news + sports) run on the same iOS device
+      // with DIFFERENT APNs tokens but identical platform="ios"; without the
+      // bundleId scope, opening one app deactivated the other app's device row,
+      // so whichever app opened last silently killed the other's push delivery.
+      // IS NOT DISTINCT FROM buckets NULL legacy rows with NULL (same app).
       const deactivated = await db
         .update(pushDevices)
         .set({ isActive: false, updatedAt: new Date() })
         .where(and(
           eq(pushDevices.userId, userId),
           eq(pushDevices.platform, platform),
+          sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
           sql`${pushDevices.deviceToken} != ${finalToken}`
         ))
         .returning({ id: pushDevices.id });
