@@ -513,6 +513,22 @@ struct SpMyMatchesCard: View {
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
                     .stroke(SpTheme.cardStroke, lineWidth: 1)
             )
+            .task { await pollLive() }
+        }
+    }
+
+    // تحديث دوري لحالة/نتيجة المباريات المتابَعة أثناء عرض البطاقة — كي تنتقل
+    // «لم تبدأ» → «مباشر» وتتقدّم الدقيقة دون انتظار تحديث الصفحة يدويًا.
+    // يتسارع حين توجد مباراة جارية/قريبة، ويتباطأ حين لا شيء نشط.
+    private func pollLive() async {
+        while !Task.isCancelled {
+            let hasActive = follows.items.contains { f in
+                f.status.live || abs(f.kickoff.timeIntervalSinceNow) < 2 * 3600
+            }
+            let delay: UInt64 = hasActive ? 15_000_000_000 : 60_000_000_000
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { break }
+            await follows.refresh()
         }
     }
 
