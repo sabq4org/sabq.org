@@ -43,81 +43,89 @@ interface ApnsCredentials {
   bundleId: string;
 }
 
-// Cached credentials. Resolved + logged exactly once, then reused for every
-// subsequent send. Credentials come from env vars that don't change at
-// runtime, so re-reading/re-formatting/re-logging them on every single push
-// (sendPushNotification is called once per device token) was pure waste — it
-// flooded Railway logs ("Using credentials", "Reformatted key to proper PEM
-// format") and contributed to the per-deployment log rate limit during large
-// broadcasts. `undefined` = not yet computed; `null` = computed-but-missing.
-let cachedCredentials: ApnsCredentials | null | undefined = undefined;
+// Cached credentials per profile ("default" | "sports"). Resolved + logged once
+// each, then reused for every subsequent send (env vars don't change at
+// runtime). `undefined` slot = not computed; `null` = computed-but-missing.
+const credentialsCache = new Map<string, ApnsCredentials | null>();
 
-function getApnsCredentials(): ApnsCredentials | null {
-  if (cachedCredentials !== undefined) {
-    return cachedCredentials;
+// حزمة تطبيق الرياضة. مفتاح .p8 مرتبط بفريق Apple واحد فقط، فإن كان تطبيق
+// الرياضة على فريق مختلف عن الأخبار فلن يصلح مفتاح الأخبار لدفع com.sabq.sports
+// (يرجع APNs 403 InvalidProviderToken). نسمح بمفتاح APNs منفصل للرياضة عبر
+// APNS_SPORTS_* — وإن لم يُضبط نرجع لمفتاح الأخبار الافتراضي (يعمل فقط لو كان
+// التطبيقان على نفس الفريق).
+const SPORTS_BUNDLE_ID = process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports";
+
+/** تهيئة مفتاح PEM (literal \n + المسافات بدل الأسطر عند اللصق في env). */
+function formatPrivateKey(privateKey: string): string {
+  let formattedKey = privateKey;
+  if (formattedKey.includes("\\n")) {
+    formattedKey = formattedKey.replace(/\\n/g, "\n");
   }
+  if (formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
+    const match = formattedKey.match(/-----BEGIN PRIVATE KEY-----\s*([\s\S]+?)\s*-----END PRIVATE KEY-----/);
+    if (match) {
+      const body = match[1].replace(/\s+/g, "");
+      formattedKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+    }
+  }
+  return formattedKey;
+}
+
+/**
+ * بيانات اعتماد APNs حسب التطبيق (bundle). تطبيق الرياضة قد يكون على فريق Apple
+ * مختلف، فيستخدم مفتاح APNS_SPORTS_* إن ضُبط؛ غير ذلك يُستخدم مفتاح الأخبار
+ * الافتراضي. bundleId قد يأتي كـ topic لنشاط Live Activity
+ * (`<bundle>.push-type.liveactivity`) فنجرّده للأساس قبل المطابقة.
+ */
+function getApnsCredentials(bundleId?: string | null): ApnsCredentials | null {
+  const base = (bundleId || "").replace(/\.push-type\.liveactivity$/, "");
+  const sportsKeyId = process.env.APNS_SPORTS_KEY_ID;
+  const sportsTeamId = process.env.APNS_SPORTS_TEAM_ID;
+  const sportsKey = process.env.APNS_SPORTS_KEY_P8 || process.env.APNS_SPORTS_PRIVATE_KEY;
+  const useSports = base === SPORTS_BUNDLE_ID && Boolean(sportsKeyId && sportsTeamId && sportsKey);
+  const profile = useSports ? "sports" : "default";
+
+  const cached = credentialsCache.get(profile);
+  if (cached !== undefined) return cached;
 
   // Support both APNS_PRIVATE_KEY and APNS_KEY_P8 (Apple's .p8 file content).
   // keyId/teamId are env-only — hardcoded fallbacks were removed in the
   // 2026-06-10 audit so a leaked .p8 alone is not immediately usable.
-  const keyId = process.env.APNS_KEY_ID;
-  const teamId = process.env.APNS_TEAM_ID;
-  const privateKey = process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY;
-  const bundleId = process.env.APNS_BUNDLE_ID || "com.sabq.sabqorg";
+  const keyId = useSports ? sportsKeyId! : process.env.APNS_KEY_ID;
+  const teamId = useSports ? sportsTeamId! : process.env.APNS_TEAM_ID;
+  const privateKey = useSports ? sportsKey! : (process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY);
+  const credBundle = useSports ? SPORTS_BUNDLE_ID : (process.env.APNS_BUNDLE_ID || "com.sabq.sabqorg");
 
   if (!privateKey || !keyId || !teamId) {
-    console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
-    cachedCredentials = null;
+    if (profile === "default") {
+      console.warn("[APNs] Missing credentials (APNS_KEY_P8 / APNS_KEY_ID / APNS_TEAM_ID) - push notifications disabled");
+    }
+    credentialsCache.set(profile, null);
     return null;
   }
 
-  // Log credentials being used (without revealing private key) — logged once.
-  console.log(`[APNs] Using credentials: keyId=${keyId}, teamId=${teamId}, bundleId=${bundleId}, keyLength=${privateKey.length}`);
-
-  // Format private key properly for APNs
-  let formattedKey = privateKey;
-  
-  // Replace literal \n with actual newlines
-  if (formattedKey.includes("\\n")) {
-    formattedKey = formattedKey.replace(/\\n/g, "\n");
-  }
-  
-  // If key has spaces instead of newlines (common when pasted into env vars)
-  if (formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
-    // Extract the Base64 body, removing spaces from it
-    const match = formattedKey.match(/-----BEGIN PRIVATE KEY-----\s*([\s\S]+?)\s*-----END PRIVATE KEY-----/);
-    if (match) {
-      // Remove all whitespace from the Base64 body
-      const body = match[1].replace(/\s+/g, '');
-      formattedKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
-      console.log("[APNs] Reformatted key to proper PEM format");
-    }
-  }
-
-  cachedCredentials = { keyId, teamId, privateKey: formattedKey, bundleId };
-  return cachedCredentials;
+  // Log credentials being used (without revealing private key) — logged once per profile.
+  console.log(`[APNs] Using ${profile} credentials: keyId=${keyId}, teamId=${teamId}, bundleId=${credBundle}, keyLength=${privateKey.length}`);
+  const creds: ApnsCredentials = { keyId, teamId, privateKey: formatPrivateKey(privateKey), bundleId: credBundle };
+  credentialsCache.set(profile, creds);
+  return creds;
 }
 
-// Cache for JWT token (valid for 1 hour)
-// Clear cache on startup to ensure new keys are used
-let cachedToken: { token: string; expiresAt: number; keyId: string } | null = null;
+// Cache for JWT tokens, keyed by keyId so the news + sports keys don't evict
+// each other (a single slot would thrash on every alternating send → repeated
+// signing). Each token valid ~1h; we refresh 5min early.
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 /**
- * Generate a JWT token for APNs authentication
- * Tokens are cached and reused until they expire
- * Cache is invalidated if keyId changes (new key uploaded)
+ * Generate a JWT token for APNs authentication.
+ * Tokens are cached per keyId and reused until they expire (5-min buffer).
  */
 function generateApnsToken(credentials: ApnsCredentials): string {
   const now = Math.floor(Date.now() / 1000);
-  
-  // Return cached token if still valid (with 5 minute buffer) AND keyId matches
-  if (cachedToken && cachedToken.expiresAt > now + 300 && cachedToken.keyId === credentials.keyId) {
-    return cachedToken.token;
-  }
 
-  // Clear cache if keyId changed
-  if (cachedToken && cachedToken.keyId !== credentials.keyId) {
-    console.log(`[APNs] Key changed from ${cachedToken.keyId} to ${credentials.keyId} - clearing token cache`);
+  const cached = tokenCache.get(credentials.keyId);
+  if (cached && cached.expiresAt > now + 300) {
+    return cached.token;
   }
 
   const payload = {
@@ -134,12 +142,7 @@ function generateApnsToken(credentials: ApnsCredentials): string {
   });
 
   // Cache token for 55 minutes (Apple allows up to 1 hour)
-  cachedToken = {
-    token,
-    expiresAt: now + 3300,
-    keyId: credentials.keyId,
-  };
-
+  tokenCache.set(credentials.keyId, { token, expiresAt: now + 3300 });
   return token;
 }
 
@@ -196,7 +199,8 @@ export async function sendPushNotification(
     topic?: string;
   } = {}
 ): Promise<ApnsResponse> {
-  const credentials = getApnsCredentials();
+  // اختر المفتاح حسب تطبيق الجهاز (topic = bundleId)؛ الرياضة قد تستخدم مفتاحًا منفصلًا.
+  const credentials = getApnsCredentials(options.topic);
   
   if (!credentials) {
     console.log("[APNs] No credentials configured - skipping push");
@@ -311,7 +315,8 @@ export async function sendLiveActivityUpdate(
   activityPushToken: string,
   options: LiveActivityUpdateOptions,
 ): Promise<ApnsResponse> {
-  const credentials = getApnsCredentials();
+  // اختر المفتاح حسب bundle التطبيق المُصدِر للنشاط (الرياضة قد تستخدم مفتاحًا منفصلًا).
+  const credentials = getApnsCredentials(options.bundleId);
   if (!credentials) {
     return { success: false, reason: "APNs not configured" };
   }
