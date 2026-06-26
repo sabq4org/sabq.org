@@ -213,6 +213,8 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
   let pushes = 0;
   let ended = 0;
   const invalidTokens: string[] = [];
+  // تشخيص: تجميع أسباب فشل الدفع (statusCode:reason → عدد) لطباعتها مُوجزة.
+  const failReasons = new Map<string, number>();
 
   for (const [fixtureId, tokens] of byFixture) {
     let detail: WcMatchDetail | null = null;
@@ -264,10 +266,17 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
             .set({ lastContentHash: hash, lastPushedAt: new Date(), updatedAt: new Date() })
             .where(eq(liveActivityTokens.id, t.id));
         }
-      } else if (isInvalidToken(resp.reason)) {
-        invalidTokens.push(t.pushToken);
+      } else {
+        const key = `${resp.statusCode ?? "?"}:${resp.reason ?? "?"}`;
+        failReasons.set(key, (failReasons.get(key) ?? 0) + 1);
+        if (isInvalidToken(resp.reason)) invalidTokens.push(t.pushToken);
       }
     }
+  }
+
+  if (failReasons.size > 0) {
+    const summary = [...failReasons.entries()].map(([k, v]) => `${k}×${v}`).join(", ");
+    console.warn(`[LiveActivity] push failures: ${summary}`);
   }
 
   if (invalidTokens.length > 0) {
