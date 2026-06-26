@@ -55,20 +55,32 @@ const credentialsCache = new Map<string, ApnsCredentials | null>();
 // التطبيقان على نفس الفريق).
 const SPORTS_BUNDLE_ID = process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports";
 
-/** تهيئة مفتاح PEM (literal \n + المسافات بدل الأسطر عند اللصق في env). */
+/**
+ * تهيئة مفتاح PEM لـ APNs. يتحمّل ثلاث صيغ لصق شائعة في env:
+ *   1) PEM كامل بترويسة BEGIN/END (مع أسطر أو مسافات داخل الجسم).
+ *   2) literal "\n" بدل أسطر فعلية.
+ *   3) جسم Base64 وحده **بلا ترويسة** — الخطأ الأشيع؛ نلفّه بترويسة PEM صحيحة،
+ *      وإلا يفشل jwt.sign في تحليله.
+ */
 function formatPrivateKey(privateKey: string): string {
-  let formattedKey = privateKey;
-  if (formattedKey.includes("\\n")) {
-    formattedKey = formattedKey.replace(/\\n/g, "\n");
+  let key = privateKey.trim();
+  if (key.includes("\\n")) {
+    key = key.replace(/\\n/g, "\n");
   }
-  if (formattedKey.includes("-----BEGIN PRIVATE KEY-----")) {
-    const match = formattedKey.match(/-----BEGIN PRIVATE KEY-----\s*([\s\S]+?)\s*-----END PRIVATE KEY-----/);
+
+  if (key.includes("-----BEGIN")) {
+    const match = key.match(/-----BEGIN [^-]+-----\s*([\s\S]+?)\s*-----END [^-]+-----/);
     if (match) {
       const body = match[1].replace(/\s+/g, "");
-      formattedKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+      return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
     }
+    return key;
   }
-  return formattedKey;
+
+  // لا ترويسة → جسم Base64 عارٍ. أزل كل فراغ ولفّه بترويسة PEM صحيحة.
+  const body = key.replace(/\s+/g, "");
+  if (!body) return key;
+  return `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
 }
 
 /**
