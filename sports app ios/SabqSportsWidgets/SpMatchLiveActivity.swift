@@ -28,10 +28,19 @@ struct SpMatchLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
                         centerValue(context, dark: true)
-                        Text(statusText(context.state, kickoff: context.attributes.kickoff))
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.85))
-                            .lineLimit(1)
+                        if let start = SpLA.clockDate(context.state) {
+                            Text(start, style: .timer)
+                                .font(.system(size: 11, weight: .bold))
+                                .monospacedDigit()
+                                .foregroundStyle(.white.opacity(0.85))
+                                .frame(maxWidth: 60)
+                                .environment(\.layoutDirection, .leftToRight)
+                        } else {
+                            Text(statusText(context.state, kickoff: context.attributes.kickoff))
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                        }
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -188,11 +197,24 @@ private struct LockScreenView: View {
         HStack(spacing: 5) {
             if context.state.isLive {
                 Circle().fill(Color.red).frame(width: 7, height: 7)
+                if let start = SpLA.clockDate(context.state) {
+                    // عدّاد حيّ يتحرّك ذاتيًّا على شاشة القفل (لا ينتظر دفعة).
+                    Text(start, style: .timer)
+                        .font(.system(size: 12, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(SpLA.green)
+                        .frame(maxWidth: 52)
+                        .environment(\.layoutDirection, .leftToRight)
+                } else {
+                    Text(statusText(context.state, kickoff: context.attributes.kickoff))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(SpLA.green).lineLimit(1)
+                }
+            } else {
+                Text(statusText(context.state, kickoff: context.attributes.kickoff))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(SpLA.ink.opacity(0.7)).lineLimit(1)
             }
-            Text(statusText(context.state, kickoff: context.attributes.kickoff))
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(context.state.isLive ? SpLA.green : SpLA.ink.opacity(0.7))
-                .lineLimit(1)
         }
         .padding(.horizontal, 9).padding(.vertical, 4)
         .background(Capsule().fill(SpLA.green.opacity(0.12)))
@@ -250,6 +272,12 @@ enum SpLA {
     static let green = Color(red: 0.09, green: 0.52, blue: 0.36)
     static let ink = Color(red: 0.07, green: 0.13, blue: 0.10)
     static let cardBG = Color(red: 0.97, green: 0.98, blue: 0.97)
+
+    /// تاريخ بدء الشوط للعدّاد الحيّ (إن توفّر مرجعه وكانت المباراة جارية).
+    static func clockDate(_ s: SpMatchActivityAttributes.ContentState) -> Date? {
+        guard s.isLive, let epoch = s.clockStartEpoch, epoch > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(epoch))
+    }
 
     /// أوّل حرفين بارزين من اسم الفريق (يتخطّى أداة التعريف «ال»).
     static func shortName(_ name: String) -> String {

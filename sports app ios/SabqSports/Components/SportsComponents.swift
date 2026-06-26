@@ -646,15 +646,27 @@ struct SpMyMatchesCard: View {
         if f.status.live {
             HStack(spacing: 4) {
                 Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
-                Text("مباشر")
+                Text(liveLabel(f))
                     .font(SportsFonts.app(size: 9.5, weight: .bold))
                     .foregroundStyle(SpTheme.crimson)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
             }
         } else {
             Text("انتهت")
                 .font(SportsFonts.app(size: 9.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
         }
+    }
+
+    // نصّ الحالة الجارية: دقيقة الشوط («45+2'») إن توفّرت، وإلا حالة الشوط
+    // («بين الشوطين»/«الشوط الأول»…) من الخادم، وإلا «مباشر».
+    private func liveLabel(_ f: SpFixture) -> String {
+        if let m = f.status.elapsed, m > 0 {
+            let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
+            return "\(m)\(extra)'"
+        }
+        return f.status.label.isEmpty ? "مباشر" : f.status.label
     }
 
     // عدّاد تنازليّ بأرقام لاتينية: «2ي 04س» إن بقي أكثر من يوم، وإلا «HH:MM:SS».
