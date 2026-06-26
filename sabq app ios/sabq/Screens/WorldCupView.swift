@@ -263,8 +263,8 @@ struct WCHeroSection: View {
             if !f.started {
                 WCCountdownChips(timestamp: f.timestamp)
             }
-            if let p = prediction(for: f), !f.status.finished {
-                WCProbabilityBar(fixture: f, prediction: p)
+            if !f.status.finished {
+                WCHeroPrediction(fixture: f, prediction: prediction(for: f))
             }
 
             Button { onOpenMatch(f.id) } label: {

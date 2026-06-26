@@ -160,6 +160,37 @@ struct WCProbabilityBar: View {
     }
 }
 
+/// شريط الاحتمالات لبطاقة الهيرو. التوقع يأتي جاهزًا من overview.predictions
+/// للمباراة المميّزة؛ وعند غيابه (البطاقة الثانية المتزامنة) نتراجع إلى
+/// /world-cup/forecast/:id — نفس مصدر مركز المباراة، مطابق لمكوّن الويب
+/// HeroPrediction — حتى تُظهر كل البطاقات توقعها لا المميّزة وحدها.
+struct WCHeroPrediction: View {
+    let fixture: WCFixture
+    let prediction: WCPrediction?
+    @State private var fetched: WCForecast?
+
+    private var resolved: WCPrediction? {
+        if let p = prediction { return p }
+        if let ft = fetched?.fulltime {
+            return WCPrediction(home: ft.home, draw: ft.draw, away: ft.away, advice: nil)
+        }
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            if let p = resolved {
+                WCProbabilityBar(fixture: fixture, prediction: p)
+            }
+        }
+        .task(id: fixture.id) {
+            if prediction == nil, !fixture.status.finished {
+                fetched = try? await APIClient.shared.fetchWorldCupForecast(fixtureId: fixture.id)
+            }
+        }
+    }
+}
+
 /// ترويسة قسم: أيقونة + عنوان + وصف.
 struct WCSectionHeader: View {
     let icon: String
