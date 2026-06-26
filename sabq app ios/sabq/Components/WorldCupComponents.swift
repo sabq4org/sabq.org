@@ -68,10 +68,17 @@ struct WCStatusPill: View {
     }
 
     private var elapsedText: String {
-        guard let e = fixture.status.elapsed else { return fixture.status.label }
-        // الوقت بدل الضائع: 90+8' بدل 90' المجمدة في أكثر دقائق المباراة توترًا
-        if let x = fixture.status.extra, x > 0 { return "\(e)+\(x)'" }
-        return "\(e)'"
+        let s = fixture.status
+        // عدّاد المباراة يجري فعلًا في أشواط اللعب فقط (لا الاستراحة/الترجيح/التوقف)
+        let running = ["1H", "2H", "ET", "LIVE"].contains(s.code) && s.elapsed != nil
+        if running, let e = s.elapsed {
+            // الوقت بدل الضائع: 90+8' بدل 90' المجمدة في أكثر دقائق المباراة توترًا
+            let minute = (s.extra ?? 0) > 0 ? "\(e)+\(s.extra!)'" : "\(e)'"
+            // اسم الشوط يسبق الدقيقة: «الشوط الأول · 23'»
+            return s.label.isEmpty ? minute : "\(s.label) · \(minute)"
+        }
+        // الاستراحات/التوقف/الترجيح: نص الحالة («استراحة الشوطين») لا دقيقة مجمّدة
+        return s.label.isEmpty ? "مباشر" : s.label
     }
 }
 
@@ -156,6 +163,37 @@ struct WCProbabilityBar: View {
             Text("توقعات خوارزمية للاستئناس من مزود البيانات")
                 .font(SabqFonts.app(size: 10))
                 .foregroundStyle(WCTheme.onDarkDim)
+        }
+    }
+}
+
+/// شريط الاحتمالات لبطاقة الهيرو. التوقع يأتي جاهزًا من overview.predictions
+/// للمباراة المميّزة؛ وعند غيابه (البطاقة الثانية المتزامنة) نتراجع إلى
+/// /world-cup/forecast/:id — نفس مصدر مركز المباراة، مطابق لمكوّن الويب
+/// HeroPrediction — حتى تُظهر كل البطاقات توقعها لا المميّزة وحدها.
+struct WCHeroPrediction: View {
+    let fixture: WCFixture
+    let prediction: WCPrediction?
+    @State private var fetched: WCForecast?
+
+    private var resolved: WCPrediction? {
+        if let p = prediction { return p }
+        if let ft = fetched?.fulltime {
+            return WCPrediction(home: ft.home, draw: ft.draw, away: ft.away, advice: nil)
+        }
+        return nil
+    }
+
+    var body: some View {
+        Group {
+            if let p = resolved {
+                WCProbabilityBar(fixture: fixture, prediction: p)
+            }
+        }
+        .task(id: fixture.id) {
+            if prediction == nil, !fixture.status.finished {
+                fetched = try? await APIClient.shared.fetchWorldCupForecast(fixtureId: fixture.id)
+            }
         }
     }
 }
