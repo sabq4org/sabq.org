@@ -73,6 +73,7 @@
 		5C000103 /* SpLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpLiveActivityManager.swift; sourceTree = "<group>"; };
 		5C000104 /* SabqSportsWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SabqSportsWidgetsBundle.swift; sourceTree = "<group>"; };
 		5C000105 /* SpMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchLiveActivity.swift; sourceTree = "<group>"; };
+		5C000106 /* SabqSportsWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSportsWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -165,6 +166,7 @@
 				5C000104 /* SabqSportsWidgetsBundle.swift */,
 				5C000105 /* SpMatchLiveActivity.swift */,
 				5C000101 /* Info.plist */,
+				5C000106 /* SabqSportsWidgets.entitlements */,
 			);
 			path = SabqSportsWidgets;
 			sourceTree = "<group>";
@@ -370,6 +372,7 @@
 		5F000100 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
@@ -394,6 +397,7 @@
 		5F000101 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;

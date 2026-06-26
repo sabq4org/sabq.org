@@ -119,7 +119,14 @@ struct CompetitionRow: View {
     }
 
     @ViewBuilder private var logo: some View {
-        if let url = comp.logo, !url.isEmpty {
+        if comp.slug == SportsConstants.defaultComp {
+            // دوري روشن — الشعار الرسمي (أصل محلّي) بدل شعار الخادم.
+            Image("RSLLogo")
+                .resizable().scaledToFit()
+                .padding(4)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(.white))
+        } else if let url = comp.logo, !url.isEmpty {
             SpRemoteImage(url: url)
                 .padding(5)
                 .frame(width: 36, height: 36)
