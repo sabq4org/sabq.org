@@ -191,32 +191,30 @@ export default function WorldCupNewsBlock() {
   return (
     <section
       dir="rtl"
-      className="space-y-3 sm:space-y-4"
+      className="space-y-4"
       aria-label="أخبار كأس العالم 2026"
       data-testid="section-worldcup-news"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Newspaper className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
-          <h2 className="truncate text-2xl font-black leading-tight md:text-3xl">أخبار المونديال</h2>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Newspaper className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          <h2 className="text-2xl md:text-3xl font-bold">أخبار المونديال</h2>
         </div>
         <Link href="/world-cup#news">
-          <span className="flex shrink-0 cursor-pointer items-center gap-1 text-sm font-bold text-emerald-700 hover:text-emerald-600 dark:text-emerald-400">
+          <span className="flex items-center gap-1 text-sm font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 cursor-pointer">
             مركز المونديال
             <ChevronLeft className="h-4 w-4" />
           </span>
         </Link>
       </div>
 
-      <p className="text-sm leading-6 text-muted-foreground sm:text-base">
-        معاينات وتقارير مباريات كأس العالم 2026 لحظة بلحظة
-      </p>
+      <p className="text-muted-foreground">معاينات وتقارير مباريات كأس العالم 2026 لحظة بلحظة</p>
 
       {/* الجوال: قائمة مدمجة — نفس بنية «أخبارك الذكية» لكن بإطار حاد
           رمادي خفيف (زوايا قائمة) يميز بطاقات المونديال فوق الخلفية الخضراء */}
-      <Card className="overflow-hidden rounded-2xl border-neutral-200/90 bg-background/95 shadow-sm dark:border-neutral-700 lg:hidden">
+      <Card className="overflow-hidden lg:hidden rounded-none border-neutral-300/70 dark:border-neutral-700">
         <CardContent className="p-0">
-          <div className="divide-y divide-border/70">
+          <div className="dark:divide-y">
             {items.map((item) => (
               <Link key={item.id} href={`/article/${item.slug}`}>
                 <div
@@ -224,24 +222,24 @@ export default function WorldCupNewsBlock() {
                   onMouseEnter={() => prefetchArticle(item.slug)}
                   onTouchStart={() => prefetchArticle(item.slug)}
                 >
-                  <div className="p-3 transition-all hover-elevate active-elevate-2">
-                    <div className="flex items-center gap-3">
-                      <div className="relative h-20 w-28 flex-shrink-0 overflow-hidden rounded-xl bg-muted">
+                  <div className="p-4 hover-elevate active-elevate-2 transition-all">
+                    <div className="flex gap-3">
+                      <div className="relative flex-shrink-0 w-28 h-20 rounded-lg overflow-hidden">
                         <MatchVisual item={item} showBadge={false} compact className="aspect-auto h-full" />
                       </div>
 
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <KindBadge item={item} compact />
                           <NewBadge item={item} compact />
                         </div>
-                        <h4 className="line-clamp-2 text-[15px] font-extrabold leading-6 transition-colors group-hover:text-primary">
+                        <h4 className="font-bold text-sm line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                           {item.title}
                         </h4>
                         {item.publishedAt && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{formatArticleTimestamp(item.publishedAt)}</span>
+                            <Clock className="h-3 w-3" />
+                            {formatArticleTimestamp(item.publishedAt)}
                           </div>
                         )}
                       </div>
