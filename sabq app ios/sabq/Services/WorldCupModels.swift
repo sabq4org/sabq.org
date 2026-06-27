@@ -121,6 +121,10 @@ nonisolated struct WCOverview: Decodable, Hashable {
     let live: [WCFixture]
     let today: [WCFixture]
     let matchOfTheDay: WCMatchOfDay?
+    /// المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — قد تكون في
+    /// يوم تقويمي تالٍ فلا تظهر في today؛ يرسلها الخادم لعرض بطاقتي Hero متجاورتين.
+    /// optional حتى تبقى الاستجابات الأقدم قابلة للفكّ.
+    let matchOfDayPeers: [WCFixture]?
     let saudi: WCSaudi
     let updatedAt: String
     /// توقعات النتيجة مفهرسة بمعرّف المباراة — يرسلها الخادم لكل مباراة قد تُعرض
