@@ -27,13 +27,11 @@ import { LiveMinute, isClockRunning } from "./LiveMinute";
 
 function TeamChip({ team }: { team: WcFixture["home"] }) {
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1 text-center md:flex-row md:gap-2 md:text-start">
-      <span className="h-10 w-10 shrink-0 rounded-full bg-white p-1 ring-2 ring-white/15 shadow md:h-9 md:w-9">
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="h-9 w-9 shrink-0 rounded-full bg-white p-1 ring-2 ring-white/15 shadow">
         <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
       </span>
-      <span className="max-w-[82px] truncate text-xs font-extrabold leading-tight text-white md:max-w-28 md:text-sm">
-        {team.name}
-      </span>
+      <span className="text-sm font-extrabold text-white truncate">{team.name}</span>
     </div>
   );
 }
@@ -93,14 +91,14 @@ function TickingCountdown({ timestamp }: { timestamp: number }) {
 function MatchBlock({ fixture }: { fixture: WcFixture }) {
   const started = fixture.status.live || fixture.status.finished;
   return (
-    <div className="grid w-full max-w-[330px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:flex md:max-w-none md:justify-center md:gap-5 md:min-w-0">
+    <div className="flex items-center justify-center gap-3 sm:gap-5 min-w-0">
       <TeamChip team={fixture.home} />
 
-      <div className="flex shrink-0 flex-col items-center gap-1 rounded-2xl bg-white/[0.08] px-3 py-2 ring-1 ring-white/10 md:bg-transparent md:px-0 md:py-0 md:ring-0">
+      <div className="flex flex-col items-center gap-0.5 shrink-0">
         {started ? (
           <>
             {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR */}
-            <span className="text-3xl font-black leading-none text-white tabular-nums md:text-2xl" dir="ltr">
+            <span className="text-2xl font-black text-white tabular-nums leading-none" dir="ltr">
               {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
             </span>
             <Badge
@@ -120,7 +118,7 @@ function MatchBlock({ fixture }: { fixture: WcFixture }) {
           </>
         ) : (
           <>
-            <span className="text-2xl font-black leading-none text-white md:text-xl">
+            <span className="text-xl font-black text-white leading-none">
               {formatKickoffTime(fixture.date)}
             </span>
             <span className="text-[10px] text-emerald-200/70">{formatKickoffDay(fixture.date)}</span>
@@ -181,7 +179,7 @@ export default function WorldCupHomeStrip() {
     <section
       dir="rtl"
       aria-label="تغطية كأس العالم 2026"
-      className="relative overflow-hidden rounded-[26px] bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828] ring-1 ring-emerald-900/40 shadow-lg md:rounded-3xl"
+      className="relative overflow-hidden rounded-3xl bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828] ring-1 ring-emerald-900/40 shadow-lg"
     >
       {/* ملمس العشب + وهج الكشافات */}
       <div
@@ -191,25 +189,25 @@ export default function WorldCupHomeStrip() {
             "repeating-linear-gradient(90deg, rgba(255,255,255,0.6) 0 70px, transparent 70px 140px)",
         }}
       />
-      <div className="absolute -top-20 -right-16 hidden h-48 w-48 rounded-full bg-emerald-400/15 blur-3xl md:block" />
-      <div className="absolute -bottom-24 -left-16 hidden h-48 w-48 rounded-full bg-sky-400/10 blur-3xl md:block" />
+      <div className="absolute -top-20 -right-16 h-48 w-48 rounded-full bg-emerald-400/15 blur-3xl" />
+      <div className="absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-sky-400/10 blur-3xl" />
 
-      <div className="relative flex flex-col items-stretch gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:gap-6">
+      <div className="relative flex flex-col md:flex-row items-center gap-4 md:gap-6 px-4 sm:px-6 py-4">
         {/* هوية البطولة */}
         <Link href="/world-cup">
-          <span className="group flex cursor-pointer items-center justify-center gap-3 md:justify-start">
-            <span className="shrink-0 rounded-xl bg-white p-1.5 shadow-lg">
+          <span className="flex items-center gap-3 cursor-pointer group">
+            <span className="rounded-xl bg-white p-1.5 shadow-lg shrink-0">
               <img
                 src={worldCupEmblem}
                 alt="كأس العالم 2026"
-                className="h-10 w-auto object-contain md:h-11"
+                className="h-11 w-auto object-contain"
                 width={233}
                 height={360}
                 loading="lazy"
               />
             </span>
-            <span className="text-center md:text-right">
-              <span className="block text-xl font-black leading-tight text-white transition-colors group-hover:text-emerald-300 md:text-lg">
+            <span className="text-right">
+              <span className="block text-lg font-black text-white leading-tight group-hover:text-emerald-300 transition-colors">
                 مونديال 2026
               </span>
               <span className="block text-[11px] text-emerald-200/80">تغطية حية بتوقيت الرياض</span>
@@ -220,10 +218,10 @@ export default function WorldCupHomeStrip() {
         <div className="hidden md:block h-12 w-px bg-white/10 shrink-0" />
 
         {/* المباراة — أو مباراتان متجاورتان عند التزامن */}
-        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 md:flex-row md:flex-wrap md:gap-6">
+        <div className="flex-1 flex flex-wrap items-center justify-center gap-3 sm:gap-6 min-w-0">
           {matches.map((f, i) => (
             <Fragment key={f.id}>
-              {i > 0 && <div className="hidden h-12 w-px shrink-0 bg-white/10 md:block" />}
+              {i > 0 && <div className="hidden sm:block h-12 w-px bg-white/10 shrink-0" />}
               <MatchBlock fixture={f} />
             </Fragment>
           ))}
@@ -231,7 +229,7 @@ export default function WorldCupHomeStrip() {
 
         {/* الدعوة للقسم */}
         <Link href="/world-cup" className="shrink-0">
-          <Button className="h-11 w-full rounded-full bg-emerald-400 px-5 font-bold text-emerald-950 hover:bg-emerald-300 md:h-10 md:w-auto gap-1">
+          <Button className="bg-emerald-400 text-emerald-950 hover:bg-emerald-300 font-bold rounded-full gap-1 px-5">
             مركز المونديال
             <ChevronLeft className="h-4 w-4" />
           </Button>
