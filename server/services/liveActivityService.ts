@@ -43,6 +43,10 @@ const LIVE_STATE_AR: Record<string, string> = {
 
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
+// نبضة إبقاء: حتى دون تغيّر النتيجة/الحالة، ندفع كل ~دقيقتين بأولوية منخفضة (5)
+// لإعادة ضبط مرساة الساعة (ضدّ الانجراف) وتجديد staleDate. أرخص بكثير من دفع
+// الدقيقة كل دقيقة (الدقيقة صارت تتحرّك ذاتيًّا على الجهاز ولا تُدفع إطلاقًا).
+const KEEPALIVE_SEC = 120;
 
 // آخر نتيجة معروفة لكل مباراة (في الذاكرة، القائد فقط) — لتحديد أولوية APNs:
 // تغيّر النتيجة (هدف) → أولوية 10 فورية؛ تغيّر روتيني (دقيقة/حالة) → أولوية 5
@@ -129,6 +133,17 @@ function lastEventText(detail: WcMatchDetail): string | null {
   return `${icon} ${minute} ${who}`;
 }
 
+// أكواد توقّف الساعة (لا تتحرّك الدقيقة): استراحة/فاصل الإضافي/ركلات الترجيح/إيقاف.
+// نفحص حالة SportMonks (developer_name) أولًا ثم كود API-Football احتياطًا.
+const SM_PAUSED_STATES = new Set(["HT", "BREAK", "PENALTIES", "INPLAY_PENALTIES"]);
+const AF_PAUSED_CODES = new Set(["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP"]);
+
+function isClockPaused(detail: WcMatchDetail, live?: WcLiveScore | null): boolean {
+  if (live && live.live && SM_PAUSED_STATES.has(live.stateDevName)) return true;
+  const code = (detail.fixture.status.code ?? "").toUpperCase();
+  return AF_PAUSED_CODES.has(code);
+}
+
 function buildContentState(
   detail: WcMatchDetail,
   live?: WcLiveScore | null,
@@ -145,18 +160,30 @@ function buildContentState(
   };
   // تجاوز لحظي من SportMonks للنتيجة/الدقيقة/الحالة (يكسر تأخّر كاش API-Football).
   // lastEvent يبقى من API-Football (عربي مُعرَّب) — ثانوي ومقبول تأخّره قليلًا.
-  if (live && (live.live || live.finished)) {
-    return {
-      ...base,
-      homeScore: live.home,
-      awayScore: live.away,
-      minute: live.minute > 0 ? `${live.minute}'` : base.minute,
-      statusLabel: LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel,
-      isLive: live.live,
-      isFinished: live.finished || base.isFinished,
-    };
+  const state: LiveActivityContentState =
+    live && (live.live || live.finished)
+      ? {
+          ...base,
+          homeScore: live.home,
+          awayScore: live.away,
+          minute: live.minute > 0 ? `${live.minute}'` : base.minute,
+          statusLabel: LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel,
+          isLive: live.live,
+          isFinished: live.finished || base.isFinished,
+        }
+      : base;
+
+  // مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة جاريةً فعليًّا (لا استراحة).
+  // المصدر الأدقّ للدقيقة: SportMonks الحيّ إن توفّر، وإلا elapsed من API-Football.
+  const elapsedMin =
+    live && live.live && live.minute > 0 ? live.minute : f.status.elapsed ?? 0;
+  const extraMin = f.status.extra ?? 0;
+  const running =
+    state.isLive && !state.isFinished && elapsedMin > 0 && !isClockPaused(detail, live);
+  if (running) {
+    state.clockStartEpoch = Math.floor(Date.now() / 1000) - (elapsedMin + extraMin) * 60;
   }
-  return base;
+  return state;
 }
 
 function staleDateFor(detail: WcMatchDetail): number {
@@ -239,19 +266,26 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
 
     const state = buildContentState(detail, live);
-    const hash = JSON.stringify(state);
+    // بصمة الدفع تستثني `minute` و`clockStartEpoch` عمدًا: الدقيقة تتحرّك ذاتيًّا
+    // على الجهاز عبر المرساة، فلا داعي لدفعة عند كل تغيّر دقيقة. نبقي الدفع فقط
+    // عند تغيّر النتيجة/الحالة/آخر حدث (نادر → فوري ولا يستنزف ميزانية iOS).
+    const pushKey = JSON.stringify({
+      h: state.homeScore,
+      a: state.awayScore,
+      s: state.statusLabel,
+      l: state.isLive,
+      f: state.isFinished,
+      e: state.lastEvent ?? null,
+    });
     const finished = state.isFinished;
     const staleDate = staleDateFor(detail);
     const nowSec = Math.floor(Date.now() / 1000);
 
-    // أولوية الدفع: أثناء البث نستخدم "10" دائمًا (فوري). علم FrequentUpdates في
-    // البناء يسمح بهذه الوتيرة المتكررة دون خنق — وهو ما يُصلح تأخّر الدقيقة الذي
-    // سبّبته أولوية 5 سابقًا (تُسلَّم «وقت ما يناسب النظام» فتتأخّر دقائق).
+    // قياس تغيّر النتيجة (للتسجيل فقط) — دفعة النتيجة دائمًا بأولوية 10 فورية.
     const scoreKey = `${state.homeScore}-${state.awayScore}`;
     const scoreChanged =
       lastScoreByFixture.has(fixtureId) && lastScoreByFixture.get(fixtureId) !== scoreKey;
     lastScoreByFixture.set(fixtureId, scoreKey);
-    const priority: "5" | "10" = "10";
     if (finished) lastScoreByFixture.delete(fixtureId);
 
     // قياس زمن الإرسال: نطبع لحظة رصد تغيّر النتيجة لمقارنتها بظهورها على الجهاز،
@@ -263,9 +297,17 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
 
     for (const t of tokens) {
-      const changed = t.lastContentHash !== hash;
-      // لا تغيير ولم تنتهِ → لا داعي للدفع (العدّاد التنازلي قبل الانطلاق ذاتي).
-      if (!changed && !finished) continue;
+      const changed = t.lastContentHash !== pushKey;
+      // نبضة إبقاء: لا تغيّر لكن مضى وقت طويل على آخر دفعة ولا تزال حيّة → ندفع
+      // بأولوية منخفضة لإعادة ضبط المرساة وتجديد staleDate (لا يحدث قبل الانطلاق).
+      const lastPushedMs = t.lastPushedAt ? new Date(t.lastPushedAt).getTime() : 0;
+      const keepAlive =
+        !changed && state.isLive && !finished && Date.now() - lastPushedMs > KEEPALIVE_SEC * 1000;
+      // لا تغيير ولا نبضة إبقاء ولم تنتهِ → لا داعي للدفع (العدّاد قبل الانطلاق ذاتي).
+      if (!changed && !keepAlive && !finished) continue;
+
+      // أولوية: تغيّر فعلي/نهاية → 10 فورية؛ نبضة الإبقاء → 5 (غير عاجلة، موفّرة).
+      const priority: "5" | "10" = keepAlive && !changed && !finished ? "5" : "10";
 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
         event: finished ? "end" : "update",
@@ -290,12 +332,12 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
           ended++;
           await db
             .update(liveActivityTokens)
-            .set({ isActive: false, lastContentHash: hash, lastPushedAt: new Date(), updatedAt: new Date() })
+            .set({ isActive: false, lastContentHash: pushKey, lastPushedAt: new Date(), updatedAt: new Date() })
             .where(eq(liveActivityTokens.id, t.id));
         } else {
           await db
             .update(liveActivityTokens)
-            .set({ lastContentHash: hash, lastPushedAt: new Date(), updatedAt: new Date() })
+            .set({ lastContentHash: pushKey, lastPushedAt: new Date(), updatedAt: new Date() })
             .where(eq(liveActivityTokens.id, t.id));
         }
       } else {

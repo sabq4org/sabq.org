@@ -187,7 +187,8 @@ final class LiveMatchActivityManager {
             statusLabel: f.status.label,
             isLive: f.status.live,
             isFinished: f.status.finished,
-            lastEvent: lastEventText(detail)
+            lastEvent: lastEventText(detail),
+            clockStartEpoch: clockStartEpoch(for: f.status)
         )
     }
 
@@ -195,6 +196,23 @@ final class LiveMatchActivityManager {
         guard let elapsed = status.elapsed, elapsed > 0 else { return "" }
         if let extra = status.extra, extra > 0 { return "\(elapsed)+\(extra)'" }
         return "\(elapsed)'"
+    }
+
+    /// مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة جاريةً فعليًّا (لا استراحة).
+    /// = الآن − (الدقائق المنقضية + بدل الضائع) بالثواني، فيبدأ الويدجت العدّ منها
+    /// تلقائيًّا. nil وقت التوقّف ليُجمَّد العرض على الدقيقة المدفوعة.
+    private static func clockStartEpoch(for s: WCStatus) -> Double? {
+        guard s.live, !s.finished, let m = s.elapsed, m > 0, isClockRunning(code: s.code) else {
+            return nil
+        }
+        let totalSeconds = Double(m + (s.extra ?? 0)) * 60.0
+        return Date().timeIntervalSince1970 - totalSeconds
+    }
+
+    /// أكواد توقّف الساعة (استراحة/فاصل الإضافي/ركلات الترجيح/إيقاف) — تُجمّد العدّاد.
+    private static func isClockRunning(code: String) -> Bool {
+        let paused: Set<String> = ["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP", "HALF_TIME"]
+        return !paused.contains(code.uppercased())
     }
 
     /// آخر حدث مهم (هدف/بطاقة/ركلة جزاء ضائعة) منسّقًا للعرض على سطر واحد.

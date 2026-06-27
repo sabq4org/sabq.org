@@ -28,7 +28,7 @@ struct SpMatchLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
                         centerValue(context, dark: true)
-                        Text(statusText(context.state, kickoff: context.attributes.kickoff))
+                        liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white.opacity(0.85))
                             .lineLimit(1)
@@ -121,6 +121,27 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
 }
 
+// عرض الحالة الحيّة: حين تتوفّر مرساة الساعة والمباراة تجري، نعرض ساعةً **تتحرّك
+// ذاتيًّا على الجهاز** عبر `Text(timerInterval:)` بلا أي دفعة — و`showsHours:false`
+// يُبقي الصياغة «63:45» (لا «1:03:45») حتى بعد تجاوز 59 دقيقة. عند التوقّف/قبل البدء
+// نسقط على النصّ المدفوع `statusText` (الدقيقة المُجمّدة). يرث الخطّ واللون من الحاوية.
+@ViewBuilder
+func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
+    if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
+        HStack(spacing: 4) {
+            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+                 countsDown: false, showsHours: false)
+                .monospacedDigit()
+                .fixedSize()
+            if !s.statusLabel.isEmpty {
+                Text("· \(s.statusLabel)").lineLimit(1)
+            }
+        }
+    } else {
+        Text(statusText(s, kickoff: kickoff)).lineLimit(1)
+    }
+}
+
 enum SpSide { case home, away }
 
 // شاشة القفل / البانر — ثيم فاتح.
@@ -190,7 +211,7 @@ private struct LockScreenView: View {
             if context.state.isLive {
                 Circle().fill(Color.red).frame(width: 7, height: 7)
             }
-            Text(statusText(context.state, kickoff: context.attributes.kickoff))
+            liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(context.state.isLive ? SpLA.green : SpLA.ink.opacity(0.7))
                 .lineLimit(1)

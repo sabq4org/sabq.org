@@ -121,11 +121,53 @@ struct LiveMatchLiveActivity: Widget {
             if state.isLive {
                 Circle().fill(WidgetTheme.live).frame(width: 6, height: 6)
             }
-            Text(state.isFinished ? state.statusLabel : (state.minute.isEmpty ? state.statusLabel : state.minute))
+            minutePillContent(state)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(state.isLive ? WidgetTheme.live : WidgetTheme.dim)
         }
     }
+}
+
+// MARK: - الدقيقة الحيّة الذاتية
+//
+// حين تتوفّر مرساة الساعة والمباراة تجري، نعرض ساعةً **تتحرّك ذاتيًّا على الجهاز**
+// عبر Text(timerInterval:) بلا أي دفعة. `showsHours: false` يُبقي الصياغة «63:45»
+// (لا «1:03:45») بعد تجاوز 59 دقيقة. عند التوقّف نسقط على النصّ المدفوع.
+
+@ViewBuilder
+private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> some View {
+    if state.isLive, !state.isFinished, let epoch = state.clockStartEpoch {
+        Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+             countsDown: false, showsHours: false)
+            .monospacedDigit()
+            .fixedSize()
+    } else {
+        Text(state.isFinished ? state.statusLabel : (state.minute.isEmpty ? state.statusLabel : state.minute))
+    }
+}
+
+@ViewBuilder
+private func statusLineContent(_ s: LiveMatchAttributes.ContentState) -> some View {
+    if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
+        HStack(spacing: 4) {
+            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+                 countsDown: false, showsHours: false)
+                .monospacedDigit()
+                .fixedSize()
+            if !s.statusLabel.isEmpty {
+                Text("· \(s.statusLabel)")
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+    } else {
+        Text(staticStatusLabel(s))
+    }
+}
+
+private func staticStatusLabel(_ s: LiveMatchAttributes.ContentState) -> String {
+    if s.isFinished { return s.statusLabel }
+    if s.isLive && !s.minute.isEmpty { return "\(s.minute) · \(s.statusLabel)" }
+    return s.statusLabel
 }
 
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR لكن بترتيب
@@ -321,16 +363,9 @@ struct LockScreenMatchView: View {
             if context.state.isLive {
                 Circle().fill(WidgetTheme.live).frame(width: 7, height: 7)
             }
-            Text(label)
+            statusLineContent(context.state)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(context.state.isLive ? WidgetTheme.live : WidgetTheme.dim)
         }
-    }
-
-    private var label: String {
-        let s = context.state
-        if s.isFinished { return s.statusLabel }
-        if s.isLive && !s.minute.isEmpty { return "\(s.minute) · \(s.statusLabel)" }
-        return s.statusLabel
     }
 }
