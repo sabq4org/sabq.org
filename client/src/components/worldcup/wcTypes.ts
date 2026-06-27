@@ -470,6 +470,9 @@ export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — قد تكون في يوم
+  // تقويمي تالٍ فلا تظهر في today؛ تُستخدم لعرض بطاقات Hero متجاورة.
+  matchOfDayPeers?: WcFixture[];
   // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة تُعرض كبطاقة Hero
   predictions?: Record<number, WcPrediction>;
   saudi: {

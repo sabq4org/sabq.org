@@ -2652,6 +2652,9 @@ export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
   matchOfTheDay: { fixture: WcFixture; prediction: WcPrediction | null } | null;
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — قد تكون في يوم
+  // تقويمي تالٍ فلا تظهر في today؛ تُمرّر لتُعرض كبطاقات Hero متجاورة.
+  matchOfDayPeers: WcFixture[];
   // توقعات النتيجة مفهرسة بمعرّف المباراة — لكل مباراة قد تُعرض كبطاقة Hero
   // كبيرة (الحيّة + المتزامنة القادمة)، لا المميّزة وحدها.
   predictions: Record<number, WcPrediction>;
@@ -2686,15 +2689,21 @@ export async function getOverview(): Promise<WcOverview> {
   // توقعات لكل المباريات التي قد تُعرض كبطاقات Hero كبيرة: الحيّة جميعها +
   // المباراة المميّزة + المباريات القادمة المتزامنة معها (نفس وقت الانطلاق).
   // getPrediction مُخزَّن (SWR) فجلب عدة مباريات لا يكلّف نداءات متكرّرة للمزود.
+  // المباريات القادمة المتزامنة مع المميّزة (نفس وقت الانطلاق) — تُبحث ضمن كل
+  // المباريات القادمة لا «اليوم» فقط، لأن ختام دور المجموعات قد ينطلق بعد منتصف
+  // الليل (يوم تقويمي تالٍ) فلا تكون الشقيقة في مصفوفة today إطلاقًا.
+  const motdPeers =
+    motdFixture && !motdFixture.status.live && !motdFixture.status.finished
+      ? upcoming.filter(
+          (f) => f.id !== motdFixture.id && f.timestamp === motdFixture.timestamp
+        )
+      : [];
+
   const predictionTargets = new Set<number>();
   for (const f of live) predictionTargets.add(f.id);
   if (motdFixture && !motdFixture.status.finished) {
     predictionTargets.add(motdFixture.id);
-    for (const f of today) {
-      if (!f.status.finished && f.timestamp === motdFixture.timestamp) {
-        predictionTargets.add(f.id);
-      }
-    }
+    for (const f of motdPeers) predictionTargets.add(f.id);
   }
 
   const predictions: Record<number, WcPrediction> = {};
@@ -2729,6 +2738,7 @@ export async function getOverview(): Promise<WcOverview> {
     live,
     today,
     matchOfTheDay: motdFixture ? { fixture: motdFixture, prediction: motdPrediction } : null,
+    matchOfDayPeers: motdPeers,
     predictions,
     saudi: { next: saudiNext, fixtures: saudiFixtures, group: saudiGroup },
     updatedAt: new Date().toISOString(),

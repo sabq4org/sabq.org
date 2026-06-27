@@ -325,12 +325,22 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
     : [];
   const liveCount = liveMatches.length;
 
-  // مباريات قادمة تنطلق في التوقيت نفسه للمباراة المميّزة (لم تبدأ بعد)
+  // مباريات قادمة تنطلق في التوقيت نفسه للمباراة المميّزة (لم تبدأ بعد).
+  // الشقيقات تأتي من الخادم (matchOfDayPeers) لا من today فقط، لأن ختام دور
+  // المجموعات قد ينطلق بعد منتصف الليل (يوم تالٍ) فلا تكون في مباريات اليوم.
+  const peers = Array.isArray(overview?.matchOfDayPeers) ? overview.matchOfDayPeers : [];
   const upcomingPeers =
     fixture && !fixture.status.live && !fixture.status.finished
-      ? today.filter(
-          (f) => !f.status.live && !f.status.finished && f.timestamp === fixture.timestamp
-        )
+      ? [
+          fixture,
+          ...peers.filter(
+            (f) =>
+              f.id !== fixture.id &&
+              !f.status.live &&
+              !f.status.finished &&
+              f.timestamp === fixture.timestamp
+          ),
+        ]
       : [];
 
   // أبرز كل المباريات المتزامنة ببطاقات كبيرة بدل إبراز واحدة وحشر الباقي:
