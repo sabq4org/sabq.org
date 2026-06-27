@@ -389,23 +389,15 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const scoreKey = `${state.homeScore}-${state.awayScore}`;
     const scoreChanged =
       lastScoreByFixture.has(fixtureId) && lastScoreByFixture.get(fixtureId) !== scoreKey;
-    const isUrgentChange = (previousHash: string | null): boolean => {
-      if (!previousHash) return false;
+    const eventChanged = tokens.some((t) => {
+      if (!t.lastContentHash) return false;
       try {
-        const prev = JSON.parse(previousHash);
-        return (
-          prev.h !== state.homeScore ||
-          prev.a !== state.awayScore ||
-          prev.e !== (state.lastEvent ?? null) ||
-          prev.s !== state.statusLabel ||
-          prev.l !== state.isLive ||
-          prev.f !== state.isFinished
-        );
+        const prev = JSON.parse(t.lastContentHash);
+        return prev.e !== (state.lastEvent ?? null);
       } catch {
-        return true;
+        return false;
       }
-    };
-    const eventChanged = tokens.some((t) => isUrgentChange(t.lastContentHash));
+    });
     lastScoreByFixture.set(fixtureId, scoreKey);
     if (finished) lastScoreByFixture.delete(fixtureId);
 
@@ -422,10 +414,10 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       // لا تغيير ولم تنتهِ → لا داعي للدفع.
       if (!changed && !finished) return;
 
-      // الدقيقة الروتينية لا يجب أن تزاحم تنبيهات الهدف/الكرت. نجعل الأولوية
-      // الفورية للأحداث المهمة فقط، أما تحديث الدقيقة فيذهب بأولوية موفرة.
-      const urgent = scoreChanged || finished || isUrgentChange(t.lastContentHash);
-      const priority: "5" | "10" = urgent ? "10" : "5";
+      // شاشة القفل حسّاسة جدًا للتأخير: دفعات الدقيقة بأولوية 5 قد يؤخرها iOS
+      // عدة دقائق على الجهاز الحقيقي. طالما المباراة live نرسلها فورية؛ ميزانية
+      // الدفع محمية أصلًا بالبصمة وبالـclockStartEpoch المحلي.
+      const priority: "5" | "10" = state.isLive || scoreChanged || eventChanged || finished ? "10" : "5";
 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
         event: finished ? "end" : "update",
