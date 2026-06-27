@@ -66,6 +66,16 @@ struct WorldCupView: View {
         // لا خلفية صلبة لشريط التنقّل — يبقى شفّافًا فتظهر خلفية الصفحة الخفيفة خلف
         // العنوان. لون العنوان يتبع النظام (داكن على الفاتح، أبيض في الليلي).
         .task { await loadAll() }
+        // متابعة لحظية: استطلاع كل 8ث أثناء وجود مباراة جارية فتتحدّث النتيجة
+        // والدقيقة تلقائيًّا (كما في مركز المباراة). بدونه كانت الشاشة تُحمّل مرة
+        // واحدة فلا يتغيّر الوقت إلا بسحب يدوي. force=true لتجاوز الكاش.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled { return }
+                if isAnyLive { await loadAll(force: true) }
+            }
+        }
         .refreshable { await loadAll(force: true) }
         .sheet(item: $selectedMatch) { sel in
             WorldCupMatchCenter(fixtureId: sel.id)
@@ -80,6 +90,12 @@ struct WorldCupView: View {
     }
 
     private func open(_ fixtureId: Int) { selectedMatch = WCMatchSelection(id: fixtureId) }
+
+    /// هل توجد مباراة جارية الآن؟ (لتقرير الحاجة للاستطلاع الدوري اللحظي).
+    private var isAnyLive: Bool {
+        (overview?.live.contains { $0.status.live } ?? false)
+            || fixtures.contains { $0.status.live }
+    }
 
     /// مباراة ودجت النبض: حيّة أولًا → أقرب قادمة → أحدث منتهية (مطابق اختيار الويب #434)
     private var pulseFixtureId: Int? {
@@ -149,10 +165,15 @@ struct WCHeroSection: View {
     private var liveCount: Int { liveMatches.count }
 
     // مباريات قادمة تنطلق في التوقيت نفسه للمباراة المميّزة (لم تبدأ بعد) — ختام
-    // دور المجموعات تحديدًا. مطابق منطق الويب HeroSection.
+    // دور المجموعات تحديدًا. الشقيقات تأتي من الخادم (matchOfDayPeers) لا من today
+    // فقط، لأن المباراة قد تنطلق بعد منتصف الليل (يوم تالٍ) فلا تكون في مباريات
+    // اليوم. مطابق منطق الويب HeroSection.
+    private var peers: [WCFixture] { overview?.matchOfDayPeers ?? [] }
     private var upcomingPeers: [WCFixture] {
         guard let f = featured, !f.status.live, !f.status.finished else { return [] }
-        return today.filter { !$0.status.live && !$0.status.finished && $0.timestamp == f.timestamp }
+        return [f] + peers.filter {
+            $0.id != f.id && !$0.status.live && !$0.status.finished && $0.timestamp == f.timestamp
+        }
     }
 
     // نُبرز كل المباريات المتزامنة ببطاقات كبيرة بدل إبراز واحدة وحشر الباقي:

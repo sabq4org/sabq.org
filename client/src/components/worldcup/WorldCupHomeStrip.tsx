@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronLeft, Radio } from "lucide-react";
@@ -87,6 +87,51 @@ function TickingCountdown({ timestamp }: { timestamp: number }) {
   );
 }
 
+// كتلة مباراة واحدة: المضيف — النتيجة/الموعد — الضيف. تُعاد لكل مباراة متزامنة.
+function MatchBlock({ fixture }: { fixture: WcFixture }) {
+  const started = fixture.status.live || fixture.status.finished;
+  return (
+    <div className="flex items-center justify-center gap-3 sm:gap-5 min-w-0">
+      <TeamChip team={fixture.home} />
+
+      <div className="flex flex-col items-center gap-0.5 shrink-0">
+        {started ? (
+          <>
+            {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR */}
+            <span className="text-2xl font-black text-white tabular-nums leading-none" dir="ltr">
+              {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
+            </span>
+            <Badge
+              className={
+                fixture.status.live
+                  ? "bg-red-500 text-white border-0 gap-1 text-[10px] px-2 py-0"
+                  : "bg-white/10 text-emerald-100 border-0 text-[10px] px-2 py-0"
+              }
+            >
+              {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
+              {fixture.status.live && isClockRunning(fixture.status) ? (
+                <LiveMinute status={fixture.status} />
+              ) : (
+                fixture.status.label
+              )}
+            </Badge>
+          </>
+        ) : (
+          <>
+            <span className="text-xl font-black text-white leading-none">
+              {formatKickoffTime(fixture.date)}
+            </span>
+            <span className="text-[10px] text-emerald-200/70">{formatKickoffDay(fixture.date)}</span>
+            <TickingCountdown timestamp={fixture.timestamp} />
+          </>
+        )}
+      </div>
+
+      <TeamChip team={fixture.away} />
+    </div>
+  );
+}
+
 export default function WorldCupHomeStrip() {
   const { data } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
@@ -105,7 +150,30 @@ export default function WorldCupHomeStrip() {
   const fixture = data?.matchOfTheDay?.fixture ?? null;
   if (!fixture) return null;
 
-  const started = fixture.status.live || fixture.status.finished;
+  // المباريات المتزامنة: مباراتان (أو أكثر) تجريان الآن، أو قادمتان تنطلقان في
+  // التوقيت نفسه (ختام دور المجموعات). الشقيقات تأتي من الخادم (matchOfDayPeers)
+  // لا من today فقط، لأنها قد تكون في يوم تقويمي تالٍ. مطابق منطق الهيرو.
+  const peers = Array.isArray(data?.matchOfDayPeers) ? data.matchOfDayPeers : [];
+  const liveMatches = Array.isArray(data?.live) ? data.live.filter((f) => f.status.live) : [];
+  const upcomingGroup =
+    !fixture.status.live && !fixture.status.finished
+      ? [
+          fixture,
+          ...peers.filter(
+            (p) =>
+              p.id !== fixture.id &&
+              !p.status.live &&
+              !p.status.finished &&
+              p.timestamp === fixture.timestamp
+          ),
+        ]
+      : [];
+  const multi = liveMatches.length >= 2 || upcomingGroup.length >= 2;
+  const matches = !multi
+    ? [fixture]
+    : liveMatches.length >= 2
+      ? liveMatches
+      : upcomingGroup;
 
   return (
     <section
@@ -149,44 +217,14 @@ export default function WorldCupHomeStrip() {
 
         <div className="hidden md:block h-12 w-px bg-white/10 shrink-0" />
 
-        {/* المباراة */}
-        <div className="flex-1 flex items-center justify-center gap-3 sm:gap-5 min-w-0">
-          <TeamChip team={fixture.home} />
-
-          <div className="flex flex-col items-center gap-0.5 shrink-0">
-            {started ? (
-              <>
-                {/* المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR */}
-                <span className="text-2xl font-black text-white tabular-nums leading-none" dir="ltr">
-                  {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
-                </span>
-                <Badge
-                  className={
-                    fixture.status.live
-                      ? "bg-red-500 text-white border-0 gap-1 text-[10px] px-2 py-0"
-                      : "bg-white/10 text-emerald-100 border-0 text-[10px] px-2 py-0"
-                  }
-                >
-                  {fixture.status.live && <Radio className="h-2.5 w-2.5 animate-pulse" />}
-                  {fixture.status.live && isClockRunning(fixture.status) ? (
-                    <LiveMinute status={fixture.status} />
-                  ) : (
-                    fixture.status.label
-                  )}
-                </Badge>
-              </>
-            ) : (
-              <>
-                <span className="text-xl font-black text-white leading-none">
-                  {formatKickoffTime(fixture.date)}
-                </span>
-                <span className="text-[10px] text-emerald-200/70">{formatKickoffDay(fixture.date)}</span>
-                <TickingCountdown timestamp={fixture.timestamp} />
-              </>
-            )}
-          </div>
-
-          <TeamChip team={fixture.away} />
+        {/* المباراة — أو مباراتان متجاورتان عند التزامن */}
+        <div className="flex-1 flex flex-wrap items-center justify-center gap-3 sm:gap-6 min-w-0">
+          {matches.map((f, i) => (
+            <Fragment key={f.id}>
+              {i > 0 && <div className="hidden sm:block h-12 w-px bg-white/10 shrink-0" />}
+              <MatchBlock fixture={f} />
+            </Fragment>
+          ))}
         </div>
 
         {/* الدعوة للقسم */}
