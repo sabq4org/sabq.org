@@ -164,12 +164,6 @@ function clockStartEpochFromMinute(minute: number, running: boolean): number | n
   return Math.floor(Date.now() / 1000) - minute * 60;
 }
 
-function minuteFromClockStartEpoch(clockStartEpoch: number | null | undefined, running: boolean): number {
-  if (!running || !clockStartEpoch) return 0;
-  const elapsed = Math.floor((Math.floor(Date.now() / 1000) - clockStartEpoch) / 60);
-  return Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0;
-}
-
 function minuteFromText(text?: string | null): number {
   if (!text) return 0;
   const m = text.match(/(\d+)(?:\+(\d+))?/);
@@ -183,16 +177,6 @@ function minuteLabel(minute: number): string {
 
 function freshestMinute(baseMinute: string, live?: WcLiveScore | null): number {
   return Math.max(minuteFromText(baseMinute), live?.minute ?? 0);
-}
-
-function normalizeLiveMinute(state: LiveActivityContentState): LiveActivityContentState {
-  if (!state.isLive || state.isFinished) return state;
-  const minute = Math.max(
-    minuteFromText(state.minute),
-    minuteFromClockStartEpoch(state.clockStartEpoch, true),
-  );
-  if (minute <= 0 || minute === minuteFromText(state.minute)) return state;
-  return { ...state, minute: minuteLabel(minute) };
 }
 
 function lastEventText(detail: SplMatchDetail): string | null {
@@ -253,23 +237,19 @@ function buildContentState(
     const tsLabel = TS_STATUS_AR[ts.statusId] ?? base.statusLabel;
     const baseMin = minuteFromText(base.minute);
     const tsRunning = ts.live && TS_CLOCK_RUNNING_STATUS.has(ts.statusId);
-    const displayMinute = Math.max(
-      baseMin,
-      minuteFromClockStartEpoch(base.clockStartEpoch, tsRunning),
-    );
     return {
       ...base,
       homeScore: ts.home,
       awayScore: ts.away,
-      minute: minuteLabel(displayMinute),
+      minute: minuteLabel(baseMin),
       statusLabel: tsLabel || base.statusLabel,
       isLive: ts.live,
       isFinished: ts.finished || base.isFinished,
-      clockStartEpoch: base.clockStartEpoch ?? clockStartEpochFromMinute(displayMinute, tsRunning),
+      clockStartEpoch: base.clockStartEpoch ?? clockStartEpochFromMinute(baseMin, tsRunning),
     };
   }
 
-  return normalizeLiveMinute(base);
+  return base;
 }
 
 function staleDateFor(detail: SplMatchDetail): number {

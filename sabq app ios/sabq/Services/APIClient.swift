@@ -888,15 +888,8 @@ actor APIClient {
     /// closed/locked. The token differs from the device push token and rotates
     /// per activity. Public endpoint — works for guests too.
     func registerLiveActivityToken(fixtureId: Int, token: String) async throws {
-        struct Body: Encodable {
-            let fixtureId: Int
-            let token: String
-            let bundleId: String?
-        }
-        try await postRaw(
-            path: "/live-activity/register",
-            body: Body(fixtureId: fixtureId, token: token, bundleId: Bundle.main.bundleIdentifier)
-        )
+        struct Body: Encodable { let fixtureId: Int; let token: String }
+        try await postRaw(path: "/live-activity/register", body: Body(fixtureId: fixtureId, token: token))
     }
 
     /// Tell the backend the live activity is over so it stops pushing updates.
