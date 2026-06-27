@@ -465,10 +465,11 @@ struct MatchesView: View {
     private var stageStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(availableStages) { st in
-                    let active = activeStage == st
+                ForEach(SpWcStage.allCases) { st in
+                    let hasData = visibleDays.contains { $0.stage == st }
+                    let active = hasData && activeStage == st
                     Button {
-                        guard let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
+                        guard hasData, let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
                         goToDay(firstDay.id)
                     } label: {
                         Text(st.short)
@@ -483,10 +484,6 @@ struct MatchesView: View {
             }
             .padding(.horizontal, 1)
         }
-    }
-
-    private var availableStages: [SpWcStage] {
-        SpWcStage.allCases.filter { st in visibleDays.contains { $0.stage == st } }
     }
 
     // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ والتمرير اليدوي يحدّث اليوم
