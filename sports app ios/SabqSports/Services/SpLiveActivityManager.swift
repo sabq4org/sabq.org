@@ -63,7 +63,7 @@ final class SpLiveActivityManager {
             awayLogo: fixture.away.logo,
             homeLogoFile: hFile,
             awayLogoFile: aFile,
-            competition: fixture.competition ?? "",
+            competition: activityCompetitionName(for: fixture),
             kickoff: fixture.kickoff
         )
         let state = makeState(from: fixture)
@@ -149,6 +149,27 @@ final class SpLiveActivityManager {
             lastEvent: nil,
             clockStartEpoch: Self.clockStartEpoch(for: f.status)
         )
+    }
+
+    private func activityCompetitionName(for fixture: SpFixture) -> String {
+        if let name = fixture.competition?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        switch fixture.competitionSlug {
+        case "pro-league": return "دوري روشن"
+        case "kings-cup": return "كأس الملك"
+        case "super-cup": return "كأس السوبر السعودي"
+        case "division-1": return "دوري يلو"
+        case "division-2": return "دوري الدرجة الثانية"
+        case "womens-league": return "الدوري السعودي للسيدات"
+        case "world-cup": return "كأس العالم"
+        case "premier-league": return "الدوري الإنجليزي"
+        case "laliga": return "الدوري الإسباني"
+        case "serie-a": return "الدوري الإيطالي"
+        case "bundesliga": return "الدوري الألماني"
+        case "ligue-1": return "الدوري الفرنسي"
+        default: return "مباراة مباشرة"
+        }
     }
 
     /// مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة **جاريةً فعليًّا** (لا استراحة).

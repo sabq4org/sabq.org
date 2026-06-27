@@ -127,6 +127,28 @@ extension APIClient {
         try await get(SpWcMatchDetail.self, path: "/world-cup/match/\(id)",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
+
+    /// إثراء مركز مباراة كأس العالم — نفس بنية مركز روشن، لكن من مسارات المونديال.
+    func fetchWorldCupXg(id: Int, ignoreCache: Bool = false) async throws -> SpXg {
+        try await get(SpXg.self, path: "/world-cup/xg/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchWorldCupMomentum(id: Int, ignoreCache: Bool = false) async throws -> SpMomentum {
+        try await get(SpMomentum.self, path: "/world-cup/momentum/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchWorldCupPressure(id: Int, ignoreCache: Bool = false) async throws -> SpPressure {
+        try await get(SpPressure.self, path: "/world-cup/pressure/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchWorldCupMatchFacts(id: Int, ignoreCache: Bool = false) async throws -> SpMatchFacts {
+        try await get(SpMatchFacts.self, path: "/world-cup/match-facts/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchWorldCupCommentary(id: Int, ignoreCache: Bool = false) async throws -> SpCommentary {
+        try await get(SpCommentary.self, path: "/world-cup/commentary/\(id)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
 }
 
 // MARK: أدوار البطولة — للترتيب وشريط المراحل
@@ -181,15 +203,32 @@ private struct SpWcDay: Identifiable {
     let fixtures: [SpWcFixture]
 }
 
+private struct SpDayTopPreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+private struct SpDayScrollRequest: Equatable {
+    let id: String
+    let nonce: Int
+}
+
 // MARK: - الشاشة
 
 struct MatchesView: View {
     @State private var fixtures: [SpWcFixture] = []
+    @State private var visibleDays: [SpWcDay] = []
     @State private var loading = true
     @State private var loadError: String?
     @State private var liveOnly = false
-    // يوم القمّة الحالي في القائمة (ثنائي الاتجاه عبر scrollPosition) = اليوم النشط.
+    // اليوم المختار في شريط التواريخ. لا نربطه بموضع التمرير لحظيًا؛ ربطه السابق
+    // عبر scrollPosition كان يحدّث الشجرة مع كل إطار تمرير ويسبّب stuttering واضحًا.
     @State private var scrolledDayId: String?
+    @State private var scrollTargetRequest: SpDayScrollRequest?
+    @State private var scrollRequestNonce = 0
     // الشريحة المتوسّطة في شريط التواريخ — تتبع scrolledDayId تلقائيًّا.
     @State private var railCenterId: String?
     @State private var didInitialScroll = false
@@ -216,6 +255,7 @@ struct MatchesView: View {
         }
         .task { await load() }
         .task { await pollLive() }
+        .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
     }
@@ -249,7 +289,7 @@ struct MatchesView: View {
         HStack(spacing: 10) {
             Spacer(minLength: 0)
             iconButton("calendar") {
-                pickedDate = Self.riyadhCal.startOfDay(for: Date())
+                pickedDate = dateForCurrentSelection() ?? Self.riyadhCal.startOfDay(for: Date())
                 showDatePicker = true
             }
             // مفتاح «مباشر فقط» كأيقونة بلا كلمة — أحمر مملوء عند التفعيل.
@@ -308,11 +348,11 @@ struct MatchesView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(SpWcStage.allCases) { st in
-                    let hasData = days.contains { $0.stage == st }
+                    let hasData = visibleDays.contains { $0.stage == st }
                     let active = hasData && activeStage == st
                     Button {
-                        guard hasData, let firstDay = days.first(where: { $0.stage == st }) else { return }
-                        withAnimation(.easeInOut(duration: 0.35)) { scrolledDayId = firstDay.id }
+                        guard hasData, let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
+                        goToDay(firstDay.id)
                     } label: {
                         Text(st.short)
                             .font(SportsFonts.app(size: 13, weight: active ? .heavy : .semibold))
@@ -328,11 +368,12 @@ struct MatchesView: View {
         }
     }
 
-    // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ التمرير يبرز شريحة اليوم الحالي ويوسّطها.
+    // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ والتمرير اليدوي يحدّث اليوم
+    // النشط فقط عند عبور قسم جديد، لا مع كل إطار تمرير.
     private var dateRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(days) { day in dateChip(day) }
+                ForEach(visibleDays) { day in dateChip(day) }
             }
             .padding(.horizontal, 16).padding(.vertical, 6)
             .scrollTargetLayout()
@@ -347,26 +388,32 @@ struct MatchesView: View {
         let isToday = Self.riyadhCal.isDateInToday(day.date)
         let hasLive = day.fixtures.contains { $0.status.live }
         return Button {
-            withAnimation(.easeInOut(duration: 0.35)) { scrolledDayId = day.id }
+            goToDay(day.id)
         } label: {
-            VStack(spacing: 2) {
-                Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
-                    .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(active ? .white : SpTheme.onDarkDim)
-                Text(SpFormat.dayMonthLabel(day.date))
-                    .font(SportsFonts.app(size: 12.5, weight: .heavy))
-                    .foregroundStyle(active ? .white : SpTheme.onDark)
-                    .lineLimit(1)
-                Circle()
-                    .fill(hasLive ? (active ? Color.white : SpTheme.crimson) : .clear)
-                    .frame(width: 5, height: 5)
+            HStack(spacing: 7) {
+                if hasLive {
+                    Circle()
+                        .fill(active ? Color.white : SpTheme.crimson)
+                        .frame(width: 6, height: 6)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
+                        .font(SportsFonts.app(size: 10.5, weight: .bold))
+                        .foregroundStyle(active ? .white.opacity(0.85) : SpTheme.onDarkDim)
+                        .lineLimit(1)
+                    Text(SpFormat.dayMonthLabel(day.date))
+                        .font(SportsFonts.app(size: 12, weight: .heavy))
+                        .foregroundStyle(active ? .white : SpTheme.onDark)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
             }
-            .frame(minWidth: 58)
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(width: 78, height: 38, alignment: .leading)
+            .padding(.horizontal, 9)
             .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(active ? SpTheme.green : SpTheme.cardFill)
-                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(active ? .clear : SpTheme.outline, lineWidth: 1))
             )
             .contentShape(Rectangle())
@@ -374,41 +421,82 @@ struct MatchesView: View {
         .buttonStyle(.plain)
     }
 
-    // القائمة العمودية — أقسام أيام برؤوس مضمّنة؛ موضع القمّة = اليوم النشط.
+    // القائمة العمودية — أقسام أيام برؤوس مضمّنة. التنقل للأيام يتم برمجيًا فقط
+    // عبر ScrollViewReader، وليس بربط ثنائي الاتجاه، حتى يبقى التمرير اليدوي خفيفًا.
     private var matchesList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                if days.isEmpty {
-                    emptyList
-                } else {
-                    if !liveOnly && !liveFixtures.isEmpty { livePinned }
-                    ForEach(days) { day in
-                        daySection(day).id(day.id)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if visibleDays.isEmpty {
+                        emptyList
+                    } else {
+                        if !liveOnly && !liveFixtures.isEmpty { livePinned }
+                        ForEach(visibleDays) { day in
+                            daySection(day).id(day.id)
+                                .background(
+                                    GeometryReader { geo in
+                                        Color.clear.preference(
+                                            key: SpDayTopPreferenceKey.self,
+                                            value: [day.id: geo.frame(in: .named("matches-scroll")).minY]
+                                        )
+                                    }
+                                )
+                        }
                     }
+                    Color.clear.frame(height: 90)
                 }
-                Color.clear.frame(height: 90)
+                .padding(.horizontal, 16).padding(.top, 12)
             }
-            .padding(.horizontal, 16).padding(.top, 12)
-            .scrollTargetLayout()
+            .coordinateSpace(name: "matches-scroll")
+            .onAppear { runInitialScroll() }
+            .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
+            .onChange(of: scrollTargetRequest) { _, request in
+                guard let id = request?.id, !id.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.32)) {
+                    proxy.scrollTo(id, anchor: .top)
+                }
+            }
+            .onPreferenceChange(SpDayTopPreferenceKey.self) { tops in
+                updateActiveDay(from: tops)
+            }
         }
-        .scrollPosition(id: $scrolledDayId, anchor: .top)
-        // لا نُحرّك شريط التواريخ مع كل تمرير (كان مزعجًا وغير احترافي): الشريط
-        // يُمركَز على اليوم مرّة عند الفتح فقط، ثم يبقى ثابتًا — والتمييز يتحدّث بلا حركة.
-        .onAppear { runInitialScroll() }
-        .onChange(of: days.isEmpty) { _, _ in runInitialScroll() }
     }
 
     // قفزة أولى إلى يوم اليوم (أو الأقرب) — مرّة واحدة بعد توفّر البيانات.
     private func runInitialScroll() {
-        guard !didInitialScroll, !days.isEmpty else { return }
+        guard !didInitialScroll, !visibleDays.isEmpty else { return }
         didInitialScroll = true
         let target = todayDayId
         guard !target.isEmpty else { return }
+        scrolledDayId = target
         railCenterId = target
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
-            scrolledDayId = target
+            requestScroll(to: target)
         }
+    }
+
+    private func goToDay(_ id: String) {
+        guard !id.isEmpty else { return }
+        scrolledDayId = id
+        railCenterId = id
+        requestScroll(to: id)
+    }
+
+    private func requestScroll(to id: String) {
+        scrollRequestNonce += 1
+        scrollTargetRequest = SpDayScrollRequest(id: id, nonce: scrollRequestNonce)
+    }
+
+    private func updateActiveDay(from sectionTops: [String: CGFloat]) {
+        guard !sectionTops.isEmpty else { return }
+        let anchorY: CGFloat = 18
+        let passed = sectionTops.filter { $0.value <= anchorY }
+        let candidate = passed.max(by: { $0.value < $1.value })?.key
+            ?? sectionTops.min(by: { abs($0.value - anchorY) < abs($1.value - anchorY) })?.key
+        guard let candidate, candidate != scrolledDayId else { return }
+        scrolledDayId = candidate
+        railCenterId = candidate
     }
 
     private var emptyList: some View {
@@ -485,14 +573,14 @@ struct MatchesView: View {
 
     // هل ابتعدنا عن يوم اليوم؟ (يتغيّر مرّة عند تجاوز اليوم — رخيص للأنميشن)
     private var isAwayFromToday: Bool {
-        !days.isEmpty && !todayDayId.isEmpty && (scrolledDayId ?? "") != todayDayId
+        !visibleDays.isEmpty && !todayDayId.isEmpty && (scrolledDayId ?? "") != todayDayId
     }
 
     // زرّ «مباريات اليوم» العائم — يظهر عند الابتعاد عن يوم اليوم.
     @ViewBuilder private var floatingToday: some View {
         if isAwayFromToday {
             Button {
-                withAnimation(.easeInOut(duration: 0.4)) { scrolledDayId = todayDayId }
+                goToDay(todayDayId)
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "calendar.badge.clock").font(.system(size: 13, weight: .bold))
@@ -515,7 +603,7 @@ struct MatchesView: View {
 
     private var liveFixtures: [SpWcFixture] { fixtures.filter { $0.status.live } }
 
-    private var days: [SpWcDay] {
+    private func makeDays(from fixtures: [SpWcFixture], liveOnly: Bool) -> [SpWcDay] {
         let cal = Self.riyadhCal
         let source = liveOnly ? fixtures.filter { $0.status.live } : fixtures
         let dated = source.compactMap { f -> (Date, SpWcFixture)? in
@@ -532,29 +620,51 @@ struct MatchesView: View {
         .sorted { $0.date < $1.date }
     }
 
-    private var activeStage: SpWcStage? { days.first(where: { $0.id == (scrolledDayId ?? "") })?.stage }
+    private func rebuildDays(keepSelection: Bool) {
+        visibleDays = makeDays(from: fixtures, liveOnly: liveOnly)
+        guard !visibleDays.isEmpty else {
+            scrolledDayId = nil
+            scrollTargetRequest = nil
+            railCenterId = nil
+            return
+        }
+        if keepSelection, let current = scrolledDayId, visibleDays.contains(where: { $0.id == current }) {
+            return
+        }
+        didInitialScroll = false
+        runInitialScroll()
+    }
 
-    private var todayHasMatches: Bool { days.contains { Self.riyadhCal.isDateInToday($0.date) } }
+    private var activeStage: SpWcStage? { visibleDays.first(where: { $0.id == (scrolledDayId ?? "") })?.stage }
+
+    private var todayHasMatches: Bool { visibleDays.contains { Self.riyadhCal.isDateInToday($0.date) } }
 
     // يوم اليوم إن وُجد، وإلا أقرب يوم قادم بمباريات، وإلا آخر يوم.
     private var todayDayId: String {
         let cal = Self.riyadhCal
-        if let today = days.first(where: { cal.isDateInToday($0.date) }) { return today.id }
+        if let today = visibleDays.first(where: { cal.isDateInToday($0.date) }) { return today.id }
         let start = cal.startOfDay(for: Date())
-        if let upcoming = days.filter({ $0.date >= start }).min(by: { $0.date < $1.date }) { return upcoming.id }
-        return days.last?.id ?? ""
+        if let upcoming = visibleDays.filter({ $0.date >= start }).min(by: { $0.date < $1.date }) { return upcoming.id }
+        return visibleDays.last?.id ?? ""
     }
 
     private func nearestDayId(to date: Date) -> String {
         let target = Self.riyadhCal.startOfDay(for: date)
-        return days.min(by: {
+        return visibleDays.min(by: {
             abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target))
         })?.id ?? ""
     }
 
     private var dateRange: ClosedRange<Date>? {
-        guard let lo = days.first?.date, let hi = days.last?.date, lo <= hi else { return nil }
+        guard let lo = visibleDays.first?.date, let hi = visibleDays.last?.date, lo <= hi else { return nil }
         return lo...hi
+    }
+
+    private func dateForCurrentSelection() -> Date? {
+        if let id = scrolledDayId, let day = visibleDays.first(where: { $0.id == id }) { return day.date }
+        let id = todayDayId
+        if !id.isEmpty, let day = visibleDays.first(where: { $0.id == id }) { return day.date }
+        return nil
     }
 
     private func dateLabel(_ d: Date) -> String {
@@ -595,7 +705,7 @@ struct MatchesView: View {
                         guard !id.isEmpty else { return }
                         Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 350_000_000)
-                            withAnimation(.easeInOut(duration: 0.4)) { scrolledDayId = id }
+                            goToDay(id)
                         }
                     }
                 }
@@ -613,12 +723,24 @@ struct MatchesView: View {
         if !force { loading = true }
         do {
             let resp = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
-            fixtures = resp.fixtures
+            if visualSignature(resp.fixtures) != visualSignature(fixtures) {
+                fixtures = resp.fixtures
+                rebuildDays(keepSelection: true)
+            } else if visibleDays.isEmpty {
+                rebuildDays(keepSelection: true)
+            }
             loadError = nil
         } catch {
             if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? "تعذّر الاتصال بخادم البيانات" }
         }
         loading = false
+    }
+
+    private func visualSignature(_ rows: [SpWcFixture]) -> String {
+        rows.map { f in
+            "\(f.id):\(Int(f.timestamp)):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.winner?.description ?? "n"):\(f.away.winner?.description ?? "n")"
+        }
+        .joined(separator: "|")
     }
 
     // تحديث صامت أثناء العرض — يتسارع (15ث) عند وجود مباراة جارية، ويتباطأ (45ث) عداها.
@@ -639,6 +761,7 @@ private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
+    private var compact: Bool { fixture.status.finished && !fixture.status.live }
     private var decided: Bool {
         fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
     }
@@ -655,7 +778,8 @@ private struct SpWcMatchRow: View {
                 centerColumn
                 teamSide(fixture.away, leading: false)
             }
-            .padding(.vertical, 10).padding(.horizontal, 14)
+            .padding(.vertical, compact ? 7 : 10)
+            .padding(.horizontal, compact ? 11 : 14)
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
@@ -666,7 +790,9 @@ private struct SpWcMatchRow: View {
             if started {
                 HStack(spacing: 5) {
                     scoreNumber(fixture.goals.away ?? 0, team: fixture.away)
-                    Text("-").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text("-")
+                        .font(SportsFonts.app(size: compact ? 13 : 15, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
                     scoreNumber(fixture.goals.home ?? 0, team: fixture.home)
                 }
                 .environment(\.layoutDirection, .leftToRight)
@@ -679,7 +805,7 @@ private struct SpWcMatchRow: View {
             }
             statusSub
         }
-        .frame(minWidth: 58)
+        .frame(minWidth: compact ? 48 : 58)
     }
 
     @ViewBuilder private var statusSub: some View {
@@ -691,10 +817,21 @@ private struct SpWcMatchRow: View {
             .font(SportsFonts.app(size: 11, weight: .bold))
             .foregroundStyle(SpTheme.crimson)
         } else if fixture.status.finished {
-            Text("انتهت")
-                .font(SportsFonts.app(size: 10.5, weight: .semibold))
-                .foregroundStyle(SpTheme.onDarkFaint)
+            Text(penaltyText ?? "نهاية")
+                .font(SportsFonts.app(size: penaltyText == nil ? 9.5 : 9, weight: .semibold))
+                .foregroundStyle(penaltyText == nil ? SpTheme.onDarkFaint : SpTheme.green)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
+    }
+
+    private var penaltyText: String? {
+        guard
+            let penalties = fixture.penalties,
+            let home = penalties.home,
+            let away = penalties.away
+        else { return nil }
+        return "ترجيح \(away)-\(home)"
     }
 
     private var liveMinute: String {
@@ -715,11 +852,11 @@ private struct SpWcMatchRow: View {
         let loser = isLoser(team)
         return HStack(spacing: 8) {
             if leading {
-                SpTeamLogo(logo: team.logo, size: 26).opacity(loser ? 0.5 : 1)
+                SpTeamLogo(logo: team.logo, size: compact ? 22 : 26).opacity(loser ? 0.5 : 1)
                 teamName(team, align: .leading)
             } else {
                 teamName(team, align: .trailing)
-                SpTeamLogo(logo: team.logo, size: 26).opacity(loser ? 0.5 : 1)
+                SpTeamLogo(logo: team.logo, size: compact ? 22 : 26).opacity(loser ? 0.5 : 1)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
@@ -729,7 +866,7 @@ private struct SpWcMatchRow: View {
         let winner = isWinner(team)
         let loser = isLoser(team)
         return Text(team.name)
-            .font(SportsFonts.app(size: 13, weight: winner ? .heavy : .semibold))
+            .font(SportsFonts.app(size: compact ? 12 : 13, weight: winner ? .heavy : .semibold))
             .foregroundStyle(loser ? SpTheme.onDarkDim : SpTheme.onDark)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -738,7 +875,7 @@ private struct SpWcMatchRow: View {
 
     private func scoreNumber(_ value: Int, team: SpWcTeam) -> some View {
         Text("\(value)")
-            .font(SportsFonts.app(size: 20, weight: .heavy))
+            .font(SportsFonts.app(size: compact ? 17 : 20, weight: .heavy))
             .foregroundStyle(isLoser(team) ? SpTheme.onDarkFaint : SpTheme.onDark)
             .monospacedDigit()
     }
@@ -757,9 +894,21 @@ struct WcMatchCenter: View {
     @State private var detail: SpWcMatchDetail?
     @State private var loading = true
     @State private var segment: WcSeg = .events
+    @State private var xg: SpXg?
+    @State private var momentum: SpMomentum?
+    @State private var pressure: SpPressure?
+    @State private var facts: SpMatchFacts?
+    @State private var commentary: SpCommentary?
+    @State private var selectedTeam: IDBox?
+    @State private var selectedPlayer: IDBox?
 
     private var fx: SpWcFixture { detail?.fixture ?? preview }
     private var started: Bool { fx.status.live || fx.status.finished }
+    private var hasAnalysis: Bool {
+        (xg?.available ?? false) || (momentum?.available ?? false)
+            || (pressure?.available ?? false) || (facts?.available ?? false)
+    }
+    private var hasCommentary: Bool { !(commentary?.items.isEmpty ?? true) }
 
     // ألوان أيقونات الأحداث (مطابقة لمركز المباراة في الويب): تبديل سماوي، فار بنفسجي.
     private let subSky = Color(red: 0.055, green: 0.647, blue: 0.914)
@@ -773,6 +922,8 @@ struct WcMatchCenter: View {
                 header
                 if !started {
                     preMatchCard
+                }
+                if detail?.prediction != nil {
                     predictionCard
                 }
                 if loading && detail == nil {
@@ -784,6 +935,7 @@ struct WcMatchCenter: View {
                 }
             }
             .padding(.vertical, 12)
+            .padding(.bottom, 24)
         }
         .background(SpAmbientBackground())
         .navigationTitle("")
@@ -791,6 +943,8 @@ struct WcMatchCenter: View {
         .task { await load() }
         .task { await pollIfLive() }
         .refreshable { await load(force: true) }
+        .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
+        .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }
 
     // MARK: الرأس
@@ -827,15 +981,18 @@ struct WcMatchCenter: View {
     }
 
     private func teamColumn(_ t: SpWcTeam) -> some View {
-        VStack(spacing: 8) {
-            SpTeamLogo(logo: t.logo, size: 58)
-            Text(t.name)
-                .font(SportsFonts.app(size: 14, weight: .heavy))
-                .foregroundStyle(SpTheme.onDark)
-                .multilineTextAlignment(.center)
-                .lineLimit(2).minimumScaleFactor(0.8)
+        Button { selectedTeam = IDBox(id: t.id) } label: {
+            VStack(spacing: 8) {
+                SpTeamLogo(logo: t.logo, size: 58)
+                Text(t.name)
+                    .font(SportsFonts.app(size: 14, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2).minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(SpPressStyle())
     }
 
     private var centerColumn: some View {
@@ -951,9 +1108,12 @@ struct WcMatchCenter: View {
     private func segments(_ d: SpWcMatchDetail) -> [WcSeg] {
         var s: [WcSeg] = []
         if !d.events.isEmpty { s.append(.events) }
-        if !d.statistics.isEmpty { s.append(.stats) }
-        if !d.lineups.isEmpty { s.append(.lineups) }
+        if hasCommentary { s.append(.commentary) }
+        if hasAnalysis { s.append(.analysis) }
         if d.ratings.contains(where: { $0.rating > 0 }) { s.append(.ratings) }
+        if !d.lineups.isEmpty { s.append(.lineups) }
+        if !d.statistics.isEmpty { s.append(.stats) }
+        if d.prediction != nil { s.append(.prediction) }
         if !(d.headToHead ?? []).isEmpty { s.append(.h2h) }
         return s
     }
@@ -988,11 +1148,14 @@ struct WcMatchCenter: View {
                          subtitle: "ستظهر الأحداث والإحصاءات والتشكيلة فور توفّرها").padding(.horizontal, 16)
         } else {
             switch effective(segs) {
-            case .events:  eventsView(d)
-            case .stats:   statsView(d.statistics)
-            case .lineups: lineupsView(d.lineups)
-            case .ratings: ratingsView(d)
-            case .h2h:     h2hView(d.headToHead ?? [])
+            case .events:     eventsView(d)
+            case .commentary: commentaryView
+            case .analysis:   analysisView
+            case .ratings:    ratingsView(d)
+            case .lineups:    lineupsView(d.lineups)
+            case .stats:      statsView(d.statistics)
+            case .prediction: predictionCard
+            case .h2h:        h2hView(d.headToHead ?? [])
             }
         }
     }
@@ -1185,6 +1348,197 @@ struct WcMatchCenter: View {
 
     private func statNum(_ s: String) -> Double { Double(s.filter { $0.isNumber || $0 == "." }) ?? 0 }
 
+    // MARK: التعليق والتحليل — مطابق لهوية مركز مباراة روشن
+
+    @ViewBuilder private var commentaryView: some View {
+        if let c = commentary, !c.items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(c.items.sorted { $0.order > $1.order }) { item in
+                    commentaryRow(item)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func commentaryRow(_ item: SpCommentaryItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(commentaryMinute(item))
+                .font(SportsFonts.app(size: 12, weight: .bold))
+                .foregroundStyle(item.goal ? SpTheme.green : SpTheme.onDarkDim)
+                .frame(minWidth: 40, alignment: .leading)
+                .environment(\.layoutDirection, .leftToRight)
+            if item.goal {
+                Image(systemName: "soccerball").font(.system(size: 13, weight: .bold)).foregroundStyle(SpTheme.green)
+            } else if item.important {
+                Image(systemName: "star.fill").font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.gold)
+            } else {
+                Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+            }
+            Text(item.textAr)
+                .font(SportsFonts.app(size: 14, weight: item.goal || item.important ? .bold : .regular))
+                .foregroundStyle(SpTheme.onDark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(item.goal ? SpTheme.green.opacity(0.10) : SpTheme.chipFill))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(item.goal ? SpTheme.green.opacity(0.35) : .clear, lineWidth: 1))
+    }
+
+    private func commentaryMinute(_ item: SpCommentaryItem) -> String {
+        if item.minute <= 0 { return "—" }
+        if let extra = item.extraMinute, extra > 0 { return "\(item.minute)'+\(extra)" }
+        return "\(item.minute)'"
+    }
+
+    @ViewBuilder private var analysisView: some View {
+        VStack(spacing: 16) {
+            if let x = xg, x.available { xgCard(x) }
+            if let m = momentum, m.available { momentumCard(m) }
+            if let p = pressure, p.available, !p.points.isEmpty { pressureCard(p) }
+            if let f = facts, f.available { factsCard(f) }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func xgCard(_ x: SpXg) -> some View {
+        VStack(spacing: 12) {
+            sectionTitle("الأهداف المتوقّعة (xG)", icon: "scope")
+            compareRow("xG", home: x.home.xg, away: x.away.xg, fmt: "%.2f")
+            compareRow("على المرمى (xGOT)", home: x.home.xgot, away: x.away.xgot, fmt: "%.2f")
+            if !x.topPlayers.isEmpty {
+                divider
+                ForEach(Array(x.topPlayers.prefix(4).enumerated()), id: \.offset) { _, p in
+                    HStack(spacing: 8) {
+                        Circle().fill(p.location == "home" ? SpTheme.green : SpTheme.onDarkDim).frame(width: 7, height: 7)
+                        Text(p.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text(String(format: "%.2f", p.xg)).font(SportsFonts.app(size: 13, weight: .bold))
+                            .foregroundStyle(SpTheme.emeraldDeep).environment(\.layoutDirection, .leftToRight)
+                    }
+                }
+            }
+        }
+        .padding(16).background(analysisCardBg)
+    }
+
+    private func momentumCard(_ m: SpMomentum) -> some View {
+        VStack(spacing: 12) {
+            sectionTitle("الزخم والاستحواذ", icon: "waveform.path.ecg")
+            if let pos = m.possession {
+                compareRow("الاستحواذ", home: Double(pos.home), away: Double(pos.away), fmt: "%.0f", suffix: "%")
+            }
+            if !m.points.isEmpty {
+                SpFlowChart(points: m.points)
+                chartLegend
+            }
+        }
+        .padding(16).background(analysisCardBg)
+    }
+
+    private func pressureCard(_ p: SpPressure) -> some View {
+        VStack(spacing: 12) {
+            sectionTitle("مؤشّر الضغط", icon: "gauge.with.dots.needle.50percent")
+            SpFlowChart(points: downsample(p.points, maxCount: 24))
+            chartLegend
+        }
+        .padding(16).background(analysisCardBg)
+    }
+
+    private func factsCard(_ f: SpMatchFacts) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("وقائع المباراة", icon: "sparkles")
+            if let ht = f.halftime, let h = ht.home, let a = ht.away {
+                factRow("نتيجة الشوط الأول", "\(h) - \(a)", ltr: true)
+            }
+            if let w = f.weather {
+                let txt = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "رطوبة \($0)" }]
+                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                if !txt.isEmpty { factRow("الطقس", txt) }
+            }
+            if !f.absentees.isEmpty {
+                divider
+                Text("الغيابات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.emeraldDeep)
+                ForEach(Array(f.absentees.prefix(6).enumerated()), id: \.offset) { _, ab in
+                    HStack(spacing: 8) {
+                        Circle().fill(ab.location == "home" ? SpTheme.green : SpTheme.onDarkDim).frame(width: 7, height: 7)
+                        Text(ab.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Text(ab.reason).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(1)
+                    }
+                }
+            }
+        }
+        .padding(16).background(analysisCardBg)
+    }
+
+    private func sectionTitle(_ title: String, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.greenSoft)
+            Text(title).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func compareRow(_ title: String, home: Double, away: Double, fmt: String, suffix: String = "") -> some View {
+        let total = max(home + away, 0.0001)
+        return VStack(spacing: 5) {
+            HStack {
+                Text(String(format: fmt, home) + suffix).font(SportsFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark).environment(\.layoutDirection, .leftToRight)
+                Spacer()
+                Text(title).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
+                Spacer()
+                Text(String(format: fmt, away) + suffix).font(SportsFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark).environment(\.layoutDirection, .leftToRight)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 3) {
+                    Capsule().fill(SpTheme.green).frame(width: geo.size.width * CGFloat(home / total))
+                    Capsule().fill(SpTheme.onDarkDim).frame(width: geo.size.width * CGFloat(away / total))
+                }
+            }
+            .frame(height: 6)
+        }
+    }
+
+    private func factRow(_ label: String, _ value: String, ltr: Bool = false) -> some View {
+        HStack {
+            Text(label).font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
+            Spacer()
+            Text(value).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                .environment(\.layoutDirection, ltr ? .leftToRight : .rightToLeft)
+        }
+    }
+
+    private var chartLegend: some View {
+        HStack(spacing: 16) {
+            legendDot(SpTheme.green, fx.home.name)
+            legendDot(SpTheme.onDarkDim, fx.away.name)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func legendDot(_ color: Color, _ text: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+        }
+    }
+
+    private var divider: some View { Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1) }
+    private var analysisCardBg: some View {
+        RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+            .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
+    }
+
+    private func downsample(_ pts: [SpFlowPoint], maxCount: Int) -> [SpFlowPoint] {
+        guard pts.count > maxCount else { return pts }
+        let step = Int((Double(pts.count) / Double(maxCount)).rounded(.up))
+        return pts.enumerated().filter { $0.offset % step == 0 }.map { $0.element }
+    }
+
     // MARK: التشكيلة — ملعب ثنائي الأبعاد + دكة البدلاء
 
     private func lineupsView(_ lineups: [SpWcLineup]) -> some View {
@@ -1195,7 +1549,10 @@ struct WcMatchCenter: View {
         let rows = pitchRows(lu)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Text(lu.teamName).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                Button { selectedTeam = IDBox(id: lu.teamId) } label: {
+                    Text(lu.teamName).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                }
+                .buttonStyle(SpPressStyle())
                 Spacer(minLength: 0)
                 if let f = lu.formation, !f.isEmpty {
                     Text(f).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.emeraldDeep)
@@ -1253,13 +1610,16 @@ struct WcMatchCenter: View {
     }
 
     private func pitchDot(_ p: SpWcLineupPlayer) -> some View {
-        VStack(spacing: 2) {
-            Text(p.number.map { "\($0)" } ?? "•")
-                .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(pitchBottom).monospacedDigit()
-                .frame(width: 28, height: 28).background(Circle().fill(.white)).environment(\.layoutDirection, .leftToRight)
-            Text(p.name).font(SportsFonts.app(size: 9, weight: .semibold)).foregroundStyle(.white)
-                .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: 60)
+        Button { selectedPlayer = IDBox(id: p.id) } label: {
+            VStack(spacing: 2) {
+                Text(p.number.map { "\($0)" } ?? "•")
+                    .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(pitchBottom).monospacedDigit()
+                    .frame(width: 28, height: 28).background(Circle().fill(.white)).environment(\.layoutDirection, .leftToRight)
+                Text(p.name).font(SportsFonts.app(size: 9, weight: .semibold)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: 60)
+            }
         }
+        .buttonStyle(.plain)
     }
 
     private func benchGrid(_ subs: [SpWcLineupPlayer]) -> some View {
@@ -1277,27 +1637,33 @@ struct WcMatchCenter: View {
     }
 
     private func benchRow(_ p: SpWcLineupPlayer) -> some View {
-        HStack(spacing: 8) {
-            Text(p.number.map { "\($0)" } ?? "•")
-                .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.emeraldDeep).monospacedDigit()
-                .frame(width: 22, height: 22).background(Circle().fill(SpTheme.green.opacity(0.15))).environment(\.layoutDirection, .leftToRight)
-            Text(p.name).font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
-            Spacer(minLength: 0)
+        Button { selectedPlayer = IDBox(id: p.id) } label: {
+            HStack(spacing: 8) {
+                Text(p.number.map { "\($0)" } ?? "•")
+                    .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.emeraldDeep).monospacedDigit()
+                    .frame(width: 22, height: 22).background(Circle().fill(SpTheme.green.opacity(0.15))).environment(\.layoutDirection, .leftToRight)
+                Text(p.name).font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
         }
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
+        .buttonStyle(SpPressStyle())
     }
 
     private func playerRow(_ p: SpWcLineupPlayer, starter: Bool) -> some View {
-        HStack(spacing: 10) {
-            Text(p.number.map { "\($0)" } ?? "—")
-                .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(starter ? SpTheme.green : SpTheme.onDarkFaint)
-                .frame(width: 26).monospacedDigit().environment(\.layoutDirection, .leftToRight)
-            Text(p.name).font(SportsFonts.app(size: 13, weight: starter ? .semibold : .regular)).foregroundStyle(starter ? SpTheme.onDark : SpTheme.onDarkDim).lineLimit(1)
-            Spacer(minLength: 0)
-            if let pos = p.position, !pos.isEmpty { Text(pos).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint) }
+        Button { selectedPlayer = IDBox(id: p.id) } label: {
+            HStack(spacing: 10) {
+                Text(p.number.map { "\($0)" } ?? "—")
+                    .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(starter ? SpTheme.green : SpTheme.onDarkFaint)
+                    .frame(width: 26).monospacedDigit().environment(\.layoutDirection, .leftToRight)
+                Text(p.name).font(SportsFonts.app(size: 13, weight: starter ? .semibold : .regular)).foregroundStyle(starter ? SpTheme.onDark : SpTheme.onDarkDim).lineLimit(1)
+                Spacer(minLength: 0)
+                if let pos = p.position, !pos.isEmpty { Text(pos).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint) }
+            }
+            .padding(.vertical, 5)
         }
-        .padding(.vertical, 5)
+        .buttonStyle(SpPressStyle())
     }
 
     // MARK: التقييمات
@@ -1321,46 +1687,53 @@ struct WcMatchCenter: View {
     }
 
     private func motmCard(_ m: SpWcRating) -> some View {
-        HStack(spacing: 13) {
-            playerPhoto(m.photo, size: 52)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
-                    Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+        Button { selectedPlayer = IDBox(id: m.id) } label: {
+            HStack(spacing: 13) {
+                playerPhoto(m.photo, size: 52)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
+                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                    }
+                    Text(m.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                    Text(teamName(m.teamId)).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                 }
-                Text(m.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                Text(teamName(m.teamId)).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+                Spacer(minLength: 0)
+                ratingBadge(m.rating)
             }
-            Spacer(minLength: 0)
-            ratingBadge(m.rating)
+            .padding(13).frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.green.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
         }
-        .padding(13).frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.green.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+        .buttonStyle(SpPressStyle())
     }
 
     private func ratingRow(_ p: SpWcRating) -> some View {
-        HStack(spacing: 11) {
-            playerPhoto(p.photo, size: 36)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    if let n = p.number { Text("\(n)").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint).monospacedDigit() }
-                    Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                    if p.captain == true { Image(systemName: "c.square.fill").font(.system(size: 11)).foregroundStyle(SpTheme.green) }
+        Button { selectedPlayer = IDBox(id: p.id) } label: {
+            HStack(spacing: 11) {
+                playerPhoto(p.photo, size: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 5) {
+                        if let n = p.number { Text("\(n)").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint).monospacedDigit() }
+                        Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                        if p.captain == true { Image(systemName: "c.square.fill").font(.system(size: 11)).foregroundStyle(SpTheme.green) }
+                    }
+                    HStack(spacing: 5) {
+                        Text(teamName(p.teamId)).font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+                        if let pos = p.position, !pos.isEmpty { Text("· \(pos)").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint) }
+                    }
                 }
-                HStack(spacing: 5) {
-                    Text(teamName(p.teamId)).font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
-                    if let pos = p.position, !pos.isEmpty { Text("· \(pos)").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint) }
+                Spacer(minLength: 0)
+                if (p.goals ?? 0) > 0 {
+                    Label("\(p.goals!)", systemImage: "soccerball.inverse").labelStyle(.titleAndIcon)
+                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
                 }
+                ratingBadge(p.rating)
             }
-            Spacer(minLength: 0)
-            if (p.goals ?? 0) > 0 {
-                Label("\(p.goals!)", systemImage: "soccerball.inverse").labelStyle(.titleAndIcon)
-                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
-            }
-            ratingBadge(p.rating)
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .buttonStyle(SpPressStyle())
     }
 
     private func ratingBadge(_ r: Double) -> some View {
@@ -1449,7 +1822,18 @@ struct WcMatchCenter: View {
     // MARK: التحميل
 
     private func load(force: Bool = false) async {
-        if let d = try? await APIClient.shared.fetchWorldCupMatch(id: fixtureId, ignoreCache: force) { detail = d }
+        async let detailOpt = (try? APIClient.shared.fetchWorldCupMatch(id: fixtureId, ignoreCache: force))
+        async let xgOpt = (try? APIClient.shared.fetchWorldCupXg(id: fixtureId, ignoreCache: force))
+        async let momentumOpt = (try? APIClient.shared.fetchWorldCupMomentum(id: fixtureId, ignoreCache: force))
+        async let pressureOpt = (try? APIClient.shared.fetchWorldCupPressure(id: fixtureId, ignoreCache: force))
+        async let factsOpt = (try? APIClient.shared.fetchWorldCupMatchFacts(id: fixtureId, ignoreCache: force))
+        async let commentaryOpt = (try? APIClient.shared.fetchWorldCupCommentary(id: fixtureId, ignoreCache: force))
+        if let d = await detailOpt { detail = d }
+        xg = await xgOpt
+        momentum = await momentumOpt
+        pressure = await pressureOpt
+        facts = await factsOpt
+        commentary = await commentaryOpt
         loading = false
     }
 
@@ -1464,14 +1848,17 @@ struct WcMatchCenter: View {
 }
 
 enum WcSeg: String, CaseIterable, Identifiable {
-    case events, stats, lineups, ratings, h2h
+    case events, commentary, analysis, ratings, lineups, stats, prediction, h2h
     var id: String { rawValue }
     var label: String {
         switch self {
         case .events: return "الأحداث"
-        case .stats: return "الإحصائيات"
-        case .lineups: return "التشكيلة"
+        case .commentary: return "التعليق"
+        case .analysis: return "التحليل"
         case .ratings: return "التقييمات"
+        case .lineups: return "التشكيلة"
+        case .stats: return "الإحصائيات"
+        case .prediction: return "التوقع"
         case .h2h: return "المواجهات"
         }
     }

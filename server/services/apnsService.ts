@@ -301,6 +301,12 @@ export interface LiveActivityContentState {
   isLive: boolean;
   isFinished: boolean;
   lastEvent: string | null;
+  /**
+   * Unix seconds for the moment represented by 0:00 of the running match clock.
+   * iOS renders a local ticking timer from this anchor, so the lock-screen
+   * activity does not wait for an APNs push every minute.
+   */
+  clockStartEpoch?: number | null;
 }
 
 export interface LiveActivityUpdateOptions {
@@ -653,7 +659,7 @@ export async function deactivateInvalidDevices(tokens: string[]): Promise<void> 
  * Check if APNs is configured and ready
  */
 export function isApnsConfigured(): boolean {
-  return getApnsCredentials() !== null;
+  return getApnsCredentials() !== null || getApnsCredentials(SPORTS_BUNDLE_ID) !== null;
 }
 
 /**

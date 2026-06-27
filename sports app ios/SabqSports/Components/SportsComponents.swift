@@ -166,6 +166,7 @@ struct SpRemoteImage: View {
     let url: String
     var contentMode: ContentMode = .fit
     @State private var image: UIImage?
+    private static let cache = NSCache<NSString, UIImage>()
 
     var body: some View {
         Group {
@@ -177,8 +178,13 @@ struct SpRemoteImage: View {
         }
         .task(id: url) {
             guard !url.isEmpty, let u = URL(string: url) else { image = nil; return }
+            if let cached = Self.cache.object(forKey: url as NSString) {
+                image = cached
+                return
+            }
             if let (data, _) = try? await URLSession.shared.data(from: u),
                let img = UIImage(data: data) {
+                Self.cache.setObject(img, forKey: url as NSString)
                 image = img
             }
         }
