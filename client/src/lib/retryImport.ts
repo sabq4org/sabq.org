@@ -62,7 +62,25 @@ export function isChunkErrorMessage(message: string | undefined | null): boolean
   );
 }
 
-export function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 500): Promise<T> {
+// Defaults tuned for Cloudflare Pages, NOT a single-origin host. After the
+// frontend/backend split, a lazy chunk can 404 transiently even on the CURRENT
+// build: a new Pages deployment is promoted before its content-hashed
+// /assets/*.js have propagated to every edge POP, and (because _routes.json runs
+// the Pages Function on /assets/*) a Function fallback under post-deploy load can
+// momentarily mask an existing file. Both heal within seconds. The old 2×500ms
+// (≈1s) budget surrendered to the "تعذر تحميل الصفحة" screen long before the
+// chunk became reachable — the white-page-after-every-deploy report. We now
+// re-fetch the SAME chunk with exponential backoff over ~20s before giving up,
+// so a propagating chunk is awaited rather than treated as a permanent 404.
+const RETRY_ATTEMPTS = 6;
+const RETRY_BASE_DELAY_MS = 600;
+const RETRY_MAX_DELAY_MS = 5000;
+
+export function retryImport<T>(
+  importFn: () => Promise<T>,
+  retries = RETRY_ATTEMPTS,
+  delay = RETRY_BASE_DELAY_MS,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     importFn()
       .then((mod) => {
@@ -81,7 +99,11 @@ export function retryImport<T>(importFn: () => Promise<T>, retries = 2, delay = 
         if (retries > 0 && isModuleError) {
           console.warn(`[LazyLoad] Retrying import, ${retries} attempts left...`);
           setTimeout(() => {
-            retryImport(importFn, retries - 1, delay)
+            // Exponential backoff capped at RETRY_MAX_DELAY_MS so a transient
+            // current-build chunk 404 (Pages POP propagation / Function fallback
+            // under load) is awaited for ~20s total instead of bailing on the 2nd
+            // try. Genuine permanent 404s still surface — just ~20s later.
+            retryImport(importFn, retries - 1, Math.min(delay * 2, RETRY_MAX_DELAY_MS))
               .then(resolve)
               .catch(reject);
           }, delay);

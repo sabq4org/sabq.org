@@ -9,7 +9,33 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 // for users who keep the tab open across releases.
 const SABQ_BUILD_ID = String(Date.now());
 
+// Optional append-only asset CDN (structural fix for "white page after every
+// deploy"). When ASSET_CDN_URL is set at BUILD time (e.g.
+// "https://cdn.sabq.org"), every content-hashed /assets/* URL is emitted as an
+// ABSOLUTE url on that host instead of a Pages-relative path. Pair it with the
+// post-build upload step (scripts/upload-assets-to-r2.mjs) that pushes
+// dist/public/assets/* into an R2 bucket WITHOUT ever deleting old files.
+// Because filenames are content-hashed, the bucket accumulates EVERY build's
+// chunks, so a chunk URL never 404s — neither for an open tab on the previous
+// build nor for a fresh tab hitting a POP mid-propagation. Unset (the default)
+// keeps the current Pages-relative behavior, so this is safe to merge inert and
+// flip on once cdn.sabq.org + R2 CORS are wired (see docs).
+const ASSET_CDN_URL = (process.env.ASSET_CDN_URL || "").replace(/\/+$/, "");
+
 export default defineConfig({
+  // Only rewrites bundle-emitted asset URLs (js/css/fonts/images) — root/public
+  // paths (index.html, /build-info.json, /favicon.ico) stay on the origin so the
+  // deploy-detection probe and the SPA shell are still served (no-store) by
+  // Cloudflare Pages. Inert unless ASSET_CDN_URL is set.
+  ...(ASSET_CDN_URL
+    ? {
+        experimental: {
+          renderBuiltUrl(filename: string) {
+            return `${ASSET_CDN_URL}/${filename}`;
+          },
+        },
+      }
+    : {}),
   plugins: [
     react(),
     runtimeErrorOverlay(),
