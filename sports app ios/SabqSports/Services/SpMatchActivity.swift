@@ -84,6 +84,7 @@ struct SpMatchActivityAttributes: ActivityAttributes {
         var homeScore: Int
         var awayScore: Int
         /// نصّ الدقيقة الجارية: «78'» أو «45+2'» — فارغ قبل الانطلاق/بعد النهاية.
+        /// يبقى كـ fallback للأجهزة القديمة وأثناء توقّف الساعة (استراحة/ترجيح).
         var minute: String
         /// نصّ الحالة: «الشوط الأول» · «بين الشوطين» · «انتهت».
         var statusLabel: String
@@ -91,10 +92,15 @@ struct SpMatchActivityAttributes: ActivityAttributes {
         var isFinished: Bool
         /// آخر حدث بارز للعرض السريع: «⚽ 23' محمد» أو «🟨 41' سالم».
         var lastEvent: String?
+        /// مرساة الساعة الذاتية (Unix ثوانٍ): اللحظة التي تمثّل «0:00» للساعة الجارية،
+        /// أي «الآن − الزمن المنقضي». حين تتوفّر والمباراة تجري، يعرض الويدجت ساعةً
+        /// **تتحرّك ذاتيًّا على الجهاز بلا أي دفعة APNs** (يُكسر تأخّر الدقيقة جذريًّا).
+        /// nil = الساعة متوقّفة (قبل البدء/استراحة/ترجيح) → يسقط العرض على `minute` المدفوع.
+        var clockStartEpoch: Double?
 
         public init(homeScore: Int = 0, awayScore: Int = 0, minute: String = "",
                     statusLabel: String = "", isLive: Bool = false, isFinished: Bool = false,
-                    lastEvent: String? = nil) {
+                    lastEvent: String? = nil, clockStartEpoch: Double? = nil) {
             self.homeScore = homeScore
             self.awayScore = awayScore
             self.minute = minute
@@ -102,6 +108,7 @@ struct SpMatchActivityAttributes: ActivityAttributes {
             self.isLive = isLive
             self.isFinished = isFinished
             self.lastEvent = lastEvent
+            self.clockStartEpoch = clockStartEpoch
         }
     }
 

@@ -25,6 +25,12 @@ public struct LiveMatchAttributes: ActivityAttributes {
         public var isFinished: Bool
         /// آخر حدث مهم جاهز للعرض، مثل "⚽ 67' هدف — صلاح" — null إن لا يوجد
         public var lastEvent: String?
+        /// مرساة الساعة الذاتية (Unix ثوانٍ): اللحظة التي تمثّل «0:00» للساعة الجارية
+        /// (أي «الآن − الزمن المنقضي»). حين تتوفّر والمباراة تجري، يعرض الويدجت ساعةً
+        /// **تتحرّك ذاتيًّا على الجهاز بلا أي دفعة APNs** — فتُكسر فجوة تأخّر الدقيقة.
+        /// nil = الساعة متوقّفة (قبل البدء/استراحة/ترجيح) → يسقط العرض على `minute`.
+        /// الاسم يطابق LiveActivityContentState في الخادم حرفيًّا.
+        public var clockStartEpoch: Double?
 
         public init(
             homeScore: Int,
@@ -33,7 +39,8 @@ public struct LiveMatchAttributes: ActivityAttributes {
             statusLabel: String,
             isLive: Bool,
             isFinished: Bool,
-            lastEvent: String?
+            lastEvent: String?,
+            clockStartEpoch: Double? = nil
         ) {
             self.homeScore = homeScore
             self.awayScore = awayScore
@@ -42,6 +49,7 @@ public struct LiveMatchAttributes: ActivityAttributes {
             self.isLive = isLive
             self.isFinished = isFinished
             self.lastEvent = lastEvent
+            self.clockStartEpoch = clockStartEpoch
         }
     }
 

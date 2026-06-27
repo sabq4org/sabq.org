@@ -301,6 +301,14 @@ export interface LiveActivityContentState {
   isLive: boolean;
   isFinished: boolean;
   lastEvent: string | null;
+  /**
+   * مرساة الساعة الذاتية (Unix ثوانٍ): اللحظة التي تمثّل «0:00» للساعة الجارية،
+   * أي «الآن − الزمن المنقضي». يستخدمها الويدجت لعرض ساعةٍ تتحرّك ذاتيًّا على
+   * الجهاز عبر Text(timerInterval:) بلا اعتماد على وتيرة الدفع — فتُكسر فجوة
+   * تأخّر الدقيقة جذريًّا. تُحذف (undefined) وقت توقّف الساعة (استراحة/ترجيح/قبل
+   * البدء) فيسقط الويدجت على نصّ `minute` المُجمّد. اسمها يطابق iOS حرفيًّا.
+   */
+  clockStartEpoch?: number;
 }
 
 export interface LiveActivityUpdateOptions {
