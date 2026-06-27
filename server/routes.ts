@@ -953,6 +953,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Hash token before storing (security: never store plaintext tokens)
       const tokenHash = await bcrypt.hash(plaintextToken, 12);
 
+      // Invalidate any older unused reset links for this account. A fresh
+      // request should leave only one usable reset path.
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true })
+        .where(and(eq(passwordResetTokens.userId, user.id), eq(passwordResetTokens.used, false)));
+
       // Save hashed token to database
       const [inserted] = await db.insert(passwordResetTokens).values({
         userId: user.id,
