@@ -30,8 +30,20 @@ export default defineConfig({
   ...(ASSET_CDN_URL
     ? {
         experimental: {
-          renderBuiltUrl(filename: string) {
-            return `${ASSET_CDN_URL}/${filename}`;
+          renderBuiltUrl(
+            filename: string,
+            { type }: { type: "asset" | "public" },
+          ) {
+            // ONLY content-hashed bundle assets (js/css/fonts/images under
+            // dist/public/assets) go to the CDN — those are what the post-build
+            // uploader pushes to R2. Files copied from publicDir (favicon.ico,
+            // manifest.webmanifest, icon-*.png, apple-touch-icon.png) are NOT
+            // uploaded and live at the Pages origin root; rewriting them to the
+            // CDN makes them 404 there. Keep `public` assets origin-relative.
+            if (type === "asset") {
+              return `${ASSET_CDN_URL}/${filename}`;
+            }
+            return { relative: true };
           },
         },
       }
