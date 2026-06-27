@@ -52,7 +52,12 @@ const {
   ASSET_UPLOAD_STRICT = "",
 } = process.env;
 
-const strict = ASSET_UPLOAD_STRICT.toLowerCase() === "true";
+// Fail-HARD by default. When ASSET_CDN_URL is set, index.html is built to point
+// at the CDN, so a failed/partial upload ships a site whose chunks 404 (the
+// white-page incident: a wrong R2_ACCESS_KEY_ID uploaded 0 files yet the deploy
+// still went live). Failing the build instead keeps production on the previous
+// good deploy. Opt out only with ASSET_UPLOAD_STRICT=false.
+const strict = ASSET_UPLOAD_STRICT.toLowerCase() !== "false";
 
 function bail(msg) {
   console.error(`[upload-assets-to-r2] ${msg}`);
@@ -69,6 +74,17 @@ if (!ASSET_CDN_URL) {
 }
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
   bail("Missing R2_* env vars — cannot upload assets. (Set them in Pages env.)");
+}
+// Preflight: an R2 S3 Access Key ID is exactly 32 hex chars. The most common
+// setup mistake is pasting the "Token value" (cfut_…, ~53 chars) into
+// R2_ACCESS_KEY_ID — every PutObject then fails with "Credential access key has
+// length 53, should be 32". Catch it up front with an actionable message.
+if (R2_ACCESS_KEY_ID.length !== 32) {
+  bail(
+    `R2_ACCESS_KEY_ID length is ${R2_ACCESS_KEY_ID.length}, expected 32. ` +
+      `You likely pasted the R2 "Token value" (cfut_…) or the Secret instead of ` +
+      `the 32-char hex "Access Key ID". Fix it in Pages → Variables.`,
+  );
 }
 
 // Content-type by extension — R2 doesn't infer it, and a wrong/missing type on a
@@ -136,16 +152,28 @@ async function main() {
     skipped = 0,
     failed = 0;
 
-  for await (const file of walk(distDir)) {
+  // Gather the file list first, then upload with a CONCURRENCY pool. The first
+  // run pushes ~680 files to an R2 region that may be far from the build box;
+  // doing it one-at-a-time (HeadObject + PutObject sequentially) took 6+ min and
+  // slowed every deploy. A bounded pool of parallel workers brings it back to
+  // seconds. Tune with ASSET_UPLOAD_CONCURRENCY (default 24).
+  const files = [];
+  for await (const file of walk(distDir)) files.push(file);
+
+  const concurrency = Math.max(
+    1,
+    Number(process.env.ASSET_UPLOAD_CONCURRENCY) || 24,
+  );
+
+  async function processOne(file) {
     // Key mirrors the public path: assets/<...>. Hashed files are immutable, so
     // a present key is byte-identical and safe to skip.
     const rel = relative(distDir, file).split(sep).join("/");
     const key = `${ASSET_UPLOAD_PREFIX}/${rel}`.replace(/\/+/g, "/");
-
     try {
       if (await existsInBucket(key)) {
         skipped++;
-        continue;
+        return;
       }
       await client.send(
         new PutObjectCommand({
@@ -163,6 +191,18 @@ async function main() {
       console.error(`[upload-assets-to-r2] FAILED ${key}: ${err?.message || err}`);
     }
   }
+
+  // Simple worker pool: `concurrency` workers each pull from a shared cursor.
+  let cursor = 0;
+  async function worker() {
+    while (cursor < files.length) {
+      const i = cursor++;
+      await processOne(files[i]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, files.length) }, worker),
+  );
 
   console.log(
     `[upload-assets-to-r2] done — uploaded=${uploaded} skipped=${skipped} failed=${failed} → ${ASSET_CDN_URL}/${ASSET_UPLOAD_PREFIX}/`,
