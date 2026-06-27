@@ -11,6 +11,7 @@ import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
   WC_STATUS_AR,
+  WC_PLAYER_AR,
   localizeEvent,
   localizeGroup,
   localizeRound,
@@ -2442,10 +2443,73 @@ export interface WcMatchDetail {
   headToHead: WcFixture[];
 }
 
+/**
+ * يبني خريطة «معرّف اللاعب → أفضل اسم خام» من كل مصادر المباراة في الرد الواحد
+ * (أحداث + تشكيلات + تقييمات). السبب: API-Football يرسل اسم اللاعب في الأحداث
+ * مختصرًا («F. Al-Buraikan») وأحيانًا بصيغة لا يلتقطها القاموس الثابت، فيتراجع
+ * النقل الصوتي للـAI الذي قد يخطئ توسعة الحرف الأول (مثال حقيقي: «F. Al-Buraikan»
+ * → «فهد البريكين» بدل «فراس البريكان»). أما التشكيلات/التقييمات فتحمل نفس
+ * المعرّف بالاسم الكامل، فنوحّد التعريب بالمعرّف الثابت لا بسلسلة الاسم المتقلّبة:
+ * هكذا يطابق اسم الحدث/التقرير اسمَ بطاقة اللاعب تمامًا.
+ *
+ * المفاضلة لكل معرّف: ما هو في القاموس الثابت أولًا، ثم الاسم الأطول (الأكمل غالبًا).
+ */
+function collectBestNamesById(item: any): Map<number, string> {
+  const best = new Map<number, string>();
+  const consider = (id: any, name: any) => {
+    if (typeof id !== "number" || !name || typeof name !== "string" || !name.trim()) return;
+    const candidate = name.trim();
+    const prev = best.get(id);
+    if (prev === undefined) {
+      best.set(id, candidate);
+      return;
+    }
+    const prevInDict = !!WC_PLAYER_AR[prev];
+    const candInDict = !!WC_PLAYER_AR[candidate];
+    if (candInDict && !prevInDict) {
+      best.set(id, candidate);
+    } else if (candInDict === prevInDict && candidate.length > prev.length) {
+      best.set(id, candidate);
+    }
+  };
+  for (const ev of item?.events ?? []) {
+    consider(ev.player?.id, ev.player?.name);
+    consider(ev.assist?.id, ev.assist?.name);
+  }
+  for (const lineup of item?.lineups ?? []) {
+    for (const p of lineup.startXI ?? []) consider(p.player?.id, p.player?.name);
+    for (const p of lineup.substitutes ?? []) consider(p.player?.id, p.player?.name);
+  }
+  for (const teamBlock of item?.players ?? []) {
+    for (const p of teamBlock.players ?? []) consider(p.player?.id, p.player?.name);
+  }
+  return best;
+}
+
+/**
+ * يرجّع دالة تعريب تفضّل المعرّف الثابت: لو توفّر معرّف اللاعب، تُعرّب أفضل اسم
+ * خام له (الأكمل) بدل سلسلة الاسم المحلية المتقلّبة. تتراجع لتعريب الاسم كما ورد.
+ */
+function nameResolverById(
+  tr: (name: string | null | undefined) => string,
+  bestById: Map<number, string>,
+): (id: number | null | undefined, name: string | null | undefined) => string {
+  return (id, name) => {
+    const best = typeof id === "number" ? bestById.get(id) : undefined;
+    return tr(best ?? name);
+  };
+}
+
 /** يعرّب أحداث المباراة فقط — مشترك بين التفاصيل الكاملة والمسار الخفيف. */
-function localizeMatchEvents(item: any, tr: (name: string | null | undefined) => string): WcMatchEvent[] {
+function localizeMatchEvents(
+  item: any,
+  tr: (name: string | null | undefined) => string,
+  bestById?: Map<number, string>,
+): WcMatchEvent[] {
+  const arName = nameResolverById(tr, bestById ?? new Map());
   return (item?.events ?? []).map((ev: any): WcMatchEvent => {
     const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
+    const hasAssist = !!(ev.assist?.name || ev.assist?.id);
     return {
       minute: ev.time?.elapsed ?? 0,
       extraMinute: ev.time?.extra ?? null,
@@ -2453,9 +2517,9 @@ function localizeMatchEvents(item: any, tr: (name: string | null | undefined) =>
       type: localized.type,
       label: localized.label,
       detail: ev.detail ?? "",
-      player: tr(ev.player?.name),
+      player: arName(ev.player?.id, ev.player?.name),
       playerId: ev.player?.id ?? null,
-      assist: ev.assist?.name ? tr(ev.assist.name) : null,
+      assist: hasAssist ? arName(ev.assist?.id, ev.assist?.name) || null : null,
       assistId: ev.assist?.id ?? null,
     };
   });
@@ -2480,12 +2544,16 @@ async function getMatchEventsOnly(fixtureId: number): Promise<WcMatchEvent[]> {
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
     if (!item) return [];
-    const rawNames: (string | null | undefined)[] = [];
+    // وحّد التعريب بمعرّف اللاعب: نفس رد `fixtures` يحمل الأسماء الكاملة في
+    // التشكيلات/التقييمات، فنعرّبها بدل الاسم المختصر في الأحداث (انظر
+    // collectBestNamesById) كي لا يخترع الـAI اسمًا أول خاطئًا.
+    const bestById = collectBestNamesById(item);
+    const rawNames: (string | null | undefined)[] = [...bestById.values()];
     for (const ev of item.events ?? []) {
       rawNames.push(ev.player?.name, ev.assist?.name);
     }
     const tr = await resolveNames(rawNames);
-    return localizeMatchEvents(item, tr);
+    return localizeMatchEvents(item, tr, bestById);
   });
 }
 
@@ -2514,8 +2582,11 @@ export async function getMatchDetail(
     if (!item) return null;
 
     // اجمع كل أسماء اللاعبين في هذه المباراة (أحداث + تشكيلات + تقييمات)
-    // وعرّبها دفعة واحدة — استدعاء AI واحد فقط للأسماء الجديدة، ثم كاش للأبد
-    const rawNames: (string | null | undefined)[] = [];
+    // وعرّبها دفعة واحدة — استدعاء AI واحد فقط للأسماء الجديدة، ثم كاش للأبد.
+    // التعريب يُوحَّد بمعرّف اللاعب (لا بسلسلة الاسم): اسم الحدث المختصر يُعرَّب
+    // عبر أكمل اسم لنفس المعرّف من التشكيلة/التقييم — فيطابق اسمَ بطاقة اللاعب.
+    const bestById = collectBestNamesById(item);
+    const rawNames: (string | null | undefined)[] = [...bestById.values()];
     for (const ev of item.events ?? []) {
       rawNames.push(ev.player?.name, ev.assist?.name);
     }
@@ -2527,13 +2598,14 @@ export async function getMatchDetail(
       for (const p of teamBlock.players ?? []) rawNames.push(p.player?.name);
     }
     const tr = await resolveNames(rawNames);
+    const arName = nameResolverById(tr, bestById);
 
-    const events: WcMatchEvent[] = localizeMatchEvents(item, tr);
+    const events: WcMatchEvent[] = localizeMatchEvents(item, tr, bestById);
 
     let lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({
         id: p.player?.id ?? 0,
-        name: tr(p.player?.name),
+        name: arName(p.player?.id, p.player?.name),
         number: p.player?.number ?? null,
         position: p.player?.pos ?? null,
         grid: p.player?.grid ?? null,
@@ -2564,7 +2636,7 @@ export async function getMatchDetail(
           if (!Number.isFinite(rating)) return null;
           return {
             id: p.player?.id ?? 0,
-            name: tr(p.player?.name),
+            name: arName(p.player?.id, p.player?.name),
             photo: p.player?.photo ?? "",
             teamId: teamBlock.team?.id ?? 0,
             number: st.games?.number ?? null,
