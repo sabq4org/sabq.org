@@ -266,7 +266,13 @@ async function verifyCdnAssets(distDir) {
     return;
   }
 
-  const missing = [];
+  // A missing .js/.css white-pages the SPA → BLOCK the deploy. A missing
+  // favicon/manifest/image is cosmetic → WARN only, never fail the build over
+  // it. (With the vite renderBuiltUrl fix, public/* assets stay origin-relative
+  // and won't even appear here — this split is defense-in-depth.)
+  const isCritical = (url) => /\.(js|mjs|css)(\?|$)/i.test(url);
+  const blocking = [];
+  const cosmetic = [];
   await Promise.all(
     [...urls].map(async (url) => {
       try {
@@ -274,23 +280,27 @@ async function verifyCdnAssets(distDir) {
           method: "HEAD",
           signal: AbortSignal.timeout(15000),
         });
-        if (!res.ok) missing.push(`${url} → HTTP ${res.status}`);
+        if (!res.ok) (isCritical(url) ? blocking : cosmetic).push(`${url} → HTTP ${res.status}`);
       } catch (err) {
-        missing.push(`${url} → ${err?.message || err}`);
+        (isCritical(url) ? blocking : cosmetic).push(`${url} → ${err?.message || err}`);
       }
     }),
   );
 
-  if (missing.length) {
-    console.error("[upload-assets-to-r2] CDN verification FAILED — these referenced assets are not served:");
-    for (const m of missing) console.error(`  • ${m}`);
+  if (cosmetic.length) {
+    console.warn("[upload-assets-to-r2] CDN verification WARNING — non-critical assets not served (won't block deploy):");
+    for (const m of cosmetic) console.warn(`  • ${m}`);
+  }
+  if (blocking.length) {
+    console.error("[upload-assets-to-r2] CDN verification FAILED — critical JS/CSS not served:");
+    for (const m of blocking) console.error(`  • ${m}`);
     bail(
-      `${missing.length} index.html asset(s) are not fetchable from ${base}. ` +
+      `${blocking.length} critical asset(s) are not fetchable from ${base}. ` +
         `Refusing to ship — the SPA would white-page. Check R2 upload + cdn.sabq.org custom domain.`,
     );
   }
   console.log(
-    `[upload-assets-to-r2] CDN verification OK — ${urls.size} referenced asset(s) reachable on ${base}.`,
+    `[upload-assets-to-r2] CDN verification OK — ${urls.size} referenced asset(s) checked on ${base}.`,
   );
 }
 
