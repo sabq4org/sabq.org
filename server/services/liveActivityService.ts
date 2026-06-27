@@ -43,10 +43,6 @@ const LIVE_STATE_AR: Record<string, string> = {
 
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
-// نبضة إبقاء: حتى دون تغيّر النتيجة/الحالة، ندفع كل ~دقيقتين بأولوية منخفضة (5)
-// لإعادة ضبط مرساة الساعة (ضدّ الانجراف) وتجديد staleDate. أرخص بكثير من دفع
-// الدقيقة كل دقيقة (الدقيقة صارت تتحرّك ذاتيًّا على الجهاز ولا تُدفع إطلاقًا).
-const KEEPALIVE_SEC = 120;
 
 // آخر نتيجة معروفة لكل مباراة (في الذاكرة، القائد فقط) — لتحديد أولوية APNs:
 // تغيّر النتيجة (هدف) → أولوية 10 فورية؛ تغيّر روتيني (دقيقة/حالة) → أولوية 5
@@ -133,17 +129,6 @@ function lastEventText(detail: WcMatchDetail): string | null {
   return `${icon} ${minute} ${who}`;
 }
 
-// أكواد توقّف الساعة (لا تتحرّك الدقيقة): استراحة/فاصل الإضافي/ركلات الترجيح/إيقاف.
-// نفحص حالة SportMonks (developer_name) أولًا ثم كود API-Football احتياطًا.
-const SM_PAUSED_STATES = new Set(["HT", "BREAK", "PENALTIES", "INPLAY_PENALTIES"]);
-const AF_PAUSED_CODES = new Set(["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP"]);
-
-function isClockPaused(detail: WcMatchDetail, live?: WcLiveScore | null): boolean {
-  if (live && live.live && SM_PAUSED_STATES.has(live.stateDevName)) return true;
-  const code = (detail.fixture.status.code ?? "").toUpperCase();
-  return AF_PAUSED_CODES.has(code);
-}
-
 function buildContentState(
   detail: WcMatchDetail,
   live?: WcLiveScore | null,
@@ -173,16 +158,6 @@ function buildContentState(
         }
       : base;
 
-  // مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة جاريةً فعليًّا (لا استراحة).
-  // المصدر الأدقّ للدقيقة: SportMonks الحيّ إن توفّر، وإلا elapsed من API-Football.
-  const elapsedMin =
-    live && live.live && live.minute > 0 ? live.minute : f.status.elapsed ?? 0;
-  const extraMin = f.status.extra ?? 0;
-  const running =
-    state.isLive && !state.isFinished && elapsedMin > 0 && !isClockPaused(detail, live);
-  if (running) {
-    state.clockStartEpoch = Math.floor(Date.now() / 1000) - (elapsedMin + extraMin) * 60;
-  }
   return state;
 }
 
@@ -266,12 +241,12 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
 
     const state = buildContentState(detail, live);
-    // بصمة الدفع تستثني `minute` و`clockStartEpoch` عمدًا: الدقيقة تتحرّك ذاتيًّا
-    // على الجهاز عبر المرساة، فلا داعي لدفعة عند كل تغيّر دقيقة. نبقي الدفع فقط
-    // عند تغيّر النتيجة/الحالة/آخر حدث (نادر → فوري ولا يستنزف ميزانية iOS).
+    // بصمة الدفع تشمل `minute`: الويدجت يعرض الدقيقة كنصّ مدفوع، فندفع عند كل
+    // تغيّر دقيقة/نتيجة/حالة/آخر حدث ليبقى العرض على الجهاز متزامنًا مع الخادم.
     const pushKey = JSON.stringify({
       h: state.homeScore,
       a: state.awayScore,
+      m: state.minute,
       s: state.statusLabel,
       l: state.isLive,
       f: state.isFinished,
@@ -298,16 +273,12 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
 
     for (const t of tokens) {
       const changed = t.lastContentHash !== pushKey;
-      // نبضة إبقاء: لا تغيّر لكن مضى وقت طويل على آخر دفعة ولا تزال حيّة → ندفع
-      // بأولوية منخفضة لإعادة ضبط المرساة وتجديد staleDate (لا يحدث قبل الانطلاق).
-      const lastPushedMs = t.lastPushedAt ? new Date(t.lastPushedAt).getTime() : 0;
-      const keepAlive =
-        !changed && state.isLive && !finished && Date.now() - lastPushedMs > KEEPALIVE_SEC * 1000;
-      // لا تغيير ولا نبضة إبقاء ولم تنتهِ → لا داعي للدفع (العدّاد قبل الانطلاق ذاتي).
-      if (!changed && !keepAlive && !finished) continue;
+      // لا تغيير ولم تنتهِ → لا داعي للدفع.
+      if (!changed && !finished) continue;
 
-      // أولوية: تغيّر فعلي/نهاية → 10 فورية؛ نبضة الإبقاء → 5 (غير عاجلة، موفّرة).
-      const priority: "5" | "10" = keepAlive && !changed && !finished ? "5" : "10";
+      // أولوية: تغيّر النتيجة (هدف) أو النهاية → 10 فورية؛ تغيّر روتيني (دقيقة/حالة)
+      // → 5 موفّرة للميزانية كي يصل الهدف فوريًا دائمًا.
+      const priority: "5" | "10" = scoreChanged || finished ? "10" : "5";
 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
         event: finished ? "end" : "update",
