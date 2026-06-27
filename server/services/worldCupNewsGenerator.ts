@@ -29,6 +29,7 @@ import {
   type WcFixture,
   type WcGroup,
   type WcMatchDetail,
+  type WcMatchEvent,
 } from "./worldCupService";
 import { isArabTeam } from "./worldCupNames";
 
@@ -150,6 +151,15 @@ function eventsBrief(detail: WcMatchDetail): string {
     const minute = ev.extraMinute ? `${ev.minute}+${ev.extraMinute}` : `${ev.minute}`;
     const team =
       ev.teamId === detail.fixture.home.id ? detail.fixture.home.name : detail.fixture.away.name;
+    // التبديل: ev.player = الداخل، ev.assist = الخارج (عُرف API-Football، نفس
+    // ما يعرضه مركز المباراة: «player بديلًا عن assist»). الصياغة العامة
+    // «{ev.label}: {player} (صناعة: {assist})» كانت تسمّي الخارج «صناعة» فيختلط
+    // الاتجاه على النموذج فيعكس الاسمين. نُصرّح بالاتجاه هنا فيستحيل العكس.
+    if (ev.type === "substitution") {
+      const inName = ev.player || "—";
+      const outPart = ev.assist ? ` بدلًا من ${ev.assist} (خروج ${ev.assist}، دخول ${inName})` : "";
+      return `- د${minute} [${team}] تبديل: دخول ${inName}${outPart}`;
+    }
     const assist = ev.assist ? ` (صناعة: ${ev.assist})` : "";
     return `- د${minute} [${team}] ${ev.label}: ${ev.player}${assist}`;
   });
@@ -248,6 +258,121 @@ function detectOutcomeContradiction(
   return null;
 }
 
+// ---------- بوابة اتساق اتجاه التبديل (داخل/خارج) ----------
+// حادثة 2026-06-27: التقرير عكس اسمي تبديل (نسب الدخول للخارج والعكس). الموجز
+// صار يصرّح بالاتجاه، وهذه شبكة أمان أخيرة: لو ناقض المتنُ الاتجاهَ القطعي
+// (ev.player=الداخل، ev.assist=الخارج) حُجبت المادة كمسودة بدل نشر العكس.
+// متحفّظة عمدًا (دقّة عالية): تطابق اسمي اللاعبين مع رابط/فعل اتجاهي صريح فقط.
+
+/** تطبيع عربي خفيف للمطابقة: إزالة الوسوم والتشكيل والتطويل وتوحيد الألف/الياء/التاء. */
+function normalizeAr(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ً-ْـ]/g, "")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// روابط «بدلًا من» حصرًا: عُرفها ثابت (الداخل يسبق، الخارج يتلو — «دخل س بدلًا
+// من ع»)، فظهور الخارج قبله والداخل بعده = عكس صريح. تُستبعد «محله/مكانه» لأن
+// عُرفها معاكس (الخارج أولًا) وكثيرًا ما يليها ضميرٌ لا اسمٌ — مصدر إنذار كاذب.
+const SUB_REPLACE_CONNECTORS = ["بدلا من", "بديلا عن", "بدلا عن"];
+// أفعال الدخول/الخروج لالتقاط العكس حين لا يُستخدم رابط استبدال
+const SUB_ENTRY_VERBS = ["دخول", "دخل", "ادخل", "نزل", "اشرك", "اشراك", "اقحم"];
+const SUB_EXIT_VERBS = ["خروج", "خرج", "استبدال", "استبدل"];
+
+/**
+ * عكس اتجاهي عند فعل: يُنذر فقط إن كان `wrongName` هو الاسم **الأقرب** للفعل
+ * (أي فاعله) دون أن يسبقه `rightName`. هذا يميّز «دخل [الخارج]» المعكوس عن
+ * «دخل [الداخل] بدلًا من [الخارج]» الصحيح (حيث الداخل أقرب للفعل) فلا يُنذر زورًا.
+ */
+function verbAttributesTo(
+  text: string,
+  verbs: string[],
+  wrongName: string,
+  rightName: string,
+  window: number
+): boolean {
+  for (const verb of verbs) {
+    let from = 0;
+    for (;;) {
+      const vi = text.indexOf(verb, from);
+      if (vi < 0) break;
+      const seg = text.slice(vi + verb.length, vi + verb.length + window);
+      const pWrong = seg.indexOf(wrongName);
+      const pRight = seg.indexOf(rightName);
+      if (pWrong >= 0 && (pRight < 0 || pWrong < pRight)) return true;
+      from = vi + verb.length;
+    }
+  }
+  return false;
+}
+
+/** عكس الرابط: الخارج يسبق «بدلًا من» والداخل يتلوه ضمن نافذة قصيرة. */
+function reversedConnector(
+  text: string,
+  inName: string,
+  outName: string,
+  window: number
+): boolean {
+  for (const conn of SUB_REPLACE_CONNECTORS) {
+    let from = 0;
+    for (;;) {
+      const ci = text.indexOf(conn, from);
+      if (ci < 0) break;
+      const before = text.slice(Math.max(0, ci - window), ci);
+      const after = text.slice(ci + conn.length, ci + conn.length + window);
+      if (before.includes(outName) && after.includes(inName)) return true;
+      from = ci + conn.length;
+    }
+  }
+  return false;
+}
+
+/**
+ * يفحص أن متن التقرير لا يعكس اتجاه أي تبديل. يُعيد سبب الحجب نصًّا عند العكس،
+ * أو null إن خلا منه. يتطلّب اسمين متمايزين موجودين في المتن مع إشارة اتجاهية
+ * صريحة معكوسة — فالأسوأ مادة صحيحة تُراجَع يدويًا.
+ */
+function detectSubstitutionReversal(contentHtml: string, events: WcMatchEvent[]): string | null {
+  const subs = events.filter(
+    (e): e is WcMatchEvent & { assist: string } =>
+      e.type === "substitution" &&
+      !!e.player &&
+      !!e.assist &&
+      normalizeAr(e.player) !== normalizeAr(e.assist)
+  );
+  if (!subs.length) return null;
+
+  const text = normalizeAr(contentHtml);
+  // لاعب قد يَدخل في تبديل ويَخرج في آخر — لا نُنذر على فعل اتجاهي مشروع له
+  const allIn = new Set(subs.map((s) => normalizeAr(s.player)));
+  const allOut = new Set(subs.map((s) => normalizeAr(s.assist)));
+
+  for (const s of subs) {
+    const inName = normalizeAr(s.player);
+    const outName = normalizeAr(s.assist);
+    if (!text.includes(inName) || !text.includes(outName)) continue;
+
+    // (أ) رابط «بدلًا من» معكوس: «الخارج بدلًا من الداخل»
+    if (reversedConnector(text, inName, outName, 40)) {
+      return `sub_reversed_connector@${s.minute}`;
+    }
+    // (ب) فعل دخول ينسب الدخول للخارج (والخارج ليس داخلًا في تبديل آخر)
+    if (!allIn.has(outName) && verbAttributesTo(text, SUB_ENTRY_VERBS, outName, inName, 40)) {
+      return `sub_out_described_entering@${s.minute}`;
+    }
+    // (ج) فعل خروج ينسب الخروج للداخل (والداخل ليس خارجًا في تبديل آخر)
+    if (!allOut.has(inName) && verbAttributesTo(text, SUB_EXIT_VERBS, inName, outName, 40)) {
+      return `sub_in_described_leaving@${s.minute}`;
+    }
+  }
+  return null;
+}
+
 /**
  * بوابة «النتيجة نهائية ومستقرة» قبل توليد التقرير. تمنع نشر لقطة غير
  * نهائية: المُشغِّل (جدول getFixtures) ومصدر التقرير (getMatchDetail الطازج)
@@ -277,6 +402,7 @@ const EDITORIAL_RULES = `أنت محرر رياضي محترف في صحيفة "
 - العنوان من 5 إلى 12 كلمة، جذاب دون مبالغة، ويتضمن اسمي المنتخبين.
 - المحتوى HTML فقط بوسوم <p> و<h2> و<ul>/<li>، من 350 إلى 550 كلمة.
 - وجّه المادة للقارئ السعودي والخليجي، والتوقيتات بتوقيت الرياض (مكة المكرمة)، لكن لا تفتعل أي زاوية سعودية أو خليجية غير واردة في البيانات.
+- انقل أسماء اللاعبين والمنتخبين حرفيًا كما وردت في الموجز دون أي تغيير أو تصحيح أو تخمين لاسم أول؛ ومن صنع هدفًا أو سجّله أو دخل/خرج في تبديل هو حصرًا من نسبه إليه الموجز — يُمنع منعًا باتًا عكس الفاعل أو تبديل اسمين، خصوصًا اتجاه التبديل (الداخل/الخارج).
 - لا تذكر أنك ذكاء اصطناعي ولا تشر إلى "موجز البيانات".`;
 
 const JSON_CONTRACT = `أعد الناتج بصيغة JSON صالحة فقط دون أي نص خارجها:
@@ -421,6 +547,14 @@ async function generateAndStore(
       published = false;
       console.error(
         `[WC News] 🚨 تناقض النتيجة مع العنوان — حُفظ كمسودة للمراجعة. fixture ${detail.fixture.id} (${detail.fixture.home.name} × ${detail.fixture.away.name})؛ السبب=${contradiction}؛ العنوان="${generated.title}"؛ النتيجة الفعلية: ${outcome.line}`
+      );
+    }
+    // بوابة اتجاه التبديل: عكس الداخل/الخارج في المتن يحجب النشر للمراجعة
+    const subReversal = detectSubstitutionReversal(generated.content, detail.events);
+    if (subReversal) {
+      published = false;
+      console.error(
+        `[WC News] 🚨 عكس اتجاه تبديل في متن التقرير — حُفظ كمسودة للمراجعة. fixture ${detail.fixture.id} (${detail.fixture.home.name} × ${detail.fixture.away.name})؛ السبب=${subReversal}`
       );
     }
   }
