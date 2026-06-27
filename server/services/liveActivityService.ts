@@ -44,6 +44,11 @@ const LIVE_STATE_AR: Record<string, string> = {
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
 
+// آخر نتيجة معروفة لكل مباراة (في الذاكرة، القائد فقط) — لتحديد أولوية APNs:
+// تغيّر النتيجة (هدف) → أولوية 10 فورية؛ تغيّر روتيني (دقيقة/حالة) → أولوية 5
+// موفّرة للميزانية. فقدانه عند إعادة التشغيل غير ضار (دفعة واحدة بأولوية 5).
+const lastScoreByFixture = new Map<number, string>();
+
 // ============================================================================
 // تسجيل/إلغاء التوكنات
 // ============================================================================
@@ -239,6 +244,14 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const staleDate = staleDateFor(detail);
     const nowSec = Math.floor(Date.now() / 1000);
 
+    // أولوية الدفع: تغيّر النتيجة (هدف) أو النهاية → "10" فوري؛ غير ذلك → "5"
+    // موفّر للميزانية كي لا يُخنق الهدف. نُقارن بآخر نتيجة محفوظة لهذه المباراة.
+    const scoreKey = `${state.homeScore}-${state.awayScore}`;
+    const scoreChanged = lastScoreByFixture.get(fixtureId) !== scoreKey;
+    lastScoreByFixture.set(fixtureId, scoreKey);
+    const priority: "5" | "10" = finished || scoreChanged ? "10" : "5";
+    if (finished) lastScoreByFixture.delete(fixtureId);
+
     for (const t of tokens) {
       const changed = t.lastContentHash !== hash;
       // لا تغيير ولم تنتهِ → لا داعي للدفع (العدّاد التنازلي ذاتي التحديث).
@@ -249,6 +262,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
         contentState: state,
         bundleId: t.bundleId,
         staleDate,
+        priority,
         dismissalDate: finished ? nowSec + TWO_HOURS_SEC : undefined,
       });
       pushes++;

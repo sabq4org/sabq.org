@@ -314,6 +314,12 @@ export interface LiveActivityUpdateOptions {
   dismissalDate?: number;
   /** تنبيه اختياري يظهر عند التحديث (هدف مثلاً). */
   alert?: { title: string; body: string };
+  /**
+   * أولوية APNs: "10" = فوري (للأهداف/البطاقات/النهاية)، "5" = موفّر للطاقة
+   * وللميزانية (لتغيّرات الدقيقة/الإحصائيات الروتينية). الافتراضي "10".
+   * تقسيم الأولوية يمنع استنزاف ميزانية iOS فيصل الهدف فوريًا دائمًا.
+   */
+  priority?: "5" | "10";
 }
 
 /**
@@ -366,7 +372,7 @@ export async function sendLiveActivityUpdate(
         // (الرياضة com.sabq.sports)، وإلا الـbundle الافتراضي للخادم.
         "apns-topic": `${options.bundleId || credentials.bundleId}.push-type.liveactivity`,
         "apns-push-type": "liveactivity",
-        "apns-priority": "10",
+        "apns-priority": options.priority || "10",
       };
 
       const req = client.request(headers);
