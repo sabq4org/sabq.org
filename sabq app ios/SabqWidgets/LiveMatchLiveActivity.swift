@@ -137,8 +137,6 @@ struct LiveMatchLiveActivity: Widget {
 @ViewBuilder
 private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> some View {
     if state.isLive, !state.isFinished, let epoch = state.clockStartEpoch {
-        // نطاق محدود (3 ساعات) لا lانهائي: distantFuture يجعل WidgetKit يحجز عرضًا
-        // فلكيًّا للنص فينهار التخطيط (بطاقة سوداء). 3 ساعات تكفي أي مباراة.
         Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
              countsDown: false, showsHours: false)
             .monospacedDigit()

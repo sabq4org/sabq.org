@@ -7,12 +7,9 @@ import UIKit
 
 // MARK: - واجهة Live Activity للمباراة (شاشة القفل + الجزيرة الديناميكية)
 //
-// ثيم **متكيّف** يتبع مظهر الجهاز: فاتح ناعم نهارًا، داكن أنيق ليلًا — ألوان
-// مكتومة عالية التباين لا تؤذي العين (SpLA أدناه عبر UIColor ديناميكي). الجزيرة
-// الديناميكية مظهرها داكن دائمًا، فتُحلّ الألوان تلقائيًّا لنسختها الداكنة.
-//
-// تعرض بوضوح: (١) اسم البطولة مع أيقونة، (٢) الشوط ودقيقته (ساعة ذاتية الحركة)،
-// (٣) النتيجة، (٤) آخر هدف/بطاقة كشريحة ملوّنة مرمّزة (أخضر/كهرماني/أحمر).
+// ثيم فاتح (أبيض/أخضر) على شاشة القفل، وداكن في الجزيرة (طبيعتها سوداء).
+// تعرض: شعارات الأندية (من الحاوية المشتركة)، النتيجة أو عدّادًا تنازليًّا قبل
+// الانطلاق، الشوط/الاستراحة/بدل الضائع/انتهت، وآخر هدف/بطاقة أسفل البطاقة.
 
 struct SpMatchLiveActivity: Widget {
     var body: some WidgetConfiguration {
@@ -23,30 +20,26 @@ struct SpMatchLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    teamBadge(context.attributes, side: .home)
+                    teamBadge(context.attributes, side: .home, dark: true)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    teamBadge(context.attributes, side: .away)
+                    teamBadge(context.attributes, side: .away, dark: true)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    VStack(spacing: 3) {
-                        if !context.attributes.competition.isEmpty {
-                            Label(context.attributes.competition, systemImage: "trophy.fill")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(SpLA.green)
-                                .labelStyle(.titleAndIcon)
-                                .lineLimit(1)
-                        }
-                        centerValue(context)
+                    VStack(spacing: 2) {
+                        centerValue(context, dark: true)
                         liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.9))
+                            .foregroundStyle(.white.opacity(0.85))
                             .lineLimit(1)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     if let ev = context.state.lastEvent, !ev.isEmpty {
-                        HStack { Spacer(); eventChip(ev); Spacer() }
+                        Text(ev)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .frame(maxWidth: .infinity)
                     }
                 }
             } compactLeading: {
@@ -70,30 +63,30 @@ struct SpMatchLiveActivity: Widget {
     }
 
     // شارة الفريق في الجزيرة (شعار إن توفّر، وإلا أحرف).
-    @ViewBuilder private func teamBadge(_ a: SpMatchActivityAttributes, side: SpSide) -> some View {
+    @ViewBuilder private func teamBadge(_ a: SpMatchActivityAttributes, side: SpSide, dark: Bool) -> some View {
         let name = side == .home ? a.homeName : a.awayName
         let file = side == .home ? a.homeLogoFile : a.awayLogoFile
         VStack(spacing: 4) {
-            SpLogoView(fileName: file, name: name, size: 32, dark: true)
+            SpLogoView(fileName: file, name: name, size: 32, dark: dark)
             Text(name)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle((dark ? Color.white : SpLA.ink).opacity(0.8))
                 .lineLimit(1)
         }
     }
 
-    @ViewBuilder private func centerValue(_ context: ActivityViewContext<SpMatchActivityAttributes>) -> some View {
+    @ViewBuilder private func centerValue(_ context: ActivityViewContext<SpMatchActivityAttributes>, dark: Bool) -> some View {
         if isUpcoming(context) {
             Text(timerInterval: Date()...context.attributes.kickoff, countsDown: true)
                 .font(.system(size: 20, weight: .heavy, design: .rounded))
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
+                .foregroundStyle(dark ? .white : SpLA.ink)
                 .frame(maxWidth: 90)
         } else {
             Text("\(context.state.homeScore) - \(context.state.awayScore)")
                 .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(dark ? .white : SpLA.ink)
         }
     }
 
@@ -135,8 +128,6 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
     if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
-        // نطاق محدود (3 ساعات) لا lانهائي: distantFuture يجعل WidgetKit يحجز عرضًا
-        // فلكيًّا للنص فينهار التخطيط (بطاقة سوداء). 3 ساعات تكفي أي مباراة.
         HStack(spacing: 4) {
             Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
                  countsDown: false, showsHours: false)
@@ -153,21 +144,7 @@ func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Dat
 
 enum SpSide { case home, away }
 
-// شريحة الحدث الملوّنة المرمّزة (هدف/بطاقة) — لون مكتوم بحسب نوع الحدث، يُحلّ
-// تكيّفيًّا بين الفاتح والداكن. تُستخدم في شاشة القفل والجزيرة معًا.
-@ViewBuilder
-func eventChip(_ ev: String) -> some View {
-    let tint = SpLA.eventTint(ev)
-    Text(ev)
-        .font(.system(size: 12.5, weight: .bold))
-        .foregroundStyle(tint)
-        .lineLimit(1)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(tint.opacity(0.16)))
-}
-
-// شاشة القفل / البانر — ثيم متكيّف.
+// شاشة القفل / البانر — ثيم فاتح.
 private struct LockScreenView: View {
     let context: ActivityViewContext<SpMatchActivityAttributes>
 
@@ -176,28 +153,28 @@ private struct LockScreenView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
-            // (١) رأس البطاقة: اسم البطولة + شارة الحالة (الشوط والدقيقة)
-            HStack(spacing: 6) {
+        VStack(spacing: 9) {
+            HStack {
                 if !context.attributes.competition.isEmpty {
-                    Label(context.attributes.competition, systemImage: "trophy.fill")
+                    Text(context.attributes.competition)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(SpLA.green)
-                        .labelStyle(.titleAndIcon)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
                 statusBadge
             }
-            // (٢) الفريقان + النتيجة/العدّاد
             HStack(alignment: .center, spacing: 8) {
                 teamColumn(.home)
                 centerBlock
                 teamColumn(.away)
             }
-            // (٣) آخر هدف/بطاقة كشريحة ملوّنة
             if let ev = context.state.lastEvent, !ev.isEmpty {
-                eventChip(ev)
+                Text(ev)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SpLA.ink.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .lineLimit(1)
             }
         }
         .padding(14)
@@ -214,16 +191,16 @@ private struct LockScreenView: View {
                     .frame(maxWidth: 120)
                 Text("تبدأ بعد")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(SpLA.inkSoft)
+                    .foregroundStyle(SpLA.ink.opacity(0.6))
             }
         } else {
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
                 Text("\(context.state.homeScore)")
-                    .font(.system(size: 32, weight: .heavy, design: .rounded))
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(SpLA.ink)
-                Text("-").font(.system(size: 20, weight: .heavy)).foregroundStyle(SpLA.inkSoft)
+                Text("-").font(.system(size: 20, weight: .heavy)).foregroundStyle(SpLA.ink.opacity(0.4))
                 Text("\(context.state.awayScore)")
-                    .font(.system(size: 32, weight: .heavy, design: .rounded))
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
                     .foregroundStyle(SpLA.ink)
             }
         }
@@ -232,11 +209,11 @@ private struct LockScreenView: View {
     @ViewBuilder private var statusBadge: some View {
         HStack(spacing: 5) {
             if context.state.isLive {
-                Circle().fill(SpLA.liveDot).frame(width: 7, height: 7)
+                Circle().fill(Color.red).frame(width: 7, height: 7)
             }
             liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(context.state.isLive ? SpLA.green : SpLA.inkSoft)
+                .foregroundStyle(context.state.isLive ? SpLA.green : SpLA.ink.opacity(0.7))
                 .lineLimit(1)
         }
         .padding(.horizontal, 9).padding(.vertical, 4)
@@ -250,7 +227,7 @@ private struct LockScreenView: View {
             SpLogoView(fileName: file, name: name, size: 42, dark: false)
             Text(name)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(SpLA.ink.opacity(0.9))
+                .foregroundStyle(SpLA.ink.opacity(0.85))
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
@@ -291,41 +268,10 @@ private struct SpLogoView: View {
 }
 
 // ألوان وأدوات الإضافة (مستقلّة عن هدف التطبيق).
-//
-// كل الألوان **متكيّفة**: تُبنى عبر UIColor ديناميكي يحلّ نسختين (فاتح/داكن)
-// تلقائيًّا حسب مظهر الجهاز — وفي الجزيرة الديناميكية (مظهرها داكن دائمًا) تُحلّ
-// للنسخة الداكنة. القيم مكتومة (لا ألوان قانية) لراحة العين وتباين كافٍ.
 enum SpLA {
-    static let cardBG  = adaptive(light: (0.97, 0.98, 0.97), dark: (0.106, 0.141, 0.188)) // أبيض ناعم / سليت داكن
-    static let ink     = adaptive(light: (0.11, 0.16, 0.13), dark: (0.91, 0.93, 0.95))    // نص رئيسي
-    static let inkSoft = adaptive(light: (0.40, 0.45, 0.42), dark: (0.64, 0.69, 0.73))    // نص ثانوي
-    static let green   = adaptive(light: (0.09, 0.52, 0.36), dark: (0.20, 0.74, 0.52))    // تمييز سبق
-    static let liveDot = adaptive(light: (0.84, 0.25, 0.22), dark: (0.95, 0.42, 0.38))    // نبضة «مباشر»
-
-    // ألوان الأحداث المكتومة (هدف أخضر · صفراء كهرمانية · حمراء قانية هادئة).
-    static let goalTint   = green
-    static let yellowTint = adaptive(light: (0.74, 0.55, 0.07), dark: (0.96, 0.77, 0.28))
-    static let redTint    = adaptive(light: (0.78, 0.26, 0.22), dark: (0.95, 0.45, 0.40))
-
-    /// لون شريحة الحدث بحسب رمزه (يطابق رموز lastEventText: ⚽ 🟨 🟥 ❌).
-    static func eventTint(_ ev: String) -> Color {
-        if ev.contains("🟥") { return redTint }
-        if ev.contains("🟨") { return yellowTint }
-        if ev.contains("⚽") || ev.contains("🥅") { return goalTint }
-        return green
-    }
-
-    /// لون متكيّف من نسختين RGB (فاتح/داكن) — يُحلّ تلقائيًّا حسب مظهر الجهاز.
-    static func adaptive(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
-        #if canImport(UIKit)
-        return Color(uiColor: UIColor { traits in
-            let c = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: CGFloat(c.0), green: CGFloat(c.1), blue: CGFloat(c.2), alpha: 1)
-        })
-        #else
-        return Color(red: light.0, green: light.1, blue: light.2)
-        #endif
-    }
+    static let green = Color(red: 0.09, green: 0.52, blue: 0.36)
+    static let ink = Color(red: 0.07, green: 0.13, blue: 0.10)
+    static let cardBG = Color(red: 0.97, green: 0.98, blue: 0.97)
 
     /// أوّل حرفين بارزين من اسم الفريق (يتخطّى أداة التعريف «ال»).
     static func shortName(_ name: String) -> String {
