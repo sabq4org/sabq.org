@@ -104,10 +104,17 @@ struct HomeView: View {
             SpMyMatchesCard()   // أوّل بطاقة في الواجهة عند متابعة مباريات.
             if let f = featured {
                 heroMatch(f)
-            } else if let o = outlook {
+                    .transition(.opacity)
+            } else if let o = outlook, !loading {
+                // البطاقة الاحتياطية «بطل الموسم» — تظهر فقط بعد استقرار التحميل
+                // ووجود يقينٍ بعدم توفّر مباراة مميّزة. لولا قيد !loading لومضت لحظيًّا
+                // قبل أن يُحسم featured ثم قفزت لبطاقة المباراة (الوميض المُبلَّغ عنه).
                 SpOutlookCard(outlook: o)
+                    .transition(.opacity)
             }
+            // أثناء التحميل: لا هيرو احتياطي — مؤشّر SpLoading أسفل القسم يكفي، بلا قفز.
         }
+        .animation(.easeInOut(duration: 0.25), value: loading)
     }
 
     // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية.
