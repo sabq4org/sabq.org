@@ -1084,7 +1084,9 @@ async function fetchLiveScores(): Promise<WcLiveScore[]> {
  * مصفوفة (لا Map) لتأمين التخزين عبر withSWR.
  */
 export async function getLiveScores(): Promise<WcLiveScore[]> {
-  return withSWR("wc:livescores", 4000, 8000, fetchLiveScores);
+  // كاش قصير جدًا (1.5ث طازج + 3ث بائت) ليلاحق دورة العامل المتكيّفة (2ث أثناء
+  // البث). نداء inplay واحد يغطّي كل المباريات، فالضغط على المزوّد يبقى ~نداء/2ث.
+  return withSWR("wc:livescores", 1500, 3000, fetchLiveScores);
 }
 
 /** النتيجة الحيّة لمباراة بمعرّف API-Football (يحلّ معرّف SportMonks ثم يبحث). */

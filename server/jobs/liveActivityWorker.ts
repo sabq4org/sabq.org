@@ -11,27 +11,35 @@
 import { isLeader } from "../leaderElection";
 import { runLiveActivityCycle } from "../services/liveActivityService";
 
-const INTERVAL_MS = 5_000;
+// دورة متكيّفة: 2ث حين توجد مباريات لها أنشطة فعّالة (لتسليم الهدف خلال ثوانٍ)،
+// و5ث عند الخمول (لا توكنات) لتقليل الضغط. setTimeout متسلسل بدل setInterval ثابت.
+const FAST_MS = 2_000;
+const IDLE_MS = 5_000;
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
+let stopped = false;
 
 async function tick(): Promise<void> {
-  if (!isLeader()) return;
-  if (isRunning) return;
-  isRunning = true;
-  try {
-    const summary = await runLiveActivityCycle();
-    if (summary.pushes > 0 || summary.ended > 0) {
-      console.log(
-        `[LiveActivity Worker] fixtures=${summary.fixtures} pushes=${summary.pushes} ended=${summary.ended}`,
-      );
+  let nextMs = IDLE_MS;
+  if (isLeader() && !isRunning) {
+    isRunning = true;
+    try {
+      const summary = await runLiveActivityCycle();
+      // وجود مباريات بأنشطة فعّالة = سياق مباراة جارية → سرّع الدورة.
+      if (summary.fixtures > 0) nextMs = FAST_MS;
+      if (summary.pushes > 0 || summary.ended > 0) {
+        console.log(
+          `[LiveActivity Worker] fixtures=${summary.fixtures} pushes=${summary.pushes} ended=${summary.ended}`,
+        );
+      }
+    } catch (error) {
+      console.error("[LiveActivity Worker] cycle failed:", error);
+    } finally {
+      isRunning = false;
     }
-  } catch (error) {
-    console.error("[LiveActivity Worker] cycle failed:", error);
-  } finally {
-    isRunning = false;
   }
+  if (!stopped) timer = setTimeout(() => void tick(), nextMs);
 }
 
 export function startLiveActivityWorker(): void {
@@ -40,6 +48,7 @@ export function startLiveActivityWorker(): void {
     return;
   }
   if (timer) return;
-  timer = setInterval(() => void tick(), INTERVAL_MS);
-  console.log("[LiveActivity Worker] 📲 started — every 5s (leader only)");
+  stopped = false;
+  timer = setTimeout(() => void tick(), FAST_MS);
+  console.log("[LiveActivity Worker] 📲 started — adaptive 2s live / 5s idle (leader only)");
 }
