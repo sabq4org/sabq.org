@@ -50,9 +50,10 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
 const TS_LIVE_STATUS = new Set([2, 3, 4, 5, 6, 7]);
 const TS_FINISHED_STATUS = 8;
 
-// إيقاعات الكاش: detail_live حيّ بالثواني، والجسر (المعرّف) دائم بعد أول حلّ.
-const LIVE_TTL = 5 * 1000;
-const LIVE_SWR = 12 * 1000;
+// إيقاعات الكاش: detail_live هو مصدر اللحظية الأسرع، فنُبقيه قصيرًا جدًا حتى
+// تتطابق النتيجة بين الموقع والتطبيق والـLive Activity خلال ثوانٍ قليلة.
+const LIVE_TTL = 2 * 1000;
+const LIVE_SWR = 4 * 1000;
 const BRIDGE_TTL = 6 * 60 * 60 * 1000; // المعرّف لا يتغيّر؛ نُعيد الحلّ مرتين/يوم احتياطًا
 
 // ربط إيجابي فقط: معرّف مباراتنا (API-Football) → معرّف مباراة TheSports.

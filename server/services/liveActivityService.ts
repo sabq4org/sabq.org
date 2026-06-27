@@ -6,7 +6,8 @@
  *   1) registerLiveActivityToken — يسجّله التطبيق فور إصدار ActivityKit للتوكن.
  *   2) endLiveActivityToken      — يلغي التفعيل عند إيقاف المستخدم للمتابعة.
  *   3) runLiveActivityCycle      — دورة العامل: لكل مباراة نشطة، يبني الحالة من
- *      worldCupService ويدفع التغييرات لكل توكناتها، ويُنهي النشاط عند الانتهاء.
+ *      خدمة الرياضة العامة مع طبقة TheSports/SportMonks السريعة، ثم يدفع
+ *      التغييرات لكل توكناتها، ويُنهي النشاط عند الانتهاء.
  *
  * مبادئ:
  *   - بيانات المباراة من getMatchDetail المحميّة بـ SWR (لا ضغط زائد على API).
@@ -17,8 +18,18 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 import { db } from "../db";
 import { liveActivityTokens } from "@shared/schema";
-import { getMatchDetail, type WcMatchDetail, type WcMatchEvent } from "./worldCupService";
+import {
+  getMatchDetail,
+  SAUDI_COMPETITIONS,
+  type SplMatchDetail,
+  type SplMatchEvent,
+} from "./saudiLeagueService";
 import { getLiveScore, type WcLiveScore } from "./sportmonksService";
+import {
+  getTheSportsMatchLive,
+  getTsCompetitionId,
+  type TsMatchLive,
+} from "./theSportsService";
 import {
   sendLiveActivityUpdate,
   isApnsConfigured,
@@ -43,6 +54,30 @@ const LIVE_STATE_AR: Record<string, string> = {
 
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
+const PUSH_CONCURRENCY = 10;
+
+const CLOCK_PAUSED_STATES = new Set([
+  "HT",
+  "BREAK",
+  "PENALTIES",
+  "INPLAY_PENALTIES",
+  "FT",
+  "AET",
+  "FT_PEN",
+  "AET_PEN",
+]);
+
+const TS_STATUS_AR: Record<number, string> = {
+  2: "الشوط الأول",
+  3: "بين الشوطين",
+  4: "الشوط الثاني",
+  5: "الوقت الإضافي",
+  6: "الإضافي الثاني",
+  7: "ركلات الترجيح",
+  8: "انتهت",
+};
+
+const TS_CLOCK_RUNNING_STATUS = new Set([2, 4, 5, 6]);
 
 // آخر نتيجة معروفة لكل مباراة (في الذاكرة، القائد فقط) — لتحديد أولوية APNs:
 // تغيّر النتيجة (هدف) → أولوية 10 فورية؛ تغيّر روتيني (دقيقة/حالة) → أولوية 5
@@ -99,18 +134,56 @@ export async function endLiveActivityToken(pushToken: string): Promise<void> {
 // بناء حالة النشاط (يطابق منطق iOS makeState/minuteText/lastEventText)
 // ============================================================================
 
-function minuteText(status: WcMatchDetail["fixture"]["status"]): string {
+function minuteText(status: SplMatchDetail["fixture"]["status"]): string {
   const elapsed = status.elapsed;
   if (!elapsed || elapsed <= 0) return "";
   if (status.extra && status.extra > 0) return `${elapsed}+${status.extra}'`;
   return `${elapsed}'`;
 }
 
-function lastEventText(detail: WcMatchDetail): string | null {
+function isApiFootballClockRunning(status: SplMatchDetail["fixture"]["status"]): boolean {
+  const code = String(status.code || "").toUpperCase();
+  return Boolean(status.live && status.elapsed && status.elapsed > 0) &&
+    !["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP", "HALF_TIME"].includes(code);
+}
+
+function apiFootballClockStartEpoch(status: SplMatchDetail["fixture"]["status"]): number | null {
+  if (!isApiFootballClockRunning(status)) return null;
+  const totalSeconds = ((status.elapsed ?? 0) + (status.extra ?? 0)) * 60;
+  return Math.floor(Date.now() / 1000) - totalSeconds;
+}
+
+function sportmonksClockStartEpoch(live?: WcLiveScore | null): number | null {
+  if (!live || !live.live || live.finished || live.minute <= 0) return null;
+  if (CLOCK_PAUSED_STATES.has(live.stateDevName)) return null;
+  return Math.floor(Date.now() / 1000) - live.minute * 60;
+}
+
+function clockStartEpochFromMinute(minute: number, running: boolean): number | null {
+  if (!running || minute <= 0) return null;
+  return Math.floor(Date.now() / 1000) - minute * 60;
+}
+
+function minuteFromText(text?: string | null): number {
+  if (!text) return 0;
+  const m = text.match(/(\d+)(?:\+(\d+))?/);
+  if (!m) return 0;
+  return (Number(m[1]) || 0) + (Number(m[2]) || 0);
+}
+
+function minuteLabel(minute: number): string {
+  return minute > 0 ? `${minute}'` : "";
+}
+
+function freshestMinute(baseMinute: string, live?: WcLiveScore | null): number {
+  return Math.max(minuteFromText(baseMinute), live?.minute ?? 0);
+}
+
+function lastEventText(detail: SplMatchDetail): string | null {
   const ranked = [...detail.events].sort(
-    (a, b) => b.minute - a.minute || (b.extraMinute ?? 0) - (a.extraMinute ?? 0),
+    (a, b) => (b.minute ?? 0) - (a.minute ?? 0) || (b.extra ?? 0) - (a.extra ?? 0),
   );
-  const ev = ranked.find((e: WcMatchEvent) =>
+  const ev = ranked.find((e: SplMatchEvent) =>
     ["goal", "yellow-card", "red-card", "missed-penalty"].includes(e.type),
   );
   if (!ev) return null;
@@ -124,13 +197,14 @@ function lastEventText(detail: WcMatchDetail): string | null {
           : ev.type === "missed-penalty"
             ? "❌"
             : "•";
-  const minute = `${ev.minute}${ev.extraMinute ? `+${ev.extraMinute}` : ""}'`;
+  const minute = `${ev.minute ?? 0}${ev.extra ? `+${ev.extra}` : ""}'`;
   const who = ev.player && ev.player.length > 0 ? ev.player : ev.label;
   return `${icon} ${minute} ${who}`;
 }
 
 function buildContentState(
-  detail: WcMatchDetail,
+  detail: SplMatchDetail,
+  ts?: TsMatchLive | null,
   live?: WcLiveScore | null,
 ): LiveActivityContentState {
   const f = detail.fixture;
@@ -142,26 +216,43 @@ function buildContentState(
     isLive: f.status.live,
     isFinished: f.status.finished,
     lastEvent: lastEventText(detail),
+    clockStartEpoch: apiFootballClockStartEpoch(f.status),
   };
-  // تجاوز لحظي من SportMonks للنتيجة/الدقيقة/الحالة (يكسر تأخّر كاش API-Football).
-  // lastEvent يبقى من API-Football (عربي مُعرَّب) — ثانوي ومقبول تأخّره قليلًا.
-  const state: LiveActivityContentState =
-    live && (live.live || live.finished)
-      ? {
-          ...base,
-          homeScore: live.home,
-          awayScore: live.away,
-          minute: live.minute > 0 ? `${live.minute}'` : base.minute,
-          statusLabel: LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel,
-          isLive: live.live,
-          isFinished: live.finished || base.isFinished,
-        }
-      : base;
 
-  return state;
+  if (live && (live.live || live.finished)) {
+    const minute = freshestMinute(base.minute, live);
+    base.homeScore = live.home;
+    base.awayScore = live.away;
+    base.minute = minuteLabel(minute);
+    base.statusLabel = LIVE_STATE_AR[live.stateDevName] ?? base.statusLabel;
+    base.isLive = live.live;
+    base.isFinished = live.finished || base.isFinished;
+    base.clockStartEpoch = sportmonksClockStartEpoch(live) ?? base.clockStartEpoch;
+  }
+
+  // TheSports هو أسرع مصدر لدينا للبطولات المربوطة، ثم SportMonks، ثم API-Football.
+  // lastEvent يبقى من API-Football/الخدمة العامة (عربي مُعرَّب) — ثانوي ومقبول
+  // تأخّره قليلًا، بينما النتيجة والساعة تأتي من المصدر الأسرع.
+  if (ts && (ts.live || ts.finished)) {
+    const tsLabel = TS_STATUS_AR[ts.statusId] ?? base.statusLabel;
+    const baseMin = minuteFromText(base.minute);
+    const tsRunning = ts.live && TS_CLOCK_RUNNING_STATUS.has(ts.statusId);
+    return {
+      ...base,
+      homeScore: ts.home,
+      awayScore: ts.away,
+      minute: minuteLabel(baseMin),
+      statusLabel: tsLabel || base.statusLabel,
+      isLive: ts.live,
+      isFinished: ts.finished || base.isFinished,
+      clockStartEpoch: base.clockStartEpoch ?? clockStartEpochFromMinute(baseMin, tsRunning),
+    };
+  }
+
+  return base;
 }
 
-function staleDateFor(detail: WcMatchDetail): number {
+function staleDateFor(detail: SplMatchDetail): number {
   const f = detail.fixture;
   if (!f.status.live && !f.status.finished) {
     // قبل الانطلاق: نُبقيه طازجًا حتى موعد البدء (+دقيقتين) كي لا يُعتمّ العدّاد.
@@ -169,6 +260,11 @@ function staleDateFor(detail: WcMatchDetail): number {
     if (kickoffSec > Date.now() / 1000) return kickoffSec;
   }
   return Math.floor(Date.now() / 1000) + STALE_LIVE_SEC;
+}
+
+function leagueSlug(leagueId: number | null): string | null {
+  if (leagueId == null) return null;
+  return SAUDI_COMPETITIONS.find((c) => c.id === leagueId)?.slug ?? null;
 }
 
 function isInvalidToken(reason?: string): boolean {
@@ -224,7 +320,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
   const failReasons = new Map<string, number>();
 
   for (const [fixtureId, tokens] of byFixture) {
-    let detail: WcMatchDetail | null = null;
+    let detail: SplMatchDetail | null = null;
     try {
       detail = await getMatchDetail(fixtureId);
     } catch (err) {
@@ -232,7 +328,20 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
     if (!detail) continue;
 
-    // نتيجة لحظية من SportMonks (الوقت الحقيقي) — أفضل جهد، تتجاوز كاش API-Football
+    // نتيجة لحظية من TheSports للبطولات المربوطة — نفس المصدر السريع الذي يسرّع
+    // الموقع والتطبيق، فيمنع اختلاف شاشة القفل عن الواجهة.
+    let ts: TsMatchLive | null = null;
+    const tsCompId = getTsCompetitionId(leagueSlug(detail.leagueId));
+    if (tsCompId) {
+      try {
+        ts = await getTheSportsMatchLive(fixtureId, detail.fixture.timestamp, tsCompId);
+      } catch {
+        ts = null;
+      }
+    }
+
+    // نتيجة لحظية من SportMonks (الوقت الحقيقي) — نستدعيها حتى مع TheSports
+    // لأن TheSports يسبق في النتيجة، لكنه لا يملك حقل دقيقة جارٍ موثوقًا هنا.
     let live: WcLiveScore | null = null;
     try {
       live = await getLiveScore(fixtureId);
@@ -240,7 +349,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       live = null;
     }
 
-    const state = buildContentState(detail, live);
+    const state = buildContentState(detail, ts, live);
     // بصمة الدفع تشمل `minute`: الويدجت يعرض الدقيقة كنصّ مدفوع، فندفع عند كل
     // تغيّر دقيقة/نتيجة/حالة/آخر حدث ليبقى العرض على الجهاز متزامنًا مع الخادم.
     const pushKey = JSON.stringify({
@@ -260,6 +369,15 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const scoreKey = `${state.homeScore}-${state.awayScore}`;
     const scoreChanged =
       lastScoreByFixture.has(fixtureId) && lastScoreByFixture.get(fixtureId) !== scoreKey;
+    const eventChanged = tokens.some((t) => {
+      if (!t.lastContentHash) return false;
+      try {
+        const prev = JSON.parse(t.lastContentHash);
+        return prev.e !== (state.lastEvent ?? null);
+      } catch {
+        return false;
+      }
+    });
     lastScoreByFixture.set(fixtureId, scoreKey);
     if (finished) lastScoreByFixture.delete(fixtureId);
 
@@ -271,14 +389,15 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       );
     }
 
-    for (const t of tokens) {
+    const pushOne = async (t: (typeof tokens)[number]): Promise<void> => {
       const changed = t.lastContentHash !== pushKey;
       // لا تغيير ولم تنتهِ → لا داعي للدفع.
-      if (!changed && !finished) continue;
+      if (!changed && !finished) return;
 
-      // أولوية: تغيّر النتيجة (هدف) أو النهاية → 10 فورية؛ تغيّر روتيني (دقيقة/حالة)
-      // → 5 موفّرة للميزانية كي يصل الهدف فوريًا دائمًا.
-      const priority: "5" | "10" = scoreChanged || finished ? "10" : "5";
+      // شاشة القفل حسّاسة جدًا للتأخير: دفعات الدقيقة بأولوية 5 قد يؤخرها iOS
+      // عدة دقائق على الجهاز الحقيقي. طالما المباراة live نرسلها فورية؛ ميزانية
+      // الدفع محمية أصلًا بالبصمة وبالـclockStartEpoch المحلي.
+      const priority: "5" | "10" = state.isLive || scoreChanged || eventChanged || finished ? "10" : "5";
 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
         event: finished ? "end" : "update",
@@ -316,6 +435,10 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
         failReasons.set(key, (failReasons.get(key) ?? 0) + 1);
         if (isInvalidToken(resp.reason)) invalidTokens.push(t.pushToken);
       }
+    };
+
+    for (let i = 0; i < tokens.length; i += PUSH_CONCURRENCY) {
+      await Promise.all(tokens.slice(i, i + PUSH_CONCURRENCY).map(pushOne));
     }
   }
 

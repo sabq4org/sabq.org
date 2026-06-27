@@ -1068,14 +1068,23 @@ enum SpDateMath {
 enum SpFormat {
     private static let riyadh = TimeZone(identifier: "Asia/Riyadh")!
 
-    private static func fmt(_ pattern: String) -> DateFormatter {
+    private static var formatters: [String: DateFormatter] = [:]
+
+    private static func makeFormatter(_ pattern: String, locale: Locale = Locale(identifier: "ar-u-nu-latn")) -> DateFormatter {
         let f = DateFormatter()
         f.timeZone = riyadh
         // أسماء عربية + أرقام لاتينية + تقويم ميلادي (22:00 / 27 يونيو) — نتجنّب
         // ar-SA لأنه يفترض التقويم الهجري (يظهر «محرم» بدل «يونيو»).
-        f.locale = Locale(identifier: "ar-u-nu-latn")
+        f.locale = locale
         f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = pattern
+        return f
+    }
+
+    private static func fmt(_ pattern: String) -> DateFormatter {
+        if let f = formatters[pattern] { return f }
+        let f = makeFormatter(pattern)
+        formatters[pattern] = f
         return f
     }
 
@@ -1103,10 +1112,10 @@ enum SpFormat {
 
     /// مفتاح التاريخ YYYY-MM-DD بتوقيت الرياض — لاستعلام /sports/today?date=.
     static func dateKey(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.timeZone = riyadh
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
+        let key = "posix:yyyy-MM-dd"
+        if let f = formatters[key] { return f.string(from: date) }
+        let f = makeFormatter("yyyy-MM-dd", locale: Locale(identifier: "en_US_POSIX"))
+        formatters[key] = f
         return f.string(from: date)
     }
 

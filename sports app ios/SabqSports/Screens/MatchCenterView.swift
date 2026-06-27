@@ -86,6 +86,27 @@ struct SpMatchCenter: View {
         return "\(icon) \(minute) \(who)"
     }
 
+    /// تفاصيل المباراة قد تصل بلا اسم بطولة، بينما المعاينة القادمة من البطاقات
+    /// تحملها. نحفظها هنا حتى يظهر اسم البطولة داخل Live Activity دائماً.
+    private func liveActivityFixture(_ f: SpFixture) -> SpFixture {
+        let competition = f.competition?.isEmpty == false ? f.competition : preview?.competition
+        let competitionSlug = f.competitionSlug?.isEmpty == false ? f.competitionSlug : preview?.competitionSlug
+        guard competition != f.competition || competitionSlug != f.competitionSlug else { return f }
+        return SpFixture(
+            id: f.id,
+            date: f.date,
+            timestamp: f.timestamp,
+            status: f.status,
+            round: f.round,
+            venue: f.venue,
+            home: f.home,
+            away: f.away,
+            goals: f.goals,
+            competition: competition,
+            competitionSlug: competitionSlug
+        )
+    }
+
     /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر سبق الرياضي.
     private var shareTitle: String {
         guard let f = fixture else { return "مباراة عبر سبق الرياضي" }
@@ -158,7 +179,7 @@ struct SpMatchCenter: View {
                 if liveActivity.isSupported && liveFollowEligible(f) {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            liveActivity.toggle(for: f)
+                            liveActivity.toggle(for: liveActivityFixture(f))
                         } label: {
                             let on = liveActivity.isActive(f.id)
                             Image(systemName: on ? "lock.iphone" : "platter.filled.bottom.iphone")
@@ -1459,7 +1480,7 @@ struct SpMatchCenter: View {
         else { return }
         self.detail = fresh
         // حدّث نشاط شاشة القفل بأحدث نتيجة/حدث (no-op إن لم يكن قائمًا).
-        liveActivity.update(with: fresh.fixture, lastEvent: lastEventText(fresh.events))
+        liveActivity.update(with: liveActivityFixture(fresh.fixture), lastEvent: lastEventText(fresh.events))
         // التعليق اللحظي المُعرَّب — أفضل جهد، لا يعطّل الباقي.
         if hasCommentary {
             self.commentary = try? await APIClient.shared.fetchCommentary(matchId: fixtureId)
@@ -1482,7 +1503,7 @@ struct SpMatchCenter: View {
             self.loadError = nil
             // حدّث نشاط شاشة القفل بأحدث نتيجة وآخر حدث (no-op إن لم يكن قائمًا).
             if let d = self.detail {
-                liveActivity.update(with: d.fixture, lastEvent: lastEventText(d.events))
+                liveActivity.update(with: liveActivityFixture(d.fixture), lastEvent: lastEventText(d.events))
             }
         } catch {
             self.loadError = error.localizedDescription

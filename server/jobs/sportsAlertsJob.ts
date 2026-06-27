@@ -1,14 +1,13 @@
 /**
  * جوب التنبيهات الرياضية الذكية (المرحلة 3ب).
  *
- * كل 10 ثوانٍ يقارن حالة المباريات (اليوم + المباشر الطازج) بآخر لقطة ويُرسل
+ * كل 3 ثوانٍ يقارن حالة المباريات (اليوم + المباشر الطازج) بآخر لقطة ويُرسل
  * أحداثها (انطلاق/هدف/نهاية) لمتابعي الفِرق. يعمل على القائد فقط (يُفحص داخل
  * كل دورة لا عند التسجيل — أثناء النشر يقلع الـ pod الجديد بينما القديم ممسك
  * بقفل القيادة؛ نفس نمط radarJob).
  *
- * الوتيرة 10ث (بدل 20ث سابقًا) لتقليل تأخّر إشعارات الهدف/الانطلاق. بيانات
- * المباراة محميّة بـ SWR (live 15ث) فالدورة تقرأ الكاش غالبًا بلا ضغط إضافي على
- * API-Football — فقط نلتقط التحديث الجديد أسرع بمجرّد إنعاش الكاش.
+ * الوتيرة 3ث لأن TheSports detail_live مكاش بثوانٍ قليلة؛ فتصل الأهداف والبطاقات
+ * في أقرب نافذة ممكنة. بيانات API-Football الأبطأ تبقى خلف SWR ولا تضغط المزود.
  *
  * التفعيل صريح عبر SPORTS_ALERTS_ENABLED=true — لا يعمل قبل تطبيق المخطط
  * (npm run db:push على staging) واختبار التوصيل.
@@ -16,7 +15,7 @@
 import { isLeader } from "../leaderElection";
 import { runSportsAlertsCycle } from "../services/sportsAlertsService";
 
-const INTERVAL_MS = 10_000;
+const INTERVAL_MS = 3_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
@@ -50,8 +49,8 @@ export function startSportsAlertsJob(): void {
   if (timer) return;
 
   timer = setInterval(() => void tick("interval"), INTERVAL_MS);
-  console.log("[SportsAlerts Job] ⚽ scheduled — every 10s (followers' teams only)");
+  console.log("[SportsAlerts Job] ⚽ scheduled — every 3s (followers' teams only)");
 
-  // دورة أولى بعد 10 ثوانٍ لتأسيس خطّ الأساس مبكرًا.
-  setTimeout(() => void tick("startup"), 10 * 1000);
+  // دورة أولى بعد 3 ثوانٍ لتأسيس خطّ الأساس مبكرًا.
+  setTimeout(() => void tick("startup"), INTERVAL_MS);
 }
