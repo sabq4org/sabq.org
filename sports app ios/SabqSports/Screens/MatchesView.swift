@@ -50,6 +50,97 @@ nonisolated struct SpWcTeam: Decodable {
 
 nonisolated struct SpWcScore: Decodable { let home: Int?; let away: Int? }
 
+extension SpFixture {
+    init(worldCup f: SpWcFixture) {
+        self.init(
+            id: f.id,
+            date: f.date,
+            timestamp: Int(f.timestamp),
+            status: SpStatus(
+                code: f.status.code,
+                label: f.status.label,
+                elapsed: f.status.elapsed,
+                extra: f.status.extra,
+                live: f.status.live,
+                finished: f.status.finished
+            ),
+            round: f.round,
+            venue: SpVenue(name: f.venue?.name ?? "", city: f.venue?.city ?? ""),
+            home: SpTeam(id: f.home.id, name: f.home.name, logo: f.home.logo, winner: f.home.winner),
+            away: SpTeam(id: f.away.id, name: f.away.name, logo: f.away.logo, winner: f.away.winner),
+            goals: SpScore(home: f.goals.home, away: f.goals.away),
+            competition: "كأس العالم",
+            competitionSlug: "world-cup"
+        )
+    }
+}
+
+nonisolated struct SpWcStandingsResponse: Decodable { let groups: [SpWcGroup] }
+nonisolated struct SpWcGroup: Decodable, Identifiable {
+    let group: String
+    let groupEn: String
+    let rows: [SpWcStandingRow]
+    var id: String { groupEn }
+}
+
+nonisolated struct SpWcStandingRow: Decodable, Identifiable {
+    let rank: Int
+    let team: SpWcTeam
+    let played: Int
+    let win: Int
+    let draw: Int
+    let lose: Int
+    let goalsFor: Int
+    let goalsAgainst: Int
+    let goalsDiff: Int
+    let points: Int
+    let form: String?
+    let live: Bool?
+    var id: Int { team.id }
+}
+
+nonisolated struct SpWcBracket: Decodable {
+    let source: String?
+    let rounds: [SpWcBracketRound]
+}
+
+nonisolated struct SpWcBracketRound: Decodable, Identifiable {
+    let round: String
+    let roundEn: String
+    let matches: [SpWcFixture]
+    var id: String { roundEn }
+}
+
+nonisolated struct SpWcScorersResponse: Decodable { let scorers: [SpWcScorer] }
+nonisolated struct SpWcLeadersResponse: Decodable { let leaders: [SpWcLeader] }
+
+nonisolated struct SpWcScorer: Decodable, Identifiable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let photo: String
+    let team: SpWcTeam
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let minutes: Int
+    let matches: Int
+}
+
+nonisolated struct SpWcLeader: Decodable, Identifiable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let photo: String
+    let team: SpWcTeam
+    let goals: Int
+    let assists: Int
+    let yellow: Int
+    let red: Int
+    let minutes: Int
+    let matches: Int
+}
+
 // تفاصيل مباراة المونديال (/world-cup/match/:id) — الأسماء عربية ومُوحّدة بالمعرّف.
 nonisolated struct SpWcMatchDetail: Decodable {
     let fixture: SpWcFixture
@@ -119,6 +210,31 @@ extension APIClient {
     /// كل مباريات كأس العالم (الجدول الكامل) — نقطة عامة على البوابة.
     func fetchWorldCupFixtures(ignoreCache: Bool = false) async throws -> SpWcFixturesResponse {
         try await get(SpWcFixturesResponse.self, path: "/world-cup/fixtures",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupStandings(ignoreCache: Bool = false) async throws -> SpWcStandingsResponse {
+        try await get(SpWcStandingsResponse.self, path: "/world-cup/standings",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupBracket(ignoreCache: Bool = false) async throws -> SpWcBracket {
+        try await get(SpWcBracket.self, path: "/world-cup/bracket",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupScorers(ignoreCache: Bool = false) async throws -> SpWcScorersResponse {
+        try await get(SpWcScorersResponse.self, path: "/world-cup/scorers",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupAssists(ignoreCache: Bool = false) async throws -> SpWcLeadersResponse {
+        try await get(SpWcLeadersResponse.self, path: "/world-cup/assists",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchWorldCupCards(ignoreCache: Bool = false) async throws -> SpWcLeadersResponse {
+        try await get(SpWcLeadersResponse.self, path: "/world-cup/cards",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
@@ -245,7 +361,6 @@ struct MatchesView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                controls
                 Divider().overlay(SpTheme.outline)
                 bodyContent
             }
@@ -263,57 +378,61 @@ struct MatchesView: View {
     // MARK: الترويسة + أدوات التحكّم
 
     private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "sportscourt.fill")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(SpTheme.green)
-            Text("المباريات")
-                .font(SportsFonts.headline(size: 24))
-                .foregroundStyle(SpTheme.onDark)
-            Spacer(minLength: 0)
-            if !liveFixtures.isEmpty {
-                HStack(spacing: 6) {
-                    Circle().fill(SpTheme.crimson).frame(width: 7, height: 7)
-                    Text("\(liveFixtures.count) مباشرة")
-                        .font(SportsFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(SpTheme.crimson)
+        VStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(SpTheme.green.opacity(0.10))
+                    Image(systemName: "sportscourt.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Capsule().fill(SpTheme.crimson.opacity(0.12)))
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("المباريات")
+                        .font(SportsFonts.headline(size: 25))
+                        .foregroundStyle(SpTheme.onDark)
+                    Text(headerSubtitle)
+                        .font(SportsFonts.app(size: 11.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                headerAction(system: "calendar", active: false, tint: SpTheme.green) {
+                    pickedDate = dateForCurrentSelection() ?? Self.riyadhCal.startOfDay(for: Date())
+                    showDatePicker = true
+                }
+                headerAction(system: "dot.radiowaves.left.and.right", active: liveOnly, tint: SpTheme.crimson) {
+                    withAnimation(.easeOut(duration: 0.2)) { liveOnly.toggle() }
+                }
             }
+            stageStrip
         }
-        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
     }
 
-    private var controls: some View {
-        HStack(spacing: 10) {
-            Spacer(minLength: 0)
-            iconButton("calendar") {
-                pickedDate = dateForCurrentSelection() ?? Self.riyadhCal.startOfDay(for: Date())
-                showDatePicker = true
-            }
-            // مفتاح «مباشر فقط» كأيقونة بلا كلمة — أحمر مملوء عند التفعيل.
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { liveOnly.toggle() }
-            } label: {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(liveOnly ? .white : SpTheme.crimson)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(liveOnly ? SpTheme.crimson : SpTheme.crimson.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
+    private var headerSubtitle: String {
+        if liveOnly { return "المباريات المباشرة فقط" }
+        if !liveFixtures.isEmpty { return "\(liveFixtures.count) مباراة مباشرة الآن" }
+        if let id = scrolledDayId, let day = visibleDays.first(where: { $0.id == id }) {
+            return day.stage.label
         }
-        .padding(.horizontal, 16).padding(.bottom, 8)
+        return "جدول كأس العالم بتوقيت الرياض"
     }
 
-    private func iconButton(_ system: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func headerAction(system: String, active: Bool, tint: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+        } label: {
             Image(systemName: system)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(SpTheme.green)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(SpTheme.chipFill))
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(active ? .white : tint)
+                .frame(width: 39, height: 39)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(active ? tint : tint.opacity(0.10)))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(active ? .clear : tint.opacity(0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -329,7 +448,6 @@ struct MatchesView: View {
         } else {
             ZStack(alignment: .bottom) {
                 VStack(spacing: 0) {
-                    stageStrip
                     dateRail
                     matchesList
                 }
@@ -347,25 +465,28 @@ struct MatchesView: View {
     private var stageStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(SpWcStage.allCases) { st in
-                    let hasData = visibleDays.contains { $0.stage == st }
-                    let active = hasData && activeStage == st
+                ForEach(availableStages) { st in
+                    let active = activeStage == st
                     Button {
-                        guard hasData, let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
+                        guard let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
                         goToDay(firstDay.id)
                     } label: {
                         Text(st.short)
                             .font(SportsFonts.app(size: 13, weight: active ? .heavy : .semibold))
-                            .foregroundStyle(active ? .white : (hasData ? SpTheme.onDarkDim : SpTheme.onDarkFaint.opacity(0.55)))
-                            .padding(.horizontal, 13).padding(.vertical, 7)
-                            .background(Capsule().fill(active ? SpTheme.green : (hasData ? SpTheme.chipFill : SpTheme.chipFill.opacity(0.4))))
+                            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(active ? SpTheme.green : SpTheme.cardFill))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(active ? .clear : SpTheme.outline.opacity(0.7), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .disabled(!hasData)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, 1)
         }
+    }
+
+    private var availableStages: [SpWcStage] {
+        SpWcStage.allCases.filter { st in visibleDays.contains { $0.stage == st } }
     }
 
     // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ والتمرير اليدوي يحدّث اليوم
@@ -375,11 +496,11 @@ struct MatchesView: View {
             HStack(spacing: 8) {
                 ForEach(visibleDays) { day in dateChip(day) }
             }
-            .padding(.horizontal, 16).padding(.vertical, 6)
+            .padding(.horizontal, 16).padding(.vertical, 8)
             .scrollTargetLayout()
         }
         .scrollPosition(id: $railCenterId, anchor: .center)
-        .background(SpTheme.surface.opacity(0.65))
+        .background(SpTheme.card.opacity(0.96))
         .overlay(alignment: .bottom) { Divider().overlay(SpTheme.outline) }
     }
 
@@ -398,23 +519,23 @@ struct MatchesView: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
-                        .font(SportsFonts.app(size: 10.5, weight: .bold))
+                        .font(SportsFonts.app(size: 10, weight: .bold))
                         .foregroundStyle(active ? .white.opacity(0.85) : SpTheme.onDarkDim)
                         .lineLimit(1)
                     Text(SpFormat.dayMonthLabel(day.date))
-                        .font(SportsFonts.app(size: 12, weight: .heavy))
+                        .font(SportsFonts.app(size: 11.5, weight: .heavy))
                         .foregroundStyle(active ? .white : SpTheme.onDark)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                 }
             }
-            .frame(width: 78, height: 38, alignment: .leading)
-            .padding(.horizontal, 9)
+            .frame(width: 74, height: 34, alignment: .leading)
+            .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(active ? SpTheme.green : SpTheme.cardFill)
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(active ? .clear : SpTheme.outline, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(active ? .clear : SpTheme.outline.opacity(0.8), lineWidth: 1))
             )
             .contentShape(Rectangle())
         }
@@ -447,6 +568,7 @@ struct MatchesView: View {
                 }
                 .padding(.horizontal, 16).padding(.top, 12)
             }
+            .background(SpAmbientBackground())
             .coordinateSpace(name: "matches-scroll")
             .onAppear { runInitialScroll() }
             .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
@@ -771,7 +893,7 @@ private struct SpWcMatchRow: View {
     // صفّ مدمج بلا إطار — يقع داخل سطح المجموعة الأبيض الموحّد (matchGroup).
     var body: some View {
         NavigationLink {
-            WcMatchCenter(fixtureId: fixture.id, preview: fixture)
+            SpMatchCenter(fixtureId: fixture.id, preview: SpFixture(worldCup: fixture))
         } label: {
             HStack(spacing: 10) {
                 teamSide(fixture.home, leading: true)

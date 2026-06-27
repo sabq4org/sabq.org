@@ -24,6 +24,7 @@ struct AccountView: View {
                         signInCard
                     }
 
+                    servicesSection
                     teamsSection
                     notificationsSection
                     aboutSection
@@ -54,28 +55,56 @@ struct AccountView: View {
     // MARK: - الملف الشخصي (ترويسة مدمجة)
 
     private var profileHeader: some View {
-        HStack(spacing: 14) {
-            avatarView
-            VStack(alignment: .leading, spacing: 3) {
-                Text(auth.member?.name ?? "عضو سبق")
-                    .font(SportsFonts.app(size: 18, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1)
-                if let email = auth.member?.email, !email.isEmpty {
-                    Text(email)
-                        .font(SportsFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkDim)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                avatarView
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(auth.member?.name ?? "عضو سبق")
+                        .font(SportsFonts.app(size: 18, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
                         .lineLimit(1)
+                    if let email = auth.member?.email, !email.isEmpty {
+                        Text(email)
+                            .font(SportsFonts.app(size: 12, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .lineLimit(1)
+                    }
+                    Text(loyaltyLine)
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
                 }
-                Text(loyaltyLine)
-                    .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(SpTheme.green)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                profileMetric("\(favorites.team == nil ? 0 : 1)", "مفضل")
+                profileMetric("\(followedTeams.count)", "متابعة")
+                profileMetric("\(activeAlertsCount)", "تنبيهات")
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
         .background(cardBg)
+    }
+
+    private var activeAlertsCount: Int {
+        [auth.alertPrefs.kickoff, auth.alertPrefs.goals, auth.alertPrefs.cards, auth.alertPrefs.varReview, auth.alertPrefs.fulltime]
+            .filter { $0 }.count
+    }
+
+    private func profileMetric(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(SportsFonts.app(size: 15, weight: .heavy))
+                .foregroundStyle(SpTheme.green)
+                .monospacedDigit()
+            Text(label)
+                .font(SportsFonts.app(size: 10, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkDim)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill))
     }
 
     private var loyaltyLine: String {
@@ -83,6 +112,49 @@ struct AccountView: View {
         if let fav = favorites.team { return "مشجّع \(fav.name)" }
         if teams > 0 { return "تتابع \(teams) فريقًا" }
         return "أهلًا بك في VARA"
+    }
+
+    // MARK: - خدماتي
+
+    private var servicesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("خدماتي")
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                serviceTile("مبارياتي", "calendar.badge.clock", "\(auth.isLoggedIn ? followedTeams.count : 0) فريق", SpTheme.green)
+                serviceTile("توقعاتي", "chart.bar.xaxis", "المجتمع", SpTheme.teal)
+                serviceTile("تنبيهات مباشرة", "bell.badge.fill", "\(activeAlertsCount) مفعّلة", SpTheme.green)
+                serviceTile("الدعم", "questionmark.circle.fill", "تواصل", SpTheme.onDarkDim)
+            }
+        }
+    }
+
+    private func serviceTile(_ title: String, _ icon: String, _ subtitle: String, _ tint: Color) -> some View {
+        Button {
+            if title == "الدعم", let url = URL(string: "https://sabq.org/contact") { openURL(url) }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tint.opacity(0.12)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(SportsFonts.app(size: 13, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(SportsFonts.app(size: 10.5, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(minHeight: 68)
+            .background(cardBg)
+        }
+        .buttonStyle(SpPressStyle())
     }
 
     // MARK: - فِرقي (المفضّل + المتابَعة)
@@ -182,15 +254,15 @@ struct AccountView: View {
             sectionHeader("تنبيهات المباريات")
             if auth.isLoggedIn {
                 settingsCard {
-                    toggleRow("بداية المباراة", "play.circle.fill", \.kickoff)
+                    alertRow("بداية المباراة", "play.circle.fill", \.kickoff)
                     rowDivider
-                    toggleRow("الأهداف", "soccerball", \.goals)
+                    alertRow("الأهداف", "soccerball", \.goals)
                     rowDivider
-                    toggleRow("البطاقات", "rectangle.portrait.fill", \.cards)
+                    alertRow("البطاقات", "rectangle.portrait.fill", \.cards)
                     rowDivider
-                    toggleRow("حالات الفار (VAR)", "tv.fill", \.varReview)
+                    alertRow("حالات الفار (VAR)", "tv.fill", \.varReview)
                     rowDivider
-                    toggleRow("نهاية المباراة", "flag.checkered", \.fulltime)
+                    alertRow("نهاية المباراة", "flag.checkered", \.fulltime)
                 }
                 hint(followedTeams.isEmpty
                      ? "تابع فريقًا ليصلك تنبيه عند أحداث مبارياته."
@@ -215,25 +287,35 @@ struct AccountView: View {
         }
     }
 
-    private func toggleRow(_ title: String, _ icon: String, _ keyPath: WritableKeyPath<SpAlertPrefs, Bool>) -> some View {
-        HStack(spacing: 12) {
-            iconTile(icon, SpTheme.green)
-            Text(title)
-                .font(SportsFonts.app(size: 14.5, weight: .semibold))
-                .foregroundStyle(SpTheme.onDark)
-            Spacer(minLength: 0)
-            Toggle("", isOn: Binding(
-                get: { auth.alertPrefs[keyPath: keyPath] },
-                set: { newValue in
-                    var p = auth.alertPrefs
-                    p[keyPath: keyPath] = newValue
-                    Task { await auth.setAlertPrefs(p) }
+    private func alertRow(_ title: String, _ icon: String, _ keyPath: WritableKeyPath<SpAlertPrefs, Bool>) -> some View {
+        let active = auth.alertPrefs[keyPath: keyPath]
+        return Button {
+            var p = auth.alertPrefs
+            p[keyPath: keyPath].toggle()
+            Task { await auth.setAlertPrefs(p) }
+        } label: {
+            HStack(spacing: 12) {
+                iconTile(icon, active ? SpTheme.green : SpTheme.onDarkFaint)
+                Text(title)
+                    .font(SportsFonts.app(size: 14.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(active ? SpTheme.green : SpTheme.onDarkFaint)
+                        .frame(width: 7, height: 7)
+                    Text(active ? "مفعّل" : "متوقف")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
                 }
-            ))
-            .labelsHidden()
-            .tint(SpTheme.green)
+                .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkFaint)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(active ? SpTheme.green.opacity(0.10) : SpTheme.chipFill))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
+        .buttonStyle(SpPressStyle())
     }
 
     // MARK: - عن التطبيق

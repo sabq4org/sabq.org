@@ -28,6 +28,9 @@ struct HomeView: View {
     // إثراء الهيرو (أفضل جهد) — إحصائيات + xG لمباراة الواجهة المباشرة.
     @State private var featuredDetail: SpMatchDetail?
     @State private var featuredXg: SpXg?
+    @State private var featuredMomentum: SpMomentum?
+    @State private var featuredPressure: SpPressure?
+    @State private var featuredFacts: SpMatchFacts?
 
     @State private var scorerMode: ScorerMode = .goals
     @State private var selectedMatch: SpFixture?
@@ -224,6 +227,15 @@ struct HomeView: View {
                     }
                 }
 
+                let insights = heroInsightItems(f)
+                if !insights.isEmpty {
+                    HStack(spacing: 7) {
+                        ForEach(Array(insights.enumerated()), id: \.offset) { _, item in
+                            heroInsightChip(icon: item.0, title: item.1, value: item.2)
+                        }
+                    }
+                }
+
                 HStack(spacing: 6) {
                     Text("مركز المباراة والتحليل")
                         .font(SportsFonts.app(size: 13, weight: .bold))
@@ -322,6 +334,57 @@ struct HomeView: View {
         return Array(out.prefix(3))
     }
 
+    private func heroInsightItems(_ f: SpFixture) -> [(String, String, String)] {
+        var out: [(String, String, String)] = []
+        if let pressure = featuredPressure, pressure.available, let latest = pressure.latest {
+            out.append(("gauge.with.dots.needle.bottom.50percent", "الضغط", "\(pressureSideName(latest.side, fixture: f)) \(Int(latest.value.rounded()))"))
+        }
+        if let momentum = featuredMomentum, momentum.available, let possession = momentum.possession {
+            out.append(("waveform.path.ecg", "الاستحواذ", "\(possession.home)% · \(possession.away)%"))
+        }
+        if let facts = featuredFacts, facts.available, let weather = facts.weather, let temp = weather.temp {
+            out.append(("cloud.sun", "الطقس", "\(temp)°"))
+        }
+        if let facts = featuredFacts, facts.available, !facts.absentees.isEmpty {
+            out.append(("cross.case", "الغيابات", "\(facts.absentees.count)"))
+        }
+        if let player = featuredXg?.topPlayers.first {
+            out.append(("scope", "الأخطر", player.name))
+        }
+        return Array(out.prefix(3))
+    }
+
+    private func pressureSideName(_ side: String, fixture: SpFixture) -> String {
+        switch side.lowercased() {
+        case "home": return fixture.home.name
+        case "away": return fixture.away.name
+        default: return "متوازن"
+        }
+    }
+
+    private func heroInsightChip(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SpTheme.green)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(SportsFonts.app(size: 9, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                Text(value)
+                    .font(SportsFonts.app(size: 10.5, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
+        .padding(.horizontal, 10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.green.opacity(0.055)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.green.opacity(0.16), lineWidth: 1))
+    }
+
     private func findStat(_ keys: [String]) -> String? {
         guard let rows = featuredDetail?.statistics?.rows else { return nil }
         let row = rows.first { r in
@@ -371,7 +434,7 @@ struct HomeView: View {
             .navigationBarTitleDisplayMode(.inline)
     }
 
-    // MARK: - نبض الدوري (شريط أرقام سريعة — بطاقات بيضاء هادئة)
+    // MARK: - نبض الدوري (ملخص موجّه + مؤشرات سريعة)
 
     @ViewBuilder private var leaguePulse: some View {
         let leader = standings.first
@@ -381,7 +444,25 @@ struct HomeView: View {
         let gap: Int? = standings.count >= 2 ? standings[0].points - standings[1].points : nil
 
         VStack(alignment: .leading, spacing: 11) {
-            sectionTitle("نبض الدوري").padding(.horizontal, 16)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    sectionTitle("نبض الدوري")
+                    Spacer()
+                    if let g = gap {
+                        Text(g == 0 ? "صدارة مشتعلة" : "الفارق \(g) نقطة")
+                            .font(SportsFonts.app(size: 11, weight: .bold))
+                            .foregroundStyle(SpTheme.green)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                    }
+                }
+                Text(leaguePulseSummary(leader: leader, topScorer: topScorer, gap: gap))
+                    .font(SportsFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(2)
+            }
+            .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 11) {
                     if let l = leader { pulseTile("المتصدّر", l.team.name, "\(l.points) نقطة", logo: l.team.logo) }
@@ -393,6 +474,18 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
             }
         }
+    }
+
+    private func leaguePulseSummary(leader: SpStandingRow?, topScorer: SpScorer?, gap: Int?) -> String {
+        var parts: [String] = []
+        if let leader {
+            let lead = (gap ?? 0) == 0 ? "يتقاسم الصدارة" : "يتصدر بفارق \(gap ?? 0)"
+            parts.append("\(leader.team.name) \(lead)")
+        }
+        if let topScorer {
+            parts.append("\(topScorer.name) يقود سباق الهدافين")
+        }
+        return parts.isEmpty ? "أهم مؤشرات الدوري في لقطة واحدة." : parts.joined(separator: " · ")
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
@@ -519,14 +612,23 @@ struct HomeView: View {
                             Text("\(row.rank)").font(SportsFonts.app(size: 14, weight: .heavy))
                                 .foregroundStyle(zoneColor(row.rank)).frame(width: 18).monospacedDigit()
                             SpTeamLogo(logo: row.team.logo, size: 32)
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: 7) {
                                 Text(row.team.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                                formDots(row.form)
+                                HStack(spacing: 7) {
+                                    titleRaceProgress(row, leaderPoints: top.first?.points ?? row.points)
+                                    formDots(row.form)
+                                }
                             }
                             Spacer(minLength: 6)
-                            (Text("\(row.points)").font(SportsFonts.app(size: 17, weight: .heavy))
-                                + Text(" نقطة").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim))
-                                .foregroundStyle(SpTheme.onDark).monospacedDigit()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                (Text("\(row.points)").font(SportsFonts.app(size: 17, weight: .heavy))
+                                    + Text(" نقطة").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim))
+                                    .foregroundStyle(SpTheme.onDark).monospacedDigit()
+                                Text(titleRaceGap(row, leader: top.first))
+                                    .font(SportsFonts.app(size: 10, weight: .bold))
+                                    .foregroundStyle(row.rank == 1 ? SpTheme.green : SpTheme.onDarkFaint)
+                                    .lineLimit(1)
+                            }
                         }
                         .padding(.vertical, 11)
                         .contentShape(Rectangle())
@@ -539,6 +641,25 @@ struct HomeView: View {
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
             .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
         }
+    }
+
+    private func titleRaceGap(_ row: SpStandingRow, leader: SpStandingRow?) -> String {
+        guard let leader else { return "" }
+        let gap = leader.points - row.points
+        if row.rank == 1 { return "المتصدر" }
+        return gap == 0 ? "متساوٍ" : "-\(gap)"
+    }
+
+    private func titleRaceProgress(_ row: SpStandingRow, leaderPoints: Int) -> some View {
+        let pct = leaderPoints > 0 ? min(1, max(0.06, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.06
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(SpTheme.chipFill)
+                Capsule().fill(row.rank == 1 ? SpTheme.green : SpTheme.green.opacity(0.55))
+                    .frame(width: geo.size.width * pct)
+            }
+        }
+        .frame(height: 6)
     }
 
     // نقاط الفورمة (آخر 5): فوز أخضر، تعادل رمادي ممتلئ، خسارة حلقة رمادية. لونان فقط.
@@ -929,13 +1050,24 @@ struct HomeView: View {
         // تحديث حالة/نتيجة المباريات المتابَعة (بطاقة «مبارياتي») من الخادم.
         await matchFollows.refresh()
 
-        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG.
+        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + زخم/ضغط/طقس.
         if let f = featured, f.started {
-            self.featuredDetail = try? await APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
-            self.featuredXg = try? await APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
+            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
+            async let xgOpt = try? APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
+            async let momentumOpt = try? APIClient.shared.fetchMomentum(matchId: f.id, ignoreCache: force)
+            async let pressureOpt = try? APIClient.shared.fetchPressure(matchId: f.id, ignoreCache: force)
+            async let factsOpt = try? APIClient.shared.fetchMatchFacts(matchId: f.id, ignoreCache: force)
+            self.featuredDetail = await detailOpt
+            self.featuredXg = await xgOpt
+            self.featuredMomentum = await momentumOpt
+            self.featuredPressure = await pressureOpt
+            self.featuredFacts = await factsOpt
         } else {
             self.featuredDetail = nil
             self.featuredXg = nil
+            self.featuredMomentum = nil
+            self.featuredPressure = nil
+            self.featuredFacts = nil
         }
     }
 }

@@ -113,7 +113,7 @@ struct WorldCupHomeStrip: View {
     }
 
     private func card(_ f: WCFixture) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // شعار البطولة الرسمي (على خلفية بيضاء لإبراز الرقم الأسود) + الهوية
             HStack(spacing: 10) {
                 Image("WorldCupEmblem")
@@ -131,16 +131,17 @@ struct WorldCupHomeStrip: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(width: 126, alignment: .leading)
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 logo(f.home.logo)
                 centerColumn(f)
                 logo(f.away.logo)
             }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             Image(systemName: "chevron.left")
                 .font(SabqFonts.app(size: 13, weight: .bold))
@@ -195,8 +196,9 @@ struct WorldCupHomeStrip: View {
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
                     .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(.white)
                     .environment(\.layoutDirection, .leftToRight)
-                WCStatusPill(fixture: f, onDark: true)
+                homeLiveStatus(f)
             }
+            .frame(minWidth: 82)
         } else {
             VStack(spacing: 2) {
                 Text(WCFormat.time(f))
@@ -212,6 +214,48 @@ struct WorldCupHomeStrip: View {
                         .lineLimit(1).fixedSize()
                 }
             }
+            .frame(minWidth: 82)
         }
+    }
+
+    /// شارة مخصصة لبطاقة الرئيسية. لا نستخدم WCStatusPill هنا لأن نص
+    /// «الشوط الأول · 4'» طويل على مساحة البطاقة الصغيرة فينكسر كسطرين.
+    private func homeLiveStatus(_ f: WCFixture) -> some View {
+        let period = f.status.label.isEmpty ? "مباشر" : f.status.label
+        let minute = liveMinute(f)
+
+        return HStack(spacing: 5) {
+            Text(period)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            if let minute {
+                Circle()
+                    .fill(.white.opacity(0.85))
+                    .frame(width: 3.5, height: 3.5)
+                Text(minute)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+        }
+        .font(SabqFonts.app(size: 10, weight: .black))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .frame(minWidth: 78, maxWidth: 94)
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(WCTheme.liveRed)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func liveMinute(_ f: WCFixture) -> String? {
+        guard let elapsed = f.status.elapsed, elapsed > 0 else { return nil }
+        let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
+        return "\(elapsed)\(extra)'"
     }
 }
