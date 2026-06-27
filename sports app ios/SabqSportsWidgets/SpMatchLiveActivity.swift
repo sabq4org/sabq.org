@@ -141,11 +141,25 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
 }
 
-// عرض الحالة الحيّة مطابق لتطبيق سبق: الدقيقة نص ثابت يأتي من ContentState
-// ويحدّثه الخادم بالدفع. لا نستخدم ساعة ذاتية على الجهاز حتى لا تظهر الثواني.
+// عرض الحالة الحيّة: عند توفر clockStartEpoch يعرض الويدجت ساعةً محلية متحركة
+// بلا انتظار دفعات APNs لكل دقيقة. عند التوقف/الاستراحة يسقط إلى نص الخادم.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
-    Text(statusText(s, kickoff: kickoff)).lineLimit(1)
+    if s.isLive, let epoch = s.clockStartEpoch, epoch > 0 {
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack(spacing: 4) {
+                Text(footballClockText(epoch: epoch, now: timeline.date))
+                    .monospacedDigit()
+                if !s.statusLabel.isEmpty {
+                    Text("·")
+                    Text(s.statusLabel)
+                }
+            }
+            .lineLimit(1)
+        }
+    } else {
+        Text(statusText(s, kickoff: kickoff)).lineLimit(1)
+    }
 }
 
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
@@ -154,6 +168,14 @@ private func scoreText(_ state: SpMatchActivityAttributes.ContentState) -> some 
     Text("\(state.awayScore) - \(state.homeScore)")
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
+}
+
+/// يعرض ساعة المباراة بصيغة كروية `71:29` لا بصيغة iOS العامة `1:11:29`.
+private func footballClockText(epoch: Double, now: Date) -> String {
+    let elapsed = max(0, Int(now.timeIntervalSince1970 - epoch))
+    let minutes = elapsed / 60
+    let seconds = elapsed % 60
+    return String(format: "%d:%02d", minutes, seconds)
 }
 
 enum SpSide { case home, away }
