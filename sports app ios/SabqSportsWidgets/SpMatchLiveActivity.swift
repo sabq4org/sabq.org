@@ -129,7 +129,7 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
     if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
         HStack(spacing: 4) {
-            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
                  countsDown: false, showsHours: false)
                 .monospacedDigit()
                 .fixedSize()

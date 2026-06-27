@@ -320,6 +320,12 @@ final class SpMatchFollows {
 
     private let key = "sabqsports.followed.matches"
 
+    /// حلقة الاستطلاع الدوري الأمامية (تُلغى عند خلفية التطبيق).
+    private var autoRefreshTask: Task<Void, Never>?
+
+    /// هل توجد مباراة متابَعة جارية الآن — يحكم وتيرة الاستطلاع.
+    var hasLiveFollowed: Bool { items.contains { $0.status.live } }
+
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
            let stored = try? JSONDecoder().decode([SpFixture].self, from: data) {
@@ -361,6 +367,37 @@ final class SpMatchFollows {
         else { cancelReminders(for: fixture.id) }
         // حدّث نشاط شاشة القفل إن كان قائمًا لهذه المباراة (no-op إن لم يوجد).
         SpLiveActivityManager.shared.update(with: fixture)
+    }
+
+    // MARK: - الاستطلاع الدوري المستقل (يُبقي «مبارياتي» + الويدجت متحدّثَين)
+    //
+    // المشكلة التي يعالجها: النشاط الحيّ والبطاقة كانا يتغذّيان فقط من شاشةٍ تستطلع
+    // (مركز المباراة) أو من سحبٍ يدوي للرئيسية. فعلى أي شاشة أخرى يتجمّد الاثنان.
+    // هذه الحلقة تستطلع المباريات المتابَعة الجارية دوريًّا ما دام التطبيق أمامياً،
+    // فتُحدّث البطاقة وتغذّي النشاط الحيّ عبر `update()` بلا اعتماد على الشاشة المعروضة.
+
+    /// يبدأ الاستطلاع الدوري (آمن للاستدعاء المتكرّر — لا يُنشئ أكثر من حلقة).
+    func startAutoRefresh() {
+        guard autoRefreshTask == nil else { return }
+        autoRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let shouldPoll = self.items.contains { f in
+                    f.status.live || (!f.status.finished && abs(f.kickoff.timeIntervalSinceNow) < 3 * 3600)
+                }
+                if shouldPoll { await self.refresh() }
+                if Task.isCancelled { return }
+                // وتيرة متكيّفة: 12ث أثناء وجود مباراة جارية، و30ث خلاف ذلك (توفيرًا).
+                let interval: UInt64 = self.hasLiveFollowed ? 12_000_000_000 : 30_000_000_000
+                try? await Task.sleep(nanoseconds: interval)
+            }
+        }
+    }
+
+    /// يوقف الاستطلاع الدوري (عند انتقال التطبيق للخلفية).
+    func stopAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
     }
 
     /// يجدّد حالة/نتيجة المباريات الجارية أو القريبة من الانطلاق (±٣ ساعات) من الخادم.

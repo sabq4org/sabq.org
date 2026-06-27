@@ -137,7 +137,7 @@ struct LiveMatchLiveActivity: Widget {
 @ViewBuilder
 private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> some View {
     if state.isLive, !state.isFinished, let epoch = state.clockStartEpoch {
-        Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+        Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
              countsDown: false, showsHours: false)
             .monospacedDigit()
             .fixedSize()
@@ -150,7 +150,7 @@ private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> som
 private func statusLineContent(_ s: LiveMatchAttributes.ContentState) -> some View {
     if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
         HStack(spacing: 4) {
-            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date.distantFuture,
+            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
                  countsDown: false, showsHours: false)
                 .monospacedDigit()
                 .fixedSize()
