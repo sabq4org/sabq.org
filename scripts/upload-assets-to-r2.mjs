@@ -52,7 +52,12 @@ const {
   ASSET_UPLOAD_STRICT = "",
 } = process.env;
 
-const strict = ASSET_UPLOAD_STRICT.toLowerCase() === "true";
+// Fail-HARD by default. When ASSET_CDN_URL is set, index.html is built to point
+// at the CDN, so a failed/partial upload ships a site whose chunks 404 (the
+// white-page incident: a wrong R2_ACCESS_KEY_ID uploaded 0 files yet the deploy
+// still went live). Failing the build instead keeps production on the previous
+// good deploy. Opt out only with ASSET_UPLOAD_STRICT=false.
+const strict = ASSET_UPLOAD_STRICT.toLowerCase() !== "false";
 
 function bail(msg) {
   console.error(`[upload-assets-to-r2] ${msg}`);
@@ -69,6 +74,17 @@ if (!ASSET_CDN_URL) {
 }
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
   bail("Missing R2_* env vars — cannot upload assets. (Set them in Pages env.)");
+}
+// Preflight: an R2 S3 Access Key ID is exactly 32 hex chars. The most common
+// setup mistake is pasting the "Token value" (cfut_…, ~53 chars) into
+// R2_ACCESS_KEY_ID — every PutObject then fails with "Credential access key has
+// length 53, should be 32". Catch it up front with an actionable message.
+if (R2_ACCESS_KEY_ID.length !== 32) {
+  bail(
+    `R2_ACCESS_KEY_ID length is ${R2_ACCESS_KEY_ID.length}, expected 32. ` +
+      `You likely pasted the R2 "Token value" (cfut_…) or the Secret instead of ` +
+      `the 32-char hex "Access Key ID". Fix it in Pages → Variables.`,
+  );
 }
 
 // Content-type by extension — R2 doesn't infer it, and a wrong/missing type on a
@@ -111,11 +127,30 @@ const client = new S3Client({
     accessKeyId: R2_ACCESS_KEY_ID,
     secretAccessKey: R2_SECRET_ACCESS_KEY,
   },
+  // The S3 client retries on transient errors; cap it so a wedged endpoint
+  // fails in bounded time instead of looping. The per-request hang itself is
+  // bounded by an abortSignal on every send() below (see REQUEST_TIMEOUT_MS) —
+  // the SDK has NO socket timeout by default, which is what let the build hang
+  // for HOURS in the "stuck since 09:00" incident while index.html had already
+  // shipped to the CDN but the entry chunk never uploaded → site-wide white
+  // page. We avoid a direct @smithy/node-http-handler import (transitive-only
+  // dep) and use the dependency-free AbortSignal.timeout instead.
+  maxAttempts: Number(process.env.ASSET_UPLOAD_MAX_ATTEMPTS) || 4,
 });
+
+// Bound every individual S3 operation. AbortSignal.timeout aborts the whole
+// send — including a stalled TCP connect — so no request can hang indefinitely.
+const REQUEST_TIMEOUT_MS =
+  Number(process.env.ASSET_UPLOAD_REQUEST_TIMEOUT_MS) || 30000;
+function sendWithTimeout(command) {
+  return client.send(command, {
+    abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+}
 
 async function existsInBucket(key) {
   try {
-    await client.send(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
+    await sendWithTimeout(new HeadObjectCommand({ Bucket: R2_BUCKET_NAME, Key: key }));
     return true;
   } catch {
     return false;
@@ -136,18 +171,30 @@ async function main() {
     skipped = 0,
     failed = 0;
 
-  for await (const file of walk(distDir)) {
+  // Gather the file list first, then upload with a CONCURRENCY pool. The first
+  // run pushes ~680 files to an R2 region that may be far from the build box;
+  // doing it one-at-a-time (HeadObject + PutObject sequentially) took 6+ min and
+  // slowed every deploy. A bounded pool of parallel workers brings it back to
+  // seconds. Tune with ASSET_UPLOAD_CONCURRENCY (default 24).
+  const files = [];
+  for await (const file of walk(distDir)) files.push(file);
+
+  const concurrency = Math.max(
+    1,
+    Number(process.env.ASSET_UPLOAD_CONCURRENCY) || 24,
+  );
+
+  async function processOne(file) {
     // Key mirrors the public path: assets/<...>. Hashed files are immutable, so
     // a present key is byte-identical and safe to skip.
     const rel = relative(distDir, file).split(sep).join("/");
     const key = `${ASSET_UPLOAD_PREFIX}/${rel}`.replace(/\/+/g, "/");
-
     try {
       if (await existsInBucket(key)) {
         skipped++;
-        continue;
+        return;
       }
-      await client.send(
+      await sendWithTimeout(
         new PutObjectCommand({
           Bucket: R2_BUCKET_NAME,
           Key: key,
@@ -164,10 +211,87 @@ async function main() {
     }
   }
 
+  // Simple worker pool: `concurrency` workers each pull from a shared cursor.
+  let cursor = 0;
+  async function worker() {
+    while (cursor < files.length) {
+      const i = cursor++;
+      await processOne(files[i]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, files.length) }, worker),
+  );
+
   console.log(
     `[upload-assets-to-r2] done — uploaded=${uploaded} skipped=${skipped} failed=${failed} → ${ASSET_CDN_URL}/${ASSET_UPLOAD_PREFIX}/`,
   );
-  if (failed && strict) process.exit(1);
+  if (failed && strict) {
+    bail(`${failed} asset(s) failed to upload — refusing to ship a CDN-mode build with missing chunks.`);
+  }
+
+  // Final guard against the white-page incident: verify the chunks that the
+  // built index.html ACTUALLY references are fetchable from the CDN right now.
+  // PutObject succeeding is not enough — wrong bucket, unconnected R2 custom
+  // domain, or a partial upload all leave the entry chunk 404ing on
+  // cdn.sabq.org while the deploy still goes live. We HEAD every CDN-prefixed
+  // asset in index.html; any non-200 fails the build so production stays on the
+  // previous good deploy. Opt out with ASSET_VERIFY_CDN=false.
+  if ((process.env.ASSET_VERIFY_CDN || "").toLowerCase() !== "false") {
+    await verifyCdnAssets(distDir);
+  }
+}
+
+async function verifyCdnAssets(distDir) {
+  let html;
+  try {
+    html = await readFile(join(distDir, "..", "index.html"), "utf8");
+  } catch (err) {
+    console.warn(
+      `[upload-assets-to-r2] could not read index.html to verify (${err?.message || err}) — skipping CDN verification.`,
+    );
+    return;
+  }
+
+  // Pull every src=/href= that points at the configured CDN origin.
+  const base = ASSET_CDN_URL.replace(/\/+$/, "");
+  const urls = new Set();
+  for (const m of html.matchAll(/(?:src|href)=["']([^"']+)["']/g)) {
+    if (m[1].startsWith(base + "/")) urls.add(m[1]);
+  }
+  if (urls.size === 0) {
+    console.warn(
+      "[upload-assets-to-r2] index.html references no CDN URLs — is ASSET_CDN_URL set at build time? Skipping verification.",
+    );
+    return;
+  }
+
+  const missing = [];
+  await Promise.all(
+    [...urls].map(async (url) => {
+      try {
+        const res = await fetch(url, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) missing.push(`${url} → HTTP ${res.status}`);
+      } catch (err) {
+        missing.push(`${url} → ${err?.message || err}`);
+      }
+    }),
+  );
+
+  if (missing.length) {
+    console.error("[upload-assets-to-r2] CDN verification FAILED — these referenced assets are not served:");
+    for (const m of missing) console.error(`  • ${m}`);
+    bail(
+      `${missing.length} index.html asset(s) are not fetchable from ${base}. ` +
+        `Refusing to ship — the SPA would white-page. Check R2 upload + cdn.sabq.org custom domain.`,
+    );
+  }
+  console.log(
+    `[upload-assets-to-r2] CDN verification OK — ${urls.size} referenced asset(s) reachable on ${base}.`,
+  );
 }
 
 main().catch((err) => bail(`Unexpected: ${err?.message || err}`));
