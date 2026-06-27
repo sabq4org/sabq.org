@@ -1496,6 +1496,14 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
     const resetToken = generateVerificationCode();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
+    // A new reset request invalidates older unused codes for the same user.
+    await db.update(passwordResetTokens)
+      .set({ used: true })
+      .where(and(
+        eq(passwordResetTokens.userId, user.id),
+        eq(passwordResetTokens.used, false)
+      ));
+
     // Store reset token
     await db.insert(passwordResetTokens).values({
       userId: user.id,
@@ -1514,8 +1522,6 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
         ? "تم إرسال رمز استعادة كلمة المرور إلى بريدك الإلكتروني"
         : "تم إنشاء رمز استعادة كلمة المرور",
       emailSent,
-      resetCode: resetToken, // Remove in production
-      userId: user.id, // Remove in production
     });
   } catch (error) {
     console.error("[Mobile API] auth/forgot-password error:", error);
