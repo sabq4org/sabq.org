@@ -189,6 +189,58 @@ nonisolated struct SpMatchesResponse: Decodable {
     let results: [SpFixture]
 }
 
+nonisolated struct SpLeagueInsightsResponse: Decodable {
+    let configured: Bool
+    let generatedAt: Double?
+    let competition: SpLeagueInsightCompetition?
+    let summary: SpLeagueInsightSummary?
+    let featured: SpLeagueFeaturedInsight?
+    let signals: [SpLeagueSignal]
+    let providers: [SpLeagueProvider]
+}
+
+nonisolated struct SpLeagueInsightCompetition: Decodable, Hashable {
+    let slug: String
+    let name: String
+}
+
+nonisolated struct SpLeagueInsightSummary: Decodable {
+    let title: String?
+    let subtitle: String?
+    let leader: SpStandingRow?
+    let runnerUp: SpStandingRow?
+    let gap: Int?
+    let bestAttack: SpStandingRow?
+    let bestDefense: SpStandingRow?
+    let mostWins: SpStandingRow?
+    let topScorer: SpScorer?
+    let topAssist: SpScorer?
+}
+
+nonisolated struct SpLeagueFeaturedInsight: Decodable {
+    let fixture: SpFixture
+}
+
+nonisolated struct SpLeagueSignal: Decodable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    let title: String
+    let value: String
+    let subtitle: String?
+    let logo: String?
+    let teamId: Int?
+    let playerId: Int?
+    var id: String { key }
+}
+
+nonisolated struct SpLeagueProvider: Decodable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    let available: Bool
+    let summary: String?
+    var id: String { key }
+}
+
 nonisolated struct SpStandingsResponse: Decodable {
     let configured: Bool
     let standings: [SpStandingRow]
@@ -1162,6 +1214,11 @@ extension APIClient {
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
+    func fetchLeagueInsights(comp: String, ignoreCache: Bool = false) async throws -> SpLeagueInsightsResponse {
+        try await get(SpLeagueInsightsResponse.self, path: "/sports/\(comp)/insights",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
     func fetchStandings(comp: String, ignoreCache: Bool = false) async throws -> SpStandingsResponse {
         try await get(SpStandingsResponse.self, path: "/sports/\(comp)/standings",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
@@ -1190,6 +1247,16 @@ extension APIClient {
     func fetchMatchDetail(id: Int, ignoreCache: Bool = false) async throws -> SpMatchDetail {
         try await get(SpMatchDetail.self, path: "/sports/match/\(id)",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    /// تحديث لقطة مباراة متابَعة من مصدرها الصحيح؛ «مبارياتي» قد تجمع روشن،
+    /// البطولات العالمية، وكأس العالم في مكان واحد.
+    func fetchFollowedFixture(_ fixture: SpFixture, ignoreCache: Bool = false) async throws -> SpFixture {
+        if fixture.competitionSlug == "world-cup" {
+            let detail = try await fetchWorldCupMatch(id: fixture.id, ignoreCache: ignoreCache)
+            return SpFixture(worldCup: detail.fixture)
+        }
+        return try await fetchMatchDetail(id: fixture.id, ignoreCache: ignoreCache).fixture
     }
 
     // إثراء مركز المباراة: ملخّص ذكي + تقييمات اللاعبين + المواجهات.

@@ -71,6 +71,7 @@ import {
   resolveSmIdByNames,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
+import { isTheSportsConfigured } from "../services/theSportsService";
 import { resolveNames } from "../services/worldCupNameTranslator";
 import {
   addFollow,
@@ -567,6 +568,248 @@ export function registerSportsRoutes(app: Express) {
       awayNameEn: identity.awayNameEn,
     });
   };
+
+  const percent = (n: number | null | undefined) =>
+    typeof n === "number" && Number.isFinite(n) ? `${Math.round(n)}%` : null;
+
+  const topBy = <T,>(rows: T[], score: (row: T) => number): T | null =>
+    rows.length ? rows.reduce((best, row) => (score(row) > score(best) ? row : best), rows[0]) : null;
+
+  const bottomBy = <T,>(rows: T[], score: (row: T) => number): T | null =>
+    rows.length ? rows.reduce((best, row) => (score(row) < score(best) ? row : best), rows[0]) : null;
+
+  // ملخص مركّب لروشن: يختصر بيانات الاشتراكات في لقطة واحدة خفيفة للواجهة.
+  app.get("/api/sports/:comp/insights", async (req, res) => {
+    const comp = resolve(req, res);
+    if (!comp) return;
+    if (!isSaudiLeagueConfigured()) {
+      res.json({
+        configured: false,
+        generatedAt: Date.now(),
+        summary: null,
+        featured: null,
+        signals: [],
+        providers: [
+          { key: "api-football", label: "الجدول والهدافون", available: false },
+          { key: "thesports", label: "اللحظية والإصابات", available: isTheSportsConfigured() },
+          { key: "sportmonks", label: "التحليل والطقس", available: isSportmonksConfigured() },
+        ],
+      });
+      return;
+    }
+
+    try {
+      const season = parseSeason(req);
+      const [fixtures, liveNow, baseStandings, scorers, assists] = await Promise.all([
+        getFixtures(comp, season),
+        season ? Promise.resolve([]) : getLiveFixtures(comp).catch(() => []),
+        getStandings(comp, season).catch(() => []),
+        getTopScorers(comp, season).catch(() => []),
+        getTopAssists(comp, season).catch(() => []),
+      ]);
+
+      const buckets = bucketFixtures(fixtures);
+      const liveIds = new Set(liveNow.map((f) => f.id));
+      const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
+      const live = season ? [] : await overlayLiveFixturesForComp(mergedLive, comp.slug).catch(() => mergedLive);
+      const standings = season ? baseStandings : applyProvisionalTable(baseStandings, liveNow);
+      const featured = live[0] ?? buckets.today[0] ?? buckets.upcoming[0] ?? buckets.results[0] ?? null;
+
+      const leader = standings[0] ?? null;
+      const runnerUp = standings[1] ?? null;
+      const gap = leader && runnerUp ? leader.points - runnerUp.points : null;
+      const bestAttack = topBy(standings, (r) => r.goalsFor);
+      const bestDefense = bottomBy(standings, (r) => r.goalsAgainst);
+      const mostWins = topBy(standings, (r) => r.win);
+      const topScorer = scorers[0] ?? null;
+      const topAssist = assists[0] ?? null;
+
+      let xg: Awaited<ReturnType<typeof getXg>> | null = null;
+      let momentum: Awaited<ReturnType<typeof getMomentum>> | null = null;
+      let pressure: Awaited<ReturnType<typeof getPressure>> | null = null;
+      let facts: Awaited<ReturnType<typeof getMatchFacts>> | null = null;
+      let forecast: Awaited<ReturnType<typeof getForecast>> | null = null;
+
+      if (featured && isSportmonksConfigured()) {
+        const smId = await resolveSportsSmId(featured.id).catch(() => null);
+        if (smId) {
+          [xg, momentum, pressure, facts, forecast] = await Promise.all([
+            getXg(featured.id, { directSmId: smId }).catch(() => null),
+            getMomentum(featured.id, { directSmId: smId }).catch(() => null),
+            getPressure(featured.id, { directSmId: smId }).catch(() => null),
+            getMatchFacts(featured.id, { directSmId: smId }).catch(() => null),
+            getForecast(featured.id, { directSmId: smId }).catch(() => null),
+          ]);
+          if (xg?.topPlayers?.length) {
+            const tr = await resolveNames(xg.topPlayers.map((p) => p.name)).catch(() => null);
+            if (tr) xg = { ...xg, topPlayers: xg.topPlayers.map((p) => ({ ...p, name: tr(p.name) || p.name })) };
+          }
+        }
+      }
+
+      const forecastPick = (() => {
+        const ft = forecast?.fulltime;
+        if (!ft || !featured) return null;
+        const options = [
+          { label: featured.home.name, value: ft.home },
+          { label: "تعادل", value: ft.draw },
+          { label: featured.away.name, value: ft.away },
+        ].sort((a, b) => b.value - a.value);
+        return options[0]?.value > 0 ? options[0] : null;
+      })();
+
+      const signals = [
+        leader && {
+          key: "leader",
+          label: "صدارة الدوري",
+          title: leader.team.name,
+          value: `${leader.points} نقطة`,
+          subtitle: gap == null ? "ترتيب الموسم" : gap === 0 ? "الصدارة متساوية" : `فارق ${gap} عن الوصيف`,
+          logo: leader.team.logo,
+          teamId: leader.team.id,
+        },
+        topScorer && {
+          key: "top-scorer",
+          label: "الهداف",
+          title: topScorer.name,
+          value: `${topScorer.goals} هدف`,
+          subtitle: topScorer.team.name,
+          logo: topScorer.team.logo,
+          playerId: topScorer.id,
+          teamId: topScorer.team.id,
+        },
+        bestAttack && {
+          key: "attack",
+          label: "أقوى هجوم",
+          title: bestAttack.team.name,
+          value: `${bestAttack.goalsFor} هدف`,
+          subtitle: `${bestAttack.win} فوز`,
+          logo: bestAttack.team.logo,
+          teamId: bestAttack.team.id,
+        },
+        bestDefense && {
+          key: "defense",
+          label: "أمتن دفاع",
+          title: bestDefense.team.name,
+          value: `${bestDefense.goalsAgainst} عليه`,
+          subtitle: `${bestDefense.played} مباراة`,
+          logo: bestDefense.team.logo,
+          teamId: bestDefense.team.id,
+        },
+        topAssist && {
+          key: "assist",
+          label: "صانع اللعب",
+          title: topAssist.name,
+          value: `${topAssist.assists} صناعة`,
+          subtitle: topAssist.team.name,
+          logo: topAssist.team.logo,
+          playerId: topAssist.id,
+          teamId: topAssist.team.id,
+        },
+        mostWins && {
+          key: "wins",
+          label: "الأكثر فوزًا",
+          title: mostWins.team.name,
+          value: `${mostWins.win} فوز`,
+          subtitle: `${mostWins.goalsDiff > 0 ? "+" : ""}${mostWins.goalsDiff} فارق`,
+          logo: mostWins.team.logo,
+          teamId: mostWins.team.id,
+        },
+      ].filter(Boolean);
+
+      const analysis = featured
+        ? {
+            xg: xg?.available ? { home: xg.home, away: xg.away, topPlayers: xg.topPlayers.slice(0, 3) } : null,
+            pressure: pressure?.available
+              ? {
+                  live: pressure.live,
+                  latest: pressure.latest,
+                  points: pressure.points.slice(-12),
+                }
+              : null,
+            momentum: momentum?.available
+              ? {
+                  live: momentum.live,
+                  possession: momentum.possession,
+                  points: momentum.points.slice(-12),
+                }
+              : null,
+            weather: facts?.available ? facts.weather : null,
+            absentees: facts?.available ? facts.absentees.slice(0, 6) : [],
+            forecast: forecast?.available
+              ? {
+                  fulltime: forecast.fulltime,
+                  btts: forecast.btts,
+                  goals: forecast.goals,
+                  correctScores: forecast.correctScores.slice(0, 3),
+                  pick: forecastPick,
+                }
+              : null,
+          }
+        : null;
+
+      const providers = [
+        {
+          key: "api-football",
+          label: "الجدول والهدافون",
+          available: true,
+          summary: `${standings.length} فريق · ${scorers.length} هداف`,
+        },
+        {
+          key: "thesports",
+          label: "اللحظية والإصابات",
+          available: isTheSportsConfigured(),
+          summary: live.length ? `${live.length} مباراة مباشرة` : "جاهز للتحديث اللحظي",
+        },
+        {
+          key: "sportmonks",
+          label: "التحليل والطقس",
+          available: isSportmonksConfigured(),
+          summary: [
+            xg?.available ? "xG" : null,
+            pressure?.available ? "ضغط" : null,
+            momentum?.available ? "زخم" : null,
+            facts?.weather ? "طقس" : null,
+            forecast?.available ? "توقع" : null,
+          ].filter(Boolean).join(" · ") || "يتوفر حسب المباراة",
+        },
+      ];
+
+      const hasLive = live.some((f) => f.status.live) || standings.some((r) => r.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=20"
+          : "public, max-age=60, s-maxage=180, stale-while-revalidate=600",
+      );
+      res.json({
+        configured: true,
+        generatedAt: Date.now(),
+        competition: { slug: comp.slug, name: comp.name },
+        summary: {
+          title: leader ? `${leader.team.name} في الصدارة` : comp.name,
+          subtitle: [
+            gap == null ? null : gap === 0 ? "فارق الصدارة متساوٍ" : `فارق الصدارة ${gap} نقطة`,
+            topScorer ? `الهداف ${topScorer.name}` : null,
+          ].filter(Boolean).join(" · "),
+          leader,
+          runnerUp,
+          gap,
+          bestAttack,
+          bestDefense,
+          mostWins,
+          topScorer,
+          topAssist,
+        },
+        featured: featured ? { fixture: featured, analysis } : null,
+        signals,
+        providers,
+      });
+    } catch (error) {
+      console.error("[Sports] insights failed:", error);
+      res.status(502).json({ message: "تعذر جلب رؤية الدوري حاليًا" });
+    }
+  });
 
   const SM_ENRICH_CACHE = "public, max-age=30, s-maxage=120, stale-while-revalidate=300";
 

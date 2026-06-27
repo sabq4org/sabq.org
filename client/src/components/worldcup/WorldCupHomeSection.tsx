@@ -37,8 +37,8 @@ export default function WorldCupHomeSection() {
   if (!hasMatch && !hasNews) return null;
 
   return (
-    <div className="bg-emerald-50 dark:bg-emerald-950/25 border-y border-emerald-600/10 dark:border-emerald-400/10 py-8">
-      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="border-y border-emerald-600/10 bg-emerald-50/80 py-6 dark:border-emerald-400/10 dark:bg-emerald-950/20 md:bg-emerald-50 md:py-8 md:dark:bg-emerald-950/25">
+      <div className="container mx-auto max-w-7xl space-y-6 px-4 md:space-y-8 sm:px-6 lg:px-8">
         <WorldCupHomeStrip />
         <WorldCupNewsBlock />
       </div>

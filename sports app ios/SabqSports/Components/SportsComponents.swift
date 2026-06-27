@@ -492,7 +492,7 @@ struct SpMyMatchesCard: View {
     @Environment(SpAuthStore.self) private var auth
 
     var body: some View {
-        let matches = follows.items
+        let matches = follows.visibleItems
         if !matches.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 header(count: matches.count)
@@ -519,22 +519,10 @@ struct SpMyMatchesCard: View {
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
                     .stroke(SpTheme.cardStroke, lineWidth: 1)
             )
-            .task { await pollLive() }
-        }
-    }
-
-    // تحديث دوري لحالة/نتيجة المباريات المتابَعة أثناء عرض البطاقة — كي تنتقل
-    // «لم تبدأ» → «مباشر» وتتقدّم الدقيقة دون انتظار تحديث الصفحة يدويًا.
-    // يتسارع حين توجد مباراة جارية/قريبة، ويتباطأ حين لا شيء نشط.
-    private func pollLive() async {
-        while !Task.isCancelled {
-            let hasActive = follows.items.contains { f in
-                f.status.live || abs(f.kickoff.timeIntervalSinceNow) < 2 * 3600
+            .task {
+                follows.pruneExpiredFinishedMatches()
+                await follows.refresh()
             }
-            let delay: UInt64 = hasActive ? 15_000_000_000 : 60_000_000_000
-            try? await Task.sleep(nanoseconds: delay)
-            if Task.isCancelled { break }
-            await follows.refresh()
         }
     }
 
@@ -562,6 +550,10 @@ struct SpMyMatchesCard: View {
                 .foregroundStyle(SpTheme.green)
                 .padding(.horizontal, 7).padding(.vertical, 2)
                 .background(Capsule().fill(SpTheme.green.opacity(0.12)))
+            Image(systemName: "rectangle.stack.badge.play")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkFaint)
+                .accessibilityLabel("مباريات من بطولات مختلفة")
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -573,7 +565,7 @@ struct SpMyMatchesCard: View {
             NavigationLink {
                 SpMatchCenter(fixtureId: f.id, preview: f)
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Color.clear.frame(width: 24, height: 24)   // فراغ محجوز لنجمة الإلغاء
                     teamMini(f.home, leading: true)
                     centerStatus(f, now: now)
@@ -675,7 +667,7 @@ struct SpMyMatchesCard: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
         } else {
-            Text("انتهت")
+            Text(f.status.finished ? "انتهت · تختفي بعد قليل" : "انتهت")
                 .font(SportsFonts.app(size: 9.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
         }

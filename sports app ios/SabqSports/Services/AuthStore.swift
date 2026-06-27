@@ -319,6 +319,11 @@ final class SpMatchFollows {
     private(set) var items: [SpFixture] = []
 
     private let key = "sabqsports.followed.matches"
+    private let finishedAtKey = "sabqsports.followed.matches.finishedAt"
+    private let finishedGrace: TimeInterval = 5 * 60
+    private let refreshLead: TimeInterval = 3 * 3600
+    private let refreshTail: TimeInterval = 24 * 3600
+    private var finishedAtById: [String: TimeInterval] = [:]
 
     /// حلقة الاستطلاع الدوري الأمامية (تُلغى عند خلفية التطبيق).
     private var autoRefreshTask: Task<Void, Never>?
@@ -326,11 +331,22 @@ final class SpMatchFollows {
     /// هل توجد مباراة متابَعة جارية الآن — يحكم وتيرة الاستطلاع.
     var hasLiveFollowed: Bool { items.contains { $0.status.live } }
 
+    /// ما يُعرض فعليًا في بطاقة «مبارياتي» بعد تطبيق قاعدة الإخفاء.
+    var visibleItems: [SpFixture] {
+        let now = Date()
+        return items.filter { !shouldHideFinished($0, now: now) }
+    }
+
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
            let stored = try? JSONDecoder().decode([SpFixture].self, from: data) {
             items = stored.sorted { $0.timestamp < $1.timestamp }
         }
+        if let data = UserDefaults.standard.data(forKey: finishedAtKey),
+           let stored = try? JSONDecoder().decode([String: TimeInterval].self, from: data) {
+            finishedAtById = stored
+        }
+        pruneExpiredFinishedMatches()
     }
 
     func isFollowing(_ id: Int) -> Bool { items.contains { $0.id == id } }
@@ -341,7 +357,9 @@ final class SpMatchFollows {
 
     func add(_ fixture: SpFixture) {
         guard !isFollowing(fixture.id) else { return }
+        guard !shouldHideFinished(fixture, now: Date()) else { return }
         items.append(fixture)
+        noteFinishedIfNeeded(fixture, now: Date())
         sortAndPersist()
         Task { await requestNotificationAuthIfNeeded() }
         scheduleReminders(for: fixture)
@@ -351,6 +369,7 @@ final class SpMatchFollows {
     func remove(_ id: Int) {
         let removed = items.first { $0.id == id }
         items.removeAll { $0.id == id }
+        finishedAtById.removeValue(forKey: String(id))
         sortAndPersist()
         cancelReminders(for: id)
         if let removed { syncUnfollow(removed.id) }
@@ -360,6 +379,12 @@ final class SpMatchFollows {
     /// تحديث لقطة مباراة متابَعة بأحدث حالة/نتيجة (يُبقي المتابعة كما هي).
     func update(_ fixture: SpFixture) {
         guard let idx = items.firstIndex(where: { $0.id == fixture.id }) else { return }
+        let now = Date()
+        noteFinishedIfNeeded(fixture, now: now)
+        if shouldHideFinished(fixture, now: now) {
+            remove(fixture.id)
+            return
+        }
         items[idx] = fixture
         sortAndPersist()
         // أعد جدولة التذكير إن تغيّر موعد الانطلاق ولم تبدأ بعد.
@@ -378,17 +403,19 @@ final class SpMatchFollows {
 
     /// يبدأ الاستطلاع الدوري (آمن للاستدعاء المتكرّر — لا يُنشئ أكثر من حلقة).
     func startAutoRefresh() {
+        pruneExpiredFinishedMatches()
         guard autoRefreshTask == nil else { return }
         autoRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
+                self.pruneExpiredFinishedMatches()
                 let shouldPoll = self.items.contains { f in
-                    f.status.live || (!f.status.finished && abs(f.kickoff.timeIntervalSinceNow) < 3 * 3600)
+                    self.shouldRefresh(f, now: Date())
                 }
                 if shouldPoll { await self.refresh() }
                 if Task.isCancelled { return }
-                // وتيرة متكيّفة: 12ث أثناء وجود مباراة جارية، و30ث خلاف ذلك (توفيرًا).
-                let interval: UInt64 = self.hasLiveFollowed ? 12_000_000_000 : 30_000_000_000
+                // وتيرة متكيّفة: أسرع أثناء المباراة/قربها، وأبطأ عندما لا شيء نشط.
+                let interval: UInt64 = self.hasLiveFollowed ? 10_000_000_000 : 30_000_000_000
                 try? await Task.sleep(nanoseconds: interval)
             }
         }
@@ -403,16 +430,16 @@ final class SpMatchFollows {
     /// يجدّد حالة/نتيجة المباريات الجارية أو القريبة من الانطلاق (±٣ ساعات) من الخادم.
     func refresh() async {
         let now = Date()
-        let targets = items.filter { f in
-            f.started || abs(f.kickoff.timeIntervalSince(now)) < 3 * 3600
-        }
+        pruneExpiredFinishedMatches(now: now)
+        let targets = items.filter { shouldRefresh($0, now: now) }
         guard !targets.isEmpty else { return }
         await withTaskGroup(of: SpFixture?.self) { group in
             for f in targets {
-                group.addTask { try? await APIClient.shared.fetchMatchDetail(id: f.id).fixture }
+                group.addTask { try? await APIClient.shared.fetchFollowedFixture(f, ignoreCache: true) }
             }
             for await fx in group { if let fx { update(fx) } }
         }
+        pruneExpiredFinishedMatches()
     }
 
     private func sortAndPersist() {
@@ -420,6 +447,67 @@ final class SpMatchFollows {
         if let data = try? JSONEncoder().encode(items) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        if let data = try? JSONEncoder().encode(finishedAtById) {
+            UserDefaults.standard.set(data, forKey: finishedAtKey)
+        }
+    }
+
+    /// ينظّف المباريات المنتهية بعد 5 دقائق من رصد نهايتها، مع تقدير احتياطي عند
+    /// فتح التطبيق بعد النهاية كي لا تبقى مباراة قديمة عالقة في «مبارياتي».
+    func pruneExpiredFinishedMatches(now: Date = Date()) {
+        var changed = false
+        for f in items where f.status.finished {
+            if noteFinishedIfNeeded(f, now: now) { changed = true }
+        }
+
+        let expired = items.filter { shouldHideFinished($0, now: now) }
+        guard !expired.isEmpty else {
+            if changed { sortAndPersist() }
+            return
+        }
+
+        let expiredIds = Set(expired.map(\.id))
+        items.removeAll { expiredIds.contains($0.id) }
+        for id in expiredIds {
+            finishedAtById.removeValue(forKey: String(id))
+            cancelReminders(for: id)
+            syncUnfollow(id)
+        }
+        sortAndPersist()
+    }
+
+    private func shouldRefresh(_ fixture: SpFixture, now: Date) -> Bool {
+        if fixture.status.finished { return false }
+        if fixture.status.live { return true }
+        let kickoff = fixture.kickoff
+        return now >= kickoff.addingTimeInterval(-refreshLead)
+            && now <= kickoff.addingTimeInterval(refreshTail)
+    }
+
+    @discardableResult
+    private func noteFinishedIfNeeded(_ fixture: SpFixture, now: Date) -> Bool {
+        guard fixture.status.finished else {
+            return finishedAtById.removeValue(forKey: String(fixture.id)) != nil
+        }
+        let id = String(fixture.id)
+        guard finishedAtById[id] == nil else { return false }
+        finishedAtById[id] = estimatedFinishedAt(for: fixture, observedAt: now).timeIntervalSince1970
+        return true
+    }
+
+    private func shouldHideFinished(_ fixture: SpFixture, now: Date) -> Bool {
+        guard fixture.status.finished else { return false }
+        let observed = finishedAtById[String(fixture.id)]
+            .map { Date(timeIntervalSince1970: $0) }
+            ?? estimatedFinishedAt(for: fixture, observedAt: now)
+        return now.timeIntervalSince(observed) >= finishedGrace
+    }
+
+    private func estimatedFinishedAt(for fixture: SpFixture, observedAt now: Date) -> Date {
+        let elapsed = fixture.status.elapsed ?? 90
+        let extra = fixture.status.extra ?? 0
+        let estimated = fixture.kickoff.addingTimeInterval(TimeInterval(elapsed + extra + 20) * 60)
+        return min(now, estimated)
     }
 
     // MARK: - المزامنة مع الخادم (للإشعارات اللحظية — تتطلّب تسجيل دخول)

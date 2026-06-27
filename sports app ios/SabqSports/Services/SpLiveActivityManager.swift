@@ -176,7 +176,7 @@ final class SpLiveActivityManager {
     /// القيمة = الآن − (الدقائق المنقضية + بدل الضائع) بالثواني، فيبدأ الويدجت العدّ
     /// منها تلقائيًّا. تُعاد nil وقت التوقّف ليُجمَّد العرض على الدقيقة المدفوعة.
     static func clockStartEpoch(for s: SpStatus) -> Double? {
-        guard s.live, let m = s.elapsed, m > 0, isClockRunning(code: s.code) else { return nil }
+        guard s.live, !s.finished, let m = s.elapsed, m > 0, isClockRunning(code: s.code) else { return nil }
         let totalSeconds = Double(m + (s.extra ?? 0)) * 60.0
         return Date().timeIntervalSince1970 - totalSeconds
     }
@@ -190,7 +190,7 @@ final class SpLiveActivityManager {
     /// تاريخ تقادم الحالة: قصير أثناء اللعب؛ وحتى الانطلاق+دقيقتين للمباراة القادمة
     /// كي لا يُعتَّم العدّاد التنازلي قبل البدء.
     private func staleDate(for f: SpFixture) -> Date? {
-        if f.status.live { return Date().addingTimeInterval(120) }
+        if f.status.live { return Date().addingTimeInterval(180) }
         if !f.started, f.kickoff > Date() { return f.kickoff.addingTimeInterval(120) }
         return nil
     }

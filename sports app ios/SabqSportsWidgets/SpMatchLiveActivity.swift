@@ -16,7 +16,8 @@ struct SpMatchLiveActivity: Widget {
         ActivityConfiguration(for: SpMatchActivityAttributes.self) { context in
             LockScreenView(context: context)
                 .activityBackgroundTint(SpLA.background)
-                .activitySystemActionForegroundColor(SpLA.accent)
+                .activitySystemActionForegroundColor(.white)
+                .environment(\.layoutDirection, .rightToLeft)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -43,16 +44,24 @@ struct SpMatchLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Text(SpLA.shortName(context.attributes.homeName))
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(SpLA.accent)
+                if isUpcoming(context) {
+                    Text(SpLA.shortName(context.attributes.homeName))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                } else {
+                    compactSide(name: context.attributes.homeName, score: context.state.homeScore)
+                }
             } compactTrailing: {
-                compactValue(context)
+                if isUpcoming(context) {
+                    compactValue(context)
+                } else {
+                    compactSide(name: context.attributes.awayName, score: context.state.awayScore)
+                }
             } minimal: {
                 if isUpcoming(context) {
                     Image(systemName: "clock.fill").foregroundStyle(SpLA.accent)
                 } else {
-                    Text("\(context.state.homeScore)-\(context.state.awayScore)")
+                    scoreText(context.state)
                         .font(.system(size: 12, weight: .heavy, design: .rounded))
                         .foregroundStyle(SpLA.accent)
                 }
@@ -70,7 +79,7 @@ struct SpMatchLiveActivity: Widget {
             SpLogoView(fileName: file, name: name, size: 32, dark: dark)
             Text(name)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle((dark ? SpLA.ink : SpLA.ink).opacity(0.82))
+                .foregroundStyle(.white)
                 .lineLimit(1)
         }
     }
@@ -84,7 +93,7 @@ struct SpMatchLiveActivity: Widget {
                 .foregroundStyle(dark ? SpLA.ink : SpLA.ink)
                 .frame(maxWidth: 90)
         } else {
-            Text("\(context.state.homeScore) - \(context.state.awayScore)")
+            scoreText(context.state)
                 .font(.system(size: 22, weight: .heavy, design: .rounded))
                 .foregroundStyle(dark ? SpLA.ink : SpLA.ink)
         }
@@ -102,6 +111,17 @@ struct SpMatchLiveActivity: Widget {
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
         }
+    }
+
+    private func compactSide(name: String, score: Int) -> some View {
+        HStack(spacing: 3) {
+            Text(SpLA.shortName(name))
+                .font(.system(size: 11, weight: .bold))
+            Text("\(score)")
+                .font(.system(size: 15, weight: .black, design: .rounded))
+                .monospacedDigit()
+        }
+        .foregroundStyle(.white)
     }
 
     private func isUpcoming(_ context: ActivityViewContext<SpMatchActivityAttributes>) -> Bool {
@@ -126,23 +146,41 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
     if s.isLive, let epoch = s.clockStartEpoch, epoch > 0 {
-        HStack(spacing: 4) {
-            Text(Date(timeIntervalSince1970: epoch), style: .timer)
-                .monospacedDigit()
-            if !s.statusLabel.isEmpty {
-                Text("·")
-                Text(s.statusLabel)
+        TimelineView(.periodic(from: .now, by: 1)) { timeline in
+            HStack(spacing: 4) {
+                Text(footballClockText(epoch: epoch, now: timeline.date))
+                    .monospacedDigit()
+                if !s.statusLabel.isEmpty {
+                    Text("·")
+                    Text(s.statusLabel)
+                }
             }
+            .lineLimit(1)
         }
-        .lineLimit(1)
     } else {
         Text(statusText(s, kickoff: kickoff)).lineLimit(1)
     }
 }
 
+// البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
+// "الضيف - المضيف" حتى تقع الأرقام تحت أماكن الفرق كما في ويدجت سبق.
+private func scoreText(_ state: SpMatchActivityAttributes.ContentState) -> some View {
+    Text("\(state.awayScore) - \(state.homeScore)")
+        .foregroundStyle(.white)
+        .environment(\.layoutDirection, .leftToRight)
+}
+
+/// يعرض ساعة المباراة بصيغة كروية `71:29` لا بصيغة iOS العامة `1:11:29`.
+private func footballClockText(epoch: Double, now: Date) -> String {
+    let elapsed = max(0, Int(now.timeIntervalSince1970 - epoch))
+    let minutes = elapsed / 60
+    let seconds = elapsed % 60
+    return String(format: "%d:%02d", minutes, seconds)
+}
+
 enum SpSide { case home, away }
 
-// شاشة القفل / البانر — ثيم داكن.
+// شاشة القفل / مركز الإشعارات — نفس توزيع ويدجت سبق، بثيم رياضي داكن.
 private struct LockScreenView: View {
     let context: ActivityViewContext<SpMatchActivityAttributes>
 
@@ -151,70 +189,70 @@ private struct LockScreenView: View {
     }
 
     var body: some View {
-        VStack(spacing: 11) {
-            HStack(spacing: 8) {
-                competitionBadge
-                Spacer(minLength: 8)
-                statusBadge
+        VStack(spacing: 14) {
+            headerRow
+
+            HStack(alignment: .top, spacing: 10) {
+                teamSide(.home, alignment: .trailing)
+                centerPanel
+                    .frame(minWidth: 104)
+                    .padding(.top, 8)
+                teamSide(.away, alignment: .leading)
             }
-            HStack(alignment: .center, spacing: 8) {
-                teamColumn(.home)
-                centerBlock
-                teamColumn(.away)
-            }
-            if let ev = context.state.lastEvent, !ev.isEmpty {
-                Text(ev)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SpLA.ink.opacity(0.9))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(SpLA.surface))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .lineLimit(1)
-            }
+
+            eventRow
         }
-        .padding(14)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
     }
 
-    private var competitionBadge: some View {
+    private var headerRow: some View {
+        HStack {
+            competitionTitle
+            Spacer()
+            roundText
+        }
+    }
+
+    private var competitionTitle: some View {
         HStack(spacing: 6) {
             Image(systemName: "trophy.fill")
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(SpLA.accent)
             Text(context.attributes.competition.isEmpty ? "مباراة مباشرة" : context.attributes.competition)
-                .font(.system(size: 11.5, weight: .heavy))
-                .foregroundStyle(SpLA.ink)
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(SpLA.accent)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(SpLA.surface))
-        .overlay(Capsule().stroke(SpLA.border, lineWidth: 1))
     }
 
-    @ViewBuilder private var centerBlock: some View {
+    @ViewBuilder private var roundText: some View {
+        if !context.attributes.competition.isEmpty {
+            Text(context.state.isLive ? "مباشر الآن" : context.state.statusLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(SpLA.dim)
+                .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder private var centerPanel: some View {
         if upcoming {
-            VStack(spacing: 2) {
+            VStack(spacing: 4) {
                 Text(timerInterval: Date()...context.attributes.kickoff, countsDown: true)
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .font(.system(size: 34, weight: .black, design: .rounded))
                     .monospacedDigit()
                     .multilineTextAlignment(.center)
+                    .foregroundStyle(.white)
+                Text("على انطلاق المباراة")
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(SpLA.accent)
-                    .frame(maxWidth: 120)
-                Text("تبدأ بعد")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(SpLA.subInk)
             }
         } else {
-            HStack(spacing: 8) {
-                Text("\(context.state.homeScore)")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(SpLA.ink)
-                Text("-").font(.system(size: 20, weight: .heavy)).foregroundStyle(SpLA.subInk)
-                Text("\(context.state.awayScore)")
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(SpLA.ink)
+            VStack(spacing: 4) {
+                scoreText(context.state)
+                    .font(.system(size: 38, weight: .black, design: .rounded))
+                statusBadge
             }
         }
     }
@@ -226,25 +264,34 @@ private struct LockScreenView: View {
             }
             liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.subInk)
+                .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.dim)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 9).padding(.vertical, 4)
-        .background(Capsule().fill(context.state.isLive ? SpLA.liveDot.opacity(0.14) : SpLA.surface))
-        .overlay(Capsule().stroke(context.state.isLive ? SpLA.liveDot.opacity(0.25) : SpLA.border, lineWidth: 1))
     }
 
-    @ViewBuilder private func teamColumn(_ side: SpSide) -> some View {
+    @ViewBuilder private func teamSide(_ side: SpSide, alignment: HorizontalAlignment) -> some View {
         let name = side == .home ? context.attributes.homeName : context.attributes.awayName
         let file = side == .home ? context.attributes.homeLogoFile : context.attributes.awayLogoFile
-        VStack(spacing: 5) {
-            SpLogoView(fileName: file, name: name, size: 42, dark: true)
+        VStack(spacing: 8) {
+            SpLogoView(fileName: file, name: name, size: 52, dark: true)
             Text(name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(SpLA.ink.opacity(0.88))
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundStyle(.white)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private var eventRow: some View {
+        if let ev = context.state.lastEvent, !ev.isEmpty {
+            Text(ev)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(SpLA.dim)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
     }
 }
 
@@ -286,14 +333,16 @@ private struct SpLogoView: View {
 
 // ألوان وأدوات الإضافة (مستقلّة عن هدف التطبيق).
 enum SpLA {
-    static let accent = Color(red: 0.13, green: 0.72, blue: 0.52)
-    static let ink = Color(red: 0.95, green: 0.98, blue: 0.96)
-    static let subInk = Color(red: 0.66, green: 0.75, blue: 0.71)
-    static let background = Color(red: 0.035, green: 0.06, blue: 0.052)
-    static let surface = Color(red: 0.075, green: 0.12, blue: 0.105)
-    static let logoSurface = Color(red: 0.92, green: 0.96, blue: 0.94)
-    static let border = Color.white.opacity(0.10)
-    static let liveDot = Color(red: 0.98, green: 0.72, blue: 0.24)
+    // داكن رياضي مختلف عن ويدجت سبق الرئيسي: أخضر/فحمي أعمق مع لمعة نعناع.
+    static let accent = Color(red: 0.22, green: 0.84, blue: 0.64)
+    static let ink = Color.white
+    static let subInk = Color.white.opacity(0.72)
+    static let dim = Color.white.opacity(0.66)
+    static let background = Color(red: 0.015, green: 0.045, blue: 0.037)
+    static let surface = Color(red: 0.045, green: 0.10, blue: 0.085)
+    static let logoSurface = Color(red: 0.93, green: 0.97, blue: 0.95)
+    static let border = Color.white.opacity(0.14)
+    static let liveDot = Color(red: 1.0, green: 0.43, blue: 0.34)
     static let green = accent
 
     /// أوّل حرفين بارزين من اسم الفريق (يتخطّى أداة التعريف «ال»).
