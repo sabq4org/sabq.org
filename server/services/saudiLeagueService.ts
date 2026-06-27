@@ -442,6 +442,20 @@ export async function getOngoingLeagueIds(): Promise<Set<number>> {
 // أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات، فئات سنّية، احتياط.
 const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amateur/i;
 
+function localizeWorldLeagueName(name: string, country: string): string {
+  const trimmed = (name || "").trim();
+  const countryName = (country || "").trim().toLowerCase();
+  if (!trimmed) return "";
+
+  // Names like "Premier League" are reused in many countries. The generic
+  // SPL dictionary maps it to England, which is only safe with country context.
+  if (trimmed === "Premier League" && !["england", "world"].includes(countryName)) {
+    return trimmed;
+  }
+
+  return localizeSplCompetition(trimmed);
+}
+
 /**
  * المباريات المباشرة في البطولات العالمية التي موسمها قائم الآن — نُبقي بطولاتنا
  * المنتقاة دائمًا، ونضيف أي دوري عالمي موسمه قائم (عبر كل العالم لا قائمتنا فقط)،
@@ -471,7 +485,7 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
         const known = byId.get(lg.id);
         return {
           ...localizeFixture(r),
-          competition: known?.name ?? localizeSplCompetition(lg.name ?? ""),
+          competition: known?.name ?? localizeWorldLeagueName(lg.name ?? "", lg.country ?? ""),
           competitionSlug: known?.slug ?? null,
           country: lg.country ?? "",
           countryAr: localizeSplCountry(lg.country ?? ""),

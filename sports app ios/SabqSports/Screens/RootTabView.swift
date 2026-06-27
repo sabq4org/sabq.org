@@ -1,8 +1,10 @@
 import SwiftUI
 
-// جذر التطبيق — خمسة تبويبات. روشن (هب الدوري مباشرةً = الرئيسية) · البطولات
-// (بقية البطولات) · المباشر (لوحة مباشرة شاملة) · الأخبار (تغطية سبق الرياضية) ·
-// حسابي. مركز المباراة وصفحات النادي/اللاعب تُفتح كـ sheet من داخل هذه التبويبات.
+// جذر التطبيق — خمسة تبويبات. روشن (هب الدوري = الرئيسية) · البطولات (بقية
+// البطولات) · المباريات (جدول المونديال بالتواريخ) · عالمية (كل مباريات العالم
+// الجارية الآن) · حسابي. أُزيل تبويب «الأخبار» (تبقى كقسم في روشن) و«المباشر»
+// أُعيد كـ«عالمية» (محتواه العالمي الحيّ فقط). مركز المباراة وصفحات النادي/اللاعب
+// تُفتح من داخل هذه التبويبات.
 struct RootTabView: View {
     // يُضبط بعد إتمام/تخطّي الشاشات التعريفية — يمنع ظهورها ثانيةً.
     @AppStorage("ob_seen_v1") private var onboardingSeen = false
@@ -21,6 +23,10 @@ struct RootTabView: View {
 
     var body: some View {
         TabView {
+            MatchesView()
+                .tabItem { Label("المباريات", systemImage: "soccerball") }
+                .toolbar(tabBarVisibility, for: .tabBar)
+
             HomeView()
                 .tabItem { Label("روشن", systemImage: "trophy.fill") }
                 .toolbar(tabBarVisibility, for: .tabBar)
@@ -30,11 +36,7 @@ struct RootTabView: View {
                 .toolbar(tabBarVisibility, for: .tabBar)
 
             LiveView()
-                .tabItem { Label("المباشر", systemImage: "dot.radiowaves.left.and.right") }
-                .toolbar(tabBarVisibility, for: .tabBar)
-
-            NewsView()
-                .tabItem { Label("الأخبار", systemImage: "newspaper.fill") }
+                .tabItem { Label("عالمية", systemImage: "globe") }
                 .toolbar(tabBarVisibility, for: .tabBar)
 
             AccountView()
