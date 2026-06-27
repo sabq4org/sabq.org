@@ -121,25 +121,11 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
 }
 
-// عرض الحالة الحيّة: حين تتوفّر مرساة الساعة والمباراة تجري، نعرض ساعةً **تتحرّك
-// ذاتيًّا على الجهاز** عبر `Text(timerInterval:)` بلا أي دفعة — و`showsHours:false`
-// يُبقي الصياغة «63:45» (لا «1:03:45») حتى بعد تجاوز 59 دقيقة. عند التوقّف/قبل البدء
-// نسقط على النصّ المدفوع `statusText` (الدقيقة المُجمّدة). يرث الخطّ واللون من الحاوية.
+// عرض الحالة الحيّة: نصّ ثابت يأتي من الخادم (الدقيقة + الشوط) عبر `statusText`.
+// لا ساعة ذاتية على الجهاز — يرث الخطّ واللون من الحاوية.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
-    if s.isLive, !s.isFinished, let epoch = s.clockStartEpoch {
-        HStack(spacing: 4) {
-            Text(timerInterval: Date(timeIntervalSince1970: epoch)...Date(timeIntervalSince1970: epoch + 3 * 3600),
-                 countsDown: false, showsHours: false)
-                .monospacedDigit()
-                .fixedSize()
-            if !s.statusLabel.isEmpty {
-                Text("· \(s.statusLabel)").lineLimit(1)
-            }
-        }
-    } else {
-        Text(statusText(s, kickoff: kickoff)).lineLimit(1)
-    }
+    Text(statusText(s, kickoff: kickoff)).lineLimit(1)
 }
 
 enum SpSide { case home, away }
