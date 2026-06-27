@@ -57,14 +57,35 @@ final class WorldCupHomeStore {
 struct WorldCupHomeStrip: View {
     private let store = WorldCupHomeStore.shared
 
+    // المباريات المتزامنة: مباراتان (أو أكثر) تجريان الآن، أو قادمتان تنطلقان في
+    // التوقيت نفسه (ختام دور المجموعات). الشقيقات تأتي من الخادم (matchOfDayPeers)
+    // لا من today فقط، لأنها قد تكون في يوم تقويمي تالٍ. مطابق منطق الهيرو.
+    private var matches: [WCFixture] {
+        guard let ov = store.overview, let featured = ov.matchOfTheDay?.fixture else { return [] }
+        let live = ov.live.filter { $0.status.live }
+        if live.count >= 2 { return live }
+        if !featured.status.live, !featured.status.finished {
+            let peers = (ov.matchOfDayPeers ?? []).filter {
+                $0.id != featured.id && !$0.status.live && !$0.status.finished
+                    && $0.timestamp == featured.timestamp
+            }
+            if !peers.isEmpty { return [featured] + peers }
+        }
+        return [featured]
+    }
+
     var body: some View {
         // حامل مكان Color.clear يمنع SwiftUI من إلغاء العرض (وبالتالي .task)
         // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
         ZStack {
             Color.clear.frame(width: 0, height: 0)
-            if let f = store.overview?.matchOfTheDay?.fixture {
+            if !matches.isEmpty {
                 NavigationLink(value: WorldCupRoute()) {
-                    card(f)
+                    VStack(spacing: 10) {
+                        ForEach(matches) { f in
+                            card(f)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
             }
