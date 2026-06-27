@@ -244,17 +244,27 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const staleDate = staleDateFor(detail);
     const nowSec = Math.floor(Date.now() / 1000);
 
-    // أولوية الدفع: تغيّر النتيجة (هدف) أو النهاية → "10" فوري؛ غير ذلك → "5"
-    // موفّر للميزانية كي لا يُخنق الهدف. نُقارن بآخر نتيجة محفوظة لهذه المباراة.
+    // أولوية الدفع: أثناء البث نستخدم "10" دائمًا (فوري). علم FrequentUpdates في
+    // البناء يسمح بهذه الوتيرة المتكررة دون خنق — وهو ما يُصلح تأخّر الدقيقة الذي
+    // سبّبته أولوية 5 سابقًا (تُسلَّم «وقت ما يناسب النظام» فتتأخّر دقائق).
     const scoreKey = `${state.homeScore}-${state.awayScore}`;
-    const scoreChanged = lastScoreByFixture.get(fixtureId) !== scoreKey;
+    const scoreChanged =
+      lastScoreByFixture.has(fixtureId) && lastScoreByFixture.get(fixtureId) !== scoreKey;
     lastScoreByFixture.set(fixtureId, scoreKey);
-    const priority: "5" | "10" = finished || scoreChanged ? "10" : "5";
+    const priority: "5" | "10" = "10";
     if (finished) lastScoreByFixture.delete(fixtureId);
+
+    // قياس زمن الإرسال: نطبع لحظة رصد تغيّر النتيجة لمقارنتها بظهورها على الجهاز،
+    // فنفصل تأخّر «الإرسال» (الخادم) عن تأخّر «التسليم» (APNs/iOS).
+    if (scoreChanged) {
+      console.log(
+        `[LiveActivity ⚽] fixture=${fixtureId} score=${scoreKey} detected@${new Date().toISOString()} minute=${state.minute} tokens=${tokens.length}`,
+      );
+    }
 
     for (const t of tokens) {
       const changed = t.lastContentHash !== hash;
-      // لا تغيير ولم تنتهِ → لا داعي للدفع (العدّاد التنازلي ذاتي التحديث).
+      // لا تغيير ولم تنتهِ → لا داعي للدفع (العدّاد التنازلي قبل الانطلاق ذاتي).
       if (!changed && !finished) continue;
 
       const resp = await sendLiveActivityUpdate(t.pushToken, {
@@ -266,6 +276,14 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
         dismissalDate: finished ? nowSec + TWO_HOURS_SEC : undefined,
       });
       pushes++;
+
+      // قياس: لحظة إتمام الإرسال + نتيجة APNs لدفعة الهدف. الفارق بين detected@
+      // وsent@ هو تأخّر الخادم (يُفترض أجزاء من الثانية)؛ ما بعده تأخّر تسليم APNs.
+      if (scoreChanged) {
+        console.log(
+          `[LiveActivity ⚽] fixture=${fixtureId} sent@${new Date().toISOString()} priority=${priority} ok=${resp.success} apnsId=${resp.apnsId ?? "-"} status=${resp.statusCode ?? "-"}`,
+        );
+      }
 
       if (resp.success) {
         if (finished) {
