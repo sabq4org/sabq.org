@@ -17,6 +17,7 @@
 		5B000008 /* SportsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000008 /* SportsComponents.swift */; };
 		5B000009 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000009 /* RootTabView.swift */; };
 		5B00000A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000A /* HomeView.swift */; };
+		5B000014 /* MatchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000014 /* MatchesView.swift */; };
 		5B00000B /* CompetitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000B /* CompetitionsView.swift */; };
 		5B00000C /* CompetitionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000C /* CompetitionDetailView.swift */; };
 		5B00000D /* LiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000D /* LiveView.swift */; };
@@ -50,6 +51,7 @@
 		5C000008 /* SportsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsComponents.swift; sourceTree = "<group>"; };
 		5C000009 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		5C00000A /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		5C000014 /* MatchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchesView.swift; sourceTree = "<group>"; };
 		5C00000B /* CompetitionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionsView.swift; sourceTree = "<group>"; };
 		5C00000C /* CompetitionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionDetailView.swift; sourceTree = "<group>"; };
 		5C00000D /* LiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveView.swift; sourceTree = "<group>"; };
@@ -107,6 +109,7 @@
 			children = (
 				5C000009 /* RootTabView.swift */,
 				5C00000A /* HomeView.swift */,
+				5C000014 /* MatchesView.swift */,
 				5C00000B /* CompetitionsView.swift */,
 				5C00000C /* CompetitionDetailView.swift */,
 				5C00000D /* LiveView.swift */,
@@ -324,6 +327,7 @@
 				5B000008 /* SportsComponents.swift in Sources */,
 				5B000009 /* RootTabView.swift in Sources */,
 				5B00000A /* HomeView.swift in Sources */,
+				5B000014 /* MatchesView.swift in Sources */,
 				5B00000B /* CompetitionsView.swift in Sources */,
 				5B00000C /* CompetitionDetailView.swift in Sources */,
 				5B00000D /* LiveView.swift in Sources */,
