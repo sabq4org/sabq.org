@@ -38,7 +38,14 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
       }
       return response.json();
     },
-    enabled: !deferLoading, // Defer loading until initial dashboard stats are loaded
+    // Only fetch when the user can actually access the data. The backend
+    // endpoint is gated by requireRole("admin","editor"); firing it for staff
+    // without `dashboard.view_messages` (e.g. reporters) returned 403 on every
+    // dashboard load — amplified ~4x because the generic thrown Error couldn't
+    // be classified as a non-retryable 4xx. Gating on the permission the
+    // Dashboard already computes (passed as canViewDetails) removes the noise.
+    enabled: !deferLoading && canViewDetails, // Defer until initial stats load AND user can view messages
+    retry: false, // 403/auth failures won't recover on retry
     refetchInterval: 300000, // Refetch every 5 minutes (optimized from 30 seconds)
   });
 
