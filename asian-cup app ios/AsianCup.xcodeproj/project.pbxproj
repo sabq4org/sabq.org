@@ -1,24 +1,29 @@
 // !$*UTF8*$!
 {
 	archiveVersion = 1;
-	classes = {};
+	classes = {
+	};
 	objectVersion = 56;
 	objects = {
+
 /* Begin PBXBuildFile section */
-		4A000001 /* AsianCupApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100001; };
-		4A000002 /* AsianCupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100002; };
-		4A000003 /* AsianCupComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100003; };
-		4A000004 /* AsianCupRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100004; };
-		4A000005 /* AsianCupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100005; };
-		4A000006 /* AsianCupTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100006; };
-		4A000007 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100007; };
-		4A000008 /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100008; };
-		4A000009 /* URLConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100009; };
-		4A00000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000A; };
-		4A00000B /* InfoPlist.strings (Arabic) in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000B; };
-		4A00000C /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000C; };
-		4A00000D /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000D; };
-		4A00000E /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000E; };
+		4A000001 /* AsianCupApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100001 /* AsianCupApp.swift */; };
+		4A000002 /* AsianCupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100002 /* AsianCupView.swift */; };
+		4A000003 /* AsianCupComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100003 /* AsianCupComponents.swift */; };
+		4A000004 /* AsianCupRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100004 /* AsianCupRTL.swift */; };
+		4A000005 /* AsianCupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100005 /* AsianCupModels.swift */; };
+		4A000006 /* AsianCupTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100006 /* AsianCupTheme.swift */; };
+		4A000007 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100007 /* APIClient.swift */; };
+		4A000008 /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100008 /* FontRegistration.swift */; };
+		4A000009 /* URLConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100009 /* URLConstants.swift */; };
+		4A00000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000A /* Assets.xcassets */; };
+		4A00000B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000B /* InfoPlist.strings */; };
+		4A00000C /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000C /* IBMPlexSansArabic-Regular.woff2 */; };
+		4A00000D /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000D /* IBMPlexSansArabic-SemiBold.woff2 */; };
+		4A00000E /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 4A10000E /* IBMPlexSansArabic-Bold.woff2 */; };
+		4A00000F /* AcLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100012 /* AcLanguage.swift */; };
+		4A000010 /* AcLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100013 /* AcLocalization.swift */; };
+		4A000011 /* Localization in Resources */ = {isa = PBXBuildFile; fileRef = 4A100014 /* Localization */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,16 +43,21 @@
 		4A10000E /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
 		4A100010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4A100011 /* AsianCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AsianCup.entitlements; sourceTree = "<group>"; };
+		4A100012 /* AcLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLanguage.swift; sourceTree = "<group>"; };
+		4A100013 /* AcLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLocalization.swift; sourceTree = "<group>"; };
+		4A100014 /* Localization */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Localization; sourceTree = "<group>"; };
 		4A100020 /* AsianCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AsianCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		4A200000 /* Root */ = {
+		4A200000 = {
 			isa = PBXGroup;
-			children = (4A200001 /* AsianCup */, 4A200006 /* Products */);
+			children = (
+				4A200001 /* AsianCup */,
+				4A200006 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
-		4A200006 /* Products */ = { isa = PBXGroup; children = (4A100020 /* AsianCup.app */); name = Products; sourceTree = "<group>"; };
 		4A200001 /* AsianCup */ = {
 			isa = PBXGroup;
 			children = (
@@ -56,29 +66,94 @@
 				4A200004 /* Services */,
 				4A200005 /* Resources */,
 				4A200007 /* ar.lproj */,
+				4A100014 /* Localization */,
 				4A10000A /* Assets.xcassets */,
 				4A100010 /* Info.plist */,
 				4A100011 /* AsianCup.entitlements */,
-				4A100001 /* AsianCupApp.swift */
+				4A100001 /* AsianCupApp.swift */,
 			);
 			path = AsianCup;
 			sourceTree = "<group>";
 		};
-		4A200002 /* Screens */ = { isa = PBXGroup; children = (4A100002 /* AsianCupView.swift */); path = Screens; sourceTree = "<group>"; };
-		4A200003 /* Components */ = { isa = PBXGroup; children = (4A100003 /* AsianCupComponents.swift */, 4A100004 /* AsianCupRTL.swift */); path = Components; sourceTree = "<group>"; };
-		4A200004 /* Services */ = { isa = PBXGroup; children = (4A100005 /* AsianCupModels.swift */, 4A100006 /* AsianCupTheme.swift */, 4A100007 /* APIClient.swift */, 4A100008 /* FontRegistration.swift */, 4A100009 /* URLConstants.swift */); path = Services; sourceTree = "<group>"; };
-		4A200005 /* Resources */ = { isa = PBXGroup; children = (4A200008 /* Fonts */,); path = Resources; sourceTree = "<group>"; };
-		4A200008 /* Fonts */ = { isa = PBXGroup; children = (4A10000C, 4A10000D, 4A10000E); path = Fonts; sourceTree = "<group>"; };
-		4A200007 /* ar.lproj */ = { isa = PBXGroup; children = (4A10000B /* InfoPlist.strings */); path = ar.lproj; sourceTree = "<group>"; };
+		4A200002 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				4A100002 /* AsianCupView.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		4A200003 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				4A100003 /* AsianCupComponents.swift */,
+				4A100004 /* AsianCupRTL.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		4A200004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				4A100005 /* AsianCupModels.swift */,
+				4A100006 /* AsianCupTheme.swift */,
+				4A100012 /* AcLanguage.swift */,
+				4A100013 /* AcLocalization.swift */,
+				4A100007 /* APIClient.swift */,
+				4A100008 /* FontRegistration.swift */,
+				4A100009 /* URLConstants.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		4A200005 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				4A200008 /* Fonts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		4A200006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A100020 /* AsianCup.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4A200007 /* ar.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				4A10000B /* InfoPlist.strings */,
+			);
+			path = ar.lproj;
+			sourceTree = "<group>";
+		};
+		4A200008 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				4A10000C /* IBMPlexSansArabic-Regular.woff2 */,
+				4A10000D /* IBMPlexSansArabic-SemiBold.woff2 */,
+				4A10000E /* IBMPlexSansArabic-Bold.woff2 */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		4A300000 /* AsianCup */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 4A500001 /* Build configuration list for AsianCup */;
-			buildPhases = (4A400001 /* Sources */, 4A400002 /* Resources */);
-			buildRules = ();
-			dependencies = ();
+			buildConfigurationList = 4A500001 /* Build configuration list for PBXNativeTarget "AsianCup" */;
+			buildPhases = (
+				4A400001 /* Sources */,
+				4A400002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = AsianCup;
 			productName = AsianCup;
 			productReference = 4A100020 /* AsianCup.app */;
@@ -89,17 +164,30 @@
 /* Begin PBXProject section */
 		4A600000 /* Project object */ = {
 			isa = PBXProject;
-			attributes = { LastSwiftUpdateCheck = 1500; LastUpgradeCheck = 1500; TargetAttributes = { 4A300000 = { CreatedOnToolsVersion = 15.0; }; }; };
-			buildConfigurationList = 4A500004 /* Build configuration list for project */;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					4A300000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 4A500004 /* Build configuration list for PBXProject "AsianCup" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = ar;
 			hasScannedForEncodings = 0;
-			knownRegions = (ar, Base);
+			knownRegions = (
+				ar,
+				Base,
+			);
 			mainGroup = 4A200000;
 			productRefGroup = 4A200006 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (4A300000 /* AsianCup */);
+			targets = (
+				4A300000 /* AsianCup */,
+			);
 		};
 /* End PBXProject section */
 
@@ -107,7 +195,14 @@
 		4A400002 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (4A00000A, 4A00000B, 4A00000C, 4A00000D, 4A00000E);
+			files = (
+				4A00000A /* Assets.xcassets in Resources */,
+				4A000011 /* Localization in Resources */,
+				4A00000B /* InfoPlist.strings in Resources */,
+				4A00000C /* IBMPlexSansArabic-Regular.woff2 in Resources */,
+				4A00000D /* IBMPlexSansArabic-SemiBold.woff2 in Resources */,
+				4A00000E /* IBMPlexSansArabic-Bold.woff2 in Resources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -116,7 +211,19 @@
 		4A400001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (4A000001, 4A000002, 4A000003, 4A000004, 4A000005, 4A000006, 4A000007, 4A000008, 4A000009);
+			files = (
+				4A000001 /* AsianCupApp.swift in Sources */,
+				4A000002 /* AsianCupView.swift in Sources */,
+				4A000003 /* AsianCupComponents.swift in Sources */,
+				4A000004 /* AsianCupRTL.swift in Sources */,
+				4A000005 /* AsianCupModels.swift in Sources */,
+				4A000006 /* AsianCupTheme.swift in Sources */,
+				4A00000F /* AcLanguage.swift in Sources */,
+				4A000010 /* AcLocalization.swift in Sources */,
+				4A000007 /* APIClient.swift in Sources */,
+				4A000008 /* FontRegistration.swift in Sources */,
+				4A000009 /* URLConstants.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -143,19 +250,19 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SWIFT_VERSION = 5.0;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -177,78 +284,104 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				VALIDATE_PRODUCT = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				SWIFT_VERSION = 5.0;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
-		4A500003 /* Debug (AsianCup) */ = {
+		4A500003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AsianCup/AsianCup.entitlements;
-				"CODE_SIGN_STYLE" = Automatic;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AsianCup/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "كأس آسيا";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path");
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.asiancup;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
-		4A500005 /* Release (AsianCup) */ = {
+		4A500005 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AsianCup/AsianCup.entitlements;
-				"CODE_SIGN_STYLE" = Automatic;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AsianCup/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "كأس آسيا";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
-				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path");
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.asiancup;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		4A500001 /* Build config list for AsianCup */ = { isa = XCConfigurationList; buildConfigurations = (4A500003, 4A500005); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		4A500004 /* Build config list for project */ = { isa = XCConfigurationList; buildConfigurations = (4A500000, 4A500002); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		4A500001 /* Build configuration list for PBXNativeTarget "AsianCup" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A500003 /* Debug */,
+				4A500005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A500004 /* Build configuration list for PBXProject "AsianCup" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A500000 /* Debug */,
+				4A500002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 4A600000 /* Project object */;

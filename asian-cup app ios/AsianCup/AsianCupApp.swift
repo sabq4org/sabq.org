@@ -11,7 +11,7 @@ struct AsianCupApp: App {
         WindowGroup {
             AsianCupView()
                 .asianCupRTL()
-                .preferredColorScheme(.dark) // البطولة داكنة احتفاليًا
+                .preferredColorScheme(.light) // هوية فاتحة باردة محايدة لكل المنتخبات
         }
     }
 }
