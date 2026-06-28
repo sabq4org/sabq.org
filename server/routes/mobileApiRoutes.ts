@@ -2786,6 +2786,72 @@ router.get("/articles", async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v1/news/paginated (homepage news feed — load-more)
+//
+// Compatibility alias for the iOS client's `fetchPaginatedNews(page:)`, which
+// still targets the legacy `/news/paginated` path. The Android client already
+// migrated to `/api/v1/articles`; iOS has not, so without this route every
+// app launch floods the server with 404s. The response shape matches the
+// `/articles` endpoint (decoded by iOS `APIPaginatedList<APIArticle>` via the
+// `articles` key). The filter mirrors the web `/api/news/paginated`: published,
+// shown on homepage, excluding opinion pieces and AI-sourced items.
+router.get("/news/paginated", async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const page = parseInt(req.query.page as string) || 0;
+    const offset = page > 0 ? (page - 1) * limit : (parseInt(req.query.offset as string) || 0);
+
+    const conditions = [
+      eq(articles.status, "published"),
+      eq(articles.hideFromHomepage, false),
+      or(isNull(articles.articleType), ne(articles.articleType, "opinion")),
+      or(isNull(articles.source), ne(articles.source, "ai")),
+    ];
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(articles)
+      .where(and(...conditions));
+
+    const total = Number(countResult?.count || 0);
+
+    const results = await db
+      .select({
+        article: articleCardSelect,
+        category: { nameAr: categories.nameAr, id: categories.id },
+        author: {
+          firstName: users.firstName,
+          lastName: users.lastName,
+        },
+        reporter: {
+          firstName: reporterUsers.firstName,
+          lastName: reporterUsers.lastName,
+        },
+      })
+      .from(articles)
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .leftJoin(reporterUsers, eq(articles.reporterId, reporterUsers.id))
+      .where(and(...conditions))
+      .orderBy(desc(articles.publishedAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json({
+      articles: results.map((r) => formatArticleForMobile(r, BASE_URL)),
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /news/paginated error:", error);
+    res.status(500).json({
+      error: { code: "SERVER_ERROR", message: "فشل في جلب الأخبار", status: 500 },
+    });
+  }
+});
+
 // GET /api/v1/articles/:id (single article detail)
 router.get("/articles/:id", async (req: Request, res: Response) => {
   try {
