@@ -1,7 +1,10 @@
 /**
- * شجرة الأدوار الإقصائية لكأس العالم — مسار البطولة من دور الـ32 حتى النهائي.
- * تُبنى من نفس مصفوفة المباريات التي تجلبها الصفحة (roundEn الخام) دون أي
- * استدعاء API إضافي. الخانات غير المحسومة تظهر «يُحدَّد لاحقًا» (لا بيانات وهمية).
+ * شجرة الأدوار الإقصائية لكأس العالم 2026 — مسار البطولة من دور الـ32 حتى النهائي.
+ *
+ * البنية والترقيم رسميّان (FIFA): تُبنى الشجرة من البنية الثابتة في
+ * `wc2026Bracket.ts` (أرقام المباريات 73–104 ومصادرها)، ثم نُسقط فوقها مباريات
+ * الاشتراك (API-Football) مربوطةً بأرقامها الرسمية. الخانات غير المحسومة تعرض
+ * مصدرها الحقيقي («الفائز من مباراة …») لا ترقيمًا اعتباطيًّا.
  */
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -9,8 +12,14 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatKickoffTime, type WcFixture, type WcGroup, type WcStandingRow, type WcTeam } from "./wcTypes";
+import { formatKickoffDay, formatKickoffTime, type WcFixture, type WcGroup, type WcStandingRow, type WcTeam } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
+import {
+  buildBracketModel,
+  WC_ROUND_KEYS,
+  WC_ROUND_LABELS,
+  type WcBracketColumn,
+} from "./wc2026Bracket";
 
 interface KnockoutBracketProps {
   fixtures: WcFixture[];
@@ -19,8 +28,7 @@ interface KnockoutBracketProps {
   onOpenMatch: (fixtureId: number) => void;
 }
 
-// شكل استجابة /api/world-cup/bracket (مصدر البنية الخادمي — API-Football حاليًّا،
-// وTheSports bracket/season لاحقًا كمصدر أساسي دون تغيير في الواجهة).
+// شكل استجابة /api/world-cup/bracket (مصدر المباريات الخادمي — يُركّب أحدث نتيجة لحظية).
 interface BracketRoundDto {
   round: string;
   roundEn: string;
@@ -31,33 +39,21 @@ interface BracketDto {
   rounds: BracketRoundDto[];
 }
 
-// ترتيب الأدوار الإقصائية ومسمياتها العربية — ثابتة حتى تظهر العناوين
-// قبل توفّر مباريات الدور. المركز الثالث يُعرض منفصلًا خارج الشجرة.
-// تسمية الأدوار بعدد المنتخبات المتبقية: 32 ← 16 ← 8 ← 4 ← النهائي ثم البطل
-// (المفاتيح تطابق round الخام من API-Football، والمسمّيات فقط هي ما يتغيّر)
-const KNOCKOUT_ROUNDS: { key: string; label: string }[] = [
-  { key: "round of 32", label: "دور الـ32" },
-  { key: "round of 16", label: "دور الـ16" },
-  { key: "quarter-finals", label: "دور الـ8" },
-  { key: "semi-finals", label: "دور الـ4" },
-  { key: "final", label: "النهائي" },
-];
-const THIRD_PLACE_KEYS = new Set(["3rd place final", "third place", "3rd place"]);
-
-const norm = (round: string): string => (round || "").trim().toLowerCase();
+// عناوين الأدوار للشرائح التوضيحية (شاشة الانتظار + ترويسة المتأهّلين).
+const ROUND_CHIPS = WC_ROUND_KEYS.map((key) => ({ key, label: WC_ROUND_LABELS[key] }));
 
 /** الدور الافتراضي لتبويبات الجوال: حيث «الحدث» الآن — مباراة جارية، وإلا
- *  أبكر دور لم يكتمل، وإلا آخر دور (انتهت البطولة) */
-function defaultRoundKey(cols: BracketColumn[]): string | undefined {
-  const live = cols.find((c) => c.matches.some((m) => m.status.live));
+ *  أبكر دور لم يكتمل، وإلا آخر دور (انتهت البطولة). */
+function defaultRoundKey(cols: WcBracketColumn[]): string | undefined {
+  const live = cols.find((c) => c.slots.some((s) => s.fixture?.status.live));
   if (live) return live.key;
-  const upcoming = cols.find((c) => c.matches.some((m) => !m.status.finished));
+  const upcoming = cols.find((c) => c.slots.some((s) => s.fixture && !s.fixture.status.finished));
   if (upcoming) return upcoming.key;
   return cols[cols.length - 1]?.key ?? cols[0]?.key;
 }
 
-/** منتخب محسوم فعلًا (له معرّف وشعار) مقابل خانة بانتظار التأهل */
-const isResolved = (team: WcTeam): boolean => Boolean(team?.id && team?.logo);
+/** منتخب محسوم فعلًا (له معرّف وشعار) مقابل خانة بانتظار التأهل. */
+const isResolved = (team?: WcTeam): boolean => Boolean(team?.id && team?.logo);
 
 interface QualifiedGroup {
   group: WcGroup;
@@ -66,10 +62,9 @@ interface QualifiedGroup {
 
 /**
  * المتأهّلون المؤكَّدون حتى الآن لكل مجموعة — قبل أن يوفّر المزوّد مباريات خروج
- * المغلوب. منتخب يُعدّ متأهّلًا إذا:
- *   • حسمه الخادم رياضيًّا (qualifyStatus === "qualified")، أو
- *   • اكتملت كل مباريات مجموعته وهو في المركزين الأوّلين (عندها qualifyStatus = null).
- * أفضل 8 من أصحاب المركز الثالث لا يُحسبون هنا (يتحدّدون بعد اكتمال كل المجموعات).
+ * المغلوب. منتخب يُعدّ متأهّلًا إذا حسمه الخادم رياضيًّا (qualifyStatus) أو اكتملت
+ * كل مباريات مجموعته وهو في المركزين الأوّلين. أفضل 8 من أصحاب المركز الثالث لا
+ * يُحسبون هنا (يتحدّدون بعد اكتمال كل المجموعات).
  */
 function computeQualified(groups: WcGroup[], fixtures: WcFixture[]): QualifiedGroup[] {
   const out: QualifiedGroup[] = [];
@@ -98,7 +93,7 @@ function QualifiedSoFar({ qualifiedGroups }: { qualifiedGroups: QualifiedGroup[]
           </span>
         </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          {KNOCKOUT_ROUNDS.map((r) => (
+          {ROUND_CHIPS.map((r) => (
             <span
               key={r.key}
               className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground"
@@ -149,22 +144,58 @@ function QualifiedSoFar({ qualifiedGroups }: { qualifiedGroups: QualifiedGroup[]
   );
 }
 
-interface BracketColumn {
-  key: string;
-  label: string;
-  matches: WcFixture[];
+/** بطاقة مباراة لعرض الجوال (قائمة عمودية لكل دور). */
+function BracketMatch({
+  fixture,
+  matchNo,
+  onOpen,
+}: {
+  fixture: WcFixture;
+  matchNo?: number;
+  onOpen: (id: number) => void;
+}) {
+  const started = fixture.status.live || fixture.status.finished;
+  return (
+    <div
+      onClick={() => onOpen(fixture.id)}
+      className="wc-match cursor-pointer rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm transition-colors hover:border-emerald-500/60"
+      data-testid={`wc-bracket-match-${fixture.id}`}
+    >
+      {matchNo != null && (
+        <p className="pb-1 text-[10px] font-bold text-muted-foreground">
+          مباراة <span className="tabular-nums">{matchNo}</span>
+        </p>
+      )}
+      <div className="divide-y divide-border/50">
+        <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={fixture.home.winner === true} />
+        <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={fixture.away.winner === true} />
+      </div>
+      {fixture.penalties && (
+        <p className="pt-1 text-center text-[9.5px] text-muted-foreground" dir="rtl">
+          ركلات الترجيح <span dir="ltr" className="tabular-nums">{fixture.penalties.home} - {fixture.penalties.away}</span>
+        </p>
+      )}
+      {fixture.status.live ? (
+        <p className="pt-1 text-center text-[10px] font-bold text-red-600 dark:text-red-400">
+          ● <LiveMinute status={fixture.status} /> مباشر
+        </p>
+      ) : !started && fixture.status.code !== "TBD" && fixture.timestamp > 0 ? (
+        <p className="pt-1 text-center text-[10px] text-muted-foreground">
+          {formatKickoffDay(fixture.date)} · {formatKickoffTime(fixture.date)}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function TeamLine({
   team,
   goals,
   winner,
-  started,
 }: {
   team: WcTeam;
   goals: number | null;
   winner: boolean;
-  started: boolean;
 }) {
   if (!isResolved(team)) {
     return (
@@ -193,37 +224,181 @@ function TeamLine({
   );
 }
 
-function BracketMatch({ fixture, onOpen }: { fixture: WcFixture; onOpen: (id: number) => void }) {
-  const started = fixture.status.live || fixture.status.finished;
-  return (
-    <div
-      onClick={() => onOpen(fixture.id)}
-      className="wc-match cursor-pointer rounded-lg border border-border bg-card px-2.5 py-1.5 shadow-sm transition-colors hover:border-emerald-500/60"
-      data-testid={`wc-bracket-match-${fixture.id}`}
-    >
-      <div className="divide-y divide-border/50">
-        <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={fixture.home.winner === true} started={started} />
-        <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={fixture.away.winner === true} started={started} />
+function TreeTeamLine({
+  team,
+  goals,
+  winner,
+  label,
+}: {
+  team?: WcTeam;
+  goals?: number | null;
+  winner?: boolean;
+  label?: string;
+}) {
+  if (!team || !isResolved(team)) {
+    return (
+      <div className="wc-tree-team is-placeholder">
+        <span className="wc-tree-logo" />
+        <span className="truncate">{label ?? "يتحدد لاحقًا"}</span>
       </div>
-      {fixture.penalties && (
-        <p className="pt-1 text-center text-[9.5px] text-muted-foreground" dir="rtl">
-          ركلات الترجيح <span dir="ltr" className="tabular-nums">{fixture.penalties.home} - {fixture.penalties.away}</span>
+    );
+  }
+  return (
+    <div className={`wc-tree-team ${winner ? "is-winner-row" : ""}`}>
+      <span className="wc-tree-logo">
+        <img src={team.logo} alt={team.name} loading="lazy" />
+      </span>
+      <span className={`truncate ${winner ? "font-black" : "font-semibold"}`}>{team.name}</span>
+      {goals != null && (
+        <span className={`wc-tree-score ${winner ? "is-winner" : ""}`}>{goals}</span>
+      )}
+    </div>
+  );
+}
+
+function TreeMatchCard({
+  match,
+  matchNo,
+  isFinal,
+  topLabel,
+  bottomLabel,
+  topTeam,
+  bottomTeam,
+  onOpen,
+}: {
+  match?: WcFixture;
+  matchNo: number;
+  isFinal: boolean;
+  topLabel?: string;
+  bottomLabel?: string;
+  topTeam?: WcTeam;
+  bottomTeam?: WcTeam;
+  onOpen: (id: number) => void;
+}) {
+  const shortStatus = (fx: WcFixture) => {
+    if (fx.status.live) return "مباشرة الآن";
+    if (fx.status.finished) return "انتهت";
+    if (fx.status.code !== "TBD" && fx.timestamp > 0) return formatKickoffTime(fx.date);
+    return "قريبًا";
+  };
+
+  const started = Boolean(match?.status.live || match?.status.finished);
+  return (
+    <button
+      type="button"
+      disabled={!match}
+      onClick={() => match && onOpen(match.id)}
+      className={`wc-tree-card ${match ? "is-clickable" : "is-empty"} ${isFinal ? "is-final" : ""}`}
+      data-testid={match ? `wc-tree-match-${match.id}` : `wc-tree-slot-${matchNo}`}
+    >
+      <div className="wc-tree-card-head">
+        <span>{match ? shortStatus(match) : "بانتظار التأهل"}</span>
+        <strong>
+          {isFinal ? "النهائي" : "مباراة "}
+          {!isFinal && <span className="tabular-nums">{matchNo}</span>}
+        </strong>
+      </div>
+      <div className="wc-tree-lines">
+        <TreeTeamLine
+          team={match?.home ?? topTeam}
+          goals={match && started ? match.goals.home ?? 0 : null}
+          winner={match?.home.winner === true}
+          label={topLabel}
+        />
+        <TreeTeamLine
+          team={match?.away ?? bottomTeam}
+          goals={match && started ? match.goals.away ?? 0 : null}
+          winner={match?.away.winner === true}
+          label={bottomLabel}
+        />
+      </div>
+      {match?.penalties && (
+        <p className="wc-tree-note">
+          ركلات الترجيح <span dir="ltr">{match.penalties.home} - {match.penalties.away}</span>
         </p>
       )}
-      {fixture.status.live ? (
-        <p className="pt-1 text-center text-[10px] font-bold text-red-600 dark:text-red-400">
-          ● <LiveMinute status={fixture.status} /> مباشر
-        </p>
-      ) : !started && fixture.status.code !== "TBD" && fixture.timestamp > 0 ? (
-        <p className="pt-1 text-center text-[10px] text-muted-foreground">{formatKickoffTime(fixture.date)}</p>
-      ) : null}
+      {isFinal && !match?.status.finished && (
+        <p className="wc-tree-champion">🏆 بطل العالم</p>
+      )}
+    </button>
+  );
+}
+
+function DesktopKnockoutTree({ columns, onOpen }: { columns: WcBracketColumn[]; onOpen: (id: number) => void }) {
+  const rounds = columns.map((col) => {
+    const rowSpan = Math.max(1, 2 ** col.roundIndex);
+    const isFinalRound = col.roundIndex === columns.length - 1;
+    const slots = col.slots.map((slot, slotIndex) => ({
+      ...slot,
+      rowStart: 2 + slotIndex * rowSpan,
+      rowSpan,
+      isUpper: slotIndex % 2 === 0,
+      // وسوم المصادر الرسمية للخانات غير المحسومة (لا تظهر لدور الـ32 — له فرقه).
+      topLabel: slot.sources ? `الفائز من مباراة ${slot.sources[0]}` : "يُحدَّد لاحقًا",
+      bottomLabel: slot.sources ? `الفائز من مباراة ${slot.sources[1]}` : "يُحدَّد لاحقًا",
+    }));
+    return { ...col, isFinalRound, slots };
+  });
+  const hasRoundOf32 = columns.some((c) => c.key === "round of 32" && c.slots.some((s) => s.fixture));
+
+  return (
+    <div className="wc-tree-shell">
+      <div className="wc-tree-toolbar">
+        <div>
+          <p className="text-xs font-black text-emerald-700 dark:text-emerald-300">مسار خروج المغلوب</p>
+          <h3 className="text-xl font-black tracking-normal text-foreground">
+            {hasRoundOf32 ? "من دور الـ32 حتى النهائي" : "الأدوار الإقصائية"}
+          </h3>
+        </div>
+        <span className="wc-tree-hint">← اسحب أفقيًا لتتبع المسار</span>
+      </div>
+
+      <div className="wc-tree-scroll" dir="rtl">
+        <div className="wc-tree-grid">
+          {rounds.map((round) => (
+            <div
+              key={`${round.key}-title`}
+              className="wc-tree-round-title"
+              style={{ gridColumn: round.roundIndex + 1, gridRow: 1 }}
+            >
+              {round.label}
+            </div>
+          ))}
+
+          {rounds.map((round) =>
+            round.slots.map((slot) => (
+              <div
+                key={`${round.key}-${slot.matchNo}`}
+                className={`wc-tree-node ${
+                  round.isFinalRound ? "is-last-round" : slot.isUpper ? "is-upper" : "is-lower"
+                }`}
+                style={{
+                  gridColumn: round.roundIndex + 1,
+                  gridRow: `${slot.rowStart} / span ${slot.rowSpan}`,
+                }}
+              >
+                <TreeMatchCard
+                  match={slot.fixture}
+                  matchNo={slot.matchNo}
+                  isFinal={round.isFinalRound}
+                  topLabel={round.roundIndex === 0 ? undefined : slot.topLabel}
+                  bottomLabel={round.roundIndex === 0 ? undefined : slot.bottomLabel}
+                  topTeam={slot.topTeam}
+                  bottomTeam={slot.bottomTeam}
+                  onOpen={onOpen}
+                />
+              </div>
+            )),
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
 export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: KnockoutBracketProps) {
-  // مصدر البنية من الخادم (يُركّب أحدث نتيجة لحظية ويُمهّد لإثراء TheSports). يتراجع
-  // للمباريات الممرَّرة من الصفحة عند تعذّره فلا تتعطّل الشجرة.
+  // مصدر المباريات من الخادم (يُركّب أحدث نتيجة لحظية). يتراجع للمباريات الممرَّرة
+  // من الصفحة عند تعذّره فلا تتعطّل الشجرة.
   const { data: bracketData } = useQuery<BracketDto>({
     queryKey: ["/api/world-cup/bracket"],
     refetchInterval: (query) =>
@@ -239,31 +414,18 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
     return fromServer.length > 0 ? fromServer : fixtures;
   }, [bracketData, fixtures]);
 
-  const { columns, thirdPlace, hasAny } = useMemo(() => {
-    const cols: BracketColumn[] = KNOCKOUT_ROUNDS.map(({ key, label }) => ({
-      key,
-      label,
-      matches: sourceFixtures
-        .filter((f) => norm(f.roundEn) === key)
-        .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id),
-    }));
-    const third = sourceFixtures.find((f) => THIRD_PLACE_KEYS.has(norm(f.roundEn))) ?? null;
-    return { columns: cols, thirdPlace: third, hasAny: cols.some((c) => c.matches.length > 0) };
-  }, [sourceFixtures]);
+  // نموذج الشجرة الرسمي (أرقام + مصادر) مع إسقاط مباريات الاشتراك على مواضعها.
+  const { columns, thirdPlace, hasAny } = useMemo(() => buildBracketModel(sourceFixtures), [sourceFixtures]);
 
-  // المتأهّلون المؤكَّدون حتى الآن — يُعرضون مكان النص التحفيزي قبل توفّر مباريات
-  // خروج المغلوب، ويُعبَّأون تدريجيًّا فور حسم كل مجموعة (أول/ثاني).
+  // المتأهّلون المؤكَّدون حتى الآن — يُعرضون مكان الشجرة قبل توفّر مباريات الإقصاء.
   const qualifiedGroups = useMemo(
     () => (hasAny ? [] : computeQualified(groups, fixtures)),
     [hasAny, groups, fixtures],
   );
 
-  // الأعمدة التي بها مباريات فعلًا — تحدّد طرفَي الشجرة (أول/آخر) للموصّلات
-  const liveCols = columns.filter((c) => c.matches.length > 0);
-  const firstKey = liveCols[0]?.key;
-  const lastKey = liveCols[liveCols.length - 1]?.key;
+  // الأعمدة التي بها مباريات فعلًا — لتبويبات الجوال.
+  const liveCols = columns.filter((c) => c.slots.some((s) => s.fixture));
 
-  // تبويبات الجوال — الدور النشط (مع تعويض إن اختفى دوره بعد تحديث البيانات)
   const [tab, setTab] = useState<string | null>(null);
   const activeKey = tab && liveCols.some((c) => c.key === tab) ? tab : defaultRoundKey(liveCols);
 
@@ -291,7 +453,7 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
         {!isLoading && !hasAny && qualifiedGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center sm:p-8">
             <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-              {KNOCKOUT_ROUNDS.map((r) => (
+              {ROUND_CHIPS.map((r) => (
                 <span
                   key={r.key}
                   className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
@@ -308,14 +470,13 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
 
         {!isLoading && hasAny && (
           <>
-            {/* الجوال فقط: تبويبات حسب الدور تلتف لسطرين —
-                نفس نمط tabs قسم «المباريات» */}
+            {/* الجوال فقط: تبويبات حسب الدور */}
             <div className="md:hidden">
               <Tabs value={activeKey} onValueChange={setTab} dir="rtl">
                 <TabsList className="mb-4 flex-wrap h-auto w-full justify-start">
                   {liveCols.map((col) => (
                     <TabsTrigger key={col.key} value={col.key} className="gap-1.5" data-testid={`wc-bracket-tab-${col.key}`}>
-                      {col.matches.some((m) => m.status.live) && (
+                      {col.slots.some((s) => s.fixture?.status.live) && (
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
                       )}
                       {col.label}
@@ -325,49 +486,22 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
                 </TabsList>
                 {liveCols.map((col) => (
                   <TabsContent key={col.key} value={col.key} className="space-y-2 mt-0">
-                    {col.matches.map((fx) => (
-                      <BracketMatch key={fx.id} fixture={fx} onOpen={onOpenMatch} />
-                    ))}
+                    {/* قائمة مسطّحة (لا شجرة) → ترتيب زمني حسب موعد الانطلاق الفعلي
+                        (رقم المباراة الرسمي ليس مطابقًا للتسلسل الزمني دائمًا) */}
+                    {col.slots
+                      .filter((s) => s.fixture)
+                      .sort((a, b) => a.fixture!.timestamp - b.fixture!.timestamp || a.matchNo - b.matchNo)
+                      .map((s) => (
+                        <BracketMatch key={s.matchNo} fixture={s.fixture!} matchNo={s.matchNo} onOpen={onOpenMatch} />
+                      ))}
                   </TabsContent>
                 ))}
               </Tabs>
             </div>
 
-            {/* سطح المكتب/التابلت: الشجرة الأفقية تملأ العرض دون سحب أفقي */}
+            {/* سطح المكتب/التابلت: الشجرة البنيوية الأفقية */}
             <div className="hidden md:block">
-              <div className="pb-3">
-                <div className="wc-bracket">
-                  {liveCols.map((col) => {
-                    const cls = [
-                      "wc-round",
-                      col.key === firstKey ? "is-first" : "",
-                      col.key === lastKey ? "is-last" : "",
-                      col.key === "final" ? "is-final" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ");
-                    return (
-                      <div key={col.key} className={cls}>
-                        <div className="mb-1.5 rounded-md bg-emerald-500/[0.07] py-1.5 text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
-                          {col.label}
-                        </div>
-                        <div className="wc-round-body">
-                          {col.matches.map((fx) => (
-                            <div key={fx.id} className="wc-slot">
-                              <BracketMatch fixture={fx} onOpen={onOpenMatch} />
-                            </div>
-                          ))}
-                        </div>
-                        {col.key === "final" && (
-                          <p className="pt-2 text-center text-[11px] font-extrabold text-amber-600 dark:text-amber-400">
-                            🏆 بطل العالم
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <DesktopKnockoutTree columns={columns} onOpen={onOpenMatch} />
             </div>
 
             {thirdPlace && (
@@ -376,7 +510,7 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
                   🥉 مباراة المركز الثالث
                 </p>
                 <div className="max-w-[260px]">
-                  <BracketMatch fixture={thirdPlace} onOpen={onOpenMatch} />
+                  <BracketMatch fixture={thirdPlace} matchNo={103} onOpen={onOpenMatch} />
                 </div>
               </div>
             )}

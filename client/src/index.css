@@ -2134,6 +2134,226 @@ input, select, textarea {
   animation: ambient-glow 40s infinite linear;
 }
 
+/* شجرة كأس العالم لسطح المكتب: مسار أفقي من دور الـ32 حتى النهائي. */
+.wc-tree-shell {
+  border-block: 1px solid hsl(var(--border));
+  background:
+    linear-gradient(180deg, hsl(151 68% 96% / 0.82), hsl(var(--background))),
+    hsl(var(--background));
+  padding: 1rem 0 1.25rem;
+}
+.dark .wc-tree-shell {
+  background:
+    linear-gradient(180deg, hsl(154 54% 11% / 0.62), hsl(var(--background))),
+    hsl(var(--background));
+}
+.wc-tree-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-inline: 0.25rem;
+  padding-bottom: 1rem;
+}
+.wc-tree-hint {
+  border-radius: 999px;
+  background: hsl(158 64% 42% / 0.1);
+  color: hsl(158 64% 28%);
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0.45rem 0.8rem;
+}
+.dark .wc-tree-hint {
+  color: hsl(158 78% 72%);
+}
+.wc-tree-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.35rem;
+  scrollbar-color: hsl(158 64% 42% / 0.35) transparent;
+}
+.wc-tree-grid {
+  --wc-gap: 1.4rem;
+  --wc-line: hsl(158 36% 70%);
+  display: grid;
+  grid-template-columns: 280px 220px 205px 190px 175px;
+  column-gap: var(--wc-gap);
+  grid-template-rows: 2.75rem repeat(16, 5.15rem);
+  min-width: 1147px;
+  padding-inline: 0.25rem;
+}
+.dark .wc-tree-grid {
+  --wc-line: hsl(158 24% 38%);
+}
+.wc-tree-round-title {
+  align-self: stretch;
+  border-radius: 0.65rem;
+  background: hsl(158 42% 92% / 0.85);
+  color: hsl(158 64% 26%);
+  display: grid;
+  font-size: 0.9rem;
+  font-weight: 950;
+  place-items: center;
+  padding: 0.7rem 0.9rem;
+  text-align: center;
+}
+.dark .wc-tree-round-title {
+  background: hsl(158 40% 16% / 0.82);
+  color: hsl(158 78% 72%);
+}
+/* تملأ الخانة كامل ارتفاع صفّها (rowSpan) وتتوسّط البطاقة فيها — شرط أساسي
+   ليرتكز المرفّق على حافة الخانة (مركز مباراة الدور التالي) لا على حافة البطاقة. */
+.wc-tree-node {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+/* موصّل أفقي قصير من البطاقة إلى منتصف الفجوة بين العمودين */
+.wc-tree-node:not(.is-last-round)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(var(--wc-gap) / -2);
+  width: calc(var(--wc-gap) / 2);
+  height: 2px;
+  background: var(--wc-line);
+  transform: translateY(-50%);
+  z-index: 0;
+}
+/* مرفّق (elbow) يجمع زوج المباريات ويربطه بمباراة الدور التالي يسارًا.
+   نِسب مئوية متماثلة ذاتيًا: نقطة الالتقاء عند حافة الخانة = مركز خانة الدور التالي. */
+.wc-tree-node:not(.is-last-round)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--wc-gap) * -1);
+  width: calc(var(--wc-gap) / 2);
+  height: 50%;
+  z-index: 0;
+}
+.wc-tree-node.is-upper:not(.is-last-round)::before {
+  top: 50%;
+  border-right: 2px solid var(--wc-line);
+  border-bottom: 2px solid var(--wc-line);
+  border-bottom-right-radius: 0.45rem;
+}
+.wc-tree-node.is-lower:not(.is-last-round)::before {
+  top: 0;
+  border-right: 2px solid var(--wc-line);
+  border-top: 2px solid var(--wc-line);
+  border-top-right-radius: 0.45rem;
+}
+.wc-tree-card {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.7rem;
+  background: hsl(var(--card));
+  box-shadow: 0 7px 18px hsl(160 35% 20% / 0.06);
+  color: hsl(var(--foreground));
+  display: block;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  position: relative;
+  text-align: start;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  width: 100%;
+}
+.wc-tree-card.is-clickable {
+  cursor: pointer;
+}
+.wc-tree-card.is-clickable:hover {
+  border-color: hsl(158 64% 42% / 0.45);
+  box-shadow: 0 12px 26px hsl(160 35% 20% / 0.1);
+  transform: translateY(-1px);
+}
+.wc-tree-card.is-final {
+  border-color: hsl(43 90% 56% / 0.5);
+}
+.wc-tree-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.25rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+.wc-tree-card-head strong {
+  color: hsl(158 64% 31%);
+}
+.dark .wc-tree-card-head strong {
+  color: hsl(158 78% 72%);
+}
+.wc-tree-lines {
+  border-top: 1px solid hsl(var(--border) / 0.62);
+}
+.wc-tree-team {
+  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  min-height: 1.45rem;
+  padding-block: 0.18rem;
+}
+.wc-tree-team + .wc-tree-team {
+  border-top: 1px solid hsl(var(--border) / 0.58);
+}
+.wc-tree-team.is-placeholder {
+  color: hsl(var(--muted-foreground));
+  font-weight: 800;
+}
+.wc-tree-team.is-winner-row {
+  background: hsl(158 64% 42% / 0.08);
+  border-radius: 0.4rem;
+  margin-inline: -0.2rem;
+  padding-inline: 0.2rem;
+}
+.wc-tree-score {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.9rem;
+  font-weight: 900;
+  min-width: 1rem;
+}
+.wc-tree-score.is-winner {
+  color: hsl(158 64% 35%);
+}
+.wc-tree-logo {
+  display: grid;
+  height: 1.35rem;
+  place-items: center;
+  width: 1.35rem;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  overflow: hidden;
+}
+.wc-tree-logo img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+.wc-tree-note,
+.wc-tree-champion {
+  margin-top: 0.35rem;
+  text-align: center;
+  font-size: 0.68rem;
+  color: hsl(var(--foreground));
+  font-weight: 900;
+}
+.wc-tree-champion {
+  color: hsl(36 90% 42%);
+}
+
+@media (max-width: 1180px) {
+  .wc-tree-grid {
+    --wc-gap: 2.4rem;
+    grid-template-columns: 280px 250px 250px 230px 220px;
+    min-width: 1330px;
+  }
+}
+
 /* ===== شجرة الأدوار الإقصائية (كأس العالم) =====
    تخطيط أفقي RTL: دور الـ32 يمينًا يتدفّق يسارًا حتى النهائي.
    الموصّلات مرسومة بعناصر زائفة لا تعتمد على ارتفاع الخلية الفعلي
