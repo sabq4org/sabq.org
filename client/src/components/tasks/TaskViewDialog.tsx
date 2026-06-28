@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ interface User {
 }
 
 export function TaskViewDialog({ taskId, onClose }: TaskViewDialogProps) {
+  const { user } = useAuth();
   const { data: task, isLoading } = useQuery<Task>({
     queryKey: ['/api/tasks', taskId],
     queryFn: async () => {
@@ -38,6 +40,10 @@ export function TaskViewDialog({ taskId, onClose }: TaskViewDialogProps) {
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s.
+    enabled: hasPermission(user, 'admin.manage_settings'),
+    retry: false,
   });
   const users = Array.isArray(usersRaw) ? usersRaw : [];
 
