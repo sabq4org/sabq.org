@@ -18392,77 +18392,89 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       behaviorLogBuffer.push({ userId, eventType, metadata: sanitizedMetadata });
 
+      // Fire-and-forget beacon: acknowledge immediately. The userEvent /
+      // reading-progress / loyalty writes below must NOT block the HTTP
+      // response — previously they were awaited and (worse) the success path
+      // never called res.*, so during deploy-time connection-pool saturation
+      // the request hung 25-96s and the edge proxy returned 502. Ack first,
+      // persist the analytics/loyalty side-effects in the background.
+      res.status(202).json({ ok: true });
+
       const meta = sanitizedMetadata as Record<string, any>;
 
-      // Track events in userEvents table for daily summary analytics
-      if (meta.articleId) {
-    try {
-          // Map behavior event types to userEvent types for daily summary
-          if (eventType === "article_read") {
-            await trackUserEvent({
-              userId,
-              articleId: meta.articleId,
-              eventType: 'read',
-              metadata: {
-                readDuration: meta.readTime || meta.duration,
-                scrollDepth: meta.scrollDepth,
-              },
-            });
-            
-            // Update reading_history with scroll depth for Continue Reading feature
-            if (meta.scrollDepth && typeof meta.scrollDepth === 'number') {
-              await storage.updateReadingProgress(
+      void (async () => {
+        // Track events in userEvents table for daily summary analytics
+        if (meta.articleId) {
+          try {
+            // Map behavior event types to userEvent types for daily summary
+            if (eventType === "article_read") {
+              await trackUserEvent({
                 userId,
-                meta.articleId,
-                meta.scrollDepth,
-                meta.readTime || meta.duration
-              );
+                articleId: meta.articleId,
+                eventType: 'read',
+                metadata: {
+                  readDuration: meta.readTime || meta.duration,
+                  scrollDepth: meta.scrollDepth,
+                },
+              });
+
+              // Update reading_history with scroll depth for Continue Reading feature
+              if (meta.scrollDepth && typeof meta.scrollDepth === 'number') {
+                await storage.updateReadingProgress(
+                  userId,
+                  meta.articleId,
+                  meta.scrollDepth,
+                  meta.readTime || meta.duration
+                );
+              }
+            } else if (eventType === "article_view") {
+              await trackUserEvent({
+                userId,
+                articleId: meta.articleId,
+                eventType: 'view',
+                metadata: {
+                  scrollDepth: meta.scrollDepth,
+                },
+              });
             }
-          } else if (eventType === "article_view") {
-            await trackUserEvent({
+          } catch (error) {
+            console.error("Error tracking user event:", error);
+          }
+        }
+
+        // إضافة نقاط ولاء بناءً على نوع السلوك
+        try {
+          let loyaltyAction: typeof LOYALTY_ACTIONS[keyof typeof LOYALTY_ACTIONS] | null = null;
+
+          if (eventType === "article_view") {
+            loyaltyAction = LOYALTY_ACTIONS.READ_OPEN;
+          } else if (
+            eventType === "article_read" &&
+            meta.duration &&
+            typeof meta.duration === "number" &&
+            meta.duration >= 60
+          ) {
+            loyaltyAction = LOYALTY_ACTIONS.READ_DEEP;
+          }
+
+          if (loyaltyAction) {
+            await awardPoints({
               userId,
-              articleId: meta.articleId,
-              eventType: 'view',
-              metadata: {
-                scrollDepth: meta.scrollDepth,
-              },
+              action: loyaltyAction,
+              source: (meta.articleId || meta.slug) as string | undefined,
+              metadata: meta,
             });
           }
         } catch (error) {
-          console.error("Error tracking user event:", error);
+          console.error("Error recording loyalty points:", error);
         }
-      }
-
-      // إضافة نقاط ولاء بناءً على نوع السلوك
-      try {
-        let loyaltyAction: typeof LOYALTY_ACTIONS[keyof typeof LOYALTY_ACTIONS] | null = null;
-
-        if (eventType === "article_view") {
-          loyaltyAction = LOYALTY_ACTIONS.READ_OPEN;
-        } else if (
-          eventType === "article_read" &&
-          meta.duration &&
-          typeof meta.duration === "number" &&
-          meta.duration >= 60
-        ) {
-          loyaltyAction = LOYALTY_ACTIONS.READ_DEEP;
-        }
-
-        if (loyaltyAction) {
-          await awardPoints({
-            userId,
-            action: loyaltyAction,
-            source: (meta.articleId || meta.slug) as string | undefined,
-            metadata: meta,
-          });
-        }
-      } catch (error) {
-        console.error("Error recording loyalty points:", error);
-      }
+      })();
 
     } catch (error) {
       console.error("Error logging behavior:", error);
-      res.status(500).json({ message: "Failed to log behavior" });
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to log behavior" });
+      }
     }
   });
 

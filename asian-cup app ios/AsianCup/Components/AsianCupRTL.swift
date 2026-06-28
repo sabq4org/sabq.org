@@ -1,13 +1,16 @@
 import SwiftUI
 
-// يفرض اتجاه RTL عام + لغة عربية عبر التطبيق كله. مطابق لـ sabqRTL في تطبيق سبق
-// (التطبيق عربي أولًا، بلا ترجمة إنجليزية).
+// يطبّق اتجاه الكتابة (RTL/LTR) واللوكال وفق اللغة المختارة في AcLocalization.
+// عند تبديل اللغة يتغيّر .id فتُعاد بناء الشجرة بالكامل لإعادة قراءة كل النصوص المترجمة.
 private struct AsianCupRTLModifier: ViewModifier {
+    @ObservedObject private var loc = AcLocalization.shared
+
     func body(content: Content) -> some View {
         content
-            .environment(\.layoutDirection, .rightToLeft)
-            .environment(\.locale, Locale(identifier: "ar"))
+            .environment(\.layoutDirection, loc.direction)
+            .environment(\.locale, loc.locale)
             .multilineTextAlignment(.leading)
+            .id(loc.language.code)
     }
 }
 

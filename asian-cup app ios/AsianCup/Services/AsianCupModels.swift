@@ -89,6 +89,359 @@ private nonisolated struct AcTeamsResponse: Decodable { let teams: [AcTeam] }
 private nonisolated struct AcFixturesResponse: Decodable { let fixtures: [AcFixture] }
 private nonisolated struct AcStandingsResponse: Decodable { let groups: [AcGroup] }
 
+// MARK: - التوقعات
+
+nonisolated struct AcModelProbs: Decodable, Hashable {
+    let home: Double
+    let draw: Double
+    let away: Double
+}
+
+nonisolated struct AcPredictionCrowd: Decodable, Hashable {
+    let home: Int
+    let draw: Int
+    let away: Int
+    let total: Int
+}
+
+nonisolated struct AcMyPrediction: Decodable, Hashable {
+    let predHome: Int
+    let predAway: Int
+    let status: String
+    let outcomeHit: Bool?
+    let marginHit: Bool?
+    let exactHit: Bool?
+    let boldnessMult: Double?
+    let streakMult: Double?
+    let pointsAwarded: Int?
+}
+
+nonisolated struct AcPredictionSettlement: Decodable, Hashable {
+    let status: String
+    let finalHome: Int?
+    let finalAway: Int?
+    let predictionsCount: Int
+    let outcomeWinners: Int
+    let exactWinners: Int
+}
+
+nonisolated struct AcPredictableMatch: Decodable, Identifiable, Hashable {
+    let fixture: AcFixture
+    let locked: Bool
+    let probs: AcModelProbs
+    let crowd: AcPredictionCrowd
+    let predictionsCount: Int
+    let myPrediction: AcMyPrediction?
+    let settlement: AcPredictionSettlement?
+
+    var id: Int { fixture.id }
+}
+
+nonisolated struct AcPredictionMeStats: Decodable, Hashable {
+    let points: Int
+    let correct: Int
+    let exact: Int
+    let played: Int
+    let currentStreak: Int
+}
+
+nonisolated struct AcPredictionLeader: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let userId: String
+    let name: String
+    let avatar: String?
+    let totalPoints: Int
+    let correctCount: Int
+    let exactCount: Int
+    let playedCount: Int
+    let accuracy: Double
+
+    var id: String { userId }
+}
+
+nonisolated struct AcPredictionsTodayResponse: Decodable, Hashable {
+    let matches: [AcPredictableMatch]
+    let me: AcPredictionMeStats?
+}
+
+private nonisolated struct AcPredictionsLeaderboardResponse: Decodable {
+    let leaders: [AcPredictionLeader]
+}
+
+// MARK: - الهدّافون (API-Football topscorers)
+
+nonisolated struct AcScorer: Decodable, Hashable {
+    let rank: Int
+    let id: Int          // معرّف اللاعب عند المزوّد (0 = غير معروف)
+    let name: String     // الاسم معرّبًا عربيًّا
+    let nameEn: String   // الاسم الأصلي (لاتيني) للغات غير العربية
+    let photo: String
+    let team: AcTeam
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let minutes: Int
+    let matches: Int
+}
+private nonisolated struct AcScorersResponse: Decodable { let scorers: [AcScorer] }
+
+// MARK: - شجرة الأدوار الإقصائية
+
+nonisolated struct AcBracketRound: Decodable, Identifiable, Hashable {
+    let round: String
+    let roundEn: String
+    let matches: [AcFixture]
+    var id: String { roundEn }
+}
+nonisolated struct AcBracket: Decodable, Hashable {
+    let source: String
+    let rounds: [AcBracketRound]
+}
+
+// MARK: - صفحة المنتخب + القائمة
+
+nonisolated struct AcSquadPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let nameEn: String
+    let number: Int?
+    let position: String
+    let positionEn: String
+    let age: Int?
+    let photo: String
+}
+nonisolated struct AcTeamProfile: Decodable, Hashable {
+    let team: AcTeam
+    let isSaudi: Bool
+    let coach: String?
+    let group: AcGroup?
+    let stats: AcTeamStats?
+    let nextMatch: AcFixture?
+    let fixtures: [AcFixture]
+    let squad: [AcSquadPlayer]
+}
+
+nonisolated struct AcQualificationGoals: Decodable, Hashable {
+    let `for`: Int?
+    let against: Int?
+}
+
+nonisolated struct AcQualificationStats: Decodable, Hashable {
+    let played: Int
+    let win: Int
+    let draw: Int
+    let lose: Int
+    let goalsFor: Int
+    let goalsAgainst: Int
+}
+
+nonisolated struct AcQualificationTimelineItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let date: String?
+    let title: String
+    let subtitle: String?
+    let competition: String?
+    let round: String?
+    let opponent: AcTeam?
+    let isHome: Bool?
+    let venue: AcVenue?
+    let goals: AcQualificationGoals
+    let result: String?
+    let status: String?
+}
+
+nonisolated struct AcQualificationJourney: Decodable, Hashable {
+    let team: AcTeam
+    let available: Bool
+    let method: String
+    let source: String
+    let title: String
+    let subtitle: String
+    let stats: AcQualificationStats
+    let timeline: [AcQualificationTimelineItem]
+    let updatedAt: String
+}
+
+nonisolated struct AcPlayerCareerStop: Decodable, Identifiable, Hashable {
+    let teamId: Int
+    let team: String
+    let logo: String
+    let seasons: [Int]
+    var id: String { "\(teamId)-\(seasons.first ?? 0)-\(seasons.last ?? 0)" }
+}
+
+nonisolated struct AcPlayerTrophy: Decodable, Identifiable, Hashable {
+    let competition: String
+    let country: String
+    let season: String
+    let place: String
+    let winner: Bool
+    var id: String { "\(competition)-\(season)-\(place)" }
+}
+
+nonisolated struct AcPlayerTransfer: Decodable, Identifiable, Hashable {
+    let date: String?
+    let type: String
+    let from: AcTeam?
+    let to: AcTeam?
+    var id: String { "\(date ?? "")-\(type)-\(from?.id ?? 0)-\(to?.id ?? 0)" }
+}
+
+nonisolated struct AcPlayerTournamentStats: Decodable, Hashable {
+    let matches: Int
+    let lineups: Int
+    let minutes: Int
+    let rating: Double?
+    let goals: Int
+    let assists: Int
+    let shots: Int
+    let shotsOn: Int
+    let passes: Int
+    let keyPasses: Int
+    let tackles: Int
+    let yellow: Int
+    let red: Int
+    let saves: Int
+    let conceded: Int
+    let penaltiesScored: Int
+    let penaltiesMissed: Int
+}
+
+nonisolated struct AcPlayerMarketPoint: Decodable, Hashable {
+    let time: Int
+    let value: Int
+}
+
+nonisolated struct AcPlayerMarket: Decodable, Hashable {
+    let available: Bool
+    let value: Int?
+    let currency: String
+    let source: String
+    let history: [AcPlayerMarketPoint]
+}
+
+nonisolated struct AcPlayerSourceFlags: Decodable, Hashable {
+    let apiFootball: Bool
+    let theSports: Bool
+}
+
+nonisolated struct AcPlayerInjury: Decodable, Hashable {
+    let reason: String
+}
+
+nonisolated struct AcPlayerCard: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let fullName: String?
+    let photo: String
+    let nationality: String?
+    let position: String
+    let positionEn: String
+    let number: Int?
+    let age: Int?
+    let birthDate: String?
+    let birthPlace: String?
+    let height: Int?
+    let weight: Int?
+    let currentTeam: AcTeam?
+    let career: [AcPlayerCareerStop]
+    let trophies: [AcPlayerTrophy]
+    let transfers: [AcPlayerTransfer]
+    let stats: AcPlayerTournamentStats?
+    let injury: AcPlayerInjury?
+    let market: AcPlayerMarket
+    let sources: AcPlayerSourceFlags
+}
+
+nonisolated struct AcTeamStats: Decodable, Hashable {
+    let groupName: String?
+    let rank: Int?
+    let played: Int
+    let win: Int
+    let draw: Int
+    let lose: Int
+    let goalsFor: Int
+    let goalsAgainst: Int
+    let goalsDiff: Int
+    let points: Int
+    let form: [String]
+}
+
+// MARK: - تفاصيل المباراة (أحداث + تشكيلات + إحصاءات + تقييمات)
+
+nonisolated struct AcMatchEvent: Decodable, Hashable {
+    let minute: Int
+    let extraMinute: Int?
+    let teamId: Int
+    let type: String
+    let label: String
+    let detail: String
+    let player: String
+    let playerEn: String
+    let playerId: Int?
+    let assist: String?
+    let assistEn: String?
+    let assistId: Int?
+}
+
+nonisolated struct AcLineupPlayer: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let nameEn: String
+    let number: Int?
+    let position: String?
+    let grid: String?
+}
+
+nonisolated struct AcLineup: Decodable, Hashable {
+    let teamId: Int
+    let teamName: String
+    let formation: String?
+    let coach: String
+    let startXI: [AcLineupPlayer]
+    let substitutes: [AcLineupPlayer]
+}
+
+nonisolated struct AcStatistic: Decodable, Hashable {
+    let key: String
+    let label: String
+    let home: String
+    let away: String
+}
+
+nonisolated struct AcPlayerRating: Decodable, Hashable {
+    let id: Int
+    let name: String
+    let nameEn: String
+    let photo: String
+    let teamId: Int
+    let number: Int?
+    let position: String
+    let rating: Double
+    let minutes: Int
+    let goals: Int
+    let assists: Int
+    let captain: Bool
+}
+
+nonisolated struct AcMatchPrediction: Decodable, Hashable {
+    let home: Int
+    let draw: Int
+    let away: Int
+}
+
+nonisolated struct AcMatchDetail: Decodable, Hashable {
+    let fixture: AcFixture
+    let events: [AcMatchEvent]
+    let lineups: [AcLineup]
+    let statistics: [AcStatistic]
+    let ratings: [AcPlayerRating]
+    let manOfTheMatch: AcPlayerRating?
+    let prediction: AcMatchPrediction?
+    let headToHead: [AcFixture]
+}
+
 // تجميع المباريات حسب اليوم (لعرض الجدول). نوع مُسمّى (لا tuple) لتجنّب
 // «unable to type-check» على محلّل Swift في الـ SwiftUI ForEach.
 struct AcDayGroup: Identifiable {
@@ -147,34 +500,40 @@ enum AcDateMath {
     }
 }
 
-// تنسيق التواريخ بالعربية (بتوقيت الرياض).
+// تنسيق التواريخ بتوقيت الرياض — تقويم ميلادي وأرقام لاتينية (3455) دائمًا،
+// مع أسماء الأشهر/الأيام وفق لغة العرض الحالية (عربي، إنجليزي، ياباني ...).
 enum AcFormat {
     private static let riyadh = TimeZone(identifier: "Asia/Riyadh")!
+    private static let gregorian = Calendar(identifier: .gregorian)
+
+    // لوكال لغة العرض الحالية مع فرض التقويم الميلادي والأرقام اللاتينية.
+    private static var localizedLocale: Locale {
+        let base = AcLocalization.shared.language.localeIdentifier
+        return Locale(identifier: "\(base)@calendar=gregorian;numbers=latn")
+    }
+
+    private static func formatter(_ pattern: String) -> DateFormatter {
+        let f = DateFormatter()
+        f.timeZone = riyadh
+        f.locale = localizedLocale
+        f.calendar = gregorian
+        f.dateFormat = pattern
+        return f
+    }
 
     static func kickoffDay(_ iso: String?) -> String {
         guard let iso, let d = AcDateMath.date(from: iso) else { return "" }
-        let f = DateFormatter()
-        f.timeZone = riyadh
-        f.locale = Locale(identifier: "ar-SA")
-        f.dateFormat = "EEEE d MMMM"
-        return f.string(from: d)
+        return formatter("EEEE d MMMM").string(from: d)
     }
 
     static func kickoffTime(_ iso: String?) -> String {
         guard let iso, let d = AcDateMath.date(from: iso) else { return "" }
-        let f = DateFormatter()
-        f.timeZone = riyadh
-        f.locale = Locale(identifier: "ar-SA")
-        f.dateFormat = "HH:mm"
-        return f.string(from: d)
+        return formatter("HH:mm").string(from: d)
     }
 
     static func dateRange(startIso: String?, endIso: String?) -> String {
         guard let startIso, let s = AcDateMath.date(from: startIso) else { return "" }
-        let f = DateFormatter()
-        f.timeZone = riyadh
-        f.locale = Locale(identifier: "ar-SA")
-        f.dateFormat = "d MMMM yyyy"
+        let f = formatter("d MMMM yyyy")
         let start = f.string(from: s)
         guard let endIso, let e = AcDateMath.date(from: endIso) else { return start }
         let end = f.string(from: e)
@@ -205,5 +564,49 @@ extension APIClient {
         let r = try await get(AcStandingsResponse.self, path: "/asian-cup/standings",
                               ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
         return r.groups
+    }
+
+    func fetchAcPredictionsToday(ignoreCache: Bool = false) async throws -> AcPredictionsTodayResponse {
+        try await get(AcPredictionsTodayResponse.self, path: "/asian-cup/predictions/today",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcPredictionsLeaderboard(ignoreCache: Bool = false) async throws -> [AcPredictionLeader] {
+        let r = try await get(AcPredictionsLeaderboardResponse.self, path: "/asian-cup/predictions/leaderboard",
+                              ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        return r.leaders
+    }
+
+    // المرحلة 1 — نقاط API-Football الإضافية.
+
+    func fetchAcScorers(ignoreCache: Bool = false) async throws -> [AcScorer] {
+        let r = try await get(AcScorersResponse.self, path: "/asian-cup/scorers",
+                              ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        return r.scorers
+    }
+
+    func fetchAcBracket(ignoreCache: Bool = false) async throws -> AcBracket {
+        try await get(AcBracket.self, path: "/asian-cup/bracket",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcTeamProfile(_ teamId: Int, ignoreCache: Bool = false) async throws -> AcTeamProfile {
+        try await get(AcTeamProfile.self, path: "/asian-cup/team/\(teamId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcQualificationJourney(_ teamId: Int, ignoreCache: Bool = false) async throws -> AcQualificationJourney {
+        try await get(AcQualificationJourney.self, path: "/asian-cup/team/\(teamId)/qualification",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcPlayerCard(_ playerId: Int, ignoreCache: Bool = false) async throws -> AcPlayerCard {
+        try await get(AcPlayerCard.self, path: "/asian-cup/player/\(playerId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcMatchDetail(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> AcMatchDetail {
+        try await get(AcMatchDetail.self, path: "/asian-cup/match/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 }
