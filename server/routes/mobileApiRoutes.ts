@@ -10,7 +10,7 @@
  * - Member profile
  */
 
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { db, pool } from "../db";
 import { log } from "../utils/logger";
 import {
@@ -2853,9 +2853,14 @@ router.get("/news/paginated", async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/articles/:id (single article detail)
-router.get("/articles/:id", async (req: Request, res: Response) => {
+router.get("/articles/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const articleId = req.params.id;
+
+    // "my-revisions" has a dedicated handler registered later in this file.
+    // Without this guard the :id matcher treats it as a slug, finds no
+    // published article, and 404s (route shadowing). Fall through instead.
+    if (articleId === "my-revisions") return next();
 
     let condition;
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
