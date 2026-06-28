@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { apiUrl } from "@/lib/queryClient";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import type { InsertTask } from "@shared/schema";
 
@@ -106,6 +107,7 @@ export default function AddTaskQuickPane({
   const [showPrioritySelect, setShowPrioritySelect] = useState(false);
   const [showAssigneeSelect, setShowAssigneeSelect] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   const form = useForm<QuickTaskForm>({
     resolver: zodResolver(quickTaskSchema),
@@ -130,6 +132,10 @@ export default function AddTaskQuickPane({
       if (!res.ok) throw new Error("Failed to fetch users");
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s on mount.
+    enabled: hasPermission(user, "admin.manage_settings"),
+    retry: false,
   });
   const users = Array.isArray(usersRaw) ? usersRaw : [];
 

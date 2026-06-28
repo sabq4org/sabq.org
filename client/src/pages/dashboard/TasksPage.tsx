@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AddTaskQuickPane, TaskViewDialog, TaskEditDialog } from "@/components/tasks";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { apiRequest, queryClient, apiUrl } from "@/lib/queryClient";
 import { 
   ListTodo, 
@@ -576,6 +577,7 @@ function MobileTaskCard({ task, users, onView, onEdit, onDelete, onComplete }: M
 
 export default function TasksPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [viewTaskId, setViewTaskId] = useState<string | null>(null);
   const [editTaskId, setEditTaskId] = useState<string | null>(null);
@@ -627,6 +629,10 @@ export default function TasksPage() {
       if (!res.ok) throw new Error('Failed to fetch users');
       return await res.json();
     },
+    // /api/users requires admin.manage_settings; only fetch for users who can,
+    // so non-admins don't generate (retry-amplified) 403s on page load.
+    enabled: hasPermission(user, 'admin.manage_settings'),
+    retry: false,
   });
   const users = Array.isArray(usersRaw) ? usersRaw : [];
 
