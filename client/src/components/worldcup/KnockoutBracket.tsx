@@ -16,6 +16,7 @@ import { formatKickoffDay, formatKickoffTime, type WcFixture, type WcGroup, type
 import { LiveMinute } from "./LiveMinute";
 import {
   buildBracketModel,
+  fixtureWinnerSide,
   WC_ROUND_KEYS,
   WC_ROUND_LABELS,
   type WcBracketColumn,
@@ -155,6 +156,7 @@ function BracketMatch({
   onOpen: (id: number) => void;
 }) {
   const started = fixture.status.live || fixture.status.finished;
+  const winSide = fixtureWinnerSide(fixture);
   return (
     <div
       onClick={() => onOpen(fixture.id)}
@@ -167,8 +169,8 @@ function BracketMatch({
         </p>
       )}
       <div className="divide-y divide-border/50">
-        <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={fixture.home.winner === true} />
-        <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={fixture.away.winner === true} />
+        <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={winSide === "home"} />
+        <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={winSide === "away"} />
       </div>
       {fixture.penalties && (
         <p className="pt-1 text-center text-[9.5px] text-muted-foreground" dir="rtl">
@@ -283,6 +285,7 @@ function TreeMatchCard({
   };
 
   const started = Boolean(match?.status.live || match?.status.finished);
+  const winSide = fixtureWinnerSide(match);
   return (
     <button
       type="button"
@@ -302,13 +305,13 @@ function TreeMatchCard({
         <TreeTeamLine
           team={match?.home ?? topTeam}
           goals={match && started ? match.goals.home ?? 0 : null}
-          winner={match?.home.winner === true}
+          winner={winSide === "home"}
           label={topLabel}
         />
         <TreeTeamLine
           team={match?.away ?? bottomTeam}
           goals={match && started ? match.goals.away ?? 0 : null}
-          winner={match?.away.winner === true}
+          winner={winSide === "away"}
           label={bottomLabel}
         />
       </div>

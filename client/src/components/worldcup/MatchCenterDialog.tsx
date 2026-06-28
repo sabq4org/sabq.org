@@ -1392,6 +1392,11 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                   ) : (
                     <span className="text-xl font-black">{formatKickoffTime(fixture.date)}</span>
                   )}
+                  {fixture.penalties && (
+                    <span className="text-[11px] font-semibold text-muted-foreground" dir="ltr">
+                      ({fixture.penalties.away ?? 0} - {fixture.penalties.home ?? 0}) ركلات الترجيح
+                    </span>
+                  )}
                   <Badge
                     className={
                       fixture.status.live

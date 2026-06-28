@@ -110,20 +110,31 @@ export function isThirdPlaceRound(roundEn: string): boolean {
   return THIRD_PLACE_KEYS.has((roundEn || "").trim().toLowerCase());
 }
 
-/** معرّف الفريق الفائز في مباراة محسومة (يشمل ركلات الترجيح)، وإلا null. */
-function winnerTeamId(fx?: WcFixture): number | null {
+/**
+ * الجهة الفائزة في مباراة محسومة (تشمل ركلات الترجيح)، وإلا null.
+ * مصدر واحد لتمييز الفائز في الشجرة و«ترقيته» للدور التالي — لا يعتمد على علم
+ * `winner` الخام وحده (المزوّد قد يتركه فارغًا في المباريات المحسومة بالترجيح).
+ */
+export function fixtureWinnerSide(fx?: WcFixture): "home" | "away" | null {
   if (!fx || !fx.status.finished) return null;
-  if (fx.home.winner === true) return fx.home.id || null;
-  if (fx.away.winner === true) return fx.away.id || null;
+  if (fx.home.winner === true) return "home";
+  if (fx.away.winner === true) return "away";
   const hg = fx.goals.home ?? 0;
   const ag = fx.goals.away ?? 0;
-  if (hg !== ag) return (hg > ag ? fx.home.id : fx.away.id) || null;
+  if (hg !== ag) return hg > ag ? "home" : "away";
   if (fx.penalties) {
     const hp = fx.penalties.home ?? 0;
     const ap = fx.penalties.away ?? 0;
-    if (hp !== ap) return (hp > ap ? fx.home.id : fx.away.id) || null;
+    if (hp !== ap) return hp > ap ? "home" : "away";
   }
   return null;
+}
+
+/** معرّف الفريق الفائز في مباراة محسومة (يشمل ركلات الترجيح)، وإلا null. */
+function winnerTeamId(fx?: WcFixture): number | null {
+  const side = fixtureWinnerSide(fx);
+  if (!fx || side == null) return null;
+  return (side === "home" ? fx.home.id : fx.away.id) || null;
 }
 
 /** الفريق الفائز ككائن كامل (شعار + اسم) — لـ«ترقية» الفائز إلى الفرع التالي بصريًّا. */
