@@ -796,22 +796,23 @@ struct HomeView: View {
     private func resultRow(_ f: SpFixture) -> some View {
         HStack(spacing: 10) {
             HStack(spacing: 7) {
-                Text(f.home.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1).frame(maxWidth: .infinity, alignment: .trailing)
-                SpTeamLogo(logo: f.home.logo, size: 24)
+                Text(f.home.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth: .infinity, alignment: .trailing)
+                SpTeamLogo(logo: f.home.logo, size: 26)
             }
             Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                .font(SportsFonts.app(size: 14, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+                .font(SportsFonts.app(size: 15, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                 .monospacedDigit().environment(\.layoutDirection, .leftToRight).frame(width: 52)
             HStack(spacing: 7) {
-                SpTeamLogo(logo: f.away.logo, size: 24)
-                Text(f.away.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                SpTeamLogo(logo: f.away.logo, size: 26)
+                Text(f.away.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1).minimumScaleFactor(0.85).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 11)
         .contentShape(Rectangle())
     }
+
 
     // أبرز الصفقات — أعلى الانتقالات بمبلغ معلن في أندية روشن (تفتح صفحة النادي).
     private var transfersCard: some View {

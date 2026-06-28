@@ -893,6 +893,8 @@ actor APIClient {
             let token: String
             let bundleId: String?
         }
+        // نرسل bundleId صراحةً (كما يفعل تطبيق الرياضة) كي يختار الخادم apns-topic
+        // ومفتاح APNs الصحيحين بدل الاعتماد على الافتراضي.
         try await postRaw(
             path: "/live-activity/register",
             body: Body(fixtureId: fixtureId, token: token, bundleId: Bundle.main.bundleIdentifier)

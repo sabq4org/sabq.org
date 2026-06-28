@@ -48,6 +48,9 @@ struct RootTabView: View {
             OnboardingView {
                 onboardingSeen = true
                 showOnboarding = false
+                // اطلب إذن الدفع فور إتمام التعريفي مباشرةً (بدل تأجيله لإقلاعٍ تالٍ)
+                // كي يظهر صف الإشعارات ويُسجَّل توكن APNs في الجلسة نفسها.
+                Task { await SpAuthStore.shared.enablePushNotifications() }
             }
         }
         .onAppear { if !onboardingSeen { showOnboarding = true } }

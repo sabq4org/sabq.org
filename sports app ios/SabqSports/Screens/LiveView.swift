@@ -406,11 +406,11 @@ private struct SpWorldMatchRow: View {
     private func teamSide(_ team: SpTeam, leading: Bool) -> some View {
         HStack(spacing: 8) {
             if leading {
-                SpTeamLogo(logo: team.logo, size: 28)
                 teamName(team, align: .leading)
-            } else {
-                teamName(team, align: .trailing)
                 SpTeamLogo(logo: team.logo, size: 28)
+            } else {
+                SpTeamLogo(logo: team.logo, size: 28)
+                teamName(team, align: .trailing)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
@@ -418,12 +418,13 @@ private struct SpWorldMatchRow: View {
 
     private func teamName(_ team: SpTeam, align: TextAlignment) -> some View {
         Text(team.name)
-            .font(SportsFonts.app(size: 12.5, weight: .semibold))
+            .font(SportsFonts.app(size: 14, weight: .bold))
             .foregroundStyle(SpTheme.onDark)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.85)
             .multilineTextAlignment(align)
     }
+
 
     private var scoreBox: some View {
         HStack(spacing: 5) {
