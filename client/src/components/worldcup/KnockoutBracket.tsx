@@ -324,60 +324,6 @@ function TreeMatchCard({
   );
 }
 
-interface UpcomingItem {
-  fixture: WcFixture;
-  matchNo: number;
-  roundLabel: string;
-}
-
-/** شريط «المباريات القادمة» — أعلى الشجرة، مرتّب زمنيًا (الجارية أولًا ثم الأقرب موعدًا)
- *  ليرى المتابع أوّلًا ما سيُلعب قريبًا بصرف النظر عن موضعه البنيوي في الشجرة. */
-function UpcomingStrip({ items, onOpen }: { items: UpcomingItem[]; onOpen: (id: number) => void }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mb-5">
-      <div className="mb-2.5 flex items-center gap-2 px-0.5">
-        <span className="text-xs font-black text-emerald-700 dark:text-emerald-300">المباريات القادمة</span>
-        <span className="text-[11px] font-semibold text-muted-foreground">بالترتيب الزمني</span>
-      </div>
-      <div className="flex gap-2.5 overflow-x-auto pb-1.5">
-        {items.map(({ fixture, matchNo, roundLabel }) => {
-          const started = fixture.status.live || fixture.status.finished;
-          return (
-            <button
-              key={fixture.id}
-              type="button"
-              onClick={() => onOpen(fixture.id)}
-              className="shrink-0 w-[218px] cursor-pointer rounded-lg border border-border bg-card px-2.5 py-2 text-start shadow-sm transition-colors hover:border-emerald-500/60"
-              data-testid={`wc-upcoming-${fixture.id}`}
-            >
-              <div className="flex items-center justify-between gap-2 pb-1.5 text-[10px] font-bold text-muted-foreground">
-                <span>{roundLabel}</span>
-                <span>
-                  مباراة <span className="tabular-nums">{matchNo}</span>
-                </span>
-              </div>
-              <div className="divide-y divide-border/50">
-                <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={fixture.home.winner === true} />
-                <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={fixture.away.winner === true} />
-              </div>
-              {fixture.status.live ? (
-                <p className="pt-1.5 text-center text-[10px] font-bold text-red-600 dark:text-red-400">
-                  ● <LiveMinute status={fixture.status} /> مباشر
-                </p>
-              ) : (
-                <p className="pt-1.5 text-center text-[10px] font-semibold text-muted-foreground">
-                  {formatKickoffDay(fixture.date)} · {formatKickoffTime(fixture.date)}
-                </p>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function DesktopKnockoutTree({ columns, onOpen }: { columns: WcBracketColumn[]; onOpen: (id: number) => void }) {
   const rounds = columns.map((col) => {
     const rowSpan = Math.max(1, 2 ** col.roundIndex);
@@ -477,22 +423,6 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
     [hasAny, groups, fixtures],
   );
 
-  // المباريات القادمة (الجارية + غير المنتهية) مرتّبةً زمنيًا — لشريط أعلى الشجرة.
-  const upcoming = useMemo(() => {
-    const items: UpcomingItem[] = [];
-    for (const col of columns)
-      for (const s of col.slots) if (s.fixture) items.push({ fixture: s.fixture, matchNo: s.matchNo, roundLabel: col.label });
-    if (thirdPlace) items.push({ fixture: thirdPlace, matchNo: 103, roundLabel: "المركز الثالث" });
-    return items
-      .filter((i) => !i.fixture.status.finished)
-      .sort(
-        (a, b) =>
-          Number(b.fixture.status.live) - Number(a.fixture.status.live) ||
-          a.fixture.timestamp - b.fixture.timestamp,
-      )
-      .slice(0, 8);
-  }, [columns, thirdPlace]);
-
   // الأعمدة التي بها مباريات فعلًا — لتبويبات الجوال.
   const liveCols = columns.filter((c) => c.slots.some((s) => s.fixture));
 
@@ -569,9 +499,8 @@ export function KnockoutBracket({ fixtures, groups, isLoading, onOpenMatch }: Kn
               </Tabs>
             </div>
 
-            {/* سطح المكتب/التابلت: شريط زمني للمباريات القادمة + الشجرة البنيوية */}
+            {/* سطح المكتب/التابلت: الشجرة البنيوية الأفقية */}
             <div className="hidden md:block">
-              <UpcomingStrip items={upcoming} onOpen={onOpenMatch} />
               <DesktopKnockoutTree columns={columns} onOpen={onOpenMatch} />
             </div>
 
