@@ -17,10 +17,13 @@ import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
   WC_STATUS_AR,
+  localizeEvent,
   localizeRound,
   localizeTeamName,
 } from "./worldCupNames";
 import { localizeAcTeam, localizeAcVenue } from "./asianCupNames";
+import { resolveNames } from "./worldCupNameTranslator";
+import { computeMatchProbabilities, toWholePercents } from "./asianCupRatings";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 7; // AFC Asian Cup
@@ -371,3 +374,488 @@ export async function getAcOverview(): Promise<AcOverview> {
 }
 
 export { TIMEZONE as AC_TIMEZONE, LEAGUE_ID as AC_LEAGUE_ID, SEASON as AC_SEASON };
+
+// ════════════════════════════════════════════════════════════════════════════
+// المرحلة 1 — نقاط API-Football إضافية لكأس آسيا (بلا اعتماد خارجي):
+// الهدّافون · شجرة الأدوار الإقصائية · صفحة المنتخب + القائمة · تفاصيل المباراة.
+// نفس مزوّد teams/fixtures (league=7, season=2027) — لا اشتراك جديد.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ترجمة المراكز والإحصاءات (نسخة محلية مختصرة بأسلوب قسم المونديال).
+const AC_POSITION_AR: Record<string, string> = {
+  Goalkeeper: "حارس مرمى",
+  Defender: "مدافع",
+  Midfielder: "لاعب وسط",
+  Attacker: "مهاجم",
+  G: "حارس مرمى",
+  D: "مدافع",
+  M: "لاعب وسط",
+  F: "مهاجم",
+};
+const AC_POSITION_ORDER: Record<string, number> = {
+  Goalkeeper: 0,
+  Defender: 1,
+  Midfielder: 2,
+  Attacker: 3,
+};
+const AC_STAT_AR: Record<string, string> = {
+  "Ball Possession": "الاستحواذ",
+  "Total Shots": "التسديدات",
+  "Shots on Goal": "تسديدات على المرمى",
+  "Shots off Goal": "تسديدات خارج المرمى",
+  "Blocked Shots": "تسديدات مصدودة",
+  "Corner Kicks": "الركنيات",
+  Offsides: "التسلل",
+  Fouls: "الأخطاء",
+  "Yellow Cards": "البطاقات الصفراء",
+  "Red Cards": "البطاقات الحمراء",
+  "Goalkeeper Saves": "تصديات الحارس",
+  "Total passes": "التمريرات",
+  "Passes accurate": "تمريرات صحيحة",
+  "Passes %": "دقة التمرير",
+};
+
+const SCORERS_TTL = 30 * 60 * 1000;
+const SQUAD_TTL = 6 * 60 * 60 * 1000;
+const H2H_TTL = 24 * 60 * 60 * 1000;
+const MATCH_DETAIL_TTL = 5 * 60 * 1000;
+const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
+const MATCH_DETAIL_PREKICKOFF_TTL = 60 * 1000;
+const PREKICKOFF_WINDOW_MS = 60 * 60 * 1000;
+
+// ───────────────────────── الهدّافون ─────────────────────────
+
+export interface AcScorer {
+  rank: number;
+  id: number;
+  name: string;
+  /** الاسم الأصلي من المزوّد (لاتيني) — تستعمله الواجهة للغات غير العربية */
+  nameEn: string;
+  photo: string;
+  team: AcTeam;
+  goals: number;
+  assists: number;
+  penalties: number;
+  minutes: number;
+  matches: number;
+}
+
+/** قائمة الهدّافين (أعلى 10) — أسماء اللاعبين بنقل صوتي عربي عبر resolveNames. */
+export async function getAcTopScorers(): Promise<AcScorer[]> {
+  return withSWR("ac:scorers", SCORERS_TTL, SCORERS_TTL * 2, async () => {
+    const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
+    const top = rows.slice(0, 10);
+    const tr = await resolveNames(top.map((row: any) => row?.player?.name));
+    return top.map((row: any, index: number): AcScorer => {
+      const stats = row?.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row?.player?.id ?? 0,
+        name: tr(row?.player?.name),
+        nameEn: row?.player?.name ?? "",
+        photo: row?.player?.photo ?? "",
+        team: mapTeam(stats.team),
+        goals: stats.goals?.total ?? 0,
+        assists: stats.goals?.assists ?? 0,
+        penalties: stats.penalty?.scored ?? 0,
+        minutes: stats.games?.minutes ?? 0,
+        matches: stats.games?.appearences ?? 0,
+      };
+    });
+  });
+}
+
+// ───────────────────── شجرة الأدوار الإقصائية ─────────────────────
+
+const AC_KNOCKOUT_ROUND_ORDER = [
+  "Round of 16",
+  "Quarter-finals",
+  "Semi-finals",
+  "3rd Place Final",
+  "Final",
+] as const;
+
+export interface AcBracketRound {
+  round: string;
+  roundEn: string;
+  matches: AcFixture[];
+}
+
+export interface AcBracket {
+  source: "api-football";
+  rounds: AcBracketRound[];
+}
+
+/**
+ * يبني شجرة الأدوار الإقصائية من جدول المباريات نفسه: نُصنّف كل مباراة حسب
+ * اسم دورها (roundEn) إلى أحد الأدوار المعروفة، ونُسقط دور المجموعات. المزوّد
+ * قد يُذيّل الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة. فارغة قبل القرعة.
+ */
+function buildAcBracket(fixtures: AcFixture[]): AcBracket {
+  const byRound = new Map<string, AcFixture[]>();
+  for (const fx of fixtures) {
+    const r = (fx.roundEn ?? "").trim();
+    if (!r) continue;
+    const canon = AC_KNOCKOUT_ROUND_ORDER.find((o) => r === o || r.startsWith(o));
+    if (!canon) continue;
+    const arr = byRound.get(canon) ?? [];
+    arr.push(fx);
+    byRound.set(canon, arr);
+  }
+  const rounds: AcBracketRound[] = [];
+  for (const o of AC_KNOCKOUT_ROUND_ORDER) {
+    const matches = byRound.get(o);
+    if (!matches || matches.length === 0) continue;
+    matches.sort((a, b) => a.timestamp - b.timestamp);
+    rounds.push({ round: localizeRound(o), roundEn: o, matches });
+  }
+  return { source: "api-football", rounds };
+}
+
+export async function getAcBracket(): Promise<AcBracket> {
+  const fixtures = await getAcFixtures().catch(() => [] as AcFixture[]);
+  return buildAcBracket(fixtures);
+}
+
+// ───────────────────── صفحة المنتخب + القائمة ─────────────────────
+
+export interface AcSquadPlayer {
+  id: number;
+  name: string;
+  nameEn: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+}
+
+export interface AcSquad {
+  team: AcTeam;
+  players: AcSquadPlayer[];
+}
+
+/** قائمة المنتخب (مرتّبة بالمركز ثم الرقم) — أسماء معرّبة بنقل صوتي. */
+export async function getAcSquad(teamId: number): Promise<AcSquad | null> {
+  return withSWR(`ac:squad:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("players/squads", { team: teamId });
+    const entry = rows[0];
+    if (!entry) return null;
+    const raw: any[] = entry.players ?? [];
+    const tr = await resolveNames(raw.map((p: any) => p?.name));
+    const players: AcSquadPlayer[] = raw
+      .map((p: any): AcSquadPlayer => ({
+        id: p?.id ?? 0,
+        name: tr(p?.name),
+        nameEn: p?.name ?? "",
+        number: p?.number ?? null,
+        position: AC_POSITION_AR[p?.position] ?? p?.position ?? "",
+        positionEn: p?.position ?? "",
+        age: p?.age ?? null,
+        photo: p?.photo ?? "",
+      }))
+      .sort(
+        (a, b) =>
+          (AC_POSITION_ORDER[a.positionEn] ?? 9) - (AC_POSITION_ORDER[b.positionEn] ?? 9) ||
+          (a.number ?? 99) - (b.number ?? 99),
+      );
+    return { team: mapTeam(entry.team), players };
+  });
+}
+
+/** المدرّب الحالي للمنتخب (اسم معرّب) — أفضل جهد. */
+export async function getAcCoach(teamId: number): Promise<string | null> {
+  return withSWR(`ac:coach:${teamId}`, SQUAD_TTL, SQUAD_TTL * 2, async () => {
+    const rows = await apiGet("coachs", { team: teamId });
+    const current = rows.find((r: any) => r?.team?.id === teamId) ?? rows[0];
+    const raw: string | undefined = current?.name;
+    if (!raw) return null;
+    const tr = await resolveNames([raw]);
+    return tr(raw);
+  });
+}
+
+export interface AcTeamProfile {
+  team: AcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  /** مجموعة المنتخب كاملة (لتظليل صفّه) — null قبل اعتماد القرعة/الجداول */
+  group: AcGroup | null;
+  fixtures: AcFixture[];
+  squad: AcSquadPlayer[];
+}
+
+/** صفحة المنتخب المتكاملة: الهوية + المجموعة + كل مبارياته + القائمة + المدرّب. */
+export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | null> {
+  const [fixtures, squad, standings, teams] = await Promise.all([
+    getAcFixtures(),
+    getAcSquad(teamId).catch(() => null),
+    getAcStandings().catch(() => [] as AcGroup[]),
+    getAcTeams().catch(() => [] as AcTeam[]),
+  ]);
+
+  const teamFixtures = fixtures
+    .filter((f) => f.home.id === teamId || f.away.id === teamId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  let team: AcTeam | null = squad?.team ?? teams.find((t) => t.id === teamId) ?? null;
+  if (!team && teamFixtures.length > 0) {
+    const fx = teamFixtures[0];
+    team = fx.home.id === teamId ? fx.home : fx.away;
+  }
+  if (!team || !team.id) return null;
+
+  const group = standings.find((g) => g.rows.some((r) => r.team.id === teamId)) ?? null;
+
+  let coach: string | null = null;
+  try {
+    coach = await getAcCoach(teamId);
+  } catch (error) {
+    console.warn(`[AsianCup] coach ${teamId} failed:`, error);
+  }
+
+  return {
+    team,
+    isSaudi: teamId === SAUDI_TEAM_ID,
+    coach,
+    group,
+    fixtures: teamFixtures,
+    squad: squad?.players ?? [],
+  };
+}
+
+// ───────────────────── تفاصيل المباراة + الأحداث ─────────────────────
+
+export interface AcMatchEvent {
+  minute: number;
+  extraMinute: number | null;
+  teamId: number;
+  type: string;
+  label: string;
+  detail: string;
+  player: string;
+  playerEn: string;
+  playerId: number | null;
+  assist: string | null;
+  assistEn: string | null;
+  assistId: number | null;
+}
+
+export interface AcLineupPlayer {
+  id: number;
+  name: string;
+  nameEn: string;
+  number: number | null;
+  position: string | null;
+  grid: string | null;
+}
+
+export interface AcLineup {
+  teamId: number;
+  teamName: string;
+  formation: string | null;
+  coach: string;
+  startXI: AcLineupPlayer[];
+  substitutes: AcLineupPlayer[];
+}
+
+export interface AcStatistic {
+  key: string;
+  label: string;
+  home: string;
+  away: string;
+}
+
+export interface AcPlayerRating {
+  id: number;
+  name: string;
+  nameEn: string;
+  photo: string;
+  teamId: number;
+  number: number | null;
+  position: string;
+  rating: number;
+  minutes: number;
+  goals: number;
+  assists: number;
+  captain: boolean;
+}
+
+export interface AcPrediction {
+  home: number;
+  draw: number;
+  away: number;
+}
+
+export interface AcMatchDetail {
+  fixture: AcFixture;
+  events: AcMatchEvent[];
+  lineups: AcLineup[];
+  statistics: AcStatistic[];
+  ratings: AcPlayerRating[];
+  manOfTheMatch: AcPlayerRating | null;
+  prediction: AcPrediction | null;
+  headToHead: AcFixture[];
+}
+
+/** سجل المواجهات المباشرة بين منتخبين (أحدث 10 منتهية). */
+export async function getAcHeadToHead(teamA: number, teamB: number): Promise<AcFixture[]> {
+  const key = [teamA, teamB].sort((a, b) => a - b).join("-");
+  return withSWR(`ac:h2h:${key}`, H2H_TTL, H2H_TTL * 2, async () => {
+    const rows = await apiGet("fixtures/headtohead", { h2h: `${teamA}-${teamB}`, timezone: TIMEZONE });
+    return rows
+      .map(mapFixture)
+      .filter((f) => f.status.finished)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 10);
+  });
+}
+
+/** التوقّع الداخلي (نموذج Elo) لمباراة لم تنته — من تقييمات المنتخبين وفورمتهما. */
+async function buildAcPrediction(fixture: AcFixture): Promise<AcPrediction | null> {
+  if (fixture.status.finished) return null;
+  if (!fixture.home.id || !fixture.away.id) return null;
+  try {
+    const standings = await getAcStandings();
+    const rowOf = (id: number): AcStandingRow | null =>
+      standings.flatMap((g) => g.rows).find((r) => r.team.id === id) ?? null;
+    const probs = computeMatchProbabilities({
+      homeId: fixture.home.id,
+      awayId: fixture.away.id,
+      homeRow: rowOf(fixture.home.id),
+      awayRow: rowOf(fixture.away.id),
+    });
+    return toWholePercents(probs);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * تفاصيل المباراة (نداء `fixtures?id=` واحد): الأحداث + التشكيلات + الإحصاءات +
+ * تقييمات اللاعبين، مع سجل المواجهات وتوقّع داخلي للمباريات القادمة. كاش متكيّف:
+ * الحيّة 20ث، قُبيل الانطلاق دقيقة، غيرها 5 دقائق.
+ */
+export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail | null> {
+  const known = (await getAcFixtures().catch(() => [] as AcFixture[])).find((f) => f.id === fixtureId);
+  let ttl = MATCH_DETAIL_TTL;
+  if (known?.status.live) {
+    ttl = MATCH_DETAIL_LIVE_TTL;
+  } else if (known && !known.status.finished) {
+    const msToKickoff = new Date(known.date).getTime() - Date.now();
+    if (msToKickoff < PREKICKOFF_WINDOW_MS) ttl = MATCH_DETAIL_PREKICKOFF_TTL;
+  }
+
+  const detail = await withSWR(`ac:match:${fixtureId}`, ttl, ttl * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return null;
+
+    // اجمع أسماء كل اللاعبين (أحداث + تشكيلات + تقييمات) وعرّبها دفعة واحدة.
+    const rawNames: (string | null | undefined)[] = [];
+    for (const ev of item.events ?? []) rawNames.push(ev?.player?.name, ev?.assist?.name);
+    for (const lineup of item.lineups ?? []) {
+      for (const p of lineup.startXI ?? []) rawNames.push(p?.player?.name);
+      for (const p of lineup.substitutes ?? []) rawNames.push(p?.player?.name);
+    }
+    for (const teamBlock of item.players ?? []) {
+      for (const p of teamBlock.players ?? []) rawNames.push(p?.player?.name);
+    }
+    const tr = await resolveNames(rawNames);
+
+    const events: AcMatchEvent[] = (item.events ?? []).map((ev: any): AcMatchEvent => {
+      const localized = localizeEvent(ev?.type ?? "", ev?.detail ?? "");
+      const hasAssist = !!(ev?.assist?.name || ev?.assist?.id);
+      return {
+        minute: ev?.time?.elapsed ?? 0,
+        extraMinute: ev?.time?.extra ?? null,
+        teamId: ev?.team?.id ?? 0,
+        type: localized.type,
+        label: localized.label,
+        detail: ev?.detail ?? "",
+        player: tr(ev?.player?.name),
+        playerEn: ev?.player?.name ?? "",
+        playerId: ev?.player?.id ?? null,
+        assist: hasAssist ? tr(ev?.assist?.name) || null : null,
+        assistEn: hasAssist ? ev?.assist?.name ?? null : null,
+        assistId: ev?.assist?.id ?? null,
+      };
+    });
+
+    const lineups: AcLineup[] = (item.lineups ?? []).map((lineup: any): AcLineup => {
+      const mapPlayer = (p: any): AcLineupPlayer => ({
+        id: p?.player?.id ?? 0,
+        name: tr(p?.player?.name),
+        nameEn: p?.player?.name ?? "",
+        number: p?.player?.number ?? null,
+        position: p?.player?.pos ?? null,
+        grid: p?.player?.grid ?? null,
+      });
+      return {
+        teamId: lineup?.team?.id ?? 0,
+        teamName: localizeAcTeam(lineup?.team?.id, localizeTeamName(lineup?.team?.id, lineup?.team?.name ?? "")),
+        formation: lineup?.formation ?? null,
+        coach: lineup?.coach?.name ?? "",
+        startXI: (lineup.startXI ?? []).map(mapPlayer),
+        substitutes: (lineup.substitutes ?? []).map(mapPlayer),
+      };
+    });
+
+    const ratings: AcPlayerRating[] = (item.players ?? [])
+      .flatMap((teamBlock: any) =>
+        (teamBlock.players ?? []).map((p: any): AcPlayerRating | null => {
+          const st = p?.statistics?.[0] ?? {};
+          const rating = parseFloat(st.games?.rating ?? "");
+          if (!Number.isFinite(rating)) return null;
+          return {
+            id: p?.player?.id ?? 0,
+            name: tr(p?.player?.name),
+            nameEn: p?.player?.name ?? "",
+            photo: p?.player?.photo ?? "",
+            teamId: teamBlock?.team?.id ?? 0,
+            number: st.games?.number ?? null,
+            position: AC_POSITION_AR[st.games?.position] ?? st.games?.position ?? "",
+            rating,
+            minutes: st.games?.minutes ?? 0,
+            goals: st.goals?.total ?? 0,
+            assists: st.goals?.assists ?? 0,
+            captain: st.games?.captain ?? false,
+          };
+        }),
+      )
+      .filter(Boolean)
+      .sort((a: AcPlayerRating, b: AcPlayerRating) => b.rating - a.rating);
+
+    const homeStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.home?.id);
+    const awayStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.away?.id);
+    const statistics: AcStatistic[] = (homeStats?.statistics ?? [])
+      .filter((stat: any) => AC_STAT_AR[stat.type])
+      .map((stat: any): AcStatistic => {
+        const awayValue = (awayStats?.statistics ?? []).find((s: any) => s.type === stat.type)?.value;
+        return {
+          key: stat.type,
+          label: AC_STAT_AR[stat.type],
+          home: String(stat.value ?? 0),
+          away: String(awayValue ?? 0),
+        };
+      });
+
+    return { fixture: mapFixture(item), events, lineups, statistics, ratings };
+  });
+
+  if (!detail) return null;
+
+  const prediction = await buildAcPrediction(detail.fixture);
+
+  let headToHead: AcFixture[] = [];
+  try {
+    headToHead = await getAcHeadToHead(detail.fixture.home.id, detail.fixture.away.id);
+  } catch (error) {
+    console.warn(`[AsianCup] h2h failed for fixture ${fixtureId}:`, error);
+  }
+
+  const manOfTheMatch =
+    detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
+
+  return { ...detail, prediction, headToHead, manOfTheMatch };
+}
