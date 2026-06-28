@@ -224,10 +224,14 @@ private struct WCPredTodayTab: View {
         // الأخضر المتكرّر عبر البطاقات.
         let dirty = saved == nil || saved!.predHome != input.home || saved!.predAway != input.away
         VStack(spacing: 10) {
+            // المضيف يمينًا (تحت شعاره) والضيف يسارًا — مطابقةً لترتيب الشعارات في
+            // الترويسة (RTL) ولعرض النتيجة/التوقّع (ضيف-مضيف). نُبقي فرض LTR لثبات
+            // تخطيط الأرقام، لكن نرتّب الضيف أولًا ثم المضيف كي يقع عدّاد كل فريق
+            // تحت شعاره — وإلا خُزِّن التوقّع مقلوبًا فظهر «لم تُصب» لتوقّع صحيح.
             HStack(spacing: 16) {
-                stepper(value: input.home) { setHome(id, $0) }
-                Text("-").font(SabqFonts.app(size: 20, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
                 stepper(value: input.away) { setAway(id, $0) }
+                Text("-").font(SabqFonts.app(size: 20, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                stepper(value: input.home) { setHome(id, $0) }
             }
             .environment(\.layoutDirection, .leftToRight)
 

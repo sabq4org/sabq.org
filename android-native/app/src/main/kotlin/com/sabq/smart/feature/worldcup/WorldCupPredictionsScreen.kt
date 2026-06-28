@@ -234,14 +234,17 @@ private fun InputView(m: WcPredictableMatch, state: WorldCupPredictionsViewModel
     val isSubmitting = state.submitting.contains(id)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-        // المضيف يمينًا في RTL — نعرض داخل LTR
+        // المضيف يمينًا (تحت شعاره) والضيف يسارًا — مطابقةً لترتيب الشعارات (RTL)
+        // ولعرض النتيجة/التوقّع (ضيف-مضيف). نُبقي فرض LTR لثبات تخطيط الأرقام، لكن
+        // نرتّب الضيف أولًا ثم المضيف كي يقع عدّاد كل فريق تحت شعاره — وإلا خُزِّن
+        // التوقّع مقلوبًا فظهر «لم تُصب» لتوقّع صحيح.
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Stepper(input.home) { viewModel.setHome(id, it) }
-                Text("-", color = WcColors.onDarkDim, fontSize = 20.sp, fontWeight = FontWeight.Black)
                 Stepper(input.away) { viewModel.setAway(id, it) }
+                Text("-", color = WcColors.onDarkDim, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                Stepper(input.home) { viewModel.setHome(id, it) }
             }
         }
         if (dirty) {
