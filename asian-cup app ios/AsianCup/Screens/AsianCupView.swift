@@ -2390,7 +2390,7 @@ private struct AcQualificationTimelineScreen: View {
                 }
 
                 if let journey {
-                    AcQualificationStatsCard(journey: journey)
+                    AcQualificationSummaryStrip(journey: journey)
                     AcQualificationTimelineList(items: journey.timeline)
                 }
 
@@ -2433,23 +2433,42 @@ private struct AcQualificationTimelineScreen: View {
     }
 }
 
-private struct AcQualificationStatsCard: View {
+private struct AcQualificationSummaryStrip: View {
     let journey: AcQualificationJourney
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            AcSectionHeader(icon: "checkmark.seal.fill", title: L("team.qualification.stats"), subtitle: journey.source, tint: AcTheme.goldDeep)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(journey.source)
+                .font(AsianCupFonts.app(size: 11, weight: .bold))
+                .foregroundStyle(AcTheme.goldDeep)
+                .lineLimit(1)
 
-            HStack(spacing: 8) {
-                AcTeamMetricTile(value: "\(journey.stats.played)", label: L("standings.col.played"))
-                AcTeamMetricTile(value: "\(journey.stats.win)", label: L("team.win"))
-                AcTeamMetricTile(value: "\(journey.stats.draw)", label: L("team.draw"))
-                AcTeamMetricTile(value: "\(journey.stats.lose)", label: L("team.loss"))
+            HStack(alignment: .firstTextBaseline, spacing: 18) {
+                AcQualificationNumber(value: "\(journey.stats.played)", label: L("standings.col.played"))
+                AcQualificationNumber(value: "\(journey.stats.win)", label: L("team.win"))
+                AcQualificationNumber(value: "\(journey.stats.draw)", label: L("team.draw"))
+                AcQualificationNumber(value: "\(journey.stats.lose)", label: L("team.loss"))
+                Spacer(minLength: 0)
             }
         }
-        .padding(15)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(AcTheme.cardFillStrong))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+        .padding(.vertical, 8)
+    }
+}
+
+private struct AcQualificationNumber: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(AsianCupFonts.app(size: 25, weight: .bold))
+                .foregroundStyle(AcTheme.onDarkStrong)
+                .monospacedDigit()
+            Text(label)
+                .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkFaint)
+        }
     }
 }
 
@@ -2457,14 +2476,13 @@ private struct AcQualificationTimelineList: View {
     let items: [AcQualificationTimelineItem]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             AcSectionHeader(icon: "timeline.selection", title: L("team.qualification.timeline"), count: items.count, tint: AcTheme.goldDeep)
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     AcQualificationTimelineRow(item: item, isLast: index == items.count - 1)
                 }
             }
-            .padding(.vertical, 2)
         }
     }
 }
@@ -2474,49 +2492,58 @@ private struct AcQualificationTimelineRow: View {
     let isLast: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 0) {
-                Circle()
-                    .fill(dotFill)
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(AcTheme.cardFillStrong, lineWidth: 3))
-                if !isLast {
-                    Rectangle()
-                        .fill(AcTheme.outline)
-                        .frame(width: 2)
-                        .frame(height: 64)
-                }
-            }
-            .frame(width: 18)
-            .padding(.top, 18)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(item.title)
-                        .font(AsianCupFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(AcTheme.onDarkStrong)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                    Text(dateText)
-                        .font(AsianCupFonts.app(size: 10, weight: .semibold))
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(dateText)
+                    .font(AsianCupFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(AcTheme.onDark)
+                    .lineLimit(1)
+                if let status = item.status, !status.isEmpty {
+                    Text(status)
+                        .font(AsianCupFonts.app(size: 9, weight: .semibold))
                         .foregroundStyle(AcTheme.onDarkFaint)
                         .lineLimit(1)
                 }
+            }
+            .frame(width: 72, alignment: .trailing)
+            .padding(.top, 2)
+
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(dotFill)
+                    .frame(width: 13, height: 13)
+                    .overlay(Circle().stroke(AcTheme.goldDeep.opacity(0.18), lineWidth: 5))
+                if !isLast {
+                    Rectangle()
+                        .fill(AcTheme.outlineStrong.opacity(0.55))
+                        .frame(width: 2)
+                        .frame(minHeight: 118)
+                }
+            }
+            .frame(width: 18)
+            .padding(.top, 5)
+
+            VStack(alignment: .leading, spacing: 9) {
+                Text(item.title)
+                    .font(AsianCupFonts.app(size: 22, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkStrong)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
 
                 if let subtitle = item.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
-                        .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                        .font(AsianCupFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(AcTheme.onDarkDim)
                         .lineLimit(2)
                 }
 
-                HStack(spacing: 8) {
+                HStack(alignment: .center, spacing: 9) {
                     if let opponent = item.opponent {
                         AcTeamLogo(logo: opponent.logo, size: 24)
                     }
                     if let scoreText {
                         Text(scoreText)
-                            .font(AsianCupFonts.app(size: 12, weight: .bold))
+                            .font(AsianCupFonts.app(size: 15, weight: .bold))
                             .foregroundStyle(AcTheme.goldDeep)
                             .monospacedDigit()
                     }
@@ -2529,9 +2556,7 @@ private struct AcQualificationTimelineRow: View {
                     Spacer(minLength: 0)
                 }
             }
-            .padding(13)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AcTheme.cardFill))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+            .padding(.bottom, isLast ? 0 : 24)
         }
     }
 
@@ -2988,25 +3013,41 @@ private struct AcPlayerProfileScreen: View {
                 }
 
                 if let player {
-                    AcPlayerBioCard(player: player)
+                    AcPlayerFactSheet(player: player)
                     if let stats = player.stats {
-                        AcPlayerStatsCard(stats: stats, isGoalkeeper: player.positionEn == "Goalkeeper")
+                        AcPlayerStatsLine(stats: stats, isGoalkeeper: player.positionEn == "Goalkeeper")
                     }
-                    AcPlayerMarketCard(market: player.market)
+                    AcPlayerOpenInfoLine(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: L("player.market"),
+                        value: player.market.available && player.market.value != nil ? "\(player.market.value!) \(player.market.currency)" : L("player.market.unavailable")
+                    )
                     if !player.career.isEmpty {
-                        AcPlayerCareerCard(career: player.career)
+                        AcPlayerOpenSection(icon: "building.columns.fill", title: L("player.career")) {
+                            ForEach(Array(player.career.prefix(8))) { item in
+                                AcPlayerOpenRow(logo: item.logo, title: item.team, subtitle: seasonRange(item.seasons))
+                            }
+                        }
                     }
                     if !player.trophies.isEmpty {
-                        AcPlayerTrophiesCard(trophies: player.trophies)
+                        AcPlayerOpenSection(icon: "trophy.fill", title: L("player.trophies")) {
+                            ForEach(Array(player.trophies.prefix(8))) { item in
+                                AcPlayerOpenRow(logo: "", title: item.competition, subtitle: "\(item.place) · \(item.season)")
+                            }
+                        }
                     }
                     if !player.transfers.isEmpty {
-                        AcPlayerTransfersCard(transfers: player.transfers)
+                        AcPlayerOpenSection(icon: "arrow.left.arrow.right", title: L("player.transfers")) {
+                            ForEach(Array(player.transfers.prefix(6))) { item in
+                                AcPlayerOpenRow(logo: item.to?.logo ?? "", title: item.to?.name ?? item.type, subtitle: [item.type, formatDateOnly(item.date)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                            }
+                        }
                     }
                     if let injury = player.injury {
-                        AcPlayerInfoBand(icon: "cross.case.fill", title: L("player.injury"), value: injury.reason)
+                        AcPlayerOpenInfoLine(icon: "cross.case.fill", title: L("player.injury"), value: injury.reason)
                     }
                 } else {
-                    AcPlayerFallbackCard(
+                    AcPlayerFallbackProfile(
                         position: fallbackPosition,
                         number: fallbackNumber,
                         age: fallbackAge,
@@ -3072,6 +3113,237 @@ private struct AcPlayerProfileScreen: View {
             errorMessage = LError(error)
         }
         loading = false
+    }
+}
+
+private struct AcPlayerFactSheet: View {
+    let player: AcPlayerCard
+
+    private var rows: [(String, String?)] {
+        [
+            (L("player.nationality"), player.nationality),
+            (L("player.birth"), formatDateOnly(player.birthDate)),
+            (L("player.birthPlace"), player.birthPlace),
+            (L("player.height"), player.height.map { "\($0) سم" }),
+            (L("player.weight"), player.weight.map { "\($0) كجم" }),
+            (L("player.currentTeam"), player.currentTeam.map { LTeam(String($0.id), fallback: $0.name) })
+        ]
+    }
+
+    var body: some View {
+        AcPlayerOpenSection(icon: "person.text.rectangle.fill", title: L("player.bio")) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                AcPlayerFactLine(label: row.0, value: row.1)
+                if index < rows.count - 1 {
+                    Divider().overlay(AcTheme.outline.opacity(0.7))
+                }
+            }
+        }
+    }
+}
+
+private struct AcPlayerFactLine: View {
+    let label: String
+    let value: String?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label)
+                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .frame(width: 96, alignment: .leading)
+                .lineLimit(1)
+            Text((value?.isEmpty == false ? value : "—") ?? "—")
+                .font(AsianCupFonts.app(size: 15, weight: .bold))
+                .foregroundStyle(AcTheme.onDarkStrong)
+                .lineLimit(2)
+                .minimumScaleFactor(0.78)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private struct AcPlayerStatsLine: View {
+    let stats: AcPlayerTournamentStats
+    let isGoalkeeper: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AcSectionHeader(icon: "chart.bar.doc.horizontal.fill", title: L("player.stats"), tint: AcTheme.goldDeep)
+
+            HStack(alignment: .top, spacing: 20) {
+                AcPlayerBigNumber(value: "\(stats.matches)", label: L("player.matches"))
+                AcPlayerBigNumber(value: "\(stats.minutes)", label: L("player.minutes"))
+                AcPlayerBigNumber(value: stats.rating.map { String(format: "%.2f", $0) } ?? "—", label: L("player.rating"))
+            }
+
+            HStack(alignment: .top, spacing: 18) {
+                if isGoalkeeper {
+                    AcPlayerSmallNumber(value: "\(stats.saves)", label: L("player.saves"))
+                    AcPlayerSmallNumber(value: "\(stats.conceded)", label: "استقبل")
+                } else {
+                    AcPlayerSmallNumber(value: "\(stats.goals)", label: L("player.goals"))
+                    AcPlayerSmallNumber(value: "\(stats.assists)", label: L("player.assists"))
+                }
+                AcPlayerSmallNumber(value: "\(stats.lineups)", label: L("player.lineups"))
+                AcPlayerSmallNumber(value: "\(stats.yellow + stats.red)", label: L("player.cards"))
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AcPlayerBigNumber: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(AsianCupFonts.app(size: 30, weight: .bold))
+                .foregroundStyle(AcTheme.onDarkStrong)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label)
+                .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct AcPlayerSmallNumber: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(value)
+                .font(AsianCupFonts.app(size: 15, weight: .bold))
+                .foregroundStyle(AcTheme.goldDeep)
+                .monospacedDigit()
+            Text(label)
+                .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .lineLimit(1)
+        }
+    }
+}
+
+private struct AcPlayerFallbackProfile: View {
+    let position: String?
+    let number: Int?
+    let age: Int?
+    let team: AcTeam?
+
+    private var rows: [(String, String?)] {
+        [
+            (L("player.currentTeam"), team.map { LTeam(String($0.id), fallback: $0.name) }),
+            (L("player.profile"), position),
+            ("#", number.map { "\($0)" }),
+            (L("player.age"), age.map { L("team.age", ["age": "\($0)"]) })
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            AcPlayerOpenSection(icon: "person.text.rectangle.fill", title: L("player.bio"), subtitle: L("player.source")) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    AcPlayerFactLine(label: row.0, value: row.1)
+                    if index < rows.count - 1 {
+                        Divider().overlay(AcTheme.outline.opacity(0.7))
+                    }
+                }
+            }
+
+            Text(L("player.market.unavailable"))
+                .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct AcPlayerOpenSection<Content: View>: View {
+    let icon: String
+    let title: String
+    var subtitle: String?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            AcSectionHeader(icon: icon, title: title, subtitle: subtitle, tint: AcTheme.goldDeep)
+            VStack(alignment: .leading, spacing: 0) {
+                content
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct AcPlayerOpenRow: View {
+    let logo: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if logo.isEmpty {
+                Circle()
+                    .fill(AcTheme.chipFill)
+                    .frame(width: 34, height: 34)
+                    .overlay(Circle().stroke(AcTheme.outline, lineWidth: 1))
+            } else {
+                AcTeamLogo(logo: logo, size: 34)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(AsianCupFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkStrong)
+                    .lineLimit(1)
+                Text(subtitle.isEmpty ? "—" : subtitle)
+                    .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                    .foregroundStyle(AcTheme.onDarkFaint)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 9)
+        .overlay(alignment: .bottom) {
+            Divider().overlay(AcTheme.outline.opacity(0.7))
+        }
+    }
+}
+
+private struct AcPlayerOpenInfoLine: View {
+    let icon: String
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(AcTheme.goldDeep)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(AsianCupFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkStrong)
+                Text(value)
+                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(AcTheme.onDarkDim)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
     }
 }
 
