@@ -12,6 +12,8 @@ import {
   getAcTopScorers,
   getAcBracket,
   getAcTeamProfile,
+  getAcQualificationJourney,
+  getAcPlayerCard,
   getAcMatchDetail,
   isAsianCupConfigured,
 } from "../services/asianCupService";
@@ -114,6 +116,48 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[AsianCup] team ${teamId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب بيانات المنتخب حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/team/:id/qualification", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ message: "معرّف منتخب غير صالح" });
+      return;
+    }
+    try {
+      const journey = await getAcQualificationJourney(teamId);
+      if (!journey) {
+        res.status(404).json({ message: "المنتخب غير موجود" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(journey);
+    } catch (error) {
+      console.error(`[AsianCup] qualification journey ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب رحلة التأهل حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/player/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ message: "معرّف لاعب غير صالح" });
+      return;
+    }
+    try {
+      const player = await getAcPlayerCard(playerId);
+      if (!player) {
+        res.status(404).json({ message: "ملف اللاعب غير متاح" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+      res.json(player);
+    } catch (error) {
+      console.error(`[AsianCup] player ${playerId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
     }
   });
 
