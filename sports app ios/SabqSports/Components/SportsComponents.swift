@@ -419,20 +419,20 @@ struct SpMatchCard: View {
 
     private func teamSide(_ team: SpTeam, leading: Bool) -> some View {
         let loser = isLoser(team)
-        return HStack(spacing: 8) {
+        return HStack(spacing: 6) {
             if leading {
-                logo(team, dim: loser)
                 teamName(team, align: .leading)
-            } else {
-                teamName(team, align: .trailing)
                 logo(team, dim: loser)
+            } else {
+                logo(team, dim: loser)
+                teamName(team, align: .trailing)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
     }
 
     private func logo(_ team: SpTeam, dim: Bool) -> some View {
-        SpTeamLogo(logo: team.logo, size: 30).opacity(dim ? 0.5 : 1)
+        SpTeamLogo(logo: team.logo, size: 32).opacity(dim ? 0.5 : 1)
     }
 
     private func teamName(_ team: SpTeam, align: TextAlignment) -> some View {
@@ -446,39 +446,30 @@ struct SpMatchCard: View {
                 .font(SportsFonts.app(size: 13, weight: winner ? .heavy : .semibold))
                 .foregroundStyle(loser ? SpTheme.onDarkDim : SpTheme.onDark)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.78)
                 .multilineTextAlignment(align)
             if winner, align == .leading {
                 Image(systemName: "chevron.right").font(.system(size: 9, weight: .black)).foregroundStyle(SpTheme.green)
             }
         }
     }
-
     private var scoreBox: some View {
         Group {
             if started {
-                HStack(spacing: 5) {
-                    scoreNumber(fixture.goals.away ?? 0, team: fixture.away)
-                    Text("-").font(SportsFonts.app(size: 18, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
-                    scoreNumber(fixture.goals.home ?? 0, team: fixture.home)
-                }
-                .environment(\.layoutDirection, .leftToRight)
+                Text("\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)")
+                    .font(SportsFonts.app(size: 17, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
             } else {
                 Text(SpFormat.kickoffTime(fixture.date))
-                    .font(SportsFonts.app(size: 18, weight: .heavy))
+                    .font(SportsFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             }
         }
-        .frame(minWidth: 56)
-    }
-
-    private func scoreNumber(_ value: Int, team: SpTeam) -> some View {
-        Text("\(value)")
-            .font(SportsFonts.app(size: 22, weight: .heavy))
-            .foregroundStyle(isLoser(team) ? SpTheme.onDarkFaint : SpTheme.onDark)
-            .monospacedDigit()
+        .frame(minWidth: 48)
     }
 }
 

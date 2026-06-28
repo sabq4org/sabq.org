@@ -332,6 +332,35 @@ private struct SpDayScrollRequest: Equatable {
     let nonce: Int
 }
 
+// طيّ الترويسة العلوية (التولبار + شريط الأدوار) حسب اتجاه التمرير — نفس منطق
+// `autoHideTabBar`: التمرير لأسفل يخفي، لأعلى/قرب القمة يُظهر. `armed` تتجاهل قفزة
+// التمرير البرمجية الأولى (الانتقال لليوم) كي لا تُطوى الترويسة فور الإقلاع. iOS 18+.
+private struct SpAutoCollapseHeader: ViewModifier {
+    @Binding var hidden: Bool
+    @Binding var armed: Bool
+    @State private var lastY: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, newY in
+                defer { lastY = newY }
+                guard armed else { return }
+                let delta = newY - lastY
+                if newY < 24 { set(false) }
+                else if delta > 8 { set(true) }
+                else if delta < -8 { set(false) }
+            }
+        } else {
+            content
+        }
+    }
+
+    private func set(_ h: Bool) {
+        guard hidden != h else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { hidden = h }
+    }
+}
+
 // MARK: - الشاشة
 
 struct MatchesView: View {
@@ -350,6 +379,10 @@ struct MatchesView: View {
     @State private var didInitialScroll = false
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
+    // طيّ الترويسة العلوية عند التمرير لأسفل (التولبار + شريط الأدوار) — يبقى شريط
+    // التواريخ ظاهرًا بالأعلى. armed تتجاهل قفزة الانتقال البرمجية الأولى.
+    @State private var headerHidden = false
+    @State private var collapseArmed = false
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -360,8 +393,10 @@ struct MatchesView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                header
-                Divider().overlay(SpTheme.outline)
+                if !headerHidden {
+                    header
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 bodyContent
             }
             .background(SpAmbientBackground())
@@ -378,61 +413,65 @@ struct MatchesView: View {
     // MARK: الترويسة + أدوات التحكّم
 
     private var header: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .fill(SpTheme.green.opacity(0.10))
-                    Image(systemName: "sportscourt.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(SpTheme.green)
-                }
-                .frame(width: 42, height: 42)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("المباريات")
-                        .font(SportsFonts.headline(size: 25))
-                        .foregroundStyle(SpTheme.onDark)
-                    Text(headerSubtitle)
-                        .font(SportsFonts.app(size: 11.5, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                headerAction(system: "calendar", active: false, tint: SpTheme.green) {
-                    pickedDate = dateForCurrentSelection() ?? Self.riyadhCal.startOfDay(for: Date())
-                    showDatePicker = true
-                }
-                headerAction(system: "dot.radiowaves.left.and.right", active: liveOnly, tint: SpTheme.crimson) {
-                    withAnimation(.easeOut(duration: 0.2)) { liveOnly.toggle() }
-                }
-            }
-            stageStrip
+        VStack(spacing: 12) {
+            toolbar
+            if !visibleDays.isEmpty { stageStrip }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+        .padding(.top, 8)
+        .padding(.bottom, visibleDays.isEmpty ? 8 : 10)
     }
 
-    private var headerSubtitle: String {
-        if liveOnly { return "المباريات المباشرة فقط" }
-        if !liveFixtures.isEmpty { return "\(liveFixtures.count) مباراة مباشرة الآن" }
-        if let id = scrolledDayId, let day = visibleDays.first(where: { $0.id == id }) {
-            return day.stage.label
+    // توولبار خفيف على طراز «دوري»: العلامة يمينًا (RTL) والأدوات يسارًا — بلا
+    // صندوق أيقونة كبير ولا سطر فرعي (كانا أصل ثقل الترويسة السابقة وزحمتها).
+    private var toolbar: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "soccerball")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                Text("المباريات")
+                    .font(SportsFonts.headline(size: 22))
+                    .foregroundStyle(SpTheme.onDark)
+            }
+            Spacer(minLength: 0)
+            calendarButton
+            liveToggle
         }
-        return "جدول كأس العالم بتوقيت الرياض"
     }
 
-    private func headerAction(system: String, active: Bool, tint: Color, action: @escaping () -> Void) -> some View {
+    private var calendarButton: some View {
         Button {
-            action()
+            pickedDate = dateForCurrentSelection() ?? Self.riyadhCal.startOfDay(for: Date())
+            showDatePicker = true
         } label: {
-            Image(systemName: system)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(active ? .white : tint)
-                .frame(width: 39, height: 39)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(active ? tint : tint.opacity(0.10)))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(active ? .clear : tint.opacity(0.14), lineWidth: 1))
+            Image(systemName: "calendar")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .frame(width: 38, height: 34)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // مبدّل «مباشر» كبسولة (نقطة + كلمة) على طراز دوري — أوضح من أيقونة مبهمة.
+    private var liveToggle: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) { liveOnly.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(liveOnly ? SpTheme.crimson : SpTheme.onDarkFaint)
+                    .frame(width: 7, height: 7)
+                Text("مباشر")
+                    .font(SportsFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(liveOnly ? SpTheme.crimson : SpTheme.onDarkDim)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(Capsule().fill(liveOnly ? SpTheme.crimson.opacity(0.10) : SpTheme.chipFill))
+            .overlay(Capsule().stroke(liveOnly ? SpTheme.crimson.opacity(0.45) : SpTheme.outline, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -460,11 +499,12 @@ struct MatchesView: View {
         }
     }
 
-    // شريط المراحل — يعرض **كل** أدوار البطولة (مسار المونديال كاملًا)؛ نقر دور
-    // متوفّر ينقل لأول يوم فيه، والأدوار التي لم تبدأ بعد تظهر باهتة ومعطّلة.
+    // شريط أدوار البطولة — صفّ ثانويّ خفيف مُوحّد مع شريحة التواريخ. يعرض **كل**
+    // الأدوار (مسار المونديال كاملًا)؛ المتوفّر ينقل لأوّل يوم فيه، وغير المتوفّر
+    // باهت ومعطّل. المحدّد = حدّ أخضر فاتح + نصّ أخضر (لا تعبئة خضراء ثقيلة).
     private var stageStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 ForEach(SpWcStage.allCases) { st in
                     let hasData = visibleDays.contains { $0.stage == st }
                     let active = hasData && activeStage == st
@@ -473,13 +513,14 @@ struct MatchesView: View {
                         goToDay(firstDay.id)
                     } label: {
                         Text(st.short)
-                            .font(SportsFonts.app(size: 13, weight: active ? .heavy : .semibold))
-                            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
-                            .padding(.horizontal, 14).padding(.vertical, 8)
-                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(active ? SpTheme.green : SpTheme.cardFill))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(active ? .clear : SpTheme.outline.opacity(0.7), lineWidth: 1))
+                            .font(SportsFonts.app(size: 12.5, weight: active ? .bold : .semibold))
+                            .foregroundStyle(active ? SpTheme.green : (hasData ? SpTheme.onDarkDim : SpTheme.onDarkFaint))
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(active ? SpTheme.green.opacity(0.10) : Color.clear))
+                            .overlay(Capsule().stroke(active ? SpTheme.green.opacity(0.55) : SpTheme.outline, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .disabled(!hasData)
                 }
             }
             .padding(.horizontal, 1)
@@ -487,20 +528,23 @@ struct MatchesView: View {
     }
 
     // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ والتمرير اليدوي يحدّث اليوم
-    // النشط فقط عند عبور قسم جديد، لا مع كل إطار تمرير.
+    // النشط فقط عند عبور قسم جديد، لا مع كل إطار تمرير. خلفيته شفّافة ليتدفّق مع
+    // الترويسة (توولبار + أدوار + تواريخ = منطقة واحدة)، ويفصله عن القائمة فاصل واحد.
     private var dateRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(visibleDays) { day in dateChip(day) }
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, 16).padding(.top, 2).padding(.bottom, 10)
             .scrollTargetLayout()
         }
         .scrollPosition(id: $railCenterId, anchor: .center)
-        .background(SpTheme.card.opacity(0.96))
         .overlay(alignment: .bottom) { Divider().overlay(SpTheme.outline) }
     }
 
+    // شريحة يوم على طراز دوري: حبّة بيضاء بحدّ رمادي فاتح, المحدّد = حدّ أخضر فاتح
+    // + نصّ أخضر (لا تعبئة خضراء ثقيلة). يوم اليوم/غدًا/أمس باسم خاص، ونقطة حمراء
+    // للأيام التي فيها مباراة مباشرة الآن.
     private func dateChip(_ day: SpWcDay) -> some View {
         let active = scrolledDayId == day.id
         let isToday = Self.riyadhCal.isDateInToday(day.date)
@@ -508,39 +552,39 @@ struct MatchesView: View {
         return Button {
             goToDay(day.id)
         } label: {
-            HStack(spacing: 7) {
-                if hasLive {
-                    Circle()
-                        .fill(active ? Color.white : SpTheme.crimson)
-                        .frame(width: 6, height: 6)
-                }
-                VStack(alignment: .leading, spacing: 1) {
+            VStack(spacing: 2) {
+                HStack(spacing: 5) {
+                    if hasLive {
+                        Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
+                    }
                     Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
-                        .font(SportsFonts.app(size: 10, weight: .bold))
-                        .foregroundStyle(active ? .white.opacity(0.85) : SpTheme.onDarkDim)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkDim)
                         .lineLimit(1)
-                    Text(SpFormat.dayMonthLabel(day.date))
-                        .font(SportsFonts.app(size: 11.5, weight: .heavy))
-                        .foregroundStyle(active ? .white : SpTheme.onDark)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
                 }
+                Text(SpFormat.dayMonthLabel(day.date))
+                    .font(SportsFonts.app(size: 12, weight: .heavy))
+                    .foregroundStyle(active ? SpTheme.green : SpTheme.onDark)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
-            .frame(width: 74, height: 34, alignment: .leading)
-            .padding(.horizontal, 8)
+            .frame(width: 78, height: 46)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(active ? SpTheme.green : SpTheme.cardFill)
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(active ? .clear : SpTheme.outline.opacity(0.8), lineWidth: 1))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(active ? SpTheme.green.opacity(0.07) : SpTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(active ? SpTheme.green : SpTheme.outline, lineWidth: active ? 1.5 : 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    // القائمة العمودية — أقسام أيام برؤوس مضمّنة. التنقل للأيام يتم برمجيًا فقط
-    // عبر ScrollViewReader، وليس بربط ثنائي الاتجاه، حتى يبقى التمرير اليدوي خفيفًا.
+    // القائمة العمودية — أقسام أيام برؤوس مضمّنة. التنقل للأيام برمجيّ عبر
+    // ScrollViewReader (لا ربط ثنائي الاتجاه) ليبقى التمرير اليدوي خفيفًا. التمرير
+    // لأسفل يطوي الترويسة العلوية (التولبار + الأدوار) فيرتفع شريط التواريخ للأعلى.
     private var matchesList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -567,6 +611,7 @@ struct MatchesView: View {
             }
             .background(SpAmbientBackground())
             .coordinateSpace(name: "matches-scroll")
+            .modifier(SpAutoCollapseHeader(hidden: $headerHidden, armed: $collapseArmed))
             .onAppear { runInitialScroll() }
             .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
             .onChange(of: scrollTargetRequest) { _, request in
@@ -589,9 +634,13 @@ struct MatchesView: View {
         guard !target.isEmpty else { return }
         scrolledDayId = target
         railCenterId = target
+        collapseArmed = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
             requestScroll(to: target)
+            // فعّل كشف الطيّ بعد استقرار القفزة البرمجية لليوم (كي لا تُطوى الترويسة فورًا).
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            collapseArmed = true
         }
     }
 
@@ -650,43 +699,56 @@ struct MatchesView: View {
     private func daySection(_ day: SpWcDay) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             dayHeader(day)
-            matchGroup(day.fixtures)
+            matchGroup(fixturesForDisplay(in: day))
         }
     }
 
-    // مجموعة مباريات بلا إطارات لكل صفّ: سطح أبيض واحد + صفوف مدمجة مفصولة بخطّ
-    // رفيع (نمط قائمة منظّمة يوفّر المساحة بدل بطاقة مؤطّرة لكل مباراة).
+    private func fixturesForDisplay(in day: SpWcDay) -> [SpWcFixture] {
+        guard Self.riyadhCal.isDateInToday(day.date) else { return day.fixtures }
+        return day.fixtures.sorted { a, b in
+            let aRank = todayMatchRank(a)
+            let bRank = todayMatchRank(b)
+            if aRank != bRank { return aRank < bRank }
+            if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
+            return a.id < b.id
+        }
+    }
+
+    private func todayMatchRank(_ fixture: SpWcFixture) -> Int {
+        if fixture.status.finished { return 2 }
+        if fixture.status.live { return 1 }
+        return 0
+    }
+
+    // مجموعة مباريات بلا إطارات: صفوف مدمجة مفصولة بخطّ رفيع ممتدّ
+    // (نمط قائمة منظّمة على طراز «دوري» — الأعلام تصطفّ في عمودين نظيفين).
     private func matchGroup(_ fixtures: [SpWcFixture]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
                 SpWcMatchRow(fixture: f)
                 if idx < fixtures.count - 1 {
-                    Divider().overlay(SpTheme.outline).padding(.leading, 14)
+                    Divider()
+                        .overlay(SpTheme.outline.opacity(0.75))
+                        .padding(.horizontal, 10)
                 }
             }
         }
-        .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
     }
 
+    // رأس اليوم وسطيّ على طراز دوري: شريط رمادي خفيف بعرض الشاشة، التاريخ بالمنتصف
+    // (اليوم/غدًا/أمس + اسم اليوم) وتحته اسم الدور بالأخضر.
     private func dayHeader(_ day: SpWcDay) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(SpTheme.green)
-                .frame(width: 3, height: 30)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(dateLabel(day.date))
-                    .font(SportsFonts.headline(size: 15))
-                    .foregroundStyle(SpTheme.onDark)
-                Text(day.stage.label)
-                    .font(SportsFonts.app(size: 11.5, weight: .bold))
-                    .foregroundStyle(SpTheme.green)
-            }
-            Spacer(minLength: 0)
-            Text("\(day.fixtures.count)")
-                .font(SportsFonts.app(size: 12, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkFaint)
-                .monospacedDigit()
+        VStack(spacing: 3) {
+            Text(dateLabel(day.date))
+                .font(SportsFonts.headline(size: 15))
+                .foregroundStyle(SpTheme.onDark)
+            Text(day.stage.label)
+                .font(SportsFonts.app(size: 11, weight: .bold))
+                .foregroundStyle(SpTheme.green)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpTheme.chipFill))
         .padding(.top, 2)
     }
 
@@ -788,11 +850,12 @@ struct MatchesView: View {
 
     private func dateLabel(_ d: Date) -> String {
         let cal = Self.riyadhCal
+        let weekday = SpFormat.weekdayName(d)
         let dm = SpFormat.dayMonthLabel(d)
-        if cal.isDateInToday(d) { return "اليوم · \(dm)" }
-        if cal.isDateInTomorrow(d) { return "غدًا · \(dm)" }
-        if cal.isDateInYesterday(d) { return "أمس · \(dm)" }
-        return "\(SpFormat.weekdayName(d)) · \(dm)"
+        if cal.isDateInToday(d) { return "اليوم · \(weekday) \(dm)" }
+        if cal.isDateInTomorrow(d) { return "غدًا · \(weekday) \(dm)" }
+        if cal.isDateInYesterday(d) { return "أمس · \(weekday) \(dm)" }
+        return "\(weekday) · \(dm)"
     }
 
     // MARK: ورقة اختيار التاريخ
@@ -879,69 +942,113 @@ struct MatchesView: View {
 private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
 
+    // أحجام موحّدة لكل الصفوف (منتهية/جارية/قادمة) — هذا ما يمنح القائمة مظهر
+    // «دوري» المنظّم: الأعلام تصطفّ في عمودين نظيفين والنتائج في عمود واحد بالمنتصف.
+    private let logoSize: CGFloat = 34
+    private let centerWidth: CGFloat = 50
+
     private var started: Bool { fixture.status.live || fixture.status.finished }
-    private var compact: Bool { fixture.status.finished && !fixture.status.live }
     private var decided: Bool {
         fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
     }
-    private func isLoser(_ team: SpWcTeam) -> Bool { decided && team.winner != true }
     private func isWinner(_ team: SpWcTeam) -> Bool { decided && team.winner == true }
 
-    // صفّ مدمج بلا إطار — يقع داخل سطح المجموعة الأبيض الموحّد (matchGroup).
+    // صفّ مدمج بلا إطار. الترتيب على طراز «دوري»: العَلَم في الطرف الخارجي، والاسم للداخل ملاصقًا
+    // للنتيجة. (RTL: المضيف يمينًا، الضيف يسارًا).
     var body: some View {
         NavigationLink {
             SpMatchCenter(fixtureId: fixture.id, preview: SpFixture(worldCup: fixture))
         } label: {
-            HStack(spacing: 10) {
-                teamSide(fixture.home, leading: true)
+            HStack(spacing: 6) {
+                teamSide(fixture.home, home: true)
                 centerColumn
-                teamSide(fixture.away, leading: false)
+                teamSide(fixture.away, home: false)
             }
-            .padding(.vertical, compact ? 7 : 10)
-            .padding(.horizontal, compact ? 11 : 14)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 8)
+            .background(fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
     }
 
+    // الجانب على طراز «دوري» (مطابق للصورة): العَلَم ملاصق للنتيجة في المنتصف
+    // (يحاذيها من يمينها/يسارها)، والاسم يمتدّ نحو الطرف الخارجي. الـ Spacer يدفع
+    // العَلَم نحو المنتصف فتصطفّ الأعلام في عمودين يحاذيان النتيجة عبر كل الصفوف.
+    private func teamSide(_ team: SpWcTeam, home: Bool) -> some View {
+        let logo = SpTeamLogo(logo: team.logo, size: logoSize)
+        let name = teamName(team)
+        return HStack(spacing: 6) {
+            if home {
+                Spacer(minLength: 4)
+                name
+                logo
+            } else {
+                logo
+                name
+                Spacer(minLength: 4)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func teamName(_ team: SpWcTeam) -> some View {
+        let winner = isWinner(team)
+        return Text(team.name)
+            .font(SportsFonts.app(size: 12.5, weight: winner ? .heavy : .semibold))
+            .foregroundStyle(SpTheme.onDarkStrong)
+            .lineLimit(1)
+            .minimumScaleFactor(0.76)
+            .allowsTightening(true)
+    }
+
+    // عمود النتيجة الثابت بالمنتصف — نتيجة مدمجة + سطر حالة موجز تحتها.
+    // ارتفاع ثابت كي تتساوى الصفوف بصريًّا مهما اختلفت حالتها.
     private var centerColumn: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 0) {
             if started {
-                HStack(spacing: 5) {
-                    scoreNumber(fixture.goals.away ?? 0, team: fixture.away)
-                    Text("-")
-                        .font(SportsFonts.app(size: compact ? 13 : 15, weight: .bold))
-                        .foregroundStyle(SpTheme.onDarkFaint)
-                    scoreNumber(fixture.goals.home ?? 0, team: fixture.home)
-                }
-                .environment(\.layoutDirection, .leftToRight)
+                Text(scoreText)
+                    .font(SportsFonts.app(size: 15, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
             } else {
                 Text(SpFormat.kickoffTime(fixture.date))
-                    .font(SportsFonts.app(size: 16, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
+                    .font(SportsFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             }
             statusSub
         }
-        .frame(minWidth: compact ? 48 : 58)
+        .frame(width: centerWidth)
     }
 
     @ViewBuilder private var statusSub: some View {
         if fixture.status.live {
             HStack(spacing: 4) {
-                Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
+                Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
                 Text(liveMinute)
             }
-            .font(SportsFonts.app(size: 11, weight: .bold))
+            .font(SportsFonts.app(size: 10.5, weight: .bold))
             .foregroundStyle(SpTheme.crimson)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         } else if fixture.status.finished {
-            Text(penaltyText ?? "نهاية")
-                .font(SportsFonts.app(size: penaltyText == nil ? 9.5 : 9, weight: .semibold))
-                .foregroundStyle(penaltyText == nil ? SpTheme.onDarkFaint : SpTheme.green)
+            Text(penaltyText ?? "انتهت")
+                .font(SportsFonts.app(size: 10.5, weight: penaltyText == nil ? .semibold : .bold))
+                .foregroundStyle(penaltyText == nil ? SpTheme.onDarkDim : SpTheme.green)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .minimumScaleFactor(0.7)
+        } else {
+            Text("موعد")
+                .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkFaint)
         }
+    }
+
+    private var scoreText: String {
+        "\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)"
     }
 
     private var penaltyText: String? {
@@ -967,37 +1074,6 @@ private struct SpWcMatchRow: View {
         return "\(e)'"
     }
 
-    private func teamSide(_ team: SpWcTeam, leading: Bool) -> some View {
-        let loser = isLoser(team)
-        return HStack(spacing: 8) {
-            if leading {
-                SpTeamLogo(logo: team.logo, size: compact ? 22 : 26).opacity(loser ? 0.5 : 1)
-                teamName(team, align: .leading)
-            } else {
-                teamName(team, align: .trailing)
-                SpTeamLogo(logo: team.logo, size: compact ? 22 : 26).opacity(loser ? 0.5 : 1)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
-    }
-
-    private func teamName(_ team: SpWcTeam, align: TextAlignment) -> some View {
-        let winner = isWinner(team)
-        let loser = isLoser(team)
-        return Text(team.name)
-            .font(SportsFonts.app(size: compact ? 12 : 13, weight: winner ? .heavy : .semibold))
-            .foregroundStyle(loser ? SpTheme.onDarkDim : SpTheme.onDark)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .multilineTextAlignment(align)
-    }
-
-    private func scoreNumber(_ value: Int, team: SpWcTeam) -> some View {
-        Text("\(value)")
-            .font(SportsFonts.app(size: compact ? 17 : 20, weight: .heavy))
-            .foregroundStyle(isLoser(team) ? SpTheme.onDarkFaint : SpTheme.onDark)
-            .monospacedDigit()
-    }
 }
 
 // MARK: - مركز مباراة المونديال (نفس تصميم مركز مباراة روشن SpMatchCenter)

@@ -397,7 +397,7 @@ private fun MatchesSection(fixtures: List<WcFixture>, isLoading: Boolean, onOpen
                     else "النتائج تظهر هنا فور انتهاء أول مباراة"
                 }
             )
-            else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
+            else -> Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(horizontal = 16.dp)) {
                 groupedByDay(current).forEach { (label, items) ->
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -405,7 +405,17 @@ private fun MatchesSection(fixtures: List<WcFixture>, isLoading: Boolean, onOpen
                             Text(label, color = WcColors.onDark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             Text("(${items.size})", color = WcColors.onDarkDim, fontSize = 12.sp)
                         }
-                        items.forEach { f -> MatchRowCard(f, onOpenMatch) }
+                        Column(verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
+                            items.forEachIndexed { index, f ->
+                                MatchRowCard(f, onOpenMatch)
+                                if (index < items.lastIndex) {
+                                    Box(
+                                        Modifier.fillMaxWidth().padding(horizontal = 10.dp)
+                                            .height(0.5.dp).background(WcColors.cardStroke.copy(alpha = 0.75f))
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -426,39 +436,84 @@ private fun groupedByDay(items: List<WcFixture>): List<Pair<String, List<WcFixtu
 
 @Composable
 private fun MatchRowCard(f: WcFixture, onOpenMatch: (Int) -> Unit) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(WcColors.card)
-            .border(0.5.dp, WcColors.cardStroke, RoundedCornerShape(20.dp))
-            .clickable { onOpenMatch(f.id) }.padding(14.dp),
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .background(if (f.status.live) WcColors.liveRed.copy(alpha = 0.04f) else Color.Transparent)
+            .clickable { onOpenMatch(f.id) }.padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(f.round, color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            WcStatusPill(f)
-        }
-        TeamScoreRow(f.home, if (f.started) f.goals.home ?: 0 else null, f.home.winner == true)
-        TeamScoreRow(f.away, if (f.started) f.goals.away ?: 0 else null, f.away.winner == true)
-        f.penalties?.let {
-            Text("ركلات الترجيح: ${it.home ?: 0} - ${it.away ?: 0}", color = WcColors.onDarkDim, fontSize = 11.sp)
-        }
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(WcColors.cardStroke))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            Icon(Icons.Filled.LocationOn, null, tint = WcColors.onDarkDim, modifier = Modifier.size(10.dp))
-            Text("${f.venue.name} — ${f.venue.city}", color = WcColors.onDarkDim, fontSize = 11.sp, maxLines = 1)
+        MatchTeamSide(f.home, home = true, win = f.home.winner == true, modifier = Modifier.weight(1f))
+        MatchScoreCenter(f, Modifier.width(50.dp))
+        MatchTeamSide(f.away, home = false, win = f.away.winner == true, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MatchTeamSide(team: WcTeam, home: Boolean, win: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (home) Arrangement.End else Arrangement.Start,
+        modifier = modifier,
+    ) {
+        if (home) {
+            Text(
+                team.name,
+                color = WcColors.onDark,
+                fontSize = 12.sp,
+                fontWeight = if (win) FontWeight.Black else FontWeight.SemiBold,
+                maxLines = 1,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(6.dp))
+            WcTeamLogo(team, size = 34)
+        } else {
+            WcTeamLogo(team, size = 34)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                team.name,
+                color = WcColors.onDark,
+                fontSize = 12.sp,
+                fontWeight = if (win) FontWeight.Black else FontWeight.SemiBold,
+                maxLines = 1,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
 
 @Composable
-private fun TeamScoreRow(team: WcTeam, goals: Int?, win: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        WcTeamLogo(team, size = 28)
-        Text(team.name, color = WcColors.onDark, fontSize = 14.sp, fontWeight = if (win) FontWeight.Black else FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        if (goals != null) {
-            Text("$goals", color = if (win) WcColors.emerald else WcColors.onDark, fontSize = 16.sp, fontWeight = FontWeight.Black)
+private fun MatchScoreCenter(f: WcFixture, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
+        if (f.started) {
+            LtrText("${f.goals.away ?: 0}-${f.goals.home ?: 0}", WcColors.onDark, 15, FontWeight.Black)
+        } else {
+            LtrText(WcFormat.time(f), WcColors.onDark, 13, FontWeight.Black)
         }
+        Text(matchStatusText(f), color = matchStatusColor(f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
+
+private fun matchStatusText(f: WcFixture): String {
+    if (f.status.live) {
+        val e = f.status.elapsed ?: return f.status.label.ifEmpty { "مباشر" }
+        val x = f.status.extra
+        return if (x != null && x > 0) "$e+$x'" else "$e'"
+    }
+    f.penalties?.let { return "ترجيح ${it.away ?: 0}-${it.home ?: 0}" }
+    if (f.status.finished) return "انتهت"
+    return "موعد"
+}
+
+private fun matchStatusColor(f: WcFixture): Color =
+    when {
+        f.status.live -> WcColors.liveRed
+        f.penalties != null -> WcColors.emeraldDeep
+        f.status.finished -> WcColors.onDarkDim
+        else -> WcColors.onDarkDim.copy(alpha = 0.7f)
+    }
 
 // ---------- ترتيب المجموعات ----------
 
