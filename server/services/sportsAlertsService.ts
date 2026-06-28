@@ -331,7 +331,7 @@ async function detectEventAlerts(
 }
 
 /** دفع إشعار لأجهزة مستخدم واحد (APNs + FCM) — أفضل جهد، لا يرمي. */
-async function pushToUserDevices(
+export async function pushToUserDevices(
   userId: string,
   title: string,
   body: string,
@@ -354,13 +354,24 @@ async function pushToUserDevices(
     if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(
         // apns-topic لكل جهاز حسب تطبيقه (الرياضة com.sabq.sports، الأخبار الافتراضي).
-        apnsDevices.map((d) =>
-          sendPushNotification(
-            d.token,
-            createCustomNotificationPayload(title, body, { ...data, priority: "time-sensitive" }),
-            { priority: "10", pushType: "alert", topic: d.bundleId ?? undefined },
-          ).catch(() => undefined),
-        ),
+        apnsDevices.map(async (d) => {
+          try {
+            const resp = await sendPushNotification(
+              d.token,
+              createCustomNotificationPayload(title, body, { ...data, priority: "time-sensitive" }),
+              { priority: "10", pushType: "alert", topic: d.bundleId ?? undefined },
+            );
+            // تشخيص: نطبع نتيجة كل دفعة (نجاح/فشل + السبب) لكشف الرفض الصامت
+            // (BadDeviceToken/DeviceTokenNotForTopic) الذي يمنع وصول إشعارات الرياضة.
+            if (!resp.success) {
+              console.warn(
+                `[SportsAlerts] push fail user=${userId} topic=${d.bundleId ?? "default"} status=${resp.statusCode ?? "-"} reason=${resp.reason ?? "-"}`,
+              );
+            }
+          } catch (err) {
+            console.warn(`[SportsAlerts] push threw user=${userId} topic=${d.bundleId ?? "default"}:`, err);
+          }
+        }),
       );
     }
 
