@@ -9,6 +9,10 @@ import {
   getAcTeams,
   getAcFixtures,
   getAcStandings,
+  getAcTopScorers,
+  getAcBracket,
+  getAcTeamProfile,
+  getAcMatchDetail,
   isAsianCupConfigured,
 } from "../services/asianCupService";
 
@@ -67,6 +71,72 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error("[AsianCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/scorers", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ scorers: await getAcTopScorers() });
+    } catch (error) {
+      console.error("[AsianCup] scorers failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة الهدّافين حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/bracket", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+      res.json(await getAcBracket());
+    } catch (error) {
+      console.error("[AsianCup] bracket failed:", error);
+      res.status(502).json({ message: "تعذر جلب شجرة الأدوار حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/team/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ message: "معرّف منتخب غير صالح" });
+      return;
+    }
+    try {
+      const profile = await getAcTeamProfile(teamId);
+      if (!profile) {
+        res.status(404).json({ message: "المنتخب غير موجود" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json(profile);
+    } catch (error) {
+      console.error(`[AsianCup] team ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب بيانات المنتخب حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/match/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const detail = await getAcMatchDetail(fixtureId);
+      if (!detail) {
+        res.status(404).json({ message: "المباراة غير موجودة" });
+        return;
+      }
+      // كاش قصير للمباريات الحيّة، أطول للمنتهية/القادمة
+      const ttl = detail.fixture.status.live ? 15 : detail.fixture.status.finished ? 600 : 60;
+      res.set("Cache-Control", `public, max-age=${ttl}, s-maxage=${ttl * 2}, stale-while-revalidate=${ttl * 4}`);
+      res.json(detail);
+    } catch (error) {
+      console.error(`[AsianCup] match ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
     }
   });
 }
