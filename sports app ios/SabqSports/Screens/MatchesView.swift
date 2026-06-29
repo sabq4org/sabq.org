@@ -389,6 +389,8 @@ struct MatchesView: View {
     @State private var didInitialScroll = false
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
+    @State private var suppressActiveDayUpdatesUntil = Date.distantPast
+    @State private var listStartsAtToday = true
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -396,9 +398,10 @@ struct MatchesView: View {
         return c
     }()
 
-    // عند اختيار يوم من الشريط المثبّت، نضع عنوان اليوم أسفل أعلى الشاشة قليلًا
-    // حتى لا يختفي خلف شريط الأيام في ScrollView/Section sticky header.
+    // عند اختيار يوم من الشريط المثبّت، نضع عنوان اليوم أسفل شريط الأيام
+    // بدل أن يدخل تحته.
     private static let dayScrollAnchor = UnitPoint(x: 0.5, y: 0.13)
+    private static let topScrollId = "matches-screen-top"
 
     var body: some View {
         NavigationStack {
@@ -493,17 +496,10 @@ struct MatchesView: View {
                 matchesList
                 floatingToday
             }
-            // غطاء علوي مُعتِم بارتفاع منطقة الأمان (شريط الحالة/الجزيرة): شريط
-            // الأيام المثبّت يتوقّف أسفل منطقة الأمان، بينما يصعد محتوى القائمة خلف
-            // شريط الحالة — فكانت المباريات السابقة «تطلع» فوق شريط الأيام وتبان.
-            // هذا الغطاء يحجبها فلا يظهر شيء فوق الأيام.
             .overlay(alignment: .top) { topSafeAreaCover }
         }
     }
 
-    // غطاء منطقة الأمان العلوية: لون الخلفية نفسه يمتدّ خلف شريط الحالة فيحجب أي
-    // محتوى يصعد خلفه. نقرأ ارتفاع منطقة الأمان من النافذة مباشرةً (حتمي) ثم نرسم
-    // شريطًا مُعتِمًا يتجاوز الأمان أعلى الشاشة.
     private var topSafeAreaInset: CGFloat {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -554,7 +550,7 @@ struct MatchesView: View {
             HStack(spacing: 8) {
                 ForEach(visibleDays) { day in dateChip(day) }
             }
-            .padding(.horizontal, 16).padding(.top, 2).padding(.bottom, 10)
+            .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
             .scrollTargetLayout()
         }
         .scrollPosition(id: $railCenterId, anchor: .center)
@@ -571,7 +567,7 @@ struct MatchesView: View {
         return Button {
             goToDay(day.id)
         } label: {
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 HStack(spacing: 5) {
                     if hasLive {
                         Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
@@ -587,7 +583,7 @@ struct MatchesView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
-            .frame(width: 78, height: 46)
+            .frame(width: 78, height: 50)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(active ? SpTheme.green.opacity(0.07) : SpTheme.card)
@@ -601,29 +597,22 @@ struct MatchesView: View {
         .buttonStyle(.plain)
     }
 
-    // القائمة العمودية — أقسام أيام برؤوس مضمّنة. التنقل للأيام برمجيّ عبر
-    // ScrollViewReader (لا ربط ثنائي الاتجاه) ليبقى التمرير اليدوي خفيفًا. التمرير
-    // لأسفل يطوي الترويسة العلوية (التولبار + الأدوار) فيرتفع شريط التواريخ للأعلى.
+    // القائمة العمودية — العنوان والمراحل يتحركان مع القائمة، وشريط الأيام وحده
+    // يثبت عند أعلى الشاشة. التنقل للأيام برمجي عبر ScrollViewReader.
     private var matchesList: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    // الجزء العلوي (العنوان + شريط المراحل) يصعد ويختفي مع التمرير.
-                    VStack(spacing: 18) {
-                        toolbar
-                        if !visibleDays.isEmpty { stageStrip }
-                    }
-                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
+                    header
+                        .id(Self.topScrollId)
 
-                    // شريط الأيام = ترويسة قسم مثبّتة: تصعد حتى أعلى الشاشة ثم تتوقّف
-                    // (لا تختفي). القائمة تنزل تحتها.
                     Section {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             if visibleDays.isEmpty {
                                 emptyList
                             } else {
                                 if !liveOnly && !liveFixtures.isEmpty { livePinned }
-                                ForEach(visibleDays) { day in
+                                ForEach(daysForList) { day in
                                     daySection(day)
                                         .background(
                                             GeometryReader { geo in
@@ -635,7 +624,7 @@ struct MatchesView: View {
                                         )
                                 }
                             }
-                            Color.clear.frame(height: 90)
+                            Color.clear.frame(height: 168)
                         }
                         .padding(.horizontal, 16).padding(.top, 12)
                     } header: {
@@ -647,9 +636,11 @@ struct MatchesView: View {
             }
             .background(SpAmbientBackground())
             .coordinateSpace(name: "matches-scroll")
-            .autoHideTabBar()
             .onAppear { runInitialScroll() }
-            .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
+            .onChange(of: visibleDaySignature) { _, _ in
+                didInitialScroll = false
+                runInitialScroll()
+            }
             .onChange(of: scrollTargetRequest) { _, request in
                 guard let request, !request.id.isEmpty else { return }
                 if request.animated {
@@ -673,24 +664,42 @@ struct MatchesView: View {
         didInitialScroll = true
         let target = todayDayId
         guard !target.isEmpty else { return }
+        listStartsAtToday = true
         scrolledDayId = target
         railCenterId = target
-        requestScroll(to: target, animated: false)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            requestScroll(to: Self.topScrollId, animated: false)
+        }
     }
 
     private func goToDay(_ id: String) {
         guard !id.isEmpty else { return }
         scrolledDayId = id
         railCenterId = id
+        if listStartsAtToday {
+            if id == todayDayId {
+                requestScroll(to: id)
+                return
+            }
+            listStartsAtToday = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                requestScroll(to: id)
+            }
+            return
+        }
         requestScroll(to: id)
     }
 
     private func requestScroll(to id: String, animated: Bool = true) {
+        suppressActiveDayUpdatesUntil = Date().addingTimeInterval(animated ? 0.45 : 0.25)
         scrollRequestNonce += 1
         scrollTargetRequest = SpDayScrollRequest(id: id, nonce: scrollRequestNonce, animated: animated)
     }
 
     private func updateActiveDay(from sectionTops: [String: CGFloat]) {
+        guard Date() >= suppressActiveDayUpdatesUntil else { return }
         guard !sectionTops.isEmpty else { return }
         // العتبة تحت شريط الأيام المثبّت (~56pt) كي يكون اليوم النشِط هو الظاهر تحته.
         let anchorY: CGFloat = 60
@@ -799,8 +808,7 @@ struct MatchesView: View {
             Button {
                 goToDay(todayDayId)
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar.badge.clock").font(.system(size: 13, weight: .bold))
+                HStack(spacing: 0) {
                     Text(todayHasMatches ? "مباريات اليوم" : "الأقرب")
                         .font(SportsFonts.app(size: 13, weight: .bold))
                 }
@@ -811,7 +819,8 @@ struct MatchesView: View {
                 .shadow(color: SpTheme.green.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 96)
+            .padding(.bottom, 104)
+            .zIndex(10)
         }
     }
 
@@ -837,6 +846,19 @@ struct MatchesView: View {
         return days
     }
 
+    private var visibleDaySignature: String {
+        visibleDays.map(\.id).joined(separator: "|")
+    }
+
+    private var daysForList: [SpWcDay] {
+        guard listStartsAtToday,
+              !todayDayId.isEmpty,
+              let todayIndex = visibleDays.firstIndex(where: { $0.id == todayDayId })
+        else { return visibleDays }
+
+        return Array(visibleDays[todayIndex...])
+    }
+
     private func rebuildDays(keepSelection: Bool) {
         visibleDays = makeDays(from: fixtures, liveOnly: liveOnly)
         guard !visibleDays.isEmpty else {
@@ -849,7 +871,6 @@ struct MatchesView: View {
             return
         }
         didInitialScroll = false
-        runInitialScroll()
     }
 
     private var activeStage: SpWcStage? { visibleDays.first(where: { $0.id == (scrolledDayId ?? "") })?.stage }
