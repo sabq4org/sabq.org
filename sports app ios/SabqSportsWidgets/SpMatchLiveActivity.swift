@@ -235,16 +235,47 @@ private struct LockScreenView: View {
         }
     }
 
+    // سطران: عدّاد الوقت (مع نقطة البث) فوق، ورقم الشوط/استراحة أسفله — يمنع
+    // انقصاص «46:00 · الشوط الث…» حين يجتمعان في سطر واحد.
     @ViewBuilder private var statusBadge: some View {
-        HStack(spacing: 5) {
-            if context.state.isLive {
-                Circle().fill(SpLA.liveDot).frame(width: 7, height: 7)
+        VStack(spacing: 3) {
+            HStack(spacing: 5) {
+                if context.state.isLive {
+                    Circle().fill(SpLA.liveDot).frame(width: 7, height: 7)
+                }
+                Text(primaryStatusLine)
+                    .font(.system(size: 13, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.dim)
+                    .lineLimit(1)
             }
-            liveStatusContent(context.state, kickoff: context.attributes.kickoff)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.dim)
-                .lineLimit(1)
+            if let sub = secondaryStatusLine {
+                Text(sub)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(SpLA.dim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
+    }
+
+    /// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
+    private var primaryStatusLine: String {
+        let s = context.state
+        if s.isFinished { return "انتهت" }
+        if s.isLive {
+            if !s.minute.isEmpty { return s.minute }
+            return s.statusLabel.isEmpty ? "مباشر" : s.statusLabel
+        }
+        return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
+    }
+
+    /// السطر الثاني: رقم الشوط/استراحة — يظهر فقط حين يكون السطر الأول عدّادًا
+    /// (كي لا يتكرّر نصّ الحالة في السطرين).
+    private var secondaryStatusLine: String? {
+        let s = context.state
+        guard s.isLive, !s.minute.isEmpty, !s.statusLabel.isEmpty else { return nil }
+        return s.statusLabel
     }
 
     @ViewBuilder private func teamSide(_ side: SpSide, alignment: HorizontalAlignment) -> some View {

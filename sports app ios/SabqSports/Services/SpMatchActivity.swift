@@ -76,11 +76,11 @@ private extension UIImage {
 // • الحالة الديناميكية (ContentState): تُحدَّث لحظيًّا — النتيجة، الدقيقة، نصّ الحالة،
 //   آخر حدث (هدف/بطاقة). تُرسَل محليًّا (والتطبيق نشط) أو عبر APNs لاحقًا.
 
-struct SpMatchActivityAttributes: ActivityAttributes {
+nonisolated struct SpMatchActivityAttributes: ActivityAttributes {
     // ⚠️ أسماء الحقول هنا تُطابق `LiveActivityContentState` في الخادم
     // (server/services/apnsService.ts) حرفيًّا — لأن دفعات APNs تحمل
     // `content-state` بهذه المفاتيح، وأي اختلاف يكسر فكّ الترميز على الجهاز.
-    public struct ContentState: Codable, Hashable {
+    public nonisolated struct ContentState: Codable, Hashable {
         var homeScore: Int
         var awayScore: Int
         /// نصّ الدقيقة الجارية: «78'» أو «45+2'» — فارغ قبل الانطلاق/بعد النهاية.
