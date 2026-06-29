@@ -4,6 +4,15 @@ import SwiftUI
 // خضراء (الفريقان + النتيجة/التوقيت + الحالة + البطولة + الملعب)، ثم تبويبات:
 // الأحداث · الإحصاءات · التشكيلة (تُخفى الفارغة). يبدأ بمعاينة فورية من البطاقة
 // ثم يثري بالتفاصيل الكاملة من /sports/match/:id. نصوص الترويسة بيضاء على الأخضر.
+extension VaraTeamStrength {
+    /// قوّة فريق من صفّ ترتيب بطولة (روشن/الدوريات).
+    nonisolated init(row r: SpStandingRow) {
+        self.init(played: r.played, points: r.points,
+                  goalsFor: r.goalsFor, goalsAgainst: r.goalsAgainst,
+                  form: r.form, rank: r.rank)
+    }
+}
+
 struct SpMatchCenter: View {
     let fixtureId: Int
     /// معاينة من بطاقة المباراة لعرض الترويسة فورًا قبل اكتمال التحميل.
@@ -39,6 +48,8 @@ struct SpMatchCenter: View {
 
     // إثراء (المرحلة 2): التعليق اللحظي المُعرَّب
     @State private var commentary: SpCommentary?
+    // قوّة الفريقين من ترتيب البطولة — تغذّي «توقّع VARA» الديناميكي (أفضل جهد).
+    @State private var strength: [Int: VaraTeamStrength] = [:]
 
     private enum Segment: String, CaseIterable {
         case events, commentary, analysis, ratings, lineups, stats, h2h
@@ -109,7 +120,7 @@ struct SpMatchCenter: View {
 
     /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر سبق الرياضي.
     private var shareTitle: String {
-        guard let f = fixture else { return "مباراة عبر سبق الرياضي" }
+        guard let f = fixture else { return "مباراة عبر VARA" }
         let middle: String
         if f.started {
             middle = "\(f.goals.home ?? 0) - \(f.goals.away ?? 0)"
@@ -117,7 +128,7 @@ struct SpMatchCenter: View {
             middle = "×"
         }
         let comp = f.competition?.isEmpty == false ? f.competition! : "دوري روشن"
-        return "\(f.home.name) \(middle) \(f.away.name) — \(comp) · عبر سبق الرياضي"
+        return "\(f.home.name) \(middle) \(f.away.name) — \(comp) · عبر VARA"
     }
 
     private var hasRatings: Bool { (ratings?.players.contains { ($0.rating ?? 0) > 0 }) ?? false }
@@ -148,6 +159,7 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
+                varaModelCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -310,6 +322,72 @@ struct SpMatchCenter: View {
             )
             .padding(.horizontal, 16)
         }
+    }
+
+    // MARK: - توقّع VARA (نموذج ديناميكي: ترتيب + فورمة + أفضلية أرض + مواجهات)
+
+    private func varaPick(_ f: SpFixture) -> VaraPick {
+        var tuple: (home: Int, draw: Int, away: Int)? = nil
+        if let s = h2h?.summary { tuple = (s.homeWins, s.draws, s.awayWins) }
+        let neutral = (f.competitionSlug == "world-cup" || f.competitionSlug == "gulf-cup")
+        return VaraPredict.compute(
+            home: strength[f.home.id], away: strength[f.away.id],
+            homeName: f.home.name, awayName: f.away.name,
+            neutralVenue: neutral, h2h: tuple)
+    }
+
+    @ViewBuilder private var varaModelCard: some View {
+        if let f = fixture, !f.started {
+            let pick = varaPick(f)
+            VStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Text("توقّع VARA").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    Spacer(minLength: 0)
+                    Text("الأرجح \(pick.scoreHome)-\(pick.scoreAway)")
+                        .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.green)
+                        .monospacedDigit().environment(\.layoutDirection, .leftToRight)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                }
+                HStack(alignment: .top) {
+                    varaStat("\(pick.home)٪", f.home.name, SpTheme.green)
+                    varaStat("\(pick.draw)٪", "تعادل", SpTheme.onDarkDim)
+                    varaStat("\(pick.away)٪", f.away.name, SpTheme.onDark)
+                }
+                GeometryReader { geo in
+                    HStack(spacing: 2) {
+                        Capsule().fill(SpTheme.green).frame(width: geo.size.width * CGFloat(pick.home) / 100)
+                        Capsule().fill(SpTheme.onDarkFaint.opacity(0.45)).frame(width: geo.size.width * CGFloat(pick.draw) / 100)
+                        Capsule().fill(SpTheme.teal).frame(width: geo.size.width * CGFloat(pick.away) / 100)
+                    }
+                    .environment(\.layoutDirection, .rightToLeft)
+                }.frame(height: 8)
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle").font(.system(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text(pick.rationale)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+            )
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func varaStat(_ value: String, _ label: String, _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value).font(SportsFonts.app(size: 19, weight: .heavy)).foregroundStyle(color)
+                .monospacedDigit().environment(\.layoutDirection, .leftToRight)
+            Text(label).font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                .lineLimit(1).minimumScaleFactor(0.7).multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - التوقّع (مُعطّل مؤقتًا — النظام غير مكتمل؛ يُعاد تفعيله لاحقًا)
@@ -1517,6 +1595,13 @@ struct SpMatchCenter: View {
         // المواجهات المباشرة — تحتاج معرّفَي الفريقين.
         if let f = preview ?? detail?.fixture {
             self.h2h = try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
+        }
+        // قوّة الفريقين من ترتيب البطولة (لتوقّع VARA) — أفضل جهد، يتراجع للمواجهات.
+        if let slug = (detail?.fixture.competitionSlug ?? preview?.competitionSlug), !slug.isEmpty,
+           let st = try? await APIClient.shared.fetchStandings(comp: slug) {
+            var m: [Int: VaraTeamStrength] = [:]
+            for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
+            if !m.isEmpty { self.strength = m }
         }
         // توقّعي (إن كانت المباراة قادمة وأنا عضو) — لملء الستيبر.
         if auth.isLoggedIn, let f = preview ?? detail?.fixture, !f.started {

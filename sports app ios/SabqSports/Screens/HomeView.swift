@@ -16,6 +16,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpMatchFollows.self) private var matchFollows
+    @Environment(SpAuthStore.self) private var auth
 
     @State private var comp: SpCompetition?
     @State private var outlook: SpOutlook?
@@ -65,6 +66,24 @@ struct HomeView: View {
         return f.home.id == favId || f.away.id == favId
     }
 
+    /// سياق ذكاء VARA — مبنيّ على سلوك المستخدم (المفضّل، المتابَعة، التنبيهات،
+    /// ومباراة المفضّل القادمة/الجارية من البيانات المحمّلة).
+    private var varaInsightContext: VaraInsightContext {
+        let favMatch = favorites.team.flatMap { fav in matches.flatMap { favoriteMatch($0, fav.id) } }
+        let activeAlerts = [auth.alertPrefs.kickoff, auth.alertPrefs.goals, auth.alertPrefs.cards,
+                            auth.alertPrefs.varReview, auth.alertPrefs.fulltime].filter { $0 }.count
+        let upcoming = (favMatch != nil && !favMatch!.started)
+        return VaraInsightContext(
+            isLoggedIn: auth.isLoggedIn,
+            favoriteName: favorites.team?.name,
+            followsCount: auth.follows.filter { $0.kind == "team" }.count,
+            activeAlerts: activeAlerts,
+            favoriteNextTitle: favMatch.map { "\($0.home.name) × \($0.away.name)" },
+            favoriteNextKickoff: upcoming ? favMatch?.kickoff : nil,
+            favoriteIsLive: favMatch?.status.live ?? false
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -105,6 +124,7 @@ struct HomeView: View {
             brandBar
             leagueHeader
             SpMyMatchesCard()   // أوّل بطاقة في الواجهة عند متابعة مباريات.
+            VaraInsightCard(context: varaInsightContext)   // ذكاء VARA السلوكي.
             if let f = featured {
                 heroMatch(f)
                     .transition(.opacity)

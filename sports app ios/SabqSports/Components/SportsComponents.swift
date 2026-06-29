@@ -585,14 +585,17 @@ struct SpMyMatchesCard: View {
         .buttonStyle(.plain)
     }
 
+    // ترتيب موحّد مطابق للشاشة الرئيسية للمباريات (SpWcMatchRow/SpMatchCard):
+    // الشعار ملاصق للنتيجة في المنتصف، والاسم يمتدّ نحو الطرف الخارجي.
+    // (RTL: المضيف يمينًا — اسمه في أقصى اليمين وشعاره للداخل؛ الضيف يسارًا بالعكس.)
     private func teamMini(_ t: SpTeam, leading: Bool) -> some View {
         HStack(spacing: 7) {
             if leading {
-                SpTeamLogo(logo: t.logo, size: 24)
                 name(t)
+                SpTeamLogo(logo: t.logo, size: 24)
             } else {
-                name(t)
                 SpTeamLogo(logo: t.logo, size: 24)
+                name(t)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
@@ -904,7 +907,7 @@ struct SpNewsCard: View {
                     .lineLimit(3).multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    Text(article.author ?? "صحيفة سبق")
+                    Text(article.author ?? "VARA الرياضي")
                         .font(SportsFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SpTheme.emeraldDeep)
                     if let m = article.readingMinutes, m > 0 {

@@ -5,9 +5,6 @@ import SwiftUI
 // الجارية الآن) · حسابي. «التوقّعات» (نظام البركة المتدرّجة المعمّم) تُفتح من
 // داخل صفحة «حسابي». مركز المباراة وصفحات النادي/اللاعب تُفتح من داخل التبويبات.
 struct RootTabView: View {
-    // يُضبط بعد إتمام/تخطّي الشاشات التعريفية — يمنع ظهورها ثانيةً.
-    @AppStorage("ob_seen_v1") private var onboardingSeen = false
-    @State private var showOnboarding = false
     @Environment(SpTabBarVisibility.self) private var tabBarVis
 
     init() {
@@ -43,15 +40,5 @@ struct RootTabView: View {
                 .toolbar(tabBarVisibility, for: .tabBar)
         }
         .tint(SpTheme.green)
-        .fullScreenCover(isPresented: $showOnboarding) {
-            OnboardingView {
-                onboardingSeen = true
-                showOnboarding = false
-                // اطلب إذن الدفع فور إتمام التعريفي مباشرةً (بدل تأجيله لإقلاعٍ تالٍ)
-                // كي يظهر صف الإشعارات ويُسجَّل توكن APNs في الجلسة نفسها.
-                Task { await SpAuthStore.shared.enablePushNotifications() }
-            }
-        }
-        .onAppear { if !onboardingSeen { showOnboarding = true } }
     }
 }

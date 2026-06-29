@@ -48,7 +48,7 @@ struct SpTeamPage: View {
             if let url = URLConstants.teamShareURL(teamId) {
                 ToolbarItem(placement: .topBarTrailing) {
                     let nm = profile?.team.name ?? previewName ?? "النادي"
-                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر سبق الرياضي")) {
+                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر VARA")) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(SpTheme.green)
@@ -491,7 +491,7 @@ struct SpPlayerPage: View {
             if let url = URLConstants.playerShareURL(playerId) {
                 ToolbarItem(placement: .topBarTrailing) {
                     let nm = card?.name ?? "اللاعب"
-                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر سبق الرياضي")) {
+                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر VARA")) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(SpTheme.green)

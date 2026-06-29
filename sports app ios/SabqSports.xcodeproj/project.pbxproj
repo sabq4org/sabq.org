@@ -26,7 +26,9 @@
 		5B000010 /* MatchCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000010 /* MatchCenterView.swift */; };
 		5B000011 /* TeamPlayerPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000011 /* TeamPlayerPages.swift */; };
 		5B000012 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000012 /* AuthStore.swift */; };
-		5B000013 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000013 /* OnboardingView.swift */; };
+		5B0000A1 /* VaraPrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A1 /* VaraPrediction.swift */; };
+		5B0000A2 /* VaraInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A2 /* VaraInsights.swift */; };
+		5B0000A3 /* LegalPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A3 /* LegalPages.swift */; };
 		5B000015 /* SportsPredictionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000015 /* SportsPredictionModels.swift */; };
 		5B000016 /* PredictionsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000016 /* PredictionsHubView.swift */; };
 		5B000017 /* SpPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000017 /* SpPredictionMatchCard.swift */; };
@@ -64,7 +66,9 @@
 		5C000010 /* MatchCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchCenterView.swift; sourceTree = "<group>"; };
 		5C000011 /* TeamPlayerPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamPlayerPages.swift; sourceTree = "<group>"; };
 		5C000012 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
-		5C000013 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		5C0000A1 /* VaraPrediction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraPrediction.swift; sourceTree = "<group>"; };
+		5C0000A2 /* VaraInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraInsights.swift; sourceTree = "<group>"; };
+		5C0000A3 /* LegalPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalPages.swift; sourceTree = "<group>"; };
 		5C000015 /* SportsPredictionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsPredictionModels.swift; sourceTree = "<group>"; };
 		5C000016 /* PredictionsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionsHubView.swift; sourceTree = "<group>"; };
 		5C000017 /* SpPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPredictionMatchCard.swift; sourceTree = "<group>"; };
@@ -125,7 +129,7 @@
 				5C00000F /* AccountView.swift */,
 				5C000010 /* MatchCenterView.swift */,
 				5C000011 /* TeamPlayerPages.swift */,
-				5C000013 /* OnboardingView.swift */,
+				5C0000A3 /* LegalPages.swift */,
 				5C000016 /* PredictionsHubView.swift */,
 				5C000017 /* SpPredictionMatchCard.swift */,
 				5C000018 /* PredictionExtras.swift */,
@@ -154,6 +158,8 @@
 				5C000015 /* SportsPredictionModels.swift */,
 				5C000102 /* SpMatchActivity.swift */,
 				5C000103 /* SpLiveActivityManager.swift */,
+				5C0000A1 /* VaraPrediction.swift */,
+				5C0000A2 /* VaraInsights.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -347,8 +353,10 @@
 				5B00000F /* AccountView.swift in Sources */,
 				5B000010 /* MatchCenterView.swift in Sources */,
 				5B000011 /* TeamPlayerPages.swift in Sources */,
-				5B000013 /* OnboardingView.swift in Sources */,
 				5B000012 /* AuthStore.swift in Sources */,
+				5B0000A1 /* VaraPrediction.swift in Sources */,
+				5B0000A2 /* VaraInsights.swift in Sources */,
+				5B0000A3 /* LegalPages.swift in Sources */,
 				5B000015 /* SportsPredictionModels.swift in Sources */,
 				5B000016 /* PredictionsHubView.swift in Sources */,
 				5B000017 /* SpPredictionMatchCard.swift in Sources */,

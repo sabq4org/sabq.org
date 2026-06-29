@@ -34,9 +34,9 @@ private struct SpMyPredictionRowCard: View {
             }
 
             HStack(spacing: 10) {
-                teamMini(row.homeTeamLogo, row.homeTeamName)
+                teamMini(row.homeTeamLogo, row.homeTeamName, leading: true)
                 scoreBlock
-                teamMini(row.awayTeamLogo, row.awayTeamName)
+                teamMini(row.awayTeamLogo, row.awayTeamName, leading: false)
             }
         }
         .padding(13)
@@ -48,13 +48,20 @@ private struct SpMyPredictionRowCard: View {
         )
     }
 
-    private func teamMini(_ logo: String?, _ name: String) -> some View {
+    // ترتيب موحّد مع بقية الشاشات: الشعار للداخل (نحو النتيجة)، الاسم للطرف الخارجي.
+    private func teamMini(_ logo: String?, _ name: String, leading: Bool) -> some View {
         HStack(spacing: 7) {
-            SpTeamLogo(logo: logo ?? "", size: 30)
-            Text(name).font(SportsFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+            if leading {
+                Text(name).font(SportsFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+                SpTeamLogo(logo: logo ?? "", size: 30)
+            } else {
+                SpTeamLogo(logo: logo ?? "", size: 30)
+                Text(name).font(SportsFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
     }
 
     private var scoreBlock: some View {

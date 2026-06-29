@@ -213,13 +213,13 @@ struct SpPredictionMatchCard: View {
         }
     }
 
-    // MARK: - احتمالات «سبق الذكي» (RTL: المضيف يمين)
+    // MARK: - توقّع VARA (RTL: المضيف يمين)
 
     private var probabilityBar: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
-                Text("احتمالات سبق الذكي").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                Text("توقّع VARA").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
             }
             // شريط مكدّس باتجاه RTL: المضيف أولًا (يمين) ثم التعادل ثم الضيف (يسار).
