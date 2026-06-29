@@ -2224,7 +2224,12 @@ struct AcTeamProfileScreen: View {
     var body: some View {
         AcScreenScaffold {
             VStack(spacing: 18) {
-                header
+                AcTeamHero(
+                    team: team,
+                    teamId: teamId,
+                    coach: profile?.coach,
+                    rankBadge: rankBadge
+                )
 
                 if let errorMessage {
                     AcRefreshBanner(message: errorMessage, refresh: { await load(force: true) })
@@ -2252,7 +2257,7 @@ struct AcTeamProfileScreen: View {
 
                     if let group = profile.group {
                         VStack(alignment: .leading, spacing: 12) {
-                            AcSectionHeader(icon: "list.number", title: L("team.group"), tint: AcTheme.goldDeep)
+                            AcEditorialHeader(title: L("team.group"))
                             AcStandingsLegend()
                             AcGroupCard(group: group)
                         }
@@ -2269,49 +2274,6 @@ struct AcTeamProfileScreen: View {
         .navigationBarHidden(true)
         .task { await load() }
         .refreshable { await load(force: true) }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .center, spacing: 16) {
-                AcTeamLogo(logo: team.logo, size: 84)
-                    .shadow(color: .black.opacity(0.08), radius: 12, y: 6)
-
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(LTeam(String(team.id), fallback: team.name))
-                        .font(AsianCupFonts.app(size: 30, weight: .bold))
-                        .foregroundStyle(AcTheme.onDarkStrong)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    if let badge = rankBadge {
-                        Text("\(badge.groupName) · \(L("team.rank", ["rank": "\(badge.rank)"]))")
-                            .font(AsianCupFonts.app(size: 13, weight: .bold))
-                            .foregroundStyle(AcTheme.onDarkDim)
-                            .lineLimit(1)
-                    } else {
-                        Text(L("teams.subtitle"))
-                            .font(AsianCupFonts.app(size: 13, weight: .semibold))
-                            .foregroundStyle(AcTheme.onDarkDim)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 8) {
-                if teamId == AsianCupConstants.saudiTeamId {
-                    AcHeaderChip(icon: "star.fill", text: L("saudi.host"), tint: AcTheme.goldDeep)
-                }
-                if let coach = profile?.coach, !coach.isEmpty {
-                    AcHeaderChip(icon: "person.fill.viewfinder", text: coach, tint: AcTheme.onDarkDim)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 4)
-        .padding(.bottom, 6)
     }
 
     private var rankBadge: (groupName: String, rank: Int)? {
@@ -2336,18 +2298,247 @@ struct AcTeamProfileScreen: View {
     }
 }
 
+// MARK: - الهوية البصرية الجديدة (تحريري جريء) لصفحة المنتخب
+
+/// رأس قسم تحريري: شريط ذهبي رأسي + عنوان عريض + عدّاد اختياري.
+private struct AcEditorialHeader: View {
+    let title: String
+    var subtitle: String? = nil
+    var count: Int? = nil
+
+    var body: some View {
+        HStack(spacing: 11) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(AcTheme.goldTitleGradient)
+                .frame(width: 4, height: subtitle == nil ? 24 : 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AsianCupFonts.app(size: 21, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkStrong)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(AcTheme.onDarkDim)
+                }
+            }
+            Spacer(minLength: 0)
+            if let count {
+                Text("\(count)")
+                    .font(AsianCupFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(AcTheme.goldDeep)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(AcTheme.gold.opacity(0.16)))
+            }
+        }
+    }
+}
+
+/// بلاطة رقم نظيفة — خلفية باهتة، رقم بارز، لون دلالي خفيف اختياري.
+private struct AcBigStatTile: View {
+    let value: String
+    let label: String
+    var tint: Color = AcTheme.onDarkStrong
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(AsianCupFonts.app(size: 23, weight: .bold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 13)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AcTheme.chipFill))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+    }
+}
+
+/// شارات الفورمة (آخر 5 نتائج) — دوائر ملوّنة دلاليًّا (فوز/تعادل/خسارة).
+private struct AcFormDots: View {
+    let form: [String]
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(Array(form.prefix(5).enumerated()), id: \.offset) { _, r in
+                Text(letter(r))
+                    .font(AsianCupFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 23, height: 23)
+                    .background(Circle().fill(color(r)))
+            }
+        }
+        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func letter(_ r: String) -> String {
+        switch r {
+        case "W": return L("team.form.win")
+        case "D": return L("team.form.draw")
+        case "L": return L("team.form.loss")
+        default: return r
+        }
+    }
+
+    private func color(_ r: String) -> Color {
+        switch r {
+        case "W": return AcTheme.emeraldSoft
+        case "L": return AcTheme.crimson
+        default: return AcTheme.gold.opacity(0.85)
+        }
+    }
+}
+
+/// بطاقة هوية المنتخب — نظيفة ومتوافقة مع هوية التطبيق (فاتح بارد محايد، لمسة ذهبية خفيفة).
+private struct AcTeamHero: View {
+    let team: AcTeam
+    let teamId: Int
+    let coach: String?
+    let rankBadge: (groupName: String, rank: Int)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .center, spacing: 15) {
+                AcTeamLogo(logo: team.logo, size: 78)
+                    .shadow(color: .black.opacity(0.06), radius: 10, y: 5)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("team.profile.eyebrow"))
+                        .font(AsianCupFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(AcTheme.goldDeep)
+                        .tracking(1)
+
+                    Text(LTeam(String(team.id), fallback: team.name))
+                        .font(AsianCupFonts.app(size: 28, weight: .bold))
+                        .foregroundStyle(AcTheme.onDarkStrong)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+
+                    if let rankBadge {
+                        HStack(spacing: 7) {
+                            Text("#\(rankBadge.rank)")
+                                .font(AsianCupFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(AcTheme.goldDeep)
+                                .monospacedDigit()
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(AcTheme.gold.opacity(0.15)))
+                            Text(rankBadge.groupName)
+                                .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                                .foregroundStyle(AcTheme.onDarkDim)
+                                .lineLimit(1)
+                        }
+                    } else {
+                        Text(L("teams.subtitle"))
+                            .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                            .foregroundStyle(AcTheme.onDarkDim)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            if teamId == AsianCupConstants.saudiTeamId || (coach.map { !$0.isEmpty } ?? false) {
+                HStack(spacing: 8) {
+                    if teamId == AsianCupConstants.saudiTeamId {
+                        AcHeaderChip(icon: "star.fill", text: L("saudi.host"), tint: AcTheme.goldDeep)
+                    }
+                    if let coach, !coach.isEmpty {
+                        AcHeaderChip(icon: "person.fill.viewfinder", text: coach, tint: AcTheme.onDarkDim)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(AcTheme.heroGradient))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+        .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+    }
+}
+
+/// إحصاءات المنتخب الفعّالة (server-stats أو احتساب من المجموعة/المباريات).
+func acTeamEffectiveStats(_ profile: AcTeamProfile) -> AcTeamStats {
+    if let stats = profile.stats { return stats }
+
+    if let group = profile.group, let row = group.rows.first(where: { $0.team.id == profile.team.id }) {
+        return AcTeamStats(
+            groupName: group.name,
+            rank: row.rank,
+            played: row.played,
+            win: row.win,
+            draw: row.draw,
+            lose: row.lose,
+            goalsFor: row.goalsFor,
+            goalsAgainst: row.goalsAgainst,
+            goalsDiff: row.goalsDiff,
+            points: row.points,
+            form: acTeamForm(profile.fixtures, teamId: profile.team.id)
+        )
+    }
+
+    var played = 0, win = 0, draw = 0, lose = 0, goalsFor = 0, goalsAgainst = 0, points = 0
+    for fixture in profile.fixtures where fixture.status.finished {
+        guard let homeGoals = fixture.goals.home, let awayGoals = fixture.goals.away else { continue }
+        let own = fixture.home.id == profile.team.id ? homeGoals : awayGoals
+        let against = fixture.home.id == profile.team.id ? awayGoals : homeGoals
+        played += 1
+        goalsFor += own
+        goalsAgainst += against
+        if own > against { win += 1; points += 3 }
+        else if own == against { draw += 1; points += 1 }
+        else { lose += 1 }
+    }
+
+    return AcTeamStats(
+        groupName: nil,
+        rank: nil,
+        played: played,
+        win: win,
+        draw: draw,
+        lose: lose,
+        goalsFor: goalsFor,
+        goalsAgainst: goalsAgainst,
+        goalsDiff: goalsFor - goalsAgainst,
+        points: points,
+        form: acTeamForm(profile.fixtures, teamId: profile.team.id)
+    )
+}
+
+func acTeamForm(_ fixtures: [AcFixture], teamId: Int) -> [String] {
+    fixtures
+        .filter { $0.status.finished && $0.goals.home != nil && $0.goals.away != nil }
+        .sorted { $0.timestamp > $1.timestamp }
+        .prefix(5)
+        .compactMap { fixture in
+            let own = fixture.home.id == teamId ? fixture.goals.home! : fixture.goals.away!
+            let against = fixture.home.id == teamId ? fixture.goals.away! : fixture.goals.home!
+            if own > against { return "W" }
+            if own < against { return "L" }
+            return "D"
+        }
+}
+
 private struct AcQualificationEntryCard: View {
     let team: AcTeam
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 13) {
             Image(systemName: "point.topleft.down.curvedto.point.bottomright.up.fill")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(AcTheme.goldDeep)
                 .frame(width: 44, height: 44)
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(AcTheme.chipFill))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(L("team.qualification"))
                     .font(AsianCupFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(AcTheme.onDarkStrong)
@@ -2359,7 +2550,7 @@ private struct AcQualificationEntryCard: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 AcTeamLogo(logo: team.logo, size: 30)
                 Image(systemName: "chevron.left")
                     .font(.system(size: 12, weight: .bold))
@@ -2556,90 +2747,28 @@ private struct AcQualificationTimelineRow: View {
 private struct AcTeamSummaryCard: View {
     let profile: AcTeamProfile
 
-    private var stats: AcTeamStats {
-        profile.stats ?? Self.fallbackStats(profile)
-    }
-
-    private static func fallbackStats(_ profile: AcTeamProfile) -> AcTeamStats {
-        if let group = profile.group, let row = group.rows.first(where: { $0.team.id == profile.team.id }) {
-            return AcTeamStats(
-                groupName: group.name,
-                rank: row.rank,
-                played: row.played,
-                win: row.win,
-                draw: row.draw,
-                lose: row.lose,
-                goalsFor: row.goalsFor,
-                goalsAgainst: row.goalsAgainst,
-                goalsDiff: row.goalsDiff,
-                points: row.points,
-                form: form(from: profile.fixtures, teamId: profile.team.id)
-            )
-        }
-
-        var played = 0, win = 0, draw = 0, lose = 0, goalsFor = 0, goalsAgainst = 0, points = 0
-        for fixture in profile.fixtures where fixture.status.finished {
-            guard let homeGoals = fixture.goals.home, let awayGoals = fixture.goals.away else { continue }
-            let own = fixture.home.id == profile.team.id ? homeGoals : awayGoals
-            let against = fixture.home.id == profile.team.id ? awayGoals : homeGoals
-            played += 1
-            goalsFor += own
-            goalsAgainst += against
-            if own > against {
-                win += 1
-                points += 3
-            } else if own == against {
-                draw += 1
-                points += 1
-            } else {
-                lose += 1
-            }
-        }
-
-        return AcTeamStats(
-            groupName: nil,
-            rank: nil,
-            played: played,
-            win: win,
-            draw: draw,
-            lose: lose,
-            goalsFor: goalsFor,
-            goalsAgainst: goalsAgainst,
-            goalsDiff: goalsFor - goalsAgainst,
-            points: points,
-            form: form(from: profile.fixtures, teamId: profile.team.id)
-        )
-    }
-
-    private static func form(from fixtures: [AcFixture], teamId: Int) -> [String] {
-        fixtures
-            .filter { $0.status.finished && $0.goals.home != nil && $0.goals.away != nil }
-            .sorted { $0.timestamp > $1.timestamp }
-            .prefix(5)
-            .compactMap { fixture in
-                let own = fixture.home.id == teamId ? fixture.goals.home! : fixture.goals.away!
-                let against = fixture.home.id == teamId ? fixture.goals.away! : fixture.goals.home!
-                if own > against { return "W" }
-                if own < against { return "L" }
-                return "D"
-            }
-    }
+    private var stats: AcTeamStats { acTeamEffectiveStats(profile) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            AcSectionHeader(icon: "chart.bar.xaxis", title: L("team.snapshot"), subtitle: stats.groupName, tint: AcTheme.goldDeep)
+            AcEditorialHeader(title: L("team.snapshot"), subtitle: stats.groupName)
 
-            HStack(spacing: 8) {
-                AcTeamMetricTile(value: "\(stats.points)", label: L("team.points"))
-                AcTeamMetricTile(value: stats.rank.map { "#\($0)" } ?? "—", label: L("team.rank.short"))
-                AcTeamMetricTile(value: signed(stats.goalsDiff), label: L("team.goalDiff"))
+            HStack(spacing: 9) {
+                AcBigStatTile(value: "\(stats.points)", label: L("team.points"), tint: AcTheme.goldDeep)
+                AcBigStatTile(value: stats.rank.map { "#\($0)" } ?? "—", label: L("team.rank.short"))
+                AcBigStatTile(value: signed(stats.goalsDiff), label: L("team.goalDiff"))
+            }
+
+            HStack(spacing: 9) {
+                AcBigStatTile(value: "\(stats.win)", label: L("team.win"), tint: AcTheme.emeraldSoft)
+                AcBigStatTile(value: "\(stats.draw)", label: L("team.draw"))
+                AcBigStatTile(value: "\(stats.lose)", label: L("team.loss"), tint: AcTheme.crimson)
             }
 
             HStack(spacing: 8) {
-                AcTeamRecordPill(value: "\(stats.win)", label: L("team.win"))
-                AcTeamRecordPill(value: "\(stats.draw)", label: L("team.draw"))
-                AcTeamRecordPill(value: "\(stats.lose)", label: L("team.loss"))
+                AcTeamRecordPill(value: "\(stats.played)", label: L("team.played"))
                 AcTeamRecordPill(value: "\(stats.goalsFor)", label: L("team.goalsFor"))
+                AcTeamRecordPill(value: "\(stats.goalsAgainst)", label: L("team.goalsAgainst"))
             }
 
             HStack(spacing: 8) {
@@ -2651,20 +2780,13 @@ private struct AcTeamSummaryCard: View {
                         .font(AsianCupFonts.app(size: 12))
                         .foregroundStyle(AcTheme.onDarkFaint)
                 } else {
-                    ForEach(Array(stats.form.enumerated()), id: \.offset) { _, item in
-                        Text(formText(item))
-                            .font(AsianCupFonts.app(size: 11, weight: .bold))
-                            .foregroundStyle(AcTheme.onDarkStrong)
-                            .frame(width: 24, height: 24)
-                            .background(Circle().fill(AcTheme.chipFill))
-                            .overlay(Circle().stroke(AcTheme.outline, lineWidth: 1))
-                    }
+                    AcFormDots(form: stats.form)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.top, 2)
         }
-        .padding(15)
+        .padding(16)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(AcTheme.cardFillStrong))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
     }
@@ -2672,16 +2794,6 @@ private struct AcTeamSummaryCard: View {
     private func signed(_ value: Int) -> String {
         value > 0 ? "+\(value)" : "\(value)"
     }
-
-    private func formText(_ value: String) -> String {
-        switch value {
-        case "W": return L("team.form.win")
-        case "D": return L("team.form.draw")
-        case "L": return L("team.form.loss")
-        default: return value
-        }
-    }
-
 }
 
 private struct AcHeaderChip: View {
@@ -2878,7 +2990,7 @@ private struct AcTeamJourneySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AcSectionHeader(icon: "point.topleft.down.curvedto.point.bottomright.up", title: L("team.path"), count: fixtures.count, tint: AcTheme.goldDeep)
+            AcEditorialHeader(title: L("team.path"), count: fixtures.count)
             VStack(spacing: 8) {
                 ForEach(fixtures) { fixture in
                     AcTeamJourneyRow(fixture: fixture, teamId: teamId)
@@ -3350,7 +3462,7 @@ private struct AcSquadSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            AcSectionHeader(icon: "person.3.fill", title: L("team.squad"), count: squad.count, tint: AcTheme.goldDeep)
+            AcEditorialHeader(title: L("team.squad"), count: squad.count)
             ForEach(groups, id: \.key) { group in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(positionTitle(group.key))
