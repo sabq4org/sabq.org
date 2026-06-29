@@ -27,6 +27,10 @@
 		5B000011 /* TeamPlayerPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000011 /* TeamPlayerPages.swift */; };
 		5B000012 /* AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000012 /* AuthStore.swift */; };
 		5B000013 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000013 /* OnboardingView.swift */; };
+		5B000015 /* SportsPredictionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000015 /* SportsPredictionModels.swift */; };
+		5B000016 /* PredictionsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000016 /* PredictionsHubView.swift */; };
+		5B000017 /* SpPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000017 /* SpPredictionMatchCard.swift */; };
+		5B000018 /* PredictionExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000018 /* PredictionExtras.swift */; };
 		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020 /* Assets.xcassets */; };
 		5B000021 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021 /* InfoPlist.strings */; };
 		5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.woff2 */; };
@@ -61,6 +65,10 @@
 		5C000011 /* TeamPlayerPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamPlayerPages.swift; sourceTree = "<group>"; };
 		5C000012 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		5C000013 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		5C000015 /* SportsPredictionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsPredictionModels.swift; sourceTree = "<group>"; };
+		5C000016 /* PredictionsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionsHubView.swift; sourceTree = "<group>"; };
+		5C000017 /* SpPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPredictionMatchCard.swift; sourceTree = "<group>"; };
+		5C000018 /* PredictionExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionExtras.swift; sourceTree = "<group>"; };
 		5C000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5C000021 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
 		5C000022 /* IBMPlexSansArabic-Regular.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.woff2"; sourceTree = "<group>"; };
@@ -118,6 +126,9 @@
 				5C000010 /* MatchCenterView.swift */,
 				5C000011 /* TeamPlayerPages.swift */,
 				5C000013 /* OnboardingView.swift */,
+				5C000016 /* PredictionsHubView.swift */,
+				5C000017 /* SpPredictionMatchCard.swift */,
+				5C000018 /* PredictionExtras.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -140,6 +151,7 @@
 				5C000004 /* FontRegistration.swift */,
 				5C000003 /* URLConstants.swift */,
 				5C000012 /* AuthStore.swift */,
+				5C000015 /* SportsPredictionModels.swift */,
 				5C000102 /* SpMatchActivity.swift */,
 				5C000103 /* SpLiveActivityManager.swift */,
 			);
@@ -337,6 +349,10 @@
 				5B000011 /* TeamPlayerPages.swift in Sources */,
 				5B000013 /* OnboardingView.swift in Sources */,
 				5B000012 /* AuthStore.swift in Sources */,
+				5B000015 /* SportsPredictionModels.swift in Sources */,
+				5B000016 /* PredictionsHubView.swift in Sources */,
+				5B000017 /* SpPredictionMatchCard.swift in Sources */,
+				5B000018 /* PredictionExtras.swift in Sources */,
 				5B000102 /* SpMatchActivity.swift in Sources */,
 				5B000103 /* SpLiveActivityManager.swift in Sources */,
 			);

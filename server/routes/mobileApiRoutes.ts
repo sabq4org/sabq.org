@@ -5720,6 +5720,172 @@ router.get("/sports/predictions/me", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// Advanced pool predictions (generalized "Khaleeji 27" engine, any competition)
+// Tiered pari-mutuel pool, leaderboard, long-term (champion/top scorer), badges.
+// All under /api/v1/sports/predictions/* — Bearer (verifyMemberSession).
+//   GET  /sports/predictions/today           اليوم + إحصاءاتي + الجاكبوت (اختياري الدخول)
+//   POST /sports/predictions                  إرسال/تعديل توقّع (يتطلّب الدخول)
+//   GET  /sports/predictions/mine             توقّعاتي + إحصاءاتي (يتطلّب الدخول)
+//   GET  /sports/predictions/leaderboard      المتصدّرون (عام)
+//   GET  /sports/predictions/match/:id        ملخّص تسوية مباراة (عام)
+//   GET  /sports/predictions/long?comp=slug   البطل/الهدّاف لبطولة (اختياري الدخول)
+//   POST /sports/predictions/long             إرسال توقّع طويل المدى (يتطلّب الدخول)
+// ==========================================
+const sportsPredictionsGate = (res: Response): boolean => {
+  // Lazy require keeps the import graph light on the hot auth path.
+  const { isSportsPredictionsEnabled } = require("../services/sportsPoolPredictionsService");
+  if (!isSportsPredictionsEnabled()) {
+    res.set("Cache-Control", "public, max-age=60");
+    res.status(503).json({ configured: false, message: "مسابقة التوقّعات غير مفعّلة حاليًا" });
+    return false;
+  }
+  return true;
+};
+
+router.get("/sports/predictions/today", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const data = await svc.getUpcomingPredictableMatches(session?.userId);
+    res.set("Cache-Control", session ? "private, no-store" : "public, max-age=15, s-maxage=15");
+    res.json(data);
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/today error:", error);
+    res.status(502).json({ message: "تعذر جلب مباريات التوقّع حاليًا" });
+  }
+});
+
+router.post("/sports/predictions", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { fixtureId, predHome, predAway, kickoffTs, competitionSlug, homeId, awayId, homeName, awayName, homeLogo, awayLogo } = req.body ?? {};
+    const id = Number(fixtureId);
+    const ph = clampPredGoals(predHome);
+    const pa = clampPredGoals(predAway);
+    const ko = Number(kickoffTs);
+    if (!Number.isFinite(id) || id <= 0 || ph == null || pa == null || !Number.isFinite(ko) || ko <= 0 || !homeName || !awayName) {
+      return res.status(400).json({ success: false, message: "بيانات التوقّع غير مكتملة" });
+    }
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const result = await svc.submitPrediction(session.userId, {
+      fixtureId: id,
+      kickoffTs: ko,
+      competitionSlug: competitionSlug ? String(competitionSlug) : null,
+      homeId: Number.isFinite(Number(homeId)) ? Number(homeId) : null,
+      awayId: Number.isFinite(Number(awayId)) ? Number(awayId) : null,
+      homeName: String(homeName),
+      awayName: String(awayName),
+      homeLogo: homeLogo ? String(homeLogo) : null,
+      awayLogo: awayLogo ? String(awayLogo) : null,
+      predHome: ph,
+      predAway: pa,
+    });
+    res.set("Cache-Control", "private, no-store");
+    if (!result.ok) {
+      const status = result.reason === "LOCKED" ? 409 : 400;
+      const message = result.reason === "LOCKED" ? "أُقفل التوقّع — انطلقت المباراة" : "بيانات التوقّع غير صحيحة";
+      return res.status(status).json({ success: false, reason: result.reason, message });
+    }
+    res.json({ success: true, prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/predictions error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ توقّعك حاليًا" });
+  }
+});
+
+router.get("/sports/predictions/mine", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const [predictions, me] = await Promise.all([
+      svc.getMyPredictions(session.userId),
+      svc.getMeStats(session.userId),
+    ]);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, predictions, me });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/mine error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+router.get("/sports/predictions/leaderboard", async (_req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const leaders = await svc.getLeaderboard(100);
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+    res.json({ leaders });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/leaderboard error:", error);
+    res.status(502).json({ message: "تعذر جلب لوحة المتصدّرين حاليًا" });
+  }
+});
+
+router.get("/sports/predictions/match/:id", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const summary = await svc.getMatchPredictionsSummary(id);
+    res.set("Cache-Control", "public, max-age=10, s-maxage=30");
+    res.json(summary);
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/match/:id error:", error);
+    res.status(502).json({ message: "تعذر جلب ملخّص المباراة حاليًا" });
+  }
+});
+
+router.get("/sports/predictions/long", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const comp = typeof req.query.comp === "string" ? req.query.comp.trim() : "";
+    if (!comp) return res.status(400).json({ message: "البطولة مطلوبة" });
+    const session = await verifyMemberSession(req);
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const data = await svc.getLongPredictions(comp, session?.userId);
+    res.set("Cache-Control", session ? "private, no-store" : "public, max-age=60, s-maxage=120");
+    res.json(data);
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/long error:", error);
+    res.status(502).json({ message: "تعذر جلب التوقّعات طويلة المدى حاليًا" });
+  }
+});
+
+router.post("/sports/predictions/long", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { competitionSlug, kind, teamId, playerName } = req.body ?? {};
+    if (!competitionSlug || (kind !== "champion" && kind !== "top_scorer")) {
+      return res.status(400).json({ success: false, message: "بيانات غير صحيحة" });
+    }
+    const svc = await import("../services/sportsPoolPredictionsService");
+    const result = await svc.submitLongPrediction(session.userId, String(competitionSlug), kind, {
+      teamId: Number.isFinite(Number(teamId)) ? Number(teamId) : undefined,
+      playerName: playerName != null ? String(playerName) : undefined,
+    });
+    res.set("Cache-Control", "private, no-store");
+    if (!result.ok) {
+      const status = result.reason === "LOCKED" ? 409 : 400;
+      const message = result.reason === "LOCKED" ? "أُقفلت التوقّعات — انطلقت البطولة" : "بيانات غير صحيحة";
+      return res.status(status).json({ success: false, reason: result.reason, message });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/predictions/long error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ توقّعك حاليًا" });
+  }
+});
+
+// ==========================================
 // Live Activity push tokens (iOS lock-screen live match)
 // POST /api/v1/live-activity/register   { fixtureId, token }
 // POST /api/v1/live-activity/end        { token }

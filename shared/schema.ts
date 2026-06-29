@@ -2100,6 +2100,120 @@ export type GcPredictionMatch = typeof gcPredictionMatches.$inferSelect;
 export type GcLongPrediction = typeof gcLongPredictions.$inferSelect;
 export type GcBadge = typeof gcBadges.$inferSelect;
 
+// ============================================================================
+// Sabq Sports — GENERALIZED tiered shared-pool predictions (any competition).
+// The same pari-mutuel engine as Gulf Cup 27, but competition-agnostic: any
+// fixture in the curated sports board (Roshn, world leagues, cups, …) funds a
+// 1000-point pool (+ any jackpot carried within the SAME competition), split
+// 50/30/20 across exact / margin / outcome tiers and shared equally among each
+// tier's winners. Reversed scorelines never win (scored by sign of home-away).
+// Fixtures come from API-Football via saudiLeagueService; probabilities are
+// frozen at submit time from getFixturePrediction (neutral fallback). Distinct
+// from the legacy `sports_predictions` (fixed 3/1/0) table, which is retained.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess + the
+// settled tier and the pari-mutuel share paid.
+export const sportsPoolPredictions = pgTable("sports_pool_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  tier: text("tier").notNull().default("none"),          // exact | margin | outcome | none
+  outcomeHit: boolean("outcome_hit").notNull().default(false),
+  marginHit: boolean("margin_hit").notNull().default(false),
+  exactHit: boolean("exact_hit").notNull().default(false),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  // Model win-% of the picked outcome at submit time (0-100) — powers lionheart.
+  pickProb: integer("pick_prob").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_sp_pool_pred_user").on(table.userId),
+  index("idx_sp_pool_pred_fixture").on(table.fixtureId),
+  index("idx_sp_pool_pred_user_settled").on(table.userId, table.settledAt),
+]);
+
+// Per-fixture state: competition, frozen model probabilities, pool accounting
+// (base + carried-in jackpot scoped to the competition, per-tier paid amounts,
+// carried-out jackpot), and the settlement anchor + display snapshots.
+export const sportsPoolMatches = pgTable("sports_pool_matches", {
+  fixtureId: integer("fixture_id").primaryKey(),
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(), // unix seconds — pool ordering + jackpot chain
+  homeTeamId: integer("home_team_id").notNull().default(0),
+  awayTeamId: integer("away_team_id").notNull().default(0),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  probHome: integer("prob_home").notNull().default(33),
+  probDraw: integer("prob_draw").notNull().default(34),
+  probAway: integer("prob_away").notNull().default(33),
+  poolBase: integer("pool_base").notNull().default(1000),
+  poolCarryIn: integer("pool_carry_in").notNull().default(0),
+  paidExact: integer("paid_exact").notNull().default(0),
+  paidMargin: integer("paid_margin").notNull().default(0),
+  paidOutcome: integer("paid_outcome").notNull().default(0),
+  carryOut: integer("carry_out").notNull().default(0),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  outcomeWinners: integer("outcome_winners").notNull().default(0),
+  marginWinners: integer("margin_winners").notNull().default(0),
+  exactWinners: integer("exact_winners").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"), // THE idempotency guard
+}, (table) => [
+  index("idx_sp_pool_match_status").on(table.status),
+  index("idx_sp_pool_match_kickoff").on(table.kickoffTs),
+  index("idx_sp_pool_match_comp").on(table.competitionSlug, table.kickoffTs),
+]);
+
+// Long-term per-competition predictions (champion / top scorer). One row per
+// (userId, competitionSlug, kind).
+export const sportsPoolLong = pgTable("sports_pool_long", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  competitionSlug: text("competition_slug").notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerName: text("player_name"),
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_long_user_comp_kind").on(table.userId, table.competitionSlug, table.kind),
+  index("idx_sp_pool_long_comp_kind").on(table.competitionSlug, table.kind),
+]);
+
+// Earned achievement badges. One row per (userId, badge).
+export const sportsPoolBadges = pgTable("sports_pool_badges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  badge: text("badge").notNull(), // 'nostradamus' | 'lionheart' | 'hot_streak' | 'sharpshooter'
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sp_pool_badge_user_badge").on(table.userId, table.badge),
+  index("idx_sp_pool_badge_user").on(table.userId),
+]);
+
+export type SportsPoolPrediction = typeof sportsPoolPredictions.$inferSelect;
+export type SportsPoolMatch = typeof sportsPoolMatches.$inferSelect;
+export type SportsPoolLong = typeof sportsPoolLong.$inferSelect;
+export type SportsPoolBadge = typeof sportsPoolBadges.$inferSelect;
+
 // Loyalty Rewards (available rewards)
 export const loyaltyRewards = pgTable("loyalty_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
