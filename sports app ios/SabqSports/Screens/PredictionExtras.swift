@@ -107,7 +107,8 @@ func prettyComp(_ slug: String) -> String {
     case "saudi-league", "roshn-league": return "دوري روشن"
     case "world-cup": return "كأس العالم"
     case "champions-league": return "دوري الأبطال"
-    case "afc-champions": return "أبطال آسيا"
+    case "afc-champions-league", "afc-champions": return "أبطال آسيا"
+    case "pro-league": return "دوري روشن"
     default: return slug.replacingOccurrences(of: "-", with: " ")
     }
 }
@@ -356,13 +357,26 @@ struct SpLongPredictionsView: View {
 
     // MARK: - تحميل/إرسال
 
+    // بطولات التوقّعات طويلة المدى (البطل/الهدّاف): كأس العالم، أبطال آسيا، خليجي ٢٧،
+    // وكل البطولات السعودية. لا نشترط جدول ترتيب — الكؤوس تشتقّ فِرقها من المباريات
+    // في الخادم، فاشتراط hasStandings كان يستبعد كأس العالم والخليج وآسيا بالكامل.
+    private static let longCompSlugs: [String] = ["world-cup", "afc-champions-league", "gulf-cup"]
+
     private func loadComps() async {
         loading = true
         do {
             let r = try await APIClient.shared.fetchCompetitions(ignoreCache: false)
-            // بطولات لها جدول ترتيب (يلزم لاشتقاق الفرق) وليست منتهية.
-            comps = r.competitions.filter { $0.hasStandings && $0.status != "finished" }
-            if comps.isEmpty { comps = r.competitions.filter { $0.hasStandings } }
+            let pick: (SpCompetition) -> Bool = { c in
+                Self.longCompSlugs.contains(c.slug) || c.category == "saudi"
+            }
+            var list = r.competitions.filter { pick($0) && $0.status != "finished" }
+            if list.isEmpty { list = r.competitions.filter(pick) }
+            // ترتيب العرض: كأس العالم ثم آسيا ثم خليجي ثم البطولات السعودية.
+            comps = list.sorted { a, b in
+                let ai = Self.longCompSlugs.firstIndex(of: a.slug) ?? Self.longCompSlugs.count
+                let bi = Self.longCompSlugs.firstIndex(of: b.slug) ?? Self.longCompSlugs.count
+                return ai < bi
+            }
             selected = comps.first
             if selected != nil { await loadLong() } else { loading = false }
         } catch {

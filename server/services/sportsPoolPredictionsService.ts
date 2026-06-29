@@ -72,32 +72,6 @@ function isPredictable(fx: SplLiveBoardItem): boolean {
     && fx.timestamp > nowSec();
 }
 
-// Flagship tournaments whose FULL schedule (not just today/tomorrow) is offered
-// for prediction — the World Cup is the app's centrepiece, so its upcoming
-// fixtures must always surface even when they're days out. Gulf Cup rides along.
-const FEATURED_PREDICTION_SLUGS = ["world-cup", "gulf-cup"] as const;
-const PREDICTION_HORIZON_SEC = 21 * 24 * 60 * 60; // up to ~3 weeks ahead
-
-/** Upcoming predictable fixtures pulled directly from flagship competitions. */
-async function featuredUpcomingFixtures(): Promise<SplLiveBoardItem[]> {
-  const horizon = nowSec() + PREDICTION_HORIZON_SEC;
-  const lists = await Promise.all(
-    FEATURED_PREDICTION_SLUGS.map(async (slug) => {
-      const comp = getCompetition(slug);
-      if (!comp) return [] as SplLiveBoardItem[];
-      try {
-        const fixtures = await getFixtures(comp);
-        return fixtures
-          .map((f): SplLiveBoardItem => ({ ...f, competition: comp.name, competitionSlug: comp.slug }))
-          .filter((item) => isPredictable(item) && item.timestamp <= horizon);
-      } catch {
-        return [] as SplLiveBoardItem[];
-      }
-    }),
-  );
-  return lists.flat();
-}
-
 const probOfPick = (
   predHome: number,
   predAway: number,
@@ -409,17 +383,19 @@ export async function getMeStats(userId: string): Promise<SpMeStats> {
 export async function getUpcomingPredictableMatches(
   userId?: string,
 ): Promise<{ matches: SpPredictableMatch[]; me: SpMeStats | null; jackpot: number }> {
-  const [todayRaw, tomorrowRaw, featuredRaw, jackpot] = await Promise.all([
+  // Matches cover a rolling two-day window (today + tomorrow) across ALL our
+  // competitions — the global board is filtered to our league ids, so World Cup,
+  // Gulf Cup, AFC and the Saudi competitions all surface automatically. As days
+  // pass, the next fixtures roll into view.
+  const [todayRaw, tomorrowRaw, jackpot] = await Promise.all([
     getGlobalTodayFixtures(riyadhDateKey(0)).catch(() => [] as SplLiveBoardItem[]),
     getGlobalTodayFixtures(riyadhDateKey(1)).catch(() => [] as SplLiveBoardItem[]),
-    featuredUpcomingFixtures().catch(() => [] as SplLiveBoardItem[]),
     totalJackpot(),
   ]);
 
-  // De-dup (a fixture can surface on multiple sources), keep predictable. Flagship
-  // tournament fixtures (World Cup / Gulf Cup) are merged in regardless of date.
+  // De-dup (a fixture can surface on both day boards near midnight), keep predictable.
   const byId = new Map<number, SplLiveBoardItem>();
-  for (const fx of [...todayRaw, ...tomorrowRaw, ...featuredRaw]) {
+  for (const fx of [...todayRaw, ...tomorrowRaw]) {
     if (isPredictable(fx) && !byId.has(fx.id)) byId.set(fx.id, fx);
   }
   const fixtures = [...byId.values()].sort((a, b) => a.timestamp - b.timestamp).slice(0, 40);
@@ -849,15 +825,20 @@ export type SpLongResponse = {
   }[];
 };
 
-/** Long-term picks lock once the competition's first fixture has kicked off. */
+/**
+ * Long-term picks (champion / top scorer) stay OPEN while the competition is
+ * still running and lock only once it has ENDED — every known fixture finished.
+ * This lets fans predict an in-progress tournament's top scorer / champion (e.g.
+ * a World Cup already underway) instead of seeing it locked the moment it began.
+ * With no fixtures yet (not scheduled), it's treated as open.
+ */
 async function longLocked(competitionSlug: string): Promise<boolean> {
   const comp = getCompetition(competitionSlug);
   if (!comp) return true;
   try {
     const fixtures = await getFixtures(comp);
-    const first = [...fixtures].sort((a, b) => a.timestamp - b.timestamp)[0];
-    if (!first) return false;
-    return nowSec() >= first.timestamp;
+    if (fixtures.length === 0) return false;
+    return fixtures.every((f) => f.status.finished);
   } catch {
     return false;
   }

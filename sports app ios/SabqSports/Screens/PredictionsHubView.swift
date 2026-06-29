@@ -9,7 +9,7 @@ struct PredictionsHubView: View {
     @Environment(SpAuthStore.self) private var auth
 
     enum Tab: String, CaseIterable {
-        case matches, mine, leaders, long, badges
+        case matches, mine, leaders, long, badges, howto
         var label: String {
             switch self {
             case .matches: return "المباريات"
@@ -17,6 +17,7 @@ struct PredictionsHubView: View {
             case .leaders: return "المتصدّرون"
             case .long: return "البطل والهدّاف"
             case .badges: return "الإنجازات"
+            case .howto: return "كيف تلعب؟"
             }
         }
     }
@@ -199,6 +200,7 @@ struct PredictionsHubView: View {
         case .leaders: leadersTab
         case .long: SpLongPredictionsView()
         case .badges: badgesTab
+        case .howto: howToTab
         }
     }
 
@@ -256,6 +258,93 @@ struct PredictionsHubView: View {
                      subtitle: "ادخل من تبويب «حسابي» للتوقّع والمنافسة على النقاط")
     }
 
+    // MARK: - كيف تلعب؟ (شرح الفكرة وتوزيع النقاط — مطابق لخليجي ٢٧)
+
+    @ViewBuilder private var howToTab: some View {
+        VStack(spacing: 14) {
+            // الخطوات الثلاث
+            howToCard(
+                title: "الفكرة باختصار",
+                rows: [
+                    ("1.circle.fill", "توقّع النتيجة", "اختر نتيجة المباراة قبل انطلاقها — لكل مباراة بركة نقاط تُقتسم بين المصيبين."),
+                    ("2.circle.fill", "تُسوّى تلقائيًا", "فور انتهاء المباراة تُوزَّع البركة على المصيبين كلٌّ حسب دقّة توقّعه."),
+                    ("3.circle.fill", "اجمع وتصدّر", "نقاطك تُضاف لرصيدك وترفعك في لوحة المتصدّرين وتفتح لك الإنجازات."),
+                ],
+                tint: SpTheme.green)
+
+            // طبقات البركة 50/30/20
+            howToCard(
+                title: "توزيع النقاط — بركة ١٠٠٠",
+                rows: [
+                    ("target", "🎯 النتيجة الدقيقة — ٥٠٪", "٥٠٠ نقطة لمن أصاب النتيجة بالضبط (مثال ٢-١)."),
+                    ("ruler", "📏 الفارق الصحيح — ٣٠٪", "٣٠٠ نقطة لمن أصاب فارق الأهداف واتجاه النتيجة."),
+                    ("checkmark.seal", "✅ النتيجة الصحيحة — ٢٠٪", "٢٠٠ نقطة لمن أصاب الفائز أو التعادل فقط."),
+                ],
+                tint: SpTheme.teal)
+
+            // قواعد البركة المتدرّجة
+            howToCard(
+                title: "قواعد البركة المتدرّجة",
+                rows: [
+                    ("person.2.fill", "كلّما قلّوا زدت", "نصيب كل طبقة يُقسَّم بالتساوي على فائزيها — فكلّما قلّ المصيبون زاد نصيبك."),
+                    ("crown.fill", "جائزة متراكمة (جاكبوت)", "إن لم يُصب أحدٌ طبقةً تراكمت نقاطها وأُضيفت لبركة المباراة التالية في البطولة."),
+                    ("arrow.triangle.2.circlepath", "النتيجة المقلوبة لا تفوز", "يُحتسب الفائز حسب اتجاه النتيجة؛ توقّع ١-٢ لا يُكافأ على مباراة انتهت ٢-١."),
+                ],
+                tint: SpTheme.gold)
+
+            // البطل والهدّاف
+            howToCard(
+                title: "البطل والهدّاف",
+                rows: [
+                    ("trophy.fill", "بركة منفصلة ٥٠٠٠", "لكل بطولة بركة مستقلّة للبطل وأخرى للهدّاف، تُقسَّم على المصيبين عند ختام البطولة."),
+                    ("lock.open.fill", "مفتوحة أثناء البطولة", "توقّع البطل والهدّاف يبقى متاحًا ما دامت البطولة جارية ويُقفل عند انتهائها."),
+                ],
+                tint: SpTheme.greenSoft)
+
+            Text("التوقّعات للمتعة والمنافسة فقط — لا رهان ولا مقابل مادّي.")
+                .font(SportsFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkFaint)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+        }
+    }
+
+    private func howToCard(title: String, rows: [(String, String, String)], tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(SportsFonts.subhead(size: 16))
+                .foregroundStyle(SpTheme.onDark)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: row.0)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(tint)
+                        .frame(width: 30, height: 30)
+                        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint.opacity(0.12)))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(row.1)
+                            .font(SportsFonts.app(size: 13.5, weight: .bold))
+                            .foregroundStyle(SpTheme.onDark)
+                        Text(row.2)
+                            .font(SportsFonts.app(size: 11.5, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                .fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                    .stroke(SpTheme.cardStroke, lineWidth: 1))
+        )
+    }
+
     // MARK: - التحميل
 
     private func loadToday(silent: Bool = false) async {
@@ -283,7 +372,7 @@ struct PredictionsHubView: View {
             if auth.isLoggedIn && (force || !mineLoaded) { await loadMine() }
         case .leaders:
             if force || !leadersLoaded { await loadLeaders() }
-        case .long, .badges:
+        case .long, .badges, .howto:
             break
         }
     }
