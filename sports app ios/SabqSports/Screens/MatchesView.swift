@@ -51,7 +51,7 @@ nonisolated struct SpWcTeam: Decodable {
 nonisolated struct SpWcScore: Decodable { let home: Int?; let away: Int? }
 
 extension SpFixture {
-    init(worldCup f: SpWcFixture) {
+    nonisolated init(worldCup f: SpWcFixture) {
         self.init(
             id: f.id,
             date: f.date,
@@ -413,7 +413,7 @@ struct MatchesView: View {
     // MARK: الترويسة + أدوات التحكّم
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 18) {
             toolbar
             if !visibleDays.isEmpty { stageStrip }
         }

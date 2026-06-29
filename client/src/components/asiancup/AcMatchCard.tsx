@@ -49,7 +49,7 @@ export function AcMatchCard({ fixture }: { fixture: AcFixture }) {
         <div className="px-1 text-center" dir="ltr">
           {started ? (
             <span className="text-lg font-black tabular-nums text-foreground">
-              {fixture.goals.home ?? 0} - {fixture.goals.away ?? 0}
+              {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
             </span>
           ) : (
             <span className="text-xs font-bold text-muted-foreground">VS</span>

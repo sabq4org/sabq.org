@@ -107,7 +107,9 @@ export function GcWinCelebration({ win, onClose }: { win: GcWin; onClose: () => 
           </motion.div>
           <p className="text-lg font-black">توقّعك صحيح!</p>
           <p className="mt-0.5 text-sm text-green-100/90">
-            {TIER_EMOJI[win.tier]} {TIER_AR[win.tier]} — {win.homeName} {win.finalHome}-{win.finalAway} {win.awayName}
+            {TIER_EMOJI[win.tier]} {TIER_AR[win.tier]} — {win.homeName}{" "}
+            <span dir="ltr" className="tabular-nums">{win.finalAway}-{win.finalHome}</span>{" "}
+            {win.awayName}
           </p>
 
           <div className="my-5 inline-flex items-center gap-2 rounded-2xl bg-amber-400/20 px-6 py-3 ring-2 ring-amber-300/40">

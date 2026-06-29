@@ -225,4 +225,4 @@ nonisolated enum APIError: Error, LocalizedError {
     }
 }
 
-private struct ApiMessage: Decodable { let message: String? }
+private nonisolated struct ApiMessage: Decodable { let message: String? }

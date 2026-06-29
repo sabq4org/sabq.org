@@ -77,13 +77,13 @@ export function AcMyPredictionsList({
               <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
                 <Crest name={p.homeTeamName} logo={p.homeTeamLogo} />
                 <span className="shrink-0 text-xs font-black tabular-nums text-muted-foreground" dir="ltr">
-                  {p.predHome} - {p.predAway}
+                  {p.predAway} - {p.predHome}
                 </span>
                 <Crest name={p.awayTeamName} logo={p.awayTeamLogo} />
               </div>
               {settled && p.finalHome != null && (
                 <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold tabular-nums" dir="ltr">
-                  النتيجة {p.finalHome}-{p.finalAway}
+                  النتيجة {p.finalAway}-{p.finalHome}
                 </span>
               )}
             </div>
