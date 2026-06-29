@@ -498,10 +498,6 @@ struct MatchesView: View {
             // شريط الحالة — فكانت المباريات السابقة «تطلع» فوق شريط الأيام وتبان.
             // هذا الغطاء يحجبها فلا يظهر شيء فوق الأيام.
             .overlay(alignment: .top) { topSafeAreaCover }
-            // الأنميشن مقصور على ظهور/إخفاء زرّ «اليوم» فقط (يتغيّر isAwayFromToday
-            // مرّة عند تجاوز اليوم) — لا على scrolledDayId الذي يتغيّر كل إطار تمرير
-            // فيُحرّك الشجرة كلّها ويُبطّئ الصفحة.
-            .animation(.easeInOut(duration: 0.25), value: isAwayFromToday)
         }
     }
 
@@ -670,9 +666,8 @@ struct MatchesView: View {
         }
     }
 
-    // تحديد اليوم النشِط أوّل مرّة دون تمرير: الجدول يبدأ من اليوم (الأيام الماضية
-    // مُسقطة في makeDays)، فيظهر رأس الصفحة كاملًا (العنوان + الأدوار + الأيام) ومعه
-    // مباريات اليوم في الأعلى. أيّ قفزة بـ anchor:.top كانت ستُصعد العنوان وتُخفيه.
+    // تحديد اليوم النشِط أوّل مرّة ثم القفز له بلا حركة: القائمة تحتفظ بكل أيام
+    // البطولة حتى تبقى «المجموعات» وبقية الأدوار فعّالة، لكن الافتتاح يكون على اليوم.
     private func runInitialScroll() {
         guard !didInitialScroll, !visibleDays.isEmpty else { return }
         didInitialScroll = true
@@ -680,6 +675,7 @@ struct MatchesView: View {
         guard !target.isEmpty else { return }
         scrolledDayId = target
         railCenterId = target
+        requestScroll(to: target, animated: false)
     }
 
     private func goToDay(_ id: String) {
@@ -815,8 +811,7 @@ struct MatchesView: View {
                 .shadow(color: SpTheme.green.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 18)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .padding(.bottom, 96)
         }
     }
 
@@ -839,12 +834,7 @@ struct MatchesView: View {
             return SpWcDay(id: key, date: date, stage: stage, fixtures: fxs)
         }
         .sorted { $0.date < $1.date }
-        // الجدول يبدأ من اليوم: نُسقط الأيام المنتهية (قبل اليوم) كي يظهر رأس الصفحة
-        // كاملًا (العنوان + الأدوار + الأيام) ومعه مباريات اليوم في الأعلى دون قفز.
-        // إن لم تبقَ أيام (انتهت البطولة) نعرض الكل حتى لا تفرغ الشاشة.
-        let startOfToday = cal.startOfDay(for: Date())
-        let upcoming = days.filter { $0.date >= startOfToday }
-        return upcoming.isEmpty ? days : upcoming
+        return days
     }
 
     private func rebuildDays(keepSelection: Bool) {
