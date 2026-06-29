@@ -390,6 +390,7 @@ struct MatchesView: View {
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
     @State private var suppressActiveDayUpdatesUntil = Date.distantPast
+    @State private var listStartsAtToday = true
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -400,6 +401,7 @@ struct MatchesView: View {
     // عند اختيار يوم من الشريط المثبّت، نضع عنوان اليوم أسفل شريط الأيام
     // بدل أن يدخل تحته.
     private static let dayScrollAnchor = UnitPoint(x: 0.5, y: 0.13)
+    private static let topScrollId = "matches-screen-top"
 
     var body: some View {
         NavigationStack {
@@ -602,6 +604,7 @@ struct MatchesView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     header
+                        .id(Self.topScrollId)
 
                     Section {
                         LazyVStack(alignment: .leading, spacing: 16) {
@@ -609,7 +612,7 @@ struct MatchesView: View {
                                 emptyList
                             } else {
                                 if !liveOnly && !liveFixtures.isEmpty { livePinned }
-                                ForEach(visibleDays) { day in
+                                ForEach(daysForList) { day in
                                     daySection(day)
                                         .background(
                                             GeometryReader { geo in
@@ -621,7 +624,7 @@ struct MatchesView: View {
                                         )
                                 }
                             }
-                            Color.clear.frame(height: 96)
+                            Color.clear.frame(height: 168)
                         }
                         .padding(.horizontal, 16).padding(.top, 12)
                     } header: {
@@ -633,7 +636,6 @@ struct MatchesView: View {
             }
             .background(SpAmbientBackground())
             .coordinateSpace(name: "matches-scroll")
-            .autoHideTabBar()
             .onAppear { runInitialScroll() }
             .onChange(of: visibleDaySignature) { _, _ in
                 didInitialScroll = false
@@ -662,12 +664,12 @@ struct MatchesView: View {
         didInitialScroll = true
         let target = todayDayId
         guard !target.isEmpty else { return }
+        listStartsAtToday = true
         scrolledDayId = target
         railCenterId = target
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 80_000_000)
-            guard visibleDays.contains(where: { $0.id == target }) else { return }
-            requestScroll(to: target, animated: false)
+            requestScroll(to: Self.topScrollId, animated: false)
         }
     }
 
@@ -675,6 +677,18 @@ struct MatchesView: View {
         guard !id.isEmpty else { return }
         scrolledDayId = id
         railCenterId = id
+        if listStartsAtToday {
+            if id == todayDayId {
+                requestScroll(to: id)
+                return
+            }
+            listStartsAtToday = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 60_000_000)
+                requestScroll(to: id)
+            }
+            return
+        }
         requestScroll(to: id)
     }
 
@@ -805,7 +819,8 @@ struct MatchesView: View {
                 .shadow(color: SpTheme.green.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 18)
+            .padding(.bottom, 104)
+            .zIndex(10)
         }
     }
 
@@ -833,6 +848,15 @@ struct MatchesView: View {
 
     private var visibleDaySignature: String {
         visibleDays.map(\.id).joined(separator: "|")
+    }
+
+    private var daysForList: [SpWcDay] {
+        guard listStartsAtToday,
+              !todayDayId.isEmpty,
+              let todayIndex = visibleDays.firstIndex(where: { $0.id == todayDayId })
+        else { return visibleDays }
+
+        return Array(visibleDays[todayIndex...])
     }
 
     private func rebuildDays(keepSelection: Bool) {
