@@ -637,6 +637,108 @@ struct SpMyMatchesCard: View {
         .buttonStyle(.plain)
     }
 
+    // ترتيب موحّد مطابق للشاشة الرئيسية للمباريات (SpWcMatchRow/SpMatchCard):
+    // الشعار ملاصق للنتيجة في المنتصف، والاسم يمتدّ نحو الطرف الخارجي.
+    // (RTL: المضيف يمينًا — اسمه في أقصى اليمين وشعاره للداخل؛ الضيف يسارًا بالعكس.)
+    private func teamMini(_ t: SpTeam, leading: Bool) -> some View {
+        HStack(spacing: 7) {
+            if leading {
+                name(t)
+                SpTeamLogo(logo: t.logo, size: 24)
+            } else {
+                SpTeamLogo(logo: t.logo, size: 24)
+                name(t)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
+    }
+
+    private func name(_ t: SpTeam) -> some View {
+        Text(t.name)
+            .font(SportsFonts.app(size: 12.5, weight: .semibold))
+            .foregroundStyle(SpTheme.onDark)
+            .lineLimit(1).minimumScaleFactor(0.75)
+    }
+
+    @ViewBuilder private func centerStatus(_ f: SpFixture, now: Date) -> some View {
+        if f.started {
+            VStack(spacing: 3) {
+                HStack(spacing: 5) {
+                    Text("\(f.goals.away ?? 0)").font(SportsFonts.app(size: 18, weight: .heavy)).monospacedDigit()
+                    Text("-").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text("\(f.goals.home ?? 0)").font(SportsFonts.app(size: 18, weight: .heavy)).monospacedDigit()
+                }
+                .foregroundStyle(SpTheme.onDark)
+                .environment(\.layoutDirection, .leftToRight)
+                statusBadge(f)
+            }
+            .frame(minWidth: 92)
+        } else if f.kickoff.timeIntervalSince(now) <= 2 * 3600 {
+            // باقٍ ساعتان أو أقل → عدّ تنازليّ حيّ (خط أصغر من السابق).
+            VStack(spacing: 2) {
+                Text(countdown(to: f.kickoff, now: now))
+                    .font(SportsFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+                Text("تبدأ بعد")
+                    .font(SportsFonts.app(size: 9))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+            }
+            .frame(minWidth: 92)
+        } else {
+            // أبعد من ساعتين → توقيت المباراة بخط صغير + اليوم.
+            VStack(spacing: 2) {
+                Text(SpFormat.kickoffTime(f.date))
+                    .font(SportsFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+                Text(SpFormat.dayMonth(f.date))
+                    .font(SportsFonts.app(size: 9))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+            }
+            .frame(minWidth: 92)
+        }
+    }
+
+    @ViewBuilder private func statusBadge(_ f: SpFixture) -> some View {
+        if f.status.live {
+            HStack(spacing: 4) {
+                Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
+                Text(liveLabel(f))
+                    .font(SportsFonts.app(size: 9.5, weight: .bold))
+                    .foregroundStyle(SpTheme.crimson)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+        } else {
+            Text(f.status.finished ? "انتهت · تختفي بعد قليل" : "انتهت")
+                .font(SportsFonts.app(size: 9.5, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkDim)
+        }
+    }
+
+    // نصّ الحالة الجارية: دقيقة الشوط («45+2'») إن توفّرت، وإلا حالة الشوط
+    // («بين الشوطين»/«الشوط الأول»…) من الخادم، وإلا «مباشر».
+    private func liveLabel(_ f: SpFixture) -> String {
+        if let m = f.status.elapsed, m > 0 {
+            let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
+            return "\(m)\(extra)'"
+        }
+        return f.status.label.isEmpty ? "مباشر" : f.status.label
+    }
+
+    // عدّاد تنازليّ بأرقام لاتينية: «2ي 04س» إن بقي أكثر من يوم، وإلا «HH:MM:SS».
+    private func countdown(to date: Date, now: Date) -> String {
+        let total = max(0, Int(date.timeIntervalSince(now)))
+        let days = total / 86_400
+        let h = (total % 86_400) / 3_600
+        let m = (total % 3_600) / 60
+        let s = total % 60
+        if days > 0 { return "\(days)ي \(h)س" }
+        return String(format: "%02d:%02d:%02d", h, m, s)
+    }
 }
 
 // MARK: - عدّ تنازلي حي (TimelineView) — لانطلاق الموسم القادم

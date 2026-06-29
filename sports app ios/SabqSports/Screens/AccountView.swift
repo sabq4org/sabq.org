@@ -26,6 +26,14 @@ struct AccountView: View {
                     }
 
                     teamsSection
+
+                    VaraInsightCard(context: VaraInsightContext(
+                        isLoggedIn: auth.isLoggedIn,
+                        favoriteName: favorites.team?.name,
+                        followsCount: followedTeams.count,
+                        activeAlerts: activeAlertsCount
+                    ))
+
                     predictionsSection
                     servicesSection
                     appearanceSection
