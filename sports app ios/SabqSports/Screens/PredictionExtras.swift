@@ -103,7 +103,7 @@ private struct SpMyPredictionRowCard: View {
 // أسماء بطولات مختصرة من الـ slug (احتياط حين لا يرسل الخادم اسمًا).
 func prettyComp(_ slug: String) -> String {
     switch slug {
-    case "gulf-cup-27", "gulf-cup": return "خليجي ٢٧"
+    case "gulf-cup-27", "gulf-cup": return "خليجي 27"
     case "saudi-league", "roshn-league": return "دوري روشن"
     case "world-cup": return "كأس العالم"
     case "champions-league": return "دوري الأبطال"
@@ -357,7 +357,7 @@ struct SpLongPredictionsView: View {
 
     // MARK: - تحميل/إرسال
 
-    // بطولات التوقّعات طويلة المدى (البطل/الهدّاف): كأس العالم، أبطال آسيا، خليجي ٢٧،
+    // بطولات التوقّعات طويلة المدى (البطل/الهدّاف): كأس العالم، أبطال آسيا، خليجي 27،
     // وكل البطولات السعودية. لا نشترط جدول ترتيب — الكؤوس تشتقّ فِرقها من المباريات
     // في الخادم، فاشتراط hasStandings كان يستبعد كأس العالم والخليج وآسيا بالكامل.
     private static let longCompSlugs: [String] = ["world-cup", "afc-champions-league", "gulf-cup"]
@@ -435,10 +435,10 @@ struct SpBadgeInfo: Identifiable, Hashable {
 }
 
 let spBadgeCatalog: [SpBadgeInfo] = [
-    .init(code: "nostradamus", emoji: "🔮", title: "العرّاف", desc: "٥ نتائج دقيقة"),
-    .init(code: "lionheart", emoji: "🦁", title: "قلب الأسد", desc: "أصبت نتيجة مفاجئة (احتمال أقل من ١٠٪)"),
-    .init(code: "hot_streak", emoji: "🔥", title: "سلسلة ملتهبة", desc: "٣ توقّعات صحيحة متتالية"),
-    .init(code: "marathoner", emoji: "🏃", title: "الماراثوني", desc: "٢٥ توقّعًا مكتملًا"),
+    .init(code: "nostradamus", emoji: "🔮", title: "العرّاف", desc: "5 نتائج دقيقة"),
+    .init(code: "lionheart", emoji: "🦁", title: "قلب الأسد", desc: "أصبت نتيجة مفاجئة (احتمال أقل من 10٪)"),
+    .init(code: "hot_streak", emoji: "🔥", title: "سلسلة ملتهبة", desc: "3 توقّعات صحيحة متتالية"),
+    .init(code: "marathoner", emoji: "🏃", title: "الماراثوني", desc: "25 توقّعًا مكتملًا"),
 ]
 
 struct SpBadgesGrid: View {
