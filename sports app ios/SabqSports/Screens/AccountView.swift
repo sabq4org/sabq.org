@@ -24,15 +24,23 @@ struct AccountView: View {
                         signInCard
                     }
 
+                    VaraInsightCard(context: VaraInsightContext(
+                        isLoggedIn: auth.isLoggedIn,
+                        favoriteName: favorites.team?.name,
+                        followsCount: followedTeams.count,
+                        activeAlerts: activeAlertsCount
+                    ))
+
                     predictionsSection
                     servicesSection
                     teamsSection
                     notificationsSection
                     aboutSection
+                    dangerZoneSection
 
                     if auth.isLoggedIn { signOutButton }
 
-                    Text("VARA · تطبيق سبق الرياضي")
+                    Text("VARA · تطبيقك الرياضي")
                         .font(SportsFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkFaint)
                         .padding(.top, 2)
@@ -60,7 +68,7 @@ struct AccountView: View {
             HStack(spacing: 14) {
                 avatarView
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(auth.member?.name ?? "عضو سبق")
+                    Text(auth.member?.name ?? "عضو VARA")
                         .font(SportsFonts.app(size: 18, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                         .lineLimit(1)
@@ -130,7 +138,7 @@ struct AccountView: View {
                         .frame(width: 48, height: 48)
                         .background(Circle().fill(SpTheme.gold.opacity(0.14)))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("توقّعات سبق")
+                        Text("توقّعات VARA")
                             .font(SportsFonts.app(size: 16, weight: .heavy))
                             .foregroundStyle(SpTheme.onDark)
                         Text("توقّع نتائج كأس العالم والبطولات وتنافس على النقاط والجوائز")
@@ -366,11 +374,49 @@ struct AccountView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("عن التطبيق")
             settingsCard {
-                linkRow("globe", "موقع سبق", "sabq.org", url: "https://sabq.org")
+                navRow("info.circle.fill", "عن التطبيق") { AboutAppView() }
                 rowDivider
-                linkRow("sportscourt.fill", "القسم الرياضي", "sabq.org/sports", url: "https://sabq.org/sports")
+                navRow("checkmark.shield.fill", "سياسة الاستخدام") { UsagePolicyView() }
                 rowDivider
-                infoRow("info.circle.fill", "الإصدار", "1.0 (تجريبي)")
+                navRow("doc.text.fill", "شروط الاستخدام") { TermsView() }
+                rowDivider
+                infoRow("number", "الإصدار", appVersion)
+            }
+        }
+    }
+
+    private var appVersion: String {
+        let b = Bundle.main
+        let v = (b.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
+        let n = (b.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
+        return "\(v) (\(n))"
+    }
+
+    private func navRow<D: View>(_ icon: String, _ title: String, _ tint: Color = SpTheme.onDarkDim,
+                                 @ViewBuilder destination: @escaping () -> D) -> some View {
+        NavigationLink { destination() } label: {
+            HStack(spacing: 12) {
+                iconTile(icon, tint)
+                Text(title).font(SportsFonts.app(size: 14.5, weight: .semibold)).foregroundStyle(tint == SpTheme.crimson ? SpTheme.crimson : SpTheme.onDark)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.backward").font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
+    }
+
+    // MARK: - منطقة الخطر (حذف الحساب)
+
+    @ViewBuilder private var dangerZoneSection: some View {
+        if auth.isLoggedIn {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionHeader("منطقة الخطر")
+                settingsCard {
+                    navRow("trash.fill", "حذف الحساب", SpTheme.crimson) { DeleteAccountView() }
+                }
+                hint("حذف الحساب يزيل ملفّك وبياناتك نهائيًّا ولا يمكن التراجع عنه.")
             }
         }
     }
@@ -401,7 +447,7 @@ struct AccountView: View {
             Text("سجّل دخولك")
                 .font(SportsFonts.app(size: 22, weight: .bold))
                 .foregroundStyle(SpTheme.onDark)
-            Text("بحساب سبق لمتابعة فِرقك وتلقّي تنبيهات المباريات والمشاركة في المجتمع.")
+            Text("بحساب VARA لمتابعة فِرقك وتلقّي تنبيهات المباريات والمشاركة في المجتمع.")
                 .font(SportsFonts.app(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .multilineTextAlignment(.center)

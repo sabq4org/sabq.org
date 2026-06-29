@@ -90,12 +90,9 @@ final class SpAuthStore {
         if let p = try? await APIClient.shared.fetchAlertPrefs() {
             alertPrefs = p
         }
-        // الإشعارات: نطلب الإذن ونسجّل الجهاز (الرمز يصل عبر AppDelegate ثم يُرفع).
-        // نؤجّل طلب الإذن حتى يُكمل المستخدم الشاشات التعريفية كي لا يتداخل نظام الإذن
-        // مع العرض التعريفي في أول تشغيل؛ يُطلب تلقائيًّا في الإقلاع التالي.
-        if UserDefaults.standard.bool(forKey: "ob_seen_v1") {
-            await enablePushNotifications()
-        }
+        // الإشعارات: نطلب الإذن ونسجّل الجهاز (الرمز يصل عبر AppDelegate ثم يُرفع)
+        // فور تسجيل الدخول — لا شاشات تعريفية لتأجيله بعدها.
+        await enablePushNotifications()
         // مزامنة متابعات المباريات المحلّية كي تصلها الإشعارات اللحظية.
         SpMatchFollows.shared.syncAllToServer()
         await uploadPushToken()
@@ -245,6 +242,31 @@ final class SpAuthStore {
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         Task { await APIClient.shared.setAuthToken(nil) }
+    }
+
+    /// حذف الحساب نهائيًّا — يتطلّب كلمة المرور للتأكيد (Apple 5.1.1(v)). عند النجاح
+    /// يُنهي الجلسة محلّيًّا. الخادم: DELETE /api/v1/members/account.
+    func deleteAccount(password: String) async -> Bool {
+        guard isLoggedIn else { return false }
+        isLoading = true; errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let body = try JSONEncoder().encode(["password": password])
+            _ = try await APIClient.shared.send(method: "DELETE", path: "/members/account",
+                                                jsonBody: body, apiRoot: URLConstants.mobileAPI)
+            signOut()
+            return true
+        } catch let e as APIError {
+            switch e {
+            case .unauthorized: errorMessage = "كلمة المرور غير صحيحة"
+            case .server(_, let msg): errorMessage = msg ?? "تعذّر حذف الحساب"
+            default: errorMessage = e.errorDescription ?? "تعذّر حذف الحساب"
+            }
+            return false
+        } catch {
+            errorMessage = "تعذّر حذف الحساب"
+            return false
+        }
     }
 }
 
