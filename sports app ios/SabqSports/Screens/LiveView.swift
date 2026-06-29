@@ -202,13 +202,6 @@ struct LiveView: View {
                 .font(SportsFonts.headline(size: 17))
                 .foregroundStyle(SpTheme.onDark)
             Spacer(minLength: 0)
-            Text("\(section.matchCount)")
-                .font(SportsFonts.app(size: 12, weight: .heavy))
-                .foregroundStyle(tint)
-                .monospacedDigit()
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(Capsule().fill(tint.opacity(0.12)))
         }
         .padding(.top, 6)
     }

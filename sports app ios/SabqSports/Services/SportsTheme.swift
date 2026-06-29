@@ -63,8 +63,8 @@ nonisolated enum SpTheme {
     static var screenGradient: LinearGradient {
         LinearGradient(
             colors: [
-                dyn(Color(red: 0.965, green: 0.970, blue: 0.975), Color(red: 0.055, green: 0.066, blue: 0.078)),
-                dyn(Color(red: 0.952, green: 0.958, blue: 0.964), Color(red: 0.035, green: 0.043, blue: 0.052)),
+                dyn(Color(red: 0.942, green: 0.949, blue: 0.957), Color(red: 0.047, green: 0.057, blue: 0.068)),
+                dyn(Color(red: 0.928, green: 0.936, blue: 0.945), Color(red: 0.028, green: 0.035, blue: 0.044)),
             ],
             startPoint: .top, endPoint: .bottom
         )
@@ -88,10 +88,15 @@ nonisolated enum SpTheme {
         )
     }
 
-    static var cardStroke: Color { dyn(Color(red: 0.835, green: 0.851, blue: 0.875), Color(red: 0.205, green: 0.235, blue: 0.280)) } // حدّ حادّ خفيف
+    // بلا إطارات للبطاقات — نعتمد التباعد والتدرّج اللوني (tonal elevation) للفصل
+    // بدل الحدّ الصريح الذي كان يجعل كل قسم صندوقًا، خصوصًا في الوضع الداكن.
+    static var cardStroke: Color { .clear }
     static var cardFill: Color { dyn(.white, Color(red: 0.110, green: 0.130, blue: 0.160)) }
     static var chipFill: Color { dyn(Color(red: 0.945, green: 0.955, blue: 0.965), Color(red: 0.160, green: 0.190, blue: 0.230)) }  // شريحة
-    static var outline: Color { dyn(Color(red: 0.89, green: 0.905, blue: 0.920), Color(red: 0.225, green: 0.255, blue: 0.300)) }     // فاصل داخليّ
+    /// حبّة شريط الأيام — أقرب للأسود في الداكن كي تذوب مع خلفية الشاشة (أبيض في الفاتح).
+    static var railChipFill: Color { dyn(.white, Color(red: 0.078, green: 0.090, blue: 0.106)) }
+    /// فاصل داخليّ خافت جدًّا — خطوط شعرية بدل حدود ثقيلة.
+    static var outline: Color { dyn(Color(red: 0.912, green: 0.922, blue: 0.934), Color(red: 0.165, green: 0.188, blue: 0.220)) }
 
     /// لا ظلّ للبطاقات — تصميم مسطّح يعتمد الحدّ الحادّ الخفيف للفصل.
     static var cardShadow: Color { .clear }
@@ -102,11 +107,11 @@ nonisolated enum SpTheme {
     static var onDarkDim: Color { dyn(Color(red: 0.43, green: 0.46, blue: 0.50), Color(red: 0.64, green: 0.68, blue: 0.73)) }     // ثانوي
     static var onDarkFaint: Color { dyn(Color(red: 0.62, green: 0.65, blue: 0.69), Color(red: 0.46, green: 0.50, blue: 0.55)) }   // باهت
 
-    // نصف قطر (مطابق لبقية تطبيقات سبق لاتساق الإحساس)
-    static let cardRadius: CGFloat = 24
-    static let tileRadius: CGFloat = 18
+    // نصف قطر أهدأ وأقل «انتفاخًا» — يدعم المظهر المسطّح بلا إطارات.
+    static let cardRadius: CGFloat = 18
+    static let tileRadius: CGFloat = 14
     static let chipRadius: CGFloat = 12
-    static let buttonRadius: CGFloat = 16
+    static let buttonRadius: CGFloat = 14
 }
 
 // MARK: - مظهر التطبيق (تلقائي / فاتح / داكن)
