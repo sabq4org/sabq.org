@@ -72,31 +72,19 @@ function isPredictable(fx: SplLiveBoardItem): boolean {
     && fx.timestamp > nowSec();
 }
 
-// Flagship tournaments whose FULL schedule (not just today/tomorrow) is offered
-// for prediction — the World Cup is the app's centrepiece, so its upcoming
-// fixtures must always surface even when they're days out. Gulf Cup rides along.
-const FEATURED_PREDICTION_SLUGS = ["world-cup", "gulf-cup"] as const;
-const PREDICTION_HORIZON_SEC = 21 * 24 * 60 * 60; // up to ~3 weeks ahead
+// Only these competitions are offered for prediction: World Cup, AFC, Gulf Cup
+// 27, and every Saudi competition. European / other world leagues are NOT
+// predictable — keep this in sync with the iOS long-prediction whitelist.
+const PREDICTION_COMP_SLUGS = new Set(["world-cup", "afc-champions-league", "gulf-cup"]);
 
-/** Upcoming predictable fixtures pulled directly from flagship competitions. */
-async function featuredUpcomingFixtures(): Promise<SplLiveBoardItem[]> {
-  const horizon = nowSec() + PREDICTION_HORIZON_SEC;
-  const lists = await Promise.all(
-    FEATURED_PREDICTION_SLUGS.map(async (slug) => {
-      const comp = getCompetition(slug);
-      if (!comp) return [] as SplLiveBoardItem[];
-      try {
-        const fixtures = await getFixtures(comp);
-        return fixtures
-          .map((f): SplLiveBoardItem => ({ ...f, competition: comp.name, competitionSlug: comp.slug }))
-          .filter((item) => isPredictable(item) && item.timestamp <= horizon);
-      } catch {
-        return [] as SplLiveBoardItem[];
-      }
-    }),
-  );
-  return lists.flat();
+function isPredictionComp(slug: string | null | undefined): boolean {
+  if (!slug) return false;
+  if (PREDICTION_COMP_SLUGS.has(slug)) return true;
+  return getCompetition(slug)?.category === "saudi";
 }
+
+// Matches open for prediction only within this window before kickoff (48h).
+const PREDICTION_WINDOW_SEC = 48 * 60 * 60;
 
 const probOfPick = (
   predHome: number,
@@ -409,18 +397,25 @@ export async function getMeStats(userId: string): Promise<SpMeStats> {
 export async function getUpcomingPredictableMatches(
   userId?: string,
 ): Promise<{ matches: SpPredictableMatch[]; me: SpMeStats | null; jackpot: number }> {
-  const [todayRaw, tomorrowRaw, featuredRaw, jackpot] = await Promise.all([
+  // Matches open for prediction only within the next 48 hours, and only for our
+  // prediction competitions (World Cup, AFC, Gulf Cup 27, Saudi). We pull three
+  // day-boards so the 48h window is fully covered regardless of the time of day,
+  // then cap by timestamp. As time passes the next fixtures roll into view.
+  const [d0, d1, d2, jackpot] = await Promise.all([
     getGlobalTodayFixtures(riyadhDateKey(0)).catch(() => [] as SplLiveBoardItem[]),
     getGlobalTodayFixtures(riyadhDateKey(1)).catch(() => [] as SplLiveBoardItem[]),
-    featuredUpcomingFixtures().catch(() => [] as SplLiveBoardItem[]),
+    getGlobalTodayFixtures(riyadhDateKey(2)).catch(() => [] as SplLiveBoardItem[]),
     totalJackpot(),
   ]);
 
-  // De-dup (a fixture can surface on multiple sources), keep predictable. Flagship
-  // tournament fixtures (World Cup / Gulf Cup) are merged in regardless of date.
+  const windowEnd = nowSec() + PREDICTION_WINDOW_SEC;
   const byId = new Map<number, SplLiveBoardItem>();
-  for (const fx of [...todayRaw, ...tomorrowRaw, ...featuredRaw]) {
-    if (isPredictable(fx) && !byId.has(fx.id)) byId.set(fx.id, fx);
+  for (const fx of [...d0, ...d1, ...d2]) {
+    if (byId.has(fx.id)) continue;
+    if (!isPredictable(fx)) continue;
+    if (fx.timestamp > windowEnd) continue;          // within 48h only
+    if (!isPredictionComp(fx.competitionSlug)) continue; // our competitions only
+    byId.set(fx.id, fx);
   }
   const fixtures = [...byId.values()].sort((a, b) => a.timestamp - b.timestamp).slice(0, 40);
 
@@ -521,7 +516,7 @@ export async function getUpcomingPredictableMatches(
 // ---------------------------------------------------------------------------
 
 export async function getMyPredictions(userId: string) {
-  return db
+  const rows = await db
     .select({
       fixtureId: sportsPoolPredictions.fixtureId,
       predHome: sportsPoolPredictions.predHome,
@@ -547,6 +542,9 @@ export async function getMyPredictions(userId: string) {
     .leftJoin(sportsPoolMatches, eq(sportsPoolPredictions.fixtureId, sportsPoolMatches.fixtureId))
     .where(eq(sportsPoolPredictions.userId, userId))
     .orderBy(desc(sportsPoolMatches.kickoffTs));
+  // Hide predictions made on competitions no longer offered (e.g. legacy world
+  // leagues) — only our prediction competitions remain visible.
+  return rows.filter((r) => isPredictionComp(r.competitionSlug));
 }
 
 export async function getMatchPredictionsSummary(
@@ -849,15 +847,30 @@ export type SpLongResponse = {
   }[];
 };
 
-/** Long-term picks lock once the competition's first fixture has kicked off. */
+/** Localized round is the quarter-finals or later (round of 8 onward). */
+function isLateStageRound(round: string): boolean {
+  return round.includes("النهائي") || round.includes("المركز الثالث");
+}
+
+/**
+ * Long-term picks (champion / top scorer) stay OPEN through the early rounds and
+ * lock once the knockout reaches the round of 8 (quarter-finals begin) — for an
+ * in-progress World Cup you can still predict the champion/top scorer until the
+ * quarter-finals kick off. Leagues (no late-stage rounds) lock only when the
+ * whole competition has ended. No fixtures yet ⇒ open.
+ */
 async function longLocked(competitionSlug: string): Promise<boolean> {
   const comp = getCompetition(competitionSlug);
   if (!comp) return true;
   try {
     const fixtures = await getFixtures(comp);
-    const first = [...fixtures].sort((a, b) => a.timestamp - b.timestamp)[0];
-    if (!first) return false;
-    return nowSec() >= first.timestamp;
+    if (fixtures.length === 0) return false;
+    const now = nowSec();
+    const quarterStarted = fixtures.some(
+      (f) => isLateStageRound(f.round) && (f.status.live || f.status.finished || f.timestamp <= now),
+    );
+    if (quarterStarted) return true;
+    return fixtures.every((f) => f.status.finished);
   } catch {
     return false;
   }
