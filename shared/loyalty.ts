@@ -49,6 +49,18 @@ export const LOYALTY_ACTIONS = {
    *  `gc-long:<kind>`. `points` overridden with the pari-mutuel share of the
    *  long-term pool. Settled once at tournament end. */
   GC_LONG_PREDICTION_WIN: "GC_LONG_PREDICTION_WIN",
+  /** Generalized Sabq Sports pool-prediction win (any competition: Roshn,
+   *  world leagues, cups, …). Source = the API-Football fixtureId, and `points`
+   *  is ALWAYS overridden with the user's pari-mutuel share of that match's
+   *  tiered 1000-point pool (+ any per-competition carried jackpot). No daily
+   *  cap; the lifetime dedup window keeps (userId, action, fixtureId) at most
+   *  once so the settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/sportsPoolPredictionsService.ts. */
+  SPORTS_PREDICTION_WIN: "SPORTS_PREDICTION_WIN",
+  /** Generalized Sabq Sports long-term prediction win (champion / top scorer
+   *  of a competition). Source = `sp-long:<competitionSlug>:<kind>`. `points`
+   *  overridden with the long-term pool share. */
+  SPORTS_LONG_PREDICTION_WIN: "SPORTS_LONG_PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -77,6 +89,11 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   GC_PREDICTION_WIN: 100,
   // Nominal default only — overridden with the long-term pool share.
   GC_LONG_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the user's pari-mutuel share of the
+  // match's tiered 1000-point pool.
+  SPORTS_PREDICTION_WIN: 100,
+  // Nominal default only — overridden with the long-term pool share.
+  SPORTS_LONG_PREDICTION_WIN: 500,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -104,6 +121,10 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   GC_PREDICTION_WIN: null,
   // Settled once at tournament end; lifetime dedup keyed on source.
   GC_LONG_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  SPORTS_PREDICTION_WIN: null,
+  // Settled once per competition; lifetime dedup keyed on source.
+  SPORTS_LONG_PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -137,6 +158,10 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   GC_PREDICTION_WIN: 100000,
   // Lifetime, source=gc-long:<kind> dedup.
   GC_LONG_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId dedup — a match pays a user at most once.
+  SPORTS_PREDICTION_WIN: 100000,
+  // Lifetime, source=sp-long:<competitionSlug>:<kind> dedup.
+  SPORTS_LONG_PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------

@@ -24,6 +24,7 @@ struct AccountView: View {
                         signInCard
                     }
 
+                    predictionsSection
                     servicesSection
                     teamsSection
                     notificationsSection
@@ -114,6 +115,48 @@ struct AccountView: View {
         return "أهلًا بك في VARA"
     }
 
+    // MARK: - التوقّعات (نظام البركة المتدرّجة المعمّم — يُفتح من هنا)
+
+    private var predictionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("التوقّعات")
+            NavigationLink {
+                PredictionsHubView()
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "rosette")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(SpTheme.gold)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(SpTheme.gold.opacity(0.14)))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("توقّعات سبق")
+                            .font(SportsFonts.app(size: 16, weight: .heavy))
+                            .foregroundStyle(SpTheme.onDark)
+                        Text("توقّع نتائج كأس العالم والبطولات وتنافس على النقاط والجوائز")
+                            .font(SportsFonts.app(size: 11.5, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                        .fill(SpTheme.green.opacity(0.06))
+                        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                            .stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SpPressStyle())
+        }
+    }
+
     // MARK: - خدماتي
 
     private var servicesSection: some View {
@@ -121,7 +164,6 @@ struct AccountView: View {
             sectionHeader("خدماتي")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 serviceTile("مبارياتي", "calendar.badge.clock", "\(auth.isLoggedIn ? followedTeams.count : 0) فريق", SpTheme.green)
-                serviceTile("توقعاتي", "chart.bar.xaxis", "المجتمع", SpTheme.teal)
                 serviceTile("تنبيهات مباشرة", "bell.badge.fill", "\(activeAlertsCount) مفعّلة", SpTheme.green)
                 serviceTile("الدعم", "questionmark.circle.fill", "تواصل", SpTheme.onDarkDim)
             }

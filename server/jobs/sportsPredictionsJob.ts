@@ -13,6 +13,10 @@ import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { isSaudiLeagueConfigured } from "../services/saudiLeagueService";
 import { settleFinishedPredictions } from "../services/sportsPredictionsService";
+import {
+  isSportsPredictionsEnabled,
+  settleFinishedMatches as settlePoolMatches,
+} from "../services/sportsPoolPredictionsService";
 
 let isRunning = false;
 
@@ -28,6 +32,13 @@ async function tick(trigger: string): Promise<void> {
     const settled = await settleFinishedPredictions();
     if (settled > 0) {
       console.log(`[SportsPredictions Job] (${trigger}) settled=${settled} predictions`);
+    }
+    // Generalized tiered-pool predictions (separate engine) — only when enabled.
+    if (isSportsPredictionsEnabled()) {
+      const pool = await settlePoolMatches();
+      if (pool.settled > 0 || pool.errors > 0) {
+        console.log(`[SportsPredictions Job] (${trigger}) pool settled=${pool.settled} awarded=${pool.awarded} errors=${pool.errors}`);
+      }
     }
   } catch (error) {
     console.error("[SportsPredictions Job] cycle failed:", error);
