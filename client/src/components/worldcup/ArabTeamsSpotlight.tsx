@@ -83,6 +83,9 @@ function buildArabTeams(fixtures: WcFixture[], groups: WcGroup[]): ArabTeamDiges
     })
     .filter((digest) => digest.fixtures.length > 0 || digest.row)
     .sort((a, b) => {
+      const aHasNext = Boolean(a.next);
+      const bHasNext = Boolean(b.next);
+      if (aHasNext !== bHasNext) return aHasNext ? -1 : 1;
       const aActive = a.row?.qualifyStatus === "eliminated" ? 1 : 0;
       const bActive = b.row?.qualifyStatus === "eliminated" ? 1 : 0;
       if (aActive !== bActive) return aActive - bActive;
@@ -312,7 +315,7 @@ export function ArabTeamsSpotlight({ fixtures, groups, onOpenMatch }: ArabTeamsS
                   <Flag className="h-5 w-5 text-emerald-200" />
                   <h2 className="text-2xl sm:text-3xl font-black text-white">المنتخبات العربية في المونديال</h2>
                 </div>
-                <p className="max-w-3xl text-sm text-emerald-100/78">
+                <p className="max-w-3xl text-sm font-medium text-white/85">
                   نتائج ومواعيد المنتخبات العربية المتبقية في البطولة، مع وضع المجموعة في بطاقة واحدة.
                 </p>
               </div>
