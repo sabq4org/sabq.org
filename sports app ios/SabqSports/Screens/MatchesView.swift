@@ -330,6 +330,7 @@ private struct SpDayTopPreferenceKey: PreferenceKey {
 private struct SpDayScrollRequest: Equatable {
     let id: String
     let nonce: Int
+    var animated: Bool = true
 }
 
 // طيّ الترويسة العلوية (التولبار + شريط الأدوار) حسب اتجاه التمرير — نفس منطق
@@ -651,9 +652,13 @@ struct MatchesView: View {
             .onAppear { runInitialScroll() }
             .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
             .onChange(of: scrollTargetRequest) { _, request in
-                guard let id = request?.id, !id.isEmpty else { return }
-                withAnimation(.easeInOut(duration: 0.32)) {
-                    proxy.scrollTo(id, anchor: .top)
+                guard let request, !request.id.isEmpty else { return }
+                if request.animated {
+                    withAnimation(.easeInOut(duration: 0.32)) {
+                        proxy.scrollTo(request.id, anchor: .top)
+                    }
+                } else {
+                    proxy.scrollTo(request.id, anchor: .top)
                 }
             }
             .onPreferenceChange(SpDayTopPreferenceKey.self) { tops in
@@ -662,7 +667,9 @@ struct MatchesView: View {
         }
     }
 
-    // قفزة أولى إلى يوم اليوم (أو الأقرب) — مرّة واحدة بعد توفّر البيانات.
+    // تحديد اليوم النشِط أوّل مرّة دون تمرير: الجدول يبدأ من اليوم (الأيام الماضية
+    // مُسقطة في makeDays)، فيظهر رأس الصفحة كاملًا (العنوان + الأدوار + الأيام) ومعه
+    // مباريات اليوم في الأعلى. أيّ قفزة بـ anchor:.top كانت ستُصعد العنوان وتُخفيه.
     private func runInitialScroll() {
         guard !didInitialScroll, !visibleDays.isEmpty else { return }
         didInitialScroll = true
@@ -670,10 +677,6 @@ struct MatchesView: View {
         guard !target.isEmpty else { return }
         scrolledDayId = target
         railCenterId = target
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            requestScroll(to: target)
-        }
     }
 
     private func goToDay(_ id: String) {
@@ -683,9 +686,9 @@ struct MatchesView: View {
         requestScroll(to: id)
     }
 
-    private func requestScroll(to id: String) {
+    private func requestScroll(to id: String, animated: Bool = true) {
         scrollRequestNonce += 1
-        scrollTargetRequest = SpDayScrollRequest(id: id, nonce: scrollRequestNonce)
+        scrollTargetRequest = SpDayScrollRequest(id: id, nonce: scrollRequestNonce, animated: animated)
     }
 
     private func updateActiveDay(from sectionTops: [String: CGFloat]) {
@@ -825,13 +828,19 @@ struct MatchesView: View {
             return (cal.startOfDay(for: d), f)
         }
         let grouped = Dictionary(grouping: dated, by: { SpFormat.dateKey($0.0) })
-        return grouped.compactMap { key, pairs -> SpWcDay? in
+        let days = grouped.compactMap { key, pairs -> SpWcDay? in
             guard let date = pairs.first?.0 else { return nil }
             let fxs = pairs.map { $0.1 }.sorted { $0.timestamp < $1.timestamp }
             let stage = SpWcStage.from(roundEn: fxs.first?.roundEn ?? "")
             return SpWcDay(id: key, date: date, stage: stage, fixtures: fxs)
         }
         .sorted { $0.date < $1.date }
+        // الجدول يبدأ من اليوم: نُسقط الأيام المنتهية (قبل اليوم) كي يظهر رأس الصفحة
+        // كاملًا (العنوان + الأدوار + الأيام) ومعه مباريات اليوم في الأعلى دون قفز.
+        // إن لم تبقَ أيام (انتهت البطولة) نعرض الكل حتى لا تفرغ الشاشة.
+        let startOfToday = cal.startOfDay(for: Date())
+        let upcoming = days.filter { $0.date >= startOfToday }
+        return upcoming.isEmpty ? days : upcoming
     }
 
     private func rebuildDays(keepSelection: Bool) {

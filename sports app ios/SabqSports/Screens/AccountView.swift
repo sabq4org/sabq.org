@@ -25,10 +25,10 @@ struct AccountView: View {
                         signInCard
                     }
 
-                    predictionsSection
-                    appearanceSection
-                    servicesSection
                     teamsSection
+                    predictionsSection
+                    servicesSection
+                    appearanceSection
                     notificationsSection
                     aboutSection
                     dangerZoneSection
