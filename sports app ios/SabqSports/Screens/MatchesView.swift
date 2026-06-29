@@ -390,9 +390,6 @@ struct MatchesView: View {
     @State private var pickedDate = Date()
     // طيّ الترويسة العلوية عند التمرير لأسفل (التولبار + شريط الأدوار) — يبقى شريط
     // التواريخ ظاهرًا بالأعلى. armed تتجاهل قفزة الانتقال البرمجية الأولى.
-    @State private var headerHidden = false
-    @State private var collapseArmed = false
-
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
@@ -401,16 +398,10 @@ struct MatchesView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if !headerHidden {
-                    header
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-                bodyContent
-            }
-            .background(SpAmbientBackground())
-            .navigationTitle("")
-            .toolbar(.hidden, for: .navigationBar)
+            bodyContent
+                .background(SpAmbientBackground())
+                .navigationTitle("")
+                .toolbar(.hidden, for: .navigationBar)
         }
         .task { await load() }
         .task { await pollLive() }
@@ -495,17 +486,36 @@ struct MatchesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ZStack(alignment: .bottom) {
-                VStack(spacing: 0) {
-                    dateRail
-                    matchesList
-                }
+                matchesList
                 floatingToday
             }
+            // غطاء علوي مُعتِم بارتفاع منطقة الأمان (شريط الحالة/الجزيرة): شريط
+            // الأيام المثبّت يتوقّف أسفل منطقة الأمان، بينما يصعد محتوى القائمة خلف
+            // شريط الحالة — فكانت المباريات السابقة «تطلع» فوق شريط الأيام وتبان.
+            // هذا الغطاء يحجبها فلا يظهر شيء فوق الأيام.
+            .overlay(alignment: .top) { topSafeAreaCover }
             // الأنميشن مقصور على ظهور/إخفاء زرّ «اليوم» فقط (يتغيّر isAwayFromToday
             // مرّة عند تجاوز اليوم) — لا على scrolledDayId الذي يتغيّر كل إطار تمرير
             // فيُحرّك الشجرة كلّها ويُبطّئ الصفحة.
             .animation(.easeInOut(duration: 0.25), value: isAwayFromToday)
         }
+    }
+
+    // غطاء منطقة الأمان العلوية: لون الخلفية نفسه يمتدّ خلف شريط الحالة فيحجب أي
+    // محتوى يصعد خلفه. نقرأ ارتفاع منطقة الأمان من النافذة مباشرةً (حتمي) ثم نرسم
+    // شريطًا مُعتِمًا يتجاوز الأمان أعلى الشاشة.
+    private var topSafeAreaInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.keyWindow?.safeAreaInsets.top ?? 0
+    }
+
+    private var topSafeAreaCover: some View {
+        SpTheme.screenGradient
+            .frame(height: topSafeAreaInset)
+            .frame(maxWidth: .infinity)
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
     }
 
     // شريط أدوار البطولة — صفّ ثانويّ خفيف مُوحّد مع شريحة التواريخ. يعرض **كل**
@@ -597,30 +607,47 @@ struct MatchesView: View {
     private var matchesList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    if visibleDays.isEmpty {
-                        emptyList
-                    } else {
-                        if !liveOnly && !liveFixtures.isEmpty { livePinned }
-                        ForEach(visibleDays) { day in
-                            daySection(day).id(day.id)
-                                .background(
-                                    GeometryReader { geo in
-                                        Color.clear.preference(
-                                            key: SpDayTopPreferenceKey.self,
-                                            value: [day.id: geo.frame(in: .named("matches-scroll")).minY]
-                                        )
-                                    }
-                                )
-                        }
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    // الجزء العلوي (العنوان + شريط المراحل) يصعد ويختفي مع التمرير.
+                    VStack(spacing: 18) {
+                        toolbar
+                        if !visibleDays.isEmpty { stageStrip }
                     }
-                    Color.clear.frame(height: 90)
+                    .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
+
+                    // شريط الأيام = ترويسة قسم مثبّتة: تصعد حتى أعلى الشاشة ثم تتوقّف
+                    // (لا تختفي). القائمة تنزل تحتها.
+                    Section {
+                        LazyVStack(alignment: .leading, spacing: 16) {
+                            if visibleDays.isEmpty {
+                                emptyList
+                            } else {
+                                if !liveOnly && !liveFixtures.isEmpty { livePinned }
+                                ForEach(visibleDays) { day in
+                                    daySection(day).id(day.id)
+                                        .background(
+                                            GeometryReader { geo in
+                                                Color.clear.preference(
+                                                    key: SpDayTopPreferenceKey.self,
+                                                    value: [day.id: geo.frame(in: .named("matches-scroll")).minY]
+                                                )
+                                            }
+                                        )
+                                }
+                            }
+                            Color.clear.frame(height: 90)
+                        }
+                        .padding(.horizontal, 16).padding(.top, 12)
+                    } header: {
+                        dateRail
+                            .padding(.top, 4).padding(.bottom, 8)
+                            .background(SpTheme.screenGradient)
+                    }
                 }
-                .padding(.horizontal, 16).padding(.top, 12)
             }
             .background(SpAmbientBackground())
             .coordinateSpace(name: "matches-scroll")
-            .modifier(SpAutoCollapseHeader(hidden: $headerHidden, armed: $collapseArmed))
+            .autoHideTabBar()
             .onAppear { runInitialScroll() }
             .onChange(of: visibleDays.isEmpty) { _, _ in runInitialScroll() }
             .onChange(of: scrollTargetRequest) { _, request in
@@ -643,13 +670,9 @@ struct MatchesView: View {
         guard !target.isEmpty else { return }
         scrolledDayId = target
         railCenterId = target
-        collapseArmed = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 120_000_000)
             requestScroll(to: target)
-            // فعّل كشف الطيّ بعد استقرار القفزة البرمجية لليوم (كي لا تُطوى الترويسة فورًا).
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            collapseArmed = true
         }
     }
 
@@ -667,7 +690,8 @@ struct MatchesView: View {
 
     private func updateActiveDay(from sectionTops: [String: CGFloat]) {
         guard !sectionTops.isEmpty else { return }
-        let anchorY: CGFloat = 18
+        // العتبة تحت شريط الأيام المثبّت (~56pt) كي يكون اليوم النشِط هو الظاهر تحته.
+        let anchorY: CGFloat = 60
         let passed = sectionTops.filter { $0.value <= anchorY }
         let candidate = passed.max(by: { $0.value < $1.value })?.key
             ?? sectionTops.min(by: { abs($0.value - anchorY) < abs($1.value - anchorY) })?.key
