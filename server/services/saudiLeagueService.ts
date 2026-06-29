@@ -128,7 +128,10 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 435, slug: "primera-rfef-1", name: "الدرجة الثالثة الإسبانية - المجموعة 1", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
   { id: 436, slug: "primera-rfef-2", name: "الدرجة الثالثة الإسبانية - المجموعة 2", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
   // دوريات الخليج — أندية معرّبة (قاموس GULF_TEAM_AR). كأس الخليج للمنتخبات
-  // (id 25) مؤجّل مع بطولات المنتخبات بمجموعات (المرحلة 3).
+  // «خليجي 27» (id 25) له قسم مخصّص مستقل (gulfCupService + /gulf-cup) يعتمد
+  // الجدول الرسمي الثابت حتى يضيف المزوّد موسم 2026؛ نُدرجه هنا للبوابة العامة
+  // أيضًا (موسم 2026) فيظهر ضمن فئة الخليج بمجرّد توفّره لدى API-Football.
+  { id: 25, slug: "gulf-cup", name: "كأس الخليج العربي (خليجي 27)", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "gulf" },
   { id: 301, slug: "uae-pro-league", name: "دوري أدنوك للمحترفين", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
   { id: 305, slug: "qatar-stars-league", name: "دوري نجوم قطر", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },
   { id: 330, slug: "kuwait-premier-league", name: "الدوري الكويتي الممتاز", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "gulf" },

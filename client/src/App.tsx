@@ -359,6 +359,7 @@ const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
+const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -881,6 +882,7 @@ function Router() {
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         <Route path="/asian-cup/predictions">{() => <LazyRoute component={AsianCupPredictions} />}</Route>
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
+        <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
         {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
         {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}

@@ -33,6 +33,7 @@ import { registerTaskRoutes } from "./tasks";
 import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
 import { registerAsianCupRoutes } from "./asianCup";
+import { registerGulfCupRoutes } from "./gulfCup";
 import { registerSportsRoutes } from "./sports";
 import { registerRadarRoutes } from "./radar";
 import { registerSpaNewsRoutes } from "./spaNews";
@@ -86,6 +87,7 @@ export function registerSplitRoutes(app: Express) {
   registerWalletRoutes(app);
   registerWorldCupRoutes(app);
   registerAsianCupRoutes(app);
+  registerGulfCupRoutes(app);
   registerSportsRoutes(app);
   registerRadarRoutes(app);
   registerSpaNewsRoutes(app);

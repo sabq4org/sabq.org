@@ -1800,6 +1800,64 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // Gulf Cup 27 "Khaleeji 27" (Saudi Arabia 2026) hub landing
+  {
+    pattern: /^\/gulf-cup\/?$/,
+    handle: async () => {
+      const description =
+        "خليجي 27 — كأس الخليج العربي في جدة (23 سبتمبر – 6 أكتوبر 2026): جدول المباريات بتوقيت الرياض، المجموعتان، المنتخبات الثمانية، وملاعب الاستضافة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/gulf-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>خليجي 27 — كأس الخليج العربي في السعودية</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "خليجي 27 — كأس الخليج العربي في السعودية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/gulf-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "خليجي 27 — كأس الخليج العربي في السعودية",
+              description,
+              url: `${SITE_URL}/gulf-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "خليجي 27",
+                  item: `${SITE_URL}/gulf-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
   // World Cup 2026 hub landing
   {
     pattern: /^\/world-cup\/?$/,
