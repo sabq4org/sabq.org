@@ -341,13 +341,14 @@ struct SpTeamPage: View {
 
     @ViewBuilder private func matchGroup(_ label: String, _ list: [SpFixture]) -> some View {
         if !list.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
                     Circle().fill(SpTheme.green).frame(width: 7, height: 7)
                     Text(label).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Text("(\(list.count))").font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
                 }
-                ForEach(list) { f in SpMatchCard(fixture: f) }
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+                SpFlatMatchList(fixtures: list)
             }
         }
     }

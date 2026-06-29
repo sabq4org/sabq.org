@@ -514,6 +514,23 @@ struct SpFlatMatchRow: View {
     }
 }
 
+// قائمة مباريات مسطّحة مفصولة بخطوط رفيعة (تحت ترويسة قسم/بطولة) — بلا بطاقات،
+// بنفس تنسيق شاشة «المباريات».
+struct SpFlatMatchList: View {
+    let fixtures: [SpFixture]
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
+                if idx > 0 {
+                    Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1)
+                        .padding(.horizontal, 10)
+                }
+                SpFlatMatchRow(fixture: f)
+            }
+        }
+    }
+}
+
 // MARK: - بطاقة «مبارياتي» (المباريات المتابَعة)
 
 struct SpMyMatchesCard: View {
