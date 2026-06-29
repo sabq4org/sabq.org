@@ -484,16 +484,30 @@ struct HomeView: View {
             }
             .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 11) {
-                    if let l = leader { pulseTile("المتصدّر", l.team.name, "\(l.points) نقطة", logo: l.team.logo) }
-                    if let s = topScorer { pulseTile("الهدّاف", s.name, "\(s.goals) هدف", logo: s.team.logo) }
-                    if let a = bestAtk { pulseTile("أقوى هجوم", a.team.name, "\(a.goalsFor) هدف", logo: a.team.logo) }
-                    if let d = bestDef { pulseTile("أمنع دفاع", d.team.name, "\(d.goalsAgainst) عليه", logo: d.team.logo) }
-                    if let g = gap { pulseTile("فارق الصدارة", g == 0 ? "متساويان" : "\(g) نقطة", "على الوصيف", logo: nil) }
+                HStack(spacing: 0) {
+                    ForEach(Array(pulseTiles(leader: leader, topScorer: topScorer, bestAtk: bestAtk, bestDef: bestDef, gap: gap).enumerated()), id: \.offset) { idx, t in
+                        if idx > 0 {
+                            Rectangle().fill(SpTheme.outline).frame(width: 1, height: 38)
+                        }
+                        pulseTile(t.label, t.value, t.sub, logo: t.logo)
+                    }
                 }
+                .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
                 .padding(.horizontal, 16)
             }
         }
+    }
+
+    private typealias PulseTile = (label: String, value: String, sub: String, logo: String?)
+
+    private func pulseTiles(leader: SpStandingRow?, topScorer: SpScorer?, bestAtk: SpStandingRow?, bestDef: SpStandingRow?, gap: Int?) -> [PulseTile] {
+        var tiles: [PulseTile] = []
+        if let l = leader { tiles.append(("المتصدّر", l.team.name, "\(l.points) نقطة", l.team.logo)) }
+        if let s = topScorer { tiles.append(("الهدّاف", s.name, "\(s.goals) هدف", s.team.logo)) }
+        if let a = bestAtk { tiles.append(("أقوى هجوم", a.team.name, "\(a.goalsFor) هدف", a.team.logo)) }
+        if let d = bestDef { tiles.append(("أمنع دفاع", d.team.name, "\(d.goalsAgainst) عليه", d.team.logo)) }
+        if let g = gap { tiles.append(("فارق الصدارة", g == 0 ? "متساويان" : "\(g) نقطة", "على الوصيف", nil)) }
+        return tiles
     }
 
     private func leaguePulseSummary(leader: SpStandingRow?, topScorer: SpScorer?, gap: Int?) -> String {
@@ -519,10 +533,8 @@ struct HomeView: View {
             Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
-        .frame(width: 116, alignment: .leading)
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(SpTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+        .frame(width: 112, alignment: .leading)
+        .padding(.horizontal, 13).padding(.vertical, 11)
     }
 
     private func favoriteCard(_ fav: SpFavTeam) -> some View {

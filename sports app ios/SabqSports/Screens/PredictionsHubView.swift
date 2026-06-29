@@ -129,8 +129,8 @@ struct PredictionsHubView: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
-                .fill(SpTheme.green.opacity(0.06))
-                .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+                .fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
         )
     }
 

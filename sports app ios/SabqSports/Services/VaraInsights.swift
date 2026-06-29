@@ -147,8 +147,7 @@ struct VaraInsightCard: View {
                     .frame(height: 52)
                 }
                 .padding(14)
-                .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.28), lineWidth: 1)))
+                .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
             }
         }
     }

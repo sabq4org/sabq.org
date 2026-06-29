@@ -20,7 +20,7 @@ struct SpPredictionMatchCard: View {
     private var hasMine: Bool { match.myPrediction != nil }
 
     var body: some View {
-        VStack(spacing: 13) {
+        VStack(spacing: 11) {
             headerRow
             teamsRow
             if settled {
@@ -40,14 +40,10 @@ struct SpPredictionMatchCard: View {
                 Text(error).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.crimson)
             }
         }
-        .padding(15)
+        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
                 .fill(SpTheme.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
-                        .stroke(hasMine && !settled ? SpTheme.green.opacity(0.45) : SpTheme.cardStroke, lineWidth: 1)
-                )
         )
         .onAppear {
             if let mine = match.myPrediction {
@@ -63,10 +59,10 @@ struct SpPredictionMatchCard: View {
         HStack(spacing: 8) {
             if let comp = f.competition, !comp.isEmpty {
                 Text(comp)
-                    .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.green)
+                    .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
                     .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                    .background(Capsule().fill(SpTheme.chipFill))
             }
             Spacer(minLength: 0)
             Text(kickoffLabel)
@@ -97,10 +93,10 @@ struct SpPredictionMatchCard: View {
 
     private func teamBadge(_ t: SpPoolTeamLite) -> some View {
         VStack(spacing: 6) {
-            SpTeamLogo(logo: t.logo, size: 46)
+            SpTeamLogo(logo: t.logo, size: 42)
             Text(t.name)
                 .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-                .lineLimit(1).minimumScaleFactor(0.75).frame(width: 86)
+                .lineLimit(1).minimumScaleFactor(0.75).frame(width: 84)
         }
     }
 
@@ -268,34 +264,39 @@ struct SpPredictionMatchCard: View {
     }
 
     private var poolPreview: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 9) {
             HStack(spacing: 6) {
                 Image(systemName: "banknote").font(.system(size: 11)).foregroundStyle(SpTheme.gold)
                 Text("البركة المتاحة")
                     .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
                 Text("\(match.poolAvailable) نقطة")
-                    .font(SportsFonts.app(size: 12, weight: .heavy)).foregroundStyle(SpTheme.green)
+                    .font(SportsFonts.app(size: 12, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
             }
-            HStack(spacing: 6) {
+            HStack(spacing: 0) {
                 tierChip("🎯", SpPoolMath.tierPool(match.poolAvailable, .exact))
+                tierDivider
                 tierChip("📏", SpPoolMath.tierPool(match.poolAvailable, .margin))
+                tierDivider
                 tierChip("✅", SpPoolMath.tierPool(match.poolAvailable, .outcome))
             }
         }
-        .padding(10)
+        .padding(.horizontal, 12).padding(.vertical, 11)
         .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.chipFill))
     }
 
+    private var tierDivider: some View {
+        Rectangle().fill(SpTheme.outline).frame(width: 1, height: 28)
+    }
+
     private func tierChip(_ emoji: String, _ points: Int) -> some View {
-        VStack(spacing: 1) {
-            Text(emoji).font(.system(size: 13))
-            Text("\(points)").font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+        VStack(spacing: 2) {
+            Text(emoji).font(.system(size: 14))
+            Text("\(points)").font(SportsFonts.app(size: 11.5, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                 .monospacedDigit().environment(\.layoutDirection, .leftToRight)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.card))
+        .frame(maxWidth: .infinity).padding(.vertical, 2)
     }
 
     // MARK: - الإرسال

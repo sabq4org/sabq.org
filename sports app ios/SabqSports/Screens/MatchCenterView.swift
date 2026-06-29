@@ -426,7 +426,7 @@ struct SpMatchCenter: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
             )
             .padding(.horizontal, 16)
         }
@@ -480,7 +480,7 @@ struct SpMatchCenter: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
                     .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
             )
             .padding(.horizontal, 16)
@@ -1456,7 +1456,7 @@ struct SpMatchCenter: View {
             }
             .padding(13).frame(maxWidth: .infinity)
             .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.green.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.green.opacity(0.30), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
     }

@@ -11,7 +11,7 @@ import { MatchesSection } from "@/components/worldcup/MatchesSection";
 import { NewsSection } from "@/components/worldcup/NewsSection";
 import { PredictionsCTA } from "@/components/worldcup/PredictionsCTA";
 import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
-import { SaudiSpotlight } from "@/components/worldcup/SaudiSpotlight";
+import { ArabTeamsSpotlight } from "@/components/worldcup/ArabTeamsSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
 import { TeamsSection } from "@/components/worldcup/TeamsSection";
@@ -84,11 +84,7 @@ export default function WorldCup() {
       <main className="flex-1">
         <HeroSection overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
         <TournamentFacts />
-        <SaudiSpotlight
-          saudi={overview?.saudi}
-          onOpenMatch={setOpenFixtureId}
-          onOpenPlayer={setOpenPlayerId}
-        />
+        <ArabTeamsSpotlight fixtures={fixtures} groups={groups} onOpenMatch={setOpenFixtureId} />
         <MatchesSection fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
         <PredictionsCTA />
         <StandingsSection groups={groups} isLoading={standingsLoading} />
