@@ -1873,6 +1873,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسوية توقّعات خليجي 27 (بركة متدرّجة + جائزة متراكمة + شارات + إشعار):
+      // نفس نمط كأس آسيا — تسجيل دائم وفحص القيادة داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startGcPredictionsJob } = await import("./jobs/gcPredictionsJob");
+            startGcPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting gulf cup predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {

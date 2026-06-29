@@ -38,6 +38,17 @@ export const LOYALTY_ACTIONS = {
    *  per-minute settlement cron re-runs safely. Awarded by
    *  `settleFinishedMatches` in server/services/acPredictionsService.ts. */
   AC_PREDICTION_WIN: "AC_PREDICTION_WIN",
+  /** Gulf Cup 27 ("Khaleeji 27") match-prediction win. Source = the fixtureId,
+   *  and `points` is ALWAYS overridden with the user's pari-mutuel share of that
+   *  match's tiered 1000-point pool (+ any carried jackpot). No daily cap; the
+   *  lifetime dedup window keeps (userId, action, fixtureId) at most once so the
+   *  per-minute settlement cron re-runs safely. Awarded by `settleFinishedMatches`
+   *  in server/services/gcPredictionsService.ts. */
+  GC_PREDICTION_WIN: "GC_PREDICTION_WIN",
+  /** Gulf Cup 27 long-term prediction win (champion / top scorer). Source =
+   *  `gc-long:<kind>`. `points` overridden with the pari-mutuel share of the
+   *  long-term pool. Settled once at tournament end. */
+  GC_LONG_PREDICTION_WIN: "GC_LONG_PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -61,6 +72,11 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   // Nominal default only — the smart engine ALWAYS overrides this with the
   // user's computed per-match total (tier × boldness × streak).
   AC_PREDICTION_WIN: 30,
+  // Nominal default only — the engine ALWAYS overrides this with the user's
+  // pari-mutuel share of the match's tiered 1000-point pool.
+  GC_PREDICTION_WIN: 100,
+  // Nominal default only — overridden with the long-term pool share.
+  GC_LONG_PREDICTION_WIN: 500,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -84,6 +100,10 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   // Same rationale as the World Cup — one settleable match per fixture, dedup
   // below is the real guard.
   AC_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  GC_PREDICTION_WIN: null,
+  // Settled once at tournament end; lifetime dedup keyed on source.
+  GC_LONG_PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -113,6 +133,10 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   WC_PREDICTION_WIN: 100000,
   // Same lifetime, source=fixtureId dedup as the World Cup.
   AC_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId dedup — a match pays a user at most once.
+  GC_PREDICTION_WIN: 100000,
+  // Lifetime, source=gc-long:<kind> dedup.
+  GC_LONG_PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import { GcGroups } from "@/components/gulfcup/GcGroups";
 import { GcSchedule } from "@/components/gulfcup/GcSchedule";
 import { GcTeams } from "@/components/gulfcup/GcTeams";
 import { GcHostShowcase } from "@/components/gulfcup/GcHostShowcase";
+import { GcPredictionsCTA } from "@/components/gulfcup/GcPredictionsCTA";
 import type { GcFixture, GcGroup, GcOverview, GcTeam } from "@/components/gulfcup/gcTypes";
 
 export default function GulfCup() {
@@ -60,6 +61,7 @@ export default function GulfCup() {
 
       <main className="flex-1">
         <GcHero overview={overview} onJump={handleJump} />
+        <GcPredictionsCTA />
         <GcSaudiSpotlight saudi={overview?.saudi} />
         <GcGroups groups={groups} />
         <GcSchedule fixtures={fixtures} isLoading={fixturesLoading} />
