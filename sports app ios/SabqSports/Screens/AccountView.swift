@@ -24,13 +24,6 @@ struct AccountView: View {
                         signInCard
                     }
 
-                    VaraInsightCard(context: VaraInsightContext(
-                        isLoggedIn: auth.isLoggedIn,
-                        favoriteName: favorites.team?.name,
-                        followsCount: followedTeams.count,
-                        activeAlerts: activeAlertsCount
-                    ))
-
                     predictionsSection
                     servicesSection
                     teamsSection

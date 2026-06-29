@@ -392,8 +392,6 @@ struct MatchesView: View {
     // التواريخ ظاهرًا بالأعلى. armed تتجاهل قفزة الانتقال البرمجية الأولى.
     @State private var headerHidden = false
     @State private var collapseArmed = false
-    // قوّة كل منتخب من جداول المجموعات — تغذّي «توقّع VARA» المدمج في القائمة.
-    @State private var strengthByTeam: [Int: VaraTeamStrength] = [:]
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -415,7 +413,6 @@ struct MatchesView: View {
             .toolbar(.hidden, for: .navigationBar)
         }
         .task { await load() }
-        .task { await loadStandings() }
         .task { await pollLive() }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .refreshable { await load(force: true) }
@@ -737,7 +734,7 @@ struct MatchesView: View {
     private func matchGroup(_ fixtures: [SpWcFixture]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
-                SpWcMatchRow(fixture: f, prediction: varaPick(for: f))
+                SpWcMatchRow(fixture: f)
                 if idx < fixtures.count - 1 {
                     Divider()
                         .overlay(SpTheme.outline.opacity(0.75))
@@ -930,27 +927,6 @@ struct MatchesView: View {
         loading = false
     }
 
-    // توقّع VARA المدمج لمباراة في القائمة — للقادمة ضمن نافذة الـ48 ساعة فقط.
-    // ملاعب كأس العالم محايدة (بلد مضيف ثالث) فتُضبط أفضلية الأرض على «محايد».
-    private func varaPick(for f: SpWcFixture) -> VaraPick? {
-        guard !f.status.live, !f.status.finished else { return nil }
-        let secsUntil = Date(timeIntervalSince1970: f.timestamp).timeIntervalSinceNow
-        guard secsUntil > -300, secsUntil <= 48 * 3600 else { return nil }
-        return VaraPredict.compute(
-            home: strengthByTeam[f.home.id], away: strengthByTeam[f.away.id],
-            homeName: f.home.name, awayName: f.away.name, neutralVenue: true)
-    }
-
-    // جداول المجموعات → خريطة قوّة لكل منتخب (لتوقّع VARA الديناميكي في القائمة).
-    private func loadStandings() async {
-        guard let resp = try? await APIClient.shared.fetchWorldCupStandings() else { return }
-        var map: [Int: VaraTeamStrength] = [:]
-        for group in resp.groups {
-            for row in group.rows { map[row.team.id] = VaraTeamStrength(wcRow: row) }
-        }
-        if !map.isEmpty { strengthByTeam = map }
-    }
-
     private func visualSignature(_ rows: [SpWcFixture]) -> String {
         rows.map { f in
             "\(f.id):\(Int(f.timestamp)):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.winner?.description ?? "n"):\(f.away.winner?.description ?? "n")"
@@ -974,8 +950,6 @@ struct MatchesView: View {
 
 private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
-    /// توقّع VARA المدمج — يُمرَّر فقط للمباريات القادمة ضمن نافذة الـ48 ساعة.
-    var prediction: VaraPick? = nil
 
     // أحجام موحّدة لكل الصفوف (منتهية/جارية/قادمة) — هذا ما يمنح القائمة مظهر
     // «دوري» المنظّم: الأعلام تصطفّ في عمودين نظيفين والنتائج في عمود واحد بالمنتصف.
@@ -988,20 +962,16 @@ private struct SpWcMatchRow: View {
     }
     private func isWinner(_ team: SpWcTeam) -> Bool { decided && team.winner == true }
 
-    // صفّ مدمج بلا إطار. الترتيب على طراز «دوري»: العَلَم في الطرف الخارجي، والاسم للداخل ملاصقًا
-    // للنتيجة. (RTL: المضيف يمينًا، الضيف يسارًا).
+    // صفّ مدمج بلا إطار وبلا أي إضافات (الدور/الملعب/التوقّع تُعرض في تفاصيل المباراة).
+    // الترتيب على طراز «دوري»: العَلَم ملاصق للنتيجة، والاسم للطرف الخارجي. (RTL: المضيف يمينًا.)
     var body: some View {
         NavigationLink {
             SpMatchCenter(fixtureId: fixture.id, preview: SpFixture(worldCup: fixture))
         } label: {
-            VStack(spacing: 7) {
-                HStack(spacing: 6) {
-                    teamSide(fixture.home, home: true)
-                    centerColumn
-                    teamSide(fixture.away, home: false)
-                }
-                if !metaParts.isEmpty { metaLine }
-                if let prediction { VaraMiniPrediction(pick: prediction) }
+            HStack(spacing: 6) {
+                teamSide(fixture.home, home: true)
+                centerColumn
+                teamSide(fixture.away, home: false)
             }
             .padding(.vertical, 10)
             .padding(.horizontal, 8)
@@ -1009,30 +979,6 @@ private struct SpWcMatchRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
-    }
-
-    // سطر تفاصيل المباراة: الدور · الملعب (— المدينة) · السعة إن وُجدت. البطولة
-    // ضمنيّة (تبويب كأس العالم) واليوم/التاريخ في ترويسة اليوم.
-    private var metaParts: [String] {
-        var parts: [String] = []
-        if !fixture.round.isEmpty { parts.append(fixture.round) }
-        if let v = fixture.venue {
-            let stadium = v.city.isEmpty ? v.name : (v.name.isEmpty ? v.city : "\(v.name) — \(v.city)")
-            if !stadium.isEmpty { parts.append(stadium) }
-        }
-        return parts
-    }
-
-    private var metaLine: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 8.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
-            Text(metaParts.joined(separator: " · "))
-                .font(SportsFonts.app(size: 9.5, weight: .semibold))
-                .foregroundStyle(SpTheme.onDarkDim)
-                .lineLimit(1).minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // الجانب على طراز «دوري» (مطابق للصورة): العَلَم ملاصق للنتيجة في المنتصف

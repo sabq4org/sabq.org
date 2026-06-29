@@ -213,13 +213,18 @@ struct LiveView: View {
         .padding(.top, 6)
     }
 
+    // مجموعة بطولة على طراز شاشة «المباريات»: ترويسة البطولة + خطّ فاصل + صفوف
+    // مسطّحة (SpFlatMatchRow) مفصولة بخطوط رفيعة — بلا إطارات/بطاقات.
     private func worldGroupSection(_ g: LiveGroup) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             worldGroupHeader(g)
-            VStack(spacing: 9) {
-                ForEach(g.matches) { item in
-                    SpWorldMatchRow(item: item)
+            Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+            ForEach(Array(g.matches.enumerated()), id: \.element.id) { idx, item in
+                if idx > 0 {
+                    Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1)
+                        .padding(.horizontal, 10)
                 }
+                SpFlatMatchRow(fixture: item.fixture)
             }
         }
         .padding(.top, 2)
