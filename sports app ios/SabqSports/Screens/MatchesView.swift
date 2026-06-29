@@ -396,9 +396,9 @@ struct MatchesView: View {
         return c
     }()
 
-    // ارتفاع شريط الأيام المثبّت تقريبًا — تُرفع به مرساة التمرير كي يظهر عنوان
-    // اليوم تحت الشريط لا خلفه عند الانتقال لأيّ يوم.
-    private static let pinnedRailHeight: CGFloat = 70
+    // عند اختيار يوم من الشريط المثبّت، نضع عنوان اليوم أسفل أعلى الشاشة قليلًا
+    // حتى لا يختفي خلف شريط الأيام في ScrollView/Section sticky header.
+    private static let dayScrollAnchor = UnitPoint(x: 0.5, y: 0.13)
 
     var body: some View {
         NavigationStack {
@@ -658,10 +658,10 @@ struct MatchesView: View {
                 guard let request, !request.id.isEmpty else { return }
                 if request.animated {
                     withAnimation(.easeInOut(duration: 0.32)) {
-                        proxy.scrollTo(request.id, anchor: .top)
+                        proxy.scrollTo(request.id, anchor: Self.dayScrollAnchor)
                     }
                 } else {
-                    proxy.scrollTo(request.id, anchor: .top)
+                    proxy.scrollTo(request.id, anchor: Self.dayScrollAnchor)
                 }
             }
             .onPreferenceChange(SpDayTopPreferenceKey.self) { tops in
@@ -738,14 +738,7 @@ struct MatchesView: View {
     private func daySection(_ day: SpWcDay) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             dayHeader(day)
-                // مرساة التمرير في overlay (لا تؤثّر على التخطيط) مرفوعة بمقدار
-                // ارتفاع الشريط المثبّت، فيهبط عنوان اليوم تحته عند الانتقال إليه.
-                .overlay(alignment: .top) {
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .padding(.top, -Self.pinnedRailHeight)
-                        .id(day.id)
-                }
+                .id(day.id)
             matchGroup(fixturesForDisplay(in: day))
         }
     }
