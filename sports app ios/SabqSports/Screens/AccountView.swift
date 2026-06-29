@@ -6,6 +6,7 @@ import SwiftUI
 struct AccountView: View {
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpFavorites.self) private var favorites
+    @Environment(SpThemeMode.self) private var themeMode
     @Environment(\.openURL) private var openURL
     @State private var identifier = ""
     @State private var password = ""
@@ -24,6 +25,8 @@ struct AccountView: View {
                         signInCard
                     }
 
+                    teamsSection
+
                     VaraInsightCard(context: VaraInsightContext(
                         isLoggedIn: auth.isLoggedIn,
                         favoriteName: favorites.team?.name,
@@ -33,7 +36,7 @@ struct AccountView: View {
 
                     predictionsSection
                     servicesSection
-                    teamsSection
+                    appearanceSection
                     notificationsSection
                     aboutSection
                     dangerZoneSection
@@ -163,6 +166,42 @@ struct AccountView: View {
             }
             .buttonStyle(SpPressStyle())
         }
+    }
+
+    // MARK: - المظهر (تلقائي / فاتح / داكن)
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("المظهر")
+            HStack(spacing: 8) {
+                ForEach(SpThemeMode.Mode.allCases) { m in
+                    appearanceChip(m)
+                }
+            }
+            hint("«تلقائي» يتبع إعداد جهازك؛ أو اختر الفاتح/الداكن يدويًّا.")
+        }
+    }
+
+    private func appearanceChip(_ m: SpThemeMode.Mode) -> some View {
+        let active = themeMode.mode == m
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) { themeMode.mode = m }
+        } label: {
+            VStack(spacing: 7) {
+                Image(systemName: m.icon).font(.system(size: 18, weight: .bold))
+                Text(m.label).font(SportsFonts.app(size: 12.5, weight: .bold))
+            }
+            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+            .frame(maxWidth: .infinity).frame(height: 66)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                    .fill(active ? SpTheme.green : SpTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                        .stroke(active ? Color.clear : SpTheme.cardStroke, lineWidth: 1))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous))
+        }
+        .buttonStyle(SpPressStyle())
     }
 
     // MARK: - خدماتي

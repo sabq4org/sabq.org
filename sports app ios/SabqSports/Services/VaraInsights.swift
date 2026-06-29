@@ -57,7 +57,7 @@ nonisolated enum VaraInsightsEngine {
                              accent: .green))
         } else if c.favoriteNextKickoff == nil && !c.favoriteIsLive {
             out.append(.init(id: "fav-watch", icon: "sparkles",
-                             text: "نتابع أخبار \(c.favoriteName!) لك — مبارياته القادمة ستظهر هنا أولًا.",
+                             text: "أنت من مشجّعي \(c.favoriteName!) — نُبرز مبارياته وأخباره أولًا في VARA.",
                              accent: .green))
         }
 

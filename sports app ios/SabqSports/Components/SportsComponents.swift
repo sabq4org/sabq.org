@@ -319,8 +319,104 @@ struct SpLoading: View {
     }
 }
 
-// MARK: - بطاقة مباراة واحدة (الجدول/اليوم/المباشر)
+// MARK: - صفّ النتيجة الموحّد (المرجع الوحيد لعرض المباراة في كل التطبيق)
+//
+// يطابق تمامًا صفّ شاشة «المباريات» (SpWcMatchRow): العَلَم 34 ملاصقًا للنتيجة في
+// المنتصف، الاسم 12.5 نحو الطرف الخارجي يدفعه Spacer، عمود نتيجة/توقيت ثابت العرض
+// (50) بنصّ 15/13، وسطر حالة موجز. **كل** بطاقات المباريات تستعمله لتوحيد الأحجام
+// والمواضع (RTL: المضيف يمينًا، الضيف يسارًا).
+struct SpScoreRow: View {
+    let fixture: SpFixture
+    private let logoSize: CGFloat = 34
+    private let centerWidth: CGFloat = 50
 
+    private var started: Bool { fixture.status.live || fixture.status.finished }
+    private var decided: Bool {
+        fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
+    }
+    private func isWinner(_ t: SpTeam) -> Bool { decided && t.winner == true }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            teamSide(fixture.home, home: true)
+            centerColumn
+            teamSide(fixture.away, home: false)
+        }
+    }
+
+    private func teamSide(_ team: SpTeam, home: Bool) -> some View {
+        let logo = SpTeamLogo(logo: team.logo, size: logoSize)
+        let name = teamName(team)
+        return HStack(spacing: 6) {
+            if home { Spacer(minLength: 4); name; logo }
+            else { logo; name; Spacer(minLength: 4) }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func teamName(_ team: SpTeam) -> some View {
+        Text(team.name)
+            .font(SportsFonts.app(size: 12.5, weight: isWinner(team) ? .heavy : .semibold))
+            .foregroundStyle(SpTheme.onDarkStrong)
+            .lineLimit(1).minimumScaleFactor(0.76).allowsTightening(true)
+    }
+
+    private var centerColumn: some View {
+        VStack(spacing: 0) {
+            if started {
+                Text("\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)")
+                    .font(SportsFonts.app(size: 15, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong).monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+            } else {
+                Text(SpFormat.kickoffTime(fixture.date))
+                    .font(SportsFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong).monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+            statusSub
+        }
+        .frame(width: centerWidth)
+    }
+
+    @ViewBuilder private var statusSub: some View {
+        if fixture.status.live {
+            HStack(spacing: 4) {
+                Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
+                Text(liveMinute)
+            }
+            .font(SportsFonts.app(size: 10.5, weight: .bold))
+            .foregroundStyle(SpTheme.crimson).lineLimit(1).minimumScaleFactor(0.8)
+        } else if fixture.status.finished {
+            Text("انتهت")
+                .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+        } else {
+            Text("موعد")
+                .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkFaint)
+        }
+    }
+
+    private var liveMinute: String {
+        switch fixture.status.code {
+        case "HT": return "استراحة"
+        case "BT": return "استراحة إضافي"
+        case "P", "PEN": return "ركلات"
+        case "SUSP": return "موقوفة"
+        case "INT": return "متوقّفة"
+        default: break
+        }
+        guard let e = fixture.status.elapsed else { return fixture.status.label }
+        if let extra = fixture.status.extra, extra > 0 { return "\(e)+\(extra)'" }
+        return "\(e)'"
+    }
+}
+
+// MARK: - بطاقة مباراة واحدة (الجدول/اليوم/المباشر)
+//
+// حاوية بيضاء حول `SpScoreRow` الموحّد: سطر سياقيّ (البطولة/الدور/التاريخ) +
+// نجمة المتابعة، ثم صفّ النتيجة المطابق لشاشة «المباريات» بالضبط.
 struct SpMatchCard: View {
     let fixture: SpFixture
     /// إظهار اسم البطولة أعلى البطاقة (للوحات متعدّدة البطولات: اليوم/المباشر).
@@ -328,11 +424,6 @@ struct SpMatchCard: View {
 
     @Environment(SpMatchFollows.self) private var matchFollows
 
-    private var started: Bool { fixture.started }
-
-    // البطاقة رابط يدفع مركز المباراة. نجمة المتابعة **شقيقة** للرابط داخل ZStack
-    // (لا متداخلة) كي تلتقط نقرتها بدل أن يبتلعها الرابط — مكانها يطابق فراغًا
-    // محجوزًا في صدر البطاقة.
     var body: some View {
         ZStack(alignment: .topLeading) {
             NavigationLink {
@@ -346,13 +437,6 @@ struct SpMatchCard: View {
         }
     }
 
-    // هل حُسمت المباراة بفائز؟ (للنتائج المنتهية — لإبراز الفائز وتعتيم الخاسر)
-    private var decided: Bool {
-        fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
-    }
-    private func isWinner(_ team: SpTeam) -> Bool { decided && team.winner == true }
-    private func isLoser(_ team: SpTeam) -> Bool { decided && team.winner != true }
-
     private var cardBody: some View {
         VStack(spacing: 10) {
             HStack(spacing: 6) {
@@ -362,15 +446,8 @@ struct SpMatchCard: View {
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
                 Spacer(minLength: 6)
-                SpStatusPill(fixture: fixture)
             }
-
-            HStack(spacing: 8) {
-                teamSide(fixture.home, leading: true)
-                scoreBox
-                teamSide(fixture.away, leading: false)
-            }
-            // اسم الملعب مُخفى — المزوّد يرسله إنجليزيًّا بلا تعريب.
+            SpScoreRow(fixture: fixture)
         }
         .padding(14)
         .background(
@@ -381,8 +458,6 @@ struct SpMatchCard: View {
             RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
                 .stroke(SpTheme.cardStroke, lineWidth: 1)
         )
-        // بطاقة هادئة موحّدة لكل الحالات (كنتائج البطولة) — لا إطار/ظلّ أحمر
-        // للمباشر؛ تبقى إشارة البثّ في قُريص الدقيقة الأحمر الصغير فقط.
         .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
         .contentShape(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous))
     }
@@ -412,65 +487,6 @@ struct SpMatchCard: View {
         }
         return fixture.round
     }
-
-    private var venueText: String {
-        fixture.venue.city.isEmpty ? fixture.venue.name : "\(fixture.venue.name) — \(fixture.venue.city)"
-    }
-
-    private func teamSide(_ team: SpTeam, leading: Bool) -> some View {
-        let loser = isLoser(team)
-        return HStack(spacing: 6) {
-            if leading {
-                teamName(team, align: .leading)
-                logo(team, dim: loser)
-            } else {
-                logo(team, dim: loser)
-                teamName(team, align: .trailing)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
-    }
-
-    private func logo(_ team: SpTeam, dim: Bool) -> some View {
-        SpTeamLogo(logo: team.logo, size: 32).opacity(dim ? 0.5 : 1)
-    }
-
-    private func teamName(_ team: SpTeam, align: TextAlignment) -> some View {
-        let winner = isWinner(team)
-        let loser = isLoser(team)
-        return HStack(spacing: 5) {
-            if winner, align == .trailing {
-                Image(systemName: "chevron.left").font(.system(size: 9, weight: .black)).foregroundStyle(SpTheme.green)
-            }
-            Text(team.name)
-                .font(SportsFonts.app(size: 13, weight: winner ? .heavy : .semibold))
-                .foregroundStyle(loser ? SpTheme.onDarkDim : SpTheme.onDark)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-                .multilineTextAlignment(align)
-            if winner, align == .leading {
-                Image(systemName: "chevron.right").font(.system(size: 9, weight: .black)).foregroundStyle(SpTheme.green)
-            }
-        }
-    }
-    private var scoreBox: some View {
-        Group {
-            if started {
-                Text("\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)")
-                    .font(SportsFonts.app(size: 17, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDarkStrong)
-                    .monospacedDigit()
-                    .environment(\.layoutDirection, .leftToRight)
-            } else {
-                Text(SpFormat.kickoffTime(fixture.date))
-                    .font(SportsFonts.app(size: 15, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                    .monospacedDigit()
-                    .environment(\.layoutDirection, .leftToRight)
-            }
-        }
-        .frame(minWidth: 48)
-    }
 }
 
 // MARK: - بطاقة «مبارياتي» (المباريات المتابَعة + عدّاد تنازلي حيّ)
@@ -478,6 +494,45 @@ struct SpMatchCard: View {
 // تتصدّر الرئيسية حين يتابع المستخدم مباراةً أو أكثر. كل صفّ: الفريقان + مركز
 // يتغيّر بالحالة — عدّاد تنازليّ للانطلاق (يُحدَّث كل ثانية عبر TimelineView)،
 // نتيجة + «مباشر» للجارية، أو نتيجة + «انتهت» للمنتهية. نجمة ذهبية لإلغاء المتابعة.
+// MARK: - صفّ مباراة مسطّح بلا بطاقة (لقوائم البطولات المجمّعة: «عالمية»…)
+//
+// نفس تنسيق شاشة «المباريات» تمامًا: `SpScoreRow` بلا إطار/بطاقة، يُفصَل بخطوط
+// رفيعة تحت ترويسة البطولة. يدفع مركز المباراة عند النقر.
+struct SpFlatMatchRow: View {
+    let fixture: SpFixture
+    var body: some View {
+        NavigationLink {
+            SpMatchCenter(fixtureId: fixture.id, preview: fixture)
+        } label: {
+            SpScoreRow(fixture: fixture)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 8)
+                .background(fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
+    }
+}
+
+// قائمة مباريات مسطّحة مفصولة بخطوط رفيعة (تحت ترويسة قسم/بطولة) — بلا بطاقات،
+// بنفس تنسيق شاشة «المباريات».
+struct SpFlatMatchList: View {
+    let fixtures: [SpFixture]
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
+                if idx > 0 {
+                    Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1)
+                        .padding(.horizontal, 10)
+                }
+                SpFlatMatchRow(fixture: f)
+            }
+        }
+    }
+}
+
+// MARK: - بطاقة «مبارياتي» (المباريات المتابَعة)
+
 struct SpMyMatchesCard: View {
     @Environment(SpMatchFollows.self) private var follows
     @Environment(SpAuthStore.self) private var auth
@@ -487,15 +542,13 @@ struct SpMyMatchesCard: View {
         if !matches.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 header(count: matches.count)
-                TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    VStack(spacing: 0) {
-                        ForEach(Array(matches.enumerated()), id: \.element.id) { idx, f in
-                            if idx > 0 {
-                                Rectangle().fill(SpTheme.outline).frame(height: 1)
-                                    .padding(.leading, 14)
-                            }
-                            row(f, now: ctx.date)
+                VStack(spacing: 0) {
+                    ForEach(Array(matches.enumerated()), id: \.element.id) { idx, f in
+                        if idx > 0 {
+                            Rectangle().fill(SpTheme.outline).frame(height: 1)
+                                .padding(.leading, 14)
                         }
+                        row(f)
                     }
                 }
                 .padding(.top, 4)
@@ -551,16 +604,15 @@ struct SpMyMatchesCard: View {
         .padding(.top, 14)
     }
 
-    private func row(_ f: SpFixture, now: Date) -> some View {
-        ZStack(alignment: .leading) {
+    // صفّ موحّد مطابق لشاشة «المباريات» عبر SpScoreRow + نجمة إلغاء المتابعة.
+    private func row(_ f: SpFixture) -> some View {
+        ZStack(alignment: .topLeading) {
             NavigationLink {
                 SpMatchCenter(fixtureId: f.id, preview: f)
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Color.clear.frame(width: 24, height: 24)   // فراغ محجوز لنجمة الإلغاء
-                    teamMini(f.home, leading: true)
-                    centerStatus(f, now: now)
-                    teamMini(f.away, leading: false)
+                    SpScoreRow(fixture: f)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
@@ -568,7 +620,7 @@ struct SpMyMatchesCard: View {
             }
             .buttonStyle(SpPressStyle())
 
-            unfollowButton(f).padding(.leading, 14)
+            unfollowButton(f).padding(.top, 11).padding(.leading, 14)
         }
     }
 

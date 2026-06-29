@@ -302,7 +302,8 @@ struct CompetitionDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                ForEach(results.prefix(5)) { f in SpMatchCard(fixture: SpFixture(worldCup: f)) }
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 2)
+                SpFlatMatchList(fixtures: results.prefix(5).map { SpFixture(worldCup: $0) })
             }
         }
     }
@@ -430,7 +431,8 @@ struct CompetitionDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                ForEach(Array(results.suffix(5).reversed())) { f in SpMatchCard(fixture: f) }
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 2)
+                SpFlatMatchList(fixtures: Array(results.suffix(5).reversed()))
             }
         }
     }
@@ -509,9 +511,10 @@ struct CompetitionDetailView: View {
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(rounds) { round in
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 0) {
                         SpSectionHeader(icon: "trophy.fill", title: round.round, count: round.matches.count, tint: SpTheme.gold)
-                        ForEach(round.matches) { f in SpMatchCard(fixture: SpFixture(worldCup: f)) }
+                        Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+                        SpFlatMatchList(fixtures: round.matches.map { SpFixture(worldCup: $0) })
                     }
                 }
             }
@@ -810,18 +813,20 @@ struct CompetitionDetailView: View {
 
     @ViewBuilder private func wcMatchBucket(_ title: String, _ items: [SpWcFixture], tint: Color, icon: String) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 SpSectionHeader(icon: icon, title: title, count: items.count, tint: tint)
-                ForEach(items) { f in SpMatchCard(fixture: SpFixture(worldCup: f)) }
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+                SpFlatMatchList(fixtures: items.map { SpFixture(worldCup: $0) })
             }
         }
     }
 
     @ViewBuilder private func matchBucket(_ title: String, _ items: [SpFixture], tint: Color, icon: String) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 SpSectionHeader(icon: icon, title: title, count: items.count, tint: tint)
-                ForEach(items) { f in SpMatchCard(fixture: f) }
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+                SpFlatMatchList(fixtures: items)
             }
         }
     }

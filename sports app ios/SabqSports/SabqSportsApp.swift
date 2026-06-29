@@ -9,6 +9,7 @@ struct SabqSportsApp: App {
     @State private var matchFollows = SpMatchFollows.shared
     @State private var tabBarVis = SpTabBarVisibility.shared
     @State private var liveActivity = SpLiveActivityManager.shared
+    @State private var themeMode = SpThemeMode.shared
 
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
@@ -23,8 +24,9 @@ struct SabqSportsApp: App {
                 .environment(matchFollows)
                 .environment(tabBarVis)
                 .environment(liveActivity)
+                .environment(themeMode)
                 .sportsRTL()
-                .preferredColorScheme(.light)
+                .preferredColorScheme(themeMode.colorScheme)
                 .task { await auth.restore() }
                 // استطلاع دوري مستقل لـ«مبارياتي» والنشاط الحيّ أثناء وجود التطبيق
                 // أمامياً — يمنع تجمّد البطاقة/الويدجت حين لا تكون على مركز المباراة.

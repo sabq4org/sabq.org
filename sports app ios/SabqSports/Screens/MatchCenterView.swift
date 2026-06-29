@@ -159,6 +159,7 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
+                matchInfoCard
                 varaModelCard
 
                 if loading && detail == nil {
@@ -322,6 +323,57 @@ struct SpMatchCenter: View {
             )
             .padding(.horizontal, 16)
         }
+    }
+
+    // MARK: - معلومات المباراة القادمة (اليوم/التاريخ/الملعب/البطولة/الدور)
+
+    @ViewBuilder private var matchInfoCard: some View {
+        if let f = fixture, !f.started {
+            let stadium = f.venue.city.isEmpty ? f.venue.name
+                : (f.venue.name.isEmpty ? f.venue.city : "\(f.venue.name) — \(f.venue.city)")
+            VStack(spacing: 0) {
+                infoLine("calendar", "اليوم والتاريخ", SpFormat.kickoffDay(f.date))
+                infoDivider
+                infoLine("clock", "التوقيت", SpFormat.kickoffTime(f.date))
+                if !stadium.isEmpty {
+                    infoDivider
+                    infoLine("mappin.and.ellipse", "الملعب", stadium)
+                }
+                let comp = [f.competition, preview?.competition].compactMap { $0 }.first { !$0.isEmpty } ?? ""
+                if !comp.isEmpty {
+                    infoDivider
+                    infoLine("trophy.fill", "البطولة", comp)
+                }
+                if !f.round.isEmpty {
+                    infoDivider
+                    infoLine("flag.checkered", "الدور", f.round)
+                }
+            }
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+            )
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func infoLine(_ icon: String, _ label: String, _ value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(SpTheme.green)
+                .frame(width: 26, height: 26)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpTheme.green.opacity(0.10)))
+            Text(label).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+            Spacer(minLength: 8)
+            Text(value).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 11)
+    }
+
+    private var infoDivider: some View {
+        Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1).padding(.leading, 52)
     }
 
     // MARK: - توقّع VARA (نموذج ديناميكي: ترتيب + فورمة + أفضلية أرض + مواجهات)
@@ -1597,11 +1649,18 @@ struct SpMatchCenter: View {
             self.h2h = try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
         }
         // قوّة الفريقين من ترتيب البطولة (لتوقّع VARA) — أفضل جهد، يتراجع للمواجهات.
-        if let slug = (detail?.fixture.competitionSlug ?? preview?.competitionSlug), !slug.isEmpty,
-           let st = try? await APIClient.shared.fetchStandings(comp: slug) {
-            var m: [Int: VaraTeamStrength] = [:]
-            for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
-            if !m.isEmpty { self.strength = m }
+        if let slug = (detail?.fixture.competitionSlug ?? preview?.competitionSlug), !slug.isEmpty {
+            if slug == "world-cup" {
+                if let wc = try? await APIClient.shared.fetchWorldCupStandings() {
+                    var m: [Int: VaraTeamStrength] = [:]
+                    for g in wc.groups { for row in g.rows { m[row.team.id] = VaraTeamStrength(wcRow: row) } }
+                    if !m.isEmpty { self.strength = m }
+                }
+            } else if let st = try? await APIClient.shared.fetchStandings(comp: slug) {
+                var m: [Int: VaraTeamStrength] = [:]
+                for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
+                if !m.isEmpty { self.strength = m }
+            }
         }
         // توقّعي (إن كانت المباراة قادمة وأنا عضو) — لملء الستيبر.
         if auth.isLoggedIn, let f = preview ?? detail?.fixture, !f.started {
