@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$ROOT/GulfCup.xcodeproj"
 SCHEME="${SCHEME:-GulfCup}"
 CONFIG="${CONFIG:-Debug}"
-DEST="${DEST:-generic/platform=iOS Simulator}"
+DEST="${DEST:-generic/platform=iOS}"
 DERIVED="${DERIVED:-$ROOT/build/DerivedData}"
 
 if ! command -v xcodebuild >/dev/null 2>&1; then
