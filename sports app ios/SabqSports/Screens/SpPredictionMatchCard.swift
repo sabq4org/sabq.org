@@ -18,6 +18,8 @@ struct SpPredictionMatchCard: View {
     private var f: SpPoolFixture { match.fixture }
     private var settled: Bool { match.settlement?.status == "settled" }
     private var hasMine: Bool { match.myPrediction != nil }
+    private var drawNotAllowed: Bool { f.competitionSlug == "world-cup" && predHome == predAway }
+    private let drawNotAllowedMessage = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة"
 
     var body: some View {
         VStack(spacing: 11) {
@@ -302,7 +304,12 @@ struct SpPredictionMatchCard: View {
     // MARK: - الإرسال
 
     private func submit() async {
-        submitting = true; error = nil
+        error = nil
+        if drawNotAllowed {
+            error = drawNotAllowedMessage
+            return
+        }
+        submitting = true
         let body = SpPoolSubmitBody(
             fixtureId: f.id, predHome: predHome, predAway: predAway, kickoffTs: f.timestamp,
             competitionSlug: f.competitionSlug, homeId: f.home.id, awayId: f.away.id,
@@ -316,7 +323,7 @@ struct SpPredictionMatchCard: View {
                 try? await Task.sleep(nanoseconds: 1_400_000_000)
                 justSaved = false
             } else {
-                error = r.reason == "LOCKED" ? "أُقفل التوقّع — انطلقت المباراة" : "تعذّر حفظ التوقّع"
+                error = submitErrorMessage(reason: r.reason)
             }
         } catch let e as APIError {
             if case .server(409, let msg) = e { error = msg ?? "أُقفل التوقّع — انطلقت المباراة" }
@@ -325,5 +332,13 @@ struct SpPredictionMatchCard: View {
             self.error = "تعذّر حفظ التوقّع"
         }
         submitting = false
+    }
+
+    private func submitErrorMessage(reason: String?) -> String {
+        switch reason {
+        case "LOCKED": return "أُقفل التوقّع — انطلقت المباراة"
+        case "DRAW_NOT_ALLOWED": return drawNotAllowedMessage
+        default: return "تعذّر حفظ التوقّع"
+        }
     }
 }

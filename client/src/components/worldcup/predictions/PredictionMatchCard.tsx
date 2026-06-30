@@ -46,6 +46,17 @@ interface Props {
   onRequireLogin: () => void;
 }
 
+// نطابق على roundEn الإنجليزي (مصدر موثوق يطابق الخادم) لا على الاسم العربي
+// المُعرَّب الهشّ. مونديال 2026 يبدأ خروج المغلوب بـ«دور الـ32». المزوّد قد
+// يُذيّل الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة.
+const KNOCKOUT_ROUND_PREFIXES = ["Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "3rd Place Final", "Final"];
+const DRAW_NOT_ALLOWED_MESSAGE = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة";
+
+function isKnockoutRound(roundEn: string): boolean {
+  const r = (roundEn ?? "").trim();
+  return KNOCKOUT_ROUND_PREFIXES.some((prefix) => r === prefix || r.startsWith(prefix));
+}
+
 export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSubmit, onRequireLogin }: Props) {
   const { fixture, myPrediction, settlement, locked, predictionsCount } = match;
   const settled = settlement?.status === "settled";
@@ -64,6 +75,14 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
   const dirty = !myPrediction || myPrediction.predHome !== home || myPrediction.predAway !== away;
   const isWin = settled && myPrediction?.status === "correct";
+  // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ مسبقًا
+  // بتعادل) ونُعطِّل الحفظ حتى يختار المستخدم فائزًا.
+  const drawNotAllowed = home === away && isKnockoutRound(fixture.roundEn);
+
+  const submit = () => {
+    if (drawNotAllowed) return;
+    onSubmit(fixture.id, home, away);
+  };
 
   return (
     <Card className="overflow-hidden border-0 dark:border dark:border-card-border" data-testid={`wc-pred-card-${fixture.id}`}>
@@ -127,8 +146,8 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
             <LockedFooter match={match} />
           ) : isAuthenticated ? (
             <Button
-              onClick={() => onSubmit(fixture.id, home, away)}
-              disabled={isSubmitting || (!dirty && !!myPrediction)}
+              onClick={submit}
+              disabled={isSubmitting || drawNotAllowed || (!dirty && !!myPrediction)}
               className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
               data-testid={`wc-pred-submit-${fixture.id}`}
             >
@@ -146,6 +165,12 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
             <Button onClick={onRequireLogin} variant="outline" className="w-full gap-2 border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
               <LogIn className="h-4 w-4" /> سجّل دخولك للمشاركة
             </Button>
+          )}
+
+          {drawNotAllowed && !locked && !settled && (
+            <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-center text-xs font-semibold text-red-600 dark:text-red-300">
+              {DRAW_NOT_ALLOWED_MESSAGE}
+            </p>
           )}
 
           {/* عدد المشاركين + العدّاد التنازلي */}

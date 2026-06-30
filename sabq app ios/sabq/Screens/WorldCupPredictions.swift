@@ -7,6 +7,17 @@ import SwiftUI
 // و«المتصدّرون». المصادقة بجلسة العضو (Bearer) عبر /api/v1/world-cup/predictions/*.
 // كل مباراة يُصيب نتيجتها بالضبط تمنح حصّة من 500 نقطة ولاء.
 
+// أدوار خروج المغلوب لا تُحسم بتعادل، فنمنع توقّع التعادل فيها (نطابق roundEn
+// الإنجليزي كما يفعل الخادم؛ المزوّد قد يُذيّل الاسم برقم مثل "Round of 16 - 1").
+private let WC_KNOCKOUT_ROUND_PREFIXES = [
+    "Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "3rd Place Final", "Final",
+]
+private let WC_DRAW_NOT_ALLOWED_MESSAGE = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة"
+private func wcIsKnockoutRound(_ roundEn: String) -> Bool {
+    let r = roundEn.trimmingCharacters(in: .whitespaces)
+    return WC_KNOCKOUT_ROUND_PREFIXES.contains { r == $0 || r.hasPrefix($0) }
+}
+
 // MARK: زر الدعوة في الهب
 
 struct WCPredictCTA: View {
@@ -223,6 +234,9 @@ private struct WCPredTodayTab: View {
         // الأخضر الطويل في هذه الحالة فقط — وإلا سطر تأكيد هادئ، لتقليل ازدحام
         // الأخضر المتكرّر عبر البطاقات.
         let dirty = saved == nil || saved!.predHome != input.home || saved!.predAway != input.away
+        // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ
+        // مسبقًا بتعادل) ونُعطّل الحفظ حتى يختار المستخدم فائزًا.
+        let drawNotAllowed = input.home == input.away && wcIsKnockoutRound(m.fixture.roundEn)
         VStack(spacing: 10) {
             // المضيف يمينًا (تحت شعاره) والضيف يسارًا — مطابقةً لترتيب الشعارات في
             // الترويسة (RTL) ولعرض النتيجة/التوقّع (ضيف-مضيف). نُبقي فرض LTR لثبات
@@ -234,6 +248,14 @@ private struct WCPredTodayTab: View {
                 stepper(value: input.home) { setHome(id, $0) }
             }
             .environment(\.layoutDirection, .leftToRight)
+
+            if drawNotAllowed {
+                Text(WC_DRAW_NOT_ALLOWED_MESSAGE)
+                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity).padding(.vertical, 8).padding(.horizontal, 8)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(WCTheme.liveRed))
+            }
 
             if dirty {
                 Button { Task { await submit(m) } } label: {
@@ -249,11 +271,11 @@ private struct WCPredTodayTab: View {
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 9)
-                    .background(Capsule().fill(WCTheme.emeraldDeep))
+                    .background(Capsule().fill(drawNotAllowed ? WCTheme.onDarkDim : WCTheme.emeraldDeep))
                 }
                 .buttonStyle(.plain)
-                .disabled(submitting.contains(id))
-            } else {
+                .disabled(submitting.contains(id) || drawNotAllowed)
+            } else if !drawNotAllowed {
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 12)).foregroundStyle(WCTheme.emerald)
@@ -327,6 +349,11 @@ private struct WCPredTodayTab: View {
     private func submit(_ m: WCPredictableMatch) async {
         let id = m.fixture.id
         guard let input = inputs[id] else { return }
+        // حصانة خادمية مكرّرة على العميل: لا تعادل في خروج المغلوب.
+        if input.home == input.away && wcIsKnockoutRound(m.fixture.roundEn) {
+            await MainActor.run { showToast(WC_DRAW_NOT_ALLOWED_MESSAGE) }
+            return
+        }
         await MainActor.run { submitting.insert(id) }
         do {
             _ = try await APIClient.shared.submitWCPrediction(fixtureId: id, predHome: input.home, predAway: input.away)

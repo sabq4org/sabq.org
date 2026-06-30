@@ -36,6 +36,7 @@ import {
   getStandings,
   type SplLiveBoardItem,
 } from "./saudiLeagueService";
+import { getFixtures as getWorldCupFixtures } from "./worldCupService";
 import {
   scoreTier,
   distributePool,
@@ -91,6 +92,32 @@ const probOfPick = (
   predAway: number,
   p: { home: number; draw: number; away: number },
 ): number => (predHome > predAway ? p.home : predHome < predAway ? p.away : p.draw);
+
+// مونديال 2026 (48 منتخبًا) يبدأ خروج المغلوب بـ«دور الـ32». المزوّد قد يُذيّل
+// الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة لا بالمساواة فقط.
+const WC_KNOCKOUT_ROUND_PREFIXES = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter-finals",
+  "Semi-finals",
+  "3rd Place Final",
+  "Final",
+];
+
+function isWorldCupKnockoutRound(round: string | null | undefined): boolean {
+  const r = (round ?? "").trim();
+  return WC_KNOCKOUT_ROUND_PREFIXES.some((prefix) => r === prefix || r.startsWith(prefix));
+}
+
+async function isWorldCupKnockoutFixture(fixtureId: number, competitionSlug: string | null | undefined): Promise<boolean> {
+  if (competitionSlug !== "world-cup") return false;
+  try {
+    const fixture = (await getWorldCupFixtures()).find((fx) => fx.id === fixtureId);
+    return fixture ? isWorldCupKnockoutRound(fixture.roundEn) : false;
+  } catch {
+    return false;
+  }
+}
 
 export type SpModelProbs = { home: number; draw: number; away: number };
 
@@ -176,7 +203,7 @@ export type SpMeStats = {
 
 export type SpSubmitResult =
   | { ok: true; prediction: { predHome: number; predAway: number; status: string } }
-  | { ok: false; reason: "LOCKED" | "INVALID" };
+  | { ok: false; reason: "LOCKED" | "INVALID" | "DRAW_NOT_ALLOWED" };
 
 function liteFixture(fx: SplLiveBoardItem): SpFixtureLite {
   return {
@@ -274,6 +301,9 @@ export async function submitPrediction(
     return { ok: false, reason: "INVALID" };
   }
   if (input.kickoffTs <= nowSec()) return { ok: false, reason: "LOCKED" };
+  if (predHome === predAway && await isWorldCupKnockoutFixture(input.fixtureId, input.competitionSlug)) {
+    return { ok: false, reason: "DRAW_NOT_ALLOWED" };
+  }
 
   const probs = await probsForFixture(input.fixtureId);
 
