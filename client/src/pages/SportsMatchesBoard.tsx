@@ -292,8 +292,13 @@ export function MatchRow({
   const decided = st === "live" || st === "finished";
   const hg = f.goals.home;
   const ag = f.goals.away;
-  const homeWon = decided && hg != null && ag != null && hg > ag;
-  const awayWon = decided && hg != null && ag != null && ag > hg;
+  // الترجيح يحسم الفائز حين تتعادل الأهداف (خروج المغلوب) — وإلا الأهداف.
+  const pen = f.penalties;
+  const penHome = pen?.home;
+  const penAway = pen?.away;
+  const hasPens = decided && penHome != null && penAway != null && penHome !== penAway;
+  const homeWon = (decided && hg != null && ag != null && hg > ag) || (hasPens && penHome! > penAway!);
+  const awayWon = (decided && hg != null && ag != null && ag > hg) || (hasPens && penAway! > penHome!);
   const isLive = st === "live";
 
   // وميض أخضر عند تغيّر النتيجة (تحديث لحظي) لمباراة جارية.
@@ -376,11 +381,15 @@ export function MatchRow({
               dir="ltr"
             >
               <span>{ag} - {hg}</span>
-              {st === "finished" && (
+              {hasPens ? (
+                <span className="mt-1 text-[9px] font-black leading-none text-emerald-600 dark:text-emerald-400" dir="rtl">
+                  ترجيح <span dir="ltr">{Math.max(penHome!, penAway!)}-{Math.min(penHome!, penAway!)}</span>
+                </span>
+              ) : st === "finished" ? (
                 <span className="mt-1 text-[9px] font-black leading-none text-muted-foreground" dir="rtl">
                   {f.status.label || "انتهت"}
                 </span>
-              )}
+              ) : null}
             </span>
           ) : (
             <span className="text-xs font-bold text-muted-foreground">vs</span>
