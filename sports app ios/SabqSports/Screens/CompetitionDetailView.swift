@@ -54,7 +54,7 @@ struct CompetitionDetailView: View {
             var s: [Segment] = [.overview]
             if !wcGroups.isEmpty { s.append(.groups) }
             s.append(.matches)
-            if hasWcBracket { s.append(.bracket) }
+            s.append(.bracket)
             if !wcScorers.isEmpty { s.append(.scorers) }
             if !wcAssists.isEmpty { s.append(.assists) }
             if !wcCards.isEmpty { s.append(.cards) }
@@ -929,7 +929,7 @@ struct CompetitionDetailView: View {
 
         async let fixturesOpt = try? APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
         async let groupsOpt = try? APIClient.shared.fetchWorldCupStandings(ignoreCache: force)
-        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: force)
+        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: true)
         async let scorersOpt = try? APIClient.shared.fetchWorldCupScorers(ignoreCache: force)
         async let assistsOpt = try? APIClient.shared.fetchWorldCupAssists(ignoreCache: force)
         async let cardsOpt = try? APIClient.shared.fetchWorldCupCards(ignoreCache: force)
@@ -949,136 +949,5 @@ struct CompetitionDetailView: View {
         self.wcCards = cardsRes?.leaders ?? []
         self.loadError = hasAnyData ? nil : "تعذّر الاتصال بخادم بيانات كأس العالم"
         self.loading = false
-    }
-}
-
-// MARK: - شجرة خروج المغلوب (FIFA 73–104) — ترقية الفائزين + رموز المصادر
-
-private struct SpWcBracketTreeView: View {
-    let tree: SpWcBracketTree
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("من دور الـ32 حتى النهائي")
-                .font(SportsFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SpTheme.green)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(tree.columns) { col in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(col.label)
-                                .font(SportsFonts.app(size: 12, weight: .heavy))
-                                .foregroundStyle(SpTheme.onDark)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                            ForEach(col.slots) { slot in
-                                SpWcBracketSlotCard(slot: slot, isFinal: col.key == "final")
-                            }
-                        }
-                        .frame(width: 168)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-
-            if let third = tree.thirdPlace {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("المركز الثالث")
-                        .font(SportsFonts.app(size: 12, weight: .heavy))
-                        .foregroundStyle(SpTheme.gold)
-                    SpWcBracketSlotCard(
-                        slot: SpWcBracketSlot(
-                            matchNo: 103,
-                            fixture: third,
-                            sources: nil,
-                            topTeam: nil,
-                            bottomTeam: nil,
-                            topLabel: nil,
-                            bottomLabel: nil
-                        ),
-                        isFinal: false
-                    )
-                }
-            }
-        }
-    }
-}
-
-private struct SpWcBracketSlotCard: View {
-    let slot: SpWcBracketSlot
-    let isFinal: Bool
-
-    private var fx: SpWcFixture? { slot.fixture }
-    private var homeResolved: (team: SpWcTeam?, label: String) { slot.resolvedHome(from: fx) }
-    private var awayResolved: (team: SpWcTeam?, label: String) { slot.resolvedAway(from: fx) }
-
-    var body: some View {
-        Group {
-            if let fx {
-                NavigationLink {
-                    SpMatchCenter(fixtureId: fx.id, preview: SpFixture(worldCup: fx))
-                } label: {
-                    cardContent
-                }
-                .buttonStyle(SpPressStyle())
-            } else {
-                cardContent
-            }
-        }
-    }
-
-    private var cardContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(statusText)
-                    .font(SportsFonts.app(size: 10, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                Spacer(minLength: 0)
-                Text(isFinal ? "النهائي" : "مباراة \(slot.matchNo)")
-                    .font(SportsFonts.app(size: 10, weight: .bold))
-                    .foregroundStyle(SpTheme.green)
-                    .monospacedDigit()
-            }
-            bracketTeamLine(homeResolved, goals: fx?.goals.home, finished: fx?.status.finished == true)
-            bracketTeamLine(awayResolved, goals: fx?.goals.away, finished: fx?.status.finished == true)
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(SpTheme.card)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-        )
-    }
-
-    private var statusText: String {
-        guard let fx else { return "بانتظار التأهل" }
-        if fx.status.live { return "مباشرة" }
-        if fx.status.finished { return "انتهت" }
-        if fx.status.code != "TBD", fx.timestamp > 0 { return SpFormat.kickoffTime(fx.date) }
-        return "قريبًا"
-    }
-
-    private func bracketTeamLine(_ resolved: (team: SpWcTeam?, label: String), goals: Int?, finished: Bool) -> some View {
-        HStack(spacing: 8) {
-            if let team = resolved.team, team.id > 0, !team.logo.isEmpty {
-                SpTeamLogo(logo: team.logo, size: 20)
-            } else {
-                Circle()
-                    .stroke(SpTheme.outline, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                    .frame(width: 20, height: 20)
-            }
-            Text(resolved.label)
-                .font(SportsFonts.app(size: 11, weight: resolved.team == nil ? .semibold : .bold))
-                .foregroundStyle(resolved.team == nil ? SpTheme.onDarkDim : SpTheme.onDark)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 0)
-            if finished, let goals {
-                Text("\(goals)")
-                    .font(SportsFonts.app(size: 12, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                    .monospacedDigit()
-            }
-        }
     }
 }

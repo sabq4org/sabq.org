@@ -147,6 +147,9 @@ export interface WcFixture {
   away: WcTeam;
   goals: { home: number | null; away: number | null };
   penalties: { home: number | null; away: number | null } | null;
+  matchNo?: number;
+  homeCode?: string;
+  awayCode?: string;
 }
 
 export type WcQualifyStatus = "qualified" | "eliminated" | "contention";
