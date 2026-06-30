@@ -2,13 +2,13 @@ import Foundation
 
 // نماذج بيانات «خليجي 27» — مطابقة لـ DTOs الخادم في gulfCupService.ts و gcPredictionsService.ts.
 
-nonisolated struct GcTeam: Decodable, Identifiable, Hashable {
+struct GcTeam: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String
 }
 
-nonisolated struct GcStatus: Decodable, Hashable {
+struct GcStatus: Decodable, Hashable {
     let code: String
     let label: String
     let elapsed: Int?
@@ -16,10 +16,10 @@ nonisolated struct GcStatus: Decodable, Hashable {
     let finished: Bool
 }
 
-nonisolated struct GcScore: Decodable, Hashable { let home: Int?; let away: Int? }
-nonisolated struct GcVenue: Decodable, Hashable { let name: String; let city: String }
+struct GcScore: Decodable, Hashable { let home: Int?; let away: Int? }
+struct GcVenue: Decodable, Hashable { let name: String; let city: String }
 
-nonisolated struct GcFixture: Decodable, Identifiable, Hashable {
+struct GcFixture: Decodable, Identifiable, Hashable {
     let id: Int
     let matchNo: Int?
     let date: String
@@ -42,7 +42,7 @@ nonisolated struct GcFixture: Decodable, Identifiable, Hashable {
     }
 }
 
-nonisolated struct GcStandingRow: Decodable, Identifiable, Hashable {
+struct GcStandingRow: Decodable, Identifiable, Hashable {
     let rank: Int
     let team: GcTeam
     let played: Int
@@ -56,13 +56,13 @@ nonisolated struct GcStandingRow: Decodable, Identifiable, Hashable {
     var id: Int { team.id }
 }
 
-nonisolated struct GcGroup: Decodable, Identifiable, Hashable {
+struct GcGroup: Decodable, Identifiable, Hashable {
     let name: String
     let rows: [GcStandingRow]
     var id: String { name }
 }
 
-nonisolated struct GcOverview: Decodable, Hashable {
+struct GcOverview: Decodable, Hashable {
     let startsAt: String?
     let endsAt: String?
     let teamsCount: Int
@@ -74,32 +74,32 @@ nonisolated struct GcOverview: Decodable, Hashable {
     let nextMatch: GcFixture?
 }
 
-nonisolated struct GcSaudi: Decodable, Hashable {
+struct GcSaudi: Decodable, Hashable {
     let team: GcTeam?
     let group: String?
     let fixtures: [GcFixture]
 }
 
-private nonisolated struct GcTeamsResponse: Decodable { let teams: [GcTeam] }
-private nonisolated struct GcFixturesResponse: Decodable { let fixtures: [GcFixture] }
-private nonisolated struct GcStandingsResponse: Decodable { let groups: [GcGroup] }
+private struct GcTeamsResponse: Decodable { let teams: [GcTeam] }
+private struct GcFixturesResponse: Decodable { let fixtures: [GcFixture] }
+private struct GcStandingsResponse: Decodable { let groups: [GcGroup] }
 
 // MARK: - التوقعات (gcPredictionsService)
 
-nonisolated struct GcModelProbs: Decodable, Hashable {
+struct GcModelProbs: Decodable, Hashable {
     let home: Double
     let draw: Double
     let away: Double
 }
 
-nonisolated struct GcPredictionCrowd: Decodable, Hashable {
+struct GcPredictionCrowd: Decodable, Hashable {
     let home: Int
     let draw: Int
     let away: Int
     let total: Int
 }
 
-nonisolated struct GcMyPrediction: Decodable, Hashable {
+struct GcMyPrediction: Decodable, Hashable {
     let predHome: Int
     let predAway: Int
     let status: String
@@ -110,7 +110,7 @@ nonisolated struct GcMyPrediction: Decodable, Hashable {
     let pointsAwarded: Int?
 }
 
-nonisolated struct GcMatchSettlement: Decodable, Hashable {
+struct GcMatchSettlement: Decodable, Hashable {
     let status: String
     let finalHome: Int?
     let finalAway: Int?
@@ -123,7 +123,7 @@ nonisolated struct GcMatchSettlement: Decodable, Hashable {
     let carryOut: Int?
 }
 
-nonisolated struct GcPredictableMatch: Decodable, Identifiable, Hashable {
+struct GcPredictableMatch: Decodable, Identifiable, Hashable {
     let fixture: GcFixture
     let locked: Bool
     let probs: GcModelProbs
@@ -135,7 +135,7 @@ nonisolated struct GcPredictableMatch: Decodable, Identifiable, Hashable {
     var id: Int { fixture.id }
 }
 
-nonisolated struct GcPredictionMeStats: Decodable, Hashable {
+struct GcPredictionMeStats: Decodable, Hashable {
     let points: Int
     let correct: Int
     let exact: Int
@@ -144,7 +144,7 @@ nonisolated struct GcPredictionMeStats: Decodable, Hashable {
     let badges: [String]?
 }
 
-nonisolated struct GcPredictionLeader: Decodable, Identifiable, Hashable {
+struct GcPredictionLeader: Decodable, Identifiable, Hashable {
     let rank: Int
     let userId: String
     let name: String
@@ -157,35 +157,35 @@ nonisolated struct GcPredictionLeader: Decodable, Identifiable, Hashable {
     var id: String { userId }
 }
 
-nonisolated struct GcPredictionsTodayResponse: Decodable, Hashable {
+struct GcPredictionsTodayResponse: Decodable, Hashable {
     let matches: [GcPredictableMatch]
     let me: GcPredictionMeStats?
     let jackpot: Int
 }
 
-private nonisolated struct GcPredictionsLeaderboardResponse: Decodable {
+private struct GcPredictionsLeaderboardResponse: Decodable {
     let leaders: [GcPredictionLeader]
 }
 
 // توقعات طويلة المدى (البطل / الهدّاف)
-nonisolated struct GcTeamLite: Decodable, Identifiable, Hashable {
+struct GcTeamLite: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String
 }
 
-nonisolated struct GcLongPools: Decodable, Hashable {
+struct GcLongPools: Decodable, Hashable {
     let champion: Int
     let top_scorer: Int
 }
 
-nonisolated struct GcLongVote: Decodable, Hashable {
+struct GcLongVote: Decodable, Hashable {
     let kind: String
     let teamId: Int?
     let n: Int
 }
 
-nonisolated struct GcLongMine: Decodable, Hashable {
+struct GcLongMine: Decodable, Hashable {
     let kind: String
     let teamId: Int?
     let teamName: String?
@@ -194,7 +194,7 @@ nonisolated struct GcLongMine: Decodable, Hashable {
     let pointsAwarded: Int
 }
 
-nonisolated struct GcLongData: Decodable, Hashable {
+struct GcLongData: Decodable, Hashable {
     let teams: [GcTeamLite]
     let pools: GcLongPools
     let championVotes: [GcLongVote]
@@ -203,7 +203,7 @@ nonisolated struct GcLongData: Decodable, Hashable {
 
 // MARK: - صفحة المنتخب + تفاصيل المباراة
 
-nonisolated struct GcTeamStats: Decodable, Hashable {
+struct GcTeamStats: Decodable, Hashable {
     let groupName: String?
     let rank: Int?
     let played: Int
@@ -217,14 +217,14 @@ nonisolated struct GcTeamStats: Decodable, Hashable {
     let form: [String]
 }
 
-nonisolated struct GcSquadPlayer: Decodable, Hashable, Identifiable {
+struct GcSquadPlayer: Decodable, Hashable, Identifiable {
     let id: Int
     let name: String
     let number: Int?
     let position: String
 }
 
-nonisolated struct GcTeamProfile: Decodable, Hashable {
+struct GcTeamProfile: Decodable, Hashable {
     let team: GcTeam
     let isSaudi: Bool
     let coach: String?
@@ -235,7 +235,7 @@ nonisolated struct GcTeamProfile: Decodable, Hashable {
     let squad: [GcSquadPlayer]
 }
 
-nonisolated struct GcMatchEvent: Decodable, Hashable, Identifiable {
+struct GcMatchEvent: Decodable, Hashable, Identifiable {
     let minute: Int
     let extraMinute: Int?
     let teamId: Int
@@ -245,14 +245,14 @@ nonisolated struct GcMatchEvent: Decodable, Hashable, Identifiable {
     var id: String { "\(minute)-\(teamId)-\(type)-\(player ?? "")" }
 }
 
-nonisolated struct GcLineupPlayer: Decodable, Hashable, Identifiable {
+struct GcLineupPlayer: Decodable, Hashable, Identifiable {
     let id: Int
     let name: String
     let number: Int?
     let position: String?
 }
 
-nonisolated struct GcLineup: Decodable, Hashable, Identifiable {
+struct GcLineup: Decodable, Hashable, Identifiable {
     let teamId: Int
     let teamName: String
     let formation: String?
@@ -262,7 +262,7 @@ nonisolated struct GcLineup: Decodable, Hashable, Identifiable {
     var id: Int { teamId }
 }
 
-nonisolated struct GcStatistic: Decodable, Hashable, Identifiable {
+struct GcStatistic: Decodable, Hashable, Identifiable {
     let key: String
     let label: String
     let home: String
@@ -270,7 +270,7 @@ nonisolated struct GcStatistic: Decodable, Hashable, Identifiable {
     var id: String { key }
 }
 
-nonisolated struct GcMatchDetail: Decodable, Hashable {
+struct GcMatchDetail: Decodable, Hashable {
     let fixture: GcFixture
     let events: [GcMatchEvent]
     let lineups: [GcLineup]
@@ -285,7 +285,7 @@ struct GcDayGroup: Identifiable {
     var id: String { key }
 }
 
-nonisolated enum GulfCupConstants {
+enum GulfCupConstants {
     static let saudiTeamId = 23
     static let tournamentName = "خليجي 27"
     static let tournamentNameEn = "Arab Gulf Cup 27"

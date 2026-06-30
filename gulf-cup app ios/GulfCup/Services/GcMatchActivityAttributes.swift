@@ -1,10 +1,10 @@
 import Foundation
 import ActivityKit
 
-// سمات Live Activity (هدف التطبيق) — nonisolated لأن SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor.
+// سمات Live Activity (هدف التطبيق) — لأن SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor.
 // أسماء ContentState تطابق LiveActivityContentState في الخادم حرفيًّa.
-nonisolated struct GcMatchActivityAttributes: ActivityAttributes {
-    public nonisolated struct ContentState: Codable, Hashable {
+struct GcMatchActivityAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
         var homeScore: Int
         var awayScore: Int
         var minute: String

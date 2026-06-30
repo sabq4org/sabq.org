@@ -2,7 +2,7 @@ import Foundation
 
 // جذور الـ API — تطبيق خليجي 27 يستهلك نفس خادم سبق (الـ backend موجود فعلاً).
 // نقاط خليجي 27 عامة (بلا مصادقة) تحت /api/gulf-cup/* = publicAPI.
-nonisolated enum URLConstants {
+enum URLConstants {
     static let webOrigin = "https://sabq.org"
 
     private static let apiOrigin = "https://api.sabq.org"

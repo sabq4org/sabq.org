@@ -149,7 +149,7 @@ actor APIClient {
     }
 }
 
-nonisolated enum APIError: Error, LocalizedError {
+enum APIError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case unauthorized
@@ -173,4 +173,4 @@ nonisolated enum APIError: Error, LocalizedError {
     }
 }
 
-private nonisolated struct ApiMessage: Decodable { let message: String? }
+private struct ApiMessage: Decodable { let message: String? }

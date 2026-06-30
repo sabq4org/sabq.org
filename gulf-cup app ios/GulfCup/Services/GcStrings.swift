@@ -1,7 +1,7 @@
 import Foundation
 
 // نصوص عربية ثابتة لتطبيق خليجي 27 — بدون i18n متعدد اللغات في النسخة الأولى.
-nonisolated enum GcStrings {
+enum GcStrings {
     static let strings: [String: String] = [
         "tab.home": "الرئيسية",
         "tab.matches": "المباريات",

@@ -1,7 +1,7 @@
 import Foundation
 import ActivityKit
 
-// نسخة امتداد Live Activity — بدون nonisolated (app extension لا يقبل المعدّل).
+// نسخة امتداد Live Activity — بدون (app extension لا يقبل المعدّل).
 struct GcMatchActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         var homeScore: Int

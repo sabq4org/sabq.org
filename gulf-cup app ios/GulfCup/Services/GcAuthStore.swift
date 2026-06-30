@@ -180,7 +180,7 @@ enum GcKeychain {
     }
 }
 
-nonisolated final class GcAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+final class GcAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     private let onSuccess: (ASAuthorizationAppleIDCredential) -> Void
     private let onFailure: (Error) -> Void
     private let onFinish: () -> Void

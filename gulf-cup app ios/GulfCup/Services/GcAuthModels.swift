@@ -2,7 +2,7 @@ import Foundation
 
 // نماذج مصادقة الموبايل — مشتركة مع تطبيق سبق الرياضي (/api/v1/auth/apple).
 
-private nonisolated struct GcFlexKey: CodingKey {
+private struct GcFlexKey: CodingKey {
     var stringValue: String
     var intValue: Int?
     init(_ s: String) { stringValue = s; intValue = nil }
@@ -10,7 +10,7 @@ private nonisolated struct GcFlexKey: CodingKey {
     init?(intValue: Int) { return nil }
 }
 
-nonisolated struct GcMember: Decodable, Hashable {
+struct GcMember: Decodable, Hashable {
     let id: String
     let name: String?
     let email: String?
@@ -30,7 +30,7 @@ nonisolated struct GcMember: Decodable, Hashable {
     }
 }
 
-nonisolated struct GcLoginResponse: Decodable {
+struct GcLoginResponse: Decodable {
     let token: String?
     let member: GcMember?
     let message: String?
@@ -45,7 +45,7 @@ nonisolated struct GcLoginResponse: Decodable {
     }
 }
 
-nonisolated struct GcDeviceInfo: Encodable {
+struct GcDeviceInfo: Encodable {
     let platform: String
     let osVersion: String
     let appVersion: String
@@ -53,7 +53,7 @@ nonisolated struct GcDeviceInfo: Encodable {
     let deviceId: String?
 }
 
-nonisolated struct GcAppleAuthRequest: Encodable {
+struct GcAppleAuthRequest: Encodable {
     let identityToken: String
     let fullName: AppleFullName?
     let email: String?
@@ -61,23 +61,23 @@ nonisolated struct GcAppleAuthRequest: Encodable {
     struct AppleFullName: Encodable { let firstName: String?; let lastName: String? }
 }
 
-nonisolated struct GcPredictionSubmitBody: Encodable {
+struct GcPredictionSubmitBody: Encodable {
     let fixtureId: Int
     let predHome: Int
     let predAway: Int
 }
 
-nonisolated struct GcPredictionSubmitResponse: Decodable {
+struct GcPredictionSubmitResponse: Decodable {
     let prediction: GcSubmittedPrediction
 }
 
-nonisolated struct GcSubmittedPrediction: Decodable {
+struct GcSubmittedPrediction: Decodable {
     let predHome: Int
     let predAway: Int
     let status: String
 }
 
-nonisolated struct GcLongSubmitBody: Encodable {
+struct GcLongSubmitBody: Encodable {
     let kind: String
     let teamId: Int?
     let playerName: String?
