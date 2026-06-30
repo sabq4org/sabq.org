@@ -58,8 +58,13 @@ private extension UIImage {
 #endif
 
 // سمات Live Activity — أسماء ContentState تطابق LiveActivityContentState في الخادم حرفيًّا.
+#if APPLICATION_EXTENSION
+struct GcMatchActivityAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+#else
 nonisolated struct GcMatchActivityAttributes: ActivityAttributes {
     public nonisolated struct ContentState: Codable, Hashable {
+#endif
         var homeScore: Int
         var awayScore: Int
         var minute: String
