@@ -604,8 +604,8 @@ struct MatchesView: View {
                     let active = hasData && activeStage == st
                     Button {
                         guard hasData else { return }
-                        if let firstDay = visibleDays.first(where: { $0.stage == st }) {
-                            goToDay(firstDay.id)
+                        if let day = firstDay(for: st) {
+                            goToDay(day.id)
                         }
                     } label: {
                         Text(st.short)
@@ -1048,7 +1048,7 @@ struct MatchesView: View {
     private func load(force: Bool = false) async {
         if !force { loading = true }
         do {
-            let resp = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
+            let resp = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: true)
             if visualSignature(resp.fixtures) != visualSignature(fixtures) {
                 fixtures = resp.fixtures
                 rebuildDays(keepSelection: true)
@@ -1064,6 +1064,16 @@ struct MatchesView: View {
 
     private func stageHasData(_ st: SpWcStage) -> Bool {
         visibleDays.contains(where: { $0.stage == st })
+    }
+
+    /// أول يوم في المرحلة — يُفضَّل اليوم/القادم (مباراة الليلة) لا أقدم يوم تاريخيًا.
+    private func firstDay(for stage: SpWcStage) -> SpWcDay? {
+        let cal = Self.riyadhCal
+        let start = cal.startOfDay(for: Date())
+        let days = visibleDays.filter { $0.stage == stage }
+        return days.first(where: { day in
+            day.date >= start || day.fixtures.contains { $0.status.live || !$0.status.finished }
+        }) ?? days.first
     }
 
     private func visualSignature(_ rows: [SpWcFixture]) -> String {
