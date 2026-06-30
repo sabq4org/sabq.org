@@ -225,6 +225,17 @@ private fun TeamSide(team: WcTeam, modifier: Modifier = Modifier) {
     }
 }
 
+// أدوار خروج المغلوب لا تُحسم بتعادل، فنمنع توقّع التعادل فيها (نطابق roundEn
+// الإنجليزي كما يفعل الخادم؛ المزوّد قد يُذيّل الاسم برقم مثل "Round of 16 - 1").
+private val WC_KNOCKOUT_ROUND_PREFIXES = listOf(
+    "Round of 32", "Round of 16", "Quarter-finals", "Semi-finals", "3rd Place Final", "Final",
+)
+private const val WC_DRAW_NOT_ALLOWED_MESSAGE = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة"
+private fun wcIsKnockoutRound(roundEn: String): Boolean {
+    val r = roundEn.trim()
+    return WC_KNOCKOUT_ROUND_PREFIXES.any { r == it || r.startsWith(it) }
+}
+
 @Composable
 private fun InputView(m: WcPredictableMatch, state: WorldCupPredictionsViewModel.UiState, viewModel: WorldCupPredictionsViewModel) {
     val id = m.fixture.id
@@ -232,6 +243,9 @@ private fun InputView(m: WcPredictableMatch, state: WorldCupPredictionsViewModel
     val saved = m.myPrediction
     val dirty = saved == null || saved.predHome != input.home || saved.predAway != input.away
     val isSubmitting = state.submitting.contains(id)
+    // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ مسبقًا
+    // بتعادل) ونُعطّل الحفظ حتى يختار المستخدم فائزًا.
+    val drawNotAllowed = input.home == input.away && wcIsKnockoutRound(m.fixture.roundEn)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
         // المضيف يمينًا (تحت شعاره) والضيف يسارًا — مطابقةً لترتيب الشعارات (RTL)
@@ -247,12 +261,24 @@ private fun InputView(m: WcPredictableMatch, state: WorldCupPredictionsViewModel
                 Stepper(input.home) { viewModel.setHome(id, it) }
             }
         }
+        if (drawNotAllowed) {
+            Text(
+                WC_DRAW_NOT_ALLOWED_MESSAGE,
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(WcColors.liveRed)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+            )
+        }
         if (dirty) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(WcColors.emeraldDeep)
-                    .clickable(enabled = !isSubmitting) { viewModel.submit(id) }.padding(vertical = 9.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(50))
+                    .background(if (drawNotAllowed) WcColors.onDarkDim else WcColors.emeraldDeep)
+                    .clickable(enabled = !isSubmitting && !drawNotAllowed) { viewModel.submit(id) }.padding(vertical = 9.dp),
             ) {
                 Spacer(Modifier.weight(1f))
                 if (isSubmitting) {
@@ -263,7 +289,7 @@ private fun InputView(m: WcPredictableMatch, state: WorldCupPredictionsViewModel
                 Text(if (saved != null) "تحديث التوقّع" else "حفظ التوقّع", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
-        } else {
+        } else if (!drawNotAllowed) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(vertical = 7.dp)) {
                 Icon(Icons.Filled.CheckCircle, null, tint = WcColors.emerald, modifier = Modifier.size(12.dp))
                 Text("تم حفظ توقّعك", color = WcColors.onDarkDim, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)

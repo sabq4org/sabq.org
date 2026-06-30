@@ -70,6 +70,7 @@ router.post("/api/world-cup/predictions", requireAuth, async (req: any, res) => 
         NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
         LOCKED: { code: 409, message: "أُغلق التوقّع — انطلقت المباراة" },
         INVALID: { code: 400, message: "نتيجة غير صالحة" },
+        DRAW_NOT_ALLOWED: { code: 400, message: "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة" },
       } as const;
       const m = map[result.reason];
       return res.status(m.code).json({ message: m.message });

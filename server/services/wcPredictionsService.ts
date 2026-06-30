@@ -84,7 +84,23 @@ export type PredictableMatch = {
 
 export type SubmitResult =
   | { ok: true; prediction: { predHome: number; predAway: number; status: string } }
-  | { ok: false; reason: "NOT_FOUND" | "LOCKED" | "INVALID" };
+  | { ok: false; reason: "NOT_FOUND" | "LOCKED" | "INVALID" | "DRAW_NOT_ALLOWED" };
+
+// مونديال 2026 (48 منتخبًا) يبدأ خروج المغلوب بـ«دور الـ32». المزوّد قد يُذيّل
+// الاسم برقم ("Round of 16 - 1") فنطابق بالبادئة لا بالمساواة فقط.
+const KNOCKOUT_ROUND_PREFIXES = [
+  "Round of 32",
+  "Round of 16",
+  "Quarter-finals",
+  "Semi-finals",
+  "3rd Place Final",
+  "Final",
+];
+
+function isKnockoutFixture(fx: WcFixture): boolean {
+  const round = (fx.roundEn ?? "").trim();
+  return KNOCKOUT_ROUND_PREFIXES.some((prefix) => round === prefix || round.startsWith(prefix));
+}
 
 // ---------------------------------------------------------------------------
 // كتابة التوقّع
@@ -106,6 +122,9 @@ export async function submitPrediction(
   const fx = (await getFixtures()).find((f) => f.id === fixtureId);
   if (!fx) return { ok: false, reason: "NOT_FOUND" };
   if (isLocked(fx)) return { ok: false, reason: "LOCKED" };
+  if (predHome === predAway && isKnockoutFixture(fx)) {
+    return { ok: false, reason: "DRAW_NOT_ALLOWED" };
+  }
 
   // لقطة المباراة (open) — نُحدِّث الأسماء/الموعد دون لمس status كي لا نُحيي
   // مباراة مُسوّاة (مستحيل هنا لأنها مقفلة، لكنه احتياط دفاعي).
