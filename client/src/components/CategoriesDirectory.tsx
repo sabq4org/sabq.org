@@ -38,7 +38,7 @@ const PULSE_BADGE_STYLES: Record<CategoryPulseLevel, string> = {
 };
 
 function categoryHref(category: CategoryWithStats) {
-  return `/category/${category.englishSlug || category.slug}`;
+  return `/category/${category.slug}`;
 }
 
 function categoryAccentColor(color?: string | null) {
