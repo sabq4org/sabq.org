@@ -563,3 +563,29 @@ export function countdownTo(timestamp: number): WcCountdown {
     total,
   };
 }
+
+/**
+ * نتيجة ركلات الترجيح مع تحديد الفائز. النتيجة مرتّبة دائمًا «الفائز أولًا»
+ * (winnerScore > loserScore) كي لا تنقلب بصريًّا بحسب اتجاه العرض (RTL/LTR).
+ * المصدر موثوق: penalties.home يخصّ المضيف وpenalties.away يخصّ الضيف (نفس
+ * ربط الأهداف). تُرجع null إن لم تُحسم المباراة بالترجيح. لا نعتمد على علم
+ * `team.winner` الخام لأن المزوّد قد يتركه فارغًا في مباريات الترجيح.
+ */
+export interface WcPenaltyOutcome {
+  winnerSide: "home" | "away";
+  winnerName: string;
+  winnerScore: number;
+  loserScore: number;
+}
+
+export function penaltyOutcome(fixture: WcFixture): WcPenaltyOutcome | null {
+  const pen = fixture.penalties;
+  if (!pen || pen.home == null || pen.away == null || pen.home === pen.away) return null;
+  const homeWon = pen.home > pen.away;
+  return {
+    winnerSide: homeWon ? "home" : "away",
+    winnerName: homeWon ? fixture.home.name : fixture.away.name,
+    winnerScore: homeWon ? pen.home : pen.away,
+    loserScore: homeWon ? pen.away : pen.home,
+  };
+}

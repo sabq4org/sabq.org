@@ -252,8 +252,13 @@ private fun HeroCenter(f: WcFixture, modifier: Modifier = Modifier) {
         if (f.started) {
             // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR ليلاصق كل رقم منتخبه
             LtrText("${f.goals.away ?: 0} - ${f.goals.home ?: 0}", WcColors.onDark, 40, FontWeight.Black)
-            f.penalties?.let {
-                Text("(${it.away ?: 0} - ${it.home ?: 0}) ركلات الترجيح", color = WcColors.emeraldDeep, fontSize = 11.sp)
+            f.penaltyOutcome?.let {
+                Text(
+                    "فاز ${it.winnerName} بركلات الترجيح (${it.winnerScore}-${it.loserScore})",
+                    color = WcColors.emeraldDeep,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
             WcStatusPill(f, onDark = false)
         } else {
@@ -443,9 +448,11 @@ private fun MatchRowCard(f: WcFixture, onOpenMatch: (Int) -> Unit) {
             .background(if (f.status.live) WcColors.liveRed.copy(alpha = 0.04f) else Color.Transparent)
             .clickable { onOpenMatch(f.id) }.padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
-        MatchTeamSide(f.home, home = true, win = f.home.winner == true, modifier = Modifier.weight(1f))
+        // الفائز يُحسب من الترجيح أيضًا (لا من علم المزوّد وحده) كي يُظلَّل في مباريات الترجيح.
+        val penHome = f.penaltyOutcome?.winnerHome
+        MatchTeamSide(f.home, home = true, win = penHome ?: (f.home.winner == true), modifier = Modifier.weight(1f))
         MatchScoreCenter(f, Modifier.width(50.dp))
-        MatchTeamSide(f.away, home = false, win = f.away.winner == true, modifier = Modifier.weight(1f))
+        MatchTeamSide(f.away, home = false, win = penHome?.not() ?: (f.away.winner == true), modifier = Modifier.weight(1f))
     }
 }
 
@@ -502,11 +509,14 @@ private fun matchStatusText(f: WcFixture): String {
         val x = f.status.extra
         return if (x != null && x > 0) "$e+$x'" else "$e'"
     }
-    f.penalties?.let { return "ترجيح ${it.away ?: 0}-${it.home ?: 0}" }
+    f.penaltyOutcome?.let { return "ترجيح ${it.winnerScore}-${it.loserScore}" }
     if (f.status.finished) return "انتهت"
     return "موعد"
 }
 
+// تكيّفي مع الوضع الفاتح/الداكن: ألوان WcColors صارت getters بصيغة @Composable،
+// فيجب وسم الدالة المستهلِكة لها بـ@Composable أيضًا (تُستدعى داخل MatchScoreCenter).
+@Composable
 private fun matchStatusColor(f: WcFixture): Color =
     when {
         f.status.live -> WcColors.liveRed

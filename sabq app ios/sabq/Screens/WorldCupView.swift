@@ -325,9 +325,11 @@ struct WCHeroSection: View {
                     .font(SabqFonts.app(size: compact ? 34 : 40, weight: .black))
                     .foregroundStyle(WCTheme.onDark)
                     .environment(\.layoutDirection, .leftToRight)
-                if let pen = f.penalties {
-                    Text("(\(pen.away ?? 0) - \(pen.home ?? 0)) ركلات الترجيح")
-                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
+                if let po = f.penaltyOutcome {
+                    Text("فاز \(po.winnerName) بالترجيح (\(po.winnerScore)-\(po.loserScore))")
+                        .font(SabqFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(WCTheme.emeraldDeep)
+                        .multilineTextAlignment(.center)
                 }
                 WCStatusPill(fixture: f, onDark: false)
             } else {
@@ -719,10 +721,10 @@ struct WCMatchCard: View {
                 }
                 teamRow(fixture.home, goals: fixture.started ? fixture.goals.home ?? 0 : nil, win: fixture.home.winner == true)
                 teamRow(fixture.away, goals: fixture.started ? fixture.goals.away ?? 0 : nil, win: fixture.away.winner == true)
-                if let pen = fixture.penalties {
+                if let po = fixture.penaltyOutcome {
                     HStack {
-                        Text("ركلات الترجيح: \(pen.home ?? 0) - \(pen.away ?? 0)")
-                            .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        Text("فاز \(po.winnerName) بركلات الترجيح (\(po.winnerScore)-\(po.loserScore))")
+                            .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
                         Spacer()
                     }
                 }

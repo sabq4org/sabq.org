@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatKickoffTime, type WcFixture, type WcTeam } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
+import { PenaltyResult } from "./PenaltyResult";
 
 function TeamRow({ team, goals, winner }: { team: WcTeam; goals: number | null; winner: boolean }) {
   return (
@@ -83,11 +84,7 @@ export function MatchCard({ fixture, onOpen }: MatchCardProps) {
           />
         </div>
 
-        {fixture.penalties && (
-          <p className="text-[11px] text-muted-foreground" dir="rtl">
-            ركلات الترجيح: <span dir="ltr" className="tabular-nums">{fixture.penalties.home} - {fixture.penalties.away}</span>
-          </p>
-        )}
+        <PenaltyResult fixture={fixture} className="text-[11px] text-muted-foreground" />
 
         <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/60">
           <span className="flex items-center gap-1 truncate">

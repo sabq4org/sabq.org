@@ -56,6 +56,34 @@ data class WcFixture(
     val started: Boolean get() = status.live || status.finished
 }
 
+/**
+ * نتيجة ركلات الترجيح مع تحديد الفائز. النتيجة مرتّبة دائمًا «الفائز أولًا»
+ * (winnerScore > loserScore) كي لا تنقلب بصريًّا في سياق RTL. المصدر موثوق:
+ * penalties.home للمضيف وpenalties.away للضيف (نفس ربط الأهداف). null إن لم
+ * تُحسم بالترجيح. لا نعتمد على team.winner لأن المزوّد قد يتركه فارغًا هنا.
+ */
+data class WcPenaltyOutcome(
+    val winnerName: String,
+    val winnerScore: Int,
+    val loserScore: Int,
+    val winnerHome: Boolean,
+)
+
+val WcFixture.penaltyOutcome: WcPenaltyOutcome?
+    get() {
+        val p = penalties ?: return null
+        val h = p.home ?: return null
+        val a = p.away ?: return null
+        if (h == a) return null
+        val homeWon = h > a
+        return WcPenaltyOutcome(
+            winnerName = if (homeWon) home.name else away.name,
+            winnerScore = if (homeWon) h else a,
+            loserScore = if (homeWon) a else h,
+            winnerHome = homeWon,
+        )
+    }
+
 @Serializable
 data class WcPrediction(
     val home: Int = 0,

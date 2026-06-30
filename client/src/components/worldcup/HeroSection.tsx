@@ -19,6 +19,7 @@ import {
   type WcPrediction,
 } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
+import { PenaltyResult } from "./PenaltyResult";
 
 interface HeroSectionProps {
   overview: WcOverview | undefined;
@@ -257,11 +258,7 @@ function MatchHeroCard({
                 <div className="text-4xl sm:text-5xl font-black text-white tabular-nums" dir="ltr">
                   {fixture.goals.away ?? 0} - {fixture.goals.home ?? 0}
                 </div>
-                {fixture.penalties && (
-                  <span className="text-xs text-emerald-100/80" dir="ltr">
-                    ({fixture.penalties.away} - {fixture.penalties.home}) ركلات الترجيح
-                  </span>
-                )}
+                <PenaltyResult fixture={fixture} className="text-xs text-emerald-100/90" />
                 <Badge
                   className={
                     fixture.status.live
