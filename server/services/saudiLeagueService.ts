@@ -247,6 +247,8 @@ export interface SplFixture {
   home: SplTeam;
   away: SplTeam;
   goals: { home: number | null; away: number | null };
+  // نتيجة ركلات الترجيح (أدوار خروج المغلوب) — null ما لم تُحسم بالترجيح.
+  penalties?: { home: number | null; away: number | null } | null;
 }
 
 function localizeTeam(raw: any): SplTeam {
@@ -278,6 +280,10 @@ function localizeFixture(item: any): SplFixture {
     home: localizeTeam(item.teams?.home),
     away: localizeTeam(item.teams?.away),
     goals: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
+    penalties:
+      item.score?.penalty?.home != null || item.score?.penalty?.away != null
+        ? { home: item.score?.penalty?.home ?? null, away: item.score?.penalty?.away ?? null }
+        : null,
   };
 }
 
@@ -1057,6 +1063,12 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
     return {
       ...f,
       goals: { home: ts.home, away: ts.away },
+      // ركلات الترجيح من TheSports إن رُصدت (شوط ترجيح حيّ)، وإلا نُبقي قيمة
+      // API-Football (تظهر عند انتهاء المباراة) فلا نمحوها بقيمة فارغة.
+      penalties:
+        ts.penHome != null || ts.penAway != null
+          ? { home: ts.penHome, away: ts.penAway }
+          : f.penalties,
       status: { ...f.status, live: ts.live, finished: ts.finished || f.status.finished },
     };
   } catch {

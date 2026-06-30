@@ -76,6 +76,8 @@ export interface SpFixture {
   status: { code: string; label: string; elapsed: number | null; extra: number | null; live: boolean; finished: boolean };
   round: string; venue: { name: string; city: string };
   home: SpTeam; away: SpTeam; goals: { home: number | null; away: number | null };
+  // نتيجة ركلات الترجيح (خروج المغلوب) — null/غائب ما لم تُحسم بالترجيح.
+  penalties?: { home: number | null; away: number | null } | null;
 }
 export interface SpLiveItem extends SpFixture { competition: string; competitionSlug: string | null; }
 interface SpStandingSplit { played: number; win: number; draw: number; lose: number; goalsFor: number; goalsAgainst: number; points: number; }
