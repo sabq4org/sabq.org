@@ -28,6 +28,9 @@ nonisolated struct SpWcFixture: Decodable, Identifiable {
     let away: SpWcTeam
     let goals: SpWcScore
     let penalties: SpWcScore?
+    let matchNo: Int?
+    let homeCode: String?
+    let awayCode: String?
 }
 
 nonisolated struct SpWcVenue: Decodable { let name: String; let city: String }
@@ -133,14 +136,16 @@ nonisolated struct SpWcBracketSlot: Decodable, Identifiable {
         let side = fx?.home
         if let t = side, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
         if let t = topTeam, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
-        return (nil, topLabel ?? "يتحدد لاحقًا")
+        if let code = fx?.homeCode { return (nil, code) }
+        return (nil, topLabel ?? "TBD")
     }
 
     func resolvedAway(from fx: SpWcFixture?) -> (team: SpWcTeam?, label: String) {
         let side = fx?.away
         if let t = side, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
         if let t = bottomTeam, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
-        return (nil, bottomLabel ?? "يتحدد لاحقًا")
+        if let code = fx?.awayCode { return (nil, code) }
+        return (nil, bottomLabel ?? "TBD")
     }
 }
 
@@ -349,6 +354,18 @@ enum SpWcStage: Int, CaseIterable, Identifiable {
         case .final: return "النهائي"
         }
     }
+
+    /// مفتاح عمود الشجرة في `/world-cup/bracket` → `tree.columns[].key`
+    var bracketColumnKey: String? {
+        switch self {
+        case .r32: return "round of 32"
+        case .r16: return "round of 16"
+        case .qf: return "quarter-finals"
+        case .sf: return "semi-finals"
+        case .final: return "final"
+        case .group, .third: return nil
+        }
+    }
 }
 
 // يوم واحد من الجدول (مفتاحه YYYY-MM-DD بتوقيت الرياض)
@@ -415,7 +432,6 @@ extension VaraTeamStrength {
 
 struct MatchesView: View {
     @State private var fixtures: [SpWcFixture] = []
-    @State private var bracketSlotsByFixture: [Int: SpWcBracketSlot] = [:]
     @State private var visibleDays: [SpWcDay] = []
     @State private var loading = true
     @State private var loadError: String?
@@ -578,18 +594,19 @@ struct MatchesView: View {
             .allowsHitTesting(false)
     }
 
-    // شريط أدوار البطولة — صفّ ثانويّ خفيف مُوحّد مع شريحة التواريخ. يعرض **كل**
-    // الأدوار (مسار المونديال كاملًا)؛ المتوفّر ينقل لأوّل يوم فيه، وغير المتوفّر
-    // باهت ومعطّل. المحدّد = حدّ أخضر فاتح + نصّ أخضر (لا تعبئة خضراء ثقيلة).
+    // شريط أدوار البطولة — يفعّل الدور إن وُجدت مباريات **أو** خانات في شجرة
+    // `/world-cup/bracket` (حتى قبل أن يجدول المزوّد مواعيد الدور التالي).
     private var stageStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) {
                 ForEach(SpWcStage.allCases) { st in
-                    let hasData = visibleDays.contains { $0.stage == st }
+                    let hasData = stageHasData(st)
                     let active = hasData && activeStage == st
                     Button {
-                        guard hasData, let firstDay = visibleDays.first(where: { $0.stage == st }) else { return }
-                        goToDay(firstDay.id)
+                        guard hasData else { return }
+                        if let firstDay = visibleDays.first(where: { $0.stage == st }) {
+                            goToDay(firstDay.id)
+                        }
                     } label: {
                         Text(st.short)
                             .font(SportsFonts.app(size: 12.5, weight: active ? .bold : .semibold))
@@ -832,7 +849,7 @@ struct MatchesView: View {
     private func matchGroup(_ fixtures: [SpWcFixture]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
-                SpWcMatchRow(fixture: f, slot: bracketSlotsByFixture[f.id])
+                SpWcMatchRow(fixture: f)
                 if idx < fixtures.count - 1 {
                     Divider()
                         .overlay(SpTheme.outline.opacity(0.75))
@@ -1031,11 +1048,7 @@ struct MatchesView: View {
     private func load(force: Bool = false) async {
         if !force { loading = true }
         do {
-            async let fixturesResp = APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
-            async let bracketResp = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: force)
-            let resp = try await fixturesResp
-            let bracket = await bracketResp
-            rebuildBracketLookup(bracket)
+            let resp = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
             if visualSignature(resp.fixtures) != visualSignature(fixtures) {
                 fixtures = resp.fixtures
                 rebuildDays(keepSelection: true)
@@ -1049,19 +1062,13 @@ struct MatchesView: View {
         loading = false
     }
 
-    private func rebuildBracketLookup(_ bracket: SpWcBracket?) {
-        var map: [Int: SpWcBracketSlot] = [:]
-        for col in bracket?.tree?.columns ?? [] {
-            for slot in col.slots {
-                if let id = slot.fixture?.id { map[id] = slot }
-            }
-        }
-        bracketSlotsByFixture = map
+    private func stageHasData(_ st: SpWcStage) -> Bool {
+        visibleDays.contains(where: { $0.stage == st })
     }
 
     private func visualSignature(_ rows: [SpWcFixture]) -> String {
         rows.map { f in
-            "\(f.id):\(Int(f.timestamp)):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.winner?.description ?? "n"):\(f.away.winner?.description ?? "n")"
+            "\(f.id):\(Int(f.timestamp)):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.id)-\(f.away.id):\(f.homeCode ?? "")-\(f.awayCode ?? ""):\(f.home.winner?.description ?? "n"):\(f.away.winner?.description ?? "n")"
         }
         .joined(separator: "|")
     }
@@ -1082,7 +1089,8 @@ struct MatchesView: View {
 
 private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
-    var slot: SpWcBracketSlot?
+
+    private var isSynthetic: Bool { fixture.id >= 90_000_000 }
 
     // أحجام موحّدة لكل الصفوف (منتهية/جارية/قادمة) — هذا ما يمنح القائمة مظهر
     // «دوري» المنظّم: الأعلام تصطفّ في عمودين نظيفين والنتائج في عمود واحد بالمنتصف.
@@ -1108,37 +1116,44 @@ private struct SpWcMatchRow: View {
     // صفّ مدمج بلا إطار وبلا أي إضافات (الدور/الملعب/التوقّع تُعرض في تفاصيل المباراة).
     // الترتيب على طراز «دوري»: العَلَم ملاصق للنتيجة، والاسم للطرف الخارجي. (RTL: المضيف يمينًا.)
     var body: some View {
-        NavigationLink {
-            SpMatchCenter(fixtureId: fixture.id, preview: SpFixture(worldCup: fixture))
-        } label: {
-            VStack(spacing: 7) {
-                HStack(spacing: 6) {
-                    teamSide(home: true)
-                    centerColumn
-                    teamSide(home: false)
+        Group {
+            if isSynthetic {
+                rowContent
+            } else {
+                NavigationLink {
+                    SpMatchCenter(fixtureId: fixture.id, preview: SpFixture(worldCup: fixture))
+                } label: {
+                    rowContent
                 }
+                .buttonStyle(SpPressStyle())
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 8)
-            .background(fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(SpPressStyle())
     }
 
-    // الجانب على طراز «دوري» (مطابق للصورة): العَلَم ملاصق للنتيجة في المنتصف
-    // (يحاذيها من يمينها/يسارها)، والاسم يمتدّ نحو الطرف الخارجي. الـ Spacer يدفع
-    // العَلَم نحو المنتصف فتصطفّ الأعلام في عمودين يحاذيان النتيجة عبر كل الصفوف.
+    private var rowContent: some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 6) {
+                teamSide(home: true)
+                centerColumn
+                teamSide(home: false)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .background(fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear)
+        .contentShape(Rectangle())
+    }
+
     private var homeResolved: (team: SpWcTeam?, label: String) {
-        if let slot { return slot.resolvedHome(from: fixture) }
         if fixture.home.id > 0, !fixture.home.logo.isEmpty { return (fixture.home, fixture.home.name) }
-        return (nil, fixture.home.name)
+        let code = fixture.homeCode ?? fixture.home.name
+        return (nil, code)
     }
 
     private var awayResolved: (team: SpWcTeam?, label: String) {
-        if let slot { return slot.resolvedAway(from: fixture) }
         if fixture.away.id > 0, !fixture.away.logo.isEmpty { return (fixture.away, fixture.away.name) }
-        return (nil, fixture.away.name)
+        let code = fixture.awayCode ?? fixture.away.name
+        return (nil, code)
     }
 
     private func teamSide(home: Bool) -> some View {
@@ -1177,9 +1192,9 @@ private struct SpWcMatchRow: View {
     private func teamName(_ text: String, home: Bool, placeholder: Bool) -> some View {
         let winner = isWinner(home: home)
         return Text(text)
-            .font(SportsFonts.app(size: placeholder ? 10.5 : 12.5, weight: winner ? .heavy : .semibold))
+            .font(SportsFonts.app(size: placeholder ? 12 : 12.5, weight: winner ? .heavy : .semibold))
             .foregroundStyle(placeholder ? SpTheme.onDarkDim : SpTheme.onDarkStrong)
-            .lineLimit(placeholder ? 2 : 1)
+            .lineLimit(1)
             .minimumScaleFactor(0.76)
             .allowsTightening(true)
             .multilineTextAlignment(home ? .trailing : .leading)
@@ -2276,6 +2291,142 @@ enum WcTimelineItem: Identifiable {
         switch self {
         case .event(let e): return "e-\(e.id)"
         case .halftime: return "ht"
+        }
+    }
+}
+
+// MARK: - شجرة خروج المغلوب (FIFA 73–104)
+
+struct SpWcBracketTreeView: View {
+    let tree: SpWcBracketTree
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("من دور الـ32 حتى النهائي")
+                .font(SportsFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(tree.columns) { col in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(col.label)
+                                .font(SportsFonts.app(size: 12, weight: .heavy))
+                                .foregroundStyle(SpTheme.onDark)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                            ForEach(col.slots) { slot in
+                                SpWcBracketSlotCard(slot: slot, isFinal: col.key == "final")
+                            }
+                        }
+                        .frame(width: 168)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let third = tree.thirdPlace {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("المركز الثالث")
+                        .font(SportsFonts.app(size: 12, weight: .heavy))
+                        .foregroundStyle(SpTheme.gold)
+                    SpWcBracketSlotCard(
+                        slot: SpWcBracketSlot(
+                            matchNo: 103,
+                            fixture: third,
+                            sources: nil,
+                            topTeam: nil,
+                            bottomTeam: nil,
+                            topLabel: nil,
+                            bottomLabel: nil
+                        ),
+                        isFinal: false
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct SpWcBracketSlotCard: View {
+    let slot: SpWcBracketSlot
+    let isFinal: Bool
+
+    private var fx: SpWcFixture? { slot.fixture }
+    private var homeResolved: (team: SpWcTeam?, label: String) { slot.resolvedHome(from: fx) }
+    private var awayResolved: (team: SpWcTeam?, label: String) { slot.resolvedAway(from: fx) }
+
+    var body: some View {
+        Group {
+            if let fx {
+                NavigationLink {
+                    SpMatchCenter(fixtureId: fx.id, preview: SpFixture(worldCup: fx))
+                } label: {
+                    cardContent
+                }
+                .buttonStyle(SpPressStyle())
+            } else {
+                cardContent
+            }
+        }
+    }
+
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(statusText)
+                    .font(SportsFonts.app(size: 10, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                Spacer(minLength: 0)
+                Text(isFinal ? "النهائي" : "مباراة \(slot.matchNo)")
+                    .font(SportsFonts.app(size: 10, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                    .monospacedDigit()
+            }
+            bracketTeamLine(homeResolved, goals: fx?.goals.home, finished: fx?.status.finished == true)
+            bracketTeamLine(awayResolved, goals: fx?.goals.away, finished: fx?.status.finished == true)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+        )
+    }
+
+    private var statusText: String {
+        guard let fx else { return "بانتظار التأهل" }
+        if fx.status.live { return "مباشرة" }
+        if fx.status.finished { return "انتهت" }
+        if fx.status.code != "TBD", fx.timestamp > 0 { return SpFormat.kickoffTime(fx.date) }
+        return "قريبًا"
+    }
+
+    private func bracketTeamLine(_ resolved: (team: SpWcTeam?, label: String), goals: Int?, finished: Bool) -> some View {
+        HStack(spacing: 8) {
+            if let team = resolved.team, team.id > 0, !team.logo.isEmpty {
+                SpTeamLogo(logo: team.logo, size: 20)
+            } else {
+                Circle()
+                    .stroke(SpTheme.outline, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .frame(width: 20, height: 20)
+                    .overlay {
+                        Text("?")
+                            .font(SportsFonts.app(size: 9, weight: .bold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                    }
+            }
+            Text(resolved.label)
+                .font(SportsFonts.app(size: 11, weight: resolved.team == nil ? .semibold : .bold))
+                .foregroundStyle(resolved.team == nil ? SpTheme.onDarkDim : SpTheme.onDark)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+            if finished, let goals {
+                Text("\(goals)")
+                    .font(SportsFonts.app(size: 12, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .monospacedDigit()
+            }
         }
     }
 }

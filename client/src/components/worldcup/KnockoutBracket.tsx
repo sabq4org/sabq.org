@@ -330,8 +330,8 @@ function DesktopKnockoutTree({ columns, onOpen }: { columns: WcBracketColumn[]; 
       rowSpan,
       isUpper: slotIndex % 2 === 0,
       // وسوم المصادر الرسمية للخانات غير المحسومة (لا تظهر لدور الـ32 — له فرقه).
-      topLabel: slot.sources ? `الفائز من مباراة ${slot.sources[0]}` : "يُحدَّد لاحقًا",
-      bottomLabel: slot.sources ? `الفائز من مباراة ${slot.sources[1]}` : "يُحدَّد لاحقًا",
+      topLabel: slot.sources ? `W${slot.sources[0]}` : "TBD",
+      bottomLabel: slot.sources ? `W${slot.sources[1]}` : "TBD",
     }));
     return { ...col, isFinalRound, slots };
   });

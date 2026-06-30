@@ -929,7 +929,7 @@ struct CompetitionDetailView: View {
 
         async let fixturesOpt = try? APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
         async let groupsOpt = try? APIClient.shared.fetchWorldCupStandings(ignoreCache: force)
-        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: force)
+        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: true)
         async let scorersOpt = try? APIClient.shared.fetchWorldCupScorers(ignoreCache: force)
         async let assistsOpt = try? APIClient.shared.fetchWorldCupAssists(ignoreCache: force)
         async let cardsOpt = try? APIClient.shared.fetchWorldCupCards(ignoreCache: force)

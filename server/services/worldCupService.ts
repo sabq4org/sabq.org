@@ -45,7 +45,7 @@ import {
 } from "./theSportsService";
 import { type WcMomentum, type WcPressure } from "./sportmonksService";
 import pLimit from "p-limit";
-import { buildBracketModel, type WcBracketModel } from "./wc2026Bracket";
+import { buildBracketModel, mergeFullKnockoutSchedule, type WcBracketModel } from "./wc2026Bracket";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -128,6 +128,12 @@ export interface WcFixture {
   away: WcTeam;
   goals: { home: number | null; away: number | null };
   penalties: { home: number | null; away: number | null } | null;
+  /** رقم المباراة الرسمي (73–104) — الأدوار الإقصائية فقط */
+  matchNo?: number;
+  /** رمز خانة FIFA للمضيف عندما لم يُحسم المنتخب بعد (W74، 2A، …) */
+  homeCode?: string;
+  /** رمز خانة FIFA للضيف عندما لم يُحسم المنتخب بعد */
+  awayCode?: string;
 }
 
 function localizeTeam(raw: any): WcTeam {
@@ -183,7 +189,8 @@ export async function getFixtures(
         season: SEASON,
         timezone: TIMEZONE,
       });
-      return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+      const apiFixtures = rows.map(localizeFixture);
+      return mergeFullKnockoutSchedule(apiFixtures).sort((a, b) => a.timestamp - b.timestamp);
     },
     opts.forceFresh ?? false
   );
