@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // تطبيق «خليجي 27» — 5 تبويبات: الرئيسية · المباريات · التوقعات · المجموعات · المزيد
 struct GulfCupView: View {
@@ -510,9 +511,10 @@ private struct GcPredictionsScreen: View {
                     GcLoadingPanel(title: L("loading.predictions"))
                 } else {
                     switch segment {
-                    case .matches: GcPredMatchesList(matches: today?.matches ?? [])
+                    case .matches:
+                        GcPredMatchesList(matches: today?.matches ?? [], reload: { await load(force: true) })
                     case .leaderboard: GcPredLeaderboard(leaders: leaders)
-                    case .long: GcLongPredictionsView(data: longData)
+                    case .long: GcLongPredictionsView(data: longData, reload: { await load(force: true) })
                     }
                 }
                 GcFooterSignature()
@@ -577,76 +579,18 @@ private struct GcPredictionsHero: View {
 
 private struct GcPredMatchesList: View {
     let matches: [GcPredictableMatch]
+    let reload: () async -> Void
+
     var body: some View {
         VStack(spacing: 12) {
             if matches.isEmpty {
                 GcEmptyState(icon: "sparkles.rectangle.stack", title: L("predictions.empty.title"), subtitle: L("predictions.empty.subtitle"))
             } else {
-                ForEach(matches) { GcPredMatchCard(match: $0) }
+                ForEach(matches) { match in
+                    GcPredictionMatchCard(match: match, onSubmitted: reload)
+                }
             }
         }
-    }
-}
-
-private struct GcPredMatchCard: View {
-    let match: GcPredictableMatch
-    @State private var predHome: Int
-    @State private var predAway: Int
-
-    init(match: GcPredictableMatch) {
-        self.match = match
-        _predHome = State(initialValue: match.myPrediction?.predHome ?? 0)
-        _predAway = State(initialValue: match.myPrediction?.predAway ?? 0)
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text(match.fixture.round).font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.onDarkDim)
-                Spacer()
-                Text(match.locked ? L("predictions.locked") : GcFormat.kickoffTime(match.fixture.date))
-                    .font(GulfCupFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(match.locked ? GcTheme.crimson : GcTheme.emerald)
-            }
-            HStack {
-                teamCol(match.fixture.home, $predHome)
-                Text("\(predHome) - \(predAway)")
-                    .font(GulfCupFonts.app(size: 20, weight: .bold)).monospacedDigit()
-                    .environment(\.layoutDirection, .leftToRight)
-                    .frame(minWidth: 64)
-                teamCol(match.fixture.away, $predAway)
-            }
-            HStack(spacing: 8) {
-                meta("\(match.crowd.total)", L("predictions.meta.participant"))
-                meta("\(match.poolAvailable)", L("predictions.meta.pool"))
-                meta("\(match.predictionsCount)", L("predictions.meta.prediction"))
-            }
-            Text(match.locked ? L("predictions.locked.note") : L("predictions.login.note"))
-                .font(GulfCupFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(GcTheme.onDarkDim)
-                .frame(maxWidth: .infinity).padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 12).fill(GcTheme.chipFill))
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 20).fill(GcTheme.cardFillStrong))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(GcTheme.outline, lineWidth: 1))
-    }
-
-    private func teamCol(_ team: GcTeam, _ score: Binding<Int>) -> some View {
-        VStack(spacing: 6) {
-            GcTeamLogo(logo: team.logo, size: 36)
-            Text(team.name).font(GulfCupFonts.app(size: 11, weight: .bold)).lineLimit(1)
-            Stepper("", value: score, in: 0...9).labelsHidden().disabled(match.locked)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func meta(_ v: String, _ l: String) -> some View {
-        VStack(spacing: 2) {
-            Text(v).font(GulfCupFonts.app(size: 13, weight: .bold)).monospacedDigit()
-            Text(l).font(GulfCupFonts.app(size: 9)).foregroundStyle(GcTheme.onDarkDim)
-        }
-        .frame(maxWidth: .infinity).padding(8).background(RoundedRectangle(cornerRadius: 10).fill(GcTheme.chipFill))
     }
 }
 
@@ -681,28 +625,65 @@ private struct GcPredLeaderboard: View {
 
 private struct GcLongPredictionsView: View {
     let data: GcLongData?
+    let reload: () async -> Void
+    @Environment(GcAuthStore.self) private var auth
+    @State private var submitting = false
+    @State private var message: String?
+
     var body: some View {
         VStack(spacing: 14) {
             if let data {
                 longPoolCard("توقّع البطل", pool: data.pools.champion, votes: data.championVotes)
+                if let mine = data.mine.first(where: { $0.kind == "champion" }), let name = mine.teamName {
+                    Text("توقّعك: \(name)").font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.emerald)
+                }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("اختر من المنتخبات").font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.onDarkDim)
+                    Text("اختر بطل البطولة").font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.onDarkDim)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 88))], spacing: 10) {
                         ForEach(data.teams) { t in
-                            VStack(spacing: 6) {
-                                GcTeamLogo(logo: t.logo, size: 40)
-                                Text(t.name).font(GulfCupFonts.app(size: 10, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
+                            Button {
+                                Task { await pickChampion(t.id) }
+                            } label: {
+                                VStack(spacing: 6) {
+                                    GcTeamLogo(logo: t.logo, size: 40)
+                                    Text(t.name).font(GulfCupFonts.app(size: 10, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
+                                }
+                                .padding(8)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(GcTheme.cardFill))
                             }
-                            .padding(8)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(GcTheme.cardFill))
+                            .buttonStyle(.plain)
+                            .disabled(!auth.isLoggedIn || submitting)
                         }
                     }
                 }
-                Text(L("predictions.login.note")).font(GulfCupFonts.app(size: 12)).foregroundStyle(GcTheme.onDarkDim).multilineTextAlignment(.center)
+                if !auth.isLoggedIn {
+                    SignInWithAppleButton(.signIn) { auth.startAppleSignIn() }
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: GcTheme.buttonRadius))
+                }
+                if let message {
+                    Text(message).font(GulfCupFonts.app(size: 12)).foregroundStyle(GcTheme.crimson)
+                }
             } else {
                 GcEmptyState(icon: "trophy", title: "التوقعات طويلة المدى", subtitle: L("predictions.unavailable"))
             }
         }
+    }
+
+    private func pickChampion(_ teamId: Int) async {
+        submitting = true
+        message = nil
+        do {
+            try await APIClient.shared.submitGcLongPrediction(kind: "champion", teamId: teamId)
+            message = "تم حفظ توقّع البطل"
+            await reload()
+        } catch let e as APIError {
+            message = e.errorDescription
+        } catch {
+            message = "تعذّر الحفظ"
+        }
+        submitting = false
     }
 
     private func longPoolCard(_ title: String, pool: Int, votes: [GcLongVote]) -> some View {
@@ -754,6 +735,7 @@ private struct GcMoreScreen: View {
         GcScreenScaffold {
             VStack(spacing: 18) {
                 GcTopBar(title: L("tab.more"), subtitle: L("more.subtitle"))
+                GcAccountCard()
                 GcSectionHeader(icon: "person.3.fill", title: L("teams.section.title"), count: teams.count, tint: GcTheme.emerald)
                 if teams.isEmpty && !loading {
                     GcEmptyState(icon: "person.3", title: L("teams.empty.title"), subtitle: L("teams.empty.subtitle"))
@@ -798,5 +780,45 @@ private struct GcMoreScreen: View {
         }
         .refreshable { await refresh() }
         .navigationBarHidden(true)
+    }
+}
+
+private struct GcAccountCard: View {
+    @Environment(GcAuthStore.self) private var auth
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GcSectionHeader(icon: "person.crop.circle.fill", title: "حسابي", subtitle: "لحفظ التوقعات والمشاركة في البركة", tint: GcTheme.gold)
+            if auth.isLoggedIn {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 28)).foregroundStyle(GcTheme.emerald)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(auth.member?.name ?? "عضو سبق").font(GulfCupFonts.app(size: 15, weight: .bold))
+                        Text(auth.member?.email ?? "مسجّل الدخول").font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.onDarkDim)
+                    }
+                    Spacer()
+                    Button("خروج") { auth.signOut() }
+                        .font(GulfCupFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(GcTheme.crimson)
+                }
+            } else {
+                Text("سجّل الدخول بحساب Apple لحفظ توقّعاتك في مسابقة خليجي 27")
+                    .font(GulfCupFonts.app(size: 12))
+                    .foregroundStyle(GcTheme.onDarkDim)
+                SignInWithAppleButton(.signIn) { auth.startAppleSignIn() }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: GcTheme.buttonRadius))
+            }
+            if auth.isLoading {
+                ProgressView().tint(GcTheme.emerald)
+            }
+            if let err = auth.errorMessage {
+                Text(err).font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.crimson)
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius).fill(GcTheme.cardFillStrong))
+        .overlay(RoundedRectangle(cornerRadius: GcTheme.cardRadius).stroke(GcTheme.outline, lineWidth: 1))
     }
 }

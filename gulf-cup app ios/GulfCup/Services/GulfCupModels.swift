@@ -330,15 +330,30 @@ extension APIClient {
     }
 
     func fetchGcPredictionsToday(ignoreCache: Bool = false) async throws -> GcPredictionsTodayResponse {
-        try await get(GcPredictionsTodayResponse.self, path: "/gulf-cup/predictions/today", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        try await get(
+            GcPredictionsTodayResponse.self,
+            path: "/gulf-cup/predictions/today",
+            ignoreCache: ignoreCache,
+            apiRoot: URLConstants.mobileAPI
+        )
     }
 
     func fetchGcPredictionsLeaderboard(ignoreCache: Bool = false) async throws -> [GcPredictionLeader] {
-        let r = try await get(GcPredictionsLeaderboardResponse.self, path: "/gulf-cup/predictions/leaderboard", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        let r = try await get(
+            GcPredictionsLeaderboardResponse.self,
+            path: "/gulf-cup/predictions/leaderboard",
+            ignoreCache: ignoreCache,
+            apiRoot: URLConstants.mobileAPI
+        )
         return r.leaders
     }
 
     func fetchGcLongPredictions(ignoreCache: Bool = false) async throws -> GcLongData {
-        try await get(GcLongData.self, path: "/gulf-cup/predictions/long", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+        try await get(
+            GcLongData.self,
+            path: "/gulf-cup/predictions/long",
+            ignoreCache: ignoreCache,
+            apiRoot: URLConstants.mobileAPI
+        )
     }
 }

@@ -76,6 +76,21 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
+    func post<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
     // MARK: - Internals
 
     private func buildURL(path: String, query: [String: String] = [:], apiRoot: String? = nil) throws -> URL {

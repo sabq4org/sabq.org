@@ -34,9 +34,17 @@ gulf-cup app ios/
 
 مبني على نفس بنية `asian-cup app ios/` و `sports app ios/` — parity مع كأس آسيا وسبق الرياضي.
 
-## Phase 2 (لاحقًا)
+## Phase 2 (مُنجَز)
 
-- Apple Sign-In + حفظ التوقعات (`POST /api/gulf-cup/predictions`)
-- شعار رسمي `gulf-cup-27-emblem.png` في Assets
+- Apple Sign-In → `POST /api/v1/auth/apple` → Bearer في Keychain
+- حفظ التوقعات → `POST /api/v1/gulf-cup/predictions`
+- توقّع البطل → `POST /api/v1/gulf-cup/predictions/long`
+- بطاقة «حسابي» في تبويب المزيد
+
+**Railway:** `GC_PREDICTIONS_ENABLED=true` + `APPLE_GULFCUP_BUNDLE_ID=com.sabq.gulfcup`
+
+## Phase 3 (لاحقًا)
+
+- شعار رسمي `gulf-cup-27-emblem.png`
 - Live Activity للمباريات الحية
-- صفحات منتخب/مباراة غنية (عند توفر API)
+- Backend: `/gulf-cup/match/:id`, `/team/:id`

@@ -22,6 +22,9 @@
 		GC00000D /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000D /* IBMPlexSansArabic-Regular.woff2 */; };
 		GC00000E /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000E /* IBMPlexSansArabic-SemiBold.woff2 */; };
 		GC00000F /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000F /* IBMPlexSansArabic-Bold.woff2 */; };
+		GC000010 /* GcAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100010 /* GcAuthStore.swift */; };
+		GC000011 /* GcAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100011 /* GcAuthModels.swift */; };
+		GC000012 /* GcPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100012 /* GcPredictionMatchCard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +45,9 @@
 		GC10000F /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
 		GC100010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		GC100011 /* GulfCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCup.entitlements; sourceTree = "<group>"; };
+		GC100010 /* GcAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthStore.swift; sourceTree = "<group>"; };
+		GC100011 /* GcAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthModels.swift; sourceTree = "<group>"; };
+		GC100012 /* GcPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionMatchCard.swift; sourceTree = "<group>"; };
 		GC100020 /* GulfCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GulfCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -74,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				GC100002 /* GulfCupView.swift */,
+				GC100012 /* GcPredictionMatchCard.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -93,6 +100,8 @@
 				GC100005 /* GulfCupModels.swift */,
 				GC100006 /* GulfCupTheme.swift */,
 				GC10000A /* GcStrings.swift */,
+				GC100010 /* GcAuthStore.swift */,
+				GC100011 /* GcAuthModels.swift */,
 				GC100007 /* APIClient.swift */,
 				GC100008 /* FontRegistration.swift */,
 				GC100009 /* URLConstants.swift */,
@@ -212,6 +221,9 @@
 				GC000005 /* GulfCupModels.swift in Sources */,
 				GC000006 /* GulfCupTheme.swift in Sources */,
 				GC00000A /* GcStrings.swift in Sources */,
+				GC000010 /* GcAuthStore.swift in Sources */,
+				GC000011 /* GcAuthModels.swift in Sources */,
+				GC000012 /* GcPredictionMatchCard.swift in Sources */,
 				GC000007 /* APIClient.swift in Sources */,
 				GC000008 /* FontRegistration.swift in Sources */,
 				GC000009 /* URLConstants.swift in Sources */,

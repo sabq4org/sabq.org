@@ -2,16 +2,19 @@ import SwiftUI
 
 @main
 struct GulfCupApp: App {
+    @State private var auth = GcAuthStore.shared
+
     init() {
-        // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
         FontRegistration.registerAll()
     }
 
     var body: some Scene {
         WindowGroup {
             GulfCupView()
+                .environment(auth)
                 .gulfCupRTL()
-                .preferredColorScheme(.light) // هوية خليجي 27 — أخضر عميق + ذهبي
+                .preferredColorScheme(.light)
+                .task { await auth.restore() }
         }
     }
 }
