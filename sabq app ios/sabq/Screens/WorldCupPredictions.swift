@@ -329,6 +329,12 @@ private struct WCPredTodayTab: View {
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
+            // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
+            if let po = m.fixture.penaltyOutcome {
+                Text("فاز \(po.winnerName) بالترجيح (\(po.winnerScore)-\(po.loserScore))")
+                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .multilineTextAlignment(.center)
+            }
             if let mine = m.myPrediction {
                 HStack(spacing: 8) {
                     Text("توقّعك: \(mine.predAway) - \(mine.predHome)")

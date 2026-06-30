@@ -333,6 +333,16 @@ private fun LockedView(m: WcPredictableMatch) {
                 LtrText("${s.finalAway} - ${s.finalHome}", WcColors.onDark, 15, FontWeight.Black)
             }
         }
+        // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
+        m.fixture.penaltyOutcome?.let {
+            Text(
+                "فاز ${it.winnerName} بالترجيح (${it.winnerScore}-${it.loserScore})",
+                color = WcColors.emeraldDeep,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
         val mine = m.myPrediction
         if (mine != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
