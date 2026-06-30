@@ -123,10 +123,7 @@ struct GcPredictionMatchCard: View {
     }
 
     private var signInBlock: some View {
-        SignInWithAppleButton(.signIn) { auth.startAppleSignIn() }
-            .signInWithAppleButtonStyle(.black)
-            .frame(height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: GcTheme.buttonRadius))
+        GcAppleSignInButton()
     }
 
     private var lockedStrip: some View {
@@ -197,7 +194,7 @@ struct GcPredictionMatchCard: View {
             justSaved = false
         } catch let e as APIError {
             error = e.errorDescription
-        } catch {
+        } catch _ {
             error = "تعذّر حفظ التوقّع"
         }
         submitting = false

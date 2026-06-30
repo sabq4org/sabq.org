@@ -32,6 +32,19 @@ final class GcAuthStore {
         }
     }
 
+    func completeAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            if let credential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                handleApple(credential)
+            } else {
+                errorMessage = "تعذّر قراءة بيانات Apple"
+            }
+        case .failure(let error):
+            handleAppleFailure(error)
+        }
+    }
+
     func startAppleSignIn() {
         errorMessage = nil
         let provider = ASAuthorizationAppleIDProvider()

@@ -657,10 +657,7 @@ private struct GcLongPredictionsView: View {
                     }
                 }
                 if !auth.isLoggedIn {
-                    SignInWithAppleButton(.signIn) { auth.startAppleSignIn() }
-                        .signInWithAppleButtonStyle(.black)
-                        .frame(height: 44)
-                        .clipShape(RoundedRectangle(cornerRadius: GcTheme.buttonRadius))
+                    GcAppleSignInButton()
                 }
                 if let message {
                     Text(message).font(GulfCupFonts.app(size: 12)).foregroundStyle(GcTheme.crimson)
@@ -810,10 +807,7 @@ private struct GcAccountCard: View {
                 Text("سجّل الدخول بحساب Apple لحفظ توقّعاتك في مسابقة خليجي 27")
                     .font(GulfCupFonts.app(size: 12))
                     .foregroundStyle(GcTheme.onDarkDim)
-                SignInWithAppleButton(.signIn) { auth.startAppleSignIn() }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: GcTheme.buttonRadius))
+                GcAppleSignInButton()
             }
             if auth.isLoading {
                 ProgressView().tint(GcTheme.emerald)

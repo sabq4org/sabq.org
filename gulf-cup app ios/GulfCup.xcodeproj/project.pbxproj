@@ -34,6 +34,7 @@
 		GC000019 /* GulfCupWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = GC100030 /* GulfCupWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		GC00001A /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100025 /* GcMatchActivityAttributes.swift */; };
 		GC00001B /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100026 /* GcMatchActivityAttributes.swift */; };
+		GC00001C /* GcAppleSignInButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100027 /* GcAppleSignInButton.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +91,7 @@
 		GC100019 /* GulfCupWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCupWidgets.entitlements; sourceTree = "<group>"; };
 		GC100025 /* GcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivityAttributes.swift; sourceTree = "<group>"; };
 		GC100026 /* GcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivityAttributes.swift; sourceTree = "<group>"; };
+		GC100027 /* GcAppleSignInButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAppleSignInButton.swift; sourceTree = "<group>"; };
 		GC100030 /* GulfCupWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GulfCupWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		GC100020 /* GulfCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GulfCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -135,6 +137,7 @@
 			children = (
 				GC100003 /* GulfCupComponents.swift */,
 				GC100004 /* GulfCupRTL.swift */,
+				GC100027 /* GcAppleSignInButton.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -308,6 +311,7 @@
 				GC000002 /* GulfCupView.swift in Sources */,
 				GC000003 /* GulfCupComponents.swift in Sources */,
 				GC000004 /* GulfCupRTL.swift in Sources */,
+				GC00001C /* GcAppleSignInButton.swift in Sources */,
 				GC000005 /* GulfCupModels.swift in Sources */,
 				GC000006 /* GulfCupTheme.swift in Sources */,
 				GC00000A /* GcStrings.swift in Sources */,
