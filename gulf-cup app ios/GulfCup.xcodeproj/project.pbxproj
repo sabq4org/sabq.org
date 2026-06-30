@@ -22,8 +22,8 @@
 		GC00000D /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000D /* IBMPlexSansArabic-Regular.woff2 */; };
 		GC00000E /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000E /* IBMPlexSansArabic-SemiBold.woff2 */; };
 		GC00000F /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000F /* IBMPlexSansArabic-Bold.woff2 */; };
-		GC000010 /* GcAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100010 /* GcAuthStore.swift */; };
-		GC000011 /* GcAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100011 /* GcAuthModels.swift */; };
+		GC000010 /* GcAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100023 /* GcAuthStore.swift */; };
+		GC000011 /* GcAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100024 /* GcAuthModels.swift */; };
 		GC000012 /* GcPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100012 /* GcPredictionMatchCard.swift */; };
 		GC000013 /* GcTeamProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100013 /* GcTeamProfileScreen.swift */; };
 		GC000014 /* GcMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100014 /* GcMatchActivity.swift */; };
@@ -76,8 +76,8 @@
 		GC10000F /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
 		GC100010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		GC100011 /* GulfCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCup.entitlements; sourceTree = "<group>"; };
-		GC100010 /* GcAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthStore.swift; sourceTree = "<group>"; };
-		GC100011 /* GcAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthModels.swift; sourceTree = "<group>"; };
+		GC100023 /* GcAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthStore.swift; sourceTree = "<group>"; };
+		GC100024 /* GcAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthModels.swift; sourceTree = "<group>"; };
 		GC100012 /* GcPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionMatchCard.swift; sourceTree = "<group>"; };
 		GC100013 /* GcTeamProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTeamProfileScreen.swift; sourceTree = "<group>"; };
 		GC100014 /* GcMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivity.swift; sourceTree = "<group>"; };
@@ -141,8 +141,8 @@
 				GC100005 /* GulfCupModels.swift */,
 				GC100006 /* GulfCupTheme.swift */,
 				GC10000A /* GcStrings.swift */,
-				GC100010 /* GcAuthStore.swift */,
-				GC100011 /* GcAuthModels.swift */,
+				GC100023 /* GcAuthStore.swift */,
+				GC100024 /* GcAuthModels.swift */,
 				GC100014 /* GcMatchActivity.swift */,
 				GC100015 /* GcLiveActivityManager.swift */,
 				GC100007 /* APIClient.swift */,
@@ -446,7 +446,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -471,7 +471,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

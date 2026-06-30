@@ -1,0 +1,25 @@
+name: Gulf Cup iOS build
+
+on:
+  pull_request:
+    paths:
+      - 'gulf-cup app ios/**'
+  push:
+    branches: [main]
+    paths:
+      - 'gulf-cup app ios/**'
+
+jobs:
+  xcodebuild:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Build GulfCup (simulator)
+        working-directory: gulf-cup app ios
+        run: |
+          chmod +x scripts/build.sh
+          DEST="platform=iOS Simulator,name=iPhone 16,OS=18.2" ./scripts/build.sh

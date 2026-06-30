@@ -281,7 +281,7 @@ struct GcMatchDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var detail: GcMatchDetail?
     @State private var loading = true
-    private var liveMgr = GcLiveActivityManager.shared
+    private let liveMgr = GcLiveActivityManager.shared
 
     private var displayFixture: GcFixture { detail?.fixture ?? fixture }
     private var started: Bool { displayFixture.status.live || displayFixture.status.finished }
