@@ -19,6 +19,7 @@ xcodebuild \
   -project "$PROJECT" \
   -scheme "$SCHEME" \
   -configuration "$CONFIG" \
+  -sdk iphoneos \
   -destination "$DEST" \
   -derivedDataPath "$DERIVED" \
   CODE_SIGNING_ALLOWED=NO \
