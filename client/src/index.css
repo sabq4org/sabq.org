@@ -2175,10 +2175,12 @@ input, select, textarea {
 .wc-tree-grid {
   --wc-gap: 1.4rem;
   --wc-line: hsl(158 36% 70%);
+  /* ارتفاع صفّ واحد — بطاقة R32 (رأس + فريقان + ترجيح) تحتاج ~7rem */
+  --wc-row-h: 7.25rem;
   display: grid;
   grid-template-columns: 280px 220px 205px 190px 175px;
   column-gap: var(--wc-gap);
-  grid-template-rows: 2.75rem repeat(16, 5.15rem);
+  grid-template-rows: 2.75rem repeat(16, var(--wc-row-h));
   min-width: 1147px;
   padding-inline: 0.25rem;
 }
@@ -2208,6 +2210,8 @@ input, select, textarea {
   display: flex;
   align-items: center;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   position: relative;
   z-index: 1;
 }
@@ -2253,11 +2257,13 @@ input, select, textarea {
   color: hsl(var(--foreground));
   display: block;
   min-width: 0;
+  max-height: 100%;
   padding: 0.45rem 0.6rem;
   position: relative;
   text-align: start;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
   width: 100%;
+  box-sizing: border-box;
 }
 .wc-tree-card.is-clickable {
   cursor: pointer;
@@ -2336,11 +2342,15 @@ input, select, textarea {
 }
 .wc-tree-note,
 .wc-tree-champion {
-  margin-top: 0.35rem;
+  margin-top: 0.25rem;
   text-align: center;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
+  line-height: 1.25;
   color: hsl(var(--foreground));
   font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .wc-tree-champion {
   color: hsl(36 90% 42%);
