@@ -24,6 +24,7 @@ import {
   type SplMatchDetail,
   type SplMatchEvent,
 } from "./saudiLeagueService";
+import { getGcFixtureForLiveActivity, GC_LEAGUE_ID, type GcFixture } from "./gulfCupService";
 import { getLiveScore, type WcLiveScore } from "./sportmonksService";
 import {
   getTheSportsMatchLive,
@@ -284,7 +285,48 @@ function staleDateFor(detail: SplMatchDetail): number {
 
 function leagueSlug(leagueId: number | null): string | null {
   if (leagueId == null) return null;
+  if (leagueId === GC_LEAGUE_ID) return "gulf-cup";
   return SAUDI_COMPETITIONS.find((c) => c.id === leagueId)?.slug ?? null;
+}
+
+/** يحوّل مباراة خليجي 27 إلى SplMatchDetail لدفع Live Activity قبل overlay API-Football. */
+function gcFixtureToSplDetail(fx: GcFixture): SplMatchDetail {
+  return {
+    fixture: {
+      id: fx.id,
+      date: fx.date,
+      timestamp: fx.timestamp,
+      status: {
+        code: fx.status.code,
+        label: fx.status.label,
+        elapsed: fx.status.elapsed,
+        extra: null,
+        live: fx.status.live,
+        finished: fx.status.finished,
+      },
+      round: fx.round,
+      venue: fx.venue,
+      home: { id: fx.home.id, name: fx.home.name, logo: fx.home.logo, winner: null },
+      away: { id: fx.away.id, name: fx.away.name, logo: fx.away.logo, winner: null },
+      goals: fx.goals,
+    },
+    events: [],
+    statistics: null,
+    lineups: [],
+    leagueId: GC_LEAGUE_ID,
+  };
+}
+
+async function resolveMatchDetailForLiveActivity(fixtureId: number): Promise<SplMatchDetail | null> {
+  try {
+    const detail = await getMatchDetail(fixtureId);
+    if (detail) return detail;
+  } catch (err) {
+    console.warn(`[LiveActivity] SPL match detail failed for ${fixtureId}:`, err);
+  }
+  const gcFx = await getGcFixtureForLiveActivity(fixtureId);
+  if (gcFx) return gcFixtureToSplDetail(gcFx);
+  return null;
 }
 
 function isInvalidToken(reason?: string): boolean {
@@ -342,7 +384,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
   for (const [fixtureId, tokens] of byFixture) {
     let detail: SplMatchDetail | null = null;
     try {
-      detail = await getMatchDetail(fixtureId);
+      detail = await resolveMatchDetailForLiveActivity(fixtureId);
     } catch (err) {
       console.warn(`[LiveActivity] match detail failed for ${fixtureId}:`, err);
     }

@@ -41,10 +41,11 @@ gulf-cup app ios/
 - توقّع البطل → `POST /api/v1/gulf-cup/predictions/long`
 - بطاقة «حسابي» في تبويب المزيد
 
-**Railway:** `GC_PREDICTIONS_ENABLED=true` + `APPLE_GULFCUP_BUNDLE_ID=com.sabq.gulfcup`
+## Phase 3 (مُنجَز)
 
-## Phase 3 (لاحقًا)
+- `GET /api/gulf-cup/team/:id` + `GET /api/gulf-cup/match/:id`
+- Live Activity: `GulfCupWidgets` + `GcLiveActivityManager` + fallback في `liveActivityService`
+- شعار من `api.sabq.org/branding/gulf-cup-og-image.png`
+- Android: `feature/gulfcup/` داخل Sabq Smart (5 تبويبات + شريط الهوم)
 
-- شعار رسمي `gulf-cup-27-emblem.png`
-- Live Activity للمباريات الحية
-- Backend: `/gulf-cup/match/:id`, `/team/:id`
+**Ops:** `GC_PREDICTIONS_ENABLED=true` · `APPLE_GULFCUP_BUNDLE_ID=com.sabq.gulfcup` · App Group `group.com.sabq.gulfcup`

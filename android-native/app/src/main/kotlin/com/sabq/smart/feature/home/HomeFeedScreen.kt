@@ -107,6 +107,7 @@ fun HomeFeedScreen(
     onOpinionsAllClick: () -> Unit = {},
     onTrendingAllClick: () -> Unit = {},
     onWorldCupClick: () -> Unit = {},
+    onGulfCupClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
@@ -154,6 +155,7 @@ fun HomeFeedScreen(
                 onOpinionsAllClick = onOpinionsAllClick,
                 onTrendingAllClick = onTrendingAllClick,
                 onWorldCupClick = onWorldCupClick,
+                onGulfCupClick = onGulfCupClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
@@ -194,6 +196,7 @@ private fun LoadedFeed(
     onOpinionsAllClick: () -> Unit,
     onTrendingAllClick: () -> Unit,
     onWorldCupClick: () -> Unit,
+    onGulfCupClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
@@ -271,6 +274,10 @@ private fun LoadedFeed(
         // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
         item {
             com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
+        }
+
+        item {
+            com.sabq.smart.feature.gulfcup.GulfCupHomeStrip(onClick = onGulfCupClick)
         }
 
         // Stories rail — circular bubbles. Each bubble opens the

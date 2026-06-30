@@ -201,6 +201,83 @@ nonisolated struct GcLongData: Decodable, Hashable {
     let mine: [GcLongMine]
 }
 
+// MARK: - صفحة المنتخب + تفاصيل المباراة
+
+nonisolated struct GcTeamStats: Decodable, Hashable {
+    let groupName: String?
+    let rank: Int?
+    let played: Int
+    let win: Int
+    let draw: Int
+    let lose: Int
+    let goalsFor: Int
+    let goalsAgainst: Int
+    let goalsDiff: Int
+    let points: Int
+    let form: [String]
+}
+
+nonisolated struct GcSquadPlayer: Decodable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String
+}
+
+nonisolated struct GcTeamProfile: Decodable, Hashable {
+    let team: GcTeam
+    let isSaudi: Bool
+    let coach: String?
+    let group: GcGroup?
+    let stats: GcTeamStats
+    let nextMatch: GcFixture?
+    let fixtures: [GcFixture]
+    let squad: [GcSquadPlayer]
+}
+
+nonisolated struct GcMatchEvent: Decodable, Hashable, Identifiable {
+    let minute: Int
+    let extraMinute: Int?
+    let teamId: Int
+    let type: String
+    let label: String
+    let player: String?
+    var id: String { "\(minute)-\(teamId)-\(type)-\(player ?? "")" }
+}
+
+nonisolated struct GcLineupPlayer: Decodable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let number: Int?
+    let position: String?
+}
+
+nonisolated struct GcLineup: Decodable, Hashable, Identifiable {
+    let teamId: Int
+    let teamName: String
+    let formation: String?
+    let coach: String
+    let startXI: [GcLineupPlayer]
+    let substitutes: [GcLineupPlayer]
+    var id: Int { teamId }
+}
+
+nonisolated struct GcStatistic: Decodable, Hashable, Identifiable {
+    let key: String
+    let label: String
+    let home: String
+    let away: String
+    var id: String { key }
+}
+
+nonisolated struct GcMatchDetail: Decodable, Hashable {
+    let fixture: GcFixture
+    let events: [GcMatchEvent]
+    let lineups: [GcLineup]
+    let statistics: [GcStatistic]
+    let headToHead: [GcFixture]
+}
+
 struct GcDayGroup: Identifiable {
     let key: String
     let label: String
@@ -355,5 +432,26 @@ extension APIClient {
             ignoreCache: ignoreCache,
             apiRoot: URLConstants.mobileAPI
         )
+    }
+
+    func fetchGcTeamProfile(_ teamId: Int, ignoreCache: Bool = false) async throws -> GcTeamProfile {
+        try await get(GcTeamProfile.self, path: "/gulf-cup/team/\(teamId)", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchGcMatchDetail(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> GcMatchDetail {
+        try await get(GcMatchDetail.self, path: "/gulf-cup/match/\(fixtureId)", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func registerLiveActivity(fixtureId: Int, pushToken: String) async throws {
+        struct Body: Encodable { let fixtureId: Int; let token: String; let bundleId: String? }
+        struct Ok: Decodable { let ok: Bool? }
+        let body = Body(fixtureId: fixtureId, token: pushToken, bundleId: Bundle.main.bundleIdentifier)
+        _ = try await post(Ok.self, path: "/live-activity/register", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    func endLiveActivity(pushToken: String) async throws {
+        struct Body: Encodable { let token: String }
+        struct Ok: Decodable { let ok: Bool? }
+        _ = try await post(Ok.self, path: "/live-activity/end", body: Body(token: pushToken), apiRoot: URLConstants.mobileAPI)
     }
 }

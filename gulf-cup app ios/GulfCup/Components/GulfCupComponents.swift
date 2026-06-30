@@ -46,6 +46,7 @@ struct GcEmblem: View {
     var height: CGFloat = 120
     @State private var pulse = false
     @State private var entered = false
+    private let emblemURL = "https://api.sabq.org/branding/gulf-cup-og-image.png"
 
     var body: some View {
         ZStack {
@@ -55,10 +56,16 @@ struct GcEmblem: View {
                 .blur(radius: 28)
                 .scaleEffect(pulse ? 1.1 : 0.88)
 
-            Image(systemName: "trophy.fill")
-                .font(.system(size: height * 0.42, weight: .bold))
-                .foregroundStyle(GcTheme.goldTitleGradient)
-                .symbolRenderingMode(.palette)
+            AsyncImage(url: URL(string: emblemURL)) { phase in
+                if case .success(let img) = phase {
+                    img.resizable().scaledToFit().frame(height: height)
+                } else {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: height * 0.42, weight: .bold))
+                        .foregroundStyle(GcTheme.goldTitleGradient)
+                        .symbolRenderingMode(.palette)
+                }
+            }
             .frame(height: height)
             .shadow(color: GcTheme.emeraldDeep.opacity(0.35), radius: 16, y: 8)
             .scaleEffect(entered ? 1 : 0.82)
@@ -272,24 +279,35 @@ struct GcMatchCard: View {
 struct GcMatchDetailSheet: View {
     let fixture: GcFixture
     @Environment(\.dismiss) private var dismiss
+    @State private var detail: GcMatchDetail?
+    @State private var loading = true
+    private var liveMgr = GcLiveActivityManager.shared
+
+    private var displayFixture: GcFixture { detail?.fixture ?? fixture }
+    private var started: Bool { displayFixture.status.live || displayFixture.status.finished }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    GcMatchCard(fixture: fixture)
-                    VStack(alignment: .leading, spacing: 8) {
-                        labelRow("الجولة", fixture.round)
-                        labelRow("الملعب", "\(fixture.venue.name) — \(fixture.venue.city)")
-                        labelRow("التاريخ", GcFormat.kickoffDay(fixture.date))
-                        labelRow("الوقت", GcFormat.kickoffTime(fixture.date))
-                        if let no = fixture.matchNo {
-                            labelRow("رقم المباراة", "#\(no)")
-                        }
+                VStack(spacing: 16) {
+                    scoreboardHero
+
+                    if GcLiveActivityManager.shared.isSupported {
+                        liveActivityButton
                     }
-                    .padding(16)
-                    .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius).fill(GcTheme.cardFillStrong))
-                    .overlay(RoundedRectangle(cornerRadius: GcTheme.cardRadius).stroke(GcTheme.outline, lineWidth: 1))
+
+                    if let d = detail {
+                        if !d.events.isEmpty { GcEventsCard(events: d.events, homeId: displayFixture.home.id) }
+                        if !d.statistics.isEmpty { GcStatisticsCard(stats: d.statistics, home: displayFixture.home, away: displayFixture.away) }
+                        if !d.headToHead.isEmpty {
+                            GcSectionHeader(icon: "arrow.triangle.swap", title: L("match.h2h"), count: d.headToHead.count, tint: GcTheme.teal)
+                            ForEach(d.headToHead) { GcMatchCard(fixture: $0) }
+                        }
+                    } else if loading {
+                        GcLoadingPanel(title: L("match.loading"))
+                    }
+
+                    infoCard
                 }
                 .padding(16)
             }
@@ -303,6 +321,79 @@ struct GcMatchDetailSheet: View {
             }
         }
         .gulfCupRTL()
+        .task { await load() }
+    }
+
+    private var liveActivityButton: some View {
+        Button {
+            liveMgr.toggle(for: displayFixture)
+        } label: {
+            HStack {
+                Image(systemName: liveMgr.isActive(displayFixture.id) ? "bell.slash.fill" : "bell.badge.fill")
+                Text(liveMgr.isActive(displayFixture.id) ? L("liveActivity.stop") : L("liveActivity.start"))
+            }
+            .font(GulfCupFonts.app(size: 14, weight: .bold))
+            .foregroundStyle(GcTheme.onDark)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 14).fill(GcTheme.emerald.opacity(0.18)))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(GcTheme.emerald.opacity(0.35), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var scoreboardHero: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text(displayFixture.round).font(GulfCupFonts.app(size: 12, weight: .bold)).foregroundStyle(GcTheme.onDarkDim)
+                Spacer()
+                GcStatusPill(fixture: displayFixture)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                teamCol(displayFixture.home)
+                centerScore
+                teamCol(displayFixture.away)
+            }
+        }
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(GcTheme.heroGradient))
+    }
+
+    private func teamCol(_ team: GcTeam) -> some View {
+        VStack(spacing: 8) {
+            GcTeamLogo(logo: team.logo, size: 48)
+            Text(team.name).font(GulfCupFonts.app(size: 13, weight: .semibold)).multilineTextAlignment(.center).lineLimit(2)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var centerScore: some View {
+        Group {
+            if started {
+                Text("\(displayFixture.goals.away ?? 0) - \(displayFixture.goals.home ?? 0)")
+                    .font(GulfCupFonts.app(size: 36, weight: .bold)).monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
+            } else {
+                Text("VS").font(GulfCupFonts.app(size: 14, weight: .bold)).foregroundStyle(GcTheme.onDarkFaint)
+            }
+        }
+    }
+
+    private var infoCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            labelRow("الملعب", "\(displayFixture.venue.name) — \(displayFixture.venue.city)")
+            labelRow("التاريخ", GcFormat.kickoffDay(displayFixture.date))
+            labelRow("الوقت", GcFormat.kickoffTime(displayFixture.date))
+            if let no = displayFixture.matchNo { labelRow("رقم المباراة", "#\(no)") }
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius).fill(GcTheme.cardFillStrong))
+    }
+
+    private func load() async {
+        loading = true
+        detail = try? await APIClient.shared.fetchGcMatchDetail(fixture.id)
+        loading = false
     }
 
     private func labelRow(_ k: String, _ v: String) -> some View {
@@ -311,6 +402,47 @@ struct GcMatchDetailSheet: View {
             Spacer()
             Text(v).font(GulfCupFonts.app(size: 13, weight: .semibold)).foregroundStyle(GcTheme.onDark)
         }
+    }
+}
+
+private struct GcEventsCard: View {
+    let events: [GcMatchEvent]
+    let homeId: Int
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "list.bullet.rectangle", title: L("match.events"), count: events.count, tint: GcTheme.gold)
+            ForEach(events) { ev in
+                HStack {
+                    Text("\(ev.minute)'").font(GulfCupFonts.app(size: 12, weight: .bold)).foregroundStyle(GcTheme.emerald).frame(width: 36)
+                    Text(ev.player ?? ev.label).font(GulfCupFonts.app(size: 13))
+                    Spacer()
+                    if ev.teamId == homeId { Text("مضيف").font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.onDarkDim) }
+                }
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius).fill(GcTheme.cardFill))
+    }
+}
+
+private struct GcStatisticsCard: View {
+    let stats: [GcStatistic]
+    let home: GcTeam
+    let away: GcTeam
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "chart.bar.fill", title: L("match.stats"), tint: GcTheme.teal)
+            ForEach(stats) { s in
+                HStack {
+                    Text(s.home).frame(width: 36).monospacedDigit()
+                    Text(s.label).font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.onDarkDim).frame(maxWidth: .infinity)
+                    Text(s.away).frame(width: 36).monospacedDigit()
+                }
+                .font(GulfCupFonts.app(size: 12, weight: .semibold))
+            }
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius).fill(GcTheme.cardFill))
     }
 }
 

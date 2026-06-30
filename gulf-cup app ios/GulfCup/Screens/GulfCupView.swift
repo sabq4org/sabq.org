@@ -742,15 +742,20 @@ private struct GcMoreScreen: View {
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 10) {
                         ForEach(teams) { t in
-                            VStack(spacing: 8) {
-                                GcTeamLogo(logo: t.logo, size: 48)
-                                Text(t.name).font(GulfCupFonts.app(size: 11, weight: .bold)).lineLimit(2).multilineTextAlignment(.center)
-                                if t.id == GulfCupConstants.saudiTeamId {
-                                    Text(L("teams.host.badge")).font(GulfCupFonts.app(size: 9, weight: .bold)).foregroundStyle(GcTheme.goldDeep)
+                            NavigationLink {
+                                GcTeamProfileScreen(teamId: t.id, fallback: t)
+                            } label: {
+                                VStack(spacing: 8) {
+                                    GcTeamLogo(logo: t.logo, size: 48)
+                                    Text(t.name).font(GulfCupFonts.app(size: 11, weight: .bold)).lineLimit(2).multilineTextAlignment(.center)
+                                    if t.id == GulfCupConstants.saudiTeamId {
+                                        Text(L("teams.host.badge")).font(GulfCupFonts.app(size: 9, weight: .bold)).foregroundStyle(GcTheme.goldDeep)
+                                    }
                                 }
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 14).fill(GcTheme.cardFillStrong))
                             }
-                            .padding(10)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(GcTheme.cardFillStrong))
+                            .buttonStyle(.plain)
                         }
                     }
                 }

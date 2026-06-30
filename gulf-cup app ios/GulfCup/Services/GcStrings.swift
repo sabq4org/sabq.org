@@ -112,6 +112,22 @@ nonisolated enum GcStrings {
         "venues.section.title": "ملاعب الاستضافة",
         "venues.empty.title": "ستُعلن الملاعب",
         "venues.empty.subtitle": "جدة — المملكة العربية السعودية",
+        "loading.team": "يتم تحميل بيانات المنتخب",
+        "team.nextMatch": "المباراة القادمة",
+        "team.fixtures": "جدول المنتخب",
+        "team.group": "مجموعته",
+        "stats.played": "لعب",
+        "stats.points": "نقاط",
+        "stats.diff": "فارق",
+        "stats.win": "فوز",
+        "stats.draw": "تعادل",
+        "stats.lose": "خسارة",
+        "match.loading": "يتم تحميل تفاصيل المباراة",
+        "match.events": "أحداث المباراة",
+        "match.stats": "إحصاءات",
+        "match.h2h": "المواجهات المباشرة",
+        "liveActivity.start": "متابعة على شاشة القفل",
+        "liveActivity.stop": "إيقاف المتابعة",
     ]
 
     static func text(_ key: String, _ vars: [String: String] = [:]) -> String {
