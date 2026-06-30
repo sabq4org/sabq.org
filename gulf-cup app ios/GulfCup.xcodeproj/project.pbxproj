@@ -1,0 +1,345 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		GC000001 /* GulfCupApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100001 /* GulfCupApp.swift */; };
+		GC000002 /* GulfCupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100002 /* GulfCupView.swift */; };
+		GC000003 /* GulfCupComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100003 /* GulfCupComponents.swift */; };
+		GC000004 /* GulfCupRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100004 /* GulfCupRTL.swift */; };
+		GC000005 /* GulfCupModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100005 /* GulfCupModels.swift */; };
+		GC000006 /* GulfCupTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100006 /* GulfCupTheme.swift */; };
+		GC000007 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100007 /* APIClient.swift */; };
+		GC000008 /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100008 /* FontRegistration.swift */; };
+		GC000009 /* URLConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100009 /* URLConstants.swift */; };
+		GC00000A /* GcStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC10000A /* GcStrings.swift */; };
+		GC00000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = GC10000B /* Assets.xcassets */; };
+		GC00000C /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = GC10000C /* InfoPlist.strings */; };
+		GC00000D /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000D /* IBMPlexSansArabic-Regular.woff2 */; };
+		GC00000E /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000E /* IBMPlexSansArabic-SemiBold.woff2 */; };
+		GC00000F /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = GC10000F /* IBMPlexSansArabic-Bold.woff2 */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		GC100001 /* GulfCupApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupApp.swift; sourceTree = "<group>"; };
+		GC100002 /* GulfCupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupView.swift; sourceTree = "<group>"; };
+		GC100003 /* GulfCupComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupComponents.swift; sourceTree = "<group>"; };
+		GC100004 /* GulfCupRTL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupRTL.swift; sourceTree = "<group>"; };
+		GC100005 /* GulfCupModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupModels.swift; sourceTree = "<group>"; };
+		GC100006 /* GulfCupTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupTheme.swift; sourceTree = "<group>"; };
+		GC100007 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		GC100008 /* FontRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontRegistration.swift; sourceTree = "<group>"; };
+		GC100009 /* URLConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLConstants.swift; sourceTree = "<group>"; };
+		GC10000A /* GcStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcStrings.swift; sourceTree = "<group>"; };
+		GC10000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		GC10000C /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
+		GC10000D /* IBMPlexSansArabic-Regular.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.woff2"; sourceTree = "<group>"; };
+		GC10000E /* IBMPlexSansArabic-SemiBold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-SemiBold.woff2"; sourceTree = "<group>"; };
+		GC10000F /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
+		GC100010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		GC100011 /* GulfCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCup.entitlements; sourceTree = "<group>"; };
+		GC100020 /* GulfCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GulfCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		GC200000 = {
+			isa = PBXGroup;
+			children = (
+				GC200001 /* GulfCup */,
+				GC200006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		GC200001 /* GulfCup */ = {
+			isa = PBXGroup;
+			children = (
+				GC200002 /* Screens */,
+				GC200003 /* Components */,
+				GC200004 /* Services */,
+				GC200005 /* Resources */,
+				GC200007 /* ar.lproj */,
+				GC10000B /* Assets.xcassets */,
+				GC100010 /* Info.plist */,
+				GC100011 /* GulfCup.entitlements */,
+				GC100001 /* GulfCupApp.swift */,
+			);
+			path = GulfCup;
+			sourceTree = "<group>";
+		};
+		GC200002 /* Screens */ = {
+			isa = PBXGroup;
+			children = (
+				GC100002 /* GulfCupView.swift */,
+			);
+			path = Screens;
+			sourceTree = "<group>";
+		};
+		GC200003 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				GC100003 /* GulfCupComponents.swift */,
+				GC100004 /* GulfCupRTL.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		GC200004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				GC100005 /* GulfCupModels.swift */,
+				GC100006 /* GulfCupTheme.swift */,
+				GC10000A /* GcStrings.swift */,
+				GC100007 /* APIClient.swift */,
+				GC100008 /* FontRegistration.swift */,
+				GC100009 /* URLConstants.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		GC200005 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				GC200008 /* Fonts */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		GC200006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				GC100020 /* GulfCup.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		GC200007 /* ar.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				GC10000C /* InfoPlist.strings */,
+			);
+			path = ar.lproj;
+			sourceTree = "<group>";
+		};
+		GC200008 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				GC10000D /* IBMPlexSansArabic-Regular.woff2 */,
+				GC10000E /* IBMPlexSansArabic-SemiBold.woff2 */,
+				GC10000F /* IBMPlexSansArabic-Bold.woff2 */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		GC300000 /* GulfCup */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = GC500001 /* Build configuration list for PBXNativeTarget "GulfCup" */;
+			buildPhases = (
+				GC400001 /* Sources */,
+				GC400002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GulfCup;
+			productName = GulfCup;
+			productReference = GC100020 /* GulfCup.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		GC600000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					GC300000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = GC500004 /* Build configuration list for PBXProject "GulfCup" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ar;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				ar,
+				Base,
+			);
+			mainGroup = GC200000;
+			productRefGroup = GC200006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				GC300000 /* GulfCup */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		GC400002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				GC00000B /* Assets.xcassets in Resources */,
+				GC00000C /* InfoPlist.strings in Resources */,
+				GC00000D /* IBMPlexSansArabic-Regular.woff2 in Resources */,
+				GC00000E /* IBMPlexSansArabic-SemiBold.woff2 in Resources */,
+				GC00000F /* IBMPlexSansArabic-Bold.woff2 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		GC400001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				GC000001 /* GulfCupApp.swift in Sources */,
+				GC000002 /* GulfCupView.swift in Sources */,
+				GC000003 /* GulfCupComponents.swift in Sources */,
+				GC000004 /* GulfCupRTL.swift in Sources */,
+				GC000005 /* GulfCupModels.swift in Sources */,
+				GC000006 /* GulfCupTheme.swift in Sources */,
+				GC00000A /* GcStrings.swift in Sources */,
+				GC000007 /* APIClient.swift in Sources */,
+				GC000008 /* FontRegistration.swift in Sources */,
+				GC000009 /* URLConstants.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		GC500000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		GC500002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		GC500003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GulfCup/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "خليجي 27";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		GC500005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GulfCup/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "خليجي 27";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.gulfcup;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		GC500001 /* Build configuration list for PBXNativeTarget "GulfCup" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				GC500003 /* Debug */,
+				GC500005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		GC500004 /* Build configuration list for PBXProject "GulfCup" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				GC500000 /* Debug */,
+				GC500002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = GC600000 /* Project object */;
+}
