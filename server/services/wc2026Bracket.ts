@@ -203,6 +203,11 @@ function placeholderTeam(code: string): WcTeam {
   return { id: 0, name: code, logo: "", winner: null };
 }
 
+/** فريق مُرقّى لخانة مستقبلية — نُصفّر winner حتى لا يُظنّ أنه فاز بالمباراة الجديدة. */
+function promotedTeam(team: WcTeam): WcTeam {
+  return { ...team, winner: null };
+}
+
 function pendingStatus() {
   return {
     code: "NS",
@@ -226,7 +231,7 @@ function resolveSide(
   code: string,
 ): { team: WcTeam; code?: string } {
   if (isResolvedTeam(fixtureSide)) return { team: fixtureSide! };
-  if (isResolvedTeam(promoted)) return { team: promoted! };
+  if (isResolvedTeam(promoted)) return { team: promotedTeam(promoted!), code: undefined };
   return { team: placeholderTeam(code), code };
 }
 
@@ -418,11 +423,13 @@ export function mergeFullKnockoutSchedule(apiFixtures: WcFixture[]): WcFixture[]
     const loserBottom = matchNo === WC2026_THIRD_PLACE_NO ? loserTeam(byMatch.get(102)) : undefined;
 
     const existing = byMatch.get(matchNo);
-    if (existing) {
-      knockoutOut.push(enrichFixture(existing, matchNo, topTeam, bottomTeam));
-    } else {
-      knockoutOut.push(buildSyntheticFixture(matchNo, topTeam, bottomTeam, loserTop, loserBottom));
-    }
+    const built =
+      existing != null
+        ? enrichFixture(existing, matchNo, topTeam, bottomTeam)
+        : buildSyntheticFixture(matchNo, topTeam, bottomTeam, loserTop, loserBottom);
+    knockoutOut.push(built);
+    // تسلسل: مباريات مُكمّلة (حتى الاصطناعية) تُغذّي الأدوار اللاحقة فور حسم الفائز.
+    byMatch.set(matchNo, built);
   }
 
   return [...groupStage, ...knockoutOut].sort((a, b) => a.timestamp - b.timestamp);
