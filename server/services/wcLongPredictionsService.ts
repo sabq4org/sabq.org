@@ -20,12 +20,14 @@ import { db } from "../db";
 import { wcLongPredictions } from "@shared/schema";
 import {
   getFixtures,
-  getTeams,
-  getTopScorers,
+  getOfficialTopScorers,
   type WcFixture,
   type WcTeam,
   type WcScorer,
 } from "./worldCupService";
+
+// عدد مرشّحي الهدّاف المعروضين من اللوحة الرسمية (مرتّبة بالأهداف).
+const SCORER_CANDIDATES = 20;
 import { awardPoints } from "./loyalty";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 
@@ -108,17 +110,54 @@ function championOfFinal(final: WcFixture): number | null {
   return null;
 }
 
+/** خاسر مباراة إقصائية حُسمت (بالأهداف أو الترجيح) — للإقصاء من قائمة البطل. */
+function loserOf(fx: WcFixture): number | null {
+  if (!hasRealFinalScore(fx)) return null;
+  const fh = fx.goals.home as number;
+  const fa = fx.goals.away as number;
+  if (fh > fa) return fx.away.id;
+  if (fa > fh) return fx.home.id;
+  const ph = fx.penalties?.home;
+  const pa = fx.penalties?.away;
+  if (ph != null && pa != null && ph !== pa) return ph > pa ? fx.away.id : fx.home.id;
+  return null;
+}
+
+/**
+ * مرشّحو البطل = المنتخبات **المتأهّلة لدور الـ32** (= المتأهّلون للأدوار الإقصائية)
+ * وما زالوا في المنافسة — نستبعد من خرج في أي دور إقصائي حُسم، فلا يصحّ توقّع بطل
+ * أُقصي. مشتقّ من جدول المباريات لا من كامل قائمة الـ48 (التي تضمّ من لم يتأهّل).
+ */
+function championCandidates(fixtures: WcFixture[]): WcTeam[] {
+  const byId = new Map<number, WcTeam>();
+  for (const f of fixtures) {
+    const r = (f.roundEn ?? "").trim();
+    if (r !== "Round of 32" && !r.startsWith("Round of 32")) continue;
+    if (f.home?.id) byId.set(f.home.id, f.home);
+    if (f.away?.id) byId.set(f.away.id, f.away);
+  }
+  const eliminated = new Set<number>();
+  for (const f of fixtures) {
+    if (roundPhase(f.roundEn ?? "") < 1) continue; // غير إقصائية
+    const loser = loserOf(f);
+    if (loser != null) eliminated.add(loser);
+  }
+  return [...byId.values()]
+    .filter((t) => !eliminated.has(t.id))
+    .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
 // ---------------------------------------------------------------------------
 // قراءة الحالة + توقّعي
 // ---------------------------------------------------------------------------
 
 export async function getWcLongPredictions(userId?: string) {
-  const [teams, scorers, fixtures] = await Promise.all([
-    getTeams().catch(() => [] as WcTeam[]),
-    getTopScorers().catch(() => [] as WcScorer[]),
+  const [scorers, fixtures] = await Promise.all([
+    getOfficialTopScorers(SCORER_CANDIDATES).catch(() => [] as WcScorer[]),
     getFixtures().catch(() => [] as WcFixture[]),
   ]);
   const phase = currentPhase(fixtures);
+  const teams = championCandidates(fixtures); // المتأهّلون لدور الـ32 وما زالوا في المنافسة
 
   // أصوات البطل: عدد + مجموع الأوزان لكل منتخب (لتقدير الحصّة المرجّحة).
   const champVotes = await db
@@ -209,8 +248,8 @@ export async function submitWcLongPrediction(
   if (kind === "champion") {
     const weight = championWeight(phase);
     if (weight == null) return { ok: false, reason: "LOCKED" };
-    const teams = await getTeams();
-    const team = teams.find((t) => t.id === payload.teamId);
+    // يجب أن يكون الاختيار من المتأهّلين لدور الـ32 وما زالوا في المنافسة.
+    const team = championCandidates(fixtures).find((t) => t.id === payload.teamId);
     if (!team) return { ok: false, reason: "INVALID" };
     await db
       .insert(wcLongPredictions)
@@ -239,9 +278,9 @@ export async function submitWcLongPrediction(
     return { ok: true };
   }
 
-  // top_scorer — من لوحة الهدّافين الحيّة (مرشّحون حقيقيون + تسوية آلية بالمعرّف)
+  // top_scorer — من اللوحة الرسمية للهدّافين (تسوية آلية بالمعرّف)
   if (!scorerOpen(phase)) return { ok: false, reason: "LOCKED" };
-  const scorers = await getTopScorers();
+  const scorers = await getOfficialTopScorers(SCORER_CANDIDATES);
   const sc = scorers.find((s) => s.id === payload.playerId && s.id !== 0);
   if (!sc) return { ok: false, reason: "INVALID" };
   await db
@@ -294,7 +333,8 @@ export async function settleWcLong(): Promise<WcLongSettlement> {
     out.championWinners = r.winners;
   }
 
-  const scorers = await getTopScorers().catch(() => [] as WcScorer[]);
+  // الهدّاف الرسمي المتصدّر عند انتهاء البطولة.
+  const scorers = await getOfficialTopScorers(1).catch(() => [] as WcScorer[]);
   const top = scorers[0];
   if (top && top.id) {
     const r = await settleTopScorer(top.id);
