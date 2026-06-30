@@ -22,4 +22,5 @@ jobs:
         working-directory: gulf-cup app ios
         run: |
           chmod +x scripts/build.sh
-          DEST="platform=iOS Simulator,name=iPhone 16,OS=18.2" ./scripts/build.sh
+          # generic destination — لا يعتمد على محاكي مُثبَّت (GitHub macos-15 قد لا يوفّر iPhone 16/18.2)
+          ./scripts/build.sh

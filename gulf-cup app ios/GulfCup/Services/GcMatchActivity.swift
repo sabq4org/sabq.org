@@ -93,9 +93,3 @@ nonisolated struct GcMatchActivityAttributes: ActivityAttributes {
     var competition: String
     var kickoff: Date
 }
-
-extension GcFixture {
-    var kickoffDate: Date {
-        GcDateMath.date(from: date) ?? Date(timeIntervalSince1970: TimeInterval(timestamp))
-    }
-}

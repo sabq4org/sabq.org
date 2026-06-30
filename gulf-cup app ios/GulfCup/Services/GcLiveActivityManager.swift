@@ -139,3 +139,9 @@ final class GcLiveActivityManager {
         }
     }
 }
+
+extension GcFixture {
+    var kickoffDate: Date {
+        GcDateMath.date(from: date) ?? Date(timeIntervalSince1970: TimeInterval(timestamp))
+    }
+}

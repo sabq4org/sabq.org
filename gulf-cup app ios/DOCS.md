@@ -24,7 +24,18 @@ gulf-cup app ios/
 | `GET /api/gulf-cup/teams` | المنتخبات |
 | `GET /api/gulf-cup/predictions/*` | مسابقة التوقعات (بركة 50/30/20) |
 
-**Bundle ID:** `com.sabq.gulfcup` · **iOS 17.0+**
+## البناء (macOS)
+
+```bash
+cd "gulf-cup app ios"
+./scripts/build.sh
+```
+
+أو من Xcode: افتح `GulfCup.xcodeproj` → Scheme **GulfCup** → ⌘B.
+
+**متطلبات:** Xcode 15+ · iOS 17.0+ · Team `CBU7MJEC5R` (أو غيّر `DEVELOPMENT_TEAM` في المشروع).
+
+CI: `.github/workflows/gulf-cup-ios-build.yml` يبني على `macos-15` لكل PR يمس `gulf-cup app ios/`.
 
 ## الهوية
 
