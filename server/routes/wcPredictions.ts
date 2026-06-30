@@ -19,6 +19,11 @@ import {
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/wcPredictionsService";
+import {
+  getWcLongPredictions,
+  submitWcLongPrediction,
+  type WcLongKind,
+} from "../services/wcLongPredictionsService";
 
 const router = Router();
 
@@ -27,6 +32,20 @@ const NOT_CONFIGURED = { configured: false, message: "مسابقة التوقّ�
 function guard(res: any): boolean {
   if (!isWorldCupConfigured()) {
     res.status(503).json(NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+// توقّعات البطولة طويلة المدى خلف علم مستقل (إطلاق ويب-أولًا متدرّج).
+function longEnabled(): boolean {
+  return process.env.WC_LONG_PREDICTIONS_ENABLED === "true";
+}
+
+function longGuard(res: any): boolean {
+  if (!guard(res)) return false;
+  if (!longEnabled()) {
+    res.status(503).json({ enabled: false, message: "توقّعات البطولة قيد الإطلاق" });
     return false;
   }
   return true;
@@ -116,6 +135,44 @@ router.get("/api/world-cup/predictions/match/:fixtureId", async (req, res) => {
   } catch (error) {
     console.error("[WC Predictions] match summary error:", error);
     res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
+  }
+});
+
+// ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ───────────────────────────
+
+router.get("/api/world-cup/predictions/long", async (req: any, res) => {
+  if (!longGuard(res)) return;
+  try {
+    const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
+    if (userId) noStore(res);
+    else res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json(await getWcLongPredictions(userId));
+  } catch (error) {
+    console.error("[WC Predictions] long error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعات البطولة حاليًا" });
+  }
+});
+
+router.post("/api/world-cup/predictions/long", requireAuth, async (req: any, res) => {
+  if (!longGuard(res)) return;
+  noStore(res);
+  try {
+    const kind = String(req.body?.kind) as WcLongKind;
+    const teamId = req.body?.teamId != null ? Number(req.body.teamId) : undefined;
+    const playerId = req.body?.playerId != null ? Number(req.body.playerId) : undefined;
+    const result = await submitWcLongPrediction(req.user.id, kind, { teamId, playerId });
+    if (!result.ok) {
+      const map = {
+        LOCKED: { code: 409, message: "أُغلق هذا التوقّع — تجاوزنا موعده في البطولة" },
+        INVALID: { code: 400, message: "اختيار غير صالح" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[WC Predictions] long submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
   }
 });
 

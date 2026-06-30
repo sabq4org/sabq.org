@@ -12,19 +12,15 @@ import { formatNumber } from "@/lib/format";
 import { PredictionMatchCard } from "@/components/worldcup/predictions/PredictionMatchCard";
 import { PredictionsLeaderboard } from "@/components/worldcup/predictions/PredictionsLeaderboard";
 import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictionsList";
+import { WcLongPredictions } from "@/components/worldcup/predictions/WcLongPredictions";
 import type {
   PredictableMatch,
   LeaderRow,
   MyPredictionRow,
+  WcLongData,
 } from "@/components/worldcup/predictions/predictionsTypes";
 
-type Tab = "today" | "mine" | "leaders";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "today", label: "المباريات" },
-  { key: "mine", label: "توقّعاتي" },
-  { key: "leaders", label: "المتصدّرون" },
-];
+type Tab = "today" | "mine" | "leaders" | "tournament";
 
 export default function WorldCupPredictions() {
   const { user, isAuthenticated } = useAuth();
@@ -58,6 +54,22 @@ export default function WorldCupPredictions() {
     queryKey: ["/api/world-cup/predictions/leaderboard"],
     staleTime: 60_000,
   });
+
+  // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى فعّل الخادم الميزة (يُرجع 503
+  // ⇒ query في حالة خطأ ⇒ longData غير موجود ⇒ نُخفي التبويب).
+  const { data: longData } = useQuery<WcLongData>({
+    queryKey: ["/api/world-cup/predictions/long"],
+    retry: false,
+    staleTime: 60_000,
+  });
+  const longAvailable = !!longData;
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "today", label: "المباريات" },
+    ...(longAvailable ? ([{ key: "tournament", label: "البطولة" }] as const) : []),
+    { key: "mine", label: "توقّعاتي" },
+    { key: "leaders", label: "المتصدّرون" },
+  ];
 
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
@@ -145,7 +157,7 @@ export default function WorldCupPredictions() {
         <div className="mx-auto max-w-4xl px-4 py-6">
           {/* التبويبات */}
           <div className="mb-5 inline-flex w-full gap-1 rounded-full bg-muted p-1 sm:w-auto">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -179,6 +191,10 @@ export default function WorldCupPredictions() {
             ) : (
               <SignInPrompt onLogin={goLogin} />
             ))}
+
+          {tab === "tournament" && (
+            <WcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />
+          )}
 
           {tab === "leaders" && (
             <PredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />

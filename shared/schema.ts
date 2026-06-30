@@ -1913,6 +1913,43 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
 export type WcPrediction = typeof wcPredictions.$inferSelect;
 export type WcPredictionMatch = typeof wcPredictionMatches.$inferSelect;
 
+// Long-term tournament predictions (champion / top scorer) for World Cup 2026.
+// One row per (userId, kind). WHY the extra `weight`/`lockedStage` vs the Gulf
+// Cup equivalent: the champion pool (10,000) is split WEIGHTED by each correct
+// voter's early-bird weight — the earlier you lock in, the bigger your share.
+// Weight is set at submit time from the live knockout stage: R32/earlier = 100,
+// R16 = 60, QF = 30, then the champion pick CLOSES at semi-final kickoff. The
+// top-scorer pool (3,000) is split EQUALLY (weight always 100) and closes at
+// quarter-final kickoff (end of round of 16). Settled once from the Final result
+// (champion) and the top-scorers board (top scorer) — same per-row settledAt
+// idempotency guard as wc_predictions.
+export const wcLongPredictions = pgTable("wc_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),         // champion pick (API-Football team id)
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),     // top-scorer pick (API-Football player id)
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  // Early-bird share weight as an integer percent (100 | 60 | 30). Champion
+  // only; top_scorer is always 100 (equal split).
+  weight: integer("weight").notNull().default(100),
+  // Knockout stage active when the pick was locked: 'r32' | 'r16' | 'qf'.
+  lockedStage: text("locked_stage").notNull().default("r32"),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_wc_long_user_kind").on(table.userId, table.kind),
+  index("idx_wc_long_kind").on(table.kind),
+]);
+
+export type WcLongPrediction = typeof wcLongPredictions.$inferSelect;
+
 // ============================================================================
 // Asian Cup 2027 — Smart Predictions Game
 // Fixtures are NOT stored (fetched live from API-Football via asianCupService).
