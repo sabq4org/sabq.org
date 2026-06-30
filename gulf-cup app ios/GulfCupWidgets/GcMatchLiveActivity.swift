@@ -21,7 +21,7 @@ struct GcMatchLiveActivity: Widget {
                     GcTeamBadge(context.attributes, side: .away)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    GcCenterScore(context, compact: false)
+                    GcCenterScore(context: context, compact: false)
                 }
             } compactLeading: {
                 Text(GcLA.shortName(context.attributes.homeName)).font(.system(size: 13, weight: .bold))
