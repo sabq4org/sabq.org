@@ -397,6 +397,8 @@ nonisolated struct WCPredictionHistoryItem: Decodable, Identifiable, Hashable {
     let awayTeamLogo: String?
     let finalHome: Int?
     let finalAway: Int?
+    let finalPenHome: Int?
+    let finalPenAway: Int?
     let matchStatus: String?
     let winnersCount: Int?
     let pointsPerWinner: Int?

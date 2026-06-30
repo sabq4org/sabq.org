@@ -684,6 +684,8 @@ data class WcPredictionHistoryItem(
     val awayTeamLogo: String? = null,
     val finalHome: Int? = null,
     val finalAway: Int? = null,
+    val finalPenHome: Int? = null,
+    val finalPenAway: Int? = null,
     val matchStatus: String? = null,
 )
 

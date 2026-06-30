@@ -64,6 +64,15 @@ export function MyPredictionsList({ predictions, isLoading }: Props) {
                   <div>
                     <p className="text-[10px] text-muted-foreground">النتيجة</p>
                     <p className="text-lg font-black tabular-nums" dir="ltr">{p.finalHome} - {p.finalAway}</p>
+                    {/* خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح. */}
+                    {p.finalPenHome != null && p.finalPenAway != null && p.finalPenHome !== p.finalPenAway && (
+                      <p className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400" dir="rtl">
+                        ترجيح{" "}
+                        <span dir="ltr">{Math.max(p.finalPenHome, p.finalPenAway)}-{Math.min(p.finalPenHome, p.finalPenAway)}</span>
+                        {" · "}
+                        {(p.finalPenHome > p.finalPenAway ? p.homeTeamName : p.awayTeamName) ?? ""}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

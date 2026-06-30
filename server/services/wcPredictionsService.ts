@@ -263,6 +263,8 @@ export async function getMyPredictions(userId: string) {
       awayTeamLogo: wcPredictionMatches.awayTeamLogo,
       finalHome: wcPredictionMatches.finalHome,
       finalAway: wcPredictionMatches.finalAway,
+      finalPenHome: wcPredictionMatches.finalPenHome,
+      finalPenAway: wcPredictionMatches.finalPenAway,
       matchStatus: wcPredictionMatches.status,
       winnersCount: wcPredictionMatches.winnersCount,
       pointsPerWinner: wcPredictionMatches.pointsPerWinner,
@@ -378,6 +380,9 @@ export async function settleFinishedMatches(): Promise<SettlementSummary> {
 
           const finalHome = fx.goals.home as number;
           const finalAway = fx.goals.away as number;
+          // ركلات الترجيح (إن حُسمت بها) — نُخزّنها لإظهار «من تأهّل» في السجلّ.
+          const finalPenHome = fx.penalties?.home ?? null;
+          const finalPenAway = fx.penalties?.away ?? null;
 
           const correctRows = await tx
             .select({ userId: wcPredictions.userId })
@@ -425,6 +430,8 @@ export async function settleFinishedMatches(): Promise<SettlementSummary> {
               status: "settled",
               finalHome,
               finalAway,
+              finalPenHome,
+              finalPenAway,
               winnersCount: n,
               predictionsCount: Number(total ?? 0),
               pointsPerWinner: per,

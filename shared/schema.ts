@@ -1894,6 +1894,9 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
   awayTeamLogo: text("away_team_logo").notNull().default(""),
   finalHome: integer("final_home"),   // null until settled
   finalAway: integer("final_away"),   // null until settled
+  // ركلات الترجيح عند حسم خروج المغلوب — null ما لم تُحسم المباراة بالترجيح.
+  finalPenHome: integer("final_pen_home"),
+  finalPenAway: integer("final_pen_away"),
   // 'open' (accepting predictions) | 'locked' (kicked off) | 'settled'.
   status: text("status").notNull().default("open"),
   winnersCount: integer("winners_count").notNull().default(0),

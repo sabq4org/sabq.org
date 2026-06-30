@@ -474,7 +474,13 @@ private struct WCPredMineTab: View {
     }
 
     private func row(_ item: WCPredictionHistoryItem) -> some View {
-        HStack(spacing: 10) {
+        // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح.
+        let penWin: (name: String, w: Int, l: Int)? = {
+            guard let ph = item.finalPenHome, let pa = item.finalPenAway, ph != pa else { return nil }
+            let homeWon = ph > pa
+            return ((homeWon ? item.homeTeamName : item.awayTeamName) ?? "", max(ph, pa), min(ph, pa))
+        }()
+        return HStack(spacing: 10) {
             logo(item.homeTeamLogo)
             VStack(spacing: 2) {
                 Text("\(item.predAway) - \(item.predHome)")
@@ -491,6 +497,11 @@ private struct WCPredMineTab: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(item.homeTeamName ?? "") × \(item.awayTeamName ?? "")")
                     .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                if let pw = penWin {
+                    Text("فاز \(pw.name) بالترجيح (\(pw.w)-\(pw.l))")
+                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
                 statusBadge(item.status, points: item.pointsAwarded)
             }
             Spacer(minLength: 0)
