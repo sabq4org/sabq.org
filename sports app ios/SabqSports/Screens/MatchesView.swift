@@ -102,6 +102,46 @@ nonisolated struct SpWcStandingRow: Decodable, Identifiable {
 nonisolated struct SpWcBracket: Decodable {
     let source: String?
     let rounds: [SpWcBracketRound]
+    let tree: SpWcBracketTree?
+}
+
+nonisolated struct SpWcBracketTree: Decodable {
+    let columns: [SpWcBracketColumn]
+    let thirdPlace: SpWcFixture?
+    let hasAny: Bool?
+}
+
+nonisolated struct SpWcBracketColumn: Decodable, Identifiable {
+    let key: String
+    let label: String
+    let roundIndex: Int
+    let slots: [SpWcBracketSlot]
+    var id: String { key }
+}
+
+nonisolated struct SpWcBracketSlot: Decodable, Identifiable {
+    let matchNo: Int
+    let fixture: SpWcFixture?
+    let sources: [Int]?
+    let topTeam: SpWcTeam?
+    let bottomTeam: SpWcTeam?
+    let topLabel: String?
+    let bottomLabel: String?
+    var id: Int { matchNo }
+
+    func resolvedHome(from fx: SpWcFixture?) -> (team: SpWcTeam?, label: String) {
+        let side = fx?.home
+        if let t = side, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
+        if let t = topTeam, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
+        return (nil, topLabel ?? "يتحدد لاحقًا")
+    }
+
+    func resolvedAway(from fx: SpWcFixture?) -> (team: SpWcTeam?, label: String) {
+        let side = fx?.away
+        if let t = side, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
+        if let t = bottomTeam, t.id > 0, !t.logo.isEmpty { return (t, t.name) }
+        return (nil, bottomLabel ?? "يتحدد لاحقًا")
+    }
 }
 
 nonisolated struct SpWcBracketRound: Decodable, Identifiable {
@@ -375,6 +415,7 @@ extension VaraTeamStrength {
 
 struct MatchesView: View {
     @State private var fixtures: [SpWcFixture] = []
+    @State private var bracketSlotsByFixture: [Int: SpWcBracketSlot] = [:]
     @State private var visibleDays: [SpWcDay] = []
     @State private var loading = true
     @State private var loadError: String?
@@ -791,7 +832,7 @@ struct MatchesView: View {
     private func matchGroup(_ fixtures: [SpWcFixture]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
-                SpWcMatchRow(fixture: f)
+                SpWcMatchRow(fixture: f, slot: bracketSlotsByFixture[f.id])
                 if idx < fixtures.count - 1 {
                     Divider()
                         .overlay(SpTheme.outline.opacity(0.75))
@@ -990,7 +1031,11 @@ struct MatchesView: View {
     private func load(force: Bool = false) async {
         if !force { loading = true }
         do {
-            let resp = try await APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
+            async let fixturesResp = APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
+            async let bracketResp = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: force)
+            let resp = try await fixturesResp
+            let bracket = await bracketResp
+            rebuildBracketLookup(bracket)
             if visualSignature(resp.fixtures) != visualSignature(fixtures) {
                 fixtures = resp.fixtures
                 rebuildDays(keepSelection: true)
@@ -1002,6 +1047,16 @@ struct MatchesView: View {
             if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? "تعذّر الاتصال بخادم البيانات" }
         }
         loading = false
+    }
+
+    private func rebuildBracketLookup(_ bracket: SpWcBracket?) {
+        var map: [Int: SpWcBracketSlot] = [:]
+        for col in bracket?.tree?.columns ?? [] {
+            for slot in col.slots {
+                if let id = slot.fixture?.id { map[id] = slot }
+            }
+        }
+        bracketSlotsByFixture = map
     }
 
     private func visualSignature(_ rows: [SpWcFixture]) -> String {
@@ -1027,6 +1082,7 @@ struct MatchesView: View {
 
 private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
+    var slot: SpWcBracketSlot?
 
     // أحجام موحّدة لكل الصفوف (منتهية/جارية/قادمة) — هذا ما يمنح القائمة مظهر
     // «دوري» المنظّم: الأعلام تصطفّ في عمودين نظيفين والنتائج في عمود واحد بالمنتصف.
@@ -1057,9 +1113,9 @@ private struct SpWcMatchRow: View {
         } label: {
             VStack(spacing: 7) {
                 HStack(spacing: 6) {
-                    teamSide(fixture.home, home: true)
+                    teamSide(home: true)
                     centerColumn
-                    teamSide(fixture.away, home: false)
+                    teamSide(home: false)
                 }
             }
             .padding(.vertical, 10)
@@ -1073,16 +1129,29 @@ private struct SpWcMatchRow: View {
     // الجانب على طراز «دوري» (مطابق للصورة): العَلَم ملاصق للنتيجة في المنتصف
     // (يحاذيها من يمينها/يسارها)، والاسم يمتدّ نحو الطرف الخارجي. الـ Spacer يدفع
     // العَلَم نحو المنتصف فتصطفّ الأعلام في عمودين يحاذيان النتيجة عبر كل الصفوف.
-    private func teamSide(_ team: SpWcTeam, home: Bool) -> some View {
-        let logo = SpTeamLogo(logo: team.logo, size: logoSize)
-        let name = teamName(team, home: home)
+    private var homeResolved: (team: SpWcTeam?, label: String) {
+        if let slot { return slot.resolvedHome(from: fixture) }
+        if fixture.home.id > 0, !fixture.home.logo.isEmpty { return (fixture.home, fixture.home.name) }
+        return (nil, fixture.home.name)
+    }
+
+    private var awayResolved: (team: SpWcTeam?, label: String) {
+        if let slot { return slot.resolvedAway(from: fixture) }
+        if fixture.away.id > 0, !fixture.away.logo.isEmpty { return (fixture.away, fixture.away.name) }
+        return (nil, fixture.away.name)
+    }
+
+    private func teamSide(home: Bool) -> some View {
+        let resolved = home ? homeResolved : awayResolved
+        let logoView = teamLogo(resolved.0, label: resolved.1)
+        let name = teamName(resolved.1, home: home, placeholder: resolved.0 == nil)
         return HStack(spacing: 6) {
             if home {
                 Spacer(minLength: 4)
                 name
-                logo
+                logoView
             } else {
-                logo
+                logoView
                 name
                 Spacer(minLength: 4)
             }
@@ -1090,14 +1159,30 @@ private struct SpWcMatchRow: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func teamName(_ team: SpWcTeam, home: Bool) -> some View {
+    @ViewBuilder private func teamLogo(_ team: SpWcTeam?, label: String) -> some View {
+        if let team, team.id > 0, !team.logo.isEmpty {
+            SpTeamLogo(logo: team.logo, size: logoSize)
+        } else {
+            Circle()
+                .stroke(SpTheme.outline, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                .frame(width: logoSize, height: logoSize)
+                .overlay {
+                    Text("?")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                }
+        }
+    }
+
+    private func teamName(_ text: String, home: Bool, placeholder: Bool) -> some View {
         let winner = isWinner(home: home)
-        return Text(team.name)
-            .font(SportsFonts.app(size: 12.5, weight: winner ? .heavy : .semibold))
-            .foregroundStyle(SpTheme.onDarkStrong)
-            .lineLimit(1)
+        return Text(text)
+            .font(SportsFonts.app(size: placeholder ? 10.5 : 12.5, weight: winner ? .heavy : .semibold))
+            .foregroundStyle(placeholder ? SpTheme.onDarkDim : SpTheme.onDarkStrong)
+            .lineLimit(placeholder ? 2 : 1)
             .minimumScaleFactor(0.76)
             .allowsTightening(true)
+            .multilineTextAlignment(home ? .trailing : .leading)
     }
 
     // عمود النتيجة الثابت بالمنتصف — نتيجة مدمجة + سطر حالة موجز تحتها.

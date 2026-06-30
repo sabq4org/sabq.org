@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // هوية «VARA الرياضي» البصرية — **تكيّفية فاتح/داكن باحترافية**.
 //
@@ -10,6 +13,72 @@ import SwiftUI
 // كل لون يُحلّ ديناميكيًّا حسب مظهر الجهاز عبر `dyn(فاتح:داكن:)` — فتبديل المظهر
 // (تلقائي/فاتح/داكن من «حسابي») يسري على كل الشاشات فورًا بلا تغيير أي رمز.
 // كل أسماء الرموز محفوظة (470+ استخدامًا)؛ تغيّر تمثيلها إلى لون تكيّفي فقط.
+// MARK: - لوحة ألوان النادي (هوية المشجّع)
+//
+// كل مشجّع يميل للون ناديه. اللون المحوري في التطبيق (الأخضر تاريخيًّا) صار
+// يتبع «اللوحة المختارة»، فيُعاد تلوين كل الواجهة عند تبديل النادي. النطاق:
+// اللون المحوري فقط (أزرار/أيقونات/حالات نشطة/أشرطة/الترويسة الملوّنة)؛ خلفيات
+// المحتوى تبقى محايدة لضمان القراءة.
+nonisolated struct SpTeamPalette: Identifiable, Equatable {
+    let id: String
+    let name: String
+    // الأساسي (المحوري) — يحلّ محلّ الأخضر. اخترنا اللون الأوضح للقراءة كنصّ/زرّ.
+    let primaryLight: Color
+    let primaryDark: Color
+    let softLight: Color
+    let softDark: Color
+    let deepLight: Color
+    let deepDark: Color
+    // لمسة ثانوية (مثل أصفر النصر) — للشارات واللمسات الصغيرة فقط.
+    let secondaryLight: Color
+    let secondaryDark: Color
+
+    /// يشتقّ درجة أفتح/أغمق من لون أساس (لاشتقاق soft/deep تلقائيًّا).
+    nonisolated static func shade(_ c: Color, _ factor: CGFloat) -> Color {
+        #if canImport(UIKit)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        if UIColor(c).getHue(&h, saturation: &s, brightness: &b, alpha: &a) {
+            return Color(hue: Double(h), saturation: Double(min(1, s)),
+                         brightness: Double(max(0, min(1, b * factor))), opacity: Double(a))
+        }
+        #endif
+        return c
+    }
+
+    /// يبني لوحة من لون أساس (فاتح/داكن) باشتقاق الدرجات.
+    nonisolated static func make(_ id: String, _ name: String, _ light: Color, _ dark: Color) -> SpTeamPalette {
+        SpTeamPalette(
+            id: id, name: name,
+            primaryLight: light, primaryDark: dark,
+            softLight: shade(light, 1.16), softDark: shade(dark, 1.10),
+            deepLight: shade(light, 0.76), deepDark: shade(dark, 0.80),
+            secondaryLight: light, secondaryDark: dark
+        )
+    }
+
+    // ١٠ ألوان مميّزة — كل لون قابل للقراءة كنصّ/زرّ على الأبيض (نسخة فاتحة أغمق)
+    // وعلى الداكن (نسخة داكنة أفتح). الأخضر هو الافتراضي.
+    static let emerald  = make("emerald",  "أخضر",   Color(red: 0.09, green: 0.43, blue: 0.32), Color(red: 0.24, green: 0.68, blue: 0.50))
+    static let blue     = make("blue",     "أزرق",   Color(red: 0.12, green: 0.36, blue: 0.78), Color(red: 0.40, green: 0.60, blue: 0.98))
+    static let teal     = make("teal",     "سماوي",  Color(red: 0.06, green: 0.49, blue: 0.55), Color(red: 0.30, green: 0.74, blue: 0.82))
+    static let indigo   = make("indigo",   "نيلي",   Color(red: 0.26, green: 0.30, blue: 0.66), Color(red: 0.52, green: 0.56, blue: 0.96))
+    static let purple   = make("purple",   "بنفسجي", Color(red: 0.42, green: 0.27, blue: 0.74), Color(red: 0.64, green: 0.52, blue: 0.96))
+    static let pink     = make("pink",     "وردي",   Color(red: 0.78, green: 0.22, blue: 0.48), Color(red: 0.96, green: 0.46, blue: 0.67))
+    static let red      = make("red",      "أحمر",   Color(red: 0.80, green: 0.20, blue: 0.22), Color(red: 0.97, green: 0.43, blue: 0.43))
+    static let orange   = make("orange",   "برتقالي", Color(red: 0.80, green: 0.42, blue: 0.10), Color(red: 0.98, green: 0.61, blue: 0.27))
+    static let amber    = make("amber",    "كهرماني", Color(red: 0.70, green: 0.52, blue: 0.06), Color(red: 0.93, green: 0.73, blue: 0.22))
+    static let graphite = make("graphite", "رمادي",  Color(red: 0.30, green: 0.34, blue: 0.40), Color(red: 0.62, green: 0.67, blue: 0.74))
+
+    static let all: [SpTeamPalette] = [
+        .emerald, .blue, .teal, .indigo, .purple, .pink, .red, .orange, .amber, .graphite
+    ]
+    static func by(id: String) -> SpTeamPalette { all.first { $0.id == id } ?? .emerald }
+}
+
+/// اللوحة الفعّالة — حامل غير معزول كي يقرأه `SpTheme` (nonisolated) مباشرةً.
+/// يُحدَّث من `SpAccentTheme` (MainActor) عند تبديل النادي.
+nonisolated(unsafe) var spActivePalette: SpTeamPalette = .emerald
+
 nonisolated enum SpTheme {
     /// مُعرّف المنتخب السعودي (api-sports) — للإبراز السعودي.
     static let saudiId = 23
@@ -22,25 +91,28 @@ nonisolated enum SpTheme {
     }
 
     // ── ألوان العلامة: الأخضر الزمردي (أسطع قليلًا في الداكن)، الذهبي للميداليات ──
-    static let ink       = dyn(Color(red: 0.08, green: 0.24, blue: 0.18), Color(red: 0.22, green: 0.58, blue: 0.44))
-    static let greenDeep = dyn(Color(red: 0.06, green: 0.30, blue: 0.22), Color(red: 0.10, green: 0.40, blue: 0.30))
-    static let green     = dyn(Color(red: 0.09, green: 0.43, blue: 0.32), Color(red: 0.24, green: 0.68, blue: 0.50))
-    static let greenSoft = dyn(Color(red: 0.16, green: 0.56, blue: 0.42), Color(red: 0.32, green: 0.76, blue: 0.56))
+    // اللون المحوري (الأخضر سابقًا) يتبع لوحة النادي المختارة عبر `spActivePalette`.
+    static var ink: Color       { dyn(spActivePalette.deepLight, spActivePalette.primaryDark) }
+    static var greenDeep: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
+    static var green: Color     { dyn(spActivePalette.primaryLight, spActivePalette.primaryDark) }
+    static var greenSoft: Color { dyn(spActivePalette.softLight, spActivePalette.softDark) }
     static let teal      = dyn(Color(red: 0.12, green: 0.55, blue: 0.52), Color(red: 0.28, green: 0.74, blue: 0.70))
     static let gold      = dyn(Color(red: 0.82, green: 0.62, blue: 0.16), Color(red: 0.96, green: 0.79, blue: 0.36))
     static let goldDeep  = dyn(Color(red: 0.70, green: 0.52, blue: 0.12), Color(red: 0.86, green: 0.69, blue: 0.28))
     static let goldSoft  = dyn(Color(red: 0.93, green: 0.80, blue: 0.42), Color(red: 0.98, green: 0.86, blue: 0.56))
     static let crimson   = dyn(Color(red: 0.86, green: 0.18, blue: 0.24), Color(red: 0.98, green: 0.40, blue: 0.45))
-    static let leaf      = dyn(Color(red: 0.16, green: 0.62, blue: 0.38), Color(red: 0.30, green: 0.78, blue: 0.52))
+    static var leaf: Color { dyn(spActivePalette.softLight, spActivePalette.softDark) }
 
-    /// أخضر العلامة للإبراز/الأيقونات.
-    static let emeraldDeep = dyn(Color(red: 0.09, green: 0.43, blue: 0.32), Color(red: 0.24, green: 0.68, blue: 0.50))
+    /// اللون المحوري للإبراز/الأيقونات (يتبع لوحة النادي).
+    static var emeraldDeep: Color { dyn(spActivePalette.primaryLight, spActivePalette.primaryDark) }
+    /// لمسة لون النادي الثانوية (مثل أصفر النصر) — للشارات واللمسات الصغيرة.
+    static var teamSecondary: Color { dyn(spActivePalette.secondaryLight, spActivePalette.secondaryDark) }
 
     // ── الترويسات الخضراء (شرائط علوية بنص أبيض — تبقى خضراء في المظهرين) ──
-    static var heroTop: Color { dyn(Color(red: 0.10, green: 0.44, blue: 0.33), Color(red: 0.10, green: 0.42, blue: 0.31)) }
-    static var heroBottom: Color { dyn(Color(red: 0.07, green: 0.34, blue: 0.25), Color(red: 0.05, green: 0.26, blue: 0.20)) }
-    static var stadiumTop: Color { dyn(Color(red: 0.08, green: 0.37, blue: 0.28), Color(red: 0.08, green: 0.34, blue: 0.26)) }
-    static var stadiumBottom: Color { dyn(Color(red: 0.06, green: 0.28, blue: 0.21), Color(red: 0.04, green: 0.22, blue: 0.17)) }
+    static var heroTop: Color { dyn(spActivePalette.primaryLight, spActivePalette.deepDark) }
+    static var heroBottom: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
+    static var stadiumTop: Color { dyn(spActivePalette.primaryLight, spActivePalette.deepDark) }
+    static var stadiumBottom: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
 
     /// تدرّج الترويسة الخضراء (نص أبيض دائمًا).
     static var heroGradient: LinearGradient {
@@ -159,5 +231,36 @@ final class SpThemeMode {
         case .light:  return .light
         case .dark:   return .dark
         }
+    }
+}
+
+// MARK: - لون النادي (هوية المشجّع)
+//
+// يُحقن في البيئة ويُطبَّق في `SabqSportsApp`. تبديل النادي يحدّث `spActivePalette`
+// (الذي يقرأه SpTheme) ويُعيد بناء الواجهة لتلتقط الألوان الجديدة. الاختيار محفوظ.
+@MainActor
+@Observable
+final class SpAccentTheme {
+    static let shared = SpAccentTheme()
+
+    private let key = "sabqsports.accent.team"
+
+    var paletteId: String {
+        didSet {
+            UserDefaults.standard.set(paletteId, forKey: key)
+            spActivePalette = SpTeamPalette.by(id: paletteId)
+            // إعادة بناء الواجهة (عبر .id) تعود لتبويب المباريات؛ ولأن حالة إخفاء
+            // الشريط السفلي عامة ومشتركة وقد تكون مفعّلة من تمرير «حسابي»، نُعيد
+            // إظهار الشريط صراحةً كي لا يبقى مختفيًا بعد تبديل اللون.
+            SpTabBarVisibility.shared.hidden = false
+        }
+    }
+
+    var palette: SpTeamPalette { SpTeamPalette.by(id: paletteId) }
+
+    private init() {
+        let saved = UserDefaults.standard.string(forKey: key) ?? SpTeamPalette.emerald.id
+        paletteId = saved
+        spActivePalette = SpTeamPalette.by(id: saved)
     }
 }

@@ -10,6 +10,7 @@ struct SabqSportsApp: App {
     @State private var tabBarVis = SpTabBarVisibility.shared
     @State private var liveActivity = SpLiveActivityManager.shared
     @State private var themeMode = SpThemeMode.shared
+    @State private var accent = SpAccentTheme.shared
 
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
@@ -25,6 +26,10 @@ struct SabqSportsApp: App {
                 .environment(tabBarVis)
                 .environment(liveActivity)
                 .environment(themeMode)
+                .environment(accent)
+                // إعادة بناء الشجرة عند تبديل لون النادي كي تلتقط كل الشاشات اللون
+                // الجديد فورًا (اللون المحوري يُقرأ من spActivePalette أثناء الرسم).
+                .id(accent.paletteId)
                 .sportsRTL()
                 .preferredColorScheme(themeMode.colorScheme)
                 .task { await auth.restore() }
