@@ -2935,7 +2935,14 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
   updatedAt: true 
 }).extend({
   type: z.enum(["core", "dynamic", "smart", "seasonal"]).default("core"),
-  status: z.enum(["active", "inactive"]).default("active"),
+  // "visible" is the value every public-facing read path (homepage, /categories,
+  // mobile API, edge SEO meta — see server/routes/edgeMeta.ts "category status
+  // trap" comment) checks to decide whether a category is shown publicly.
+  // "active" is NOT public-visible despite the name; it only existed here as the
+  // schema default. Omitting "visible" from this enum used to make the dashboard
+  // form/API reject it, which is what silently downgraded "visible" categories to
+  // "active" (and made them disappear) on every edit.
+  status: z.enum(["visible", "active", "inactive"]).default("active"),
   seasonalRules: seasonalRulesSchema,
   features: categoryFeaturesSchema,
   aiConfig: aiConfigSchema,
