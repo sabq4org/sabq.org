@@ -32,6 +32,8 @@
 		GC000017 /* GcMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100016 /* GcMatchLiveActivity.swift */; };
 		GC000018 /* GulfCupWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100017 /* GulfCupWidgetsBundle.swift */; };
 		GC000019 /* GulfCupWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = GC100030 /* GulfCupWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		GC00001A /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100025 /* GcMatchActivityAttributes.swift */; };
+		GC00001B /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100026 /* GcMatchActivityAttributes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +88,8 @@
 		GC100017 /* GulfCupWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupWidgetsBundle.swift; sourceTree = "<group>"; };
 		GC100018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		GC100019 /* GulfCupWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCupWidgets.entitlements; sourceTree = "<group>"; };
+		GC100025 /* GcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivityAttributes.swift; sourceTree = "<group>"; };
+		GC100026 /* GcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivityAttributes.swift; sourceTree = "<group>"; };
 		GC100030 /* GulfCupWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GulfCupWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		GC100020 /* GulfCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GulfCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -145,6 +149,7 @@
 				GC100024 /* GcAuthModels.swift */,
 				GC100014 /* GcMatchActivity.swift */,
 				GC100015 /* GcLiveActivityManager.swift */,
+				GC100025 /* GcMatchActivityAttributes.swift */,
 				GC100007 /* APIClient.swift */,
 				GC100008 /* FontRegistration.swift */,
 				GC100009 /* URLConstants.swift */,
@@ -174,6 +179,7 @@
 			children = (
 				GC100017 /* GulfCupWidgetsBundle.swift */,
 				GC100016 /* GcMatchLiveActivity.swift */,
+				GC100026 /* GcMatchActivityAttributes.swift */,
 				GC100018 /* Info.plist */,
 				GC100019 /* GulfCupWidgets.entitlements */,
 			);
@@ -311,6 +317,7 @@
 				GC000013 /* GcTeamProfileScreen.swift in Sources */,
 				GC000014 /* GcMatchActivity.swift in Sources */,
 				GC000015 /* GcLiveActivityManager.swift in Sources */,
+				GC00001A /* GcMatchActivityAttributes.swift in Sources */,
 				GC000007 /* APIClient.swift in Sources */,
 				GC000008 /* FontRegistration.swift in Sources */,
 				GC000009 /* URLConstants.swift in Sources */,
@@ -327,6 +334,7 @@
 				GC000018 /* GulfCupWidgetsBundle.swift in Sources */,
 				GC000017 /* GcMatchLiveActivity.swift in Sources */,
 				GC000016 /* GcMatchActivity.swift in Sources */,
+				GC00001B /* GcMatchActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
