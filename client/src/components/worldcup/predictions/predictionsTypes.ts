@@ -41,6 +41,8 @@ export type MyPredictionRow = {
   awayTeamLogo: string | null;
   finalHome: number | null;
   finalAway: number | null;
+  finalPenHome?: number | null;
+  finalPenAway?: number | null;
   matchStatus: string | null;
   winnersCount: number | null;
   pointsPerWinner: number | null;

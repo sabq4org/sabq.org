@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Clock, Lock, LogIn, Radio, Trophy, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatKickoffTime, countdownTo, type WcTeam } from "../wcTypes";
+import { formatKickoffTime, countdownTo, penaltyOutcome, type WcTeam } from "../wcTypes";
 import { formatNumber } from "@/lib/format";
 import { LiveMinute } from "../LiveMinute";
 import { ScoreStepper } from "./ScoreStepper";
@@ -75,6 +75,8 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
   const dirty = !myPrediction || myPrediction.predHome !== home || myPrediction.predAway !== away;
   const isWin = settled && myPrediction?.status === "correct";
+  // نتيجة ركلات الترجيح من الـfixture الحيّ (متاح في لوحة اليوم حتى بعد التسوية).
+  const penOutcome = penaltyOutcome(fixture);
   // التعادل ممنوع في خروج المغلوب — نُظهر التنبيه فورًا (حتى لتوقّع محفوظ مسبقًا
   // بتعادل) ونُعطِّل الحفظ حتى يختار المستخدم فائزًا.
   const drawNotAllowed = home === away && isKnockoutRound(fixture.roundEn);
@@ -116,12 +118,21 @@ export function PredictionMatchCard({ match, isAuthenticated, isSubmitting, onSu
 
           <div className="flex flex-1 flex-col items-center justify-center pt-1">
             {settled || started ? (
-              // النتيجة الفعلية (حيّة أو نهائية) — RTL: رقم المضيف يمين (تحت علمه)؛ لا تضِف dir="ltr" وإلا انقلبت النتيجة تحت الأعلام
-              <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
-                <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
-                <span className="text-muted-foreground text-2xl">-</span>
-                <span>{settled ? settlement!.finalAway : fixture.goals.away ?? 0}</span>
-              </div>
+              <>
+                {/* النتيجة الفعلية (حيّة أو نهائية) — RTL: رقم المضيف يمين (تحت علمه)؛ لا تضِف dir="ltr" وإلا انقلبت النتيجة تحت الأعلام */}
+                <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
+                  <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
+                  <span className="text-muted-foreground text-2xl">-</span>
+                  <span>{settled ? settlement!.finalAway : fixture.goals.away ?? 0}</span>
+                </div>
+                {/* خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح. */}
+                {penOutcome && (
+                  <span className="mt-1 text-center text-[11px] font-bold text-emerald-600 dark:text-emerald-400" dir="rtl">
+                    فاز {penOutcome.winnerName} بالترجيح{" "}
+                    <span dir="ltr">({penOutcome.winnerScore}-{penOutcome.loserScore})</span>
+                  </span>
+                )}
+              </>
             ) : (
               // عدّادات الإدخال
               <div className="flex items-center gap-3">

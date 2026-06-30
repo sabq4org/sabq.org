@@ -333,6 +333,16 @@ private fun LockedView(m: WcPredictableMatch) {
                 LtrText("${s.finalAway} - ${s.finalHome}", WcColors.onDark, 15, FontWeight.Black)
             }
         }
+        // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
+        m.fixture.penaltyOutcome?.let {
+            Text(
+                "فاز ${it.winnerName} بالترجيح (${it.winnerScore}-${it.loserScore})",
+                color = WcColors.emeraldDeep,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
+        }
         val mine = m.myPrediction
         if (mine != null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -423,6 +433,16 @@ private fun MineRow(item: WcPredictionHistoryItem) {
         MineLogo(item.awayTeamLogo)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
             Text("${item.homeTeamName ?: ""} × ${item.awayTeamName ?: ""}", color = WcColors.onDark, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح.
+            val ph = item.finalPenHome
+            val pa = item.finalPenAway
+            if (ph != null && pa != null && ph != pa) {
+                val winner = if (ph > pa) item.homeTeamName else item.awayTeamName
+                Text(
+                    "فاز ${winner ?: ""} بالترجيح (${maxOf(ph, pa)}-${minOf(ph, pa)})",
+                    color = WcColors.emeraldDeep, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                )
+            }
             StatusBadge(item.status, item.pointsAwarded)
         }
     }
