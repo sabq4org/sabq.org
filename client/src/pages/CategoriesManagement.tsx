@@ -44,6 +44,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -141,11 +148,11 @@ function SortableCategoryItem({
             <Badge variant="outline" data-testid={`slug-${category.id}`}>
               {category.slug}
             </Badge>
-            <Badge 
-              variant={category.status === "active" ? "default" : "secondary"}
+            <Badge
+              variant={category.status === "visible" || category.status === "active" ? "default" : "secondary"}
               data-testid={`status-${category.id}`}
             >
-              {category.status === "active" ? "نشط" : "معطل"}
+              {category.status === "visible" ? "ظاهر للزوار" : category.status === "active" ? "نشط (غير ظاهر في /categories)" : "معطل"}
             </Badge>
             {category.heroImageUrl && (
               <Badge variant="outline">
@@ -357,7 +364,13 @@ export default function CategoriesManagement() {
       color: category.color || "",
       heroImageUrl: category.heroImageUrl || "",
       displayOrder: category.displayOrder || 0,
-      status: (category.status === "inactive" ? "inactive" : "active") as CategoryFormValues["status"],
+      // Preserve the category's real status (e.g. "visible") as-is. Coercing it to
+      // active/inactive here used to silently flip "visible" categories to "active"
+      // on every save (rename, recolor, image upload, etc.), which removed them from
+      // the public /categories page, homepage, and SEO routes (all of which check
+      // status === "visible"). There is no UI control for status in this form, so we
+      // just round-trip whatever value the category already has.
+      status: category.status as CategoryFormValues["status"],
     });
   };
 
@@ -629,6 +642,29 @@ export default function CategoriesManagement() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>الحالة</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "active"}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-status">
+                          <SelectValue placeholder="اختر الحالة" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="visible">ظاهر للزوار (يظهر في /categories والصفحة الرئيسية)</SelectItem>
+                        <SelectItem value="active">نشط (غير ظاهر للزوار)</SelectItem>
+                        <SelectItem value="inactive">معطل</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

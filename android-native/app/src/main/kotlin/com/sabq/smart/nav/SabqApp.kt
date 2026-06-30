@@ -110,6 +110,9 @@ object SabqRoutes {
     const val WorldCupMatch = "world-cup/match/{id}"
     const val WorldCupTeam = "world-cup/team/{id}?name={name}&logo={logo}"
     const val WorldCupPredictions = "world-cup/predictions"
+    const val GulfCup = "gulf-cup"
+    const val GulfCupMatch = "gulf-cup/match/{id}"
+    const val GulfCupTeam = "gulf-cup/team/{id}?name={name}&logo={logo}"
     // مُقترب — analytical-angles surface (landing + angle + topic + writer).
     const val Muqtarab = "muqtarab"
     const val MuqtarabAngle = "muqtarab/angle/{slug}"
@@ -120,6 +123,11 @@ object SabqRoutes {
 
     fun worldCupTeam(id: Int, name: String, logo: String): String =
         "world-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun gulfCupMatch(id: Int): String = "gulf-cup/match/$id"
+
+    fun gulfCupTeam(id: Int, name: String, logo: String): String =
+        "gulf-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
 
     fun muqtarabAngle(slug: String): String = "muqtarab/angle/${Uri.encode(slug)}"
 
@@ -236,6 +244,9 @@ fun SabqApp(
                         },
                         onWorldCupClick = {
                             navController.navigate(SabqRoutes.WorldCup)
+                        },
+                        onGulfCupClick = {
+                            navController.navigate(SabqRoutes.GulfCup)
                         },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
@@ -506,6 +517,36 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.worldCupMatch(id)) },
                         onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(SabqRoutes.GulfCup) {
+                    com.sabq.smart.feature.gulfcup.GulfCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.gulfCupTeam(team.id, team.name, team.logo)) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.GulfCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) {
+                    com.sabq.smart.feature.gulfcup.GulfCupMatchScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.GulfCupTeam,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("logo") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.gulfcup.GulfCupTeamScreen(
+                        teamId = teamId,
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
                     )
                 }
                 composable(SabqRoutes.Muqtarab) {

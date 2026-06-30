@@ -385,4 +385,254 @@ export async function getGcOverview(): Promise<GcOverview> {
   });
 }
 
+// ---------- صفحة المنتخب + تفاصيل المباراة (MVP من البيانات الثابتة) ----------
+
+export interface GcTeamStats {
+  groupName: string | null;
+  rank: number | null;
+  played: number;
+  win: number;
+  draw: number;
+  lose: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalsDiff: number;
+  points: number;
+  form: ("W" | "D" | "L")[];
+}
+
+export interface GcTeamProfile {
+  team: GcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  group: GcGroup | null;
+  stats: GcTeamStats;
+  nextMatch: GcFixture | null;
+  fixtures: GcFixture[];
+  squad: { id: number; name: string; number: number | null; position: string }[];
+}
+
+export interface GcMatchEvent {
+  minute: number;
+  extraMinute: number | null;
+  teamId: number;
+  type: string;
+  label: string;
+  player: string | null;
+}
+
+export interface GcLineupPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string | null;
+}
+
+export interface GcLineup {
+  teamId: number;
+  teamName: string;
+  formation: string | null;
+  coach: string;
+  startXI: GcLineupPlayer[];
+  substitutes: GcLineupPlayer[];
+}
+
+export interface GcStatistic {
+  key: string;
+  label: string;
+  home: string;
+  away: string;
+}
+
+export interface GcMatchDetail {
+  fixture: GcFixture;
+  events: GcMatchEvent[];
+  lineups: GcLineup[];
+  statistics: GcStatistic[];
+  headToHead: GcFixture[];
+}
+
+function resultForTeam(fixture: GcFixture, teamId: number): "W" | "D" | "L" | null {
+  if (!fixture.status.finished || fixture.goals.home == null || fixture.goals.away == null) return null;
+  const own = fixture.home.id === teamId ? fixture.goals.home : fixture.goals.away;
+  const against = fixture.home.id === teamId ? fixture.goals.away : fixture.goals.home;
+  if (own > against) return "W";
+  if (own < against) return "L";
+  return "D";
+}
+
+/** صفحة المنتخب: مجموعة + إحصاءات + جدول مبارياته (القائمة/المدرب فارغان حتى موسم API-Football). */
+export async function getGcTeamProfile(teamId: number): Promise<GcTeamProfile | null> {
+  if (!GC_TEAM_IDS.includes(teamId)) return null;
+
+  const [fixtures, standings, teams] = await Promise.all([
+    getGcFixtures(),
+    getGcStandings(),
+    getGcTeams(),
+  ]);
+
+  const team = teams.find((t) => t.id === teamId) ?? seedTeam(teamId);
+  const teamFixtures = fixtures
+    .filter((f) => f.home.id === teamId || f.away.id === teamId)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  const group = standings.find((g) => g.rows.some((r) => r.team.id === teamId)) ?? null;
+  const row = group?.rows.find((r) => r.team.id === teamId) ?? null;
+  const finishedFixtures = teamFixtures.filter(
+    (f) => f.status.finished && f.goals.home != null && f.goals.away != null,
+  );
+  const fallbackStats = finishedFixtures.reduce(
+    (acc, fixture) => {
+      const own = fixture.home.id === teamId ? fixture.goals.home! : fixture.goals.away!;
+      const against = fixture.home.id === teamId ? fixture.goals.away! : fixture.goals.home!;
+      acc.played += 1;
+      acc.goalsFor += own;
+      acc.goalsAgainst += against;
+      if (own > against) {
+        acc.win += 1;
+        acc.points += 3;
+      } else if (own === against) {
+        acc.draw += 1;
+        acc.points += 1;
+      } else {
+        acc.lose += 1;
+      }
+      return acc;
+    },
+    { played: 0, win: 0, draw: 0, lose: 0, goalsFor: 0, goalsAgainst: 0, points: 0 },
+  );
+  const form = finishedFixtures
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .map((f) => resultForTeam(f, teamId))
+    .filter((x): x is "W" | "D" | "L" => Boolean(x))
+    .slice(0, 5);
+  const nextMatch = teamFixtures.find((f) => !f.status.finished) ?? null;
+
+  return {
+    team,
+    isSaudi: teamId === SAUDI_TEAM_ID,
+    coach: null,
+    group,
+    stats: {
+      groupName: group?.name ?? null,
+      rank: row?.rank ?? null,
+      played: row?.played ?? fallbackStats.played,
+      win: row?.win ?? fallbackStats.win,
+      draw: row?.draw ?? fallbackStats.draw,
+      lose: row?.lose ?? fallbackStats.lose,
+      goalsFor: row?.goalsFor ?? fallbackStats.goalsFor,
+      goalsAgainst: row?.goalsAgainst ?? fallbackStats.goalsAgainst,
+      goalsDiff: row?.goalsDiff ?? fallbackStats.goalsFor - fallbackStats.goalsAgainst,
+      points: row?.points ?? fallbackStats.points,
+      form,
+    },
+    nextMatch,
+    fixtures: teamFixtures,
+    squad: [],
+  };
+}
+
+/** سجل المواجهات المباشرة بين منتخبين (من مباريات البطولة المنتهية). */
+export async function getGcHeadToHead(teamA: number, teamB: number): Promise<GcFixture[]> {
+  const fixtures = await getGcFixtures();
+  return fixtures
+    .filter(
+      (f) =>
+        f.status.finished &&
+        ((f.home.id === teamA && f.away.id === teamB) || (f.home.id === teamB && f.away.id === teamA)),
+    )
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10);
+}
+
+const MATCH_DETAIL_TTL = 5 * 60 * 1000;
+const MATCH_DETAIL_LIVE_TTL = 20 * 1000;
+
+/** تفاصيل المباراة — يُثرى من API-Football متى توفّر الموسم، وإلا بيانات الجدول الثابت. */
+export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail | null> {
+  const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
+  const known = fixtures.find((f) => f.id === fixtureId);
+  if (!known) return null;
+
+  let events: GcMatchEvent[] = [];
+  let lineups: GcLineup[] = [];
+  let statistics: GcStatistic[] = [];
+  let fixture = known;
+
+  if (apiFootballEnabled()) {
+    const ttl = known.status.live ? MATCH_DETAIL_LIVE_TTL : MATCH_DETAIL_TTL;
+    const item = await withSWR(`gc:match:${fixtureId}`, ttl, ttl * 2, async () => {
+      const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE }).catch(() => [] as any[]);
+      return rows[0] ?? null;
+    }).catch(() => null);
+
+    if (item) {
+      const code = item?.fixture?.status?.short ?? known.status.code;
+      fixture = {
+        ...known,
+        date: item.fixture?.date ?? known.date,
+        timestamp: item.fixture?.timestamp ?? known.timestamp,
+        status: {
+          code,
+          label: WC_STATUS_AR[code] ?? code,
+          elapsed: item.fixture?.status?.elapsed ?? known.status.elapsed,
+          live: WC_LIVE_STATUSES.has(code),
+          finished: WC_FINISHED_STATUSES.has(code),
+        },
+        goals: {
+          home: item.goals?.home ?? known.goals.home,
+          away: item.goals?.away ?? known.goals.away,
+        },
+      };
+      events = (item.events ?? []).map((ev: any) => ({
+        minute: ev?.time?.elapsed ?? 0,
+        extraMinute: ev?.time?.extra ?? null,
+        teamId: ev?.team?.id ?? 0,
+        type: ev?.type ?? "",
+        label: ev?.detail ?? ev?.type ?? "",
+        player: ev?.player?.name ?? null,
+      }));
+      lineups = (item.lineups ?? []).map((lineup: any) => ({
+        teamId: lineup?.team?.id ?? 0,
+        teamName: localizeGcTeam(lineup?.team?.id, lineup?.team?.name ?? ""),
+        formation: lineup?.formation ?? null,
+        coach: lineup?.coach?.name ?? "",
+        startXI: (lineup.startXI ?? []).map((p: any) => ({
+          id: p?.player?.id ?? 0,
+          name: p?.player?.name ?? "",
+          number: p?.player?.number ?? null,
+          position: p?.player?.pos ?? null,
+        })),
+        substitutes: (lineup.substitutes ?? []).map((p: any) => ({
+          id: p?.player?.id ?? 0,
+          name: p?.player?.name ?? "",
+          number: p?.player?.number ?? null,
+          position: p?.player?.pos ?? null,
+        })),
+      }));
+      const homeStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.home?.id);
+      const awayStats = (item.statistics ?? []).find((s: any) => s.team?.id === item.teams?.away?.id);
+      statistics = (homeStats?.statistics ?? []).slice(0, 12).map((stat: any) => ({
+        key: stat.type,
+        label: stat.type,
+        home: String(stat.value ?? 0),
+        away: String((awayStats?.statistics ?? []).find((s: any) => s.type === stat.type)?.value ?? 0),
+      }));
+    }
+  }
+
+  const headToHead =
+    fixture.home.id && fixture.away.id
+      ? await getGcHeadToHead(fixture.home.id, fixture.away.id).catch(() => [] as GcFixture[])
+      : [];
+
+  return { fixture, events, lineups, statistics, headToHead };
+}
+
+/** يحوّل مباراة خليجي إلى SplMatchDetail لدورة Live Activity عند فشل getMatchDetail. */
+export async function getGcFixtureForLiveActivity(fixtureId: number): Promise<GcFixture | null> {
+  const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
+  return fixtures.find((f) => f.id === fixtureId) ?? null;
+}
+
 export { TIMEZONE as GC_TIMEZONE, LEAGUE_ID as GC_LEAGUE_ID, SEASON as GC_SEASON };

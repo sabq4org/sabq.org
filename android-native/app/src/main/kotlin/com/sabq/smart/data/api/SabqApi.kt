@@ -604,6 +604,25 @@ interface SabqApi {
     @GET("https://api.sabq.org/api/world-cup/player/{id}/form")
     suspend fun getWorldCupPlayerForm(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerForm
 
+    // -- خليجي 27 (Gulf Cup 27 — جدة 2026) --------------------------------
+    @GET("https://api.sabq.org/api/gulf-cup/overview")
+    suspend fun getGulfCupOverview(): com.sabq.smart.feature.gulfcup.GcOverview
+
+    @GET("https://api.sabq.org/api/gulf-cup/fixtures")
+    suspend fun getGulfCupFixtures(): com.sabq.smart.feature.gulfcup.GcFixturesResponse
+
+    @GET("https://api.sabq.org/api/gulf-cup/standings")
+    suspend fun getGulfCupStandings(): com.sabq.smart.feature.gulfcup.GcStandingsResponse
+
+    @GET("https://api.sabq.org/api/gulf-cup/teams")
+    suspend fun getGulfCupTeams(): com.sabq.smart.feature.gulfcup.GcTeamsResponse
+
+    @GET("https://api.sabq.org/api/gulf-cup/team/{id}")
+    suspend fun getGulfCupTeam(@Path("id") teamId: Int): com.sabq.smart.feature.gulfcup.GcTeamProfile
+
+    @GET("https://api.sabq.org/api/gulf-cup/match/{id}")
+    suspend fun getGulfCupMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.gulfcup.GcMatchDetail
+
     // -- المتابعة الرياضية + تنبيهات المباريات (Bearer، عبر sabq.org) --------
     @GET("api/v1/sports/follows")
     suspend fun getSportsFollows(): com.sabq.smart.feature.worldcup.SportsFollowsResponse

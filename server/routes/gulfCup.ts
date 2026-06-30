@@ -9,6 +9,8 @@ import {
   getGcTeams,
   getGcFixtures,
   getGcStandings,
+  getGcTeamProfile,
+  getGcMatchDetail,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
 
@@ -67,6 +69,49 @@ export function registerGulfCupRoutes(app: Express) {
     } catch (error) {
       console.error("[GulfCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/team/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ message: "معرّف منتخب غير صالح" });
+      return;
+    }
+    try {
+      const profile = await getGcTeamProfile(teamId);
+      if (!profile) {
+        res.status(404).json({ message: "المنتخب غير موجود" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json(profile);
+    } catch (error) {
+      console.error(`[GulfCup] team ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب بيانات المنتخب حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/match/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const detail = await getGcMatchDetail(fixtureId);
+      if (!detail) {
+        res.status(404).json({ message: "المباراة غير موجودة" });
+        return;
+      }
+      const ttl = detail.fixture.status.live ? 15 : detail.fixture.status.finished ? 600 : 60;
+      res.set("Cache-Control", `public, max-age=${ttl}, s-maxage=${ttl * 2}, stale-while-revalidate=${ttl * 4}`);
+      res.json(detail);
+    } catch (error) {
+      console.error(`[GulfCup] match ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
     }
   });
 }
