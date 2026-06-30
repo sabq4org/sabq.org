@@ -55,6 +55,7 @@ import {
   type WcTeam,
 } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
+import { PenaltyResult } from "./PenaltyResult";
 
 interface MatchCenterDialogProps {
   fixtureId: number | null;
@@ -575,24 +576,36 @@ function HeadToHeadList({ detail }: { detail: WcMatchDetail }) {
   }
   return (
     <div className="space-y-1.5">
-      {detail.headToHead.map((match) => (
-        <div key={match.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
-          <Badge variant="secondary" className="tabular-nums shrink-0" dir="ltr">
-            {(match.date ?? "").slice(0, 4)}
-          </Badge>
-          <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
-            <span className="font-semibold truncate">{match.home.name}</span>
-            {/* اسم المضيف على اليمين — الضيف أولًا داخل LTR */}
-            <span className="font-black tabular-nums shrink-0" dir="ltr">
-              {match.goals.away ?? 0} - {match.goals.home ?? 0}
-            </span>
-            <span className="font-semibold truncate">{match.away.name}</span>
+      {detail.headToHead.map((match) => {
+        // الفائز: الأهداف تحسم، فإن تعادلت فركلات الترجيح — لتظليل الفائز صراحةً.
+        const hg = match.goals.home ?? 0;
+        const ag = match.goals.away ?? 0;
+        const ph = match.penalties?.home ?? 0;
+        const pa = match.penalties?.away ?? 0;
+        const homeWon = hg > ag || (hg === ag && ph > pa);
+        const awayWon = ag > hg || (hg === ag && pa > ph);
+        return (
+          <div key={match.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
+            <Badge variant="secondary" className="tabular-nums shrink-0" dir="ltr">
+              {(match.date ?? "").slice(0, 4)}
+            </Badge>
+            <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
+              <span className={`truncate ${homeWon ? "font-black" : "font-semibold"}`}>{match.home.name}</span>
+              {/* اسم المضيف على اليمين — الضيف أولًا داخل LTR */}
+              <span className="font-black tabular-nums shrink-0" dir="ltr">
+                {match.goals.away ?? 0} - {match.goals.home ?? 0}
+              </span>
+              <span className={`truncate ${awayWon ? "font-black" : "font-semibold"}`}>{match.away.name}</span>
+            </div>
+            {match.penalties && (
+              <span className="text-[10px] text-muted-foreground shrink-0" dir="rtl">
+                ترجيح{" "}
+                <span dir="ltr">({Math.max(ph, pa)}-{Math.min(ph, pa)})</span>
+              </span>
+            )}
           </div>
-          {match.penalties && (
-            <span className="text-[10px] text-muted-foreground shrink-0">ركلات ترجيح</span>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1392,11 +1405,7 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                   ) : (
                     <span className="text-xl font-black">{formatKickoffTime(fixture.date)}</span>
                   )}
-                  {fixture.penalties && (
-                    <span className="text-[11px] font-semibold text-muted-foreground" dir="ltr">
-                      ({fixture.penalties.away ?? 0} - {fixture.penalties.home ?? 0}) ركلات الترجيح
-                    </span>
-                  )}
+                  <PenaltyResult fixture={fixture} className="text-[11px] font-semibold text-muted-foreground" />
                   <Badge
                     className={
                       fixture.status.live

@@ -213,8 +213,13 @@ private fun WcKnockoutMatchCard(f: WcFixture, onOpenMatch: (Int) -> Unit) {
         }
         KnockoutTeamRow(f.home, if (f.started) f.goals.home ?: 0 else null, f.home.winner == true)
         KnockoutTeamRow(f.away, if (f.started) f.goals.away ?: 0 else null, f.away.winner == true)
-        f.penalties?.let {
-            Text("ركلات الترجيح: ${it.home ?: 0} - ${it.away ?: 0}", color = WcColors.onDarkDim, fontSize = 11.sp)
+        f.penaltyOutcome?.let {
+            Text(
+                "فاز ${it.winnerName} بركلات الترجيح (${it.winnerScore}-${it.loserScore})",
+                color = WcColors.emerald,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
 }

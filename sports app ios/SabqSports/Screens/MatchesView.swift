@@ -1034,10 +1034,20 @@ private struct SpWcMatchRow: View {
     private let centerWidth: CGFloat = 50
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
-    private var decided: Bool {
-        fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
+    // الفائز بركلات الترجيح (إن وُجدت ولم تتعادل): هل هو المضيف؟ نستعمله لتظليل
+    // الفائز حتى حين يترك المزوّد علم team.winner فارغًا في المباريات المحسومة بالترجيح.
+    private var penWinnerHome: Bool? {
+        guard let p = fixture.penalties, let h = p.home, let a = p.away, h != a else { return nil }
+        return h > a
     }
-    private func isWinner(_ team: SpWcTeam) -> Bool { decided && team.winner == true }
+    private var decided: Bool {
+        fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true || penWinnerHome != nil)
+    }
+    private func isWinner(home: Bool) -> Bool {
+        guard decided else { return false }
+        if let ph = penWinnerHome { return ph == home }
+        return (home ? fixture.home.winner : fixture.away.winner) == true
+    }
 
     // صفّ مدمج بلا إطار وبلا أي إضافات (الدور/الملعب/التوقّع تُعرض في تفاصيل المباراة).
     // الترتيب على طراز «دوري»: العَلَم ملاصق للنتيجة، والاسم للطرف الخارجي. (RTL: المضيف يمينًا.)
@@ -1065,7 +1075,7 @@ private struct SpWcMatchRow: View {
     // العَلَم نحو المنتصف فتصطفّ الأعلام في عمودين يحاذيان النتيجة عبر كل الصفوف.
     private func teamSide(_ team: SpWcTeam, home: Bool) -> some View {
         let logo = SpTeamLogo(logo: team.logo, size: logoSize)
-        let name = teamName(team)
+        let name = teamName(team, home: home)
         return HStack(spacing: 6) {
             if home {
                 Spacer(minLength: 4)
@@ -1080,8 +1090,8 @@ private struct SpWcMatchRow: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func teamName(_ team: SpWcTeam) -> some View {
-        let winner = isWinner(team)
+    private func teamName(_ team: SpWcTeam, home: Bool) -> some View {
+        let winner = isWinner(home: home)
         return Text(team.name)
             .font(SportsFonts.app(size: 12.5, weight: winner ? .heavy : .semibold))
             .foregroundStyle(SpTheme.onDarkStrong)
@@ -1139,13 +1149,16 @@ private struct SpWcMatchRow: View {
         "\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)"
     }
 
+    // السطر الفرعي المضغوط (عرض ~50pt): نتيجة الترجيح بالفائز أولًا حتى لا تنقلب،
+    // واسم الفائز يظهر مظلَّلًا (heavy) في عموده. تتعادل ركلات الترجيح نادرًا جدًّا؛
+    // عندها نتراجع لإظهار النتيجة كما وردت.
     private var penaltyText: String? {
         guard
             let penalties = fixture.penalties,
             let home = penalties.home,
             let away = penalties.away
         else { return nil }
-        return "ترجيح \(away)-\(home)"
+        return "ترجيح \(max(home, away))-\(min(home, away))"
     }
 
     private var liveMinute: String {

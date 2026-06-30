@@ -52,6 +52,16 @@ nonisolated struct WCFixture: Decodable, Identifiable, Hashable {
 
     var started: Bool { status.live || status.finished }
     var kickoff: Date? { SabqFormatters.parseISO8601(date) }
+
+    /// نتيجة ركلات الترجيح مع تحديد الفائز. النتيجة مرتّبة دائمًا «الفائز أولًا»
+    /// (winnerScore > loserScore) كي لا تنقلب بصريًّا في سياق RTL. المصدر موثوق:
+    /// penalties.home للمضيف وpenalties.away للضيف (نفس ربط الأهداف). nil إن لم
+    /// تُحسم بالترجيح. لا نعتمد على team.winner لأن المزوّد قد يتركه فارغًا هنا.
+    var penaltyOutcome: (winnerName: String, winnerScore: Int, loserScore: Int, winnerHome: Bool)? {
+        guard let p = penalties, let h = p.home, let a = p.away, h != a else { return nil }
+        let homeWon = h > a
+        return (homeWon ? home.name : away.name, homeWon ? h : a, homeWon ? a : h, homeWon)
+    }
 }
 
 nonisolated struct WCPrediction: Decodable, Hashable {

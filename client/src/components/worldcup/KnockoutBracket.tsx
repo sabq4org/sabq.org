@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatKickoffDay, formatKickoffTime, type WcFixture, type WcGroup, type WcStandingRow, type WcTeam } from "./wcTypes";
 import { LiveMinute } from "./LiveMinute";
+import { PenaltyResult } from "./PenaltyResult";
 import {
   buildBracketModel,
   fixtureWinnerSide,
@@ -172,11 +173,7 @@ function BracketMatch({
         <TeamLine team={fixture.home} goals={started ? fixture.goals.home ?? 0 : null} winner={winSide === "home"} />
         <TeamLine team={fixture.away} goals={started ? fixture.goals.away ?? 0 : null} winner={winSide === "away"} />
       </div>
-      {fixture.penalties && (
-        <p className="pt-1 text-center text-[9.5px] text-muted-foreground" dir="rtl">
-          ركلات الترجيح <span dir="ltr" className="tabular-nums">{fixture.penalties.home} - {fixture.penalties.away}</span>
-        </p>
-      )}
+      <PenaltyResult fixture={fixture} className="pt-1 text-center text-[9.5px] text-muted-foreground" />
       {fixture.status.live ? (
         <p className="pt-1 text-center text-[10px] font-bold text-red-600 dark:text-red-400">
           ● <LiveMinute status={fixture.status} /> مباشر
@@ -315,11 +312,7 @@ function TreeMatchCard({
           label={bottomLabel}
         />
       </div>
-      {match?.penalties && (
-        <p className="wc-tree-note">
-          ركلات الترجيح <span dir="ltr">{match.penalties.home} - {match.penalties.away}</span>
-        </p>
-      )}
+      {match && <PenaltyResult fixture={match} className="wc-tree-note" />}
       {isFinal && !match?.status.finished && (
         <p className="wc-tree-champion">🏆 بطل العالم</p>
       )}
