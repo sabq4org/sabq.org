@@ -7,6 +7,7 @@ struct AccountView: View {
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpThemeMode.self) private var themeMode
+    @Environment(SpAccentTheme.self) private var accent
     @Environment(\.openURL) private var openURL
     @State private var identifier = ""
     @State private var password = ""
@@ -59,7 +60,7 @@ struct AccountView: View {
                 Button("تسجيل الخروج", role: .destructive) { auth.signOut() }
                 Button("إلغاء", role: .cancel) {}
             } message: {
-                Text("سيتم إنهاء جلستك على هذا الجهاز.")
+                Text("سيتم إنهاء جلستك ومسح اختياراتك المحلية مثل الفريق المفضّل ومبارياتي على هذا الجهاز.")
             }
         }
     }
@@ -177,7 +178,45 @@ struct AccountView: View {
                 }
             }
             hint("«تلقائي» يتبع إعداد جهازك؛ أو اختر الفاتح/الداكن يدويًّا.")
+            teamColorPicker
         }
+    }
+
+    // مُنتقي اللون المميّز — العضو يختار لونًا فيتغيّر مظهر التطبيق بالكامل.
+    private var teamColorPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("اللون المميّز")
+                .font(SportsFonts.app(size: 12.5, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkDim)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 14) {
+                ForEach(SpTeamPalette.all) { p in colorSwatch(p) }
+            }
+            hint("اختر لونًا ليتغيّر مظهر التطبيق بالكامل.")
+        }
+        .padding(.top, 6)
+    }
+
+    private func colorSwatch(_ p: SpTeamPalette) -> some View {
+        let active = accent.paletteId == p.id
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) { accent.paletteId = p.id }
+        } label: {
+            Circle()
+                .fill(SpTheme.dyn(p.primaryLight, p.primaryDark))
+                .frame(width: 42, height: 42)
+                .overlay(
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .opacity(active ? 1 : 0)
+                )
+                .overlay(
+                    Circle().strokeBorder(Color.white, lineWidth: active ? 2 : 0)
+                )
+                .frame(maxWidth: .infinity)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func appearanceChip(_ m: SpThemeMode.Mode) -> some View {

@@ -45,6 +45,7 @@ import {
 } from "./theSportsService";
 import { type WcMomentum, type WcPressure } from "./sportmonksService";
 import pLimit from "p-limit";
+import { buildBracketModel, type WcBracketModel } from "./wc2026Bracket";
 
 const API_BASE = "https://v3.football.api-sports.io";
 
@@ -519,6 +520,8 @@ export interface WcBracket {
   /** مصدر البنية: API-Football حاليًّا (TheSports لاحقًا كإثراء) */
   source: "api-football" | "thesports";
   rounds: WcBracketRound[];
+  /** شجرة خروج المغلوب الرسمية (FIFA 73–104) مع ترقية الفائزين ووسوم المصادر. */
+  tree: WcBracketModel;
 }
 
 /**
@@ -545,7 +548,7 @@ export function buildBracket(fixtures: WcFixture[]): WcBracket {
     matches.sort((a, b) => a.timestamp - b.timestamp);
     rounds.push({ round: localizeRound(o), roundEn: o, matches });
   }
-  return { source: "api-football", rounds };
+  return { source: "api-football", rounds, tree: buildBracketModel(fixtures) };
 }
 
 /** شجرة الأدوار الإقصائية — يجلب المباريات ثم يبنيها (بدون تركيب لحظي). */

@@ -239,6 +239,9 @@ final class SpAuthStore {
         followedKeys = []
         follows = []
         alertPrefs = SpAlertPrefs()
+        SpFavorites.shared.clear()
+        SpMatchFollows.shared.clearAll()
+        SpLiveActivityManager.shared.endAll()
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         Task { await APIClient.shared.setAuthToken(nil) }
@@ -396,6 +399,18 @@ final class SpMatchFollows {
         cancelReminders(for: id)
         if let removed { syncUnfollow(removed.id) }
         else { syncUnfollow(id) }
+    }
+
+    func clearAll() {
+        let ids = items.map(\.id)
+        items = []
+        finishedAtById = [:]
+        stopAutoRefresh()
+        UserDefaults.standard.removeObject(forKey: key)
+        UserDefaults.standard.removeObject(forKey: finishedAtKey)
+        for id in ids {
+            cancelReminders(for: id)
+        }
     }
 
     /// تحديث لقطة مباراة متابَعة بأحدث حالة/نتيجة (يُبقي المتابعة كما هي).
