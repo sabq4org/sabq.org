@@ -606,6 +606,35 @@ export async function getTopScorers(): Promise<WcScorer[]> {
   return freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals);
 }
 
+/**
+ * لوحة الهدّافين **الرسمية** كما يرتّبها المزوّد (players/topscorers) — بلا دمج
+ * مع تجميع الأحداث، وبطول قابل للضبط (افتراضيًّا 20) لتضمّ النجوم لا أعلى 10 فقط.
+ * تُستخدم لمنتقي توقّع هدّاف البطولة (يحتاج القائمة الرسمية الصافية مرتّبةً بالأهداف)،
+ * بينما يبقى getTopScorers للودجت الحيّ (الذي يفضّل الأحدث متى تأخّر المزوّد).
+ */
+export async function getOfficialTopScorers(limit = 20): Promise<WcScorer[]> {
+  return withSWR(`wc:scorers:official:${limit}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
+    const top = rows.slice(0, limit);
+    const tr = await resolveNames(top.map((row: any) => row.player?.name));
+    return top.map((row: any, index: number): WcScorer => {
+      const stats = row.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row.player?.id ?? 0,
+        name: tr(row.player?.name),
+        photo: row.player?.photo ?? "",
+        team: localizeTeam(stats.team),
+        goals: stats.goals?.total ?? 0,
+        assists: stats.goals?.assists ?? 0,
+        penalties: stats.penalty?.scored ?? 0,
+        minutes: stats.games?.minutes ?? 0,
+        matches: stats.games?.appearences ?? 0,
+      };
+    });
+  });
+}
+
 export interface WcPrediction {
   home: number;
   draw: number;

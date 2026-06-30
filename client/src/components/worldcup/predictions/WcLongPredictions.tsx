@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Clock, Coins, Crown, Goal, Lock, LogIn, TrendingUp } from "lucide-react";
+import { Check, Clock, Coins, Crown, Goal, Info, Lock, LogIn, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -117,6 +117,45 @@ export function WcLongPredictions({
 
   return (
     <div className="space-y-5">
+      {/* ═══ كيف تعمل المسابقة؟ ═══ */}
+      <section className="rounded-2xl border border-border bg-muted/30 p-4">
+        <div className="mb-2.5 flex items-center gap-2">
+          <Info className="h-5 w-5 text-emerald-600" />
+          <h3 className="text-base font-black">كيف تعمل توقّعات البطولة؟</h3>
+        </div>
+        <ul className="space-y-2 text-xs leading-relaxed text-muted-foreground sm:text-[13px]">
+          <li className="flex gap-2">
+            <span>🏆</span>
+            <span>
+              <b className="text-foreground">البطل ({formatNumber(data?.pools.champion ?? 10000)} نقطة):</b> اختر من يرفع
+              الكأس من المنتخبات <b>المتأهّلة لدور الـ32</b>. تُقسَّم الجائزة على كل من يصيب البطل <b>مرجّحةً بوزن توقّعك</b> —
+              لا بالتساوي.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span>⏱️</span>
+            <span>
+              <b className="text-foreground">وزن المبادر:</b> كلّما ثبّت توقّعك أبكر كبُرت حصّتك —
+              <b> ×1.0</b> حتى دور الـ16، <b>×0.6</b> في دور الـ16، <b>×0.3</b> في ربع النهائي، ثم <b>يُغلق</b> عند انطلاق نصف النهائي.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span>⚽</span>
+            <span>
+              <b className="text-foreground">الهدّاف ({formatNumber(data?.pools.top_scorer ?? 3000)} نقطة):</b> اختر متصدّر
+              الهدّافين. تُقسَّم الجائزة <b>بالتساوي</b> على المصيبين، ويُغلق التوقّع عند انطلاق ربع النهائي.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span>🎯</span>
+            <span>
+              <b className="text-foreground">الاحتساب:</b> تُمنَح النقاط تلقائيًّا بعد النهائي — البطل = الفائز باللقب، الهدّاف =
+              متصدّر لائحة الهدّافين الرسمية.
+            </span>
+          </li>
+        </ul>
+      </section>
+
       {/* ═══ البطل ═══ */}
       <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-gradient-to-bl from-amber-500/[0.08] to-transparent">
         <div className="flex items-center gap-2 border-b border-amber-500/15 px-4 py-3">
@@ -184,7 +223,10 @@ export function WcLongPredictions({
 
           {champOpen ? (
             <>
-              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              <p className="mb-2 mt-3 text-xs font-bold text-muted-foreground">
+                اختر البطل من المتأهّلين لدور الـ32 ({formatNumber(teams.length)} منتخبًا)
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {teams.map((t) => {
                   const selected = pickedChampId === t.id;
                   const pct =
