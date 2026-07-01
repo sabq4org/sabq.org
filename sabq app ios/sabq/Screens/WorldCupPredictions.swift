@@ -1082,7 +1082,6 @@ private struct WCPredMineTab: View {
             let homeWon = ph > pa
             return ((homeWon ? item.homeTeamName : item.awayTeamName) ?? "", max(ph, pa), min(ph, pa))
         }()
-
         return VStack(spacing: 0) {
             // شريط علوي: اليوم + شارة الحالة
             HStack {
