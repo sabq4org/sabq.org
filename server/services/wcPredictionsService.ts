@@ -11,13 +11,14 @@
  *
  * ADR-001: هذه الخدمة تملك كل استعلامات Drizzle؛ مسار wcPredictions لا يستورد db.
  */
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { wcPredictions, wcPredictionMatches, users } from "@shared/schema";
 import { getFixtures, type WcFixture } from "./worldCupService";
 import { WC_FINISHED_STATUSES, WC_LIVE_STATUSES } from "./worldCupNames";
 import { awardPoints } from "./loyalty";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import { SUPERUSER_ROLE_NAMES } from "@shared/rbac-constants";
 
 const POINTS_POOL = 500;
 
@@ -296,8 +297,18 @@ export async function getMatchPredictionsSummary(fixtureId: number): Promise<Mat
   };
 }
 
-/** لوحة المتصدّرين — الترتيب بمجموع النقاط المكسوبة ثم عدد الإصابات الدقيقة. */
-export async function getLeaderboard(limit = 100) {
+/**
+ * لوحة المتصدّرين — الترتيب بمجموع النقاط المكسوبة ثم عدد الإصابات الدقيقة.
+ *
+ * حسابات مسؤولي النظام (SUPERUSER_ROLE_NAMES) مخفيّة عن بقية الزوار — حتى لا
+ * تثير الشكوك لو ظهر «مسؤول النظام» متصدّرًا — لكن تبقى ظاهرة لصاحبها نفسه
+ * (viewerUserId) كي لا يفقد ترتيبه الشخصي في بطاقة إحصاءاته.
+ */
+export async function getLeaderboard(limit = 100, viewerUserId?: string) {
+  const visibility = viewerUserId
+    ? or(notInArray(users.role, [...SUPERUSER_ROLE_NAMES]), eq(wcPredictions.userId, viewerUserId))
+    : notInArray(users.role, [...SUPERUSER_ROLE_NAMES]);
+
   const rows = await db
     .select({
       userId: wcPredictions.userId,
@@ -310,6 +321,7 @@ export async function getLeaderboard(limit = 100) {
     })
     .from(wcPredictions)
     .innerJoin(users, eq(wcPredictions.userId, users.id))
+    .where(visibility)
     .groupBy(wcPredictions.userId, users.firstName, users.lastName, users.profileImageUrl)
     .having(sql`count(*) filter (where ${wcPredictions.status} <> 'pending') > 0`)
     .orderBy(
