@@ -118,7 +118,7 @@ struct SpMatchCenter: View {
         )
     }
 
-    /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر سبق الرياضي.
+    /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر VARA.
     private var shareTitle: String {
         guard let f = fixture else { return "مباراة عبر VARA" }
         let middle: String
@@ -161,6 +161,7 @@ struct SpMatchCenter: View {
                 preMatchCard
                 matchInfoCard
                 varaModelCard
+                varaVerdictCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -432,6 +433,19 @@ struct SpMatchCenter: View {
         }
     }
 
+    // حكم ما بعد النهاية: لقطة VARA المؤرشفة قبل الانطلاق + توقّع العضو ضد النتيجة.
+    @ViewBuilder private var varaVerdictCard: some View {
+        if let f = fixture, f.status.finished, let gh = f.goals.home, let ga = f.goals.away {
+            let snap = VaraPickArchive.load(fixtureId: f.id)
+            let mine = myPrediction.map { (predHome: $0.predHome, predAway: $0.predAway) }
+            if snap != nil || mine != nil {
+                VaraVerdictCard(homeName: f.home.name, awayName: f.away.name,
+                                finalHome: gh, finalAway: ga, vara: snap, mine: mine)
+                    .padding(.horizontal, 16)
+            }
+        }
+    }
+
     private func varaStat(_ value: String, _ label: String, _ color: Color) -> some View {
         VStack(spacing: 3) {
             Text(value).font(SportsFonts.app(size: 19, weight: .heavy)).foregroundStyle(color)
@@ -677,7 +691,7 @@ struct SpMatchCenter: View {
                     HStack(spacing: 5) {
                         Text("\(d.fixture.away.name) · أسفل")
                             .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
-                        Circle().fill(SpTheme.gold).frame(width: 7, height: 7)
+                        Circle().fill(SpTheme.onDarkDim).frame(width: 7, height: 7)
                     }
                 }
             }
@@ -717,7 +731,7 @@ struct SpMatchCenter: View {
                 .background(Circle().fill(.white))
                 .overlay(Circle().stroke(SpTheme.green.opacity(0.6), lineWidth: 1.5))
         case "yellow-card":
-            RoundedRectangle(cornerRadius: 2).fill(Color(red: 0.95, green: 0.76, blue: 0.22)).frame(width: 9, height: 13)
+            RoundedRectangle(cornerRadius: 2).fill(SpTheme.yellowCard).frame(width: 9, height: 13)
         case "red-card":
             RoundedRectangle(cornerRadius: 2).fill(SpTheme.crimson).frame(width: 9, height: 13)
         default:
@@ -836,7 +850,7 @@ struct SpMatchCenter: View {
             .fixedSize()
     }
 
-    // فاصل «نتيجة الشوط الأول H - A» يغطّي المحور في موضع الدقيقة 45.
+    // فاصل «نتيجة الشوط الأول» (النص: ضيف - مضيف مع فرض LTR كبقية النتائج) يغطّي المحور في موضع الدقيقة 45.
     private func halftimeMarker(home: Int, away: Int) -> some View {
         HStack(spacing: 7) {
             Text("نتيجة الشوط الأول")
@@ -866,7 +880,7 @@ struct SpMatchCenter: View {
             case "var":
                 Image(systemName: "play.tv.fill").foregroundStyle(varPurple)
             case "yellow-card":
-                cardChip(Color(red: 0.95, green: 0.76, blue: 0.22))
+                cardChip(SpTheme.yellowCard)
             case "red-card":
                 cardChip(SpTheme.crimson)
             case "substitution":
@@ -1044,7 +1058,7 @@ struct SpMatchCenter: View {
             Image(systemName: "soccerball").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
         case "yellow":
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                .fill(Color(red: 0.95, green: 0.76, blue: 0.22)).frame(width: 12, height: 16)
+                .fill(SpTheme.yellowCard).frame(width: 12, height: 16)
         case "red":
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                 .fill(SpTheme.crimson).frame(width: 12, height: 16)
@@ -1662,13 +1676,19 @@ struct SpMatchCenter: View {
                 if !m.isEmpty { self.strength = m }
             }
         }
-        // توقّعي (إن كانت المباراة قادمة وأنا عضو) — لملء الستيبر.
-        if auth.isLoggedIn, let f = preview ?? detail?.fixture, !f.started {
-            if let p = try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId) {
-                myPrediction = p
+        // توقّعي (عضو): قبل الانطلاق لملء الستيبر، وبعد النهاية لبطاقة «نتيجة التوقّعات».
+        if auth.isLoggedIn,
+           let p = try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId) {
+            myPrediction = p
+            if let f = preview ?? detail?.fixture, !f.started {
                 predHome = p.predHome
                 predAway = p.predAway
             }
+        }
+        // أرشفة لقطة توقّع VARA قبل الانطلاق — المقارنة بعد النهاية تعتمدها
+        // (إعادة الحساب بجداول ما بعد المباراة متحيّزة لأنها تتضمّن نتيجتها).
+        if let f = detail?.fixture ?? preview, !f.started {
+            VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
         }
         self.loading = false
     }

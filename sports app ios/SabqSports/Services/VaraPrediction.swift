@@ -196,6 +196,104 @@ nonisolated enum VaraPredict {
     }
 }
 
+// MARK: - أرشيف لقطات التوقّع (لصدق المقارنة بعد النهاية)
+
+/// لقطة توقّع VARA — تُحفظ قبل الانطلاق وتُسترجع بعد النهاية.
+nonisolated struct VaraPickSnapshot: Equatable {
+    let home: Int
+    let draw: Int
+    let away: Int
+    let scoreHome: Int
+    let scoreAway: Int
+}
+
+/// أرشيف محلّي (UserDefaults) للقطات توقّع VARA قبل المباراة. المقارنة بعد النهاية
+/// تعتمد اللقطة المحفوظة لا إعادة الحساب — جداول ما بعد المباراة تتضمّن نتيجتها
+/// فتُضخّم دقّة VARA زورًا.
+nonisolated enum VaraPickArchive {
+    private static let key = "vara_pick_archive"
+
+    static func save(fixtureId: Int, pick: VaraPick) {
+        var d = (UserDefaults.standard.dictionary(forKey: key) as? [String: String]) ?? [:]
+        // آخر لقطة قبل الانطلاق هي الأصدق (أحدث ترتيب/فورمة) — نستبدل دومًا.
+        d["\(fixtureId)"] = "\(pick.home)|\(pick.draw)|\(pick.away)|\(pick.scoreHome)|\(pick.scoreAway)"
+        UserDefaults.standard.set(d, forKey: key)
+    }
+
+    static func load(fixtureId: Int) -> VaraPickSnapshot? {
+        guard let d = UserDefaults.standard.dictionary(forKey: key) as? [String: String],
+              let raw = d["\(fixtureId)"] else { return nil }
+        let p = raw.split(separator: "|").compactMap { Int($0) }
+        guard p.count == 5 else { return nil }
+        return VaraPickSnapshot(home: p[0], draw: p[1], away: p[2], scoreHome: p[3], scoreAway: p[4])
+    }
+}
+
+/// بطاقة «نتيجة التوقّعات» بعد النهاية — تقارن لقطة توقّع VARA المؤرشفة
+/// (وتوقّع العضو إن وُجد) بالنتيجة النهائية بحكم واضح لكل صفّ.
+struct VaraVerdictCard: View {
+    let homeName: String
+    let awayName: String
+    let finalHome: Int
+    let finalAway: Int
+    let vara: VaraPickSnapshot?
+    let mine: (predHome: Int, predAway: Int)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text("نتيجة التوقّعات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                Text("النتيجة").font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+                score(finalHome, finalAway)
+            }
+            if let vara {
+                verdictRow(label: "توقّع VARA", h: vara.scoreHome, a: vara.scoreAway)
+            }
+            if let mine {
+                verdictRow(label: "توقّعك", h: mine.predHome, a: mine.predAway)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+        )
+    }
+
+    private func verdictRow(label: String, h: Int, a: Int) -> some View {
+        let v = verdict(predH: h, predA: a)
+        return HStack(spacing: 8) {
+            Text(label).font(SportsFonts.app(size: 12.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+            score(h, a)
+            Spacer(minLength: 0)
+            Text(v.text)
+                .font(SportsFonts.app(size: 11, weight: .heavy))
+                .foregroundStyle(v.hit ? SpTheme.green : SpTheme.onDarkFaint)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill((v.hit ? SpTheme.green : SpTheme.onDarkFaint).opacity(0.10)))
+        }
+    }
+
+    // عرف التطبيق: نصّ النتيجة «ضيف - مضيف» مع فرض LTR فيقع رقم المضيف يمينًا.
+    private func score(_ h: Int, _ a: Int) -> some View {
+        Text(verbatim: "\(a) - \(h)")
+            .font(SportsFonts.app(size: 13, weight: .heavy))
+            .foregroundStyle(SpTheme.onDark)
+            .monospacedDigit()
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func verdict(predH: Int, predA: Int) -> (text: String, hit: Bool) {
+        if predH == finalHome && predA == finalAway { return ("أصاب النتيجة بدقّة", true) }
+        let ps = (predH - predA).signum()
+        let fs = (finalHome - finalAway).signum()
+        if ps == fs { return ("أصاب الاتجاه", true) }
+        return ("لم يُصب", false)
+    }
+}
+
 // MARK: - مكوّنات عرض قابلة لإعادة الاستخدام
 
 /// شريط توقّع VARA مدمج — لقائمة المباريات (#2): شريط ثلاثي رفيع + نسب صغيرة +

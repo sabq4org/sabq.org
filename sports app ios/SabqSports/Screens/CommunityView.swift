@@ -188,9 +188,10 @@ struct CommunityView: View {
     private func rankBadge(_ rank: Int) -> some View {
         let color: Color = {
             switch rank {
-            case 1: return SpTheme.green
-            case 2: return Color(white: 0.66)
-            case 3: return Color(red: 0.80, green: 0.52, blue: 0.24)
+            // الذهبي للميداليات (استثناء المالك الدلالي) — موحّد مع لوحة متصدّري التوقّعات.
+            case 1: return SpTheme.gold
+            case 2: return SpTheme.medalSilver
+            case 3: return SpTheme.medalBronze
             default: return SpTheme.onDarkFaint
             }
         }()

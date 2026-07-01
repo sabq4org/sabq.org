@@ -694,6 +694,11 @@ nonisolated struct SpDeviceRegisterBody: Encodable {
     let bundleId: String?
 }
 
+/// إلغاء تسجيل رمز جهاز APNs — /api/v1/devices/unregister (عند تسجيل الخروج).
+nonisolated struct SpDeviceUnregisterBody: Encodable {
+    let deviceToken: String
+}
+
 /// تسجيل توكن Live Activity — /api/v1/live-activity/register.
 nonisolated struct SpLiveActivityRegisterBody: Encodable {
     let fixtureId: Int
@@ -1319,6 +1324,14 @@ extension APIClient {
         )
         let data = try JSONEncoder().encode(body)
         try await send(method: "POST", path: "/devices/register", jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إلغاء ربط رمز الجهاز (عند تسجيل الخروج) كي لا تصل تنبيهات العضو السابق للجهاز.
+    /// النقطة لا تتطلّب جلسة — تعمل بعد مسح التوكن أيضًا.
+    func unregisterDevice(deviceToken: String) async throws {
+        let body = SpDeviceUnregisterBody(deviceToken: deviceToken)
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "DELETE", path: "/devices/unregister", jsonBody: data, apiRoot: URLConstants.mobileAPI)
     }
 
     /// تسجيل توكن Live Activity (نشاط شاشة القفل) ليدفع الخادم تحديثات النتيجة

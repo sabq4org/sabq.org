@@ -13,7 +13,7 @@ import SwiftUI
 //     تحديثات النتيجة حتى لو كان التطبيق مغلقًا (مرحلة تالية على الخادم).
 //
 // متاح من iOS 16.2+ (هدف التطبيق 17.0)، وبشرط تفعيل المستخدم لـLive Activities
-// (إعدادات > سبق الرياضي > Live Activities) — `areActivitiesEnabled`.
+// (إعدادات > VARA الرياضي > Live Activities) — `areActivitiesEnabled`.
 
 @MainActor
 @Observable
