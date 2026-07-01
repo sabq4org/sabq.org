@@ -19,6 +19,7 @@ struct SpMatchCenter: View {
     var preview: SpFixture?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpLiveActivityManager.self) private var liveActivity
@@ -217,6 +218,12 @@ struct SpMatchCenter: View {
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
         // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
         .task(id: detail?.fixture.id) { await pollLive() }
+        // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, (detail?.fixture ?? preview)?.status.live == true {
+                Task { await refreshLive() }
+            }
+        }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }
@@ -1609,8 +1616,12 @@ struct SpMatchCenter: View {
             if f == nil || f?.status.finished == true { return }
             let live = f?.status.live == true
             let secsToKickoff = f?.kickoff.timeIntervalSinceNow ?? .greatestFiniteMagnitude
-            // قادمة وبعيدة (> نصف ساعة) → لا داعي للاستطلاع الآن.
-            if !live && secsToKickoff > 1800 { return }
+            if !live && secsToKickoff > 1800 {
+                // بعيدة: نَم حتى ما قبل النافذة (بدل الانسحاب — الشاشة قد تبقى مفتوحة).
+                let wait = min(secsToKickoff - 1700, 3600)
+                try? await Task.sleep(nanoseconds: UInt64(max(wait, 30)) * 1_000_000_000)
+                continue
+            }
             let seconds: UInt64 = live ? 10 : 25
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if Task.isCancelled { return }
@@ -1625,9 +1636,10 @@ struct SpMatchCenter: View {
         self.detail = fresh
         // حدّث نشاط شاشة القفل بأحدث نتيجة/حدث (no-op إن لم يكن قائمًا).
         liveActivity.update(with: liveActivityFixture(fresh.fixture), lastEvent: lastEventText(fresh.events))
-        // التعليق اللحظي المُعرَّب — أفضل جهد، لا يعطّل الباقي.
-        if hasCommentary {
-            self.commentary = try? await APIClient.shared.fetchCommentary(matchId: fixtureId)
+        // التعليق اللحظي المُعرَّب — أفضل جهد دائمًا (لا نشترط وجوده سابقًا:
+        // التعليق قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره).
+        if let c = try? await APIClient.shared.fetchCommentary(matchId: fixtureId, ignoreCache: true) {
+            self.commentary = c
         }
     }
 

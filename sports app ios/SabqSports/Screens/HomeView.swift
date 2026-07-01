@@ -14,6 +14,7 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════
 
 struct HomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
@@ -119,7 +120,47 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showForYou) { SpForYouView() }
         }
         .task { await loadAll() }
+        .task { await pollHero() }
+        // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري للهيرو.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, featured?.status.live == true {
+                Task { await refreshHero() }
+            }
+        }
         .refreshable { await loadAll(force: true) }
+    }
+
+    // MARK: - الاستطلاع الحيّ للهيرو
+    //
+    // الرئيسية كانت بلا أي استطلاع — نتيجة الهيرو الحية تتجمّد حتى السحب اليدوي.
+    // السياسة الموحّدة: حيّ = 10ث (خفيف: المباريات + تفاصيل/تعليق الهيرو)،
+    // وقبل الانطلاق ≤ 30 دقيقة = 30ث لالتقاط البداية، وإلا فحص خامل كل 60ث بلا شبكة.
+    private func pollHero() async {
+        while !Task.isCancelled {
+            let f = featured
+            let live = f?.status.live == true
+            let secsToKickoff = f.map { $0.kickoff.timeIntervalSinceNow } ?? .greatestFiniteMagnitude
+            let near = !live && secsToKickoff > 0 && secsToKickoff <= 1800
+            let delay: UInt64 = live ? 10_000_000_000 : (near ? 30_000_000_000 : 60_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { break }
+            if live || near { await refreshHero() }
+        }
+    }
+
+    /// تحديث حيّ خفيف: قائمة المباريات (تُحرّك النتيجة/الحالة في الهيرو وبقية اللوحة)
+    /// + تفاصيل وتعليق مباراة الهيرو الجارية. التحليل الأثقل (xG/زخم/ضغط) يبقى
+    /// على loadAll (السحب اليدوي) — الأرقام الحيوية هنا هي النتيجة والأحداث.
+    private func refreshHero() async {
+        if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: true) {
+            matches = m
+        }
+        if let f = featured, f.started {
+            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: true)
+            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: true)
+            self.featuredDetail = await detailOpt
+            self.featuredCommentary = f.status.live ? await commentaryOpt : nil
+        }
     }
 
     // MARK: - الهيرو

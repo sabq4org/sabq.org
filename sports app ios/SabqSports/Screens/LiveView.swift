@@ -6,6 +6,7 @@ import SwiftUI
 // مستقل باسم «عالمية» (تبويب «المباريات» الجديد يغطّي جدول المونديال بالتواريخ).
 // (اسم البنية `LiveView` محفوظ لتفادي مساس pbxproj — دلالته الآن «عالمية».)
 struct LiveView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var world: [SpWorldLiveItem] = []
     @State private var catBySlug: [String: String] = [:]
     @State private var loading = true
@@ -30,6 +31,10 @@ struct LiveView: View {
         .task { await load() }
         .task { await pollLive() }
         .refreshable { await load(force: true) }
+        // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load(force: true) } }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -309,10 +314,10 @@ struct LiveView: View {
         self.loading = false
     }
 
-    // تحديث صامت أثناء العرض — يتسارع (15ث) عند وجود مباراة جارية، ويتباطأ (40ث) عداها.
+    // تحديث صامت أثناء العرض — السياسة الموحّدة: حيّ = 10ث، ويتباطأ (30ث) حين لا مباريات.
     private func pollLive() async {
         while !Task.isCancelled {
-            let delay: UInt64 = world.isEmpty ? 40_000_000_000 : 15_000_000_000
+            let delay: UInt64 = world.isEmpty ? 30_000_000_000 : 10_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
             await load(force: true)
