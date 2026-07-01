@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -88,7 +89,7 @@ fun GulfCupScreen(
 }
 
 @Composable
-private fun navItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.navItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
     NavigationBarItem(selected = selected, onClick = onClick, icon = { Icon(icon, null) }, label = { Text(label, fontSize = 10.sp, fontFamily = IbmPlexSansArabic) })
 }
 
@@ -185,7 +186,7 @@ fun GcMatchCard(fixture: GcFixture, onClick: (Int) -> Unit) {
             }
             val score = if (fixture.status.live || fixture.status.finished) "${fixture.goals.away ?: 0} - ${fixture.goals.home ?: 0}" else "VS"
             Text(score, color = GcColors.onDark, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
                 Text(fixture.away.name, color = GcColors.onDark, fontSize = 12.sp, maxLines = 1, fontFamily = IbmPlexSansArabic, modifier = Modifier.weight(1f))
                 AsyncImage(fixture.away.logo, null, modifier = Modifier.size(28.dp))
             }

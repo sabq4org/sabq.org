@@ -50,6 +50,8 @@ class WorldCupPredictionsViewModel @Inject constructor(
         viewModelScope.launch {
             val loggedIn = !tokenStore.token.first().isNullOrBlank()
             _state.update { it.copy(isLoggedIn = loggedIn) }
+            // نحمّل توقّعاتي مبكّرًا لكشف الفوز وإطلاق الاحتفال عند فتح الشاشة.
+            if (loggedIn) loadMine()
         }
         loadToday()
         loadLeaderboard()

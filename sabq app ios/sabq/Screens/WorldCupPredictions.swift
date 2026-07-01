@@ -76,6 +76,14 @@ struct WCPredictionsView: View {
     @State private var tab: Tab = .today
     @State private var showLogin = false
 
+    // احتفال الفوز (يُعرض مرّة واحدة لكل مباراة فائزة) — نتتبّع المعروضة محليًّا.
+    @AppStorage("wc_seen_wins") private var seenWinsRaw = ""
+    @State private var celebration: WCPredictionHistoryItem?
+
+    private var seenWins: Set<String> {
+        Set(seenWinsRaw.split(separator: ",").map(String.init))
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -104,6 +112,11 @@ struct WCPredictionsView: View {
                 }
             }
             .sheet(isPresented: $showLogin) { LoginSheet() }
+            .task(id: authStore.isLoggedIn) { await detectWin() }
+            .sheet(item: $celebration) { item in
+                WCWinCelebration(item: item) { markWinSeen(item.fixtureId) }
+                    .presentationDetents([.large])
+            }
         }
         // شريط حالة أبيض على الرأس الأخضر: نفرض تفضيل النمط الداكن (يبيّض ساعة/
         // بطارية النظام) مع تثبيت بيئة الألوان على «فاتح» للمحتوى داخليًا — فتبقى
@@ -129,6 +142,25 @@ struct WCPredictionsView: View {
         }
         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
         .background(WCTheme.stadiumTop)
+    }
+
+    // MARK: - كشف الفوز
+
+    // أول مباراة فائزة مُسوّاة لم نحتفل بها بعد — تُعرض بمجرّد فتح الشاشة.
+    private func detectWin() async {
+        guard authStore.isLoggedIn else { return }
+        guard let mine = try? await APIClient.shared.fetchWCMyPredictions() else { return }
+        let seen = seenWins
+        if let row = mine.first(where: { $0.won && !seen.contains($0.fixtureId) }) {
+            await MainActor.run { celebration = row }
+        }
+    }
+
+    private func markWinSeen(_ fixtureId: String) {
+        var s = seenWins
+        s.insert(fixtureId)
+        seenWinsRaw = s.joined(separator: ",")
+        celebration = nil
     }
 }
 
@@ -1189,6 +1221,145 @@ private struct WCPredMineTab: View {
         if let r = try? await APIClient.shared.fetchWCMyPredictions() {
             await MainActor.run { items = r; loading = false }
         } else { await MainActor.run { loading = false } }
+    }
+}
+
+// MARK: - احتفال الفوز (modal + confetti + تفاصيل التوقّع)
+//
+// يظهر مرّة واحدة لكل مباراة فائزة عند فتح شاشة التوقّعات. يعرض المباراة،
+// وتفاصيل التوقّع (توقّعي مقابل النتيجة مع الشعارات)، والنقاط المكتسبة —
+// مطابقةً لفكرة SpWinCelebration في تطبيق الرياضة وGcWinCelebration في الويب.
+
+struct WCWinCelebration: View {
+    let item: WCPredictionHistoryItem
+    var onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            WCTheme.card.ignoresSafeArea()
+            WCConfettiView().allowsHitTesting(false)
+            VStack(spacing: 16) {
+                Text("🎯").font(.system(size: 60))
+                Text("توقّع موفّق! 🎉")
+                    .font(SabqFonts.app(size: 24, weight: .black)).foregroundStyle(WCTheme.onDark)
+                Text("\(item.homeTeamName ?? "") ضد \(item.awayTeamName ?? "")")
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                    .multilineTextAlignment(.center)
+
+                detailsCard
+
+                VStack(spacing: 2) {
+                    Text("+\(item.pointsAwarded)")
+                        .font(SabqFonts.app(size: 42, weight: .black).monospacedDigit())
+                        .foregroundStyle(WCTheme.emeraldDeep)
+                        .environment(\.layoutDirection, .leftToRight)
+                    Text("نقطة من إصابة النتيجة الدقيقة")
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
+                }
+                .padding(.top, 2)
+
+                Button(action: onClose) {
+                    Text("رائع!")
+                        .font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).frame(height: 50)
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.emeraldDeep))
+                }
+                .buttonStyle(.plain).padding(.horizontal, 24).padding(.top, 4)
+            }
+            .padding(28)
+        }
+    }
+
+    // تفاصيل التوقّع: الشعارات + توقّعي/النتيجة
+    private var detailsCard: some View {
+        HStack(spacing: 10) {
+            celebCrest(name: item.homeTeamName, logo: item.homeTeamLogo)
+            HStack(spacing: 14) {
+                VStack(spacing: 2) {
+                    Text("توقّعي").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    wcScorePair(away: item.predAway, home: item.predHome, size: 20, color: WCTheme.emeraldDeep)
+                }
+                if let fh = item.finalHome, let fa = item.finalAway {
+                    Rectangle().fill(WCTheme.cardStroke).frame(width: 1, height: 32)
+                    VStack(spacing: 2) {
+                        Text("النتيجة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                        wcScorePair(away: fa, home: fh, size: 20, color: WCTheme.onDark)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            celebCrest(name: item.awayTeamName, logo: item.awayTeamLogo)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.chipFill))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.cardStroke, lineWidth: 1))
+    }
+
+    private func celebCrest(name: String?, logo url: String?) -> some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle().fill(.white)
+                if let url, !url.isEmpty { WCRemoteImage(url: url).padding(7) }
+            }
+            .frame(width: 44, height: 44)
+            .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
+            Text(name ?? "—")
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .lineLimit(2).multilineTextAlignment(.center).frame(width: 58)
+        }
+    }
+}
+
+// confetti خفيف بـ Canvas + TimelineView — قطع ملوّنة تتساقط وتدور لِـ ~4 ثوانٍ.
+struct WCConfettiView: View {
+    private struct Piece {
+        let x: CGFloat
+        let delay: Double
+        let duration: Double
+        let color: Color
+        let size: CGFloat
+        let spin: Double
+        let drift: CGFloat
+    }
+
+    private let pieces: [Piece]
+    private let start = Date()
+
+    init(count: Int = 80) {
+        let palette: [Color] = [WCTheme.emeraldDeep, WCTheme.gold, WCTheme.leaf, WCTheme.emerald]
+        pieces = (0..<count).map { _ in
+            Piece(
+                x: .random(in: 0...1),
+                delay: .random(in: 0...0.8),
+                duration: .random(in: 2.2...3.6),
+                color: palette.randomElement() ?? WCTheme.emeraldDeep,
+                size: .random(in: 6...11),
+                spin: .random(in: -4...4),
+                drift: .random(in: -40...40)
+            )
+        }
+    }
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { ctx, size in
+                let t = timeline.date.timeIntervalSince(start)
+                for p in pieces {
+                    let local = t - p.delay
+                    guard local > 0 else { continue }
+                    let progress = min(1, local / p.duration)
+                    let y = -20 + (size.height + 40) * CGFloat(progress)
+                    let x = p.x * size.width + p.drift * CGFloat(progress)
+                    let angle = Angle(radians: p.spin * local)
+                    let opacity = progress < 0.85 ? 1.0 : max(0, (1 - progress) / 0.15)
+
+                    var rect = Path(CGRect(x: -p.size / 2, y: -p.size / 2, width: p.size, height: p.size * 0.6))
+                    rect = rect.applying(CGAffineTransform(rotationAngle: CGFloat(angle.radians)))
+                    rect = rect.applying(CGAffineTransform(translationX: x, y: y))
+                    ctx.fill(rect, with: .color(p.color.opacity(opacity)))
+                }
+            }
+        }
     }
 }
 

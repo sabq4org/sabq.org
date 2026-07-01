@@ -687,7 +687,12 @@ data class WcPredictionHistoryItem(
     val finalPenHome: Int? = null,
     val finalPenAway: Int? = null,
     val matchStatus: String? = null,
-)
+) {
+    val settled: Boolean get() = (finalHome != null && finalAway != null) || matchStatus == "settled"
+
+    /** توقّع فائز مُسوّى — لإطلاق احتفال الفوز مرّة واحدة لكل مباراة. */
+    val won: Boolean get() = settled && status == "correct"
+}
 
 @Serializable
 data class WcPredMineResponse(val predictions: List<WcPredictionHistoryItem> = emptyList())
