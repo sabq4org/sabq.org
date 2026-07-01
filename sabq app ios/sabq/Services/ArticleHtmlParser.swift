@@ -200,10 +200,21 @@ enum ArticleHtmlParser {
         if let url = extractTweetURL(from: inner) {
             return .twitterEmbed(tweetURL: url)
         }
-        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"), let url = URL(string: raw) {
+        // المسار الاحتياطي يجب أن يتحقق من المضيف مثل regex المسار الأساسي:
+        // بدونه data-embed-url مدسوس في جسم مقال يُصيَّر «كتغريدة» تفتح
+        // موقع تصيّد من داخل WKWebView.
+        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"),
+           let url = URL(string: raw), isTrustedTweetHost(url) {
             return .twitterEmbed(tweetURL: url)
         }
         return .divider
+    }
+
+    private static func isTrustedTweetHost(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased() else { return false }
+        return host == "twitter.com" || host.hasSuffix(".twitter.com")
+            || host == "x.com" || host.hasSuffix(".x.com")
     }
 
     private static func parseTwitterEmbedFromBlockquote(scanner: inout HTMLScanner) -> ArticleBlock {

@@ -1854,6 +1854,35 @@ nonisolated struct APITodayInsights: Decodable {
         let likes: Int
         let comments: Int
         let articlesRead: Int
+
+        init(readingTime: Int = 0, completionRate: Int = 0, likes: Int = 0,
+             comments: Int = 0, articlesRead: Int = 0) {
+            self.readingTime = readingTime
+            self.completionRate = completionRate
+            self.likes = likes
+            self.comments = comments
+            self.articlesRead = articlesRead
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: FlexKey.self)
+            readingTime = (try? c.decode(Int.self, forKey: FlexKey("readingTime"))) ?? 0
+            completionRate = (try? c.decode(Int.self, forKey: FlexKey("completionRate"))) ?? 0
+            likes = (try? c.decode(Int.self, forKey: FlexKey("likes"))) ?? 0
+            comments = (try? c.decode(Int.self, forKey: FlexKey("comments"))) ?? 0
+            articlesRead = (try? c.decode(Int.self, forKey: FlexKey("articlesRead"))) ?? 0
+        }
+    }
+
+    // فك متسامح (نمط FlexKey المتّبع في بقية الملف): تغيير صغير في شكل
+    // الاستجابة كان يُفشل الفك كاملًا فتختفي بطاقة الرحلة المعرفية كليًا.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        greeting = (try? c.decode(String.self, forKey: FlexKey("greeting"))) ?? ""
+        metrics = (try? c.decode(Metrics.self, forKey: FlexKey("metrics"))) ?? Metrics()
+        topInterests = (try? c.decode([String].self, forKey: FlexKey("topInterests"))) ?? []
+        aiPhrase = try? c.decode(String.self, forKey: FlexKey("aiPhrase"))
+        quickSummary = try? c.decode(String.self, forKey: FlexKey("quickSummary"))
     }
 }
 
@@ -1888,6 +1917,22 @@ nonisolated struct APIHajjArticle: Decodable, Identifiable {
     let isPinned: Bool?
     let hajjTag: String              // "من عرفات", "في منى", ...
     let hajjEmoji: String            // 🏔️, 🪨, ...
+
+    // hajjTag/hajjEmoji بقيم افتراضية فارغة: صف واحد ناقص كان يُفشل فك
+    // المصفوفة كاملةً فيختفي بلوك الحج بأكمله.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        id = try c.decode(String.self, forKey: FlexKey("id"))
+        title = try c.decode(String.self, forKey: FlexKey("title"))
+        slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        excerpt = try? c.decode(String.self, forKey: FlexKey("excerpt"))
+        imageUrl = try? c.decode(String.self, forKey: FlexKey("imageUrl"))
+        publishedAt = try? c.decode(String.self, forKey: FlexKey("publishedAt"))
+        isBreaking = try? c.decode(Bool.self, forKey: FlexKey("isBreaking"))
+        isPinned = try? c.decode(Bool.self, forKey: FlexKey("isPinned"))
+        hajjTag = (try? c.decode(String.self, forKey: FlexKey("hajjTag"))) ?? ""
+        hajjEmoji = (try? c.decode(String.self, forKey: FlexKey("hajjEmoji"))) ?? ""
+    }
 }
 
 // MARK: - Article reactions (like toggle)
@@ -1900,6 +1945,14 @@ nonisolated struct APIHajjArticle: Decodable, Identifiable {
 nonisolated struct APIArticleReactionResponse: Decodable {
     let liked: Bool
     let likesCount: Int
+
+    // liked إلزامي (جوهر الاستجابة)؛ likesCount متسامح — إسقاطه من الخادم
+    // كان يرمي خطأ فك فيتجمّد زر الإعجاب كليًا بدل أن يفقد العدّاد فقط.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        liked = try c.decode(Bool.self, forKey: FlexKey("liked"))
+        likesCount = (try? c.decode(Int.self, forKey: FlexKey("likesCount"))) ?? 0
+    }
 }
 
 // MARK: - Editorial notifications (push history + preferences)
@@ -2067,6 +2120,24 @@ nonisolated struct EditorialNotificationPreferences: Codable, Hashable {
         rejectedEnabled: true,
         revisionEnabled: true
     )
+
+    init(scheduledEnabled: Bool, publishedEnabled: Bool,
+         rejectedEnabled: Bool, revisionEnabled: Bool) {
+        self.scheduledEnabled = scheduledEnabled
+        self.publishedEnabled = publishedEnabled
+        self.rejectedEnabled = rejectedEnabled
+        self.revisionEnabled = revisionEnabled
+    }
+
+    // متسامح: حقل مفقود = مفعّل (الافتراضي allOn) بدل إفشال شاشة
+    // التفضيلات كاملةً عند أي إضافة/إسقاط خادمي. encode يبقى مولَّدًا.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        scheduledEnabled = (try? c.decode(Bool.self, forKey: FlexKey("scheduledEnabled"))) ?? true
+        publishedEnabled = (try? c.decode(Bool.self, forKey: FlexKey("publishedEnabled"))) ?? true
+        rejectedEnabled = (try? c.decode(Bool.self, forKey: FlexKey("rejectedEnabled"))) ?? true
+        revisionEnabled = (try? c.decode(Bool.self, forKey: FlexKey("revisionEnabled"))) ?? true
+    }
 }
 
 /// تفضيلات أنواع تنبيهات المباريات (عامّة لكل المستخدم) — تُطبَّق على إشعارات
