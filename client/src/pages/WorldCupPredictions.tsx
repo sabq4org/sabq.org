@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Trophy, Target, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -21,11 +22,15 @@ import type {
 } from "@/components/worldcup/predictions/predictionsTypes";
 
 type Tab = "today" | "mine" | "leaders" | "tournament";
+const TAB_VALUES: Tab[] = ["today", "mine", "leaders", "tournament"];
 
 export default function WorldCupPredictions() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("today");
+  // يتيح الربط المباشر من الصفحة الرئيسية بتبويب محدّد، مثل ?tab=tournament
+  const search = useSearch();
+  const tabParam = new URLSearchParams(search).get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "today");
 
   useEffect(() => {
     document.title = "توقّعات المونديال — توقّع واربح نقاط الولاء | سبق";
