@@ -15,6 +15,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
@@ -126,6 +127,10 @@ struct HomeView: View {
             if phase == .active, featured?.status.live == true {
                 Task { await refreshHero() }
             }
+        }
+        // البث الحيّ (SSE): تغيّر ختم مباراة الهيرو = تحديث فوري للنتيجة والمجريات.
+        .onChange(of: featured.flatMap { liveStream.stamps["s:\($0.id)"] }) { _, _ in
+            Task { await refreshHero() }
         }
         .refreshable { await loadAll(force: true) }
     }

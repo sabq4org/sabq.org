@@ -26,15 +26,17 @@ android {
         //   • 10.0.3 (127) — Google Web Client switched to dedicated
         //     mobile-backend client `664097075837-tk2a6h79...`, no client secret
         //   • 10.1.0 (141) — native World Cup section + home revamp
-        //   • 10.1.1 (142) — this build (World Cup parity polish: adaptive
-        //     theme on detail screens, dual same-time hero cards, home
-        //     reorder آراء/مُقترب below latest, عمق section removed)
+        //   • 10.1.1 (142) — World Cup parity polish: adaptive theme on
+        //     detail screens, dual same-time hero cards, home reorder
+        //     آراء/مُقترب below latest, عمق section removed
+        //   • 10.1.3 (144) — this build (WC tournament tab + Arab teams
+        //     spotlight + predictions win celebration + live polling fixes)
         // versionCode strictly monotonic upward — Play rejects equal/lower.
         applicationId = "com.sabqorg.sabq"
         minSdk = 26
         targetSdk = 35
-        versionCode = 143
-        versionName = "10.1.2"
+        versionCode = 144
+        versionName = "10.1.3"
 
         // Locks the rendering locale to Arabic. We still honour the
         // OS-level RTL config in code, but resource fallback is forced

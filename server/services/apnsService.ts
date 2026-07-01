@@ -35,6 +35,22 @@ function getApnsHost(): string {
   return cachedApnsHost;
 }
 
+// بيئة كل توكن (تُتعلَّم عند نجاح الإرسال بعد fallback): بناءات Xcode التطويرية
+// تحمل توكنات sandbox بينما TestFlight/المتجر إنتاج — البيئة الخاطئة تعيد
+// BadDeviceToken فتتجمّد تحديثات قفل الشاشة والتنبيهات لأجهزة المطوّرين. عند
+// الرفض نعيد المحاولة على البيئة الأخرى مرة واحدة ونحفظ الناجحة للتوكن.
+const tokenHostCache = new Map<string, string>();
+const TOKEN_HOST_CACHE_MAX = 5000;
+
+function rememberTokenHost(token: string, host: string): void {
+  if (tokenHostCache.size >= TOKEN_HOST_CACHE_MAX) tokenHostCache.clear();
+  tokenHostCache.set(token, host);
+}
+
+function otherHost(host: string): string {
+  return host === APNS_HOST_PRODUCTION ? APNS_HOST_SANDBOX : APNS_HOST_PRODUCTION;
+}
+
 // APNs credentials from environment
 interface ApnsCredentials {
   keyId: string;
@@ -213,13 +229,43 @@ export async function sendPushNotification(
 ): Promise<ApnsResponse> {
   // اختر المفتاح حسب تطبيق الجهاز (topic = bundleId)؛ الرياضة قد تستخدم مفتاحًا منفصلًا.
   const credentials = getApnsCredentials(options.topic);
-  
+
   if (!credentials) {
     console.log("[APNs] No credentials configured - skipping push");
     return { success: false, reason: "APNs not configured" };
   }
 
-  const host = getApnsHost();
+  const preferredHost = tokenHostCache.get(deviceToken) ?? getApnsHost();
+  const first = await sendPushRaw(preferredHost, credentials, deviceToken, payload, options);
+  if (first.success) {
+    rememberTokenHost(deviceToken, preferredHost);
+    return first;
+  }
+  // بيئة خاطئة (توكن sandbox على إنتاج أو العكس) → جرّب البيئة الأخرى مرة واحدة.
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendPushRaw(fallback, credentials, deviceToken, payload, options);
+    if (retry.success) {
+      rememberTokenHost(deviceToken, fallback);
+      return retry;
+    }
+  }
+  return first;
+}
+
+function sendPushRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  deviceToken: string,
+  payload: ApnsPayload,
+  options: {
+    priority?: "5" | "10";
+    expiration?: number;
+    collapseId?: string;
+    pushType?: "alert" | "background" | "voip" | "complication" | "fileprovider" | "mdm";
+    topic?: string;
+  },
+): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
   const path = `/3/device/${deviceToken}`;
 
@@ -345,7 +391,30 @@ export async function sendLiveActivityUpdate(
     return { success: false, reason: "APNs not configured" };
   }
 
-  const host = getApnsHost();
+  const preferredHost = tokenHostCache.get(activityPushToken) ?? getApnsHost();
+  const first = await sendLiveActivityRaw(preferredHost, credentials, activityPushToken, options);
+  if (first.success) {
+    rememberTokenHost(activityPushToken, preferredHost);
+    return first;
+  }
+  // توكن نشاط من بناء تطويري (sandbox) على بيئة الإنتاج أو العكس → البيئة الأخرى.
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendLiveActivityRaw(fallback, credentials, activityPushToken, options);
+    if (retry.success) {
+      rememberTokenHost(activityPushToken, fallback);
+      return retry;
+    }
+  }
+  return first;
+}
+
+function sendLiveActivityRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  activityPushToken: string,
+  options: LiveActivityUpdateOptions,
+): Promise<ApnsResponse> {
   const token = generateApnsToken(credentials);
   const path = `/3/device/${activityPushToken}`;
 

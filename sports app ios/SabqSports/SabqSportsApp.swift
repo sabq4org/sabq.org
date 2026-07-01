@@ -11,6 +11,7 @@ struct SabqSportsApp: App {
     @State private var liveActivity = SpLiveActivityManager.shared
     @State private var themeMode = SpThemeMode.shared
     @State private var accent = SpAccentTheme.shared
+    @State private var liveStream = SpLiveStream.shared
 
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
@@ -27,6 +28,7 @@ struct SabqSportsApp: App {
                 .environment(liveActivity)
                 .environment(themeMode)
                 .environment(accent)
+                .environment(liveStream)
                 // إعادة بناء الشجرة عند تبديل لون النادي كي تلتقط كل الشاشات اللون
                 // الجديد فورًا (اللون المحوري يُقرأ من spActivePalette أثناء الرسم).
                 .id(accent.paletteId)
@@ -36,9 +38,16 @@ struct SabqSportsApp: App {
                 // استطلاع دوري مستقل لـ«مبارياتي» والنشاط الحيّ أثناء وجود التطبيق
                 // أمامياً — يمنع تجمّد البطاقة/الويدجت حين لا تكون على مركز المباراة.
                 .task { matchFollows.startAutoRefresh() }
+                // البث الحيّ (SSE) — نتائج/أحداث فورية؛ يعمل بالمقدّمة فقط.
+                .task { liveStream.start() }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { matchFollows.startAutoRefresh() }
-                    else { matchFollows.stopAutoRefresh() }
+                    if phase == .active {
+                        matchFollows.startAutoRefresh()
+                        liveStream.start()
+                    } else {
+                        matchFollows.stopAutoRefresh()
+                        liveStream.stop()
+                    }
                 }
             // مظهر فاتح نظيف مفروض — تصميم كأس آسيا الأبيض (أبيض + أخضر مقتصد، لا غوامق).
         }

@@ -86,7 +86,9 @@ final class SpLiveActivityManager {
     func update(with fixture: SpFixture, lastEvent: String? = nil) {
         guard let activity = activities[fixture.id] else { return }
         var state = makeState(from: fixture)
-        if let lastEvent { state.lastEvent = lastEvent }
+        // حافظ على آخر حدث معروض إن لم يحمل المستدعي أحدث — التحديث المحلي من
+        // «مبارياتي» بلا أحداث، ومسحه كان يُخفي شريحة الهدف/البطاقة المدفوعة.
+        state.lastEvent = lastEvent ?? activity.content.state.lastEvent
         Task {
             await activity.update(.init(state: state, staleDate: staleDate(for: fixture)))
             // أنهِ النشاط تلقائيًّا بعد نهاية المباراة بفترة قصيرة.
