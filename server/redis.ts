@@ -10,6 +10,8 @@ export interface RedisSessionClient {
   del(keys: string | string[]): Promise<number>;
   expire(key: string, ttl: number): Promise<number>;
   scan(...args: any[]): Promise<any>;
+  /** SET NX PX الذرّي — للأقفال/الـleases (انتخاب القائد). يعيد "OK" عند النجاح وإلا null. */
+  setLock(key: string, val: string, ttlMs: number): Promise<"OK" | null>;
 }
 
 function createSessionAdapter(client: Redis): RedisSessionClient {
@@ -27,6 +29,8 @@ function createSessionAdapter(client: Redis): RedisSessionClient {
     },
     expire: (key: string, ttl: number) => client.expire(key, ttl),
     scan: (...args: any[]) => (client as any).scan(...args),
+    setLock: (key: string, val: string, ttlMs: number) =>
+      client.set(key, val, "PX", ttlMs, "NX") as Promise<"OK" | null>,
   };
 }
 

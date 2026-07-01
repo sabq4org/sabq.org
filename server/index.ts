@@ -44,10 +44,24 @@ app.get("/health", async (_req, res) => {
     const { getTheSportsStatus } = await import("./services/theSportsService");
     theSports = getTheSportsStatus();
   } catch {}
+  // حالة القيادة — leader=false على كل الـpods يعني أعمال الدفع (Live Activity/
+  // التنبيهات) ميتة رغم أن الـAPI يعمل (فخ قفل الانتخاب بعد النشر). للتشخيص السريع.
+  let leader = false;
+  let podId: string | null = null;
+  let leaderMode: string | null = null;
+  try {
+    const le = await import("./leaderElection");
+    leader = le.isLeader();
+    podId = le.getPodId();
+    leaderMode = le.getLeaderMode();
+  } catch {}
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbReady ? "connected" : "warming-up",
+    leader,
+    leaderMode,
+    podId,
     theSports,
   });
 });
