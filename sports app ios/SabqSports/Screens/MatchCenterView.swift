@@ -23,6 +23,7 @@ struct SpMatchCenter: View {
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpLiveActivityManager.self) private var liveActivity
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var detail: SpMatchDetail?
     @State private var loading = true
     @State private var loadError: String?
@@ -223,6 +224,10 @@ struct SpMatchCenter: View {
             if phase == .active, (detail?.fixture ?? preview)?.status.live == true {
                 Task { await refreshLive() }
             }
+        }
+        // البث الحيّ (SSE): تغيّر ختم مباراتنا في الموجز = جلب التفاصيل فورًا (~2ث).
+        .onChange(of: liveStream.stamps["s:\(fixtureId)"]) { _, _ in
+            Task { await refreshLive() }
         }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }

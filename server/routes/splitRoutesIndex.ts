@@ -35,6 +35,7 @@ import { registerWorldCupRoutes } from "./worldCup";
 import { registerAsianCupRoutes } from "./asianCup";
 import { registerGulfCupRoutes } from "./gulfCup";
 import { registerSportsRoutes } from "./sports";
+import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
 import { registerRadarRoutes } from "./radar";
 import { registerSpaNewsRoutes } from "./spaNews";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
@@ -90,6 +91,7 @@ export function registerSplitRoutes(app: Express) {
   registerAsianCupRoutes(app);
   registerGulfCupRoutes(app);
   registerSportsRoutes(app);
+  registerSportsLiveStreamRoutes(app);
   registerRadarRoutes(app);
   registerSpaNewsRoutes(app);
   registerSportmonksNewsRoutes(app);

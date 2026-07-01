@@ -7,6 +7,7 @@ import SwiftUI
 // (اسم البنية `LiveView` محفوظ لتفادي مساس pbxproj — دلالته الآن «عالمية».)
 struct LiveView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var world: [SpWorldLiveItem] = []
     @State private var catBySlug: [String: String] = [:]
     @State private var loading = true
@@ -34,6 +35,10 @@ struct LiveView: View {
         // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load(force: true) } }
+        }
+        // البث الحيّ (SSE): أي تغيّر في مباريات العالم الجارية = تحديث فوري.
+        .onChange(of: liveStream.sportsVersion) { _, _ in
+            Task { await load(force: true) }
         }
     }
 

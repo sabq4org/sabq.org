@@ -44,6 +44,7 @@
 		5B000105 /* SpMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000105 /* SpMatchLiveActivity.swift */; };
 		5B0000A4 /* SpWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A4 /* SpWidgetBridge.swift */; };
 		5B0000A5 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A5 /* SearchView.swift */; };
+		5B0000A7 /* SpLiveStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A7 /* SpLiveStream.swift */; };
 		5B0000A6 /* ForYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A6 /* ForYouView.swift */; };
 		5B000107 /* SpNextMatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000107 /* SpNextMatchWidget.swift */; };
 		5B000112 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
@@ -117,6 +118,7 @@
 		5C000105 /* SpMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchLiveActivity.swift; sourceTree = "<group>"; };
 		5C0000A4 /* SpWidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpWidgetBridge.swift; sourceTree = "<group>"; };
 		5C0000A5 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		5C0000A7 /* SpLiveStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpLiveStream.swift; sourceTree = "<group>"; };
 		5C0000A6 /* ForYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForYouView.swift; sourceTree = "<group>"; };
 		5C000107 /* SpNextMatchWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpNextMatchWidget.swift; sourceTree = "<group>"; };
 		5C000106 /* SabqSportsWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSportsWidgets.entitlements; sourceTree = "<group>"; };
@@ -205,6 +207,7 @@
 				5C0000A1 /* VaraPrediction.swift */,
 				5C0000A2 /* VaraInsights.swift */,
 				5C0000A4 /* SpWidgetBridge.swift */,
+				5C0000A7 /* SpLiveStream.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -386,6 +389,7 @@
 				5B000102 /* SpMatchActivity.swift in Sources */,
 				5B000103 /* SpLiveActivityManager.swift in Sources */,
 				5B0000A4 /* SpWidgetBridge.swift in Sources */,
+				5B0000A7 /* SpLiveStream.swift in Sources */,
 				5B0000A5 /* SearchView.swift in Sources */,
 				5B0000A6 /* ForYouView.swift in Sources */,
 			);
