@@ -437,6 +437,98 @@ nonisolated struct WCPredSubmitResponse: Decodable, Hashable {
     let prediction: WCSubmittedPrediction
 }
 
+// MARK: - توقّعات البطولة طويلة المدى (البطل + الهدّاف) — /world-cup/predictions/long
+//
+// نظيرة WcLongData على الويب. البطل: مرجّح بوزن المبادر (وزن أعلى كلما بُكِّر
+// التوقّع، يُغلق عند نصف النهائي). الهدّاف: يُقسَّم بالتساوي، يُغلق عند ربع
+// النهائي. votes تصل دومًا (حتى لو فارغة) وتُستخدم لحساب نِسَب كل خيار.
+
+nonisolated struct WCLongTeam: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let logo: String
+}
+
+nonisolated struct WCLongScorerTeam: Decodable, Hashable {
+    let name: String
+    let logo: String
+}
+
+nonisolated struct WCLongScorer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let photo: String
+    let team: WCLongScorerTeam
+    let goals: Int
+}
+
+nonisolated struct WCLongMine: Decodable, Hashable {
+    let kind: String              // champion | top_scorer
+    let teamId: Int?
+    let teamName: String?
+    let teamLogo: String?
+    let playerId: Int?
+    let playerName: String?
+    let playerPhoto: String?
+    let weight: Int
+    let status: String            // pending | correct | incorrect
+    let pointsAwarded: Int
+}
+
+nonisolated struct WCLongChampionVote: Decodable, Hashable {
+    let teamId: Int?
+    let n: Int
+    let w: Int
+}
+
+nonisolated struct WCLongChampionState: Decodable, Hashable {
+    let open: Bool
+    let weight: Int?
+    let stage: String              // r32 | r16 | qf | closed
+    let votes: [WCLongChampionVote]
+}
+
+nonisolated struct WCLongScorerVote: Decodable, Hashable {
+    let playerId: Int?
+    let n: Int
+}
+
+nonisolated struct WCLongScorerState: Decodable, Hashable {
+    let open: Bool
+    let votes: [WCLongScorerVote]
+}
+
+/// مفتاح الهدّاف بالخادم `top_scorer` (snake_case استثناءً) — لا keyDecodingStrategy
+/// عامًا في العميل فنُسمّيها Swift-يًّا صراحةً عبر CodingKeys.
+nonisolated struct WCLongPools: Decodable, Hashable {
+    let champion: Int
+    let topScorer: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case champion
+        case topScorer = "top_scorer"
+    }
+}
+
+nonisolated struct WCLongData: Decodable, Hashable {
+    let pools: WCLongPools
+    let teams: [WCLongTeam]
+    let scorers: [WCLongScorer]
+    let champion: WCLongChampionState
+    let topScorer: WCLongScorerState
+    let mine: [WCLongMine]
+}
+
+nonisolated struct WCLongSubmitBody: Encodable {
+    let kind: String
+    let teamId: Int?
+    let playerId: Int?
+}
+
+nonisolated struct WCLongSubmitResponse: Decodable, Hashable {
+    let ok: Bool
+}
+
 nonisolated struct WCPredictionSubmitBody: Encodable {
     let fixtureId: Int
     let predHome: Int
@@ -977,6 +1069,18 @@ extension APIClient {
     func fetchWCLeaderboard() async throws -> [WCPredLeader] {
         try await get(WCLeaderboardResponse.self, path: "/world-cup/predictions/leaderboard",
                       apiRoot: URLConstants.mobileAPI).leaders
+    }
+
+    func fetchWCLongPredictions(ignoreCache: Bool = false) async throws -> WCLongData {
+        try await get(WCLongData.self, path: "/world-cup/predictions/long",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
+    }
+
+    @discardableResult
+    func submitWCLongPrediction(kind: String, teamId: Int? = nil, playerId: Int? = nil) async throws -> Bool {
+        try await post(WCLongSubmitResponse.self, path: "/world-cup/predictions/long",
+                       body: WCLongSubmitBody(kind: kind, teamId: teamId, playerId: playerId),
+                       apiRoot: URLConstants.mobileAPI).ok
     }
 
     func fetchWorldCupPlayerMarket(playerId: Int) async throws -> WCPlayerMarket {
