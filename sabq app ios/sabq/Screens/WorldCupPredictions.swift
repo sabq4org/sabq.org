@@ -327,9 +327,7 @@ private struct WCPredTodayTab: View {
             if let s = m.settlement, let fh = s.finalHome, let fa = s.finalAway {
                 HStack(spacing: 6) {
                     Text("النتيجة").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    Text("\(fa) - \(fh)")
-                        .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
-                        .environment(\.layoutDirection, .leftToRight)
+                    wcScorePair(away: fa, home: fh, size: 15, color: WCTheme.onDark)
                 }
             }
             // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
@@ -340,9 +338,8 @@ private struct WCPredTodayTab: View {
             }
             if let mine = m.myPrediction {
                 HStack(spacing: 8) {
-                    Text("توقّعك: \(mine.predAway) - \(mine.predHome)")
-                        .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
-                        .environment(\.layoutDirection, .leftToRight)
+                    Text("توقّعك:").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    wcScorePair(away: mine.predAway, home: mine.predHome, size: 12, color: WCTheme.onDark)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                 }
             } else {
@@ -387,6 +384,26 @@ private struct WCPredTodayTab: View {
             await MainActor.run { if toast == msg { toast = nil } }
         }
     }
+}
+
+// MARK: - عرض النتيجة/التوقّع الموحّد (مشترك)
+//
+// مصدر واحد لعرض «ضيف - مضيف» عبر كل تبويبات التوقّع كي لا تتضارب الصفحات.
+// نبني الرقم من ثلاثة عناصر Text منفصلة داخل HStack مفروض LTR بدل استيفاء نصّي
+// مختلط (عربي + أرقام) — فالأخير يخضع لخوارزمية الاتجاه ثنائي الاتجاه (bidi)
+// ويظهر مقلوبًا أحيانًا (سبب اختلاف «توقّعاتي» عن «مباريات اليوم»). هنا الترتيب
+// حتميّ: الضيف يسارًا والمضيف يمينًا — مطابقةً لترتيب الشعارات (المضيف يمين في RTL)
+// ولعدّادات إدخال التوقّع.
+@ViewBuilder
+func wcScorePair(away: Int, home: Int, size: CGFloat, color: Color) -> some View {
+    HStack(spacing: 6) {
+        Text("\(away)")
+        Text("-")
+        Text("\(home)")
+    }
+    .font(SabqFonts.app(size: size, weight: .black).monospacedDigit())
+    .foregroundStyle(color)
+    .environment(\.layoutDirection, .leftToRight)
 }
 
 // MARK: - شارة حالة التوقّع (مشتركة)
@@ -1052,13 +1069,12 @@ private struct WCPredMineTab: View {
         return HStack(spacing: 10) {
             logo(item.homeTeamLogo)
             VStack(spacing: 2) {
-                Text("\(item.predAway) - \(item.predHome)")
-                    .font(SabqFonts.app(size: 14, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
-                    .environment(\.layoutDirection, .leftToRight)
+                wcScorePair(away: item.predAway, home: item.predHome, size: 14, color: WCTheme.onDark)
                 if let fh = item.finalHome, let fa = item.finalAway {
-                    Text("النتيجة \(fa)-\(fh)")
-                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
-                        .environment(\.layoutDirection, .leftToRight)
+                    HStack(spacing: 4) {
+                        Text("النتيجة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                        wcScorePair(away: fa, home: fh, size: 10, color: WCTheme.onDarkDim)
+                    }
                 }
             }
             .frame(minWidth: 64)
