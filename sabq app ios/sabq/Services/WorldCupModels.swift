@@ -405,6 +405,8 @@ nonisolated struct WCPredictionHistoryItem: Decodable, Identifiable, Hashable {
 
     var id: String { fixtureId }
     var settled: Bool { (finalHome != nil && finalAway != nil) || matchStatus == "settled" }
+    /// توقّع فائز مُسوّى — لإطلاق احتفال الفوز مرّة واحدة لكل مباراة.
+    var won: Bool { settled && status == "correct" }
 }
 
 nonisolated struct WCPredMineResponse: Decodable, Hashable {

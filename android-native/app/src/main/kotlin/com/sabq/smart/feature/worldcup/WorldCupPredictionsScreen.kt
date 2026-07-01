@@ -1,5 +1,10 @@
 package com.sabq.smart.feature.worldcup
 
+import android.content.Context
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,11 +46,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +65,9 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlin.random.Random
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -96,7 +111,22 @@ fun WorldCupPredictionsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // احتفال الفوز — يُعرض مرّة واحدة لكل مباراة فائزة، ونتتبّع المعروضة محليًّا.
+    val context = LocalContext.current
+    var celebration by remember { mutableStateOf<WcPredictionHistoryItem?>(null) }
+    LaunchedEffect(state.mine, state.isLoggedIn) {
+        if (!state.isLoggedIn || celebration != null) return@LaunchedEffect
+        val seen = wcSeenWins(context)
+        state.mine.firstOrNull { it.won && it.fixtureId !in seen }?.let { celebration = it }
+    }
+
     ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
+        celebration?.let { row ->
+            WcWinCelebration(row) {
+                wcMarkWinSeen(context, row.fixtureId)
+                celebration = null
+            }
+        }
         Box(modifier = Modifier.fillMaxSize().background(WcColors.sectionBackground)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Row(
@@ -550,6 +580,129 @@ private fun Pill(bg: Color, content: @Composable RowScope.() -> Unit) {
         modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
         content = content,
     )
+}
+
+// ---------- احتفال الفوز (Dialog + confetti + تفاصيل التوقّع) ----------
+//
+// يظهر مرّة واحدة لكل مباراة فائزة عند فتح الشاشة — مطابقًا لفكرة iOS
+// WCWinCelebration وSpWinCelebration في تطبيق الرياضة والويب.
+
+private const val WC_PREFS = "wc_predictions"
+private const val WC_SEEN_KEY = "seen_wins"
+
+private fun wcSeenWins(context: Context): Set<String> =
+    context.getSharedPreferences(WC_PREFS, Context.MODE_PRIVATE)
+        .getStringSet(WC_SEEN_KEY, emptySet()) ?: emptySet()
+
+private fun wcMarkWinSeen(context: Context, fixtureId: String) {
+    val prefs = context.getSharedPreferences(WC_PREFS, Context.MODE_PRIVATE)
+    val seen = (prefs.getStringSet(WC_SEEN_KEY, emptySet()) ?: emptySet()).toMutableSet()
+    seen.add(fixtureId)
+    prefs.edit().putStringSet(WC_SEEN_KEY, seen).apply()
+}
+
+@Composable
+private fun WcWinCelebration(item: WcPredictionHistoryItem, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            WcConfetti(Modifier.fillMaxSize())
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(WcColors.card).padding(28.dp),
+            ) {
+                Text("🎯", fontSize = 56.sp)
+                Text("توقّع موفّق! 🎉", color = WcColors.onDark, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text(
+                    "${item.homeTeamName ?: ""} ضد ${item.awayTeamName ?: ""}",
+                    color = WcColors.onDarkDim, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                )
+
+                // تفاصيل التوقّع: الشعارات + توقّعي/النتيجة
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.chipFill)
+                        .border(1.dp, WcColors.cardStroke, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    MineCrest(item.homeTeamName, item.homeTeamLogo)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        ScoreBlockMine("توقّعي", item.predAway, item.predHome, WcColors.emeraldDeep)
+                        if (item.finalHome != null && item.finalAway != null) {
+                            Box(Modifier.width(1.dp).height(32.dp).background(WcColors.cardStroke))
+                            ScoreBlockMine("النتيجة", item.finalAway, item.finalHome, WcColors.onDark)
+                        }
+                    }
+                    MineCrest(item.awayTeamName, item.awayTeamLogo)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Text("+${item.pointsAwarded}", color = WcColors.emeraldDeep, fontSize = 42.sp, fontWeight = FontWeight.Black)
+                    }
+                    Text("نقطة من إصابة النتيجة الدقيقة", color = WcColors.onDarkDim, fontSize = 12.sp)
+                }
+
+                Text(
+                    "رائع!", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.emeraldDeep)
+                        .clickable { onClose() }.padding(vertical = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+private data class WcConfPiece(
+    val x: Float, val delay: Float, val duration: Float,
+    val colorIdx: Int, val size: Float, val spin: Float, val drift: Float,
+)
+
+@Composable
+private fun WcConfetti(modifier: Modifier = Modifier) {
+    val palette = listOf(WcColors.emeraldDeep, WcColors.gold, WcColors.leaf, WcColors.emerald)
+    val pieces = remember {
+        List(80) {
+            WcConfPiece(
+                x = Random.nextFloat(),
+                delay = Random.nextFloat() * 0.8f,
+                duration = 2.2f + Random.nextFloat() * 1.4f,
+                colorIdx = Random.nextInt(4),
+                size = 6f + Random.nextFloat() * 5f,
+                spin = -4f + Random.nextFloat() * 8f,
+                drift = -40f + Random.nextFloat() * 80f,
+            )
+        }
+    }
+    val clock = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        clock.animateTo(4f, animationSpec = tween(durationMillis = 4000, easing = LinearEasing))
+    }
+    Canvas(modifier = modifier) {
+        val time = clock.value
+        pieces.forEach { p ->
+            val local = time - p.delay
+            if (local <= 0f) return@forEach
+            val progress = (local / p.duration).coerceAtMost(1f)
+            val y = -20f + (size.height + 40f) * progress
+            val x = p.x * size.width + p.drift * progress
+            val opacity = if (progress < 0.85f) 1f else ((1f - progress) / 0.15f).coerceIn(0f, 1f)
+            rotate(degrees = Math.toDegrees((p.spin * local).toDouble()).toFloat(), pivot = Offset(x, y)) {
+                drawRect(
+                    color = palette[p.colorIdx].copy(alpha = opacity),
+                    topLeft = Offset(x - p.size / 2f, y - p.size * 0.3f),
+                    size = Size(p.size, p.size * 0.6f),
+                )
+            }
+        }
+    }
 }
 
 // ---------- تبويب: المتصدّرون ----------

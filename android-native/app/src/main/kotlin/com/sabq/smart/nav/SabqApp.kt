@@ -529,8 +529,10 @@ fun SabqApp(
                 composable(
                     route = SabqRoutes.GulfCupMatch,
                     arguments = listOf(navArgument("id") { type = NavType.StringType }),
-                ) {
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
                     com.sabq.smart.feature.gulfcup.GulfCupMatchScreen(
+                        fixtureId = fixtureId,
                         onBack = { navController.popBackStack() },
                     )
                 }
