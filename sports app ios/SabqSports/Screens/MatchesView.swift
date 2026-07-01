@@ -432,6 +432,7 @@ extension VaraTeamStrength {
 
 struct MatchesView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var fixtures: [SpWcFixture] = []
     @State private var visibleDays: [SpWcDay] = []
     @State private var loading = true
@@ -478,6 +479,10 @@ struct MatchesView: View {
         // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load(force: true) } }
+        }
+        // البث الحيّ (SSE): أي تغيّر في مباريات المونديال الجارية = تحديث فوري للقائمة.
+        .onChange(of: liveStream.wcVersion) { _, _ in
+            Task { await load(force: true) }
         }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
@@ -1308,6 +1313,7 @@ struct WcMatchCenter: View {
     let preview: SpWcFixture
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var detail: SpWcMatchDetail?
     @State private var loading = true
     @State private var segment: WcSeg = .events
@@ -1368,6 +1374,12 @@ struct WcMatchCenter: View {
         // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, fx.status.live { Task { await refreshLiveLight() } }
+        }
+        // البث الحيّ (SSE): ختم مباراتنا تغيّر = جلب فوري؛ اختفاؤه (-1) = انتهت → تحميل كامل.
+        .onChange(of: liveStream.stamps["w:\(fixtureId)"]) { _, stamp in
+            Task {
+                if stamp == -1 { await load(force: true) } else { await refreshLiveLight() }
+            }
         }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }

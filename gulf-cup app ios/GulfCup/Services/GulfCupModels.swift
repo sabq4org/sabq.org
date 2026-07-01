@@ -84,6 +84,57 @@ private struct GcTeamsResponse: Decodable { let teams: [GcTeam] }
 private struct GcFixturesResponse: Decodable { let fixtures: [GcFixture] }
 private struct GcStandingsResponse: Decodable { let groups: [GcGroup] }
 
+// MARK: - الهدّافون وصنّاع الأهداف (/gulf-cup/scorers)
+
+struct GcScorer: Decodable, Identifiable, Hashable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let photo: String
+    let team: GcTeam
+    let goals: Int
+    let assists: Int
+    let penalties: Int
+    let matches: Int
+    let minutes: Int
+}
+
+struct GcScorersBoard: Decodable, Hashable {
+    let season: Int
+    let isCurrent: Bool
+    let scorers: [GcScorer]
+    let assists: [GcScorer]
+}
+
+// MARK: - سجلّ البطولة (/gulf-cup/history)
+
+struct GcEdition: Decodable, Identifiable, Hashable {
+    let edition: Int
+    let title: String
+    let year: String
+    let host: GcTeam
+    let hostCity: String?
+    let champion: GcTeam?
+    let runnerUp: GcTeam?
+    let finalNote: String?
+    let upcoming: Bool
+    var id: Int { edition }
+}
+
+struct GcTitleRow: Decodable, Identifiable, Hashable {
+    let team: GcTeam
+    let titles: Int
+    let runnerUps: Int
+    let hosted: Int
+    let lastTitleYear: String?
+    var id: Int { team.id }
+}
+
+struct GcHistory: Decodable, Hashable {
+    let editions: [GcEdition]
+    let titles: [GcTitleRow]
+}
+
 // MARK: - التوقعات (gcPredictionsService)
 
 struct GcModelProbs: Decodable, Hashable {
@@ -167,6 +218,30 @@ private struct GcPredictionsLeaderboardResponse: Decodable {
     let leaders: [GcPredictionLeader]
 }
 
+/// سجلّ توقّعاتي (/predictions/mine) — الصفوف مضمومة إلى لقطة المباراة.
+struct GcMyPredictionRow: Decodable, Identifiable, Hashable {
+    let fixtureId: String
+    let predHome: Int
+    let predAway: Int
+    let status: String
+    let tier: String?
+    let outcomeHit: Bool?
+    let marginHit: Bool?
+    let exactHit: Bool?
+    let pointsAwarded: Int?
+    let kickoffAt: String?
+    let homeTeamName: String?
+    let homeTeamLogo: String?
+    let awayTeamName: String?
+    let awayTeamLogo: String?
+    let finalHome: Int?
+    let finalAway: Int?
+    let matchStatus: String?
+    var id: String { fixtureId }
+}
+
+private struct GcMyPredictionsResponse: Decodable { let predictions: [GcMyPredictionRow] }
+
 // توقعات طويلة المدى (البطل / الهدّاف)
 struct GcTeamLite: Decodable, Identifiable, Hashable {
     let id: Int
@@ -222,6 +297,18 @@ struct GcSquadPlayer: Decodable, Hashable, Identifiable {
     let name: String
     let number: Int?
     let position: String
+    let positionEn: String?
+    let age: Int?
+    let photo: String?
+}
+
+/// إرث المنتخب في تاريخ البطولة (ثابت من الخادم).
+struct GcTeamLegacy: Decodable, Hashable {
+    let titles: Int
+    let runnerUps: Int
+    let hosted: Int
+    let titleYears: [String]
+    let lastTitleYear: String?
 }
 
 struct GcTeamProfile: Decodable, Hashable {
@@ -233,6 +320,7 @@ struct GcTeamProfile: Decodable, Hashable {
     let nextMatch: GcFixture?
     let fixtures: [GcFixture]
     let squad: [GcSquadPlayer]
+    let legacy: GcTeamLegacy?
 }
 
 struct GcMatchEvent: Decodable, Hashable, Identifiable {
@@ -270,12 +358,31 @@ struct GcStatistic: Decodable, Hashable, Identifiable {
     var id: String { key }
 }
 
+/// مواجهة تاريخية (كل البطولات) من fixtures/headtohead.
+struct GcH2HMatch: Decodable, Hashable, Identifiable {
+    let date: String
+    let competition: String
+    let home: GcTeam
+    let away: GcTeam
+    let goals: GcScore
+    var id: String { "\(date)-\(home.id)-\(away.id)" }
+}
+
+struct GcH2HSummary: Decodable, Hashable {
+    let total: Int
+    let homeWins: Int
+    let awayWins: Int
+    let draws: Int
+    let recent: [GcH2HMatch]
+}
+
 struct GcMatchDetail: Decodable, Hashable {
     let fixture: GcFixture
     let events: [GcMatchEvent]
     let lineups: [GcLineup]
     let statistics: [GcStatistic]
     let headToHead: [GcFixture]
+    let history: GcH2HSummary?
 }
 
 struct GcDayGroup: Identifiable {
@@ -349,9 +456,21 @@ enum GcFormat {
         return formatter("EEEE d MMMM").string(from: d)
     }
 
+    /// يوم مختصر «23 سبت» لعمود الحالة الضيّق.
+    static func kickoffDayShort(_ iso: String?) -> String {
+        guard let iso, let d = GcDateMath.date(from: iso) else { return "" }
+        return formatter("d MMM").string(from: d)
+    }
+
     static func kickoffTime(_ iso: String?) -> String {
         guard let iso, let d = GcDateMath.date(from: iso) else { return "" }
         return formatter("HH:mm").string(from: d)
+    }
+
+    /// سنة المواجهة التاريخية «2024».
+    static func year(_ iso: String?) -> String {
+        guard let iso, let d = GcDateMath.date(from: iso) else { return "" }
+        return formatter("yyyy").string(from: d)
     }
 
     static func dateRange(startIso: String?, endIso: String?) -> String {
@@ -361,6 +480,17 @@ enum GcFormat {
         guard let endIso, let e = GcDateMath.date(from: endIso) else { return start }
         let end = f.string(from: e)
         return start == end ? start : "\(start) — \(end)"
+    }
+
+    /// وصف نسبي قريب: «اليوم 21:00» / «غدًا 18:00» / «الثلاثاء 23 سبتمبر».
+    static func relativeKickoff(_ iso: String?) -> String {
+        guard let iso, let d = GcDateMath.date(from: iso) else { return "" }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = riyadh
+        let time = kickoffTime(iso)
+        if cal.isDateInToday(d) { return "\(L("time.today")) \(time)" }
+        if cal.isDateInTomorrow(d) { return "\(L("time.tomorrow")) \(time)" }
+        return kickoffDay(iso)
     }
 }
 
@@ -406,6 +536,14 @@ extension APIClient {
         return r.groups
     }
 
+    func fetchGcScorers(ignoreCache: Bool = false) async throws -> GcScorersBoard {
+        try await get(GcScorersBoard.self, path: "/gulf-cup/scorers", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchGcHistory(ignoreCache: Bool = false) async throws -> GcHistory {
+        try await get(GcHistory.self, path: "/gulf-cup/history", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
     func fetchGcPredictionsToday(ignoreCache: Bool = false) async throws -> GcPredictionsTodayResponse {
         try await get(
             GcPredictionsTodayResponse.self,
@@ -423,6 +561,16 @@ extension APIClient {
             apiRoot: URLConstants.mobileAPI
         )
         return r.leaders
+    }
+
+    func fetchGcMyPredictions(ignoreCache: Bool = false) async throws -> [GcMyPredictionRow] {
+        let r = try await get(
+            GcMyPredictionsResponse.self,
+            path: "/gulf-cup/predictions/mine",
+            ignoreCache: ignoreCache,
+            apiRoot: URLConstants.mobileAPI
+        )
+        return r.predictions
     }
 
     func fetchGcLongPredictions(ignoreCache: Bool = false) async throws -> GcLongData {
