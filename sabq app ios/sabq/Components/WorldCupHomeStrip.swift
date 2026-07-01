@@ -47,6 +47,17 @@ final class WorldCupHomeStore {
     var matchOfTheDayLive: Bool {
         overview?.matchOfTheDay?.fixture.status.live ?? false
     }
+
+    /// أقرب انطلاقة قادمة لمباراة اليوم أو شقيقاتها المتزامنة — تُستخدم لإبقاء
+    /// حلقة الاستطلاع حيّة قبل الصافرة فتلتقط التحوّل قادمة→مباشر دون مغادرة الرئيسية.
+    var nextKickoffTimestamp: Int? {
+        guard let ov = overview else { return nil }
+        let candidates = [ov.matchOfTheDay?.fixture].compactMap { $0 } + (ov.matchOfDayPeers ?? [])
+        return candidates
+            .filter { !$0.status.live && !$0.status.finished }
+            .map(\.timestamp)
+            .min()
+    }
 }
 
 // MARK: - شريط المونديال في الواجهة الرئيسية
@@ -93,12 +104,31 @@ struct WorldCupHomeStrip: View {
         .task {
             // تحميل أولي ثم استطلاع لحظي أثناء جريان مباراة اليوم — تتحدّث
             // النتيجة/الدقيقة على الواجهة دون مغادرة الصفحة (كما في الويب).
+            // الحلقة لا تخرج لمجرد أن المباراة «ليست حيّة الآن»: قبل الصافرة
+            // تستطلع بوتيرة أبطأ كي تلتقط التحوّل قادمة→مباشر (كان العدّاد
+            // يتجمّد على 00:00:00 لمن بقي على الرئيسية لحظة الانطلاق).
             await store.loadIfNeeded()
             while !Task.isCancelled {
-                guard store.matchOfTheDayLive else { return }
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                let interval: UInt64
+                var lightRefresh = false
+                if store.matchOfTheDayLive {
+                    interval = 15_000_000_000
+                } else if let ts = store.nextKickoffTimestamp {
+                    let untilKickoff = TimeInterval(ts) - Date().timeIntervalSince1970
+                    if untilKickoff <= -900 {
+                        return          // مضى ربع ساعة بلا بث: تأجيل/إلغاء — لا نستطلع للأبد
+                    } else if untilKickoff <= 600 {
+                        interval = 20_000_000_000   // وشيكة/انطلقت للتو: التقاط التحوّل
+                    } else {
+                        interval = 60_000_000_000   // بعيدة: نبضة دقيقة صديقة للكاش تكفي
+                        lightRefresh = true
+                    }
+                } else {
+                    return              // لا حيّة ولا قادمة — لا شيء يُستطلع
+                }
+                try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
-                await store.refreshLive()
+                if lightRefresh { await store.loadIfNeeded() } else { await store.refreshLive() }
             }
         }
     }

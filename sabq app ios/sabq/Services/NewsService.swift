@@ -15,13 +15,16 @@ enum NewsService {
             .map(OpinionArticle.from)
     }
 
+    /// `nil` يعني فشل المسارين معًا (الرئيسية والاحتياطي) — شبكة/خادم لا
+    /// «محتوى فارغ»؛ يميّزه المخزن ليعرض حالة خطأ قابلة لإعادة المحاولة
+    /// بدل skeleton أبدي صامت.
     static func fetchHomepage(ignoreCache: Bool = false) async -> (
         featured: [Article],
         latest: [Article],
         breaking: [Article],
         stories: [APIStory],
         trending: [String]
-    ) {
+    )? {
         do {
             let response: APIHomepageResponse
             let paginatedArticles: [Article]
@@ -74,7 +77,7 @@ enum NewsService {
                 let breaking = all.filter(\.isBreaking)
                 return (featured.isEmpty ? Array(all.prefix(3)) : featured, all, breaking, [], [])
             } catch {
-                return ([], [], [], [], [])
+                return nil
             }
         }
     }
@@ -154,10 +157,6 @@ enum NewsService {
 
     static func fetchComments(slug: String) async -> [APIComment] {
         (try? await APIClient.shared.fetchComments(slug: slug)) ?? []
-    }
-
-    static func fetchAudioSummary(slug: String) async -> APIAudioSummary? {
-        try? await APIClient.shared.fetchAudioSummary(slug: slug)
     }
 
     static func search(query: String, page: Int = 1) async -> (articles: [Article], total: Int) {

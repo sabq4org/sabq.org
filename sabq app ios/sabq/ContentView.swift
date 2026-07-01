@@ -243,6 +243,17 @@ struct ContentView: View {
             .allowsHitTesting(tabBarVisibility.isVisible)
         }
         .sabqRTL()
+        // Boot-time loads live here (NOT in the stores' inits): the @State
+        // initial-value expression re-runs on every sabqApp body re-eval
+        // (scene phase / appearance changes), spawning throwaway store
+        // instances whose init-side network calls all fired and got dumped.
+        // `.task` runs once per view identity — exactly one session check
+        // and one home feed load per launch.
+        .task {
+            async let auth: Void = authStore.checkAuth()
+            async let articles: Void = articlesStore.loadArticles()
+            _ = await (auth, articles)
+        }
         .onChange(of: navigationPath.count) { _, _ in
             // Whenever the stack pops/pushes, restore the bar so the
             // reader never lands on a screen with the bar already hidden.

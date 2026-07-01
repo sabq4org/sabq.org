@@ -49,14 +49,13 @@ final class NotificationsStore {
     /// Refetch the unread count from the backend. Called on every push
     /// receipt (foreground + tap) and on app-becomes-active transitions
     /// so the bell's red dot stays in sync without needing a manual
-    /// home-feed pull-to-refresh. Cheap single API call; safely no-ops
-    /// when the user isn't signed in (the call returns 401 and we
-    /// silently swallow it).
+    /// home-feed pull-to-refresh. Uses the lightweight count endpoint —
+    /// the previous full-page fetch pulled the whole notifications list
+    /// just to read `unread`. Safely no-ops when the user isn't signed
+    /// in (the call returns 401 and we silently swallow it).
     func refreshUnreadCount() async {
-        guard let page = try? await APIClient.shared.fetchEditorialNotifications() else {
-            return
-        }
-        unreadCount = page.unread
+        guard let count = try? await APIClient.shared.fetchUnreadCount() else { return }
+        unreadCount = count
     }
 
     func setDeviceToken(_ token: String) {

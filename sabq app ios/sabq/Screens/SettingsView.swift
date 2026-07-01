@@ -2687,8 +2687,20 @@ struct EditProfileSheet: View {
                     if let data = try? await newValue?.loadTransferable(type: Data.self),
                        let uiImage = UIImage(data: data) {
                         selectedImage = uiImage
-                        if let pngData = uiImage.pngData() {
-                            await authStore.uploadAvatar(imageData: pngData)
+                        // صغّر واضغط قبل الرفع: صورة المكتبة قد تتجاوز 12MP،
+                        // وكان pngData بدقة كاملة يرفع عشرات الميغابايت على
+                        // شبكة الجوال — 1024px بصيغة JPEG تكفي لصورة رمزية.
+                        let maxDim: CGFloat = 1024
+                        let longest = max(uiImage.size.width, uiImage.size.height)
+                        var upload = uiImage
+                        if longest > maxDim, longest > 0 {
+                            let scale = maxDim / longest
+                            let target = CGSize(width: uiImage.size.width * scale,
+                                                height: uiImage.size.height * scale)
+                            upload = await uiImage.byPreparingThumbnail(ofSize: target) ?? uiImage
+                        }
+                        if let jpegData = upload.jpegData(compressionQuality: 0.85) ?? upload.pngData() {
+                            await authStore.uploadAvatar(imageData: jpegData)
                             if authStore.errorMessage == nil {
                                 withAnimation { showUploadNotice = true }
                             }

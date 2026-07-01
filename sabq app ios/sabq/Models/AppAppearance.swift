@@ -57,6 +57,10 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     static func migrateLegacyIfNeeded() {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: "appAppearance") == nil else { return }
+        // Only migrate when the legacy key actually exists: `bool(forKey:)`
+        // returns false for a missing key, which used to stamp fresh installs
+        // with "light" and stop them from ever following the system setting.
+        guard defaults.object(forKey: "isDarkMode") != nil else { return }
         let wasDark = defaults.bool(forKey: "isDarkMode")
         defaults.set(wasDark ? AppAppearance.dark.rawValue : AppAppearance.light.rawValue,
                      forKey: "appAppearance")

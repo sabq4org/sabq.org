@@ -207,9 +207,20 @@ struct OpinionDetailView: View {
         .onDisappear {
             copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
-            audioPlayer?.pause()
-            audioPlayer = nil
+            if audioPlayer != nil {
+                audioPlayer?.pause()
+                audioPlayer = nil
+                SabqAudioSession.deactivate()
+            }
             isPlayingAudio = false
+        }
+        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «إيقاف» وجلسة
+        // الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
+            isPlayingAudio = false
+            audioPlayer = nil
+            SabqAudioSession.deactivate()
         }
         .navigationDestination(for: OpinionArticle.self) { opinion in
             OpinionDetailView(opinion: opinion)

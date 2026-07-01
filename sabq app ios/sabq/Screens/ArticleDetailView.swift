@@ -48,7 +48,6 @@ struct ArticleDetailView: View {
     @State private var aiInsights: [String: String] = [:]
 
     @State private var relatedArticles: [Article] = []
-    @State private var audioSummary: APIAudioSummary?
     @State private var isPlayingAudio = false
     @State private var audioPlayer: AVPlayer?
     /// Comments are owned by a per-article store. Lazily created the first time
@@ -63,11 +62,6 @@ struct ArticleDetailView: View {
     @State private var isSummaryExpanded = false
     @State private var fullArticle: Article?
     @State private var resolvedTags: [String] = []
-    @State private var isExcerptExpanded = false
-    @State private var shortlinkURL: URL?
-    @State private var shortlinkTask: Task<URL?, Never>?
-    @State private var isCopyFeedbackVisible = false
-    @State private var copyFeedbackTask: Task<Void, Never>?
     /// Live scroll progress (0…1), driven by `.sabqScrollProgressTracker`.
     /// Held as a class so mutations don't invalidate this view's body —
     /// only `ReadingProgressOverlay` subscribes via `@ObservedObject`. See
@@ -349,12 +343,21 @@ struct ArticleDetailView: View {
             prefetchInlineImages(from: cachedBlocks.items)
         }
         .onDisappear {
-            audioPlayer?.pause()
-            audioPlayer = nil
+            if audioPlayer != nil {
+                audioPlayer?.pause()
+                audioPlayer = nil
+                SabqAudioSession.deactivate()
+            }
             isPlayingAudio = false
-            shortlinkTask?.cancel()
-            copyFeedbackTask?.cancel()
             BehaviorTracker.shared.endSession()
+        }
+        // انتهاء الملخص الصوتي: بدون هذا كان الزر يبقى على «جاري التشغيل...»
+        // وجلسة الصوت محتجزة، فتبقى موسيقى المستخدم موقوفة بعد انتهاء المقطع.
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { note in
+            guard let item = note.object as? AVPlayerItem, item === audioPlayer?.currentItem else { return }
+            isPlayingAudio = false
+            audioPlayer = nil
+            SabqAudioSession.deactivate()
         }
         .navigationDestination(for: Article.self) { related in
             ArticleDetailView(article: related)
@@ -466,7 +469,6 @@ struct ArticleDetailView: View {
             let store = commentsStore
 
             async let detail = NewsService.fetchArticleDetail(slug: slug)
-            async let a = NewsService.fetchAudioSummary(slug: slug)
             // Best-effort: returns sentiment + credibility hints when ai
             // processing has run for this article. Failures are silent.
             async let insights: [String: String]? = try? await APIClient.shared.fetchAIInsights(slug: slug)
@@ -476,8 +478,7 @@ struct ArticleDetailView: View {
                 Task { await store.load() }
             }
 
-            let (bundle, aud, ins) = await (detail, a, insights)
-            audioSummary = aud
+            let (bundle, ins) = await (detail, insights)
             if let ins { aiInsights = ins }
 
             if let bundle {
@@ -543,49 +544,6 @@ struct ArticleDetailView: View {
                 .font(SabqFonts.app(size: 100, weight: .ultraLight))
                 .foregroundStyle(article.category.tint.opacity(0.15))
         }
-    }
-
-    // MARK: - Audio Summary
-
-    private var audioSummarySection: some View {
-        Button {
-            toggleAudio()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: isPlayingAudio ? "pause.circle.fill" : "play.circle.fill")
-                    .font(SabqFonts.app(size: 28))
-                    .foregroundStyle(SabqTheme.primaryEnd)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("ملخص صوتي")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-
-                    Text(isPlayingAudio ? "جاري التشغيل..." : "استمع لملخص المقال")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-
-                Spacer(minLength: 0)
-
-                if let duration = audioSummary?.duration {
-                    Text("\(duration / 60):\(String(format: "%02d", duration % 60))")
-                        .font(SabqFonts.app(size: 13, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .fill(SabqTheme.primaryEnd.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                    .stroke(SabqTheme.primaryEnd.opacity(0.12), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
     }
 
     private func toggleAudio() {
@@ -985,54 +943,6 @@ struct ArticleDetailView: View {
             .padding(.horizontal, 4)
     }
 
-    // MARK: - Excerpt
-
-    private var articleExcerpt: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(SabqTheme.primaryEnd)
-                .frame(width: 3)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.primaryEnd.opacity(0.7))
-                    Text("الموجز الذكي")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-
-                Text(displayArticle.excerpt)
-                    .font(SabqFonts.app(size: CGFloat(fontSize - 1), weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(6)
-                    .lineLimit(isExcerptExpanded ? nil : 3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .animation(.easeInOut(duration: 0.25), value: isExcerptExpanded)
-
-                Button {
-                    withAnimation(.spring(response: 0.3)) {
-                        isExcerptExpanded.toggle()
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(isExcerptExpanded ? "عرض أقل" : "عرض المزيد")
-                            .font(SabqFonts.app(size: 13, weight: .medium))
-                        Image(systemName: isExcerptExpanded ? "chevron.up" : "chevron.down")
-                            .font(SabqFonts.app(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(SabqTheme.primaryEnd)
-                }
-                .buttonStyle(.plain)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 4)
-    }
-
     // MARK: - Body
 
     private var displayArticle: Article { fullArticle ?? article }
@@ -1385,39 +1295,6 @@ struct ArticleDetailView: View {
         }
     }
 
-    private func copyShareLink() {
-        Task {
-            let url = await prepareShareURL()
-            await MainActor.run {
-                UIPasteboard.general.string = url.absoluteString
-                showCopyFeedback()
-            }
-        }
-    }
-
-    @MainActor
-    private func showCopyFeedback() {
-        copyFeedbackTask?.cancel()
-
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.success)
-
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
-            isCopyFeedbackVisible = true
-        }
-
-        copyFeedbackTask = Task {
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isCopyFeedbackVisible = false
-                }
-                copyFeedbackTask = nil
-            }
-        }
-    }
-
     @MainActor
     private func prepareShareURL() async -> URL {
         // Share the canonical `/article/<englishSlug>` URL directly. The
@@ -1427,10 +1304,6 @@ struct ArticleDetailView: View {
         // app's own URL. The canonical URL goes through `seoInjector.ts`
         // and exposes the full og:image / og:title / og:description.
         return fallbackShareURL
-    }
-
-    private func resolveShortlinkURL(articleId: String) async -> URL? {
-        await SabqShareHelper.resolveShortlink(articleId: articleId)
     }
 
     @MainActor
