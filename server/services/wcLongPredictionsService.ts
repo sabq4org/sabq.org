@@ -123,12 +123,24 @@ function loserOf(fx: WcFixture): number | null {
   return null;
 }
 
+/** معرّفات المنتخبات التي خرجت من أي دور إقصائي حُسم (دور الـ32 فما بعد). */
+function eliminatedTeamIds(fixtures: WcFixture[]): Set<number> {
+  const out = new Set<number>();
+  for (const f of fixtures) {
+    if (roundPhase(f.roundEn ?? "") < 1) continue; // غير إقصائية
+    const loser = loserOf(f);
+    if (loser != null) out.add(loser);
+  }
+  return out;
+}
+
 /**
- * مرشّحو البطل = المنتخبات **المتأهّلة لدور الـ32** (= المتأهّلون للأدوار الإقصائية)
- * وما زالوا في المنافسة — نستبعد من خرج في أي دور إقصائي حُسم، فلا يصحّ توقّع بطل
- * أُقصي. مشتقّ من جدول المباريات لا من كامل قائمة الـ48 (التي تضمّ من لم يتأهّل).
+ * مرشّحو البطل = المنتخبات **المتأهّلة لدور الـ32** (= المتأهّلون للأدوار الإقصائية).
+ * القائمة الكاملة تبقى ظاهرة دائمًا — من خرج في أي دور إقصائي حُسم يُعلَّم
+ * eliminated (لا يُحذف) كي تُعطّل الواجهة اختياره بدل إخفائه فجأة. مشتقّ من جدول
+ * المباريات لا من كامل قائمة الـ48 (التي تضمّ من لم يتأهّل أصلًا).
  */
-function championCandidates(fixtures: WcFixture[]): WcTeam[] {
+function championCandidates(fixtures: WcFixture[]): (WcTeam & { eliminated: boolean })[] {
   const byId = new Map<number, WcTeam>();
   for (const f of fixtures) {
     const r = (f.roundEn ?? "").trim();
@@ -136,14 +148,9 @@ function championCandidates(fixtures: WcFixture[]): WcTeam[] {
     if (f.home?.id) byId.set(f.home.id, f.home);
     if (f.away?.id) byId.set(f.away.id, f.away);
   }
-  const eliminated = new Set<number>();
-  for (const f of fixtures) {
-    if (roundPhase(f.roundEn ?? "") < 1) continue; // غير إقصائية
-    const loser = loserOf(f);
-    if (loser != null) eliminated.add(loser);
-  }
+  const eliminated = eliminatedTeamIds(fixtures);
   return [...byId.values()]
-    .filter((t) => !eliminated.has(t.id))
+    .map((t) => ({ ...t, eliminated: eliminated.has(t.id) }))
     .sort((a, b) => a.name.localeCompare(b.name, "ar"));
 }
 
@@ -157,7 +164,8 @@ export async function getWcLongPredictions(userId?: string) {
     getFixtures().catch(() => [] as WcFixture[]),
   ]);
   const phase = currentPhase(fixtures);
-  const teams = championCandidates(fixtures); // المتأهّلون لدور الـ32 وما زالوا في المنافسة
+  const teams = championCandidates(fixtures); // المتأهّلون لدور الـ32 (eliminated لمن خرج)
+  const eliminatedScorerTeams = eliminatedTeamIds(fixtures);
 
   // أصوات البطل: عدد + مجموع الأوزان لكل منتخب (لتقدير الحصّة المرجّحة).
   const champVotes = await db
@@ -208,13 +216,15 @@ export async function getWcLongPredictions(userId?: string) {
 
   return {
     pools: WC_LONG_POOL,
-    teams: teams.map((t) => ({ id: t.id, name: t.name, logo: t.logo })),
+    teams: teams.map((t) => ({ id: t.id, name: t.name, logo: t.logo, eliminated: t.eliminated })),
     scorers: scorers.map((s) => ({
       id: s.id,
       name: s.name,
       photo: s.photo,
       team: { name: s.team.name, logo: s.team.logo },
       goals: s.goals,
+      // فريقه خرج من البطولة ⇐ لا يمكنه تسجيل أهداف بعد الآن (يُعطَّل لا يُحذف).
+      eliminated: eliminatedScorerTeams.has(s.team.id),
     })),
     champion: {
       open: championWeight(phase) != null,
@@ -248,9 +258,9 @@ export async function submitWcLongPrediction(
   if (kind === "champion") {
     const weight = championWeight(phase);
     if (weight == null) return { ok: false, reason: "LOCKED" };
-    // يجب أن يكون الاختيار من المتأهّلين لدور الـ32 وما زالوا في المنافسة.
+    // يجب أن يكون الاختيار من المتأهّلين لدور الـ32 وما زالوا في المنافسة (لا مُقصًى).
     const team = championCandidates(fixtures).find((t) => t.id === payload.teamId);
-    if (!team) return { ok: false, reason: "INVALID" };
+    if (!team || team.eliminated) return { ok: false, reason: "INVALID" };
     await db
       .insert(wcLongPredictions)
       .values({
@@ -283,6 +293,8 @@ export async function submitWcLongPrediction(
   const scorers = await getOfficialTopScorers(SCORER_CANDIDATES);
   const sc = scorers.find((s) => s.id === payload.playerId && s.id !== 0);
   if (!sc) return { ok: false, reason: "INVALID" };
+  // فريقه خرج من البطولة ⇐ لا يمكنه تسجيل أهداف بعد الآن.
+  if (eliminatedTeamIds(fixtures).has(sc.team.id)) return { ok: false, reason: "INVALID" };
   await db
     .insert(wcLongPredictions)
     .values({

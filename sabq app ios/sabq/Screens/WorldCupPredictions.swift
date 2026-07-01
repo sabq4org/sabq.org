@@ -582,7 +582,7 @@ private struct WCPredTournamentTab: View {
 
             if champOpen {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("اختر البطل من المتأهّلين لدور الـ32 (\(data.teams.count) منتخبًا)")
+                    Text("اختر البطل من المتأهّلين لدور الـ32 (\(data.teams.filter { !$0.eliminated }.count) ما زال في المنافسة)")
                         .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
@@ -597,7 +597,10 @@ private struct WCPredTournamentTab: View {
                                     Text(t.name)
                                         .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
                                         .lineLimit(1).multilineTextAlignment(.center)
-                                    if total > 0 {
+                                    if t.eliminated {
+                                        Text("خرج")
+                                            .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                                    } else if total > 0 {
                                         Text("\(pct)%")
                                             .font(SabqFonts.app(size: 9).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
                                             .environment(\.layoutDirection, .leftToRight)
@@ -613,8 +616,11 @@ private struct WCPredTournamentTab: View {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .stroke(selected ? WCTheme.gold : WCTheme.cardStroke.opacity(0.5), lineWidth: selected ? 1.5 : 0.5)
                                 )
+                                .opacity(t.eliminated ? 0.45 : 1)
+                                .saturation(t.eliminated ? 0 : 1)
                             }
                             .buttonStyle(.plain)
+                            .disabled(t.eliminated)
                         }
                     }
 
@@ -785,7 +791,13 @@ private struct WCPredTournamentTab: View {
                                 HStack(spacing: 10) {
                                     scorerPhoto(s.photo, size: 40)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(s.name).font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                                        HStack(spacing: 5) {
+                                            Text(s.name).font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                                            if s.eliminated {
+                                                Text("خرج فريقه")
+                                                    .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                                            }
+                                        }
                                         HStack(spacing: 4) {
                                             teamLogo(s.team.logo, size: 12)
                                             Text(s.team.name).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
@@ -810,8 +822,11 @@ private struct WCPredTournamentTab: View {
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .stroke(selected ? WCTheme.emeraldDeep : WCTheme.cardStroke.opacity(0.5), lineWidth: selected ? 1.5 : 0.5)
                                 )
+                                .opacity(s.eliminated ? 0.45 : 1)
+                                .saturation(s.eliminated ? 0 : 1)
                             }
                             .buttonStyle(.plain)
+                            .disabled(s.eliminated)
                         }
                     }
 

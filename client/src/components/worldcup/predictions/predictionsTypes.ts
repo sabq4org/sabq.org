@@ -59,13 +59,16 @@ export type LeaderRow = {
 };
 
 // ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ──
-export type WcLongTeam = { id: number; name: string; logo: string };
+// eliminated: خرج من البطولة (المنتخب نفسه، أو منتخب الهدّاف) — يبقى ظاهرًا في
+// القائمة لكن معطَّلًا (لا يُحذف)، لأنه لم يعد بإمكانه رفع الكأس أو تسجيل أهداف.
+export type WcLongTeam = { id: number; name: string; logo: string; eliminated: boolean };
 export type WcLongScorer = {
   id: number;
   name: string;
   photo: string;
   team: { name: string; logo: string };
   goals: number;
+  eliminated: boolean;
 };
 export type WcLongMine = {
   kind: "champion" | "top_scorer" | string;

@@ -447,6 +447,9 @@ nonisolated struct WCLongTeam: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String
+    /// خرج من البطولة — يبقى ظاهرًا في القائمة لكن معطَّلًا (لا يُحذف)، لأنه لم يعد
+    /// بإمكانه رفع الكأس.
+    let eliminated: Bool
 }
 
 nonisolated struct WCLongScorerTeam: Decodable, Hashable {
@@ -460,6 +463,8 @@ nonisolated struct WCLongScorer: Decodable, Identifiable, Hashable {
     let photo: String
     let team: WCLongScorerTeam
     let goals: Int
+    /// منتخبه خرج من البطولة — يبقى ظاهرًا لكن معطَّلًا، لأنه لم يعد بإمكانه تسجيل أهداف.
+    let eliminated: Bool
 }
 
 nonisolated struct WCLongMine: Decodable, Hashable {

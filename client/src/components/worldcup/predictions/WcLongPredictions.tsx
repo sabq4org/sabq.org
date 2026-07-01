@@ -265,7 +265,7 @@ export function WcLongPredictions({
           {champOpen ? (
             <>
               <p className="mb-2 mt-3 text-xs font-bold text-muted-foreground">
-                اختر البطل من المتأهّلين لدور الـ32 ({formatNumber(teams.length)} منتخبًا)
+                اختر البطل من المتأهّلين لدور الـ32 ({formatNumber(teams.filter((t) => !t.eliminated).length)} ما زال في المنافسة)
               </p>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {teams.map((t) => {
@@ -278,10 +278,14 @@ export function WcLongPredictions({
                     <button
                       key={t.id}
                       onClick={() => (isAuthenticated ? setChampPick(t.id) : onRequireLogin())}
+                      disabled={t.eliminated}
+                      title={t.eliminated ? `${t.name} خرج من البطولة` : undefined}
                       className={`relative flex flex-col items-center gap-1.5 overflow-hidden rounded-xl border p-2.5 text-center transition ${
-                        selected
-                          ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40"
-                          : "border-border hover:border-amber-400/50"
+                        t.eliminated
+                          ? "cursor-not-allowed border-border/50 opacity-45 grayscale"
+                          : selected
+                            ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40"
+                            : "border-border hover:border-amber-400/50"
                       }`}
                       data-testid={`wc-champion-${t.id}`}
                     >
@@ -291,8 +295,12 @@ export function WcLongPredictions({
                         ) : null}
                       </span>
                       <span className="line-clamp-1 text-xs font-bold">{t.name}</span>
-                      {champTotalVotes > 0 && (
-                        <span className="text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+                      {t.eliminated ? (
+                        <span className="text-[10px] font-bold text-rose-500">خرج</span>
+                      ) : (
+                        champTotalVotes > 0 && (
+                          <span className="text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+                        )
                       )}
                     </button>
                   );
@@ -379,10 +387,14 @@ export function WcLongPredictions({
                     <button
                       key={s.id}
                       onClick={() => (isAuthenticated ? setScorerPick(s.id) : onRequireLogin())}
+                      disabled={s.eliminated}
+                      title={s.eliminated ? `${s.team.name} خرج من البطولة` : undefined}
                       className={`flex items-center gap-2.5 rounded-xl border p-2 text-right transition ${
-                        selected
-                          ? "border-emerald-600 bg-emerald-600/10 ring-1 ring-emerald-600/40"
-                          : "border-border hover:border-emerald-500/50"
+                        s.eliminated
+                          ? "cursor-not-allowed border-border/50 opacity-45 grayscale"
+                          : selected
+                            ? "border-emerald-600 bg-emerald-600/10 ring-1 ring-emerald-600/40"
+                            : "border-border hover:border-emerald-500/50"
                       }`}
                       data-testid={`wc-scorer-${s.id}`}
                     >
@@ -392,6 +404,7 @@ export function WcLongPredictions({
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-1.5">
                           <span className="line-clamp-1 text-sm font-bold">{s.name}</span>
+                          {s.eliminated && <span className="shrink-0 text-[10px] font-bold text-rose-500">خرج فريقه</span>}
                         </span>
                         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           {s.team.logo ? <img src={s.team.logo} alt="" className="h-3 w-3 object-contain" /> : null}
