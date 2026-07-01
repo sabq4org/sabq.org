@@ -72,6 +72,11 @@ import {
   getMatchPredictionsSummary,
 } from "../services/wcPredictionsService";
 import {
+  getWcLongPredictions,
+  submitWcLongPrediction,
+  type WcLongKind,
+} from "../services/wcLongPredictionsService";
+import {
   isGcPredictionsEnabled,
   submitPrediction as submitGcPrediction,
   getMyPredictions as getGcMyPredictions,
@@ -8393,6 +8398,17 @@ function wcPredGuard(res: Response): boolean {
   return true;
 }
 
+// توقّعات البطولة طويلة المدى (البطل/الهدّاف) — خلف نفس علم الويب المستقل
+// WC_LONG_PREDICTIONS_ENABLED (إطلاق ويب-أولًا متدرّج، انظر wcPredictions.ts).
+function wcLongGuard(res: Response): boolean {
+  if (!wcPredGuard(res)) return false;
+  if (process.env.WC_LONG_PREDICTIONS_ENABLED !== "true") {
+    res.status(503).json({ enabled: false, message: "توقّعات البطولة قيد الإطلاق" });
+    return false;
+  }
+  return true;
+}
+
 router.get("/world-cup/predictions/today", async (req: Request, res: Response) => {
   if (!wcPredGuard(res)) return;
   try {
@@ -8479,6 +8495,49 @@ router.get("/world-cup/predictions/match/:fixtureId", async (req: Request, res: 
   } catch (error) {
     console.error("[Mobile WC Predictions] match summary error:", error);
     res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
+  }
+});
+
+// ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ─────────────────────────
+// نظيرة /api/world-cup/predictions/long على الويب — نفس wcLongPredictionsService.
+
+router.get("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json(await getWcLongPredictions(session?.userId));
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعات البطولة حاليًا" });
+  }
+});
+
+router.post("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const kind = String(req.body?.kind) as WcLongKind;
+    const teamId = req.body?.teamId != null ? Number(req.body.teamId) : undefined;
+    const playerId = req.body?.playerId != null ? Number(req.body.playerId) : undefined;
+    const result = await submitWcLongPrediction(session.userId, kind, { teamId, playerId });
+    if (!result.ok) {
+      const map = {
+        LOCKED: { code: 409, message: "أُغلق هذا التوقّع — تجاوزنا موعده في البطولة" },
+        INVALID: { code: 400, message: "اختيار غير صالح" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
   }
 });
 
