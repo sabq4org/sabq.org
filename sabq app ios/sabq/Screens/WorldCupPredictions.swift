@@ -406,6 +406,17 @@ func wcScorePair(away: Int, home: Int, size: CGFloat, color: Color) -> some View
     .environment(\.layoutDirection, .leftToRight)
 }
 
+// محلّل ISO مرن (بكسور ثانية أو بدونها) — لعرض يوم المباراة في سجلّ التوقّعات.
+private let wcISOParserFractional: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+private let wcISOParserPlain = ISO8601DateFormatter()
+func wcParseISODate(_ s: String) -> Date? {
+    wcISOParserFractional.date(from: s) ?? wcISOParserPlain.date(from: s)
+}
+
 // MARK: - شارة حالة التوقّع (مشتركة)
 
 @ViewBuilder
@@ -1059,48 +1070,120 @@ private struct WCPredMineTab: View {
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
     }
 
+    // بطاقة توقّع احترافية مطابقة لتصميم الويب (MyPredictionsList): شريط علوي
+    // (اليوم + حالة)، ثم الشعارات (المضيف يمينًا) وكتلتا «توقّعي/النتيجة»، وتذييل
+    // للترجيح إن وُجد. توحيد بصري كامل بين الويب و iOS و Android.
     private func row(_ item: WCPredictionHistoryItem) -> some View {
+        let settled = item.matchStatus == "settled" && item.finalHome != nil && item.finalAway != nil
+        let isWin = settled && item.status == "correct"
         // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح.
         let penWin: (name: String, w: Int, l: Int)? = {
             guard let ph = item.finalPenHome, let pa = item.finalPenAway, ph != pa else { return nil }
             let homeWon = ph > pa
             return ((homeWon ? item.homeTeamName : item.awayTeamName) ?? "", max(ph, pa), min(ph, pa))
         }()
-        return HStack(spacing: 10) {
-            logo(item.homeTeamLogo)
-            VStack(spacing: 2) {
-                wcScorePair(away: item.predAway, home: item.predHome, size: 14, color: WCTheme.onDark)
-                if let fh = item.finalHome, let fa = item.finalAway {
-                    HStack(spacing: 4) {
-                        Text("النتيجة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
-                        wcScorePair(away: fa, home: fh, size: 10, color: WCTheme.onDarkDim)
+
+        return VStack(spacing: 0) {
+            // شريط علوي: اليوم + شارة الحالة
+            HStack {
+                Text(kickoffDayLabel(item.kickoffAt))
+                    .font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                Spacer()
+                statusPill(settled: settled, isWin: isWin, points: item.pointsAwarded)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(isWin ? WCTheme.emeraldDeep.opacity(0.10) : WCTheme.chipFill.opacity(0.6))
+
+            // الشعارات + توقّعي/النتيجة
+            HStack(spacing: 8) {
+                crest(name: item.homeTeamName, logo: item.homeTeamLogo)
+                HStack(spacing: 14) {
+                    scoreBlock("توقّعي", away: item.predAway, home: item.predHome,
+                               tint: isWin ? WCTheme.emeraldDeep : WCTheme.onDark)
+                    if settled, let fh = item.finalHome, let fa = item.finalAway {
+                        Rectangle().fill(WCTheme.cardStroke).frame(width: 1, height: 34)
+                        scoreBlock("النتيجة", away: fa, home: fh, tint: WCTheme.onDarkDim)
                     }
                 }
+                .frame(maxWidth: .infinity)
+                crest(name: item.awayTeamName, logo: item.awayTeamLogo)
             }
-            .frame(minWidth: 64)
-            logo(item.awayTeamLogo)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(item.homeTeamName ?? "") × \(item.awayTeamName ?? "")")
-                    .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                if let pw = penWin {
-                    Text("فاز \(pw.name) بالترجيح (\(pw.w)-\(pw.l))")
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                }
-                statusBadge(item.status, points: item.pointsAwarded)
+            .padding(.horizontal, 12).padding(.vertical, 12)
+
+            // تذييل: الفائز بركلات الترجيح
+            if let pw = penWin {
+                Rectangle().fill(WCTheme.cardStroke.opacity(0.6)).frame(height: 1)
+                Text("فاز \(pw.name) بالترجيح (\(pw.w)-\(pw.l))")
+                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .frame(maxWidth: .infinity).multilineTextAlignment(.center)
+                    .padding(.vertical, 6).padding(.horizontal, 8)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WCTheme.card))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(WCTheme.card))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(isWin ? WCTheme.emeraldDeep.opacity(0.5) : WCTheme.cardStroke.opacity(0.5),
+                        lineWidth: isWin ? 1 : 0.5)
+        )
     }
 
-    @ViewBuilder private func logo(_ url: String?) -> some View {
-        if let url, !url.isEmpty {
-            WCRemoteImage(url: url).frame(width: 28, height: 28)
-        } else {
-            Circle().fill(WCTheme.chipFill).frame(width: 28, height: 28)
+    // شعار + اسم منتخب — عمود متمركز بعرض ثابت (المضيف يمينًا في RTL)
+    private func crest(name: String?, logo url: String?) -> some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle().fill(.white)
+                if let url, !url.isEmpty {
+                    WCRemoteImage(url: url).padding(7)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
+            Text(name ?? "—")
+                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .lineLimit(2).multilineTextAlignment(.center).frame(width: 62)
         }
+    }
+
+    // كتلة نتيجة (توقّعي/النتيجة): عنوان صغير + رقم كبير موحّد الاتجاه
+    private func scoreBlock(_ label: String, away: Int, home: Int, tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+            wcScorePair(away: away, home: home, size: 22, color: tint)
+        }
+    }
+
+    @ViewBuilder private func statusPill(settled: Bool, isWin: Bool, points: Int) -> some View {
+        if settled {
+            if isWin {
+                HStack(spacing: 4) {
+                    Image(systemName: "trophy.fill").font(.system(size: 10))
+                    Text("+\(points) نقطة").font(SabqFonts.app(size: 11, weight: .black))
+                }
+                .foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 3)
+                .background(Capsule().fill(WCTheme.emeraldDeep))
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+                    Text("لم تُصب").font(SabqFonts.app(size: 11, weight: .bold))
+                }
+                .foregroundStyle(WCTheme.onDarkDim).padding(.horizontal, 10).padding(.vertical, 3)
+                .background(Capsule().fill(WCTheme.chipFill))
+            }
+        } else {
+            HStack(spacing: 4) {
+                Image(systemName: "clock").font(.system(size: 9))
+                Text("قيد الانتظار").font(SabqFonts.app(size: 11, weight: .bold))
+            }
+            .foregroundStyle(WCTheme.gold).padding(.horizontal, 10).padding(.vertical, 3)
+            .background(Capsule().fill(WCTheme.gold.opacity(0.15)))
+        }
+    }
+
+    // يوم انطلاق المباراة من سلسلة ISO (kickoffAt) بتوقيت الرياض
+    private func kickoffDayLabel(_ iso: String?) -> String {
+        guard let iso, let d = wcParseISODate(iso) else { return "كأس العالم 2026" }
+        return WCFormat.dayRiyadh.string(from: d)
     }
 
     private func load() async {
