@@ -613,7 +613,7 @@ export async function getTopScorers(): Promise<WcScorer[]> {
  * بينما يبقى getTopScorers للودجت الحيّ (الذي يفضّل الأحدث متى تأخّر المزوّد).
  */
 export async function getOfficialTopScorers(limit = 20): Promise<WcScorer[]> {
-  return withSWR(`wc:scorers:official:${limit}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+  const board = await withSWR(`wc:scorers:official:${limit}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
     const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
     const top = rows.slice(0, limit);
     const tr = await resolveNames(top.map((row: any) => row.player?.name));
@@ -633,6 +633,10 @@ export async function getOfficialTopScorers(limit = 20): Promise<WcScorer[]> {
       };
     });
   });
+  // المزود يتأخّر أحيانًا ساعات عن آخر هدف حقيقي (نفس علّة getTopScorers أعلاه) —
+  // نصحّح goals فرديًّا من تجميعنا الحيّ دون استبدال اللوحة أو اقتطاعها لأعلى 10.
+  const events = await aggregateRacesFromEvents();
+  return patchStaleGoals(board, events.scorerGoalsById);
 }
 
 export interface WcPrediction {
@@ -2194,6 +2198,30 @@ function freshestBoard<T extends { id: number; photo: string; minutes: number; m
   });
 }
 
+/**
+ * تصحيح أفراديّ لـ goals/assists/penalties في لوحة مزوّد باستخدام تجميع الأحداث
+ * اللحظي متى كان أعلى — يبقي ترتيب/عضوية لوحة المزود كما هي (خلافًا لـ
+ * freshestBoard التي تستبدل اللوحة كاملةً بأعلى 10 من الأحداث، فلا تصلح للوحة
+ * المرشّحين الطويلة). يُعاد الفرز والترقيم بعد التصحيح كي لا يظهر هدّاف صُحِّحت
+ * أهدافه لأعلى وهو مرتّب تحت من فوقه رقمًا لا أهدافًا فعليًّا.
+ */
+function patchStaleGoals(
+  board: WcScorer[],
+  byId: Record<number, { goals: number; assists: number; penalties: number }>
+): WcScorer[] {
+  const patched = board.map((row) => {
+    const fresh = row.id ? byId[row.id] : undefined;
+    if (!fresh || fresh.goals <= row.goals) return row;
+    return {
+      ...row,
+      goals: fresh.goals,
+      assists: Math.max(row.assists, fresh.assists),
+      penalties: Math.max(row.penalties, fresh.penalties),
+    };
+  });
+  return patched.sort((a, b) => b.goals - a.goals).map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 interface WcRaceTally {
   playerId: number | null;
   name: string;
@@ -2215,6 +2243,10 @@ interface WcRacesFromEvents {
   cards: WcLeader[];
   // مجاميع كاملة (كل اللاعبين لا العشرة الأوائل) لمقارنة الحداثة مع لوحة المزود
   totals: { goals: number; assists: number; cards: number };
+  // كل من سجّل هدفًا من الأحداث اللحظية (لا أعلى 10 فقط) — id ← أهداف/صناعة/جزاءات.
+  // لتصحيح goals لأي هدّاف في لوحة المزود الرسمية (حتى خارج أعلى 10) عبر
+  // patchStaleGoals، دون استبدال اللوحة كاملةً كما تفعل freshestBoard.
+  scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }>;
 }
 
 async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
@@ -2301,6 +2333,14 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     }
 
     const all = [...tallies.values()];
+    // تصحيح أفراديّ لأي هدّاف رصدناه (لا لوحة كاملة) — يحافظ على ترتيب/عضوية لوحة
+    // المزود الرسمية كما هي؛ الاستبدال الكامل (freshestBoard) يبقى خاصًّا بودجت
+    // أعلى 10 الحيّ فقط.
+    const scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }> = {};
+    for (const t of all) {
+      if (!t.playerId || t.goals <= 0) continue;
+      scorerGoalsById[t.playerId] = { goals: t.goals, assists: t.assists, penalties: t.penalties };
+    }
     const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
       rank: index + 1,
       id: t.playerId ?? 0,
@@ -2350,6 +2390,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         assists: all.reduce((sum, t) => sum + t.assists, 0),
         cards: all.reduce((sum, t) => sum + t.yellow + t.red, 0),
       },
+      scorerGoalsById,
     };
   });
 }
