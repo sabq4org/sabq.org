@@ -603,7 +603,28 @@ export async function getTopScorers(): Promise<WcScorer[]> {
     return { board, total };
   });
   const events = await aggregateRacesFromEvents();
-  return freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals);
+  return patchStaleGoals(
+    freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals),
+    events.scorers
+  );
+}
+
+/** يُصلح صفوف الهدّافين عند تأخّر جزئي: goals/assists/penalties من الأحداث الحية */
+function patchStaleGoals(board: WcScorer[], fromEvents: WcScorer[]): WcScorer[] {
+  const byId = new Map<number, WcScorer>();
+  const byName = new Map<string, WcScorer>();
+  for (const row of fromEvents) {
+    if (row.id) byId.set(row.id, row);
+    byName.set(`${row.team.id}:${row.name}`, row);
+  }
+  return board.map((row) => {
+    const live = (row.id ? byId.get(row.id) : undefined) ?? byName.get(`${row.team.id}:${row.name}`);
+    if (!live) return row;
+    const shouldPatch =
+      live.goals > row.goals ||
+      (live.goals === row.goals && (live.assists > row.assists || live.penalties > row.penalties));
+    return shouldPatch ? { ...row, goals: live.goals, assists: live.assists, penalties: live.penalties } : row;
+  });
 }
 
 /**
