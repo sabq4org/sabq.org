@@ -98,7 +98,20 @@ final class LiveMatchActivityManager {
                 if Task.isCancelled { return }
                 let hex = tokenData.map { String(format: "%02x", $0) }.joined()
                 self?.lastPushTokenHex = hex
-                try? await APIClient.shared.registerLiveActivityToken(fixtureId: fixtureId, token: hex)
+                // إعادة محاولة بتراجع: فشل شبكي واحد لحظة البدء كان يعني ألا
+                // يصل أي تحديث لشاشة القفل عند قفل الجهاز (السحب المحلي يعمل
+                // بالمقدمة فقط) ولا فرصة ثانية إلا إذا دوّر النظام التوكن.
+                var delay: UInt64 = 2_000_000_000
+                for attempt in 0..<3 {
+                    do {
+                        try await APIClient.shared.registerLiveActivityToken(fixtureId: fixtureId, token: hex)
+                        break
+                    } catch {
+                        if attempt == 2 || Task.isCancelled { break }
+                        try? await Task.sleep(nanoseconds: delay)
+                        delay *= 4
+                    }
+                }
             }
         }
     }
@@ -133,7 +146,7 @@ final class LiveMatchActivityManager {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                let interval = await self?.nextPollInterval() ?? 60_000_000_000
+                guard let interval = await self?.nextPollInterval() else { return }
                 try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
                 guard let detail = try? await APIClient.shared.fetchWorldCupMatch(
@@ -144,11 +157,18 @@ final class LiveMatchActivityManager {
         }
     }
 
-    /// أثناء اللعب: 12 ثانية. قرب الانطلاق (خلال 3 دقائق): 15 ثانية.
+    /// أثناء اللعب: 12 ثانية. حول الانطلاق (−3 دقائق حتى +30 دقيقة): 15 ثانية.
     /// قبل ذلك بكثير: 60 ثانية — العدّاد التنازلي ذاتي التحديث فلا حاجة لسحب أسرع.
-    private func nextPollInterval() -> UInt64 {
+    /// nil = أوقف السحب نهائيًا: مضت 30 دقيقة على الموعد بلا بث (تأجيل/إلغاء) —
+    /// الشرط القديم `< 180` يصبح صحيحًا دائمًا بعد الموعد فكان يسحب كل 15ث للأبد.
+    private func nextPollInterval() -> UInt64? {
         if livePhase { return 12_000_000_000 }
-        if let k = kickoff, k.timeIntervalSinceNow < 180 { return 15_000_000_000 }
+        if let k = kickoff {
+            let untilKickoff = k.timeIntervalSinceNow
+            if untilKickoff > 180 { return 60_000_000_000 }
+            if untilKickoff > -1800 { return 15_000_000_000 }
+            return nil
+        }
         return 60_000_000_000
     }
 

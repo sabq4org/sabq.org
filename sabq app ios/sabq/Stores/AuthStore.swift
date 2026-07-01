@@ -356,14 +356,24 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        // نفس تفكيك logout: ألغِ تسجيل جهاز الدفع قبل هدم الجلسة (بعدها يرفض
+        // الخادم النداء بـ401) — كان الجهاز يبقى مستهدفًا بإشعارات حساب
+        // محذوف، وأحداث GA4 اللاحقة تُنسب لمعرّفه. عند فشل الحذف (كلمة مرور
+        // خاطئة مثلًا) نعيد التسجيل كي لا يخسر المستخدم إشعاراته.
+        await NotificationsStore.shared.unregisterCurrentToken()
         do {
             try await APIClient.shared.deleteAccount(password: password)
             currentUser = nil
             isLoggedIn = false
+            needsProfileCompletion = false
+            SabqAnalytics.setUserId(nil)
             NotificationsStore.shared.unreadCount = 0
             successMessage = "تم حذف الحساب بنجاح"
         } catch {
             errorMessage = error.localizedDescription
+            if let token = NotificationsStore.shared.deviceToken {
+                await NotificationsStore.shared.registerWithBackend(token: token)
+            }
         }
         isLoading = false
     }

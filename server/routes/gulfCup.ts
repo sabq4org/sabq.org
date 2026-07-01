@@ -11,6 +11,8 @@ import {
   getGcStandings,
   getGcTeamProfile,
   getGcMatchDetail,
+  getGcScorers,
+  getGcHistory,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
 
@@ -69,6 +71,29 @@ export function registerGulfCupRoutes(app: Express) {
     } catch (error) {
       console.error("[GulfCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/scorers", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1800");
+      res.json(await getGcScorers());
+    } catch (error) {
+      console.error("[GulfCup] scorers failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة الهدّافين حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/history", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      // سجلّ ثابت محلّي — كاش طويل
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400");
+      res.json(getGcHistory());
+    } catch (error) {
+      console.error("[GulfCup] history failed:", error);
+      res.status(502).json({ message: "تعذر جلب سجلّ البطولة حاليًا" });
     }
   });
 

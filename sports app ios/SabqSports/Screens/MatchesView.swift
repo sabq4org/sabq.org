@@ -431,6 +431,8 @@ extension VaraTeamStrength {
 // MARK: - الشاشة
 
 struct MatchesView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var fixtures: [SpWcFixture] = []
     @State private var visibleDays: [SpWcDay] = []
     @State private var loading = true
@@ -474,6 +476,14 @@ struct MatchesView: View {
         .task { await load() }
         .task { await pollLive() }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
+        // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load(force: true) } }
+        }
+        // البث الحيّ (SSE): أي تغيّر في مباريات المونديال الجارية = تحديث فوري للقائمة.
+        .onChange(of: liveStream.wcVersion) { _, _ in
+            Task { await load(force: true) }
+        }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
     }
@@ -1083,8 +1093,8 @@ struct MatchesView: View {
         .joined(separator: "|")
     }
 
-    // تحديث صامت أثناء العرض — يتسارع (15ث) عند مباراة جارية أو انطلاقة وشيكة
-    // (خلال دقيقتين حول الموعد، كي لا ننتظر 45ث لالتقاط بداية المباراة)، ويتباطأ (45ث) عداها.
+    // تحديث صامت أثناء العرض — السياسة الموحّدة: حيّ = 10ث (كل الشاشات)، وتتسارع
+    // أيضًا عند انطلاقة وشيكة (خلال دقيقتين حول الموعد)، وتتباطأ (45ث) عداها.
     private func pollLive() async {
         while !Task.isCancelled {
             let now = Date().timeIntervalSince1970
@@ -1092,7 +1102,7 @@ struct MatchesView: View {
             let nearKickoff = fixtures.contains {
                 !$0.status.finished && !$0.status.live && abs($0.timestamp - now) <= 120
             }
-            let delay: UInt64 = (hasLive || nearKickoff) ? 15_000_000_000 : 45_000_000_000
+            let delay: UInt64 = (hasLive || nearKickoff) ? 10_000_000_000 : 45_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
             await load(force: true)
@@ -1302,6 +1312,8 @@ struct WcMatchCenter: View {
     let fixtureId: Int
     let preview: SpWcFixture
 
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var detail: SpWcMatchDetail?
     @State private var loading = true
     @State private var segment: WcSeg = .events
@@ -1359,6 +1371,16 @@ struct WcMatchCenter: View {
         .task { await load() }
         .task { await pollIfLive() }
         .refreshable { await load(force: true) }
+        // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, fx.status.live { Task { await refreshLiveLight() } }
+        }
+        // البث الحيّ (SSE): ختم مباراتنا تغيّر = جلب فوري؛ اختفاؤه (-1) = انتهت → تحميل كامل.
+        .onChange(of: liveStream.stamps["w:\(fixtureId)"]) { _, stamp in
+            Task {
+                if stamp == -1 { await load(force: true) } else { await refreshLiveLight() }
+            }
+        }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }
@@ -2301,13 +2323,42 @@ struct WcMatchCenter: View {
         loading = false
     }
 
+    // استطلاع لحظي — السياسة الموحّدة: حيّ = 10ث (تفاصيل+تعليق خفيفة، وكل ثالث
+    // دورة load كامل يجدّد التحليل)، وقبل الانطلاق ≤ 30 دقيقة = 25ث لالتقاط البداية.
+    // (الصيغة القديمة كانت لا تجلب إلا إذا كانت الحالة live أصلًا — من يفتح المركز
+    // قبل الانطلاق لا يتحدّث أبدًا لأن الحالة لا تنقلب بلا جلب: حلقة مفرغة.)
     private func pollIfLive() async {
+        var tick = 0
         while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 20_000_000_000)
-            if Task.isCancelled { break }
-            guard fx.status.live else { continue }
-            await load(force: true)
+            let f = fx
+            if f.status.finished { return }
+            let live = f.status.live
+            let secsToKickoff = Date(timeIntervalSince1970: f.timestamp).timeIntervalSinceNow
+            if !live && secsToKickoff > 1800 {
+                // بعيدة: نَم حتى ما قبل النافذة (بدل الانسحاب — الشاشة قد تبقى مفتوحة).
+                let wait = min(secsToKickoff - 1700, 3600)
+                try? await Task.sleep(nanoseconds: UInt64(max(wait, 30)) * 1_000_000_000)
+                continue
+            }
+            let seconds: UInt64 = live ? 10 : 25
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            if Task.isCancelled { return }
+            tick += 1
+            if live && tick % 3 != 0 {
+                await refreshLiveLight()
+            } else {
+                await load(force: true)
+            }
         }
+    }
+
+    /// جلب حيّ خفيف: التفاصيل (نتيجة/أحداث/إحصائيات/تشكيلة/تقييمات) + التعليق —
+    /// التحليل الأثقل (xG/زخم/ضغط/وقائع) يتجدّد عبر load الكامل كل ثالث دورة.
+    private func refreshLiveLight() async {
+        async let detailOpt = (try? APIClient.shared.fetchWorldCupMatch(id: fixtureId, ignoreCache: true))
+        async let commentaryOpt = (try? APIClient.shared.fetchWorldCupCommentary(id: fixtureId, ignoreCache: true))
+        if let d = await detailOpt { detail = d }
+        if let c = await commentaryOpt { commentary = c }
     }
 }
 

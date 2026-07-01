@@ -13,7 +13,6 @@ struct GulfCupApp: App {
             GulfCupView()
                 .environment(auth)
                 .gulfCupRTL()
-                .preferredColorScheme(.light)
                 .task { await auth.restore() }
         }
     }

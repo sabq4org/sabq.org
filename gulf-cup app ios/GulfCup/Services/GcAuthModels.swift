@@ -131,9 +131,9 @@ extension APIClient {
         return resp.prediction
     }
 
-    func submitGcLongPrediction(kind: String, teamId: Int?) async throws {
+    func submitGcLongPrediction(kind: String, teamId: Int?, playerName: String? = nil) async throws {
         struct Ok: Decodable { let ok: Bool? }
-        let body = GcLongSubmitBody(kind: kind, teamId: teamId, playerName: nil)
+        let body = GcLongSubmitBody(kind: kind, teamId: teamId, playerName: playerName)
         _ = try await post(Ok.self, path: "/gulf-cup/predictions/long", body: body, apiRoot: URLConstants.mobileAPI)
     }
 }

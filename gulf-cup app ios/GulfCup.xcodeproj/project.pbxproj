@@ -26,6 +26,9 @@
 		GC000011 /* GcAuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100024 /* GcAuthModels.swift */; };
 		GC000012 /* GcPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100012 /* GcPredictionMatchCard.swift */; };
 		GC000013 /* GcTeamProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100013 /* GcTeamProfileScreen.swift */; };
+		GC000030 /* GcMatchCenterScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100041 /* GcMatchCenterScreen.swift */; };
+		GC000031 /* GcTournamentScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100042 /* GcTournamentScreen.swift */; };
+		GC000032 /* GcPredictionsHubScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100043 /* GcPredictionsHubScreen.swift */; };
 		GC000014 /* GcMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100014 /* GcMatchActivity.swift */; };
 		GC000015 /* GcLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100015 /* GcLiveActivityManager.swift */; };
 		GC000016 /* GcMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100014 /* GcMatchActivity.swift */; };
@@ -83,6 +86,9 @@
 		GC100024 /* GcAuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAuthModels.swift; sourceTree = "<group>"; };
 		GC100012 /* GcPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionMatchCard.swift; sourceTree = "<group>"; };
 		GC100013 /* GcTeamProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTeamProfileScreen.swift; sourceTree = "<group>"; };
+		GC100041 /* GcMatchCenterScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchCenterScreen.swift; sourceTree = "<group>"; };
+		GC100042 /* GcTournamentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTournamentScreen.swift; sourceTree = "<group>"; };
+		GC100043 /* GcPredictionsHubScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionsHubScreen.swift; sourceTree = "<group>"; };
 		GC100014 /* GcMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivity.swift; sourceTree = "<group>"; };
 		GC100015 /* GcLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcLiveActivityManager.swift; sourceTree = "<group>"; };
 		GC100016 /* GcMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchLiveActivity.swift; sourceTree = "<group>"; };
@@ -128,6 +134,9 @@
 				GC100002 /* GulfCupView.swift */,
 				GC100012 /* GcPredictionMatchCard.swift */,
 				GC100013 /* GcTeamProfileScreen.swift */,
+				GC100041 /* GcMatchCenterScreen.swift */,
+				GC100042 /* GcTournamentScreen.swift */,
+				GC100043 /* GcPredictionsHubScreen.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -319,6 +328,9 @@
 				GC000011 /* GcAuthModels.swift in Sources */,
 				GC000012 /* GcPredictionMatchCard.swift in Sources */,
 				GC000013 /* GcTeamProfileScreen.swift in Sources */,
+				GC000030 /* GcMatchCenterScreen.swift in Sources */,
+				GC000031 /* GcTournamentScreen.swift in Sources */,
+				GC000032 /* GcPredictionsHubScreen.swift in Sources */,
 				GC000014 /* GcMatchActivity.swift in Sources */,
 				GC000015 /* GcLiveActivityManager.swift in Sources */,
 				GC00001A /* GcMatchActivityAttributes.swift in Sources */,

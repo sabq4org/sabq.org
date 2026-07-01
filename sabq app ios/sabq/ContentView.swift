@@ -215,6 +215,12 @@ struct ContentView: View {
                     bookmarksStore.syncFromServer()
                 } else {
                     revisionsStore.clear()
+                    // الجهاز المشترك: المفضلات/الإعجابات/عمليات البحث كانت
+                    // تبقى للمستخدم التالي بعد الخروج. المحفوظات على الخادم
+                    // تعود بالمزامنة عند الدخول القادم.
+                    bookmarksStore.clear()
+                    likesStore.clear()
+                    UserDefaults.standard.removeObject(forKey: "sabq_recent_searches")
                 }
             }
 
