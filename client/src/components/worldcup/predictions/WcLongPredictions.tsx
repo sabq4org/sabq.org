@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Clock, Coins, Crown, Goal, Info, Lock, LogIn, TrendingUp } from "lucide-react";
+import { Check, Clock, Coins, Crown, Flame, Goal, Info, Lock, LogIn, TrendingUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +49,32 @@ export function WcLongPredictions({
     return m;
   }, [data?.topScorer.votes]);
   const scorerTotalVotes = Array.from(scorerVotes.values()).reduce((a, b) => a + b, 0);
+
+  // الأكثر توقّعًا: المنتخب/اللاعب الأعلى عدد أصوات (لا الأعلى وزنًا) — نفس
+  // منطق النسبة % المعروضة أصلًا على كل بطاقة.
+  const champLeader = useMemo(() => {
+    if (champTotalVotes === 0) return null;
+    let best: { teamId: number; n: number } | null = null;
+    for (const [teamId, v] of Array.from(champVotes.entries())) {
+      if (!best || v.n > best.n) best = { teamId, n: v.n };
+    }
+    if (!best) return null;
+    const team = teams.find((t) => t.id === best!.teamId);
+    if (!team) return null;
+    return { name: team.name, n: best.n, pct: Math.round((best.n / champTotalVotes) * 100) };
+  }, [champVotes, champTotalVotes, teams]);
+
+  const scorerLeader = useMemo(() => {
+    if (scorerTotalVotes === 0) return null;
+    let best: { playerId: number; n: number } | null = null;
+    for (const [playerId, n] of Array.from(scorerVotes.entries())) {
+      if (!best || n > best.n) best = { playerId, n };
+    }
+    if (!best) return null;
+    const scorer = scorers.find((s) => s.id === best!.playerId);
+    if (!scorer) return null;
+    return { name: scorer.name, n: best.n, pct: Math.round((best.n / scorerTotalVotes) * 100) };
+  }, [scorerVotes, scorerTotalVotes, scorers]);
 
   const [champPick, setChampPick] = useState<number | null>(null);
   const [scorerPick, setScorerPick] = useState<number | null>(null);
@@ -208,6 +234,21 @@ export function WcLongPredictions({
             </div>
           </div>
 
+          {champTotalVotes > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl bg-amber-500/[0.06] px-3 py-2 text-xs">
+              <span className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                <Users className="h-3.5 w-3.5" /> {formatNumber(champTotalVotes)} توقّعوا
+              </span>
+              {champLeader && (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Flame className="h-3.5 w-3.5 text-amber-500" />
+                  الأكثر توقّعًا: <b className="text-foreground">{champLeader.name}</b>
+                  <span className="tabular-nums">({champLeader.pct}%)</span>
+                </span>
+              )}
+            </div>
+          )}
+
           {myChampion?.teamName ? (
             <StatusPill
               status={myChampion.status}
@@ -301,6 +342,21 @@ export function WcLongPredictions({
           <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="h-3.5 w-3.5" /> تُقسَّم بالتساوي على المصيبين · يُغلق عند انطلاق ربع النهائي
           </p>
+
+          {scorerTotalVotes > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl bg-emerald-600/[0.06] px-3 py-2 text-xs">
+              <span className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
+                <Users className="h-3.5 w-3.5" /> {formatNumber(scorerTotalVotes)} توقّعوا
+              </span>
+              {scorerLeader && (
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Flame className="h-3.5 w-3.5 text-emerald-600" />
+                  الأكثر توقّعًا: <b className="text-foreground">{scorerLeader.name}</b>
+                  <span className="tabular-nums">({scorerLeader.pct}%)</span>
+                </span>
+              )}
+            </div>
+          )}
 
           {myScorer?.playerName ? (
             <StatusPill status={myScorer.status} points={myScorer.pointsAwarded} label={`اخترت: ${myScorer.playerName}`} />
