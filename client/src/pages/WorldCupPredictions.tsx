@@ -71,7 +71,7 @@ export default function WorldCupPredictions() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "today", label: "المباريات" },
-    ...(longAvailable ? ([{ key: "tournament", label: "البطولة" }] as const) : []),
+    ...(longAvailable ? ([{ key: "tournament", label: "توقّع البطل" }] as const) : []),
     { key: "mine", label: "توقّعاتي" },
     { key: "leaders", label: "المتصدّرون" },
   ];
