@@ -148,21 +148,51 @@ function isApiFootballClockRunning(status: SplMatchDetail["fixture"]["status"]):
     !["HT", "BT", "P", "PEN", "BREAK", "INT", "SUSP", "HALF_TIME"].includes(code);
 }
 
+// ملاحظة اصطلاح الدقيقة: «الدقيقة m» عند المزوّدين تعني أن اللعب جارٍ *داخل*
+// الدقيقة m (ساعة البث تعرض m-1:xx). الإرساء بـ m×60 كان يجعل عدّاد الويدجت
+// يسبق البث ~دقيقة بنيويًّا — الصحيح (m-1)×60 فيتطابق مع ساعة البث لحظة القفز.
 function apiFootballClockStartEpoch(status: SplMatchDetail["fixture"]["status"]): number | null {
   if (!isApiFootballClockRunning(status)) return null;
-  const totalSeconds = ((status.elapsed ?? 0) + (status.extra ?? 0)) * 60;
-  return Math.floor(Date.now() / 1000) - totalSeconds;
+  const playedMinutes = (status.elapsed ?? 0) + (status.extra ?? 0);
+  if (playedMinutes < 1) return null;
+  return Math.floor(Date.now() / 1000) - (playedMinutes - 1) * 60;
 }
 
 function sportmonksClockStartEpoch(live?: WcLiveScore | null): number | null {
   if (!live || !live.live || live.finished || live.minute <= 0) return null;
   if (CLOCK_PAUSED_STATES.has(live.stateDevName)) return null;
-  return Math.floor(Date.now() / 1000) - live.minute * 60;
+  return Math.floor(Date.now() / 1000) - (live.minute - 1) * 60;
 }
 
 function clockStartEpochFromMinute(minute: number, running: boolean): number | null {
   if (!running || minute <= 0) return null;
-  return Math.floor(Date.now() / 1000) - minute * 60;
+  return Math.floor(Date.now() / 1000) - (minute - 1) * 60;
+}
+
+// ── ثبات مرساة الساعة ─────────────────────────────────────────────────────────
+// المرساة كانت تُعاد حسابها في كل دورة من مصادر متعددة (TheSports/SportMonks/
+// API-Football) تختلف لحظات انقلاب «الدقيقة» بينها، فتقفز ساعة الويدجت للأمام
+// ثم ترتدّ (شكوى المالك: «يسبق دقيقتين ثم يعود يضبط ثم يرجع يسبق»). الحل:
+// مرساة واحدة لكل مباراة تبقى ثابتة ما دام الفرق ضمن التسامح؛ إعادة الإرساء
+// فقط عند فارق كبير (بداية شوط/تصحيح حقيقي) أو توقّف الساعة (استراحة).
+const clockAnchorByFixture = new Map<number, number>();
+const ANCHOR_DRIFT_TOLERANCE_SEC = 75;
+
+function stabilizeClockAnchor(
+  fixtureId: number,
+  state: LiveActivityContentState,
+): LiveActivityContentState {
+  const candidate = state.clockStartEpoch ?? null;
+  if (!candidate) {
+    clockAnchorByFixture.delete(fixtureId);
+    return state;
+  }
+  const stored = clockAnchorByFixture.get(fixtureId);
+  if (stored != null && Math.abs(stored - candidate) < ANCHOR_DRIFT_TOLERANCE_SEC) {
+    return { ...state, clockStartEpoch: stored };
+  }
+  clockAnchorByFixture.set(fixtureId, candidate);
+  return state;
 }
 
 function minuteFromClockStartEpoch(clockStartEpoch: number | null | undefined, running: boolean): number {
@@ -411,7 +441,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       live = null;
     }
 
-    const state = buildContentState(detail, ts, live);
+    const state = stabilizeClockAnchor(fixtureId, buildContentState(detail, ts, live));
     // بصمة الدفع تشمل `minute`: الويدجت يعرض الدقيقة كنصّ مدفوع، فندفع عند كل
     // تغيّر دقيقة/نتيجة/حالة/آخر حدث ليبقى العرض على الجهاز متزامنًا مع الخادم.
     const pushKey = JSON.stringify({
@@ -441,7 +471,10 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       }
     });
     lastScoreByFixture.set(fixtureId, scoreKey);
-    if (finished) lastScoreByFixture.delete(fixtureId);
+    if (finished) {
+      lastScoreByFixture.delete(fixtureId);
+      clockAnchorByFixture.delete(fixtureId);
+    }
 
     // قياس زمن الإرسال: نطبع لحظة رصد تغيّر النتيجة لمقارنتها بظهورها على الجهاز،
     // فنفصل تأخّر «الإرسال» (الخادم) عن تأخّر «التسليم» (APNs/iOS).
