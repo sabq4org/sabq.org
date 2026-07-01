@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - قسم كأس العالم 2026 — الشاشة الرئيسية
 //
 // تستهلك /api/world-cup/* العامة. تطابق صفحة الويب /world-cup: هيرو مباراة
-// اليوم، مشوار الأخضر، المباريات بتبويبات، ترتيب المجموعات، السباقات،
-// والمنتخبات. الضغط على أي مباراة يفتح مركز المباراة (WorldCupMatchCenter).
+// اليوم، المنتخبات العربية في المونديال، المباريات بتبويبات، ترتيب المجموعات،
+// السباقات، والمنتخبات. الضغط على أي مباراة يفتح مركز المباراة (WorldCupMatchCenter).
 
 private struct WCMatchSelection: Identifiable { let id: Int }
 
@@ -37,9 +37,7 @@ struct WorldCupView: View {
                         .padding(.horizontal, 16)
                 }
 
-                if let saudi = overview?.saudi, !saudi.fixtures.isEmpty {
-                    WCSaudiSpotlight(saudi: saudi) { open($0) }
-                }
+                WCArabTeamsSpotlight(fixtures: fixtures, groups: standings) { open($0) }
 
                 WCMatchesSection(fixtures: fixtures, isLoading: fixturesLoading) { open($0) }
 
@@ -452,77 +450,332 @@ struct WCEmptyDark: View {
     }
 }
 
-// MARK: - مشوار الأخضر
+// MARK: - المنتخبات العربية في المونديال
 
-struct WCSaudiSpotlight: View {
-    let saudi: WCSaudi
-    let onOpenMatch: (Int) -> Void
+/// معرّفات المنتخبات العربية المشاركة — يطابق ثابت الويب ARAB_TEAM_IDS حرفيًا.
+private let WC_ARAB_TEAM_IDS: Set<Int> = [23, 28, 31, 32, 1532, 1548, 1567, 1569]
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Text("مشوار الأخضر")
-                    .font(SabqFonts.headline(size: 24)).foregroundStyle(.white)
-                if let g = saudi.group {
-                    Text(g.group)
-                        .font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(.white)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(.white.opacity(0.15)))
-                }
-                Spacer()
-            }
-            if let next = saudi.next {
-                Label("\(next.venue.name) — \(next.venue.city)", systemImage: "mappin.and.ellipse")
-                    .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.emerald.opacity(0.85))
-            }
-            ForEach(saudi.fixtures) { f in
-                saudiRow(f)
-            }
-            WCSaudiSquadStrip()
+nonisolated struct WCArabTeamDigest: Identifiable, Hashable {
+    let team: WCTeam
+    let row: WCStandingRow?
+    let group: WCGroup?
+    let fixtures: [WCFixture]
+    let next: WCFixture?
+    let latest: WCFixture?
+
+    var id: Int { team.id }
+}
+
+/// يبني ملخّص كل منتخب عربي (مجموعته/ترتيبه/مبارياته القادمة والأخيرة) من
+/// نفس بيانات fixtures/standings المُحمَّلة أصلًا للصفحة — يطابق buildArabTeams
+/// على الويب حرفيًا (نفس مصادر البناء ونفس ترتيب الفرز).
+func wcBuildArabTeams(fixtures: [WCFixture], groups: [WCGroup]) -> [WCArabTeamDigest] {
+    var entries: [Int: (team: WCTeam, row: WCStandingRow?, group: WCGroup?)] = [:]
+
+    for group in groups {
+        for row in group.rows where WC_ARAB_TEAM_IDS.contains(row.team.id) {
+            entries[row.team.id] = (row.team, row, group)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(colors: [WCTheme.emeraldDeep, WCTheme.stadiumTop],
-                           startPoint: .topTrailing, endPoint: .bottomLeading)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .padding(.horizontal, 16)
+    }
+    for fixture in fixtures {
+        for team in [fixture.home, fixture.away] where WC_ARAB_TEAM_IDS.contains(team.id) && entries[team.id] == nil {
+            entries[team.id] = (team, nil, nil)
+        }
     }
 
-    private func saudiRow(_ f: WCFixture) -> some View {
-        let opp = f.home.id == WCTheme.saudiId ? f.away : f.home
-        let saudiGoals = f.home.id == WCTheme.saudiId ? f.goals.home : f.goals.away
-        let oppGoals = f.home.id == WCTheme.saudiId ? f.goals.away : f.goals.home
-        return Button { onOpenMatch(f.id) } label: {
-            HStack(spacing: 10) {
-                WCTeamLogo(team: opp, size: 34)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ضد \(opp.name)").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white)
-                    Text("\(f.round) · \(WCFormat.day(f))")
-                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.emerald.opacity(0.7))
-                }
-                Spacer()
-                if f.started {
-                    Text("\(saudiGoals ?? 0) - \(oppGoals ?? 0)")
-                        .font(SabqFonts.app(size: 17, weight: .black)).foregroundStyle(.white)
-                        .environment(\.layoutDirection, .leftToRight)
-                } else {
-                    Text(WCFormat.time(f)).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
-                }
-                WCStatusPill(fixture: f, onDark: true)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.08)))
+    return entries.values
+        .map { entry -> WCArabTeamDigest in
+            let teamFixtures = fixtures
+                .filter { $0.home.id == entry.team.id || $0.away.id == entry.team.id }
+                .sorted { $0.timestamp < $1.timestamp }
+            let next = teamFixtures.first { !$0.status.finished }
+            let latest = teamFixtures.reversed().first { $0.status.finished }
+            return WCArabTeamDigest(team: entry.team, row: entry.row, group: entry.group,
+                                     fixtures: teamFixtures, next: next, latest: latest)
         }
-        .buttonStyle(.plain)
+        .filter { !$0.fixtures.isEmpty || $0.row != nil }
+        .sorted { a, b in
+            let aHasNext = a.next != nil, bHasNext = b.next != nil
+            if aHasNext != bHasNext { return aHasNext }
+            let aOut = a.row?.qualifyStatus == "eliminated" ? 1 : 0
+            let bOut = b.row?.qualifyStatus == "eliminated" ? 1 : 0
+            if aOut != bOut { return aOut < bOut }
+            let aTime = a.next?.timestamp ?? a.latest?.timestamp ?? Int.max
+            let bTime = b.next?.timestamp ?? b.latest?.timestamp ?? Int.max
+            if aTime != bTime { return aTime < bTime }
+            return a.team.name.compare(b.team.name, locale: Locale(identifier: "ar")) == .orderedAscending
+        }
+}
+
+/// حالة تأهّل المنتخب لعرضها كشارة — 4 حالات (يطابق teamState على الويب):
+/// بانتظار الترتيب (لا صفّ بعد) / متأهل / خرج / في المنافسة.
+private func wcArabTeamState(_ row: WCStandingRow?) -> (label: String, bg: Color, fg: Color) {
+    guard let row = row else {
+        return ("بانتظار الترتيب", Color.white.opacity(0.10), Color.white.opacity(0.90))
+    }
+    switch row.qualifyStatus {
+    case "qualified": return ("متأهل", WCTheme.leaf, WCTheme.stadiumTop)
+    case "eliminated": return ("خرج", Color.white.opacity(0.12), Color.white.opacity(0.85))
+    default: return ("في المنافسة", Color.white.opacity(0.92), WCTheme.stadiumTop)
     }
 }
 
-/// شريط تشكيلة الأخضر — كل لاعب يفتح بطاقته الشاملة.
+/// بطاقة المنتخبات العربية — شريط تبديل أعلى بطاقة المنتخب المختار (حالة +
+/// إحصاءات + المباراة القادمة/آخر نتيجة) بجانب مصغّر ترتيب مجموعته. يستهلك
+/// fixtures/standings المحمَّلة أصلًا لصفحة المونديال (بلا نداء شبكة إضافي).
+/// تكافؤ ArabTeamsSpotlight على الويب.
+struct WCArabTeamsSpotlight: View {
+    let fixtures: [WCFixture]
+    let groups: [WCGroup]
+    let onOpenMatch: (Int) -> Void
+
+    @State private var selectedId: Int?
+    @State private var selectedTeamForProfile: WCTeam?
+
+    var body: some View {
+        let teams = wcBuildArabTeams(fixtures: fixtures, groups: groups)
+        if !teams.isEmpty {
+            let selected = teams.first { $0.id == selectedId } ?? teams[0]
+            VStack(alignment: .leading, spacing: 14) {
+                headerRow(count: teams.count)
+                teamRail(teams: teams, selectedId: selected.id)
+                teamPanel(selected)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: [WCTheme.emeraldDeep, WCTheme.stadiumTop],
+                               startPoint: .topTrailing, endPoint: .bottomLeading)
+            )
+            .background(alignment: .bottomTrailing) {
+                Image(systemName: "shield.fill")
+                    .resizable().scaledToFit()
+                    .frame(width: 150, height: 150)
+                    .foregroundStyle(.white.opacity(0.06))
+                    .allowsHitTesting(false)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .padding(.horizontal, 16)
+            .onChange(of: teams.map(\.id)) { _, ids in
+                if let sel = selectedId, ids.contains(sel) { return }
+                selectedId = ids.first
+            }
+            .sheet(item: $selectedTeamForProfile) { team in
+                WCTeamSheet(team: team).presentationDetents([.large])
+            }
+        }
+    }
+
+    private func headerRow(count: Int) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "flag.fill")
+                        .font(SabqFonts.app(size: 15)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                    Text("المنتخبات العربية في المونديال")
+                        .font(SabqFonts.headline(size: 24)).foregroundStyle(.white)
+                }
+                Text("نتائج ومواعيد المنتخبات العربية المتبقية في البطولة، مع وضع المجموعة في بطاقة واحدة.")
+                    .font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Text("\(count) منتخبات")
+                .font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(.white)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(.white.opacity(0.15)))
+        }
+    }
+
+    private func teamRail(teams: [WCArabTeamDigest], selectedId: Int) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(teams) { digest in
+                    let isSelected = digest.id == selectedId
+                    Button { self.selectedId = digest.id } label: {
+                        HStack(spacing: 6) {
+                            WCTeamLogo(team: digest.team, size: 24, ring: .clear)
+                            Text(digest.team.name).font(SabqFonts.app(size: 13, weight: .bold))
+                        }
+                        .foregroundStyle(isSelected ? WCTheme.stadiumTop : .white)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Capsule().fill(isSelected ? Color.white : Color.white.opacity(0.08)))
+                        .overlay(Capsule().stroke(.white.opacity(isSelected ? 0 : 0.12), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func teamPanel(_ digest: WCArabTeamDigest) -> some View {
+        let state = wcArabTeamState(digest.row)
+        let diff = digest.row.map { $0.goalsDiff > 0 ? "+\($0.goalsDiff)" : "\($0.goalsDiff)" } ?? "-"
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Button { selectedTeamForProfile = digest.team } label: {
+                    HStack(spacing: 10) {
+                        WCTeamLogo(team: digest.team, size: 50, ring: .white.opacity(0.25))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(digest.team.name)
+                                .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(.white)
+                            Text(groupSubtitle(digest))
+                                .font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.7))
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                Spacer(minLength: 8)
+                Text(state.label)
+                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(state.fg)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(Capsule().fill(state.bg))
+            }
+
+            HStack(spacing: 8) {
+                statPill(label: "المركز", value: digest.row.map { "\($0.rank)" } ?? "-")
+                statPill(label: "النقاط", value: digest.row.map { "\($0.points)" } ?? "-")
+                statPill(label: "فاز", value: digest.row.map { "\($0.win)" } ?? "-")
+                statPill(label: "الفارق", value: diff)
+            }
+
+            VStack(spacing: 8) {
+                if let next = digest.next {
+                    matchRow(digest: digest, fixture: next, label: "المباراة القادمة")
+                } else {
+                    emptyMatchLine("لا توجد مباراة قادمة مجدولة.")
+                }
+                if let latest = digest.latest {
+                    matchRow(digest: digest, fixture: latest, label: "آخر نتيجة")
+                } else {
+                    emptyMatchLine("لم يلعب بعد في البطولة.")
+                }
+            }
+
+            groupMiniTable(digest.group, selectedId: digest.team.id)
+
+            WCTeamSquadStrip(teamId: digest.team.id)
+        }
+    }
+
+    private func groupSubtitle(_ digest: WCArabTeamDigest) -> String {
+        var parts = [digest.group?.group ?? "كأس العالم 2026"]
+        if let row = digest.row { parts.append("\(row.played) لعب · \(row.points) ن") }
+        return parts.joined(separator: " · ")
+    }
+
+    private func matchRow(digest: WCArabTeamDigest, fixture: WCFixture, label: String) -> some View {
+        let opponent = fixture.home.id == digest.team.id ? fixture.away : fixture.home
+        let teamGoals = fixture.home.id == digest.team.id ? fixture.goals.home : fixture.goals.away
+        let oppGoals = fixture.home.id == digest.team.id ? fixture.goals.away : fixture.goals.home
+        let started = fixture.status.live || fixture.status.finished
+
+        return Button { onOpenMatch(fixture.id) } label: {
+            HStack(spacing: 10) {
+                WCTeamLogo(team: opponent, size: 32, ring: .clear)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ضد \(opponent.name)")
+                        .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text("\(label) · \(fixture.round) · \(WCFormat.day(fixture))")
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.65))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                if started {
+                    Text("\(teamGoals ?? 0) - \(oppGoals ?? 0)")
+                        .font(SabqFonts.app(size: 17, weight: .black)).foregroundStyle(.white)
+                        .environment(\.layoutDirection, .leftToRight)
+                    WCStatusPill(fixture: fixture, onDark: true)
+                } else {
+                    Text(WCFormat.time(fixture))
+                        .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                }
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.08)))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func emptyMatchLine(_ text: String) -> some View {
+        Text(text)
+            .font(SabqFonts.app(size: 13)).foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.06)))
+    }
+
+    private func statPill(label: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(.white.opacity(0.6))
+            Text(value)
+                .font(SabqFonts.app(size: 14, weight: .black)).foregroundStyle(.white)
+                .environment(\.layoutDirection, .leftToRight)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.06)))
+    }
+
+    private func groupMiniTable(_ group: WCGroup?, selectedId: Int) -> some View {
+        Group {
+            if let group = group {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(group.group)
+                        .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white.opacity(0.9))
+                    VStack(spacing: 4) {
+                        ForEach(group.rows) { row in
+                            let isSelected = row.team.id == selectedId
+                            Button { selectedTeamForProfile = row.team } label: {
+                                HStack(spacing: 8) {
+                                    Text("\(row.rank)")
+                                        .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.6))
+                                        .frame(width: 16)
+                                    WCTeamLogo(team: row.team, size: 18, ring: .clear)
+                                    Text(row.team.name)
+                                        .font(SabqFonts.app(size: 13, weight: isSelected ? .bold : .regular))
+                                        .foregroundStyle(.white.opacity(isSelected ? 1 : 0.85))
+                                        .lineLimit(1)
+                                    Spacer(minLength: 4)
+                                    Text("\(row.played) لعب")
+                                        .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.6))
+                                    Text("\(row.points) ن")
+                                        .font(SabqFonts.app(size: 12, weight: .black)).foregroundStyle(.white)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .fill(isSelected ? Color.white.opacity(0.14) : Color.clear)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(isSelected ? Color.white.opacity(0.30) : Color.clear, lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.black.opacity(0.20)))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(.white.opacity(0.10), lineWidth: 1))
+            }
+        }
+    }
+}
+
+/// شريط تشكيلة منتخب — كل لاعب يفتح بطاقته الشاملة. يُعاد الجلب عند تبدّل
+/// teamId (تبديل المنتخب المختار في بطاقة المنتخبات العربية)، مع تصفير
+/// القائمة أولًا كي لا يظهر خليط لحظي من تشكيلة المنتخب السابق.
 /// ZStack + Color.clear وليس Group/if: الحاوية يجب أن تبقى حية وإلا
 /// أسقط EmptyView معدِّل task ولن تُجلب القائمة أبدًا (فخ موثّق).
-struct WCSaudiSquadStrip: View {
+struct WCTeamSquadStrip: View {
+    let teamId: Int
     @State private var players: [WCSquadPlayer] = []
     @State private var selectedPlayer: WCPlayerSelection?
 
@@ -531,7 +784,7 @@ struct WCSaudiSquadStrip: View {
             Color.clear.frame(width: 0, height: 0)
             if !players.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("تشكيلة الأخضر — اضغط على اللاعب لملفه الكامل")
+                    Text("التشكيلة — اضغط على اللاعب لملفه الكامل")
                         .font(SabqFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(WCTheme.emerald.opacity(0.85))
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -544,8 +797,9 @@ struct WCSaudiSquadStrip: View {
                 }
             }
         }
-        .task {
-            if let r = try? await APIClient.shared.fetchWorldCupSquad(teamId: WCTheme.saudiId) {
+        .task(id: teamId) {
+            await MainActor.run { players = [] }
+            if let r = try? await APIClient.shared.fetchWorldCupSquad(teamId: teamId) {
                 await MainActor.run { players = r.players }
             }
         }
