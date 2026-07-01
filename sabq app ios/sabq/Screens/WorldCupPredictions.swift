@@ -71,7 +71,7 @@ struct WCPredictionsView: View {
     @Environment(AuthStore.self) private var authStore
 
     enum Tab: String, CaseIterable {
-        case today = "مباريات اليوم", tournament = "البطولة", mine = "توقّعاتي", board = "المتصدّرون"
+        case today = "مباريات اليوم", tournament = "توقّع البطل", mine = "توقّعاتي", board = "المتصدّرون"
     }
     @State private var tab: Tab = .today
     @State private var showLogin = false
